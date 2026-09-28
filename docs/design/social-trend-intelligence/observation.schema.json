@@ -1,0 +1,524 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii:trend-observation:v1",
+  "title": "Rafii canonical observation v1",
+  "description": "Wire validation; contracts.validate_observation also enforces digest, scope, event/knowledge order and executable rights. Payload extensions remain byte bounded and cannot grant rights.",
+  "type": "object",
+  "required": [
+    "observation_id",
+    "scope_key",
+    "provider_id",
+    "provider_contract_version",
+    "source_policy_version",
+    "source_identity",
+    "revision_identity",
+    "revision_sequence",
+    "kind",
+    "operation",
+    "event_at",
+    "received_at",
+    "available_at",
+    "retention_until",
+    "time_basis",
+    "coverage_epoch",
+    "provenance",
+    "rights",
+    "deletion_key",
+    "payload",
+    "payload_digest",
+    "schema_version"
+  ],
+  "properties": {
+    "observation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scope_key": {
+      "type": "string",
+      "pattern": "^(workspace:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|shared:[a-z0-9][a-z0-9._-]{0,95})$"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "provider_contract_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "source_policy_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "source_identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "revision_identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "revision_sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854776000
+    },
+    "kind": {
+      "enum": [
+        "raw_post",
+        "owned_post",
+        "aggregate_metric",
+        "search_lead",
+        "trend_seed"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "create",
+        "update",
+        "delete"
+      ]
+    },
+    "event_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|\\+00:00)$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$"
+    },
+    "available_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$"
+    },
+    "retention_until": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$"
+    },
+    "time_basis": {
+      "enum": [
+        "provider_event",
+        "provider_observation",
+        "retrieval"
+      ]
+    },
+    "coverage_epoch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "access_method"
+      ],
+      "properties": {
+        "access_method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": true
+    },
+    "rights": {
+      "type": "object",
+      "properties": {
+        "retrieve": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "store_raw": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "store_metrics": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "store_embeddings": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "llm_process": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "display_excerpt": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "display_link": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "share_across_workspaces": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "derive_metrics": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "cross_source_combine": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "retain_derivatives": {
+          "$ref": "#/$defs/permissionGrant"
+        },
+        "train_or_finetune": {
+          "$ref": "#/$defs/permissionGrant"
+        }
+      },
+      "additionalProperties": false
+    },
+    "deletion_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "payload": {
+      "type": "object"
+    },
+    "payload_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "schema_version": {
+      "const": "rafii.trend-observation.v1"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "permissionGrant": {
+      "type": "object",
+      "required": [
+        "state",
+        "policy_ref",
+        "audience_scope",
+        "expires_at"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ]
+        },
+        "policy_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "audience_scope": {
+          "type": "string",
+          "pattern": "^(workspace:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|shared:[a-z0-9][a-z0-9._-]{0,95})$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|\\+00:00)$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "delete"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "platform": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "reason_code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "else": {
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "raw_post",
+                    "owned_post"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "payload": {
+                  "required": [
+                    "platform",
+                    "native_id",
+                    "author_status"
+                  ],
+                  "properties": {
+                    "platform": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "native_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "author_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 1024
+                    },
+                    "author_status": {
+                      "enum": [
+                        "known",
+                        "unknown",
+                        "withheld"
+                      ]
+                    },
+                    "language": {
+                      "enum": [
+                        "en",
+                        "zh-Hant",
+                        "zh-Hans",
+                        "yue",
+                        "yue-en",
+                        "und"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 16000
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "aggregate_metric"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "payload": {
+                  "required": [
+                    "dataset_id",
+                    "metric_definition",
+                    "unit",
+                    "population",
+                    "aggregation_semantics",
+                    "window_start",
+                    "window_end"
+                  ],
+                  "properties": {
+                    "dataset_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "metric_definition": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "unit": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "population": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "aggregation_semantics": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "window_start": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "(Z|\\+00:00)$"
+                    },
+                    "window_end": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "(Z|\\+00:00)$"
+                    },
+                    "value": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "null_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "text"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "author_key"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "native_id"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "representative_posts"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "search_lead"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "payload": {
+                  "required": [
+                    "canonical_url"
+                  ],
+                  "properties": {
+                    "canonical_url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "mention_count"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "engagement"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "author_key"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "trend_seed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "payload": {
+                  "required": [
+                    "topic_id",
+                    "native_score_semantics"
+                  ],
+                  "properties": {
+                    "topic_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "native_score_semantics": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "mention_count"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "author_key"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "text"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

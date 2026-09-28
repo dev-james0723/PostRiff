@@ -42,12 +42,15 @@ web/.env*.local
 /.claude/
 /.agents/
 /.token-pilot/
+/.git
 /.git/
 /PostRiff_Research_2026-09-18/
 /*.zip
 /*.md
 /.phase3-qualification/
 /.pytest_cache/
+/.trend-storage-test/
+/.trend-operations-test/
 /.github/
 /integrations/
 /motion/

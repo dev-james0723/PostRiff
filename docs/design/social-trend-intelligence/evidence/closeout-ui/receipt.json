@@ -1,0 +1,90 @@
+{
+  "status": "LOCAL_UI_ACTION_SLICE_VERIFIED_PENDING_REMOTE_GATES_AND_DEPLOYMENT",
+  "base_commit": "a5671ebb66d054bed6fe5c0518eeb9dea714b708",
+  "source_files": {
+    "scripts/trend_browser.py": "bdfcea2b13464ba4c0c874df46f1f540ce8bcb7c2689940fbb42bb0e0642b58b",
+    "src/postriff_phase2/campaigns.py": "d9b4c1eb2881c8c8de2621c26b66e2f7bd5494cf8303640c5d7bab735497304d",
+    "src/postriff_phase2/growth/trends/http.py": "0523d32c90006f7f2770c7dbfed9a7b272b11a72d4a9a6629ba4038d299f5106",
+    "src/postriff_phase2/growth/trends/opportunities.py": "e74e782da1290ff10ec2269f088f16b303036128daa85a40eab99baf57022e70",
+    "src/postriff_phase2/growth/trends/relevance.py": "50d50b5bb3e78e8606304e4b24256069101b2892323162bb9fe29d8421e5b7b1",
+    "src/postriff_phase2/growth/trends/service.py": "bab26ca370d726b72d5c56e55376848eac396bd52bdda51376297745190cebde",
+    "tests/phase2/postgres_trend_frontier.py": "92355a3b7609f0f6fe33fea1fdc531f38eca40f99cfe5c67b5720e2919755def",
+    "tests/phase2/seed_trend_browser.py": "3c7e12fb28af791546b2f5efae9b2d1fe627dc09b9cc0ee8d7f8cb6ea395bf3a",
+    "tests/test_trend_http.py": "1448dae51126e4a02bdaa16114d006f781856889bb45336998649101153592b8",
+    "web/src/features/automations/automations-view.tsx": "8980fe65a67e64d7fef424c740e9b952aad5dc2b9676a5f62c8a435e9219cb2b",
+    "web/src/features/coworker/weekly/recipe-form.tsx": "899e9624b762e872e269f309a0cc4bcc60ae31f826f0df79763d742fd686cf4c",
+    "web/src/features/ideas/use-draft.ts": "0a74c833d2be322d328a170b21837501896ff960c844955c5a69f4265921c651",
+    "web/src/features/trends/api.ts": "60d25f50b676d9951cde922777bc4454cf60ba3f176383f06b5c8679a220c8ab",
+    "web/src/features/trends/opportunity-card.tsx": "2fd21b3b9d192399f1dd62721939e59ae35b00bfc63b85406688239077fb8d6e",
+    "web/src/features/trends/visual-intelligence.tsx": "2ba90b5d7c470f9dc10e7cd4f1a96b7fbb10321b4dc0927c305d2527f1400788",
+    "web/src/lib/api/types.ts": "d50d01152ce117039eeaeb45856007a2f1e0efbc5d112214eaa77ab75aae5708",
+    "web/src/lib/coworker/trend-types.ts": "578472a6d17901b2f28982b70aa97b14c48a9a7addb5f05455e1b8970f222800",
+    "web/src/lib/coworker/types.ts": "71c5dc0903bd5772af047ff5310bc96421c50ba1fbf1d2b14b5ccf3610eda72c",
+    "web/tests/trend-live-api-browser.cjs": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+    "web/tests/visual-intelligence-browser.cjs": "9fb5783deb07e80242b5a55a0de6e35f54656e583b353dc6337cb1a1c018326a",
+    "web/src/features/trends/angle-generation.tsx": "0396670d8e7917944a96c971cf8837bf3eba41e933cdfff3348b875f65f8d83e",
+    "tests/test_trend_closeout.py": "5727e303c794727e5c6230c476e045b2aabc886ce257116b7627906e2befe194",
+    "scripts/trend_release_migrate.py": "0853af3fd7e2b6cd1fc0115a00a95e2f3b481b502d2f6d27aa259f006cddddd8",
+    "src/postriff_phase2/coworker/performance.py": "d6d2cad765cbe8f116214c22f263e6edcc1ab0fa8b64bf5820bbaf5a6bd9591a",
+    "src/postriff_phase2/coworker/service.py": "87485842d2d30cdab44b800a9a01fbb2f803773889193c3bad8057a832ecb1df",
+    "src/postriff_phase2/growth/trends/learning.py": "77fd6335a8274455ddbcfbe0af853af8982a693da0e67a659e986096c828f1d4"
+  },
+  "python": {
+    "tests": 2722,
+    "skipped_db_cases": 242,
+    "failures": 0,
+    "errors": 0,
+    "log": "/tmp/trend-closeout-merged-python.log"
+  },
+  "web_unit_tests": 429,
+  "database_groups": {
+    "total": 83,
+    "passed_initial": 82,
+    "frontier_recheck": {
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    }
+  },
+  "real_api": {
+    "viewports": [
+      1440,
+      768,
+      390,
+      430
+    ],
+    "status": "passed",
+    "provider_calls": 0,
+    "model_usage_events": 0,
+    "model_reservations": 0,
+    "source_drift": []
+  },
+  "visual": {
+    "light_groups": 115,
+    "dark_groups": 115,
+    "serious_critical_axe_issues": 0,
+    "physical_device_or_voiceover": false
+  },
+  "generation_ui": "Explicit intercepted synthetic response, not a real model execution. Missing-facts and queued/completed refresh paths verified.",
+  "production": "Pushed PR57; production deploy and scoped signing-key/rollout approval pending. No provider/model activation or paid calls.",
+  "qualified_runtime_commit": "c9384e87a1a69e8430ca600ab63718b0e63f5e48",
+  "integrated_head": "c6ad891123df5aec74b891b447adf71f6fdf877e",
+  "merged_qualification": {
+    "python": "PASS",
+    "web_unit_tests": 429,
+    "postgres_affected_groups": [
+      "postgres_coworker",
+      "postgres_scout",
+      "postgres_trend_services"
+    ],
+    "real_api_4_viewports": "PASS; see real-api-merged.json",
+    "typecheck_lint_build_copy": "PASS",
+    "python_artifact": "PASS; Vercel Python3.12 Linux x86_64 isolated archive",
+    "secrets": "PASS; 436 reviewed findings, zero unexpected",
+    "independent_strategy": "16 assertion groups, 4 widths; see ../closeout-strategy/receipt.json",
+    "portability_fix": "Media38; forecast15; whitespace suite passed using platform temp paths. Source safety still rejects symlinks.",
+    "reuse_boundary": "Strategy proof runtime matches except the subsequently merged independent folder-editor update beab2f7. Test harness source-drift reporting guard documented in strategy README. Current merged web build/typecheck/lint pass; no trend runtime changes after c9384e8."
+  },
+  "master_qualification": "M1/M2 remain open; M3 per-capability only. Compound IN_PROGRESS records are unresolved acceptance obligations, not a count of missing implementation tasks."
+}

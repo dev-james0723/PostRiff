@@ -1,5 +1,6 @@
 'use client';
 
+import { OpportunityLabPanel } from '@/features/trends/lab-panel';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,14 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
             <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className={EDITOR} aria-label='Draft text' autoFocus />
             {notes.map((note, index) => <p key={index} className={note.tone === 'problem' ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{note.text}</p>)}
             {notes.length === 0 && <p className='text-muted-foreground text-xs tabular-nums'>{Array.from(text).length} characters</p>}
+            <OpportunityLabPanel draft={{ id: variant.id, revision: variant.revision, platform: variant.platform, text, dirty }} onApply={async edit => {
+              if (!snapshot.data || dirty || variant.revision !== edit.expected_revision) throw new Error('The draft changed. Save and check again.');
+              const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text } });
+              const savedVariant = saved.state.variants?.find((item) => item.id === variant.id);
+              if (!savedVariant) throw new Error('The saved draft is unavailable. Reload before continuing.');
+              setText(savedVariant.text);
+              toast.success('Suggested edit saved. Review the new draft revision before scheduling.');
+            }} />
 
           </>
         ) : (

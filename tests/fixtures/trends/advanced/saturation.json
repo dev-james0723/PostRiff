@@ -1,0 +1,2488 @@
+{
+  "scope_key": "sample",
+  "decision_cutoff": "2026-09-27T00:00:00Z",
+  "workspace_id": "workspace_a",
+  "sources": [
+    {
+      "source_id": "s0",
+      "canonical_id": "c0",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author0",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 0 真係 useful！"
+    },
+    {
+      "source_id": "s1",
+      "canonical_id": "c1",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author1",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 1 真係 useful！"
+    },
+    {
+      "source_id": "s2",
+      "canonical_id": "c2",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author2",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 2 真係 useful！"
+    },
+    {
+      "source_id": "s3",
+      "canonical_id": "c3",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author3",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 3 真係 useful！"
+    },
+    {
+      "source_id": "s4",
+      "canonical_id": "c4",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author4",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 4 真係 useful！"
+    },
+    {
+      "source_id": "s5",
+      "canonical_id": "c5",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author5",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 5 真係 useful！"
+    },
+    {
+      "source_id": "s6",
+      "canonical_id": "c6",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author6",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 6 真係 useful！"
+    },
+    {
+      "source_id": "s7",
+      "canonical_id": "c7",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author7",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 7 真係 useful！"
+    },
+    {
+      "source_id": "s8",
+      "canonical_id": "c8",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author8",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 8 真係 useful！"
+    },
+    {
+      "source_id": "s9",
+      "canonical_id": "c9",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author9",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 9 真係 useful！"
+    },
+    {
+      "source_id": "s10",
+      "canonical_id": "c10",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author10",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 10 真係 useful！"
+    },
+    {
+      "source_id": "s11",
+      "canonical_id": "c11",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author11",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 11 真係 useful！"
+    },
+    {
+      "source_id": "s12",
+      "canonical_id": "c12",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author12",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 12 真係 useful！"
+    },
+    {
+      "source_id": "s13",
+      "canonical_id": "c13",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author13",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 13 真係 useful！"
+    },
+    {
+      "source_id": "s14",
+      "canonical_id": "c14",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author14",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 14 真係 useful！"
+    },
+    {
+      "source_id": "s15",
+      "canonical_id": "c15",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author15",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 15 真係 useful！"
+    },
+    {
+      "source_id": "s16",
+      "canonical_id": "c16",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author16",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 16 真係 useful！"
+    },
+    {
+      "source_id": "s17",
+      "canonical_id": "c17",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author17",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 17 真係 useful！"
+    },
+    {
+      "source_id": "s18",
+      "canonical_id": "c18",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author18",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 18 真係 useful！"
+    },
+    {
+      "source_id": "s19",
+      "canonical_id": "c19",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author19",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 19 真係 useful！"
+    },
+    {
+      "source_id": "s20",
+      "canonical_id": "c20",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author20",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 20 真係 useful！"
+    },
+    {
+      "source_id": "s21",
+      "canonical_id": "c21",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author21",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 21 真係 useful！"
+    },
+    {
+      "source_id": "s22",
+      "canonical_id": "c22",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author22",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 22 真係 useful！"
+    },
+    {
+      "source_id": "s23",
+      "canonical_id": "c23",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author23",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 23 真係 useful！"
+    },
+    {
+      "source_id": "s24",
+      "canonical_id": "c24",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author24",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 24 真係 useful！"
+    },
+    {
+      "source_id": "s25",
+      "canonical_id": "c25",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author25",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 25 真係 useful！"
+    },
+    {
+      "source_id": "s26",
+      "canonical_id": "c26",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author26",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 26 真係 useful！"
+    },
+    {
+      "source_id": "s27",
+      "canonical_id": "c27",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author27",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 27 真係 useful！"
+    },
+    {
+      "source_id": "s28",
+      "canonical_id": "c28",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author28",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 28 真係 useful！"
+    },
+    {
+      "source_id": "s29",
+      "canonical_id": "c29",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author29",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 29 真係 useful！"
+    },
+    {
+      "source_id": "s30",
+      "canonical_id": "c30",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author30",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 30 真係 useful！"
+    },
+    {
+      "source_id": "s31",
+      "canonical_id": "c31",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author31",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 31 真係 useful！"
+    },
+    {
+      "source_id": "s32",
+      "canonical_id": "c32",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author32",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 32 真係 useful！"
+    },
+    {
+      "source_id": "s33",
+      "canonical_id": "c33",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author33",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 33 真係 useful！"
+    },
+    {
+      "source_id": "s34",
+      "canonical_id": "c34",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author34",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 34 真係 useful！"
+    },
+    {
+      "source_id": "s35",
+      "canonical_id": "c35",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author35",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 35 真係 useful！"
+    },
+    {
+      "source_id": "s36",
+      "canonical_id": "c36",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author36",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 36 真係 useful！"
+    },
+    {
+      "source_id": "s37",
+      "canonical_id": "c37",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author37",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 37 真係 useful！"
+    },
+    {
+      "source_id": "s38",
+      "canonical_id": "c38",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author38",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 38 真係 useful！"
+    },
+    {
+      "source_id": "s39",
+      "canonical_id": "c39",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author39",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 39 真係 useful！"
+    },
+    {
+      "source_id": "s40",
+      "canonical_id": "c40",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author40",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 40 真係 useful！"
+    },
+    {
+      "source_id": "s41",
+      "canonical_id": "c41",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author41",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 41 真係 useful！"
+    },
+    {
+      "source_id": "s42",
+      "canonical_id": "c42",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author42",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 42 真係 useful！"
+    },
+    {
+      "source_id": "s43",
+      "canonical_id": "c43",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author43",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 43 真係 useful！"
+    },
+    {
+      "source_id": "s44",
+      "canonical_id": "c44",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author44",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 44 真係 useful！"
+    },
+    {
+      "source_id": "s45",
+      "canonical_id": "c45",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author45",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 45 真係 useful！"
+    },
+    {
+      "source_id": "s46",
+      "canonical_id": "c46",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author46",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 46 真係 useful！"
+    },
+    {
+      "source_id": "s47",
+      "canonical_id": "c47",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author47",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 47 真係 useful！"
+    },
+    {
+      "source_id": "s48",
+      "canonical_id": "c48",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author48",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 48 真係 useful！"
+    },
+    {
+      "source_id": "s49",
+      "canonical_id": "c49",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author49",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 49 真係 useful！"
+    },
+    {
+      "source_id": "s50",
+      "canonical_id": "c50",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author50",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 50 真係 useful！"
+    },
+    {
+      "source_id": "s51",
+      "canonical_id": "c51",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author51",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 51 真係 useful！"
+    },
+    {
+      "source_id": "s52",
+      "canonical_id": "c52",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author52",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 52 真係 useful！"
+    },
+    {
+      "source_id": "s53",
+      "canonical_id": "c53",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author53",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 53 真係 useful！"
+    },
+    {
+      "source_id": "s54",
+      "canonical_id": "c54",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author54",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 54 真係 useful！"
+    },
+    {
+      "source_id": "s55",
+      "canonical_id": "c55",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author55",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 55 真係 useful！"
+    },
+    {
+      "source_id": "s56",
+      "canonical_id": "c56",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author56",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 56 真係 useful！"
+    },
+    {
+      "source_id": "s57",
+      "canonical_id": "c57",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author57",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 57 真係 useful！"
+    },
+    {
+      "source_id": "s58",
+      "canonical_id": "c58",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author58",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 58 真係 useful！"
+    },
+    {
+      "source_id": "s59",
+      "canonical_id": "c59",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author59",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 59 真係 useful！"
+    },
+    {
+      "source_id": "s60",
+      "canonical_id": "c60",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author60",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 60 真係 useful！"
+    },
+    {
+      "source_id": "s61",
+      "canonical_id": "c61",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author61",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 61 真係 useful！"
+    },
+    {
+      "source_id": "s62",
+      "canonical_id": "c62",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author62",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 62 真係 useful！"
+    },
+    {
+      "source_id": "s63",
+      "canonical_id": "c63",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author63",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 63 真係 useful！"
+    },
+    {
+      "source_id": "s64",
+      "canonical_id": "c64",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author64",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 64 真係 useful！"
+    },
+    {
+      "source_id": "s65",
+      "canonical_id": "c65",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author65",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 65 真係 useful！"
+    },
+    {
+      "source_id": "s66",
+      "canonical_id": "c66",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author66",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 66 真係 useful！"
+    },
+    {
+      "source_id": "s67",
+      "canonical_id": "c67",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author67",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 67 真係 useful！"
+    },
+    {
+      "source_id": "s68",
+      "canonical_id": "c68",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author68",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 68 真係 useful！"
+    },
+    {
+      "source_id": "s69",
+      "canonical_id": "c69",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author69",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 69 真係 useful！"
+    },
+    {
+      "source_id": "s70",
+      "canonical_id": "c70",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author70",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 70 真係 useful！"
+    },
+    {
+      "source_id": "s71",
+      "canonical_id": "c71",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author71",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 71 真係 useful！"
+    },
+    {
+      "source_id": "s72",
+      "canonical_id": "c72",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author72",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 72 真係 useful！"
+    },
+    {
+      "source_id": "s73",
+      "canonical_id": "c73",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author73",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 73 真係 useful！"
+    },
+    {
+      "source_id": "s74",
+      "canonical_id": "c74",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author74",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 74 真係 useful！"
+    },
+    {
+      "source_id": "s75",
+      "canonical_id": "c75",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author75",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 75 真係 useful！"
+    },
+    {
+      "source_id": "s76",
+      "canonical_id": "c76",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author76",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 76 真係 useful！"
+    },
+    {
+      "source_id": "s77",
+      "canonical_id": "c77",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author77",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 77 真係 useful！"
+    },
+    {
+      "source_id": "s78",
+      "canonical_id": "c78",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author78",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 78 真係 useful！"
+    },
+    {
+      "source_id": "s79",
+      "canonical_id": "c79",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author79",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 79 真係 useful！"
+    },
+    {
+      "source_id": "s80",
+      "canonical_id": "c80",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author80",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 80 真係 useful！"
+    },
+    {
+      "source_id": "s81",
+      "canonical_id": "c81",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author81",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 81 真係 useful！"
+    },
+    {
+      "source_id": "s82",
+      "canonical_id": "c82",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author82",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 82 真係 useful！"
+    },
+    {
+      "source_id": "s83",
+      "canonical_id": "c83",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author83",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 83 真係 useful！"
+    },
+    {
+      "source_id": "s84",
+      "canonical_id": "c84",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author84",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 84 真係 useful！"
+    },
+    {
+      "source_id": "s85",
+      "canonical_id": "c85",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author85",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 85 真係 useful！"
+    },
+    {
+      "source_id": "s86",
+      "canonical_id": "c86",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author86",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 86 真係 useful！"
+    },
+    {
+      "source_id": "s87",
+      "canonical_id": "c87",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author87",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 87 真係 useful！"
+    },
+    {
+      "source_id": "s88",
+      "canonical_id": "c88",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author88",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 88 真係 useful！"
+    },
+    {
+      "source_id": "s89",
+      "canonical_id": "c89",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author89",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 89 真係 useful！"
+    },
+    {
+      "source_id": "s90",
+      "canonical_id": "c90",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author90",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 90 真係 useful！"
+    },
+    {
+      "source_id": "s91",
+      "canonical_id": "c91",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author91",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 91 真係 useful！"
+    },
+    {
+      "source_id": "s92",
+      "canonical_id": "c92",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author92",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 92 真係 useful！"
+    },
+    {
+      "source_id": "s93",
+      "canonical_id": "c93",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author93",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 93 真係 useful！"
+    },
+    {
+      "source_id": "s94",
+      "canonical_id": "c94",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author94",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 94 真係 useful！"
+    },
+    {
+      "source_id": "s95",
+      "canonical_id": "c95",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author95",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 95 真係 useful！"
+    },
+    {
+      "source_id": "s96",
+      "canonical_id": "c96",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author96",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 96 真係 useful！"
+    },
+    {
+      "source_id": "s97",
+      "canonical_id": "c97",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author97",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 97 真係 useful！"
+    },
+    {
+      "source_id": "s98",
+      "canonical_id": "c98",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author98",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 98 真係 useful！"
+    },
+    {
+      "source_id": "s99",
+      "canonical_id": "c99",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author99",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 99 真係 useful！"
+    }
+  ],
+  "frame": {
+    "frame_id": "sample_yue_v1",
+    "platform": "bluesky",
+    "language": "yue",
+    "window_start": "2026-09-26T00:00:00Z",
+    "window_end": "2026-09-27T00:00:00Z",
+    "acquisition_policy": "fixture",
+    "classifier_version": "fixture_1"
+  },
+  "assignments": [
+    {
+      "source_id": "s0",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s0"
+      ]
+    },
+    {
+      "source_id": "s1",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s1"
+      ]
+    },
+    {
+      "source_id": "s2",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s2"
+      ]
+    },
+    {
+      "source_id": "s3",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s3"
+      ]
+    },
+    {
+      "source_id": "s4",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s4"
+      ]
+    },
+    {
+      "source_id": "s5",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s5"
+      ]
+    },
+    {
+      "source_id": "s6",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s6"
+      ]
+    },
+    {
+      "source_id": "s7",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s7"
+      ]
+    },
+    {
+      "source_id": "s8",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s8"
+      ]
+    },
+    {
+      "source_id": "s9",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s9"
+      ]
+    },
+    {
+      "source_id": "s10",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s10"
+      ]
+    },
+    {
+      "source_id": "s11",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s11"
+      ]
+    },
+    {
+      "source_id": "s12",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s12"
+      ]
+    },
+    {
+      "source_id": "s13",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s13"
+      ]
+    },
+    {
+      "source_id": "s14",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s14"
+      ]
+    },
+    {
+      "source_id": "s15",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s15"
+      ]
+    },
+    {
+      "source_id": "s16",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s16"
+      ]
+    },
+    {
+      "source_id": "s17",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s17"
+      ]
+    },
+    {
+      "source_id": "s18",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s18"
+      ]
+    },
+    {
+      "source_id": "s19",
+      "dimension": "hook",
+      "pattern_id": "common",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s19"
+      ]
+    },
+    {
+      "source_id": "s20",
+      "dimension": "hook",
+      "pattern_id": "hook20",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s20"
+      ]
+    },
+    {
+      "source_id": "s21",
+      "dimension": "hook",
+      "pattern_id": "hook21",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s21"
+      ]
+    },
+    {
+      "source_id": "s22",
+      "dimension": "hook",
+      "pattern_id": "hook22",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s22"
+      ]
+    },
+    {
+      "source_id": "s23",
+      "dimension": "hook",
+      "pattern_id": "hook23",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s23"
+      ]
+    },
+    {
+      "source_id": "s24",
+      "dimension": "hook",
+      "pattern_id": "hook24",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s24"
+      ]
+    },
+    {
+      "source_id": "s25",
+      "dimension": "hook",
+      "pattern_id": "hook25",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s25"
+      ]
+    },
+    {
+      "source_id": "s26",
+      "dimension": "hook",
+      "pattern_id": "hook26",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s26"
+      ]
+    },
+    {
+      "source_id": "s27",
+      "dimension": "hook",
+      "pattern_id": "hook27",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s27"
+      ]
+    },
+    {
+      "source_id": "s28",
+      "dimension": "hook",
+      "pattern_id": "hook28",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s28"
+      ]
+    },
+    {
+      "source_id": "s29",
+      "dimension": "hook",
+      "pattern_id": "hook29",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s29"
+      ]
+    },
+    {
+      "source_id": "s30",
+      "dimension": "hook",
+      "pattern_id": "hook30",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s30"
+      ]
+    },
+    {
+      "source_id": "s31",
+      "dimension": "hook",
+      "pattern_id": "hook31",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s31"
+      ]
+    },
+    {
+      "source_id": "s32",
+      "dimension": "hook",
+      "pattern_id": "hook32",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s32"
+      ]
+    },
+    {
+      "source_id": "s33",
+      "dimension": "hook",
+      "pattern_id": "hook33",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s33"
+      ]
+    },
+    {
+      "source_id": "s34",
+      "dimension": "hook",
+      "pattern_id": "hook34",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s34"
+      ]
+    },
+    {
+      "source_id": "s35",
+      "dimension": "hook",
+      "pattern_id": "hook35",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s35"
+      ]
+    },
+    {
+      "source_id": "s36",
+      "dimension": "hook",
+      "pattern_id": "hook36",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s36"
+      ]
+    },
+    {
+      "source_id": "s37",
+      "dimension": "hook",
+      "pattern_id": "hook37",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s37"
+      ]
+    },
+    {
+      "source_id": "s38",
+      "dimension": "hook",
+      "pattern_id": "hook38",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s38"
+      ]
+    },
+    {
+      "source_id": "s39",
+      "dimension": "hook",
+      "pattern_id": "hook39",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s39"
+      ]
+    },
+    {
+      "source_id": "s40",
+      "dimension": "hook",
+      "pattern_id": "hook40",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s40"
+      ]
+    },
+    {
+      "source_id": "s41",
+      "dimension": "hook",
+      "pattern_id": "hook41",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s41"
+      ]
+    },
+    {
+      "source_id": "s42",
+      "dimension": "hook",
+      "pattern_id": "hook42",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s42"
+      ]
+    },
+    {
+      "source_id": "s43",
+      "dimension": "hook",
+      "pattern_id": "hook43",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s43"
+      ]
+    },
+    {
+      "source_id": "s44",
+      "dimension": "hook",
+      "pattern_id": "hook44",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s44"
+      ]
+    },
+    {
+      "source_id": "s45",
+      "dimension": "hook",
+      "pattern_id": "hook45",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s45"
+      ]
+    },
+    {
+      "source_id": "s46",
+      "dimension": "hook",
+      "pattern_id": "hook46",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s46"
+      ]
+    },
+    {
+      "source_id": "s47",
+      "dimension": "hook",
+      "pattern_id": "hook47",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s47"
+      ]
+    },
+    {
+      "source_id": "s48",
+      "dimension": "hook",
+      "pattern_id": "hook48",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s48"
+      ]
+    },
+    {
+      "source_id": "s49",
+      "dimension": "hook",
+      "pattern_id": "hook49",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s49"
+      ]
+    },
+    {
+      "source_id": "s50",
+      "dimension": "hook",
+      "pattern_id": "hook50",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s50"
+      ]
+    },
+    {
+      "source_id": "s51",
+      "dimension": "hook",
+      "pattern_id": "hook51",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s51"
+      ]
+    },
+    {
+      "source_id": "s52",
+      "dimension": "hook",
+      "pattern_id": "hook52",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s52"
+      ]
+    },
+    {
+      "source_id": "s53",
+      "dimension": "hook",
+      "pattern_id": "hook53",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s53"
+      ]
+    },
+    {
+      "source_id": "s54",
+      "dimension": "hook",
+      "pattern_id": "hook54",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s54"
+      ]
+    },
+    {
+      "source_id": "s55",
+      "dimension": "hook",
+      "pattern_id": "hook55",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s55"
+      ]
+    },
+    {
+      "source_id": "s56",
+      "dimension": "hook",
+      "pattern_id": "hook56",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s56"
+      ]
+    },
+    {
+      "source_id": "s57",
+      "dimension": "hook",
+      "pattern_id": "hook57",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s57"
+      ]
+    },
+    {
+      "source_id": "s58",
+      "dimension": "hook",
+      "pattern_id": "hook58",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s58"
+      ]
+    },
+    {
+      "source_id": "s59",
+      "dimension": "hook",
+      "pattern_id": "hook59",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s59"
+      ]
+    },
+    {
+      "source_id": "s60",
+      "dimension": "hook",
+      "pattern_id": "hook60",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s60"
+      ]
+    },
+    {
+      "source_id": "s61",
+      "dimension": "hook",
+      "pattern_id": "hook61",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s61"
+      ]
+    },
+    {
+      "source_id": "s62",
+      "dimension": "hook",
+      "pattern_id": "hook62",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s62"
+      ]
+    },
+    {
+      "source_id": "s63",
+      "dimension": "hook",
+      "pattern_id": "hook63",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s63"
+      ]
+    },
+    {
+      "source_id": "s64",
+      "dimension": "hook",
+      "pattern_id": "hook64",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s64"
+      ]
+    },
+    {
+      "source_id": "s65",
+      "dimension": "hook",
+      "pattern_id": "hook65",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s65"
+      ]
+    },
+    {
+      "source_id": "s66",
+      "dimension": "hook",
+      "pattern_id": "hook66",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s66"
+      ]
+    },
+    {
+      "source_id": "s67",
+      "dimension": "hook",
+      "pattern_id": "hook67",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s67"
+      ]
+    },
+    {
+      "source_id": "s68",
+      "dimension": "hook",
+      "pattern_id": "hook68",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s68"
+      ]
+    },
+    {
+      "source_id": "s69",
+      "dimension": "hook",
+      "pattern_id": "hook69",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s69"
+      ]
+    },
+    {
+      "source_id": "s70",
+      "dimension": "hook",
+      "pattern_id": "hook70",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s70"
+      ]
+    },
+    {
+      "source_id": "s71",
+      "dimension": "hook",
+      "pattern_id": "hook71",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s71"
+      ]
+    },
+    {
+      "source_id": "s72",
+      "dimension": "hook",
+      "pattern_id": "hook72",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s72"
+      ]
+    },
+    {
+      "source_id": "s73",
+      "dimension": "hook",
+      "pattern_id": "hook73",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s73"
+      ]
+    },
+    {
+      "source_id": "s74",
+      "dimension": "hook",
+      "pattern_id": "hook74",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s74"
+      ]
+    },
+    {
+      "source_id": "s75",
+      "dimension": "hook",
+      "pattern_id": "hook75",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s75"
+      ]
+    },
+    {
+      "source_id": "s76",
+      "dimension": "hook",
+      "pattern_id": "hook76",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s76"
+      ]
+    },
+    {
+      "source_id": "s77",
+      "dimension": "hook",
+      "pattern_id": "hook77",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s77"
+      ]
+    },
+    {
+      "source_id": "s78",
+      "dimension": "hook",
+      "pattern_id": "hook78",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s78"
+      ]
+    },
+    {
+      "source_id": "s79",
+      "dimension": "hook",
+      "pattern_id": "hook79",
+      "available_at": "2026-09-26T12:00:00Z",
+      "evidence_refs": [
+        "s79"
+      ]
+    }
+  ],
+  "copy_groups": [
+    {
+      "dimension": "hook",
+      "member_ids": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "s9",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19"
+      ],
+      "evidence_refs": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "s9",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19"
+      ],
+      "available_at": "2026-09-26T12:00:00Z"
+    }
+  ]
+}

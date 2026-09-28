@@ -1,0 +1,110 @@
+{
+  "execution": "local_production_ui_with_synthetic_intercepted_apis",
+  "baseline_commit": "9c25d34a89c14bb33c9b844077f897918a0c2091",
+  "source_sha256": {
+    "web/package.json": "9fe2ffcc20686c6a1da25e8ebca4623fb08f6faf27834dd46ea550865f1aeb86",
+    "web/package-lock.json": "a56151771567d60a0805b2d882bafb264c26290c28041b93fc6e91642936d759",
+    "web/src/features/trends/diagram-motion.ts": "ef6b3480bae66d60159a1c33a7fda28338f2081e5dfb318227fff6b91f0ca144",
+    "web/src/features/trends/trend-dna.tsx": "3241f1eade6dc2c5b637f5dde7d1155d3e9183b84a4f53196e490bdf84287895",
+    "web/src/features/trends/momentum-curve.tsx": "4b80cfe960c1e46db56d5bb162ade09f2a037970509ed9b914c365d6866291f6",
+    "web/src/features/trends/visual-intelligence.css": "049333990a9c3177ef2ddf9557d34581e42a013597c3d6bf148758866a9f8ee6",
+    "web/tests/visual-intelligence-browser.cjs": "295637bb7e04ccf3ba4c6215e815dd9ad36dbbeb1b60fc7afa1d8ea73465a03f"
+  },
+  "dependencies": {
+    "gsap": "3.15.0",
+    "@gsap/react": "2.1.2"
+  },
+  "viewports": [
+    [
+      1440,
+      900
+    ],
+    [
+      768,
+      1024
+    ],
+    [
+      390,
+      844
+    ],
+    [
+      430,
+      932
+    ]
+  ],
+  "browser_suites": {
+    "light": {
+      "assertion_groups": 91,
+      "all_passed": true,
+      "axe_runs": 18,
+      "axe_violations": 0,
+      "external_requests_blocked": 0,
+      "navigation_prefetch_cancellations": 526,
+      "request_failure_types": [
+        "net::ERR_ABORTED"
+      ],
+      "expected_fixture_http_status_counts": {
+        "404": 45,
+        "503": 2,
+        "400": 2,
+        "410": 1
+      },
+      "console_resource_errors_expected": 50
+    },
+    "dark-long": {
+      "assertion_groups": 91,
+      "all_passed": true,
+      "axe_runs": 18,
+      "axe_violations": 0,
+      "external_requests_blocked": 0,
+      "navigation_prefetch_cancellations": 522,
+      "request_failure_types": [
+        "net::ERR_ABORTED"
+      ],
+      "expected_fixture_http_status_counts": {
+        "404": 44,
+        "503": 2,
+        "400": 2,
+        "410": 1
+      },
+      "console_resource_errors_expected": 49
+    }
+  },
+  "offline_tests_passed": 15,
+  "production_build": "passed",
+  "typecheck": "passed",
+  "lint": "0 warnings and 0 errors across 829 files",
+  "strict_contract": "passed",
+  "video": {
+    "file": "diagram-motion-1440.mp4",
+    "codec": "H264",
+    "width": 1440,
+    "height": 900,
+    "duration_seconds": 7.52,
+    "synthetic_data": true
+  },
+  "server_stopped": true,
+  "artifacts_sha256": {
+    "browser-dark.log": "c696174f7b2c47c54048bfec9d89e81604c3557dae4d7fd9aac4748304dd79bb",
+    "browser-light.log": "c696174f7b2c47c54048bfec9d89e81604c3557dae4d7fd9aac4748304dd79bb",
+    "build.log": "9289b6aacf8ed3b47af4fcffaa04cf7ab697cca4ebabda7c0481427bd59dd351",
+    "contract.log": "cf36116f71e7267875be3d53a40e5d87b7b598171fb8f52ccc94b47aab25e873",
+    "dark-long/dna-1440.png": "ecfa7d268ec6f7a5ca74032dbc4174b8d641c979da0c641375bff0aca3596142",
+    "dark-long/dna-390.png": "513ccf2a57dc682712d66eb870c02c605f28a332b397959b7d9772d726ce0fba",
+    "dark-long/momentum-430.png": "b89acd2fe88c21e80db6023152b95971c80881a2a43672ce54f8ea4952e77709",
+    "dark-long/results.json": "b8ebbf2ce8fb030c5a9ac13502d652d66fdff6e0a270895200de4db7831669e2",
+    "diagram-motion-1440.mp4": "ccffea8e7aa21d5a2effae04e37498fd18108c13863fe37947b75a62ab25ecdc",
+    "light/dna-1440.png": "dc43fa74e7720461cb8e648ffe1a94720bd9078c18aad3f15468bbb7c42f5bdf",
+    "light/dna-390.png": "0774b9602646f9521c86118c1314216df862889f29ae21e7a5a62e70d72ceb12",
+    "light/dna-430.png": "a76153866bdfad33f5f260d7cab89d5c5463739a63c9c3044c71e88ff52d1b4b",
+    "light/dna-768.png": "c72f5ebfd298e9b439c8e3657c82f93f4d72e08fba9fc028b731161b51e4d6d8",
+    "light/momentum-390.png": "ac7c2b1b37e63a2fb714095e960b37fa2b9e93472610d3e6f5dbad18c755056d",
+    "light/momentum-768.png": "087710fa969f1ca3f17db6321abbb2065a6cb6db86246f659c0a6f1fbd70cf23",
+    "light/results.json": "36545023c561914d04bb775a1360e8629dbd960d47f591e2893fbacd7a55d0d9",
+    "lint.log": "750b76d997bf1acc9d375092e237d2e760bc610d7e967a7afffaad63189bc169",
+    "motion-preview-results.json": "0e007af7e253296812315b1f530788ecf02705c52486dff9322761cf092226ee",
+    "preview.log": "275f7916d0ccd11a9444e4ae07d53aaec7aea02edc114c089eadf2c1ba2bf0ac",
+    "typecheck.log": "c80a9f0fdb86a478898bdcae5b5d825aeec0df9d16695e8957bf7220b670906f",
+    "unit.log": "54e6991f3be4f2bb4712ddad49cefda002824be2f816f7158cf80bc09636f7aa"
+  }
+}

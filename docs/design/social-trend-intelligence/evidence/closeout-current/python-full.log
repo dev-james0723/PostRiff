@@ -1,0 +1,50 @@
+/Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/src/postriff_phase2/phone/session.py:312: SyntaxWarning: 'return' in a 'finally' block
+  return
+............{"event": "weather.unavailable", "reason": "timeout", "traceId": "trace_43b7dbcb800783fa7d337d14b2b49d51"}
+.........................{"event": "weather.unavailable", "reason": "URLError: <urlopen error [Errno 8] nodename>", "traceId": "trace_e7d66ed718e49a73dce8fe880108bccb"}
+{"event": "agent_tool.failed", "tool": "weather_now", "errorClass": "KeyError", "traceId": "trace_0ebb6dcb2ede8f6be5fcc0c6402126b0"}
+...................................................................................................................................................................................................................{"event": "metric_reads.complete_failed", "exceptionType": "RuntimeError"}
+.{"event": "metric_reads.read_failed", "exceptionType": "ValueError"}
+.....error: /Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/data/x.csv is inside a git checkout; write the dataset outside the repository
+.............................................................................................................................................../opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <addinfourl at 5183054352 whose fp = <test_hosted_storage_video.CountingBody object at 0x135be3bf0>>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 302: 'scripted'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...........................................................................................................................................................................................................{"event": "cron.completed", "requestId": "9f9b8bb2527248b39564a202392f6b0f", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}, "phone": {"status": "disabled"}}
+................................................/Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/src/postriff_phase2/cli_runtime.py:420: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  sink.fail(str(error))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......................{"event": "request.completed", "requestId": "a4f43dbee45449949b2fa0bb8af23341", "method": "POST", "status": 503, "durationMs": 0.03, "route": "api"}
+.........................................rafii.phone.media.failure {"errorClass": "ValueError", "phase": "runtime_init"}
+.................................................................................................................................................................................................................{"event": "cron.completed", "requestId": "9d5a82f1173243a286e0e058d118c659", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}, "phone": {"status": "disabled"}}
+.......................................................................................................................................................................................................................{"event": "time_back.write_failed", "exceptionType": "RuntimeError"}
+.{"event": "time_back.publish_failed", "exceptionType": "RuntimeError"}
+.......................................................................................................{"event": "coworker.weekly_recipe_failed", "error": "TypeError"}
+............................................................................................/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'bad request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+Executing <Task pending name='Task-1933' coro=<bridge.<locals>.from_live() running at /Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/src/postriff_phase2/phone/session.py:185> wait_for=<Future pending cb=[Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:459> cb=[_wait.<locals>._on_completion() at /opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:503] created at /opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:395> took 0.122 seconds
+............................................................................................................................................................................................................................{"event": "request.completed", "requestId": "1b4d56d83c234bbc8b1013dbad7323fc", "method": "GET", "status": 503, "durationMs": 0.25, "route": "api"}
+................................................................ssssssssssssssssssssss.....................ssssssssssssssss.................................................................................................ssssssssssss..ssssssssss................................................................................ssssssssssssss.ssss...ssssssssssssssssssssss...ssssssssssssssssssssssssssssssssssssssss..............ssss...................................................sssssss............ssssss.........sssssssssssssssss.....................ssss...sssssssssssssssssssssssss....................................................................s.....................................................................sssssssss........................ssss...........s.....................................................................sssssssss.....................................................................................................sssssssssssssss..................................trend.job_failed code=dispatch_disabled dispatched=False
+....trend.job_failed code=dispatch_disabled dispatched=False
+.trend.job_failed code=dispatch_disabled dispatched=False
+...trend.job_failed code=source_paused dispatched=False
+...trend.job_failed code=adapter_contract_mismatch dispatched=True
+.trend.job_failed code=adapter_contract_mismatch dispatched=True
+........trend.job_failed code=frontier_source_revoked dispatched=True
+.trend.job_failed code=frontier_source_revoked dispatched=False
+........trend.job_failed code=synthetic_revocation_failure dispatched=True
+..trend.job_failed code=provider_or_commit_failure dispatched=True
+.trend.job_failed code=cursor_unavailable dispatched=False
+.trend.job_failed code=provider_or_commit_failure dispatched=True
+.trend.job_failed code=stale_cursor_fence dispatched=True
+.trend.job_failed code=provider_or_commit_failure dispatched=True
+....trend.job_failed code=dispatch_disabled dispatched=True
+.trend.job_failed code=dispatch_disabled dispatched=True
+.trend.job_failed code=source_right_not_permitted dispatched=True
+.trend.job_failed code=provider_or_commit_failure dispatched=True
+..trend.job_failed code=provider_or_commit_failure dispatched=False
+.......................................................................................................................
+----------------------------------------------------------------------
+Ran 2712 tests in 106.075s
+
+OK (skipped=242)

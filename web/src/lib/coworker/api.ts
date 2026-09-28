@@ -130,8 +130,8 @@ export function createCoworkerApi(getToken: TokenSource) {
 
     /* performance learning */
     performance: (w: string) => get<PerformanceView>(`${co(w)}/performance`),
-    decideHypothesis: (w: string, id: string, decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted') =>
-      send<{ id: string; status: string; causal: boolean } & Verified>('POST', `${co(w)}/performance/hypotheses/${seg(id)}/decide`, { decision }),
+    decideHypothesis: (w: string, id: string, decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted', expectedSupport?: string) =>
+      send<{ id: string; status: string; causal: boolean } & Verified>('POST', `${co(w)}/performance/hypotheses/${seg(id)}/decide`, { decision, ...(expectedSupport ? { expectedSupport } : {}) }),
 
     /* listening + engagement */
     listening: (w: string) => get<ListeningView>(`${co(w)}/listening`),

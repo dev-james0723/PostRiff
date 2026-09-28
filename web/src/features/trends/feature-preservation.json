@@ -1,0 +1,1072 @@
+{
+  "schema_version": "1.0",
+  "scope": "WP09 Trend Radar and WP16 Opportunity Lab UI redesign",
+  "route": "/app/trends",
+  "api_contract_change": false,
+  "principles": [
+    "Existing monochrome Rafii design system",
+    "Creator -> evidence -> methodology",
+    "Exact sourced text, native language and emoji preserved",
+    "No invented stage, confidence, personalization or chart points",
+    "No paid calls or synthetic production fallback"
+  ],
+  "features": [
+    {
+      "id": "navigation",
+      "current_element": "/app/trends + coworker nav",
+      "purpose": "One trusted primary surface; Stage3 compatibility",
+      "data_source": "status.flags; no new engine",
+      "new_representation": "Existing route/nav retained",
+      "layer": "creator",
+      "verification": [
+        "flags_off_zero_requests",
+        "stage3_compatibility"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 flags off: zero trend requests",
+          "390 flags off: zero trend requests",
+          "820 flags off: zero trend requests"
+        ]
+      }
+    },
+    {
+      "id": "sections",
+      "current_element": "8 section tabs",
+      "purpose": "Preserve exact view queries and native keyboard tabs",
+      "data_source": "for_you,rising,breaking,hot,niche,platforms,language,watchlist",
+      "new_representation": "Same eight wire views; creator labels Picking up, Breaking out and Active now; scrollable keyboard tabs",
+      "layer": "creator",
+      "verification": [
+        "section_queries",
+        "keyboard_tabs"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "all section and filter queries preserved across navigation"
+        ]
+      }
+    },
+    {
+      "id": "search",
+      "current_element": "Search stored conversations + Apply search",
+      "purpose": "Explicit search; no per-keystroke acquisition",
+      "data_source": "query, cursor reset",
+      "new_representation": "Search trends + Search submit; no acquisition on input; unchanged query and cursor reset",
+      "layer": "creator",
+      "verification": [
+        "empty_exact_filters"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "empty exact filters and interval"
+        ]
+      }
+    },
+    {
+      "id": "filter_platform",
+      "current_element": "Current platform control",
+      "purpose": "Retain exact query values and reset cursor",
+      "data_source": "platform",
+      "new_representation": "Expandable Filters area; niche remains available in Niche",
+      "layer": "creator",
+      "verification": [
+        "filter_contract",
+        "responsive_filters"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "all section and filter queries preserved across navigation"
+        ]
+      }
+    },
+    {
+      "id": "filter_language",
+      "current_element": "Current language control",
+      "purpose": "Retain exact query values and reset cursor",
+      "data_source": "language",
+      "new_representation": "Expandable Filters area; niche remains available in Niche",
+      "layer": "creator",
+      "verification": [
+        "filter_contract",
+        "responsive_filters"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "all section and filter queries preserved across navigation"
+        ]
+      }
+    },
+    {
+      "id": "filter_niche",
+      "current_element": "Current niche control",
+      "purpose": "Retain exact query values and reset cursor",
+      "data_source": "niche",
+      "new_representation": "Expandable Filters area; niche remains available in Niche",
+      "layer": "creator",
+      "verification": [
+        "filter_contract",
+        "responsive_filters"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "all section and filter queries preserved across navigation"
+        ]
+      }
+    },
+    {
+      "id": "filter_since",
+      "current_element": "Current since control",
+      "purpose": "Retain exact query values and reset cursor",
+      "data_source": "since",
+      "new_representation": "Time range inside Filters; same since ISO values, Last24hours/7days",
+      "layer": "creator",
+      "verification": [
+        "filter_contract",
+        "responsive_filters"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "all section and filter queries preserved across navigation"
+        ]
+      }
+    },
+    {
+      "id": "pagination",
+      "current_element": "Next page / Back to first page",
+      "purpose": "Preserve server cursor and query scope",
+      "data_source": "next_cursor,cursor",
+      "new_representation": "Result footer with existing actions",
+      "layer": "creator",
+      "verification": [
+        "pagination_contract"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "pagination and filter cursor reset preserve server contract"
+        ]
+      }
+    },
+    {
+      "id": "freshness",
+      "current_element": "Stored results as of",
+      "purpose": "Separate stored state from live acquisition",
+      "data_source": "envelope.as_of,execution_state",
+      "new_representation": "As of date in creator layer; stored-only/no paid refresh detail retained in source details",
+      "layer": "creator",
+      "verification": [
+        "stored_reads_only"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 browse stored data only, authenticated contract",
+          "390 browse stored data only, authenticated contract",
+          "820 browse stored data only, authenticated contract"
+        ]
+      }
+    },
+    {
+      "id": "coverage",
+      "current_element": "Coverage & source health",
+      "purpose": "Keep independent scope/health axes",
+      "data_source": "coverage.*,limitations",
+      "new_representation": "Sources and what’s missing -> human source availability -> exact source details and limits",
+      "layer": "evidence",
+      "verification": [
+        "coverage_axes"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure"
+        ]
+      }
+    },
+    {
+      "id": "topic",
+      "current_element": "Topic + observation summary",
+      "purpose": "Explain what changed without inventing claims",
+      "data_source": "canonical_topic,observed.summary",
+      "new_representation": "What’s moving page; exact canonical_topic and server summary; explicit source-labelled Demo data",
+      "layer": "creator",
+      "verification": [
+        "native_text",
+        "long_content"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure"
+        ]
+      }
+    },
+    {
+      "id": "stage",
+      "current_element": "Lifecycle label",
+      "purpose": "Qualified claim only",
+      "data_source": "inferred,verification_state,expires_at,flags",
+      "new_representation": "Pure canonical qualified-stage label mapping; unknown Still taking shape; existing publicStage gate unchanged",
+      "layer": "creator",
+      "verification": [
+        "stage_guard"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [],
+        "pure_tests": "web/tests/trend-creator-language.test.cjs"
+      }
+    },
+    {
+      "id": "relevance",
+      "current_element": "Why it matters to you",
+      "purpose": "Show actual workspace reason only",
+      "data_source": "workspace_fit.reason",
+      "new_representation": "Distinct Why it may fit area displays exact workspace_fit.reason; neutral unknown when absent",
+      "layer": "creator",
+      "verification": [
+        "no_fake_personalization"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state low_confidence"
+        ],
+        "pure_tests": "web/tests/trend-creator-language.test.cjs"
+      }
+    },
+    {
+      "id": "momentum",
+      "current_element": "Measured velocity",
+      "purpose": "Show actual stored unit/window; never synthesized trend points",
+      "data_source": "calculated.velocity; observed.timeline",
+      "new_representation": "Human direction from qualified current velocity sign only; no speed thresholds; all raw values/windows/units/denominators under measurement methodology",
+      "layer": "creator",
+      "verification": [
+        "metric_units_windows",
+        "timeline_gaps"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [],
+        "pure_tests": "web/tests/trend-creator-language.test.cjs"
+      }
+    },
+    {
+      "id": "platform_states",
+      "current_element": "Per-platform labels",
+      "purpose": "Independent availability and qualification",
+      "data_source": "platform_states[].inferred,coverage",
+      "new_representation": "Compact named sources + unavailable explanation; independent human platform stages in trust and exact platform support/calibration/coverage in methodology",
+      "layer": "creator",
+      "verification": [
+        "platform_availability"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure"
+        ],
+        "pure_tests": "web/tests/trend-creator-language.test.cjs"
+      }
+    },
+    {
+      "id": "first_latest",
+      "current_element": "First detected / latest observed",
+      "purpose": "Preserve actual dates",
+      "data_source": "observed.first_detected,latest_observed",
+      "new_representation": "Actual timeline and evidence dates; full first/latest fields in source details and trust",
+      "layer": "evidence",
+      "verification": [
+        "timeline_dates"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure"
+        ]
+      }
+    },
+    {
+      "id": "confidence",
+      "current_element": "Measurement support / calibration unknown",
+      "purpose": "No invented score or unqualified accuracy",
+      "data_source": "inferred.confidence,calibration_state",
+      "new_representation": "Always visible Confidence: supported/still forming/not clear from existing categorical support, expiry and verification; neutral fallback; exact reasons retained deeper",
+      "layer": "evidence",
+      "verification": [
+        "calibration_unknown"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state low_confidence"
+        ],
+        "pure_tests": "web/tests/trend-creator-language.test.cjs"
+      }
+    },
+    {
+      "id": "timeline",
+      "current_element": "Timeline list",
+      "purpose": "Preserve real observations and gaps; no interpolation",
+      "data_source": "observed.timeline[].at,value,unit,state,reason",
+      "new_representation": "Readable activity list with gap markers",
+      "layer": "evidence",
+      "verification": [
+        "timeline_gaps"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "evidence",
+      "current_element": "Representative conversations",
+      "purpose": "Native-language evidence with rights/deadline guards",
+      "data_source": "evidence union,expires_at",
+      "new_representation": "Source quotation rows; original URL only when permitted",
+      "layer": "evidence",
+      "verification": [
+        "restricted_absence",
+        "native_emoji",
+        "expiry"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "1440 native language interpretation and evidence retained",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 native language interpretation and evidence retained",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 native language interpretation and evidence retained"
+        ]
+      }
+    },
+    {
+      "id": "trust",
+      "current_element": "Trust drawer trigger/Sheet",
+      "purpose": "Explain every claim and preserve focus",
+      "data_source": "receipt GET or detail GET",
+      "new_representation": "Why should I trust this? opens human evidence drawer; all four layers and full methodology preserved",
+      "layer": "evidence",
+      "verification": [
+        "trust_layers",
+        "focus_escape_restore"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "trust_observed",
+      "current_element": "Four-layer observed",
+      "purpose": "Keep claim type distinct",
+      "data_source": "observed.summary,metrics,evidence",
+      "new_representation": "1.What we saw: exact observed summary/dates/original conversations; all observed metrics in methodology",
+      "layer": "evidence",
+      "verification": [
+        "four_layers",
+        "native_text"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "trust_measured",
+      "current_element": "Four-layer measured",
+      "purpose": "Keep claim type distinct",
+      "data_source": "calculated.*",
+      "new_representation": "2.How the conversation is changing: deterministic direction and confidence; exact calculated metrics in methodology",
+      "layer": "evidence",
+      "verification": [
+        "four_layers",
+        "native_text"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 exact method windows units snapshots and seven independent fit dimensions",
+          "390 exact method windows units snapshots and seven independent fit dimensions",
+          "820 exact method windows units snapshots and seven independent fit dimensions"
+        ]
+      }
+    },
+    {
+      "id": "trust_inferences",
+      "current_element": "Four-layer inferences",
+      "purpose": "Keep claim type distinct",
+      "data_source": "inferred.*,platform_states",
+      "new_representation": "3.How Rafii reads the pattern: unchanged explanation and independent platform states; no unqualified stage claim",
+      "layer": "evidence",
+      "verification": [
+        "four_layers",
+        "native_text"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "trust_interpretation",
+      "current_element": "Four-layer interpretation",
+      "purpose": "Keep claim type distinct",
+      "data_source": "interpretation.summary,language,phrases,alternatives",
+      "new_representation": "4.What it might mean: native original phrases, interpretation, alternatives and missing support; separate from measured popularity",
+      "layer": "evidence",
+      "verification": [
+        "four_layers",
+        "native_text"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "unknowns",
+      "current_element": "Unverified claims / unknowns",
+      "purpose": "Keep unsupported claims visible as unverified",
+      "data_source": "unverified_claims[]",
+      "new_representation": "Dedicated evidence section",
+      "layer": "evidence",
+      "verification": [
+        "unknowns"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "method",
+      "current_element": "Advanced methodology and definitions",
+      "purpose": "Recompute/audit without crowding creator view",
+      "data_source": "receipt_id,method.*,metric.definition_id/version,baseline_ref,window,denominator",
+      "new_representation": "Measurement details and methodology: every observed/calculated metric separately, precision/windows/definitions/baseline, receipt/method/snapshot refs, original limitations and exact technical guard states",
+      "layer": "methodology",
+      "verification": [
+        "method_identity",
+        "metric_units_windows"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 exact method windows units snapshots and seven independent fit dimensions",
+          "390 exact method windows units snapshots and seven independent fit dimensions",
+          "820 exact method windows units snapshots and seven independent fit dimensions"
+        ]
+      }
+    },
+    {
+      "id": "quality",
+      "current_element": "Quality / Methodology page",
+      "purpose": "Global stored methodology and calibration",
+      "data_source": "methodology.*,calibration.*",
+      "new_representation": "How this works: same method and calibration endpoints; unknown calibration never displays accuracy percentage",
+      "layer": "methodology",
+      "verification": [
+        "calibration_unknown",
+        "method_definitions"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 insufficient calibration hides percentage",
+          "390 insufficient calibration hides percentage",
+          "820 insufficient calibration hides percentage"
+        ]
+      }
+    },
+    {
+      "id": "genome",
+      "current_element": "Genome & narratives",
+      "purpose": "Preserve dimensions, refs, uncertainty and narrative variants",
+      "data_source": "genome.version,dimensions[],narrative_variants[]",
+      "new_representation": "Readable evidence definition rows",
+      "layer": "evidence",
+      "verification": [
+        "genome_contract"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "propagation",
+      "current_element": "Graph / list",
+      "purpose": "Accessible equivalent and explicit hypothesized relations",
+      "data_source": "propagation.nodes[],edges[],scope,truncated",
+      "new_representation": "Relationship list with observed/hypothesized labels; first-seen disclosure",
+      "layer": "evidence",
+      "verification": [
+        "graph_keyboard",
+        "graph_basis"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "saturation",
+      "current_element": "Creative crowding",
+      "purpose": "Five independent dimensions; no fatigue prediction",
+      "data_source": "saturation.dimensions[].assessment,frame,classified,eligible,metric,interval,method,uncertainty",
+      "new_representation": "Five evidence rows with nested method details",
+      "layer": "evidence",
+      "verification": [
+        "saturation_dimensions"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+          "820 trust layers, native language, graph equivalent, focus trap/Escape/restore"
+        ]
+      }
+    },
+    {
+      "id": "language_patterns",
+      "current_element": "Language & Slang",
+      "purpose": "Preserve native meaning/context/uncertainty",
+      "data_source": "languagePattern.expression,language,context,meaning,uncertainty,evidence",
+      "new_representation": "Expression-led reading view with original examples",
+      "layer": "evidence",
+      "verification": [
+        "native_text",
+        "native_emoji"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 native language interpretation and evidence retained",
+          "390 native language interpretation and evidence retained",
+          "820 native language interpretation and evidence retained"
+        ]
+      }
+    },
+    {
+      "id": "opportunity",
+      "current_element": "Original contribution",
+      "purpose": "Show current source-supported creative next step",
+      "data_source": "opportunity.title,contribution,uncertainty,expires_at",
+      "new_representation": "Try this angle action area follows signal before evidence on mobile; exact opportunity data; Check again at expiry",
+      "layer": "creator",
+      "verification": [
+        "opportunity_expiry",
+        "tier_c_ideas"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "accept opportunity into existing Ideas source, no generation"
+        ]
+      }
+    },
+    {
+      "id": "angles",
+      "current_element": "Up to3 angles",
+      "purpose": "Keep title/contribution/format and user-fact requirements",
+      "data_source": "angles[].id,title,contribution,format_reason,factual_requirements",
+      "new_representation": "Disclosure per supplied angle; no generated angles",
+      "layer": "creator",
+      "verification": [
+        "fact_requirements"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "accept opportunity into existing Ideas source, no generation"
+        ]
+      }
+    },
+    {
+      "id": "accept",
+      "current_element": "Use this angle in Ideas",
+      "purpose": "Persist existing Ideas source only",
+      "data_source": "revision,angle_id,channel_id,goal,idempotency_key",
+      "new_representation": "Develop this idea opens unchanged angle/channel/goal form -> Save to Ideas -> verified snapshot refetch -> existing Ideas handoff",
+      "layer": "creator",
+      "verification": [
+        "tier_c_ideas",
+        "accept_no_generation",
+        "idempotency"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "accept opportunity into existing Ideas source, no generation"
+        ],
+        "real_api_result": "/tmp/trend-tier-c-final/browser-results.json"
+      }
+    },
+    {
+      "id": "fit",
+      "current_element": "Seven independent fit dimensions",
+      "purpose": "Keep each assessment/reason/evidence reference",
+      "data_source": "trend_relevance,brand,audience,timing,originality,risk,confidence",
+      "new_representation": "Shared fit disclosure; no scalar/ranking conversion",
+      "layer": "evidence",
+      "verification": [
+        "fit_dimensions"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 exact method windows units snapshots and seven independent fit dimensions",
+          "390 exact method windows units snapshots and seven independent fit dimensions",
+          "820 exact method windows units snapshots and seven independent fit dimensions"
+        ]
+      }
+    },
+    {
+      "id": "watch_create",
+      "current_element": "Watch this conversation",
+      "purpose": "Explicit persisted in-app scope/threshold",
+      "data_source": "trend_id,platforms,threshold,notification_policy,idempotency_key",
+      "new_representation": "Watch this conversation with human alert options mapped to unchanged threshold values and revision/idempotency semantics",
+      "layer": "creator",
+      "verification": [
+        "watch_persistence"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "watch persisted create + revision-safe disable"
+        ]
+      }
+    },
+    {
+      "id": "watch_list",
+      "current_element": "Watchlist + Disable watch",
+      "purpose": "Preserve state/revision safe deletion",
+      "data_source": "watches[].active,platforms,threshold,id,revision",
+      "new_representation": "Same watch status/actions; technical trend_id inspectable in Conversation reference (wire has no title)",
+      "layer": "creator",
+      "verification": [
+        "watch_revision_delete"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "watch persisted create + revision-safe disable"
+        ]
+      }
+    },
+    {
+      "id": "lab_context",
+      "current_element": "Lab existing draft editor",
+      "purpose": "Bind current server-resolved draft/opportunity",
+      "data_source": "draft id/revision,text,dirty; opportunity id/revision/context digest",
+      "new_representation": "Existing saved draft/linked opportunity revisions retained; creator explanation; no client lineage fields",
+      "layer": "creator",
+      "verification": [
+        "lab_missing_link",
+        "lab_stale"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "Lab explicit check, user-fact guard, selective existing revision edit"
+        ],
+        "pure_guards": "web/tests/trend-lab.test.cjs"
+      }
+    },
+    {
+      "id": "lab_run",
+      "current_element": "Check saved draft",
+      "purpose": "Explicit gated local diagnostics; no mount/keystroke run",
+      "data_source": "labInputSchema; run state/deadlines",
+      "new_representation": "Review this draft explicit existing run; service-labelled Demo notice; no auto dispatch",
+      "layer": "creator",
+      "verification": [
+        "lab_explicit_only",
+        "lab_no_paid_dispatch"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "Lab explicit check, user-fact guard, selective existing revision edit"
+        ],
+        "pure_guards": "web/tests/trend-lab.test.cjs"
+      }
+    },
+    {
+      "id": "lab_diagnostics",
+      "current_element": "Diagnostic cards",
+      "purpose": "Retain claim/frame/ref/uncertainty dimensions",
+      "data_source": "diagnostics[].dimension,assessment,claim,comparison_frame,evidence_refs,uncertainty",
+      "new_representation": "Claim, uncertainty and suggested edit first; exact before in Original wording; comparison/evidence refs in disclosure",
+      "layer": "creator",
+      "verification": [
+        "lab_diagnostic_fields"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "Lab populated diagnostics axe",
+          "390 Lab populated diagnostics axe",
+          "820 Lab populated diagnostics axe"
+        ],
+        "pure_guards": "web/tests/trend-lab.test.cjs"
+      }
+    },
+    {
+      "id": "lab_apply",
+      "current_element": "Apply this edit",
+      "purpose": "Exact selective edit using existing revision mutation",
+      "data_source": "before,after,reason,requires_user_fact; receipt/opportunity recheck",
+      "new_representation": "Existing action beside clear before/after; user-fact guard retained",
+      "layer": "creator",
+      "verification": [
+        "lab_exact_edit",
+        "lab_stale_race",
+        "lab_existing_mutation"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "Lab explicit check, user-fact guard, selective existing revision edit"
+        ],
+        "pure_guards": "web/tests/trend-lab.test.cjs"
+      }
+    },
+    {
+      "id": "state_loading",
+      "current_element": "Existing loading state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_loading"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state loading"
+        ]
+      }
+    },
+    {
+      "id": "state_empty",
+      "current_element": "Existing empty state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_empty"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "empty exact filters and interval"
+        ]
+      }
+    },
+    {
+      "id": "state_error",
+      "current_element": "Existing error state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_error"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state error"
+        ]
+      }
+    },
+    {
+      "id": "state_unavailable",
+      "current_element": "Existing unavailable state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_unavailable"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state unavailable"
+        ]
+      }
+    },
+    {
+      "id": "state_partial",
+      "current_element": "Existing partial state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_partial"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state partial"
+        ]
+      }
+    },
+    {
+      "id": "state_collecting",
+      "current_element": "Existing collecting state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_collecting"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state collecting"
+        ]
+      }
+    },
+    {
+      "id": "state_invalid",
+      "current_element": "Existing invalid state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_invalid"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state invalid"
+        ]
+      }
+    },
+    {
+      "id": "state_expired",
+      "current_element": "Existing expired state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_expired"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state expired"
+        ]
+      }
+    },
+    {
+      "id": "state_deleted",
+      "current_element": "Existing deleted state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_deleted"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "state deleted"
+        ]
+      }
+    },
+    {
+      "id": "state_revoked",
+      "current_element": "Existing revoked state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_revoked"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "receipt 410 removes card claims"
+        ]
+      }
+    },
+    {
+      "id": "state_calibration_unknown",
+      "current_element": "Existing calibration_unknown state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_calibration_unknown"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 insufficient calibration hides percentage",
+          "390 insufficient calibration hides percentage",
+          "820 insufficient calibration hides percentage"
+        ]
+      }
+    },
+    {
+      "id": "state_disabled",
+      "current_element": "Existing disabled state",
+      "purpose": "Never replace absence with synthetic intelligence",
+      "data_source": "HTTP/envelope/flags/current validity",
+      "new_representation": "Existing StateMessage semantics with compact contextual layout",
+      "layer": "creator",
+      "verification": [
+        "state_disabled"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 flags off: zero trend requests",
+          "390 flags off: zero trend requests",
+          "820 flags off: zero trend requests"
+        ]
+      }
+    },
+    {
+      "id": "demo_provenance",
+      "current_element": "Synthetic fixture/source limitations",
+      "purpose": "Mark demonstration data explicitly, never silently substitute live data",
+      "data_source": "Explicit supplied limitation beginning Demo data: only",
+      "new_representation": "Demo data only from explicit service limitation marker; creator explanation; full original limitation and seeded topic/evidence remain intact",
+      "layer": "creator",
+      "verification": [
+        "demo_label_no_fallback"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure"
+        ]
+      }
+    },
+    {
+      "id": "motion",
+      "current_element": "Native disclosure/tab transitions",
+      "purpose": "Clarify expansion/change without spectacle",
+      "data_source": "user action,prefers-reduced-motion",
+      "new_representation": "Native disclosure + existing Motion200ms; scoped tab lens200ms; reduced motion zero",
+      "layer": "creator",
+      "verification": [
+        "reduced_motion"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "meaningful 200ms motion; reduced motion removes it"
+        ]
+      }
+    },
+    {
+      "id": "accessibility",
+      "current_element": "Focus/keyboard/contrast/reflow",
+      "purpose": "Preserve existing usable semantics",
+      "data_source": "native controls,BaseUI Sheet,Rafii tokens",
+      "new_representation": "Mobile main->action->evidence; desktop action rail; native controls/focus/Escape/semantic lists; light/dark and long source text",
+      "layer": "creator",
+      "verification": [
+        "axe",
+        "keyboard",
+        "focus_escape_restore",
+        "zoom_200",
+        "long_content"
+      ],
+      "verification_evidence": {
+        "browser_result": "/tmp/trend-final-light/results.json",
+        "assertion_groups": [
+          "1440 radar axe",
+          "1440 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "1440 trust drawer axe",
+          "Lab populated diagnostics axe",
+          "Lab existing editor axe",
+          "390 radar axe",
+          "390 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "390 trust drawer axe",
+          "390 Lab populated diagnostics axe",
+          "820 radar axe",
+          "820 explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure",
+          "820 trust drawer axe",
+          "820 Lab populated diagnostics axe",
+          "200% zoom axe"
+        ]
+      }
+    }
+  ],
+  "validation_receipt": "redesign-validation.json",
+  "copy_audit": "copy-audit.json",
+  "runtime_ui_sha256": "1a6630acb02851b49772524929d234ce2c1a868fdf78bb9a608bc455e152070c"
+}

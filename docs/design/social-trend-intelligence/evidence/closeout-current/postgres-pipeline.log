@@ -1,0 +1,15 @@
+test_a_atomic_ingest_to_receipt_projection_retry_and_future_cutoff (test_trend_pipeline.DurablePipeline.test_a_atomic_ingest_to_receipt_projection_retry_and_future_cutoff) ... ok
+test_b_membership_only_revocation_invalidates_receipt_and_private_advanced (test_trend_pipeline.DurablePipeline.test_b_membership_only_revocation_invalidates_receipt_and_private_advanced) ... ok
+test_b_pending_worker_catches_wire_tampering_and_rechecks_rights (test_trend_pipeline.DurablePipeline.test_b_pending_worker_catches_wire_tampering_and_rechecks_rights) ... ok
+test_c_current_delete_blocks_projection_and_purges_complete_recipe (test_trend_pipeline.DurablePipeline.test_c_current_delete_blocks_projection_and_purges_complete_recipe) ... ok
+test_d_default_bound_continues_with_database_knowledge_timestamps (test_trend_pipeline.DurablePipeline.test_d_default_bound_continues_with_database_knowledge_timestamps) ... ok
+test_e_original_evidence_corrections_and_separate_platform_associations (test_trend_pipeline.DurablePipeline.test_e_original_evidence_corrections_and_separate_platform_associations) ... ok
+test_f_candidates_bound_recursive_trust_and_preserve_burst_ids (test_trend_pipeline.DurablePipeline.test_f_candidates_bound_recursive_trust_and_preserve_burst_ids) ... ok
+test_g_700_source_root_context_survives_larger_history_and_seals_1400_dependencies (test_trend_pipeline.DurablePipeline.test_g_700_source_root_context_survives_larger_history_and_seals_1400_dependencies) ... ok
+test_h_storage_grants_gate_sql_payload_before_normalization (test_trend_pipeline.DurablePipeline.test_h_storage_grants_gate_sql_payload_before_normalization) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 149.567s
+
+OK
+{"execution": "real_disposable_PostgreSQL_synthetic_inputs", "tests_run": 9, "failures": 0, "errors": 0, "skipped": 0, "drifted_files": ["tests/test_trend_learning.py"], "success": true}

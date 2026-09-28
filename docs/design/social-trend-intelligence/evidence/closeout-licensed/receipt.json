@@ -1,0 +1,32 @@
+{
+  "schema": "rafii.licensed-adapter-local-acceptance.v1",
+  "recorded_at": "2026-09-28T08:07:01.924745+00:00",
+  "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
+  "execution": "offline_synthetic_import_contract_not_vendor_qualification",
+  "command": "PYTHONPATH=src:tests python -m unittest test_trend_licensed -v",
+  "exit_code": 0,
+  "tests": 5,
+  "source_hashes_before": {
+    "tests/test_trend_licensed.py": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+    "tests/test_trend_contracts.py": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
+    "src/postriff_phase2/growth/trends/providers/licensed.py": "d02b75763a2ab2e48a5698113843c2c68632bb696fefe65404d677760c4bf873",
+    "src/postriff_phase2/growth/trends/providers/base.py": "f62440324ae01a068df628ab7368ac39f3c467a821461a6c19e99406a9c0990f",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "src/postriff_phase2/growth/trends/policy.py": "fb60fd7880af910e4dc42c51868fa6438f8aa70419ae9c24ee5efe8cf0a4e0e5"
+  },
+  "source_hashes_after": {
+    "tests/test_trend_licensed.py": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+    "tests/test_trend_contracts.py": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
+    "src/postriff_phase2/growth/trends/providers/licensed.py": "d02b75763a2ab2e48a5698113843c2c68632bb696fefe65404d677760c4bf873",
+    "src/postriff_phase2/growth/trends/providers/base.py": "f62440324ae01a068df628ab7368ac39f3c467a821461a6c19e99406a9c0990f",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "src/postriff_phase2/growth/trends/policy.py": "fb60fd7880af910e4dc42c51868fa6438f8aa70419ae9c24ee5efe8cf0a4e0e5"
+  },
+  "source_drift": [],
+  "log_sha256": "19162039c5dccd41b5952c6685c8a96f19957e51f558fa8e32c220ecda851614",
+  "provider_calls": 0,
+  "model_calls": 0,
+  "egress_guard": "OfflineTest asserts socket/DNS/urllib methods were never called",
+  "production_verified": false,
+  "remaining_gate": "Actual vendor-specific commercial/data review, entitlement, scope and export contract approval; adapter support alone does not qualify licensed coverage."
+}

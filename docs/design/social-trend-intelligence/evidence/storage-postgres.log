@@ -1,0 +1,113 @@
+PASS real non-owner service role writes under forced RLS
+PASS duplicate source revision idempotent
+PASS immutable source identity collision rejected
+PASS same text separate native identities retained
+PASS typed aggregate unknown remains NULL without synthetic posts
+PASS out-of-order backfill cannot replace newer head
+PASS projection revision replay returns same durable identity
+PASS projection revision cannot change payload on replay
+PASS optimistic projection append rejects stale head
+PASS shared projection requires explicit entitlement
+PASS other workspace cannot guess shared object
+PASS foreign actor rejected even on service connection
+PASS authenticated role cannot enumerate raw observations
+PASS direct browser projection cannot bypass display redaction
+PASS cross-workspace dependency trigger blocks worker
+PASS dependency cycle rejected
+PASS composite scope foreign key rejects foreign observation
+PASS stable keyset yields distinct pages
+PASS as-of read retains latest revision known at cutoff
+PASS concurrent multidimensional last-budget race permits one
+PASS unknown exposure prevents overspend
+PASS integer microUSD known settlement clears reservation exactly
+PASS bad batch atomically aborts
+PASS failed batch has neither durable observation nor cursor
+PASS batch cursor and outbox commit together
+PASS completed stale fence cannot commit
+PASS expired unstarted lease increments fence on reclaim
+PASS expired owner cannot dispatch
+PASS crashed dispatched job becomes unknown not automatic retry
+PASS exact job claim never substitutes higher priority sibling
+PASS fenced local completion requires no provider or reservation
+PASS terminal job erases input and seals idempotency without redispatch
+PASS job payload cannot retain raw observations as another source store
+PASS local completion rejects stale duplicate fence
+PASS concurrent model accounting records authoritative usage exactly once
+PASS external completion requires the recorded usage pointer
+PASS external completion clears controls without provider cursor side effects
+PASS stale model output cannot commit after independent usage accounting
+PASS expiry after accounted attempt preserves known spend and usage receipt
+PASS cancelled model output still records and settles incurred usage
+PASS cancellation after usage commit never releases settled spend
+PASS successful output with unknown price retains full reserved exposure
+PASS five physical model attempts produce five existing usage-ledger events
+PASS quarantine outbox permits only sanitized content-free receipt without node
+PASS quarantine event rejects any unexpected content-bearing field
+PASS ingested cutoff is DB-stamped after observation availability
+PASS ingested event retains marker counts without DID or source text
+PASS ingested provider job retains no processed request payload
+PASS new live observation manifest and projection validate in one transaction
+PASS full recipe chunks survive manifest roundtrip
+PASS policy and contract availability cannot inherit a backdated review
+PASS pipeline policy manifest inherits durable availability
+PASS policy cannot authorize a cutoff before its durable availability
+PASS accepted mutation binding serializes concurrent source tombstone
+PASS deletion wins immediately after mutation transaction releases
+PASS source deletion purges retained full recomputation recipe and chunks
+PASS consumer effect failure leaves no success receipt
+PASS consumer receipt deduplicates committed local effect
+PASS outbox lease expiry during local effect refuses completion
+PASS expired outbox completion rolls back its local domain mutation
+PASS watch creation idempotent
+PASS watch deletion replay stable
+PASS caller transaction controls opportunity decision rollback
+PASS mutation lock serializes concurrent projection head append
+PASS mutation binding rejects a revision superseded before lock acquisition
+PASS receipt schema v2 and DB-bound verification survive read
+PASS legacy pure receipt without membership seal hides receipt trend and indirect workspace artifact
+PASS legacy pure receipt without membership seal is excluded from bounded lists
+PASS malformed membership binding markers fail closed without changing generic receipts
+PASS source tombstone immediately denies dependent payload
+PASS delete-before-replay prevents resurrection
+PASS revoked opportunity cannot be saved
+PASS bounded purge removes raw content identity and payload digest
+PASS receipt purge removes source-derived verification hashes
+PASS author tombstone blocks unseen future source across domains
+PASS entitlement revocation changes pagination signature and denies shared read
+PASS restore read gate defers purge rather than destroying retained data
+PASS restored database read gate closes before tombstone import
+PASS real backup restore cannot resurrect deleted source after tombstone import
+PASS test connections were non-superuser and non-bypass throughout
+PASS policy revocation cancels and erases pending controls without releasing unknown cost
+PASS operations snapshot covers typed durable counters without source content
+PASS operations expose quarantine enums, lag samples and explicit cohort qualification gap
+PASS operations preserve Cantonese cohort without claiming language qualification
+PASS retention scrubs old content while retaining bounded continuation indices and root references
+PASS actual worker defaults dispatch zero attempts without flags
+PASS actual worker injected adapter commits canonical batch plus existing usage sink
+PASS worker usage source matches frozen035 ledger with integer zero known cost
+PASS deep reverse deletion closure progresses across bounded purge pages
+PASS purge preselection retains unrelated currently permitted observation
+PASS purge discovers current policy_revoked without erasing permitted inputs
+PASS purge discovers current policy_expired without erasing permitted inputs
+PASS purge discovers current policy_unknown without erasing permitted inputs
+PASS purge discovers current observation_grant_expired without erasing permitted inputs
+PASS purge discovers current derive_grant_expired without erasing permitted inputs
+PASS purge discovers current contract_expired without erasing permitted inputs
+PASS purge discovers current scope_disabled without erasing permitted inputs
+PASS purge discovers current method_withdrawn without erasing permitted inputs
+PASS purge discovers current node_expired without erasing permitted inputs
+PASS purge discovers current entitlement_revoked without erasing permitted inputs
+PASS current raw policy_unknown blocks full recipe before purge
+PASS current raw policy_unknown suppresses derived text while independent aggregate stays readable
+PASS current raw policy_unknown blocks new retained recipes at commit
+PASS current raw policy_unknown bounded purge removes raw identity recipe chunks and receipt seal only
+PASS current raw observation_expired blocks full recipe before purge
+PASS current raw observation_expired suppresses derived text while independent aggregate stays readable
+PASS current raw observation_expired blocks new retained recipes at commit
+PASS current raw observation_expired bounded purge removes raw identity recipe chunks and receipt seal only
+PASS current raw contract_operation blocks full recipe before purge
+PASS current raw contract_operation suppresses derived text while independent aggregate stays readable
+PASS current raw contract_operation blocks new retained recipes at commit
+PASS current raw contract_operation bounded purge removes raw identity recipe chunks and receipt seal only
+{"execution": "disposable_postgresql_synthetic", "passed": 112, "port": 56451, "provider_calls": 0}

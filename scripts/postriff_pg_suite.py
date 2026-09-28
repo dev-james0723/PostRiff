@@ -25,7 +25,14 @@ def main():
         with tempfile.TemporaryDirectory(prefix='consumer-pg-') as tmp:
             data=Path(tmp)/'data'
             subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)
-            subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(Path(tmp)/'postgres.log'),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+            server_log=Path(tmp)/'postgres.log'
+            try:
+                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+            except subprocess.CalledProcessError:
+                # TemporaryDirectory otherwise removes the only startup diagnostic.
+                # This cluster has no application credentials or customer records.
+                if server_log.exists():print(server_log.read_text(),flush=True)
+                raise
             try:
                 subprocess.run([str(PG/'psql'),DSN,'-v','ON_ERROR_STOP=1','-q','-f',str(ROOT/'tests/phase2/rls.sql')],check=True,stdout=subprocess.DEVNULL)
                 group=[script]

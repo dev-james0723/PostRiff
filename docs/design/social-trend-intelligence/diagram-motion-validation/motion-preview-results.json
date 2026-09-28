@@ -1,0 +1,15 @@
+{
+  "execution": "synthetic_intercepted_browser",
+  "colorScheme": "light",
+  "longContent": false,
+  "results": [
+    {
+      "name": "1440 flags off: zero trend requests",
+      "pass": true
+    },
+    {
+      "name": "Recorded synthetic production UI motion preview",
+      "pass": true
+    }
+  ]
+}

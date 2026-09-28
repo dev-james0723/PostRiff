@@ -1,0 +1,179 @@
+{
+  "state": "LOCALLY_VERIFIED_WITH_DEFERRED_CAPABILITIES",
+  "execution": "local implementation; no push/PR merge/deployment",
+  "recorded_at": "2026-09-28T05:48:51.707528+00:00",
+  "worktree": "/Users/ouxianxing/.codex/worktrees/trend-visual-intelligence/James-Au-Studio",
+  "visual_baseline": "a45ca21",
+  "committed_current_dependency_baseline": "b3395ef",
+  "dependency_method": "local three-way application of committed790e0d4..b3395ef diff; originals preserved; no WIP copied",
+  "sources": {
+    "/Users/ouxianxing/Documents/James-Au-Studio-all-updates/docs/design/social-trend-intelligence/RAFII_SOCIAL_TREND_VISUAL_INTELLIGENCE_UI_ENGINEERING_SPEC_2026-09-27.md": {
+      "sha256": "6363e15cbeeed7fc163af257078d339c27414e082734852b840f0e6f09e0833e",
+      "review": "full text read"
+    },
+    "/Users/ouxianxing/Documents/James-Au-Studio-all-updates/docs/superpowers/plans/2026-09-27-rafii-social-trend-visual-intelligence-ui.md": {
+      "sha256": "6c17b1e1d3fcb513d4c67fa02a8e5728ad79e5681cede787e5e96a54a75af5a8",
+      "review": "full text read"
+    },
+    "/Users/ouxianxing/Documents/James-Au-Studio-all-updates/docs/design/social-trend-intelligence/RAFII_SOCIAL_TREND_INTELLIGENCE_MASTER_SPEC_2026-09-27.md": {
+      "sha256": "5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328",
+      "review": "full text read"
+    },
+    "/Users/ouxianxing/Documents/James-Au-Studio-all-updates/docs/design/social-trend-intelligence/RAFII_SOCIAL_TREND_VISUAL_INTELLIGENCE_UI_AGENT_HANDOFF_2026-09-27.md": {
+      "sha256": "40ea582aa3875ff81e1cf21c45baccd9c02e0d7e6a9de965d295f376f3bd9b33",
+      "review": "full text read"
+    },
+    "/Users/ouxianxing/Documents/James-Au-Studio-all-updates/docs/design/social-trend-intelligence/assets/rafii-social-trends-intel-visual-intelligence-concept-2026-09-27.png": {
+      "sha256": "3c9685fdfa6d2215e21cac74c2d326431edd7f052a98448506519b924e0b3298",
+      "review": "visually inspected"
+    }
+  },
+  "features": [
+    {
+      "current_element": "Trend cards",
+      "purpose": "Select a conversation",
+      "underlying_data": "trend list/receipt identity",
+      "new_representation": "Selected conversation cockpit; original eight views, filters, paging retained",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "OpportunityCard",
+      "purpose": "Act or dismiss with current evidence",
+      "underlying_data": "original ordered opportunities envelope + signed exposure_token",
+      "new_representation": "Same canonical card in Creative Opportunity, including uncertain candidates; independent creation gate",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Exposure observer",
+      "purpose": "Record only actually visible opportunities",
+      "underlying_data": "server token/full ordered candidate page/current actor/500ms dwell",
+      "new_representation": "Exact signed page passes through both visual components unchanged",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Accept/source link",
+      "purpose": "Continue in existing Ideas",
+      "underlying_data": "POST accept + canonical snapshot source.origin.trendLineage",
+      "new_representation": "Existing card and durable source link survive refreshed list; no client lineage or new composer",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Dismiss status",
+      "purpose": "Reject relevance and retain evidence",
+      "underlying_data": "POST dismiss verified revision",
+      "new_representation": "Canonical Not relevant action and keyboard confirmation/focus preserved",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Fit dimensions",
+      "purpose": "Explain personalization",
+      "underlying_data": "workspace_fit separate evidence/reasons",
+      "new_representation": "Selected opportunity fit preferred; no invented audience or overall score",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "DNA",
+      "purpose": "Recognize a multi-dimensional profile",
+      "underlying_data": "native velocity/acceleration/corroboration/fit, missing normalization",
+      "new_representation": "Six stable colored spokes + exact values/list; no fabricated radius/polygon/zero",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Momentum",
+      "purpose": "See measured change through time",
+      "underlying_data": "observed.timeline actual at/unit/state",
+      "new_representation": "Measured SVG with separate gaps/controls/table; platform-specific absence is explicit",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Platform states",
+      "purpose": "Understand where coverage applies",
+      "underlying_data": "platform_states coverage/representation/inferred",
+      "new_representation": "Independent activity, collecting, missing, partial and aggregate labels; connected filtering",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Trust drawer",
+      "purpose": "Inspect four evidence layers and method",
+      "underlying_data": "current receipt, observed/calculated/inferred/interpretation",
+      "new_representation": "Existing drawer and controls preserved; current crowding sample details reused",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Crowding",
+      "purpose": "Distinguish prevalence from copying",
+      "underlying_data": "five dimensions + sample_details",
+      "new_representation": "Independent cards with full pattern counts, coverage, creator support, intervals, unknown copy support",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Whitespace",
+      "purpose": "Inspect supported underexplored contribution",
+      "underlying_data": "existing current-reviewed whitespace GET",
+      "new_representation": "Strict optional read panel with exact trend/receipt/time/platform binding, sample limitations; proposal is not proof",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Forecast",
+      "purpose": "Inspect qualified future quantities when available",
+      "underlying_data": "existing current admitted forecast GET",
+      "new_representation": "Separate opt-in forecast view; observed curve unchanged; unknown/unqualified/current-binding failure closed",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Compare",
+      "purpose": "Compare exact dimensions",
+      "underlying_data": "two current trends with version/window/scope checks",
+      "new_representation": "Two profiles exact table; no overall winner or shared scale invented",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Opportunity Lab",
+      "purpose": "Check/edit existing draft",
+      "underlying_data": "existing run + saved revision + variant_edit",
+      "new_representation": "Canonical editor/normalization, explicit check, stale409, approval invalidation retained",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    },
+    {
+      "current_element": "Home Weekly Performance",
+      "purpose": "Preserve cross-product behavior",
+      "underlying_data": "current committed W shared adapters",
+      "new_representation": "Current pool/exposure/learning/source workflow reused without duplicate navigation",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED_WITH_LIMITATIONS"
+    },
+    {
+      "current_element": "Motion",
+      "purpose": "Show transitions without encoding false movement",
+      "underlying_data": "GSAP useGSAP scoped SVG/context cleanup/reduced preference",
+      "new_representation": "Existing meaningful diagram reveal retained; values and missing gaps never animated into data",
+      "local_verification": "See source-bound receipt: strict offline contracts; light/dark matrix; native observer; actual API/PG where applicable",
+      "state": "LOCALLY_VERIFIED"
+    }
+  ],
+  "limitations": [
+    "No live social sources, paid models, cohort qualification or production verification; all seed identities/content explicitly synthetic.",
+    "Whitespace and positive forecast rendering were verified with strict actual pure-Python projection fixtures, not an end-to-end live qualified forecast cohort.",
+    "No versioned shared DNA normalization: exact units and Unknown remain visible; no filled score polygon.",
+    "No platform-specific timeline/forecast target supplied: selected platform abstains instead of borrowing global series.",
+    "Weekly-plan/campaign/chat/request-three-angles contextual buttons remain visibly disabled pending verified workflow bindings; existing Ideas acceptance and draft review work.",
+    "Opportunity-level originality/evidence are exposed; missing independent angle-level supply comparisons remain disclosed.",
+    "No physical-device or manual VoiceOver claim. Creator comprehension in 5\u201310 seconds is a design goal, not a measured user study."
+  ],
+  "validation": "evidence/visual-current/receipt.json"
+}

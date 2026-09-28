@@ -20,7 +20,10 @@ sys.path.insert(0,'scripts')
 from launch_credit_fixture import configure
 
 DSN=os.environ['POSTRIFF_TEST_DSN']
-now=[time.time()]
+# PostgreSQL timestamps have microsecond precision. Use exact whole seconds so
+# the 50/60/3600s boundary assertions cannot drift just below a threshold after
+# a float timestamp is rounded by the database.
+now=[int(time.time())]
 user=str(uuid.uuid4())
 def connection(): return psycopg.connect(DSN)
 def verify(token):

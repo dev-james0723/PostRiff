@@ -1004,6 +1004,11 @@ class IdeasService:
             from .growth.scout import validate_lineage
             validate_lineage(current_state, outcome["scoutLineage"])
             artifact["scoutLineage"] = outcome["scoutLineage"]
+        if outcome.get("trendLineage"):
+            from .growth.trends.service import validate_stored_bindings
+            validate_stored_bindings(self.repository.connection_factory, cur, workspace_id, outcome["actor"], current_state,
+                                     outcome["trendLineage"], self.clock())
+            artifact["trendLineage"] = copy.deepcopy(outcome["trendLineage"])
         artifact["sourceBindings"] = [{"id": item["id"], "hash": item["hash"]} for item in outcome["context"]["sources"]]
         references = outcome.get("references")
         if references is not None:
@@ -1405,6 +1410,12 @@ class IdeasService:
                                       notes=self._reference_notes(cur, workspace_id, state, refs), run_sources=lambda ids: self._run_sources(cur, workspace_id, ids), actor=principal,
                                       connector_items=connector_items)
             destinations, source_ids, context = projected["destinations"], projected["sourceIds"], projected["context"]
+            from .growth.trends.opportunities import lineage as trend_lineage
+            from .growth.trends.service import validate_stored_bindings
+            trend_bindings = trend_lineage(state, source_ids)
+            if trend_bindings:
+                validate_stored_bindings(self.repository.connection_factory, cur, workspace_id, principal, state,
+                                         trend_bindings, self.clock(), model_visible=getattr(runtime, "provider_class", "cloud") != "local")
             shared, voice_context, request, bound, reminders = projected["shared"], projected["voiceContext"], projected["request"], projected["bound"], projected["reminders"]
             # Authoritative: the prompt is final here (research included), so an explicit level over the limit is refused
             # before the run exists or anything is reserved.
@@ -1451,6 +1462,8 @@ class IdeasService:
             if coworker_flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED"):
                 from .growth.scout import lineage
                 outcome["scoutLineage"] = lineage(state, source_ids)
+            if trend_bindings:
+                outcome["trendLineage"] = trend_bindings
             if projected.get("reworkOf"):
                 # A rework of one draft (handed in, or a post chip in the rework role): applying it updates that
                 # draft, not whichever draft shares its slot.
@@ -1681,9 +1694,13 @@ class IdeasService:
             reminders = list(dict.fromkeys(reminders + list(report["reminders"])))
         # Step ③: skills are bound by destination, format, intent and content type, and recorded
         # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
-        bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
-                                 content_type_id if content_type_id != "unclassified" else None,
-                                 max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
+        from contextlib import nullcontext
+        from .skill_compiler import workflow_context
+        trend_selected = any(s.get("id") in source_ids and (s.get("origin") or {}).get("trendLineage") for s in state.get("sources", []))
+        with workflow_context("rafii-trend-intelligence") if trend_selected else nullcontext():
+            bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
+                                     content_type_id if content_type_id != "unclassified" else None,
+                                     max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
         projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
         if resolved:
@@ -1876,6 +1893,9 @@ class IdeasService:
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
             voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
+            if artifact.get("trendLineage"):
+                from .growth.trends.opportunities import validate_lineage as validate_trend_lineage
+                validate_trend_lineage(state, artifact["trendLineage"], self.clock())
             if artifact.get("scoutLineage"):
                 from .growth.scout import validate_lineage
                 validate_lineage(state, artifact["scoutLineage"])
@@ -1909,6 +1929,10 @@ class IdeasService:
                 if media_lost:
                     values["warnings"] = values["warnings"] + ["A photo attached to this draft was deleted."]
                 values.update(content)
+                # The server-owned accepted selection is destination-specific and frozen
+                # through candidate, variant, approval manifest and observed outcomes.
+                values["trendLineage"] = [copy.deepcopy(b) for b in artifact.get("trendLineage", [])
+                                           if b["platform"] == candidate["platform"] and b["channel_id"] == candidate.get("channelId")]
                 if old:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
@@ -1938,7 +1962,12 @@ class IdeasService:
             return state
 
         created, linked = [], []
-        saved = self.repository.command(workspace_id, token, revision, command)
+        def current_trend_evidence(cur, state, actor):
+            if artifact.get("trendLineage"):
+                from .growth.trends.service import validate_stored_bindings
+                validate_stored_bindings(self.repository.connection_factory, cur, workspace_id, actor, state,
+                                         artifact["trendLineage"], self.clock())
+        saved = self.repository.command(workspace_id, token, revision, command, after=current_trend_evidence)
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("UPDATE public.pr_agent_runs SET status='applied',updated_at=now() WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
         return {"runId": run_id, "status": "applied", "revision": saved["revision"], "variants": len(artifact["variants"]), "variantIds": list(created),

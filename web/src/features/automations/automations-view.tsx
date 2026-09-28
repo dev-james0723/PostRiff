@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
+import { DRAFT_PLATFORMS } from '@/features/agent/composer';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { InfoTip, RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage, Surface } from '@/components/rafii';
@@ -107,7 +108,22 @@ export function AutomationsView() {
     opened.current = signature;
     const campaignId = params.get('campaign');
     const editId = params.get('edit');
-    if (params.get('new') === '1') open(blankInitial(timeZone));
+    const sourceId = params.get('source');
+    const source = state.sources?.find((item) => item.id === sourceId && item.active);
+    const lineage = source?.origin?.trendLineage;
+    if (sourceId && (!source || !lineage || Date.parse(lineage.expires_at) <= Date.now())) {
+      toast.error('This trend source is unavailable or expired. Return to Trends for a fresh opportunity.');
+      return;
+    }
+    if (source && lineage && Date.parse(lineage.expires_at) > Date.now()) {
+      if (!(DRAFT_PLATFORMS as readonly string[]).includes(lineage.platform)) {
+        toast.error('Campaign drafting is not supported for this source’s selected platform. Review the source in Ideas.');
+        return;
+      }
+      open({ ...blankInitial(timeZone), name: source.title.slice(0, 80), goal: lineage.goal,
+        audience: state.brandHub?.audience ?? '', sourceIds: [source.id],
+        targets: [{ key: lineage.channel_id, channelId: lineage.channel_id, platform: lineage.platform, languages: [lineage.language] }] });
+    } else if (params.get('new') === '1') open(blankInitial(timeZone));
     else if (campaignId) {
       const campaign = state.raffi?.campaignPlanning?.campaigns.find((item) => item.id === campaignId);
       if (campaign) open(initialFromBrief(campaign, timeZone));

@@ -1,0 +1,23 @@
+✔ creator labels preserve all canonical lifecycle gates; unknown never becomes a stage (10.25575ms)
+✔ momentum translates sign only, abstains without qualified current inputs, and leaves raw data unchanged (1.824333ms)
+✔ confidence uses source categories without invented levels or an invented reason for provisional support (0.701458ms)
+✔ frozen run binds current draft, opportunity, context, receipt and deadlines (9.68575ms)
+✔ selective edit applies once and rejects missing, empty, repeated or overlapping match (0.103917ms)
+✔ public stage requires current receipt, both flags and qualified evidence/calibration (0.580667ms)
+✔ six stable dimensions retain native units and exact semantic layers; never fabricate a radar scale (38.800958ms)
+✔ Unknown remains Unknown, zero is retained, and unavailable interpretation does not erase measurement (0.774709ms)
+✔ pending, deleted, expired and revoked evidence cannot populate calculated DNA or permit creation (1.878958ms)
+✔ creation requires matching current receipt, eligible state and actual workspace fit (0.37125ms)
+✔ availability, representation and completeness stay independent; low breadth is not low activity (0.337ms)
+✔ low calibration never promotes a public platform lifecycle (0.170417ms)
+✔ timeline retains exact timestamps and gaps; rejects mixed units and does not invent platform history (0.26625ms)
+✔ comparison preserves missing dimensions and declines numerical comparison across different definitions/windows (0.302291ms)
+✔ comparison requires matching scope and denominator before displaying a numeric difference (0.303917ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 381.370042

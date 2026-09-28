@@ -219,7 +219,7 @@ export function useDecideHypothesis() {
   const { api, w } = useCoworkerApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted' }) => api.decideHypothesis(w, input.id, input.decision),
+    mutationFn: (input: { id: string; decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted'; expectedSupport?: string }) => api.decideHypothesis(w, input.id, input.decision, input.expectedSupport),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: coworkerKeys.overlays(w) });
       void client.invalidateQueries({ queryKey: coworkerKeys.performance(w) });

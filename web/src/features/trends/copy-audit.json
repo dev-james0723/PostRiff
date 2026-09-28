@@ -1,0 +1,169 @@
+{
+  "schema_version": "1.0",
+  "scope": "All owned Trend creator, evidence and methodology surfaces",
+  "source_text_policy": "Canonical topic, observations, interpretation, native evidence, opportunity text and diagnostics remain verbatim. Test/provider wording is never silently rewritten into real intelligence. Explicit Demo data marker is required for the demo notice; original marker text remains in methodology.",
+  "changes": [
+    {
+      "term": "synthetic fixture",
+      "decision": "preserve exact supplied text; label Demo data; retain original limitation in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "evidence only",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "sampled posts",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "complete within scope",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "measurement support",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "qualified",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "calibration",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "observation window",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "denominator",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "coverage unavailable",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "measurement velocity",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "provider",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "model call",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    },
+    {
+      "term": "eligible original posts",
+      "decision": "translate primary copy; preserve exact definitions and source values in methodology",
+      "locations": [
+        "creator-language.ts",
+        "signal-summary.tsx",
+        "trends-view.tsx",
+        "trust-drawer.tsx",
+        "present.tsx"
+      ]
+    }
+  ],
+  "additional_changes": {
+    "header": "What’s moving",
+    "search": "Search trends / Time range",
+    "opportunities": "Develop this idea / Save to Ideas / Check again at",
+    "lab": "Review this draft / Review ready / Keep in mind / Evidence and comparison",
+    "watch": "Trend pattern changes / Available evidence changes; wire values unchanged"
+  },
+  "qualification": "No arbitrary speed threshold, fabricated confidence score/dots, invented timeline points, or unsupported personalisation. Momentum sign requires verified current receipt and qualified data. Lifecycle mapping still uses publicStage. Confidence forming reason is neutral."
+}

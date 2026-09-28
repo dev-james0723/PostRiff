@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "scope": "Authorized WP16 addendum; original creator redesign retained",
+  "base_preservation_map": "feature-preservation.json",
+  "validation_receipt": "wp16-validation.json",
+  "features": [
+    {
+      "id": "actual_visible_exposure",
+      "current_element": "Opportunity card delivered by stored opportunities GET",
+      "purpose": "Record only a bounded client-reported view, privately",
+      "data_source": "Signed exposure_token + returned eligible page IDs/revisions + current receipt/context; real DOM intersection/document state",
+      "new_representation": "No visible telemetry chrome; >=500ms continuous measured visibility, hit testing and focus/scroll resume; default-OFF/hidden/unmounted/occluded suppress writes; stable UUID with at most one retry",
+      "verification": [
+        "real signed-page exposure and replay",
+        "synthetic timing/lifecycle/occlusion tests",
+        "no client text/time/user IDs"
+      ]
+    },
+    {
+      "id": "acceptance_exposure_link",
+      "current_element": "Save to Ideas",
+      "purpose": "Preserve the accepted source flow while linking only a real reported exposure",
+      "data_source": "Server-returned exposure_id or absent; unchanged accepted source response",
+      "new_representation": "Existing form and Ideas handoff; await qualified in-flight view, omit missing/failed ID, freeze retry payload",
+      "verification": [
+        "real Radar acceptance/exposure DB persistence",
+        "immediate and reload source/lineage assertions",
+        "backward-compatible canonical input schema"
+      ]
+    },
+    {
+      "id": "explicit_not_relevant",
+      "current_element": "No dismissal action",
+      "purpose": "Store an explicit choice without inferring a reason or deleting evidence",
+      "data_source": "Current opportunity revision, stable decision key, optional verified exposure ID; real dismiss decision",
+      "new_representation": "Not relevant button; focusable persisted confirmation; trend/metrics/evidence remain; stale409 stays visible as failure",
+      "verification": [
+        "keyboard focus and axe/viewport",
+        "real dismissal/replay/reload",
+        "no source or draft created; acceptance after dismissal409"
+      ]
+    },
+    {
+      "id": "canonical_lab_save",
+      "current_element": "Lab selective patch sets editor to raw proposed text",
+      "purpose": "Keep local editor aligned with the canonical existing variant_edit result",
+      "data_source": "Returned Snapshot.state.variants current matching draft",
+      "new_representation": "Same editor markup, server text immediately shown; no spurious dirty flag; next review enabled",
+      "verification": [
+        "real immediate canonical text and clean state",
+        "revision2 needsReview lineage/reload",
+        "real concurrent revision4 and stale409 rejection"
+      ]
+    }
+  ]
+}

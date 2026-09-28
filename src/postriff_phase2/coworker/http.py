@@ -90,6 +90,10 @@ def public(app, environ, start_response, method, path):
 
 def handle(app, environ, start_response, service, token, method, parts):
     """parts = ['api','workspaces',{id},<resource>, ...]."""
+    if len(parts) >= 5 and parts[3:5] == ["coworker", "trends"]:
+        from ..growth.trends.http import handle as trends_handle
+        runtime.ensure(service)
+        return trends_handle(app, environ, start_response, service.coworker.trends, parts[2], token, method, parts[5:])
     if str(token).startswith("prt_"):
         raise AlphaError("API tokens can't use Rafii coworker routes.", 403)
     runtime.ensure(service)
@@ -185,7 +189,8 @@ def handle(app, environ, start_response, service, token, method, parts):
             if not tail and method == "GET":
                 return json_(200, coworker.performance_view(workspace_id, token))
             if len(tail) == 3 and tail[0] == "hypotheses" and tail[2] == "decide" and method == "POST":
-                return json_(200, coworker.hypothesis_decide(workspace_id, token, tail[1], body().get("decision")))
+                payload = body()
+                return json_(200, coworker.hypothesis_decide(workspace_id, token, tail[1], payload.get("decision"), expected_support=payload.get("expectedSupport")))
         if area == "listening":
             if not tail and method == "GET":
                 return json_(200, coworker.listening_view(workspace_id, token))
