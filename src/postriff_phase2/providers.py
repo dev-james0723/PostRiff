@@ -249,12 +249,17 @@ def registry_from_environment(values, transport=None):
             continue
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
         enabled = str(values.get(prefix + "ENABLED", "")).lower() == "true"
-        adapter.execution_enabled = str(values.get(prefix + "DISABLED", "")).lower() != "true" and (enabled or not getattr(cls, "feature_flag_required", False))
+        provider_verified = str(values.get(prefix + "VERIFIED", "")).lower() == "true"
+        operator_disabled = str(values.get(prefix + "DISABLED", "")).lower() == "true"
+        adapter.execution_enabled = (not operator_disabled
+                                     and (enabled or not getattr(cls, "feature_flag_required", False))
+                                     and (provider_verified or not getattr(cls, "provider_approval_required", False)))
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
+            "operatorDisabled": operator_disabled,
             "providerAppCreated": str(values.get(prefix + "APP_CREATED", "")).lower() == "true",
-            "providerVerified": str(values.get(prefix + "VERIFIED", "")).lower() == "true",
+            "providerVerified": provider_verified,
             "approvedScopes": sorted(set(approved_scopes)),
             "oauthLiveTest": str(values.get(prefix + "OAUTH_LIVE_TESTED", "")).lower() == "true",
             "tokenRefreshLiveTest": str(values.get(prefix + "REFRESH_LIVE_TESTED", "")).lower() == "true",
@@ -262,7 +267,7 @@ def registry_from_environment(values, transport=None):
             "publishingPermission": str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true",
             "analyticsPermission": str(values.get(prefix + "ANALYTICS_APPROVED", "")).lower() == "true",
             "commentsPermission": str(values.get(prefix + "COMMENTS_APPROVED", "")).lower() == "true",
-            "productionEnabled": enabled and adapter.production_reviewed,
+            "productionEnabled": enabled and adapter.production_reviewed and (provider_verified or not getattr(cls, "provider_approval_required", False)),
         })
         if provider_id == "linkedin":
             # Allows requesting the restricted scope, never substitutes for a real grant.

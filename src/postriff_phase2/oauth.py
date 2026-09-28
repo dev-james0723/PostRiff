@@ -91,9 +91,12 @@ class OAuthService:
             except AlphaError:
                 callback = None
                 issues.append('Set POSTRIFF_PUBLIC_BASE_URL to the fixed HTTPS app origin and register its callback with the provider.')
-            paused = adapter is not None and not getattr(adapter, 'execution_enabled', True)
+            paused = adapter is not None and bool(diagnostic.get('operatorDisabled'))
             if paused:
                 issues.append('This connector is paused by the operator.')
+            feature_enabled = bool(diagnostic.get('featureFlagEnabled', not getattr(cls, 'feature_flag_required', False)))
+            if getattr(cls, 'feature_flag_required', False) and not feature_enabled:
+                issues.append('This connector is behind its independent server feature flag.')
             contract_verified = bool(getattr(cls, 'oauth_contract_verified', True))
             if not contract_verified:
                 issues.append('Current OAuth endpoint details remain behind the provider approval portal; connection stays unavailable until they are independently verified.')
@@ -136,7 +139,7 @@ class OAuthService:
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
-                            'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': bool(diagnostic.get('featureFlagEnabled', True)),
+                            'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': feature_enabled,
                             'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
                             'destinationScope': getattr(cls, 'destination_scope', 'connection'), 'destinationLabel': getattr(cls, 'destination_label', 'Channel'),
@@ -196,7 +199,12 @@ class OAuthService:
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
+            diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
+            if bool(diagnostic.get('operatorDisabled')):
+                raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
+            if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
+                raise AlphaError("This connection is waiting for provider application approval.", 409)
+            raise AlphaError("This connection is not enabled yet.", 409)
         if capability not in (*CAPABILITIES, 'posts_read') or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
@@ -262,7 +270,12 @@ class OAuthService:
         adapter = self._provider(provider_id)
         bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
+            diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
+            if bool(diagnostic.get('operatorDisabled')):
+                raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
+            if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
+                raise AlphaError("This connection is waiting for provider application approval.", 409)
+            raise AlphaError("This connection is not enabled yet.", 409)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
