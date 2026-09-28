@@ -328,7 +328,7 @@ class HostedPhase2Commands:
     SERVER_VERIFIED_PLATFORMS = (
         "LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest",
         "Bluesky", "Mastodon", "Telegram", "Discord", "Weibo", "Bilibili", "Douyin", "Kuaishou",
-        "Google Business Profile",
+        "Google Business Profile", "LINE Official Account", "Reddit", "Zhihu",
     )
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
