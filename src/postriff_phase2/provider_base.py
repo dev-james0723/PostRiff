@@ -3,6 +3,14 @@ from postriff_alpha.domain import AlphaError
 
 GRAPH_VERSION = "v24.0"  # current Graph API version read in the 2026-09-15 audit; re-verify at review time
 
+NORMALIZED_CAPABILITY_KEYS = (
+    "identity", "account_discovery", "publish_text", "publish_image", "publish_video",
+    "owned_content_read", "owned_analytics", "comments_read", "comments_reply", "comments_moderate",
+    "messaging_read", "messaging_reply", "webhooks", "refresh_token", "revoke", "scheduled_publish",
+    "public_search",
+)
+NORMALIZED_CAPABILITY_VALUES = frozenset(("supported", "unsupported", "requires_review", "account_type_limited"))
+
 
 def default_transport():
     from .providers import http_transport  # resolved at call time: tests patch providers.build_opener
@@ -30,7 +38,8 @@ class OAuthProvider:
     read_scope = None
     publish_scope = None
     publish_required = frozenset()
-    # "oauth": redirect to the provider. "bot_code": the person posts a one-time code where Rafii's bot can see it.
+    # "oauth": redirect to the provider. "bot_code": post a one-time code where Rafii's bot can see it.
+    # "device_code": open the provider verification page while the server keeps and polls the confidential device code.
     connect_kind = "oauth"
     # {"name", "label", "placeholder"} when connecting needs one value first (a Bluesky handle, a Mastodon server).
     start_input = None
@@ -46,6 +55,11 @@ class OAuthProvider:
     shared_remote = False
     # Renew this many seconds before expiry, so a publish never starts on a token about to lapse (0 = at expiry).
     refresh_margin = 0
+    normalized = {}
+    wave = None
+    feature_flag_required = False
+    provider_approval_required = False
+    oauth_contract_verified = True
 
     def __init__(self, client_id, client_secret, transport=None, production_reviewed=False):
         if not client_id or not client_secret:
@@ -81,6 +95,14 @@ class OAuthProvider:
 
     def explain(self, capability):
         return self.EXPLAIN.get(capability, "Rafii will act on this account only when you approve an exact action.")
+
+    @classmethod
+    def normalized_capabilities(cls):
+        matrix = {key: "unsupported" for key in NORMALIZED_CAPABILITY_KEYS}
+        matrix.update(cls.normalized)
+        if set(matrix) != set(NORMALIZED_CAPABILITY_KEYS) or any(value not in NORMALIZED_CAPABILITY_VALUES for value in matrix.values()):
+            raise ValueError(f"{cls.__name__} has an invalid normalized capability contract")
+        return matrix
 
     def revoke(self, token):
         return False

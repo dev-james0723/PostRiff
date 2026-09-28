@@ -8,7 +8,13 @@
 import type { CapabilityLevel } from '@/components/marketing/capability-badge';
 
 export type ChannelGroup = 'hosted' | 'local';
-export type ChannelCapabilityKey = 'identity' | 'publish' | 'schedule' | 'analytics' | 'comments_read' | 'reply';
+export type ChannelCapabilityKey =
+  | 'identity'
+  | 'publish'
+  | 'schedule'
+  | 'analytics'
+  | 'comments_read'
+  | 'reply';
 export type ChannelCapabilityLevel = 'Direct' | 'Assisted' | 'Unsupported';
 
 export interface Channel {
@@ -28,7 +34,8 @@ export interface Channel {
 
 const hostedPending = 'Publishing is still in review. Export posts until it opens.';
 /** Platforms with no app review: publishing opens once Rafii has tested the connection with real accounts. */
-const hostedTesting = 'Publishing opens after Rafii finishes testing this connection. Export posts until then.';
+const hostedTesting =
+  'Publishing opens after Rafii finishes testing this connection. Export posts until then.';
 const identityOnly = {
   identity: 'Direct',
   publish: 'Assisted',
@@ -54,6 +61,36 @@ const local = (
   description,
   formats,
   region: 'global',
+  ...extra
+});
+
+const wave4 = (
+  slug: string,
+  name: string,
+  description: string,
+  formats: string[],
+  identity: ChannelCapabilityLevel,
+  extra: Partial<Channel> = {}
+): Channel => ({
+  slug,
+  name,
+  group: 'hosted',
+  capability: 'unsupported',
+  reviewStatus: identity === 'Direct' ? 'identity connection only' : 'provider approval required',
+  capabilities: {
+    identity,
+    publish: 'Unsupported',
+    schedule: 'Unsupported',
+    analytics: 'Unsupported',
+    comments_read: 'Unsupported',
+    reply: 'Unsupported'
+  },
+  description,
+  formats,
+  region: 'global',
+  notes: [
+    'Connected does not mean publishing enabled. Wave 4 abilities stay unavailable until their exact provider permission and live test are verified.'
+  ],
   ...extra
 });
 
@@ -98,7 +135,10 @@ export const channels: Channel[] = [
     description: 'Text and single-image posts. Carousels aren’t available yet.',
     formats: ['Text (500 chars)', 'Single image'],
     region: 'global',
-    notes: [hostedPending, 'Threads limits how often you can post, including posts made outside Rafii.']
+    notes: [
+      hostedPending,
+      'Threads limits how often you can post, including posts made outside Rafii.'
+    ]
   },
   {
     slug: 'instagram',
@@ -114,7 +154,8 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Single-image posts for professional accounts. Publishing needs Instagram’s permission first.',
+    description:
+      'Single-image posts for professional accounts. Publishing needs Instagram’s permission first.',
     formats: ['Single image'],
     region: 'global',
     notes: [hostedPending, 'Instagram allows 100 published posts per 24 hours per account.']
@@ -130,7 +171,10 @@ export const channels: Channel[] = [
     description: 'Text posts with one image on your Bluesky account. Links stay clickable.',
     formats: ['Text (300 characters)', 'Single image'],
     region: 'global',
-    notes: [hostedTesting, 'You sign in on your own Bluesky server. Rafii never sees your password.']
+    notes: [
+      hostedTesting,
+      'You sign in on your own Bluesky server. Rafii never sees your password.'
+    ]
   },
   {
     slug: 'mastodon',
@@ -154,7 +198,10 @@ export const channels: Channel[] = [
     description: 'Channel posts with text or one photo, sent by Rafii’s bot.',
     formats: ['Text', 'Photo (1024-character caption)'],
     region: 'global',
-    notes: [hostedTesting, 'Add Rafii’s bot as a channel admin that can post. It needs no other rights.']
+    notes: [
+      hostedTesting,
+      'Add Rafii’s bot as a channel admin that can post. It needs no other rights.'
+    ]
   },
   {
     slug: 'discord',
@@ -191,7 +238,10 @@ export const channels: Channel[] = [
     description: 'Text, a link or one photo on the Facebook Page you choose.',
     formats: ['Text', 'Link', 'Single photo'],
     region: 'global',
-    notes: [hostedPending, 'Rafii publishes at the time you approve; nothing is scheduled on Facebook itself.']
+    notes: [
+      hostedPending,
+      'Rafii publishes at the time you approve; nothing is scheduled on Facebook itself.'
+    ]
   },
   {
     slug: 'youtube',
@@ -212,7 +262,8 @@ export const channels: Channel[] = [
     capability: 'assisted',
     reviewStatus: 'publishing in review',
     capabilities: { ...identityOnly },
-    description: 'Short vertical video with TikTok’s own privacy, interaction and disclosure choices.',
+    description:
+      'Short vertical video with TikTok’s own privacy, interaction and disclosure choices.',
     formats: ['Video'],
     region: 'global',
     notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.']
@@ -227,31 +278,146 @@ export const channels: Channel[] = [
     description: 'One image Pin with a title and link, on the board you choose for each Pin.',
     formats: ['Image pin'],
     region: 'global',
-    notes: [hostedPending, 'While Pinterest reviews Rafii, Pins go to a test area only you can see.']
+    notes: [
+      hostedPending,
+      'While Pinterest reviews Rafii, Pins go to a test area only you can see.'
+    ]
   },
 
   /* ---- Desktop companion (signs in on your own machine) ---- */
-  local('xiaohongshu', 'Xiaohongshu', 'Notes with images or video for China’s discovery-first community.', ['Image note', 'Video note'], { nameZh: '小紅書', region: 'cn' }),
-  local('bilibili', 'Bilibili', 'Video uploads with titles, tags and descriptions tuned for Bilibili’s audience.', ['Video', 'Dynamic'], { nameZh: '哔哩哔哩', region: 'cn' }),
-  local('zhihu', 'Zhihu', 'Long-form answers and articles for a knowledge-seeking readership.', ['Article', 'Answer'], { nameZh: '知乎', region: 'cn' }),
-  local('weibo', 'Weibo', 'Short posts with images for fast-moving public conversation.', ['Text', 'Image'], { nameZh: '微博', region: 'cn' }),
-  local('douyin', 'Douyin', 'Short vertical video for China’s largest short-video platform.', ['Video'], { nameZh: '抖音', region: 'cn' }),
-  local('kuaishou', 'Kuaishou', 'Short video with a community-first feel.', ['Video'], { nameZh: '快手', region: 'cn' }),
-  local('wechat-channels', 'WeChat Channels', 'Short video and image posts inside WeChat.', ['Video', 'Image'], { nameZh: '微信視頻號', region: 'cn' }),
-  local('tencent-qq', 'Tencent QQ', 'Posts to Qzone and QQ communities.', ['Text', 'Image'], { nameZh: 'QQ 空間', region: 'cn' }),
-  local('feishu-lark', 'Feishu / Lark', 'Announcements and documents to Feishu and Lark workspaces.', ['Message', 'Document'], { nameZh: '飛書', region: 'cn' }),
-  local('dcard', 'Dcard', 'Forum posts for Taiwan’s largest student and young-adult community.', ['Text', 'Image'], { region: 'tw' }),
-  local('line-official-account', 'LINE Official Account', 'Broadcasts to followers of your LINE Official Account.', ['Text', 'Image'], { region: 'jp' }),
-  local('note-jp', 'note', 'Articles for Japan’s creator publishing platform.', ['Article'], { region: 'jp' }),
-  local('naver-blog', 'Naver Blog', 'Blog posts for Korea’s largest portal.', ['Article', 'Image'], { region: 'kr' }),
-  local('kakaotalk-channel', 'KakaoTalk Channel', 'Messages to subscribers of your KakaoTalk channel.', ['Text', 'Image'], { region: 'kr' }),
-  local('sharechat', 'ShareChat', 'Regional-language posts for India.', ['Text', 'Image', 'Video'], { region: 'in' }),
+  wave4(
+    'xiaohongshu',
+    'Xiaohongshu',
+    'Official device authorization can expose identity/basic_info after app approval; notes, analytics and comments remain disabled.',
+    ['Image note', 'Video note'],
+    'Direct',
+    { nameZh: '小紅書', region: 'cn', reviewStatus: 'identity approval required' }
+  ),
+  wave4(
+    'bilibili',
+    'Bilibili',
+    'Account linking is awaiting Bilibili developer identity and application approval.',
+    ['Video', 'Article'],
+    'Unsupported',
+    { nameZh: '哔哩哔哩', region: 'cn' }
+  ),
+  wave4(
+    'zhihu',
+    'Zhihu',
+    'Identity and owned-content access await a current approved Zhihu API contract; publishing stays unsupported.',
+    ['Article', 'Answer'],
+    'Unsupported',
+    { nameZh: '知乎', region: 'cn' }
+  ),
+  wave4(
+    'weibo',
+    'Weibo',
+    'Developer service, OAuth and paid API status must be approved before account connection opens.',
+    ['Text', 'Image'],
+    'Unsupported',
+    { nameZh: '微博', region: 'cn' }
+  ),
+  wave4(
+    'douyin',
+    'Douyin',
+    'Identity connection plumbing is behind its flag and still needs a live provider test; video and comments remain permission-gated.',
+    ['Video'],
+    'Direct',
+    { nameZh: '抖音', region: 'cn' }
+  ),
+  wave4(
+    'kuaishou',
+    'Kuaishou',
+    'Identity connection plumbing is behind its flag and still needs a live provider test; video publishing remains permission-gated.',
+    ['Video'],
+    'Direct',
+    { nameZh: '快手', region: 'cn' }
+  ),
+  local(
+    'wechat-channels',
+    'WeChat Channels',
+    'Short video and image posts inside WeChat.',
+    ['Video', 'Image'],
+    { nameZh: '微信視頻號', region: 'cn' }
+  ),
+  local('tencent-qq', 'Tencent QQ', 'Posts to Qzone and QQ communities.', ['Text', 'Image'], {
+    nameZh: 'QQ 空間',
+    region: 'cn'
+  }),
+  local(
+    'feishu-lark',
+    'Feishu / Lark',
+    'Announcements and documents to Feishu and Lark workspaces.',
+    ['Message', 'Document'],
+    { nameZh: '飛書', region: 'cn' }
+  ),
+  local(
+    'dcard',
+    'Dcard',
+    'Forum posts for Taiwan’s largest student and young-adult community.',
+    ['Text', 'Image'],
+    { region: 'tw' }
+  ),
+  wave4(
+    'line-official-account',
+    'LINE Official Account',
+    'Official Account channel onboarding needs a confidential token handoff and verified webhook before messaging opens.',
+    ['Text', 'Image'],
+    'Unsupported',
+    { region: 'jp' }
+  ),
+  local('note-jp', 'note', 'Articles for Japan’s creator publishing platform.', ['Article'], {
+    region: 'jp'
+  }),
+  local(
+    'naver-blog',
+    'Naver Blog',
+    'Blog posts for Korea’s largest portal.',
+    ['Article', 'Image'],
+    { region: 'kr' }
+  ),
+  local(
+    'kakaotalk-channel',
+    'KakaoTalk Channel',
+    'Messages to subscribers of your KakaoTalk channel.',
+    ['Text', 'Image'],
+    { region: 'kr' }
+  ),
+  local(
+    'sharechat',
+    'ShareChat',
+    'Regional-language posts for India.',
+    ['Text', 'Image', 'Video'],
+    { region: 'in' }
+  ),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('reddit', 'Reddit', 'Text and link posts to subreddits you belong to.', ['Text', 'Link', 'Image']),
-  local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
-  local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', ['Text', 'Image']),
+  wave4(
+    'reddit',
+    'Reddit',
+    'Identity-only OAuth is behind Reddit approval; every future post or comment remains a separate explicit user action.',
+    ['Text', 'Link', 'Image'],
+    'Direct'
+  ),
+  wave4(
+    'pixelfed',
+    'Pixelfed',
+    'Read-only identity connection probes each instance before dynamic OAuth registration; publishing varies by instance and stays unavailable.',
+    ['Image'],
+    'Direct',
+    { reviewStatus: 'identity connection only' }
+  ),
+  local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', [
+    'Text',
+    'Image'
+  ]),
   local('snapchat', 'Snapchat', 'Public profile stories and spotlight.', ['Video', 'Image']),
-  local('google-business-profile', 'Google Business Profile', 'Updates, offers and events on your business listing.', ['Update', 'Offer', 'Event'])
+  wave4(
+    'google-business-profile',
+    'Google Business Profile',
+    'Manager-account and location-picker plumbing still needs project approval and a live test; posts, performance and review replies remain disabled.',
+    ['Update', 'Offer', 'Event'],
+    'Direct'
+  )
 ];
 
 export const hostedChannels = channels.filter((c) => c.group === 'hosted');

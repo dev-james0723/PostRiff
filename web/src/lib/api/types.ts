@@ -1391,8 +1391,27 @@ export interface ProviderView {
   productionReviewed: boolean;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
-  /** 'oauth' redirects to the platform; 'bot_code' means posting a one-time code where Rafii's bot sees it (Telegram). */
-  connectKind?: 'oauth' | 'bot_code';
+  wave?: string | null;
+  featureFlagEnabled?: boolean;
+  normalizedCapabilities?: Record<string, 'supported' | 'unsupported' | 'requires_review' | 'account_type_limited'> | null;
+  readinessChecklist?: {
+    clientIdConfigured: boolean;
+    clientSecretConfigured: boolean;
+    redirectUriConfigured: boolean;
+    providerAppCreated: boolean;
+    providerVerificationStatus: 'verified' | 'not_verified';
+    requestedScopes: string[];
+    approvedScopes: string[];
+    oauthLiveTest: boolean;
+    tokenRefreshLiveTest: boolean;
+    webhookVerified: boolean;
+    publishingPermission: boolean;
+    analyticsPermission: boolean;
+    commentsPermission: boolean;
+    productionEnabled: boolean;
+  };
+  /** OAuth redirects, bot codes are posted to a channel, and device codes are approved on the provider's page. */
+  connectKind?: 'oauth' | 'bot_code' | 'device_code';
   /** One value to ask before connecting: a Bluesky handle or a Mastodon server. */
   startInput?: { name: string; label: string; placeholder?: string } | null;
   /** Posting needs a destination: once per connection (a Discord channel, a Facebook Page) or per post (a Pinterest board). */
@@ -1446,9 +1465,12 @@ export interface OAuthStart {
   /** Null for a bot-code connection (Telegram), which never leaves Rafii. */
   authorizeUrl: string | null;
   expiresAt: number;
-  connectKind?: 'oauth' | 'bot_code';
-  /** Bot-code connections: the code to post, the bot to add and the steps. */
+  connectKind?: 'oauth' | 'bot_code' | 'device_code';
+  /** Transaction state sent back to the authenticated completion endpoint. */
   code?: string;
+  /** Device-code connections: the short code the provider may show alongside its QR approval. */
+  userCode?: string;
+  /** Bot-code connections: the bot to add and the steps. */
   botUsername?: string;
   instructions?: string[];
 }

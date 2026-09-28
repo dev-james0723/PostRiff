@@ -236,7 +236,10 @@ class FrontierSQL(unittest.TestCase):
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
         self.assertEqual(self.engine.maintenance()['cancelled'],1)
         self.assertEqual(self.job(d['job_id'])['payload'],{})
-        retention.sweep(self.store,limit=100)
+        # The suite intentionally shares an isolated database and earlier tests
+        # leave many independently purgeable nodes. This assertion is about the
+        # revoked dependency cascade, not the worker's 100-row page boundary.
+        retention.sweep(self.store,limit=1000)
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
     def test_revoked_policy_cannot_read_dispatch_or_retain_query(self):

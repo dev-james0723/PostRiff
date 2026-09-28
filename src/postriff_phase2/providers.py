@@ -214,11 +214,19 @@ class InstagramProvider(OAuthProvider):
 from .atproto_oauth import BlueskyProvider  # noqa: E402
 from .social_connectors import DiscordProvider, MastodonProvider, TelegramConnector, XProvider  # noqa: E402
 from .wave3_connectors import FacebookPagesProvider, PinterestProvider, TikTokProvider, YouTubeProvider  # noqa: E402
+from .wave4_connectors import (BilibiliProvider, DouyinProvider, GoogleBusinessProfileProvider,
+                               KuaishouProvider, WeiboProvider)  # noqa: E402
+from .wave4b_connectors import LineOfficialAccountProvider, RedditProvider, ZhihuProvider  # noqa: E402
+from .wave4c_connectors import PixelfedProvider, XiaohongshuProvider  # noqa: E402
 
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
             "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
             "discord": DiscordProvider, "x": XProvider,
-            "facebook": FacebookPagesProvider, "youtube": YouTubeProvider, "tiktok": TikTokProvider, "pinterest": PinterestProvider}
+            "facebook": FacebookPagesProvider, "youtube": YouTubeProvider, "tiktok": TikTokProvider, "pinterest": PinterestProvider,
+            "weibo": WeiboProvider, "bilibili": BilibiliProvider, "douyin": DouyinProvider, "kuaishou": KuaishouProvider,
+            "google_business_profile": GoogleBusinessProfileProvider,
+            "line_official_account": LineOfficialAccountProvider, "reddit": RedditProvider, "zhihu": ZhihuProvider,
+            "pixelfed": PixelfedProvider, "xiaohongshu": XiaohongshuProvider}
 
 
 def adapter_class_for_platform(platform):
@@ -242,7 +250,33 @@ def registry_from_environment(values, transport=None):
         if adapter is None:
             continue
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
-        adapter.execution_enabled = str(values.get(prefix + "DISABLED", "")).lower() != "true"
+        webhook_configured = True
+        if provider_id == "xiaohongshu":
+            webhook_secret = values.get(prefix + "WEBHOOK_SECRET")
+            adapter.webhook_secret = webhook_secret if _credential_shape(webhook_secret) and len(webhook_secret) >= 32 else None
+            webhook_configured = bool(adapter.webhook_secret)
+        enabled = str(values.get(prefix + "ENABLED", "")).lower() == "true"
+        provider_verified = str(values.get(prefix + "VERIFIED", "")).lower() == "true"
+        operator_disabled = str(values.get(prefix + "DISABLED", "")).lower() == "true"
+        adapter.execution_enabled = (not operator_disabled
+                                     and (enabled or not getattr(cls, "feature_flag_required", False))
+                                     and (provider_verified or not getattr(cls, "provider_approval_required", False)))
+        approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
+        registry.diagnostics[provider_id].update({
+            "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
+            "operatorDisabled": operator_disabled,
+            "providerAppCreated": str(values.get(prefix + "APP_CREATED", "")).lower() == "true",
+            "providerVerified": provider_verified,
+            "approvedScopes": sorted(set(approved_scopes)),
+            "oauthLiveTest": str(values.get(prefix + "OAUTH_LIVE_TESTED", "")).lower() == "true",
+            "tokenRefreshLiveTest": str(values.get(prefix + "REFRESH_LIVE_TESTED", "")).lower() == "true",
+            "webhookVerified": (str(values.get(prefix + "WEBHOOK_VERIFIED", "")).lower() == "true"
+                                and webhook_configured),
+            "publishingPermission": str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true",
+            "analyticsPermission": str(values.get(prefix + "ANALYTICS_APPROVED", "")).lower() == "true",
+            "commentsPermission": str(values.get(prefix + "COMMENTS_APPROVED", "")).lower() == "true",
+            "productionEnabled": enabled and adapter.production_reviewed and (provider_verified or not getattr(cls, "provider_approval_required", False)),
+        })
         if provider_id == "linkedin":
             # Allows requesting the restricted scope, never substitutes for a real grant.
             adapter.history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"

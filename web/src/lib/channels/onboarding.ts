@@ -26,10 +26,10 @@ export function providerReadinessLabel(provider: ProviderView): string {
   if (
     provider.configurationState === 'partial_configuration' ||
     provider.configurationState === 'invalid_configuration' ||
-    provider.configured === false ||
-    provider.connectReady === false
+    provider.configured === false
   )
-    return 'Not available yet';
-  if (provider.executionPaused) return 'Paused'; // STATUS.paused; a literal keeps this module loadable by its node test
-  return provider.productionReviewed ? 'Available' : 'Review pending';
+    return 'Coming soon';
+  if (provider.connectReady === false) return provider.wave ? 'Needs approval' : 'Coming soon';
+  if (provider.executionPaused) return 'Limited';
+  return provider.productionReviewed ? 'Connect' : 'Limited';
 }

@@ -131,6 +131,13 @@ export const navGroups: NavGroup[] = [
         access: { role: 'admin' }
       },
       {
+        title: 'Provider readiness',
+        url: '/app/workspace/provider-readiness',
+        icon: 'shieldCheck',
+        items: [],
+        access: { role: 'admin' }
+      },
+      {
         title: 'Brand',
         url: '/app/workspace/brand',
         icon: 'palette',
