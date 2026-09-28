@@ -246,6 +246,8 @@ with TestClient(app) as client,api:
     with client.websocket_connect('/api/phone/dial/media/'+dref,headers=socket_headers(dref)) as socket:
         socket.send_json(connected(dref));socket.send_json({'type':'dtmf','digit':'2'})
         while socket.receive_json()['type']!='end_call':pass
+        # The socket signal must not outrun the persisted decline.
+        assert read(declined['id'])['state']=='declined'
         http.calls[dref].update(status='completed',duration=2)
         socket.send_json({'type':'call_ended','reason':'customer_hangup'})
     value=finished(declined['id'])
