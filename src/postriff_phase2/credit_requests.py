@@ -4,6 +4,7 @@ from .api_tokens import is_api_token
 from .permissions import require
 from .credit_wallet import request_digest, amount
 from .credit_meter import POLICY_VERSION, millicredits
+from .developer_usage import ai_usage_exempt
 
 
 class CreditRequests:
@@ -128,6 +129,7 @@ class CreditRequests:
         if book is None: return None
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
+            if ai_usage_exempt(actor): return None
             if not book.policy(cur,workspace_id): return None
             if operation=='media-notes':
                 return self._notes_authority(cur,workspace_id,row,actor,revision,payload,book)

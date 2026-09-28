@@ -519,7 +519,7 @@ def entitlements_summary(ctx):
         return contracts.result(None, now=ctx.now, ok=False, verified=False, warnings=["Plan details are not available here."])
     ctx.cur.execute("SAVEPOINT site_agent_usage")
     try:
-        view = ledger.usage_view(ctx.cur, ctx.workspace_id)
+        view = ledger.usage_view(ctx.cur, ctx.workspace_id, ctx.principal)
         can_publish = ctx.service.billing.lifecycle(ctx.cur, ctx.workspace_id, ctx.now).get("canPublish") if getattr(ctx.service, "billing", None) else None
     finally:
         # Reading never changes billing rows (the usage view may create first-use rows; the owner's page does that).
@@ -529,6 +529,7 @@ def entitlements_summary(ctx):
     budget = view.get("budget") or {}
     subscription = view.get("subscription") or {}
     data = {"plan": subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId"), "subscriptionStatus": subscription.get("status"),
+            "aiUsageExempt": view.get("aiUsageExempt", False),
             "writingBatchesRemaining": entitlement.get("writingBatchesRemaining"), "mediaCreditsRemaining": entitlement.get("mediaCreditsRemaining"),
             "resetsAt": entitlement.get("resetsAt"), "canPublish": can_publish, "budgetStatus": budget.get("status"),
             "spentUsdMicro": budget.get("spentUsdMicro") if owner else None, "stopUsdMicro": budget.get("stopUsdMicro") if owner else None, "costsVisible": owner}

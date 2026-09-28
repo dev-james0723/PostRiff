@@ -492,6 +492,14 @@ class HostedApplication:
                     runtime = FixtureAgentRuntime()
                     return self._json(start_response, 200, {"models": runtime.list_supported_models(), "reasoning": runtime.list_supported_reasoning(), "agents": [],
                                                             "defaultModel": None, "featured": []})
+                # This public catalogue may lift only quota hints for a verified
+                # developer. A header, handle or user-editable claim cannot do so.
+                from .developer_usage import ai_usage_exempt
+                verifier = getattr(self._runtime(), "verify_session", None)
+                if environ.get("HTTP_AUTHORIZATION") and not api_bearer and callable(verifier):
+                    actor = verifier(self._token(environ))
+                    if ai_usage_exempt(actor):
+                        return self._json(start_response, 200, model_catalog(actor=actor))
                 return self._json(start_response, 200, model_catalog())
             if path == "/api/tools" and method == "GET":
                 return self._json(start_response, 200, {"tools": tools.catalog(), "isolation": tools.isolation_status()})

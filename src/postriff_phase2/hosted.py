@@ -450,8 +450,8 @@ class HostedWorkspaceService:
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):
-        with self.repository.transaction(token, workspace_id) as (cur, row, _):
-            view = self.ledger.usage_view(cur, workspace_id)
+        with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+            view = self.ledger.usage_view(cur, workspace_id, actor)
             view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()

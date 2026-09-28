@@ -14,6 +14,7 @@ from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .credit_meter import POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
+from .developer_usage import ai_usage_exempt
 
 USD = 1_000_000  # micro-dollars
 
@@ -153,24 +154,25 @@ class Ledger:
         policy = active_budget_policy() if estimated_usd_micro > 0 else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
-        if policy and estimated_usd_micro > policy["requestMax"]:
+        exempt = ai_usage_exempt(member_id)
+        if policy and not exempt and estimated_usd_micro > policy["requestMax"]:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
-        if self.credits is None and (charge_batch or estimated_usd_micro > 0):
+        if not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
             if plan_policy and plan_policy[0]:
                 raise AlphaError("Credit billing is paused; no provider request was made.", 503)
-        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if self.credits and (charge_batch or estimated_usd_micro > 0) else None
-        if credit: charge_batch = False
+        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if not exempt and self.credits and (charge_batch or estimated_usd_micro > 0) else None
+        if credit or exempt: charge_batch = False
         cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.charge_batch AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (workspace_id,))
         pending_batches = cur.fetchone()[0]
         if charge_batch and entitlement["writingBatchesRemaining"] <= pending_batches:
             raise AlphaError("No writing allowance left in this plan. Drafts, exports and reviews remain available; overage is not charged silently.", 402)
-        if not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
+        if not exempt and not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
             raise AlphaError("No media credits left in this plan.", 402)
-        if policy and member_id:
+        if policy and member_id and not exempt:
             used = self._person_day(cur, member_id)
             if used + estimated_usd_micro > policy["personDayStop"]:
                 raise AlphaError(f"You have reached the AI spending limit for one person over 24 hours (US${policy['personDayStop'] / USD:.2f} of provider cost). "
@@ -180,17 +182,19 @@ class Ledger:
         for label, _, budget in budgets:
             if estimated_usd_micro > 0 and budget['status'] != 'approved':
                 raise AlphaError("Paid AI drafting is not switched on yet. Nothing was sent or charged.", 402)
-            if budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
+            if not exempt and budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
                 raise AlphaError(_stop_message(label, budget["stop"]), 402)
-        charged = [scope for _, scope, _ in budgets]
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k not in ("credits", "budgetScopes")}, "fingerprint": fingerprint, "budgetScopes": charged, **({"credits":credit} if credit else {})})))
+        # Developer costs remain in the immutable ledger, without consuming other
+        # members' shared budgets or plan allowances.
+        charged = [] if exempt else [scope for _, scope, _ in budgets]
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k not in ("credits", "budgetScopes", "aiUsageExempt")}, "fingerprint": fingerprint, "budgetScopes": charged, **({"aiUsageExempt": True} if exempt else {}), **({"credits":credit} if credit else {})})))
         reservation_id = cur.fetchone()[0]
         if credit: self.credits.claim(cur, workspace_id, reservation_id, credit)
         cur.execute("UPDATE public.pr_usage_ledger SET reservation_id=id WHERE id::text=%s", (reservation_id,))
         for scope in charged:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=reserved_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimated_usd_micro, scope))
-        warnings = [f"{label} budget past its warning line" for label, _, b in budgets if b["spent"] + b["reserved"] + estimated_usd_micro > b["warn"]]
-        crossed = [label for label, _, b in budgets if b["spent"] + b["reserved"] <= b["warn"] < b["spent"] + b["reserved"] + estimated_usd_micro]
+        warnings = [f"{label} budget past its warning line" for label, _, b in budgets if not exempt and b["spent"] + b["reserved"] + estimated_usd_micro > b["warn"]]
+        crossed = [label for label, _, b in budgets if not exempt and b["spent"] + b["reserved"] <= b["warn"] < b["spent"] + b["reserved"] + estimated_usd_micro]
         if crossed:
             # Operators' signal in the function logs (no workspace or person identifiers): a warning line was just crossed.
             print(json.dumps({"event": "budget.warning_crossed", "scopes": crossed, "policy": (policy or {}).get("id")}), flush=True)
@@ -234,7 +238,9 @@ class Ledger:
         kind = "settle" if outcome == "completed" else "release"
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
         # Exactly the budgets this reservation held (older reservations predate the record: workspace and global).
-        scopes = ((original[0] or {}).get("budgetScopes") if original else None) or [f"workspace:{workspace_id}", "global"]
+        scopes = (original[0] or {}).get("budgetScopes") if original else None
+        if scopes is None:
+            scopes = [f"workspace:{workspace_id}", "global"]
         for scope in scopes:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=greatest(reserved_usd_micro-%s,0),spent_usd_micro=spent_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimate, actual, scope))
         if outcome == "completed" and charge_batch:
@@ -272,10 +278,10 @@ class Ledger:
                     (workspace_id, str(reservation_id)[:200], json.dumps({"outcome": outcome, "actualUsdMicro": actual_usd_micro, "operator": operator.strip()[:80], "evidence": evidence.strip()[:200]})))
         return result
 
-    def usage_view(self, cur, workspace_id):
+    def usage_view(self, cur, workspace_id, member_id=None):
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
         credits = None
-        if self.credits and self.credits.policy(cur, workspace_id):
+        if not ai_usage_exempt(member_id) and self.credits and self.credits.policy(cur, workspace_id):
             wallet = self.credits.view(cur, workspace_id)
             credits = {k:v for k,v in wallet.items() if k != "lots"}
             credits.update(mode="credits", quoteType="spending_limit", textOnly=True)
@@ -289,6 +295,7 @@ class Ledger:
         return {
             "entitlement": entitlement,
             "credits": credits,
+            "aiUsageExempt": ai_usage_exempt(member_id),
             "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
             "budget": {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",

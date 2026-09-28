@@ -21,7 +21,7 @@ from .permissions import require
 from .source_policy import project_context, stamp
 from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
-from .model_runtime import REQUEST_SECONDS, ProviderFailure, check_level_ceiling
+from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
 from . import attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
@@ -253,14 +253,14 @@ class IdeasService:
         """The exact writer route voice-sample consent is checked against (and recorded on each draft)."""
         return f"cloud:{runtime.provider}:{model_id}" if getattr(runtime, "provider_class", "local") == "cloud" else "local-cli"
 
-    def model_catalog(self):
+    def model_catalog(self, *, actor=None):
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
             # A runtime that lists reasoning per model (the managed writer) gets asked per model; the others keep one list.
             per_model = per_model_reasoning(runtime)
             models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": self._voice_route(runtime, model["id"]), "voiceRouteClass": voice_sources.route_class(self._voice_route(runtime, model["id"])),
-                           "reasoning": runtime.list_supported_reasoning(model=model["id"]) if per_model else runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
+                           "reasoning": runtime.list_supported_reasoning(model=model["id"], **({"actor": actor} if isinstance(runtime, ServerModelRuntime) else {})) if per_model else runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
@@ -321,7 +321,7 @@ class IdeasService:
 
     def rescan_models(self, workspace_id, token):
         """An editor may refresh installation and sign-in probes; no model generation runs."""
-        with self.repository.transaction(token, workspace_id) as (_, row, _):
+        with self.repository.transaction(token, workspace_id) as (_, row, actor):
             require(self._member(row), "edit")
         with self._catalog_lock:
             if self._discover_cli:
@@ -331,7 +331,7 @@ class IdeasService:
             for runtime in self.runtimes:
                 if isinstance(runtime, ClaudeCliRuntime):
                     runtime.detect(force=True)
-            return self.model_catalog()
+            return self.model_catalog(actor=actor)
 
     @staticmethod
     def _automation_selection(state, chosen):
@@ -1408,7 +1408,7 @@ class IdeasService:
             shared, voice_context, request, bound, reminders = projected["shared"], projected["voiceContext"], projected["request"], projected["bound"], projected["reminders"]
             # Authoritative: the prompt is final here (research included), so an explicit level over the limit is refused
             # before the run exists or anything is reserved.
-            check_level_ceiling(runtime, model_id, request)
+            check_level_ceiling(runtime, model_id, request, actor=principal)
             if not runtime.asynchronous:
                 # Monotonic seconds; never part of a digest, fingerprint or the priced prompt (model_runtime._messages).
                 request["deadline"] = started + REQUEST_SECONDS
@@ -1755,7 +1755,7 @@ class IdeasService:
             projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed, level=level, refs=refs, notes=turn_references.PRICING,
                                       run_sources=self._estimate_run_sources(state), actor=actor)
         request = projected["request"]
-        check_level_ceiling(runtime, model_id, request, extra_bytes=research_bytes)
+        check_level_ceiling(runtime, model_id, request, extra_bytes=research_bytes, actor=actor)
         if note:
             request["writerNote"] = note
         return runtime, model_id, request

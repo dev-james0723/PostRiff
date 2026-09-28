@@ -53,8 +53,8 @@ class PhoneService:
             return {'available': True, 'providerReady': bool(self.provider and self.provider.configured), 'flags': self.config.public(),
                     'inbound': {'available': inbound.available(self) and self.hosted.ideas._member(row).allows('edit'),
                                 'phoneNumber': self.provider.originating_number if inbound.available(self) else None,
-                                'spending': billing.spending(self, cur, workspace_id, direction='inbound')},
-                    'spending': billing.spending(self, cur, workspace_id),
+                                'spending': billing.spending(self, cur, workspace_id, direction='inbound', principal=principal)},
+                    'spending': billing.spending(self, cur, workspace_id, principal=principal),
                     'execution': 'fake' if self.provider and not self.provider.real else 'provider',
                     'number': {'lastFour': number['last_four'], 'verified': number['verified']} if number else None,
                     'preferences': store.prefs(cur, principal, workspace_id), 'calls': calls, 'schedules': schedules}
