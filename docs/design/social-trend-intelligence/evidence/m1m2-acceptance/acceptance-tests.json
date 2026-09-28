@@ -1,13 +1,13 @@
 {
   "schema": "rafii.trend-m1m2-acceptance.v1",
-  "recorded_at": "2026-09-28T14:49:03.557177+00:00",
+  "recorded_at": "2026-09-28T15:34:51.321372+00:00",
   "execution_state": "actual_local_services_and_disposable_postgresql_with_explicit_synthetic_seeds",
   "canonical_release_base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
-  "merged_head_base": "a25bb4583035d4abb18f8735cc92c7b619cdcb31",
-  "working_head_before_candidate_commit": "f79896e91f76a844155d545b5aa98fc361e12061",
+  "merged_head_base": "8cd7ad91bf540f294ea1c895679416579cd5750d",
+  "working_head_before_candidate_commit": "8cd7ad91bf540f294ea1c895679416579cd5750d",
   "offline": {
-    "tests": 1026,
-    "passed": 784,
+    "tests": 1027,
+    "passed": 785,
     "skipped_database_only": 242,
     "failures": 0,
     "errors": 0
@@ -30,7 +30,7 @@
       "trust": 112,
       "whitespace": 35
     },
-    "repair": "frontier_control physical purge is dependency-authorized and defers while a linked job still holds payload; affected frontier37 and trust112 rerun PASS"
+    "repair": "frontier_control purge is dependency-authorized and job-safe; one-author entropy is canonical positive zero so JSONB round-trips preserve receipt seals; affected frontier37, trust112 and services136 rerun PASS"
   },
   "browser_to_database": {
     "assertions": 108,
@@ -73,8 +73,9 @@
   "production_verified": false,
   "source_hashes": {
     "src/postriff_phase2/growth/trends/retention.py": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
+    "src/postriff_phase2/growth/trends/metrics.py": "a469db3b25fa70a29d354ad6117180f95780148192951a716bb799da009af948",
     "tests/test_trend_frontier.py": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
-    "tests/test_trend_metrics.py": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
+    "tests/test_trend_metrics.py": "2aaad6777fa1b2e79d6d8b91093c339681fc8994f3eebcabf871eee822057875",
     "tests/test_trend_http.py": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
     "scripts/trend_browser.py": "bdfcea2b13464ba4c0c874df46f1f540ce8bcb7c2689940fbb42bb0e0642b58b",
     "scripts/trend_strategy_browser.py": "11f96b72d92a89565f233b2ee56f2415ced958d8e2dc4c17b373a960c92b7b1f",

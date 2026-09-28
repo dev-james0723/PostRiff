@@ -14,7 +14,7 @@ Recorded on 2026-09-28 from the requested release baseline `822f25d21138be18dbcd
 
 The source-bound receipt is `evidence/m1m2-acceptance/acceptance-tests.json`; path-to-code/test/database/requirement bindings are in `COMPOUND_ACCEPTANCE_BINDINGS.md`.
 
-- 1,026 Python trend tests: 784 passed locally, 242 database-only skips, zero failures/errors. The 242 database cases were exercised in the PostgreSQL groups below.
+- 1,027 Python trend tests: 785 passed locally, 242 database-only skips, zero failures/errors. The 242 database cases were exercised in the PostgreSQL groups below.
 - 584 disposable-PostgreSQL tests passed across advanced 43, forecast 15, frontier 37, generation 39, interpretation 49, media 51, pipeline 14, planner 53, services 136, trust 112 and whitespace 35.
 - 108 browser→real API→PostgreSQL assertions passed at 1440, 768, 390 and 430 px with API interception disabled.
 - 16 strategy adoption/revocation browser→real API→PostgreSQL assertions passed at the same four widths.
@@ -26,6 +26,8 @@ The compound scenarios cover evidence→opportunity, opportunity→Ideas, explic
 ## Defect found and repaired
 
 The expanded PostgreSQL acceptance caught a real reverse-dependency deletion defect: a revoked source invalidated its `frontier_control` request, but bounded physical purge did not include that invalidated node kind. The merged-head rerun then caught an ordering edge: physical purge could erase the request before paged frontier maintenance scrubbed its linked job. `retention.py` now permits the control-node purge only after the dependency-validity predicate authorizes it and no linked job retains payload. The affected frontier 37 and trust 112 groups were rerun and passed.
+
+The Linux release gate then exposed a cross-platform receipt-seal defect: Shannon entropy for a single known creator was emitted as IEEE `-0.0`; PostgreSQL JSONB normalized it to `0.0` on the CI build, so the immutable receipt no longer matched its pre-storage digest. `metrics.py` now canonicalizes the mathematically non-negative result to positive zero. The regression test, all 1,027 trend tests and the affected 136-test PostgreSQL services group passed locally before the follow-up release gate.
 
 ## Milestone status
 

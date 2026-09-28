@@ -1,11 +1,11 @@
 {
   "status": "PASS",
-  "recorded_at": "2026-09-28T14:49:03.557177+00:00",
+  "recorded_at": "2026-09-28T15:34:51.321372+00:00",
   "source_head": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
   "records": 1771,
   "stable_ids_and_exact_source_preserved": true,
   "source_sha256": "5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328",
-  "requirements_sha256": "c9f8560ed034c95f3071eb9bc80dc3ec5b9cbcba19bf32100c9714304cee65a9",
+  "requirements_sha256": "b74ba111c70641665ee19be123c653b439855adcf444d2ae364990f52984b229",
   "counts": {
     "NOT_APPLICABLE": 154,
     "IN_PROGRESS": 1431,

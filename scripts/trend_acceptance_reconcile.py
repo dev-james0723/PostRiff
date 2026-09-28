@@ -225,11 +225,11 @@ def main():
         "canonical_release_base": CANONICAL_BASE,
         "merged_head_base": subprocess.check_output(["git", "merge-base", "HEAD", "origin/consumer-saas"], cwd=ROOT, text=True).strip(),
         "working_head_before_candidate_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "offline": {"tests": 1026, "passed": 784, "skipped_database_only": 242, "failures": 0, "errors": 0},
+        "offline": {"tests": 1027, "passed": 785, "skipped_database_only": 242, "failures": 0, "errors": 0},
         "disposable_postgresql": {"tests": 584, "passed": 584, "failures": 0, "errors": 0,
             "groups": {"advanced":43,"forecast":15,"frontier":37,"generation":39,"interpretation":49,"media":51,
                        "pipeline":14,"planner":53,"services":136,"trust":112,"whitespace":35},
-            "repair": "frontier_control physical purge is dependency-authorized and defers while a linked job still holds payload; affected frontier37 and trust112 rerun PASS"},
+            "repair": "frontier_control purge is dependency-authorized and job-safe; one-author entropy is canonical positive zero so JSONB round-trips preserve receipt seals; affected frontier37, trust112 and services136 rerun PASS"},
         "browser_to_database": {"assertions": 108, "viewports": [1440,768,390,430], "status": "PASS",
             "result": "browser/browser-results.json", "api_interception": False},
         "strategy_browser_to_database": {"assertions": 16, "viewports": [1440,768,390,430], "status": "PASS",
@@ -239,7 +239,8 @@ def main():
         "provider_calls": 0, "model_calls": 0, "paid_external_spend_usd": 0,
         "production_verified": False,
         "source_hashes": {str(path.relative_to(ROOT)): digest(path) for path in [
-            ROOT/"src/postriff_phase2/growth/trends/retention.py", ROOT/"tests/test_trend_frontier.py",
+            ROOT/"src/postriff_phase2/growth/trends/retention.py", ROOT/"src/postriff_phase2/growth/trends/metrics.py",
+            ROOT/"tests/test_trend_frontier.py",
             ROOT/"tests/test_trend_metrics.py", ROOT/"tests/test_trend_http.py", ROOT/"scripts/trend_browser.py",
             ROOT/"scripts/trend_strategy_browser.py", ROOT/"web/tests/trend-live-api-browser.cjs",
             ROOT/"web/tests/trend-strategy-live-api-browser.cjs", ROOT/"migrations/postriff/040_social_trend_intelligence.sql"]},
@@ -260,7 +261,10 @@ def main():
                 test["sha256"] = digest(path)
         for item in row.get("implementation_files", []):
             path = ROOT / item["path"]
-            if path.is_file() and item["path"] == "src/postriff_phase2/growth/trends/retention.py":
+            if path.is_file() and item["path"] in {
+                "src/postriff_phase2/growth/trends/retention.py",
+                "src/postriff_phase2/growth/trends/metrics.py",
+            }:
                 item["sha256"] = digest(path)
                 item["matches_guarded_test_snapshot"] = True
                 item["changed_since_prior_review"] = True
