@@ -1,13 +1,13 @@
 {
   "execution": "local source, disposable SQL, synthetic provider/Supabase/model fixtures; virtual WebAuthn is not a real device",
-  "base": "eefff65844f7556276b5c3b13b7cb16907e0ed6f",
+  "base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
   "capturedAt": "2026-09-28T08:40:59.569295+00:00",
   "realPaidCalls": 0,
   "paidTTSRequests": 3,
   "ttsBudgetUSD": 0.25,
   "ttsActualUSD": null,
   "productionMigrated": false,
-  "pushed": false,
+  "pushed": true,
   "merged": false,
   "deployed": false,
   "realDevice": {
