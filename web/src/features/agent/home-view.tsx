@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { ChannelIcon } from '@/components/channel-icon';
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toFolderAccounts } from '@/features/channels/channel-bloom/helpers';
 import type { QuickStart } from '@/config/quick-starts';
-import { keys, useChannels, useConversations, useMe, useMemory, useMemoryProposals, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { keys, useChannels, useMe, useMemory, useMemoryProposals, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { deriveAttention } from '@/lib/attention';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -130,7 +130,8 @@ function HomeWorkspace() {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();
-  const conversations = useConversations();
+  const conversations = useQuery({ queryKey: [...keys.conversations(workspaceId), 'navigation'],
+    queryFn: () => api.navigationConversations(workspaceId), enabled: Boolean(workspaceId) });
   const channelQuery = useChannels();
   const usage = useUsage();
   const models = useModels();
@@ -785,16 +786,17 @@ function HomeWorkspace() {
               <SharedLayoutBg as='ul' inset={0} pillClassName='rounded-none rafii-glass-selected' className='divide-border/60 divide-y'>
                 {recent.slice(0, 8).map((c) => (
                   <li key={c.conversationId}>
-                    <Link href={`/app/agent/${encodeURIComponent(c.conversationId)}`} className='flex min-h-12 items-center gap-3 px-4 py-2.5'>
+                    <Link href={`/app/agent/${encodeURIComponent(c.conversationId)}`} className='rafii-focus group flex min-h-12 items-center gap-3 px-4 py-2.5' aria-label={`Open ${c.title || 'Untitled'} conversation, ${c.messageCount} turns`}>
                       <span className='rafii-glass flex size-8 shrink-0 items-center justify-center rounded-lg'>
                         <Icons.sparkles className='size-4' />
                       </span>
                       <span className='flex min-w-0 flex-1 flex-col'>
                         <span className='truncate text-sm font-medium'>{c.title || 'Untitled'}</span>
+                        {c.excerpt && <span className='text-muted-foreground line-clamp-1 text-xs group-hover:line-clamp-2 group-focus:line-clamp-2'>{c.excerpt}</span>}
                       </span>
                       {c.archived && <Badge variant='outline'>Archived</Badge>}
                       <span className='text-muted-foreground shrink-0 text-xs' title={formatDateTime(c.updatedAt)}>
-                        {relativeTime(c.updatedAt)}
+                        {relativeTime(c.updatedAt)} · {c.messageCount}
                       </span>
                     </Link>
                   </li>

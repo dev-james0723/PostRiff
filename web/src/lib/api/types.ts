@@ -917,6 +917,47 @@ export interface Message {
   at: number;
 }
 
+export interface NavigationItem {
+  kind: 'user_request' | 'rafii_decision' | 'approval_required' | 'draft' | 'media' | 'research' | 'automation' | 'completion' | 'error' | 'moment';
+  messageId?: string;
+  momentId?: string;
+  seq: number;
+  excerpt: string;
+  at: number;
+  intent?: string | null;
+  seconds?: number;
+  assetId?: string;
+}
+
+export interface MediaMoment {
+  momentId: string;
+  conversationId: string;
+  workspaceId?: string;
+  afterSeq: number;
+  source: 'rafii_asset';
+  title: string;
+  assetId: string;
+  seconds: number;
+  timestamp: string;
+  createdAt: number;
+}
+
+export interface MessageWindow extends Conversation {
+  messages: Message[];
+  moments: MediaMoment[];
+  hasOlder: boolean;
+  hasNewer: boolean;
+}
+
+export interface NavigationConversation extends Omit<Conversation, 'createdAt'> {
+  messageCount: number;
+  excerpt: string;
+}
+
+export type NavigationSearchResult =
+  | { kind: 'conversation'; conversationId: string; title: string; at: number }
+  | { kind: 'turn'; conversationId: string; title: string; messageId: string; seq: number; excerpt: string; at: number };
+
 /**
  * One reasoning level a writer offers (`GET /api/ideas/models`). Managed writers list `auto` first (kind `auto`),
  * their gateway efforts (kind `effort`) and `thorough` (kind `pass`: draft, then revise); the fixture and CLI routes

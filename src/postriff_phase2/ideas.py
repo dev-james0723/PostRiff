@@ -10,6 +10,9 @@ import hashlib
 import inspect
 import json
 import time
+import math
+import uuid
+import binascii
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL  # noqa: F401 (legacy callers import it from here)
@@ -59,6 +62,29 @@ AUTO = "auto"
 LEVEL_REFUSAL = "Choose a reasoning level this writer supports."
 # Web research can add at most this much prompt after the level check a turn makes before it (research.py limits).
 RESEARCH_ALLOWANCE_BYTES = research.MAX_PAGES * research.MAX_FACTS * (research.MAX_FACT_CHARS * 3 + 100)
+
+
+def _workspace_asset_id(state, stored):
+    """Return a stored UUID using the workspace asset's exact public ID spelling.
+
+    PostgreSQL UUID columns render with hyphens, while existing video assets use uuid4().hex.
+    Moments must round-trip the same asset ID that the media and attachment APIs use.
+    """
+    raw = str(stored)
+    try:
+        target = uuid.UUID(raw)
+    except (ValueError, AttributeError, TypeError):
+        return raw
+    for asset in (state.get("phase2") or {}).get("assets", []):
+        candidate = asset.get("id") if isinstance(asset, dict) else None
+        if not isinstance(candidate, str):
+            continue
+        try:
+            if uuid.UUID(candidate) == target:
+                return candidate
+        except ValueError:
+            continue
+    return raw
 
 
 def _warnings(note):
@@ -694,6 +720,177 @@ class IdeasService:
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("SELECT id::text,title,created_by::text,extract(epoch from created_at),extract(epoch from updated_at),archived_at IS NOT NULL FROM public.pr_conversations WHERE workspace_id=%s ORDER BY updated_at DESC LIMIT 100", (workspace_id,))
             return {"conversations": [{"conversationId": r[0], "title": r[1], "createdBy": r[2], "createdAt": float(r[3]), "updatedAt": float(r[4]), "archived": bool(r[5])} for r in cur.fetchall()]}
+
+    def navigation_conversations(self, workspace_id, token, cursor=None, limit=40):
+        """Keyset page of real conversation activity; no message bodies leave this route."""
+        if type(limit) is not int or not 1 <= limit <= 60:
+            raise AlphaError("Invalid navigation limit.", 400)
+        after = None
+        if cursor:
+            try:
+                after = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+                if not (isinstance(after, list) and len(after) == 2 and isinstance(after[0], str)):
+                    raise ValueError()
+                uuid.UUID(after[1])
+            except (ValueError, TypeError, UnicodeDecodeError, binascii.Error) as error:
+                raise AlphaError("Invalid conversation cursor.", 400) from error
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            cur.execute("""SELECT c.id::text,c.title,extract(epoch from c.updated_at),c.updated_at::text,
+                                  c.archived_at IS NOT NULL,
+                                  (SELECT count(*) FROM public.pr_messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id),
+                                  (SELECT left(m.body->>'text',180) FROM public.pr_messages m
+                                   WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND length(trim(m.body->>'text'))>0
+                                   ORDER BY m.seq DESC LIMIT 1)
+                           FROM public.pr_conversations c WHERE c.workspace_id=%s
+                             AND (%s::timestamptz IS NULL OR (c.updated_at,c.id)<(%s::timestamptz,%s::uuid))
+                           ORDER BY c.updated_at DESC,c.id DESC LIMIT %s""",
+                        (workspace_id, after[0] if after else None, after[0] if after else None,
+                         after[1] if after else None, limit + 1))
+            rows = cur.fetchall()
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit and page:
+            next_cursor = base64.urlsafe_b64encode(json.dumps([page[-1][3], page[-1][0]]).encode()).decode().rstrip("=")
+        return {"conversations": [{"conversationId": r[0], "title": r[1], "updatedAt": float(r[2]),
+                                   "archived": bool(r[4]), "messageCount": r[5], "excerpt": r[6] or ""} for r in page],
+                "nextCursor": next_cursor}
+
+    def navigation_search(self, workspace_id, token, query):
+        if not isinstance(query, str) or len(query.strip()) < 2 or len(query) > 100:
+            raise AlphaError("Search for at least two characters.", 400)
+        term = "%" + query.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            # Trigram GIN indexes in 041 cover substring searches (including CJK). The workspace predicate is mandatory.
+            cur.execute("""SELECT c.id::text,c.title,extract(epoch from c.updated_at)
+                           FROM public.pr_conversations c WHERE c.workspace_id=%s
+                             AND c.title ILIKE %s ESCAPE '!'
+                           ORDER BY c.updated_at DESC LIMIT 15""", (workspace_id, term))
+            titles = [{"kind": "conversation", "conversationId": r[0], "title": r[1], "at": float(r[2])} for r in cur.fetchall()]
+            cur.execute("""SELECT m.id::text,m.conversation_id::text,c.title,m.seq,left(m.body->>'text',180),extract(epoch from m.created_at)
+                           FROM public.pr_messages m JOIN public.pr_conversations c
+                             ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                           WHERE m.workspace_id=%s AND m.body->>'text' ILIKE %s ESCAPE '!'
+                           ORDER BY m.created_at DESC LIMIT 30""", (workspace_id, term))
+            turns = [{"kind": "turn", "messageId": r[0], "conversationId": r[1], "title": r[2],
+                      "seq": r[3], "excerpt": r[4] or "", "at": float(r[5])} for r in cur.fetchall()]
+        return {"results": titles + turns}
+
+    def navigation(self, workspace_id, token, conversation_id, cursor=0, limit=100):
+        if type(cursor) is not int or cursor < 0 or type(limit) is not int or not 1 <= limit <= 200:
+            raise AlphaError("Invalid navigation cursor or limit.", 400)
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            state = self._state(row)
+            self._conversation(cur, workspace_id, conversation_id)
+            cur.execute("""SELECT id::text,seq,role,left(coalesce(body->>'text',''),180),extract(epoch from created_at),
+                                  body->>'intent',body->'plan' IS NOT NULL AND body->'plan'<>'null'::jsonb,
+                                  body->'automation' IS NOT NULL AND body->'automation'<>'null'::jsonb,
+                                  body ? 'images',body ? 'attachments',body->'siteAgent'->>'status',
+                                  body->'memoryProposal' IS NOT NULL AND body->'memoryProposal'<>'null'::jsonb,
+                                  body->>'failed',body->>'pending',
+                                  body->'research' IS NOT NULL AND body->'research'<>'null'::jsonb,
+                                  body ? 'artifactHash',body->'siteAgent'->>'intent'
+                           FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s AND seq>%s
+                           ORDER BY seq LIMIT %s""", (workspace_id, conversation_id, cursor, limit + 1))
+            rows = cur.fetchall()
+            page = rows[:limit]
+            end = page[-1][1] if page else cursor
+            cur.execute("""SELECT id::text,after_seq,title,seconds,created_at,asset_id::text
+                           FROM public.pr_media_moments WHERE workspace_id=%s AND conversation_id::text=%s
+                             AND after_seq>%s AND after_seq<=%s ORDER BY after_seq,created_at""",
+                        (workspace_id, conversation_id, cursor, end))
+            moments = cur.fetchall()
+            cur.execute("SELECT count(*) FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s",
+                        (workspace_id, conversation_id))
+            total = cur.fetchone()[0]
+        def kind(r):
+            if r[2] == "user": return "user_request"
+            if r[12] == "true" or r[10] == "failed": return "error"
+            if r[7] or r[5] == "automation": return "automation"
+            if r[6] or r[11] or r[10] == "approval_required": return "approval_required"
+            if r[8] or r[9]: return "media"
+            if r[14] or r[5] == "research": return "research"
+            if r[5] in ("published", "scheduled") or r[16] in ("published", "scheduled"): return "completion"
+            if r[15] or r[5] in ("draft", "image_generation"): return "draft"
+            return "rafii_decision"
+        items = [{"kind": kind(r), "messageId": r[0], "seq": r[1], "role": r[2], "excerpt": r[3],
+                  "at": float(r[4]), "intent": r[5]} for r in page]
+        items += [{"kind": "moment", "momentId": r[0], "seq": r[1], "excerpt": r[2],
+                   "seconds": float(r[3]), "at": r[4].timestamp(), "assetId": _workspace_asset_id(state, r[5])} for r in moments]
+        return {"items": items, "nextCursor": end if len(rows) > limit else None, "totalMessages": total}
+
+    def message_window(self, workspace_id, token, conversation_id, anchor=None, before=None, limit=100):
+        if type(limit) is not int or not 1 <= limit <= 100 or (before is not None and (type(before) is not int or before < 1)):
+            raise AlphaError("Invalid message window.", 400)
+        if anchor:
+            try: uuid.UUID(anchor)
+            except ValueError as error: raise AlphaError("Invalid turn link.", 400) from error
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            state = self._state(row)
+            conversation = self._conversation(cur, workspace_id, conversation_id)
+            if anchor:
+                cur.execute("SELECT seq FROM public.pr_messages WHERE id::text=%s AND conversation_id::text=%s AND workspace_id=%s",
+                            (anchor, conversation_id, workspace_id))
+                found = cur.fetchone()
+                if not found:
+                    cur.execute("SELECT after_seq FROM public.pr_media_moments WHERE id::text=%s AND conversation_id::text=%s AND workspace_id=%s",
+                                (anchor, conversation_id, workspace_id))
+                    found = cur.fetchone()
+                if not found: raise AlphaError("Turn unavailable.", 404)
+                center = found[0]
+                lower, upper = max(0, center - limit // 2 - 1), center + limit // 2
+            elif before:
+                lower, upper = max(0, before - limit - 1), before - 1
+            else:
+                cur.execute("SELECT coalesce(max(seq),0) FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s", (workspace_id, conversation_id))
+                upper = cur.fetchone()[0]
+                lower = max(0, upper - limit)
+            cur.execute("""SELECT id::text,seq,role,body,run_id::text,extract(epoch from created_at)
+                           FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s AND seq>%s AND seq<=%s
+                           ORDER BY seq LIMIT %s""", (workspace_id, conversation_id, lower, upper, limit))
+            rows = cur.fetchall()
+            first = rows[0][1] if rows else None
+            last = rows[-1][1] if rows else None
+            cur.execute("""SELECT id::text,after_seq,source,title,asset_id::text,seconds,timestamp_label,
+                                  extract(epoch from created_at)
+                           FROM public.pr_media_moments WHERE workspace_id=%s AND conversation_id::text=%s
+                             AND after_seq>=%s AND after_seq<=%s ORDER BY after_seq,created_at""",
+                        (workspace_id, conversation_id, first or 0, last or 0))
+            moments = cur.fetchall()
+            cur.execute("SELECT coalesce(max(seq),0) FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s", (workspace_id, conversation_id))
+            max_seq = cur.fetchone()[0]
+        return {**conversation, "messages": [{"messageId": r[0], "seq": r[1], "role": r[2], "body": r[3], "runId": r[4], "at": float(r[5])} for r in rows],
+                "moments": [{"momentId": r[0], "afterSeq": r[1], "source": r[2], "title": r[3],
+                             "assetId": _workspace_asset_id(state, r[4]), "seconds": float(r[5]), "timestamp": r[6], "createdAt": float(r[7])} for r in moments],
+                "hasOlder": bool(first and first > 1), "hasNewer": bool(last and last < max_seq)}
+
+    def save_moment(self, workspace_id, token, conversation_id, payload):
+        from . import asset_kinds
+        asset_id = payload.get("assetId")
+        seconds = payload.get("seconds")
+        if not isinstance(asset_id, str) or not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or not math.isfinite(seconds) or not 0 <= seconds < 86400:
+            raise AlphaError("Choose a valid video moment.", 400)
+        try: uuid.UUID(asset_id)
+        except ValueError as error: raise AlphaError("Choose a valid video moment.", 400) from error
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            state = self._state(row)
+            asset = next((a for a in state.get("phase2", {}).get("assets", []) if a.get("id") == asset_id and asset_kinds.kind_of(a) == "video" and asset_kinds.is_ready(a)), None)
+            if not asset or (asset.get("duration") and seconds > float(asset["duration"]) + 1):
+                raise AlphaError("This video is unavailable in the workspace.", 404)
+            title = clean(payload.get("title") or "Saved video", 200)
+            timestamp = f"{int(seconds) // 3600:02d}:{(int(seconds) // 60) % 60:02d}:{int(seconds) % 60:02d}" if seconds >= 3600 else f"{int(seconds) // 60:02d}:{int(seconds) % 60:02d}"
+            cur.execute("SELECT coalesce(max(seq),0) FROM public.pr_messages WHERE workspace_id=%s AND conversation_id::text=%s", (workspace_id, conversation_id))
+            after_seq = cur.fetchone()[0]
+            cur.execute("""INSERT INTO public.pr_media_moments(workspace_id,conversation_id,created_by,after_seq,source,title,asset_id,seconds,timestamp_label)
+                           VALUES(%s,%s,%s,%s,'rafii_asset',%s,%s,%s,%s)
+                           RETURNING id::text,extract(epoch from created_at)""",
+                        (workspace_id, conversation_id, principal, after_seq, title, asset_id, seconds, timestamp))
+            moment_id, created_at = cur.fetchone()
+            cur.execute("UPDATE public.pr_conversations SET updated_at=now() WHERE id::text=%s AND workspace_id=%s", (conversation_id, workspace_id))
+        return {"momentId": moment_id, "conversationId": conversation_id, "workspaceId": workspace_id,
+                "afterSeq": after_seq, "source": "rafii_asset", "title": title, "assetId": asset_id,
+                "seconds": seconds, "timestamp": timestamp, "createdAt": float(created_at)}
 
     def create_conversation(self, workspace_id, token, title=""):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):

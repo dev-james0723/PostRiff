@@ -16,7 +16,8 @@ import { OnboardingAnswer } from './onboarding-chat';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
-import { useQueryClient } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
@@ -33,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
-import { keys, useConversations, useMessages, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { keys, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
@@ -63,6 +64,10 @@ import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 import { ImageGenerationCard } from './image-generation-card';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { ThreadNavigator } from '@/features/context-navigation/thread-navigator';
+import { navigationId } from '@/features/context-navigation/markers';
+import { useNowPlaying } from '@/lib/media/now-playing';
+import type { MediaMoment, NavigationItem } from '@/lib/api/types';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
@@ -134,13 +139,42 @@ function StreamCaret() {
 
 function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const { api, workspaceId } = useWorkspaceApi();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const reduceMotion = useReducedMotion();
+  const anchor = searchParams.get('turn');
   const agent = useAgent();
   const client = useQueryClient();
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();
-  const conversations = useConversations();
-  const thread = useMessages(conversationId);
+  const navigationConversations = useInfiniteQuery({
+    queryKey: [...keys.conversations(workspaceId), 'navigation-pages'], initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, pageParam),
+    getNextPageParam: (page) => page.nextCursor ?? undefined, enabled: Boolean(workspaceId)
+  });
+  const windowQuery = useInfiniteQuery({
+    queryKey: [...keys.messages(workspaceId, conversationId), 'window', anchor], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.messageWindow(workspaceId, conversationId, pageParam ? { before: pageParam } : { anchor }),
+    getNextPageParam: (page) => page.hasOlder ? page.messages[0]?.seq : undefined,
+    enabled: Boolean(workspaceId)
+  });
+  const navigation = useInfiniteQuery({
+    queryKey: ['navigation', workspaceId, conversationId], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.navigation(workspaceId, conversationId, pageParam),
+    getNextPageParam: (page) => page.nextCursor ?? undefined, enabled: Boolean(workspaceId)
+  });
+  const { hasNextPage: hasMoreNavigation, isFetchingNextPage: fetchingNavigation, fetchNextPage: fetchNavigation } = navigation;
+  useEffect(() => {
+    if (hasMoreNavigation && !fetchingNavigation) void fetchNavigation();
+  }, [hasMoreNavigation, fetchingNavigation, fetchNavigation]);
+  const windowData = useMemo(() => {
+    const pages = windowQuery.data?.pages;
+    if (!pages?.length) return undefined;
+    return { ...pages[0], messages: pages.toReversed().flatMap((page) => page.messages),
+      moments: pages.toReversed().flatMap((page) => page.moments) };
+  }, [windowQuery.data]);
+  const thread = { data: windowData, isLoading: windowQuery.isLoading };
   const models = useModels();
   const usage = useUsage();
   const [creditLimit, setCreditLimit] = useState('');
@@ -149,6 +183,26 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const composer = useRef<HTMLTextAreaElement>(null);
 
   const messages = useMemo(() => thread.data?.messages ?? [], [thread.data]);
+  const moments = useMemo(() => thread.data?.moments ?? [], [thread.data]);
+  const timeline = useMemo(() => messages.flatMap((message): (ThreadMessage | MediaMoment)[] =>
+    [message, ...moments.filter((moment) => moment.afterSeq === message.seq)]), [messages, moments]);
+  const navItems = useMemo(() => (navigation.data?.pages.flatMap((page) => page.items) ?? [])
+    .sort((a, b) => a.seq - b.seq || a.at - b.at), [navigation.data]);
+  const renderedIds = useMemo(() => [...messages.map((m) => m.messageId), ...moments.map((m) => m.momentId)], [messages, moments]);
+  useEffect(() => {
+    if (!anchor || !windowData) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`turn-${anchor}`);
+      target?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [anchor, windowData, reduceMotion]);
+  function jumpTo(item: NavigationItem) {
+    const id = navigationId(item);
+    if (!id) return;
+    if (anchor === id) document.getElementById(`turn-${id}`)?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+    else router.replace(`/app/agent/${encodeURIComponent(conversationId)}?turn=${encodeURIComponent(id)}`, { scroll: false });
+  }
   // Rafii panel answers (`body.siteAgent`) are runs too, but not writing runs: the drafts inspector follows the last writing run.
   const lastAssistant = useMemo(() => messages.toReversed().find((m) => m.role === 'assistant' && m.runId && !isSiteAgentBody(m.body)) ?? null, [messages]);
   const lastSiteAnswer = useMemo(() => messages.findLast((m) => m.role === 'assistant' && isSiteAgentBody(m.body))?.messageId ?? null, [messages]);
@@ -259,12 +313,28 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     void client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
   }, [settledRun, client, workspaceId, conversationId]);
-  const list = conversations.data?.conversations ?? [];
+  const list = navigationConversations.data?.pages.flatMap((page) => page.conversations) ?? [];
   const title = list.find((c) => c.conversationId === conversationId)?.title || thread.data?.title || 'Conversation';
   const plan = run?.artifact?.plan ?? null;
   const planApplied = run?.status === 'applied';
   const variants = run?.artifact?.variants ?? [];
   const sources = (state?.sources ?? []).filter((s) => s.active);
+
+  async function playMoment(moment: MediaMoment) {
+    try {
+      const { url } = await api.mediaUrl(workspaceId, moment.assetId);
+      useNowPlaying.getState().open({ workspaceId, conversationId, assetId: moment.assetId,
+        title: moment.title, url, startAt: moment.seconds });
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Video unavailable'); }
+  }
+
+  function prepareMoment(moment: MediaMoment, purpose: 'ask' | 'make') {
+    const asset = state?.phase2?.assets.find((item) => item.id === moment.assetId);
+    if (asset && attachmentsOn) attachments.addLibrary([asset], 'reference');
+    const context = `Saved moment in ${moment.title} at ${moment.timestamp} (Rafii video ${moment.assetId}).`;
+    setText(purpose === 'ask' ? `${context} I want to ask Rafii: ` : `${context} Make content inspired by this moment: `);
+    requestAnimationFrame(() => composer.current?.focus());
+  }
 
   // A draft as its app would show it: the connected account (or the workspace's speaker) and the planned time if any.
   function draftFor(variant: RunVariant) {
@@ -329,6 +399,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
           client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),
           client.invalidateQueries({ queryKey: keys.usage(workspaceId) })
         ]);
+        if (anchor) router.replace(`/app/agent/${encodeURIComponent(conversationId)}`, { scroll: false });
       } catch (err) {
         if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Rafii couldn’t run that command.');
       } finally {
@@ -374,6 +445,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
       await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
+      if (anchor) router.replace(`/app/agent/${encodeURIComponent(conversationId)}`, { scroll: false });
     } catch (err) {
       if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Couldn’t send your message.');
     } finally {
@@ -395,7 +467,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
           </div>
           <Surface material='quiet' padding='none' className='overflow-hidden'>
             <ScrollArea className='h-[70vh]'>
-              {conversations.isLoading ? (
+              {navigationConversations.isLoading ? (
                 <div className='flex flex-col gap-2 p-2'>
                   <Skeleton className='h-9 w-full' />
                   <Skeleton className='h-9 w-full' />
@@ -407,23 +479,26 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                       <Link
                         href={`/app/agent/${encodeURIComponent(c.conversationId)}`}
                         aria-current={c.conversationId === conversationId ? 'page' : undefined}
-                        className={cn('rafii-focus flex min-h-11 flex-col justify-center gap-0.5 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm', c.conversationId === conversationId && 'text-foreground font-medium')}
+                        className={cn('rafii-focus group flex min-h-11 flex-col justify-center gap-0.5 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm', c.conversationId === conversationId && 'text-foreground font-medium')}
                       >
                         <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
                         <span className='text-muted-foreground text-xs font-normal' title={formatDate(c.updatedAt)}>
-                          {relativeTime(c.updatedAt)}
+                          {relativeTime(c.updatedAt)} · {c.messageCount} turns
                         </span>
+                        <span className='text-muted-foreground hidden truncate text-xs font-normal group-hover:block group-focus:block'>{c.excerpt}</span>
                       </Link>
                     </li>
                   ))}
                 </SharedLayoutBg>
               )}
+              {navigationConversations.hasNextPage && <Button variant='quiet' size='sm' className='w-full' onClick={() => void navigationConversations.fetchNextPage()}>More conversations</Button>}
             </ScrollArea>
           </Surface>
         </aside>
 
         {/* Thread */}
-        <section className='flex min-w-0 flex-col gap-5'>
+        <section className='relative flex min-w-0 flex-col gap-5 lg:pr-7'>
+          <ThreadNavigator items={navItems} renderedIds={renderedIds} onJump={jumpTo} />
           <div className='flex flex-wrap items-end justify-between gap-3'>
             <div className='flex min-w-0 flex-col gap-1'>
               <h1 className='text-foreground truncate text-[26px] leading-[1.15] font-normal tracking-[-0.02em]'>{title}</h1>
@@ -446,12 +521,29 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
 
           <ol className='flex flex-col gap-5'>
             {thread.isLoading && <Skeleton className='h-24 w-full' />}
-            {messages.map((message) => {
+            {windowQuery.hasNextPage && <li><Button variant='quiet' size='sm' disabled={windowQuery.isFetchingNextPage} onClick={() => void windowQuery.fetchNextPage()}>Load earlier turns</Button></li>}
+            {windowData?.hasNewer && <li><Button variant='quiet' size='sm' onClick={() => router.replace(`/app/agent/${encodeURIComponent(conversationId)}`, { scroll: false })}>Jump to latest</Button></li>}
+            {timeline.map((entry) => {
+              if ('momentId' in entry) {
+                const moment = entry;
+                return <li key={moment.momentId} id={`turn-${moment.momentId}`} data-nav-id={moment.momentId} className='scroll-mt-24'>
+                  <Surface material='quiet' padding='sm' className='flex flex-col gap-2 text-sm'>
+                    <div className='flex items-center gap-2'><Icons.video className='size-4' aria-hidden /><strong className='truncate'>Saved moment · {moment.title}</strong><span className='text-muted-foreground ml-auto text-xs'>{moment.timestamp}</span></div>
+                    <p className='text-muted-foreground text-xs'>Rafii video · saved {relativeTime(moment.createdAt)}</p>
+                    <div className='flex flex-wrap gap-1'>
+                      <Button variant='quiet' size='sm' onClick={() => void playMoment(moment)}>Play from {moment.timestamp}</Button>
+                      {canEdit && <Button variant='quiet' size='sm' onClick={() => prepareMoment(moment, 'ask')}>Ask Rafii</Button>}
+                      {canEdit && <Button variant='quiet' size='sm' onClick={() => prepareMoment(moment, 'make')}>Make content</Button>}
+                    </div>
+                  </Surface>
+                </li>;
+              }
+              const message = entry;
               const body = bodyOf(message);
               const animateIn = arrived(message.messageId);
               if (message.role === 'user') {
                 return (
-                  <li key={message.messageId}>
+                  <li key={message.messageId} id={`turn-${message.messageId}`} data-nav-id={message.messageId} className='scroll-mt-24'>
                     <Message from='user' animateIn={animateIn}>
                       <MessageBubble animateIn={animateIn}>
                         {/* The soft bubble's surface is its first child span; recolor it to today's secondary look. */}
@@ -467,7 +559,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               const siteAnswer = (body as { siteAgent?: SiteAgentBody }).siteAgent;
               if (siteAnswer) {
                 return (
-                  <li key={message.messageId}>
+                  <li key={message.messageId} id={`turn-${message.messageId}`} data-nav-id={message.messageId} className='scroll-mt-24'>
                     <Message from='assistant' animateIn={animateIn} className='gap-3'>
                       <MessageAvatar className='mt-0.5 rounded-full'>
                         <RafiiAvatar size={28} />
@@ -488,7 +580,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               }
               const isCurrent = message.runId != null && message.runId === lastRunId;
               return (
-                <li key={message.messageId}>
+                <li key={message.messageId} id={`turn-${message.messageId}`} data-nav-id={message.messageId} className='scroll-mt-24'>
                   <Message from='assistant' animateIn={animateIn} className='gap-3'>
                     <MessageAvatar className='rafii-glass text-foreground mt-0.5 rounded-lg'>
                       <Icons.sparkles className='size-3.5' />
@@ -502,7 +594,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                         <ChatAutomationCard
                           automation={body.automation}
                           // Only the latest turn can still be answered; older cards show what was decided then.
-                          onQuickReply={canEdit && message.messageId === messages.at(-1)?.messageId ? (reply) => sendTurn(reply) : undefined}
+                          onQuickReply={canEdit && !windowData?.hasNewer && message.messageId === messages.at(-1)?.messageId ? (reply) => sendTurn(reply) : undefined}
                         />
                       )}
                       {/* A source the live run already warned about is not listed twice; CLI runs send no such warning. */}
@@ -628,7 +720,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
               slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               attachments={attachmentsOn ? attachments : undefined}
-              attachmentBar={{ liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
+              attachmentBar={{ conversationId, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
             />
           ) : (
             <StateMessage kind='permission' title='Viewing only.' description='Ask an owner for edit access.' />

@@ -24,11 +24,12 @@ test('the Library copy is the SPEC §13 string', () => {
   );
 });
 
-test('videos show a duration badge and play inline with their poster', () => {
+test('videos show a duration badge and hand playback to the global player', () => {
   assert.match(read('features', 'library', 'asset-card.tsx'), /kindOf\(asset\) === 'video'/);
   const detail = read('features', 'library', 'asset-detail.tsx');
   assert.match(detail, /api\.mediaUrl\(workspaceId, asset\.id\)/);
-  assert.match(detail, /<video src=\{playback\.data\} poster=\{image\.data\} controls playsInline/);
+  assert.match(detail, /useNowPlaying\.getState\(\)\.open\(/);
+  assert.doesNotMatch(detail, /<video\s/);
 });
 
 test('the consent row: owner-only confirm, processors named, hidden unless reading is available', () => {
