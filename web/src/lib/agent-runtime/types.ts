@@ -156,6 +156,8 @@ export interface VoiceSessionStart {
   conversationId: string;
   sdp: string;
   dataChannel: string;
+  voice?: string;
+  openingGreeting?: string;
   model: string;
   locale: string;
   capMinutes: number;

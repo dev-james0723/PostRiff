@@ -77,6 +77,7 @@ class Controller:
                                        record_media_failure=self.media_failures.append)
         self.started_ids, self.hangups, self.finishes, self.transcripts = [], [], [], []
         self.user_text = ''
+        self.opening_greeting = 'Greet the caller now in Cantonese and pause to listen.'
 
     def guard(self):
         return self.runtime.service.get(self.call['workspace_id'],self.capability)

@@ -124,6 +124,15 @@ assert read_call(cid)['state']=='answered'
 sql('UPDATE pr_phone_calls SET media_claimed_at=now() WHERE id=%s',cid)
 controller = PhoneSessionController(phone,cid)
 assert 'second LinkedIn' in json.dumps(controller.configuration())
+# Settings save -> authenticated phone configuration: every advertised voice, with the caller's name.
+from postriff_phase2.agent_runtime_v2 import style as saved_style
+service.update_profile(ONE, {'displayName': 'James Au'})
+for selected_voice in saved_style.VOICES:
+    service.update_profile(ONE, {'agentStyle': {'voice': selected_voice}})
+    assert controller.configuration()['audio']['output']['voice'] == selected_voice
+    assert '"James"' in controller.opening_greeting
+service.update_profile(ONE, {'agentStyle': {'voice': 'marin'}})
+print('PASS six saved Settings voices and authenticated first name reach phone Live configuration')
 controller.started('fake-live-phone')
 controller.transcript({'type':'session.input_transcript.delta','delta':'Open the second LinkedIn draft and cut the opening in half. Make it warmer.'})
 scripts([function_call('workspace_summary',{},call_id='workspace')],

@@ -169,7 +169,15 @@ class Wire:
 @asynccontextmanager
 async def connect():
     connections.append(1); wire = Wire(); wires.append(wire); yield wire
-app = create_app(service, phone, connect)
+spoken = os.environ.get('RAFII_TEST_CODE_METHOD') == 'spoken'
+code_audio_requests = []
+async def code_transcribe(audio):
+    assert spoken, 'Keypad must never request transcription'
+    assert not connections, 'Code transcription must run before Live or private workspace context'
+    assert 8000 <= len(audio) <= 120160
+    code_audio_requests.append(len(audio))
+    return t['code']  # Synthetic recognizer only; the actual DB verifier still consumes the issued ticket.
+app = create_app(service, phone, connect, code_transcribe=code_transcribe)
 ref = 'call_media'
 provider_calls[ref] = {'id': ref, 'direction': 'inbound', 'from': '+12025550199', 'to': '+12025550100', 'status': 'in-progress', 'duration': 0}
 with TestClient(app) as client:
@@ -185,7 +193,12 @@ with TestClient(app) as client:
         socket.send_json({'type': 'media', 'payload': base64.b64encode(b'pre-auth private words').decode()})
         while socket.receive_json()['type'] != 'media': pass
         assert not connections, 'Greeting must not open Live'
-        for digit in t['code']: socket.send_json({'type': 'dtmf', 'digit': digit})
+        if spoken:
+            audio = b'\xa0' * 8000 + b'\xff' * 16000
+            for offset in range(0, len(audio), 1600):
+                socket.send_json({'type': 'media', 'payload': base64.b64encode(audio[offset:offset+1600]).decode()})
+        else:
+            for digit in t['code'] + '*': socket.send_json({'type': 'dtmf', 'digit': digit})
         while socket.receive_json() != {'type': 'media', 'payload': base64.b64encode(b'hello').decode()}: pass
         socket.send_json({'type': 'media', 'payload': base64.b64encode(b'authenticated speech').decode()})
         frames = []
@@ -195,6 +208,8 @@ with TestClient(app) as client:
                 provider_calls[ref].update(status='completed', duration=8)
                 socket.send_json({'type': 'call_ended'}); break
         assert {'type': 'media', 'payload': base64.b64encode(b'saved').decode()} in frames
+    assert len(code_audio_requests) == (1 if spoken else 0)
+    print('PASS signed ASGI code admission method: ' + ('spoken, no star' if spoken else 'keypad plus star'))
     status = inbound.status(phone, w, u, t['id']); cid = status['call']['id']
     deadline = time.monotonic() + 5
     while read(cid)['live_usage_seconds'] is None and time.monotonic() < deadline: time.sleep(.02)
@@ -277,7 +292,9 @@ phone.config.values.pop('RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO')
 # three already being funded by their authenticated calls. Count only unclaimed ones.
 phone.config.values['RAFII_PHONE_USD_MICRO_PER_MINUTE'] = '170000'
 unfunded = sql('SELECT count(*) FROM pr_phone_inbound_sessions WHERE call_id IS NULL')[0][0]
-phone.config.values['RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO'] = str((unfunded + 1) * 170000)
+from postriff_phase2.phone.code_speech import RESERVE_USD_MICRO
+total = sql('SELECT count(*) FROM pr_phone_inbound_sessions')[0][0]
+phone.config.values['RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO'] = str((unfunded + 1) * 170000 + (total + 1) * RESERVE_USD_MICRO)
 assert inbound.begin(phone, 'call_funded_greeting_not_double_counted', '+12025550888')
 assert not inbound.begin(phone, 'call_unfunded_budget_still_enforced', '+12025550889')
 phone.config.values.pop('RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO')

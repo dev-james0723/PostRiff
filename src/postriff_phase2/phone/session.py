@@ -10,7 +10,8 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from ..agent_runtime_v2 import live, style
-from . import billing, contracts, resume, store
+from ..agent_runtime_v2.greeting import opening
+from . import billing, resume, store
 from .providers.base import TelephonyMediaTransport
 from .diagnostics import MediaFailure, report_failure
 
@@ -38,6 +39,7 @@ class PhoneSessionController:
         with self.runtime.service.repository.transaction(self.capability, value['workspace_id']) as (cur, _row, principal):
             agent_style = style.load(cur, principal)
             locale, voice = live.locale_and_voice({}, agent_style)
+            self.opening_greeting = opening(cur, principal, locale, kind=value['kind'])
             history = self.voice._history(cur, value['workspace_id'], value['conversation_id'])
             if value.get('media_generation',0):
                 artifact = self.voice._artifact(cur, value['workspace_id'], value['voice_run_id'])
@@ -155,6 +157,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
     except Exception as error:
         raise MediaFailure('live_start', error) from None
     ready = asyncio.Event()
+    greeting_sent = False
 
     async def step(phase, work):
         try:
@@ -187,15 +190,18 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
             raise MediaFailure('live_receive', error) from None
 
     async def read_live():
-        nonlocal final_usage, final_reason
+        nonlocal final_usage, final_reason, greeting_sent
         async for raw in connection:
             event = raw if isinstance(raw, dict) else raw.model_dump()
             kind = event.get('type')
             if kind == 'session.started':
+                if ready.is_set():
+                    continue
                 await step('live_started', asyncio.to_thread(controller.started, event['session']['id']))
                 ready.set()
-                if not controller.call.get('media_generation',0):
-                    await step('live_greeting', connection.send({'type':'session.instructions.append', 'delegation_id':None, 'content':'Greet the caller now: ' + contracts.GREETING}))
+                if not controller.call.get('media_generation',0) and not greeting_sent:
+                    greeting_sent = True
+                    await step('live_greeting', connection.send({'type':'session.instructions.append', 'event_id':'phone-opening', 'delegation_id':None, 'content':controller.opening_greeting}))
                 if not controller.call.get('media_generation',0) and controller.call['kind'] == 'scheduled':
                     controller.user_text = 'Give me a short weekly social-media briefing from this workspace: verified publications, performance, approvals and blockers. Do not publish or schedule anything.'
                     dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}})

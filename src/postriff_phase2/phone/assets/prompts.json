@@ -1,0 +1,11 @@
+{
+  "model": "gpt-4o-mini-tts",
+  "voice": "marin",
+  "response_format": "wav",
+  "instructions": "Speak warmly and naturally, like a friendly helpful person on the phone. Use a calm, clear pace with short pauses. Read the supplied words exactly. Pronounce Rafii as Rafi. Emphasize star without sounding robotic. No music or sound effects.",
+  "prompts": {
+    "dial-acceptance": "Hi, this is Rafii, your AI assistant. Press one to connect, or simply hang up to decline.",
+    "dial-inbound": "Hi, this is Ravi. I'm your AI assistant. Say your twelve-digit phone sign-in code, one digit at a time, then pause. Or enter all twelve digits on your keypad and press star. Press hash to start over.",
+    "dial-inbound-retry": "Sorry, that code did not connect. Say all twelve digits again, one at a time, then pause. Or enter them on your keypad and press star."
+  }
+}
