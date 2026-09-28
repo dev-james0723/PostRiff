@@ -118,6 +118,12 @@ class Metrics(OfflineCase):
         self.assertAlmostEqual(observed['largest_creator_share'],4/150)
         self.assertNotEqual(observed['effective_creators'],observed['known_author_post_count'])
 
+    def test_single_creator_entropy_has_canonical_positive_zero(self):
+        observed=M.creator_metrics([{'provider_id':'fixture','payload':{'author_status':'known','author_key':'one'}}])
+        self.assertEqual(observed['creator_entropy'],0.0)
+        self.assertEqual(math.copysign(1.0,observed['creator_entropy']),1.0)
+        self.assertNotIn('-0.0',json.dumps(observed,sort_keys=True))
+
     def test_occupancy_and_redundancy_denominators(self):
         assignments=[{'observation_id':str(i),'dimension':'hook','pattern_id':'chosen' if i<20 else str(i),'copy_group_id':'copy' if i<20 else str(i)} for i in range(80)]
         result=M.pattern_occupancy([str(i) for i in range(100)],assignments,dimension='hook')

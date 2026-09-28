@@ -103,7 +103,10 @@ def creator_metrics(observations):
     known = sum(authors.values())
     total = len(observations)
     shares = [n / known for n in authors.values()] if known else []
-    entropy = -sum(p * math.log(p) for p in shares) if shares else None
+    # Shannon entropy is non-negative.  The one-author case otherwise produces
+    # IEEE ``-0.0``; PostgreSQL JSONB normalizes that to ``0.0`` on some builds,
+    # which changes the canonical receipt seal after persistence.
+    entropy = max(0.0, -sum(p * math.log(p) for p in shares)) if shares else None
     return {'known_creator_count': len(authors), 'known_author_post_count': known,
             'unknown_author_fraction': (total - known) / total if total else None,
             'creator_entropy': entropy, 'effective_creators': math.exp(entropy) if entropy is not None else None,
