@@ -10,6 +10,7 @@ from postriff_phase2.provider_media import stream_multipart_video
 from postriff_phase2.wave4_connectors import GoogleBusinessProfileProvider
 from postriff_phase2.wave4_publishers import DouyinVideos, GoogleBusinessPosts, KuaishouVideos, PixelfedPosts
 from postriff_phase2.publish_options import normalize
+from postriff_phase2.outcomes import normalize_result
 
 
 def reply(body, status=200):
@@ -108,6 +109,7 @@ class BusinessPosts(unittest.TestCase):
         self.assertEqual(submitted["state"], "provider_accepted")
         verified = GoogleBusinessPosts().reconcile(manifest, {"providerReference": submitted["reference"]}, provider, token, SimpleNamespace())
         self.assertEqual(verified["state"], "verified")
+        self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Google Business Profile"}})["state"], "verified")
         self.assertTrue(wire.calls[2][1].startswith("https://mybusiness.googleapis.com/v4/accounts/100/locations/10/"))
 
     def test_no_selected_location_prevents_post(self):
@@ -115,6 +117,18 @@ class BusinessPosts(unittest.TestCase):
         token = json.dumps({"v": 1, "at": "TOKEN", "location": None})
         with self.assertRaisesRegex(AlphaError, "Choose a Business Profile location"):
             GoogleBusinessPosts().submit({"payload": {"text": "Welcome"}, "media": []}, provider, token, SimpleNamespace())
+
+    def test_live_text_does_not_claim_an_unverified_google_image(self):
+        wire = Wire([reply({"accounts": [{"name": "accounts/100"}]}),
+                     reply({"locations": [{"name": "locations/10", "title": "Downtown"}]}),
+                     reply({"name": "accounts/100/locations/10/localPosts/post1", "summary": "Welcome",
+                            "topicType": "STANDARD", "state": "LIVE"})])
+        provider = GoogleBusinessProfileProvider("app", "secret", transport=wire)
+        token = json.dumps({"v": 1, "at": "TOKEN", "location": "accounts/100/locations/10"})
+        manifest = {"payload": {"text": "Welcome"}, "media": [{"mime": "image/jpeg"}]}
+        result = GoogleBusinessPosts().reconcile(manifest, {"providerReference": "accounts/100/locations/10/localPosts/post1"},
+                                                 provider, token, SimpleNamespace(_image_url=lambda _manifest: "https://storage.example/photo"))
+        self.assertEqual(result["state"], "provider_accepted")
 
 
 class MediaPublishers(unittest.TestCase):
@@ -124,7 +138,8 @@ class MediaPublishers(unittest.TestCase):
                 self.wire = Wire([
                     reply({"id": "media1"}, 201), reply({"id": "media1", "url": "https://photos.example.org/media1"}),
                     reply({"id": "post1", "account": {"id": "42"}}, 201),
-                    reply({"id": "post1", "account": {"id": "42"}, "content": "<p>Hello</p>", "visibility": "public", "url": "https://photos.example.org/p/post1"}),
+                    reply({"id": "post1", "account": {"id": "42"}, "content": "<p>Hello</p>", "visibility": "public",
+                           "media_attachments": [{"id": "media1"}], "url": "https://photos.example.org/p/post1"}),
                 ])
             def session(self, _token): return {"instance": "photos.example.org", "at": "TOKEN"}
             def api(self, session, method, path, **kw): return self.wire(method, path, **kw)
@@ -135,11 +150,22 @@ class MediaPublishers(unittest.TestCase):
         social = SimpleNamespace(_image=lambda _manifest: (b"\xff\xd8fixture", "image/jpeg", ""), sleep=lambda _seconds: None)
         posted = PixelfedPosts().submit(manifest, provider, "TOKEN", social)
         self.assertEqual(posted["state"], "provider_accepted")
-        verified = PixelfedPosts().reconcile(manifest, {"providerReference": posted["reference"]}, provider, "TOKEN", social)
+        verified = PixelfedPosts().reconcile(manifest, {"providerReference": posted["reference"], "container": posted["container"]}, provider, "TOKEN", social)
         self.assertEqual(verified["state"], "verified")
+        self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Pixelfed"}})["state"], "verified")
         self.assertEqual([call[1] for call in provider.wire.calls],
                          ["/api/v1/media", "/api/v1/media/media1", "/api/v1/statuses", "/api/v1/statuses/post1"])
         self.assertEqual(provider.wire.calls[2][2]["form"]["visibility"], "public")
+
+    def test_pixelfed_missing_approved_attachment_is_never_verified(self):
+        class Provider:
+            def session(self, _token): return {"instance": "photos.example.org", "at": "TOKEN"}
+            def api(self, _session, _method, _path):
+                return reply({"id": "post1", "account": {"id": "42"}, "content": "<p>Hello</p>",
+                              "visibility": "public", "media_attachments": []})
+        result = PixelfedPosts().reconcile({"providerAccountId": "42@photos.example.org", "payload": {"text": "Hello"}},
+                                           {"providerReference": "post1", "container": "media1"}, Provider(), "TOKEN", SimpleNamespace())
+        self.assertEqual(result["state"], "uncertain")
 
     def test_douyin_create_ambiguity_stays_uncertain_and_is_not_retried(self):
         wire = Wire([reply({"data": {"error_code": 10}})])

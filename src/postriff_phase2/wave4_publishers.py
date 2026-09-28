@@ -89,10 +89,11 @@ class GoogleBusinessPosts:
                 or any(body.get(key) != expected[key] for key in ("event", "offer") if key in expected)):
             return _uncertain("Google read-back did not match the approved location and content.")
         if body.get("state") == "LIVE":
+            if manifest.get("media"):
+                return {"state": "provider_accepted", "reference": reference,
+                        "confirmed": "Google reports the Local Post live, but the approved image cannot yet be independently matched in read-back."}
             result = {"state": "verified", "reference": reference, "verification": "provider_lookup",
                       "confirmed": "Google reports the approved Local Post live at the selected location."}
-            if isinstance(body.get("searchUrl"), str) and body["searchUrl"].startswith("https://"):
-                result["url"] = body["searchUrl"]
             return result
         if body.get("state") in ("REJECTED", "FAILED"):
             return {"state": "failed", "reference": reference, "verification": "provider_lookup",
@@ -139,7 +140,7 @@ class PixelfedPosts:
         reference = body.get("id")
         owner = body.get("account") if isinstance(body.get("account"), dict) else {}
         if response.get("status") in (200, 201) and isinstance(reference, str) and self.ID.fullmatch(reference) and str(owner.get("id")) + "@" + session["instance"] == account:
-            return {"state": "provider_accepted", "reference": reference,
+            return {"state": "provider_accepted", "reference": reference, "container": media_id,
                     "confirmed": "Pixelfed accepted the status; exact account and content read-back are pending."}
         return _uncertain("The Pixelfed status response was inconclusive.")
 
@@ -153,16 +154,18 @@ class PixelfedPosts:
         owner = body.get("account") if isinstance(body.get("account"), dict) else {}
         plain = html.unescape(re.sub(r"<[^>]*>", " ", str(body.get("content") or ""))).strip()
         expected = str(manifest.get("payload", {}).get("text") or "").strip()
+        attachments = body.get("media_attachments") if isinstance(body.get("media_attachments"), list) else []
+        media_id = job.get("container")
         if (response.get("status") != 200 or str(body.get("id")) != reference
                 or str(owner.get("id")) + "@" + session["instance"] != manifest.get("providerAccountId")
                 or body.get("visibility") != "public"
+                or not isinstance(media_id, str) or not self.ID.fullmatch(media_id)
+                or len(attachments) != 1 or not isinstance(attachments[0], dict)
+                or str(attachments[0].get("id")) != media_id
                 or " ".join(plain.split()) != " ".join(expected.split())):
-            return _uncertain("Pixelfed read-back did not match the approved account and caption.")
+            return _uncertain("Pixelfed read-back did not match the approved account, caption and image attachment.")
         result = {"state": "verified", "reference": reference, "verification": "provider_lookup",
-                  "confirmed": "Pixelfed read-back matched the approved caption and exact account."}
-        url = body.get("url")
-        if isinstance(url, str) and url.startswith("https://" + session["instance"] + "/"):
-            result["url"] = url
+                  "confirmed": "Pixelfed read-back matched the approved caption, image attachment and exact account."}
         return result
 
 
