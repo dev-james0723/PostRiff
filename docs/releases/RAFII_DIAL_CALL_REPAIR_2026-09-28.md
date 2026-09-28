@@ -1,6 +1,6 @@
 # Rafii Dial call repair — 2026-09-28
 
-Status: LOCAL CANDIDATE. No push, deployment, provider-account change, SMS or real call.
+Status at initial handoff: LOCAL CANDIDATE. The user subsequently approved deployment in this chat. Release verification is in progress; no paid live call is authorized.
 Base: 4f686a72dc3960dc93d27241160af5b1325fd5e5, the production deployment inspected during this task (dpl_4NNSHpEegYSyRR9CiNQSNGhEuaxt).
 
 ## Findings
@@ -40,7 +40,7 @@ Evidence logs (local):
 
 ## Authorized next boundary
 
-The user requested diagnosis, repair and removal of the six-call cap. A production release and a paid live call have not been authorized in this chat. After release authorization: refresh the production base, review the scoped diff, run required CI/preview checks, deploy, then use the owner-only Check calling setup action (GET only). A later explicit call approval needs the target and spending cap; do not place calls merely to test setup.
+The user requested diagnosis, repair and removal of the six-call cap. Production release was subsequently explicitly approved by the user. A paid live call is still not authorized. Release procedure: refresh the production base, review the scoped diff, run required CI/preview checks, deploy, then use the owner-only Check calling setup action (GET only). A later explicit call approval needs the target and spending cap; do not place calls merely to test setup.
 
 References:
 - https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/
