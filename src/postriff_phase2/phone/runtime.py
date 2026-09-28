@@ -3,7 +3,7 @@ import copy
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts, delivery, inbound, store
+from . import contracts, delivery, inbound, rules, store
 from .service import PhoneService
 
 
@@ -79,7 +79,7 @@ def schedule_tick(phone, limit):
 def proactive_tick(phone, limit):
     """Consumes phone outbox rows, independently of the normal email/push retry worker."""
     with phone.hosted.connection_factory() as db, db.cursor() as cur:
-        cur.execute('SELECT d.id::text,d.user_id::text,d.workspace_id::text,e.event_type,coalesce(e.grouping_key,e.dedupe_key) '
+        cur.execute('SELECT d.id::text,d.user_id::text,d.workspace_id::text,e.event_type,coalesce(e.grouping_key,e.dedupe_key),e.entity_id '
                     'FROM public.pr_notification_deliveries d JOIN public.pr_notification_events e ON e.id=d.event_id '
                     'WHERE d.channel=\'phone\' AND (d.status=\'pending\' OR (d.status=\'claimed\' AND d.next_attempt_at<now()-interval \'5 minutes\')) AND d.next_attempt_at<=now() AND (e.expires_at IS NULL OR e.expires_at>now()) '
                     'ORDER BY d.next_attempt_at LIMIT %s FOR UPDATE OF d SKIP LOCKED',(limit,))
@@ -87,10 +87,14 @@ def proactive_tick(phone, limit):
         for did,*_rest in rows:
             cur.execute('UPDATE public.pr_notification_deliveries SET status=\'claimed\',attempts=1,next_attempt_at=now() WHERE id=%s',(did,))
         db.commit()
-    for did,user,ws,event,group in rows:
+    for did,user,ws,event,group,entity_id in rows:
         scoped,capability=principal_phone(phone,ws,user)
         try:
-            result=scoped.request(ws,capability,{'idempotencyKey':'notification:'+did},kind='proactive',reason_key=event+':'+group[:100],event_type=event)
+            with phone.hosted.connection_factory() as db, db.cursor() as cur:
+                prefs = store.prefs(cur, user, ws)
+                custom = rules.matching(cur, prefs, user, ws, event, entity_id, phone.clock())
+            reason = rules.reason_key(event, custom, group) if custom else event+':'+group[:100]
+            result=scoped.request(ws,capability,{'idempotencyKey':'notification:'+did},kind='proactive',reason_key=reason,event_type=event,event_entity_id=entity_id)
             status='sent' if result['state'] not in ('ambiguous','failed','cancelled') else 'failed'
             failure=None if status=='sent' else 'uncertain'
         except AlphaError as error:

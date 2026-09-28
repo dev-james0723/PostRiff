@@ -472,6 +472,47 @@ for table in tables:
         else: raise AssertionError('Client could enumerate '+table)
 print('PASS PostgreSQL grants and RLS: client roles cannot read identity/call/delegation tables')
 
+# User-authored trigger and discussion: only a reviewed, matching rule can create one phone delivery.
+from postriff_phase2.phone import rules
+service.notifications.clock=lambda:clock[0]  # Keep the persisted event clock aligned with this fixture's phone clock.
+rule_id=str(uuid.uuid4())
+draft={'id':rule_id,'when':'Call me if a scheduled post fails twice in one day',
+       'discuss':'Tell me which post failed and what I can do','enabled':False}
+phone.save_preferences(wid,ONE,{'eventAllowlist':[],'customRules':[draft]})
+reviewed=phone.settings(wid,ONE)['preferences']['customRules'][0]
+assert not reviewed['enabled'] and reviewed['countAtLeast']==2 and reviewed['sameEntity']
+phone.save_preferences(wid,ONE,{'customRules':[{**reviewed,'enabled':True}]})
+assert phone.settings(wid,ONE)['preferences']['customRules'][0]['enabled']
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '2 days'")
+with connection() as db:
+    one=service.notifications.emit(db.cursor(),workspace_id=wid,event_type='publish.failed',dedupe_key='custom-first',
+                                   entity_type='post',entity_id='post-custom-1',actor=ONE,payload={'title':'First post failure'})
+    assert not any(d['channel']=='phone' for d in one['deliveries']),one
+with connection() as db:
+    two=service.notifications.emit(db.cursor(),workspace_id=wid,event_type='publish.failed',dedupe_key='custom-second',
+                                   entity_type='post',entity_id='post-custom-1',actor=ONE,payload={'title':'Second post failure'})
+    if not any(d['channel']=='phone' and d['status']=='pending' for d in two['deliveries']):
+        from postriff_phase2.permissions import Membership
+        context=phone.notification_context(db.cursor(),{'userId':ONE,'membership':Membership.from_row('owner',True,True,True,True)},
+            {'event_type':'publish.failed','workspace_id':wid,'grouping_key':'custom-second','entity_id':'post-custom-1'})
+        current=context.pop('prefs') if context else {}
+        why=planner.eligibility('proactive',current,now=phone.clock(),event_type='publish.failed',**context) if context else 'no_context'
+        raise AssertionError((two,why,context.get('custom_rule_ref'),current.get('customRules')))
+before=provider.create_count
+assert proactive_tick(phone,10)==1 and provider.create_count==before+1
+assert proactive_tick(phone,10)==0
+custom_call=sql("SELECT id::text,reason_key FROM pr_phone_calls WHERE reason_key LIKE 'publish.failed:rule:%%' ORDER BY requested_at DESC LIMIT 1")[0]
+assert rules.reason_ref(custom_call[1])==(rule_id,reviewed['version'])
+assert phone.proactive_briefing(read_call(custom_call[0]))==draft['discuss']
+phone.hangup(custom_call[0],live_seconds=0)
+phone.save_preferences(wid,ONE,{'customRules':[{**reviewed,'discuss':'Explain the failure and next step','enabled':True}]})
+assert not phone.settings(wid,ONE)['preferences']['customRules'][0]['enabled']
+with connection() as db:
+    three=service.notifications.emit(db.cursor(),workspace_id=wid,event_type='publish.failed',dedupe_key='custom-third',
+                                     entity_type='post',entity_id='post-custom-1',actor=ONE,payload={'title':'Third post failure'})
+    assert not any(d['channel']=='phone' for d in three['deliveries']),three
+print('PASS custom phone rule review, same-post threshold, single fake call, spoken topic and edit revocation')
+
 # Revocation removes identity/schedules; deletion cascades all phone data even when global switch is off.
 phone.delete_number(wid,ONE)
 assert not phone.settings(wid,ONE)['number']

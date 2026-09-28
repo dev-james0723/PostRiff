@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from ..notifications.planner import in_quiet_hours
 from .contracts import CALL_EVENTS
+from .rules import active_rule
 
 
 def day_start(now, time_zone):
@@ -12,7 +13,7 @@ def day_start(now, time_zone):
 
 
 def eligibility(kind, prefs, *, now, verified, membership, configured, live_configured, flags, event_type=None,
-                daily_calls=0, recent_equivalent=False, active=False, reserved_cost=0, estimate=0, daily_budget=0, direction='outbound'):
+                daily_calls=0, recent_equivalent=False, active=False, reserved_cost=0, estimate=0, daily_budget=0, direction='outbound', custom_rule_ref=None):
     inbound = direction == 'inbound'
     checks = [(flags.get('RAFII_PHONE_ENABLED'), 'phone_disabled'),
               (flags.get('RAFII_PHONE_INBOUND_ENABLED' if inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'), 'inbound_disabled' if inbound else 'outbound_disabled'),
@@ -26,8 +27,9 @@ def eligibility(kind, prefs, *, now, verified, membership, configured, live_conf
     if kind == 'scheduled':
         checks += [(flags.get('RAFII_PHONE_SCHEDULED_ENABLED') and prefs['scheduledCalls'], 'scheduled_off')]
     elif kind == 'proactive':
+        custom = active_rule(prefs, *custom_rule_ref) if custom_rule_ref else None
         checks += [(flags.get('RAFII_PHONE_PROACTIVE_ENABLED') and prefs['proactiveCalls'], 'proactive_off'),
-                   (event_type in CALL_EVENTS and event_type in prefs['eventAllowlist'], 'event_not_allowed')]
+                   (event_type in CALL_EVENTS and (bool(custom and custom['eventType'] == event_type) if custom_rule_ref else event_type in prefs['eventAllowlist']), 'event_not_allowed')]
     elif kind != 'explicit':
         return 'kind_invalid'
     return next((reason for allowed, reason in checks if not allowed), None)

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_runtime_v2 import live
-from postriff_phase2.phone import contracts, planner
+from postriff_phase2.phone import contracts, planner, rules
 from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
 from postriff_phase2.phone.providers.twilio import TwilioProvider
 from postriff_phase2.phone.session import FAREWELL
@@ -83,6 +83,73 @@ class PhonePolicyTest(unittest.TestCase):
             self.assertTrue(FAREWELL.fullmatch(text))
         for text in ('write a goodbye post','do not hang up','explain how to hang up'):
             self.assertFalse(FAREWELL.fullmatch(text))
+
+
+class CustomCallRuleTest(unittest.TestCase):
+    RULE_ID = 'b85919c0-2f06-4db9-9486-301ae01bf204'
+
+    def draft(self, when='Call me if a scheduled post fails twice in one day', discuss='Tell me which post failed and why'):
+        return {'id': self.RULE_ID, 'when': when, 'discuss': discuss, 'enabled': False}
+
+    def test_review_then_activation_and_edit_revocation(self):
+        first = contracts.preferences({'customRules': [self.draft()]})['customRules'][0]
+        self.assertFalse(first['enabled'])
+        self.assertEqual((first['eventType'], first['countAtLeast'], first['sameEntity']), ('publish.failed', 2, True))
+        active = contracts.preferences({'customRules': [{**first, 'enabled': True}]}, {'customRules': [first]})['customRules'][0]
+        self.assertTrue(active['enabled'])
+        edited = contracts.preferences({'customRules': [{**active, 'discuss': 'Explain the failure', 'enabled': True}]},
+                                       {'customRules': [active]})['customRules'][0]
+        self.assertFalse(edited['enabled'])
+        self.assertNotEqual(edited['version'], active['version'])
+
+    def test_unsupported_or_ambiguous_conditions_fail_closed(self):
+        for when in ('Call me if a post fails and costs over $100', 'Call me when a trend looks promising',
+                     'Call me when a payment fails', 'Do not call me when a post fails'):
+            with self.subTest(when=when), self.assertRaises(AlphaError):
+                contracts.preferences({'customRules': [self.draft(when=when)]})
+        with self.assertRaises(AlphaError):
+            contracts.preferences({'customRules': [self.draft()] * 6})
+
+    def test_supported_situations_compile_to_exact_events(self):
+        examples = {
+            'Call me if a post fails': 'publish.failed',
+            'Call me if publication outcome is uncertain': 'publish.uncertain',
+            'Call me if approval is due within 24 hours': 'campaign.approval_required',
+            'Call me if a campaign is blocked': 'campaign.blocked',
+            'Call me if a channel needs reconnection': 'channel.reconnect_required',
+        }
+        for when, event in examples.items():
+            with self.subTest(when=when):
+                self.assertEqual(contracts.preferences({'customRules': [self.draft(when=when)]})['customRules'][0]['eventType'], event)
+
+    def test_custom_rule_respects_shared_hard_gates(self):
+        initial = contracts.preferences({'customRules': [self.draft()]})['customRules'][0]
+        active = contracts.preferences({'customRules': [{**initial, 'enabled': True}]}, {'customRules': [initial]})['customRules'][0]
+        prefs = {**contracts.DEFAULTS, 'enabled': True, 'proactiveCalls': True, 'customRules': [active]}
+        now = datetime(2026, 9, 28, 12, tzinfo=ZoneInfo('UTC')).timestamp()
+        args = {'now': now, 'verified': True, 'membership': True, 'configured': True, 'live_configured': True,
+                'flags': {f: True for f in contracts.FLAGS}, 'event_type': 'publish.failed',
+                'custom_rule_ref': (active['id'], active['version']), 'estimate': 100, 'daily_budget': 1000}
+        self.assertIsNone(planner.eligibility('proactive', prefs, **args))
+        self.assertEqual(planner.eligibility('proactive', prefs, **{**args, 'daily_calls': 2}), 'daily_limit')
+        self.assertEqual(planner.eligibility('proactive', prefs, **{**args, 'verified': False}), 'phone_unverified')
+        self.assertEqual(planner.eligibility('proactive', prefs, **{**args, 'reserved_cost': 950}), 'phone_budget')
+        self.assertEqual(planner.eligibility('proactive', prefs, **{**args, 'custom_rule_ref': (active['id'], '0'*16)}), 'event_not_allowed')
+
+    def test_count_and_cooldown_use_workspace_and_same_entity(self):
+        initial = contracts.preferences({'customRules': [self.draft()]})['customRules'][0]
+        active = contracts.preferences({'customRules': [{**initial, 'enabled': True}]}, {'customRules': [initial]})['customRules'][0]
+        class Cursor:
+            def __init__(self, count, prior=False): self.count, self.prior, self.calls = count, prior, []
+            def execute(self, query, params): self.calls.append((query, params))
+            def fetchone(self):
+                return (1,) if self.prior else None if len(self.calls) == 1 else (self.count,)
+        for count, prior, expected in ((1, False, None), (2, False, active), (3, True, None)):
+            cur = Cursor(count, prior)
+            self.assertEqual(rules.matching(cur, {'customRules': [active]}, 'user', 'workspace', 'publish.failed', 'post-1', 100000), expected)
+            if not prior:
+                self.assertEqual(cur.calls[1][1][-2:], (True, 'post-1'))
+        self.assertIsNone(rules.matching(Cursor(3), {'customRules': [active]}, 'user', 'workspace', 'publish.failed', None, 100000))
 
 
 class PhoneTransportTest(unittest.TestCase):

@@ -200,7 +200,11 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                     controller.user_text = 'Give me a short weekly social-media briefing from this workspace: verified publications, performance, approvals and blockers. Do not publish or schedule anything.'
                     dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}})
                 elif not controller.call.get('media_generation',0) and controller.call['kind'] == 'proactive':
-                    controller.user_text = 'Explain the current ' + controller.call['reason_key'].split(':',1)[0] + ' update in this workspace. Read the actual current state. Do not publish or schedule anything.'
+                    topic = await asyncio.to_thread(controller.service.proactive_briefing, controller.call)
+                    controller.user_text = ('Explain the current ' + controller.call['reason_key'].split(':',1)[0]
+                                            + ' update in this workspace. Read the actual current state. '
+                                            + ('The user asked to discuss: ' + topic + '. ' if topic else '')
+                                            + 'This is a discussion request only. Do not publish, schedule or spend without the existing approval flow.')
                     dispatch({'delegation':{'id':'attention-briefing','target':'client'}})
             elif kind == 'session.output_audio.delta' and not controller.closed:
                 await step('phone_audio_out', transport.send_audio(event['delta']))
