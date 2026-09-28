@@ -178,11 +178,14 @@ def level_quote(runtime, model, level, prompt_bytes, destinations):
     return {"ceilingUsd": ceiling, "typicalUsd": typical, "cap": cap, "calls": calls}
 
 
-def check_level_ceiling(runtime, model, request, extra_bytes=0):
+def check_level_ceiling(runtime, model, request, extra_bytes=0, *, actor=None):
     """Refuse (402 reasoning_level_over_limit) an explicit level (Off…High, Thorough) whose reservation ceiling for this
     request is over the active policy's per-request limit: explicit levels are never trimmed. Auto keeps trimming and
     is never refused here. `extra_bytes` allows for research pages a turn may still add to the prompt."""
     import math
+    from .developer_usage import ai_usage_exempt
+    if ai_usage_exempt(actor):
+        return
     if not isinstance(runtime, ServerModelRuntime):
         return
     level = level_of(request)
@@ -361,17 +364,18 @@ class ServerModelRuntime(AgentRuntime):
         listed = gateway_catalog.levels(model)
         return [level for level in gateway_catalog.EFFORTS if level in listed and level in LEVELS]
 
-    def list_supported_reasoning(self, model=None):
+    def list_supported_reasoning(self, model=None, *, actor=None):
         """Without a model, the legacy pass modes (what older clients and the top-level catalogue show). With one, that
         model's levels: Auto, each effort the catalogue lists, then Thorough, priced on the reference request."""
         if model is None:
             return [{"id": "quick", "available": True, "detail": "One pass, shortest answer."},
                     {"id": "standard", "available": True, "detail": "One pass with a self-check for invented facts."},
                     {"id": "deep", "available": True, "detail": "Two passes: draft, then a critique-and-revise pass."}]
-        return self._reasoning_items(model)
+        return self._reasoning_items(model, actor=actor)
 
-    def _reasoning_items(self, model):
+    def _reasoning_items(self, model, *, actor=None):
         import math
+        from .developer_usage import ai_usage_exempt
         from . import gateway_catalog
         from .billing import USD, active_budget_policy
         from .credit_meter import millicredits
@@ -406,7 +410,7 @@ class ServerModelRuntime(AgentRuntime):
                 item["typicalMilliCredits"] = millicredits(math.ceil(quote["typicalUsd"] * 1_000_000))
                 item["ceilingMilliCredits"] = millicredits(math.ceil(quote["ceilingUsd"] * 1_000_000))
                 # Advisory: the turn itself refuses an explicit level over the limit (check_level_ceiling); Auto trims.
-                if level != AUTO and policy and quote["ceilingUsd"] > policy["requestMax"] / USD:
+                if level != AUTO and policy and not ai_usage_exempt(actor) and quote["ceilingUsd"] > policy["requestMax"] / USD:
                     item.update(available=False, detail="Over the per-request limit")
             items.append(item)
         return items

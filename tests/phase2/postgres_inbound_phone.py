@@ -273,6 +273,15 @@ assert not inbound.begin(phone, 'call_throttle3', '+12025550444')
 phone.config.values['RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO'] = '0'
 assert not inbound.begin(phone, 'call_operator_budget', '+12025550555')
 phone.config.values.pop('RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO')
+# Reproduce production: five greetings at $0.17 exhausted the $1 pool despite
+# three already being funded by their authenticated calls. Count only unclaimed ones.
+phone.config.values['RAFII_PHONE_USD_MICRO_PER_MINUTE'] = '170000'
+unfunded = sql('SELECT count(*) FROM pr_phone_inbound_sessions WHERE call_id IS NULL')[0][0]
+phone.config.values['RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO'] = str((unfunded + 1) * 170000)
+assert inbound.begin(phone, 'call_funded_greeting_not_double_counted', '+12025550888')
+assert not inbound.begin(phone, 'call_unfunded_budget_still_enforced', '+12025550889')
+phone.config.values.pop('RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO')
+phone.config.values['RAFII_PHONE_USD_MICRO_PER_MINUTE'] = '10000'
 sql("UPDATE pr_phone_inbound_sessions SET started_at=now()-interval '3 days'")
 sql("UPDATE pr_phone_inbound_codes SET expires_at=now()-interval '2 days'")
 with connection() as db: inbound.cleanup(phone, db.cursor())

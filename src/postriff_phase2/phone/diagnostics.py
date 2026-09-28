@@ -5,7 +5,7 @@ import uuid
 
 
 LOG = logging.getLogger('rafii.phone.media')
-PHASES = frozenset(('runtime_init', 'stream_start', 'stream_claim', 'controller_init', 'live_client',
+PHASES = frozenset(('inbound_admission', 'runtime_init', 'stream_start', 'stream_claim', 'controller_init', 'live_client',
     'live_connect', 'live_start', 'live_receive', 'live_started', 'live_greeting', 'phone_audio_out',
     'phone_transcript', 'phone_input_wait', 'phone_audio_in', 'live_audio_in', 'live_event',
     'session_guard', 'live_bridge', 'live_close'))
@@ -14,7 +14,7 @@ ERROR_CLASSES = frozenset(('TypeError', 'ValueError', 'KeyError', 'RuntimeError'
     'PermissionDeniedError', 'BadRequestError', 'RateLimitError', 'InvalidStatus',
     'ConnectionClosedError', 'ConnectionClosedOK', 'WebSocketDisconnect', 'OperationalError',
     'ProgrammingError', 'InsufficientPrivilege', 'UndefinedTable', 'UndefinedColumn'))
-ERROR_CODES = frozenset(('invalid_api_key', 'authentication_error', 'permission_denied',
+ERROR_CODES = frozenset(('inbound_hourly_limit', 'inbound_caller_limit', 'inbound_auth_budget', 'invalid_api_key', 'authentication_error', 'permission_denied',
     'insufficient_quota', 'rate_limit_exceeded', 'model_not_found', 'invalid_request_error',
     'server_error', 'context_length_exceeded', 'session_expired', 'phone_ended', 'phone_expired',
     'stream_closed', 'missing_required_parameter', 'invalid_value', 'invalid_argument', 'unknown_parameter', 'unsupported_value'))

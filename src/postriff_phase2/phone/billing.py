@@ -4,6 +4,7 @@ import math
 from postriff_alpha.domain import AlphaError
 from ..contracts import digest
 from ..credit_meter import millicredits
+from ..developer_usage import ai_usage_exempt
 from . import store
 
 
@@ -22,14 +23,16 @@ def estimates(phone, *, direction='outbound', seconds=60):
     )
 
 
-def spending(phone, cur, workspace_id, *, direction='outbound'):
+def spending(phone, cur, workspace_id, *, direction='outbound', principal=None):
     book = phone.hosted.ledger.credits
-    active = bool(book and book.policy(cur, workspace_id))
+    active = bool(not ai_usage_exempt(principal) and book and book.policy(cur, workspace_id))
     return {'usesCredits': active, 'ceilingMilliCredits': sum(millicredits(v) for v in estimates(phone, direction=direction)),
             'availableMilliCredits': book.view(cur, workspace_id)['availableMilliCredits'] if active else None}
 
 
 def authorities(phone, cur, workspace_id, principal, revision, *, maximum, conversation_id, number_hash, kind, reason, costs, use_available=False):
+    if ai_usage_exempt(principal):
+        return None, None
     book = phone.hosted.ledger.credits
     if not book or not book.policy(cur, workspace_id):
         return None, None
@@ -59,6 +62,11 @@ def manager_approval(phone, call_id):
     this does not approve a writer, research, media or publishing operation.
     """
     def approve(cur, workspace_id, principal, revision, cost, route, run_id):
+        if ai_usage_exempt(principal):
+            value = store.call(cur, call_id, lock=True)
+            if not value or value['workspace_id'] != workspace_id or value['user_id'] != principal or value['state'] not in ('answered', 'live'):
+                raise AlphaError('This phone session ended.', 409, code='phone_ended')
+            return None, {'phoneCallId': call_id}
         book = phone.hosted.ledger.credits
         if not book or not book.policy(cur, workspace_id):
             return None, {'phoneCallId': call_id}
@@ -134,8 +142,8 @@ def renew(phone, call_id):
         costs = (rates[0] * (math.ceil((target+15)/60)-math.ceil((funded+15)/60)),
                  rates[1] * (math.ceil((target+offset)/60)-math.ceil((funded+offset)/60)))
         book = phone.hosted.ledger.credits
-        credit = bool(book and book.policy(cur,value['workspace_id']))
-        if ('creditLimitMilliCredits' in voice) and not credit:
+        credit = bool(not ai_usage_exempt(value['user_id']) and book and book.policy(cur,value['workspace_id']))
+        if ('creditLimitMilliCredits' in voice) and not credit and not ai_usage_exempt(value['user_id']):
             raise AlphaError('Credit billing is paused.',503)
         if value['kind'] != 'explicit':
             from . import planner
