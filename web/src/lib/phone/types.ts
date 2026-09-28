@@ -12,4 +12,8 @@ export type PhoneSettingsData = {
   number: { lastFour: string; verified: boolean } | null; preferences: PhonePreferences; calls: PhoneCall[];
   schedules: { id: string; schedule: { weekdays: string[]; localTime: string; timeZone: string }; enabled: boolean; nextAt: number }[];
 };
+export type PhoneProviderReadiness = {
+  ready: boolean; reason?: string; stage?: string; httpStatus?: number;
+  maxSeconds?: number; smsReady?: boolean; smsRegistration?: string;
+};
 export const PHONE_TERMINAL = new Set(['completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'cancelled']);
