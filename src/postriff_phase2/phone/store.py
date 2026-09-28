@@ -31,9 +31,9 @@ def save_prefs(cur, principal, workspace_id, value):
 
 
 def number(cur, principal):
-    cur.execute('SELECT phone_ciphertext,key_id,phone_hash,last_four,verified_at IS NOT NULL FROM public.pr_phone_numbers WHERE user_id=%s', (principal,))
+    cur.execute('SELECT phone_ciphertext,key_id,phone_hash,last_four,verified_at IS NOT NULL,verification_ref FROM public.pr_phone_numbers WHERE user_id=%s', (principal,))
     row = cur.fetchone()
-    return dict(zip(('ciphertext','key_id','hash','last_four','verified'), row)) if row else None
+    return dict(zip(('ciphertext','key_id','hash','last_four','verified','verification_ref'), row)) if row else None
 
 
 def set_state(cur, value, state, duration=None):

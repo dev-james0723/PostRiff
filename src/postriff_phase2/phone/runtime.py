@@ -19,6 +19,9 @@ def attach(hosted, values):
     elif values.get('RAFII_PHONE_PROVIDER') == 'twilio':
         from .providers.twilio import TwilioProvider
         provider = TwilioProvider(values)
+    elif values.get('RAFII_PHONE_PROVIDER') == 'dial':
+        from .providers.dial import DialProvider
+        provider = DialProvider(values)
     hosted.phone = PhoneService(hosted, values, provider=provider)
     return hosted.phone
 

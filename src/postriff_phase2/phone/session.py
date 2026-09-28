@@ -264,6 +264,13 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        # Dial's documented hang-up is a media frame. Ledger/REST confirmation still decides settlement.
+        end_transport = getattr(transport, 'end_call', None)
+        if end_transport:
+            try:
+                await end_transport()
+            except Exception:
+                pass
         result = await asyncio.to_thread(controller.service.hangup, controller.call_id, live_seconds=final_usage, reason=final_reason)
         if result['ended']:
             await asyncio.to_thread(controller.service.finish, controller.call_id, final_reason, live_seconds=final_usage)

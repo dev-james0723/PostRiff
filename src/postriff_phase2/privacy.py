@@ -23,7 +23,8 @@ RETENTION_CLASSES = {
 }
 
 SUBPROCESSORS = [
-    {"name": "Twilio", "purpose": "optional phone verification and outbound PSTN transport", "status": "only when Phone Mode is configured and the person explicitly enables calls; no recording"},
+    {"name": "Dial", "purpose": "optional phone verification and outbound PSTN transport for Self-Hosted Phone Mode", "status": "only when Dial Phone Mode is configured and the person explicitly enables calls; no audio recording"},
+    {"name": "Twilio", "purpose": "optional SMS notifications or legacy phone verification and PSTN transport", "status": "only when the corresponding service is configured and the person consents"},
     {"name": "OpenAI GPT-Live", "purpose": "browser and optional telephone voice conversation, delegated to the same Rafii runtime", "status": "only when configured; session storage disabled; text transcript stays in the Rafii conversation"},
     {"name": "Vercel", "purpose": "hosting / API runtime", "status": "configured hosting provider; release environment to be verified"},
     {"name": "Supabase", "purpose": "authentication, PostgreSQL, private object storage", "status": "configured provider; release environment to be verified", "region": "release region to be verified"},

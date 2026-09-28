@@ -30,6 +30,12 @@
   },
   "rewrites": [
     {
+      "source": "/api/phone/dial/media/(.*)",
+      "destination": {
+        "service": "rafii_phone_media"
+      }
+    },
+    {
       "source": "/api/phone/media/(.*)",
       "destination": {
         "service": "rafii_phone_media"

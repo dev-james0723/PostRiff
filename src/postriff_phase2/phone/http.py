@@ -51,6 +51,8 @@ def answer(service, call_id, url, parameters, signature):
 
 
 def public(app, environ, start_response, method, path):
+    if path == '/api/phone/dial/events' and method == 'POST':
+        return dial_events(app, environ, start_response)
     parts = path.strip('/').split('/')
     if len(parts)!=4 or parts[:2]!=['api','phone'] or parts[2] not in ('webhooks','answer') or method!='POST':
         return None
@@ -63,6 +65,42 @@ def public(app, environ, start_response, method, path):
     body = answer(service, parts[3], url, parameters, signature).encode()
     start_response('200 OK', [('Content-Type','application/xml'),('Cache-Control','no-store'),('Content-Length',str(len(body)))])
     return [body]
+
+
+def dial_events(app, environ, start_response):
+    import json
+    service = phone_for(app._runtime())
+    provider = service.provider
+    try:
+        size = int(environ.get('CONTENT_LENGTH') or 0)
+    except ValueError:
+        raise AlphaError('Invalid phone webhook.',400) from None
+    if not 0 < size <= 65536:
+        raise AlphaError('Phone webhook is too large.',413)
+    raw = environ['wsgi.input'].read(size)
+    url, signature = service.config.base_url + '/api/phone/dial/events', environ.get('HTTP_X_DIAL_SIGNATURE','')
+    if not (provider and provider.name == 'dial' and provider.verify_webhook(url, {'_raw':raw}, signature)):
+        raise AlphaError('Invalid phone webhook signature.',401)
+    try:
+        event = json.loads(raw)
+        if not isinstance(event,dict) or event.get('id') != environ.get('HTTP_X_DIAL_EVENT_ID') or event.get('type') != environ.get('HTTP_X_DIAL_EVENT_TYPE'):
+            raise ValueError('Invalid event envelope')
+        event['_raw'] = raw
+    except (ValueError,TypeError):
+        raise AlphaError('Invalid phone event.',400) from None
+    if event.get('type') == 'webhook.ping':
+        return app._json(start_response,200,{'verified':True})
+    try:
+        normalized = provider.normalize_event(event)
+    except (ValueError,TypeError,KeyError,AttributeError):
+        raise AlphaError('Invalid phone event.',400) from None
+    with service.hosted.connection_factory() as db,db.cursor() as cur:
+        cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE provider=\'dial\' AND provider_call_ref=%s',(normalized.call_ref,))
+        bound = cur.fetchone()
+    if not bound:
+        # A callback may precede create's response or a lost response's cron reconciliation. Let Dial retry.
+        raise AlphaError('Phone call binding is pending.',503)
+    return app._json(start_response,200,webhooks.apply(service,bound[0],url,event,signature))
 
 
 def handle(app, environ, start_response, hosted, token, method, parts):

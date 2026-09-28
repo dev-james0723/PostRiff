@@ -1,0 +1,18 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "pcm_mulaw",
+            "sample_rate": "8000",
+            "channels": 1
+        }
+    ],
+    "format": {
+        "duration": "5.886259"
+    }
+}
