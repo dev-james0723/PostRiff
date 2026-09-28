@@ -85,7 +85,7 @@ class LocalMedia(Offline):
         cls.ffmpeg, cls.ffprobe = shutil.which('ffmpeg'), shutil.which('ffprobe')
         if not cls.ffmpeg or not cls.ffprobe:
             raise unittest.SkipTest('validation_unavailable: installed ffmpeg+ffprobe required for actual media proof')
-        cls.generated = tempfile.TemporaryDirectory(prefix='trend-media-generated-', dir='/private/tmp')
+        cls.generated = tempfile.TemporaryDirectory(prefix='trend-media-generated-', dir=Path(tempfile.gettempdir()).resolve())
         cls.addClassCleanup(cls.generated.cleanup)
         video = Path(cls.generated.name) / 'generated.mp4'
         command = [cls.ffmpeg, '-v', 'error', '-nostdin', '-f', 'lavfi', '-i', 'testsrc2=size=64x48:rate=4:duration=2',
@@ -104,7 +104,7 @@ class LocalMedia(Offline):
 
     def setUp(self):
         super().setUp()
-        self.directory = tempfile.TemporaryDirectory(prefix='trend-media-test-', dir='/private/tmp')
+        self.directory = tempfile.TemporaryDirectory(prefix='trend-media-test-', dir=Path(tempfile.gettempdir()).resolve())
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         self.scratch = self.root / 'scratch'; self.scratch.mkdir()

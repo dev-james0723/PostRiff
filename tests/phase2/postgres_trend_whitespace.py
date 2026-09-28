@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,8 +57,7 @@ def main():
         receipt = {'captured_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'execution_state': 'actual_disposable_postgresql_synthetic_source_generation_and_review_records',
             'target': '127.0.0.1:55438/postgres', 'postgres_version': version, 'python_version': sys.version,
-            'command': 'PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests:/private/tmp/rafii-trend-release-deps '
-                '/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_pg_suite.py postgres_trend_whitespace',
+            'command': [sys.executable, 'scripts/postriff_pg_suite.py', 'postgres_trend_whitespace'],
             'tests': result.testsRun, 'failures': len(result.failures), 'errors': len(result.errors), 'skips': len(result.skipped),
             'seconds': round(time.monotonic()-started,3), 'source_guard_before': before, 'source_guard_after': after,
             'source_guard_unchanged': before == after, 'method_graph': method_graph,
@@ -69,7 +69,7 @@ def main():
                 'Actual advanced enqueue/run genome/saturation/graph; reviewed semantics and literal native phrases; no global qualification',
                 'Current review registry/config gates; viewer current reads without edit dependency locks; owner review authority remains active',
                 'NOSUPERUSER NOBYPASSRLS runtime; canonical baseline040 only, no003/pr_runtime']}
-        path = Path('/private/tmp/trend-whitespace-portable-receipt.json')
+        path = Path(str(Path(tempfile.gettempdir()) / 'trend-whitespace-portable-receipt.json'))
         path.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
         print(json.dumps({k:v for k,v in receipt.items() if k not in ('source_guard_before','source_guard_after','method_graph')}),flush=True)
         print('SOURCE_BOUND_RECEIPT '+str(path),flush=True)
