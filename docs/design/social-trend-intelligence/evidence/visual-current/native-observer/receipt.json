@@ -1,0 +1,98 @@
+{
+  "status": "passed",
+  "execution": "explicit_synthetic_API_signed_page_and_visibility_fixtures_with_native_IntersectionObserver",
+  "build_id": "X0pB2r4Yqq8ZUT7PHiyv5",
+  "dist": "web/.next-trend-live",
+  "preview": "http://127.0.0.1:3209",
+  "groups_passed": 36,
+  "groups_failed": 0,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 430,
+      "height": 932
+    }
+  ],
+  "source_guard": {
+    "compared_files": 872,
+    "changed": [],
+    "added_runtime_files": []
+  },
+  "test_sha256": "37b9ccb655a377aff678f0dd763fca4a43eb325af2552f380a19542215212a64",
+  "trends_view_sha256": "66736f1fd80a10edd9cebde43237e6ad6b3c4f9a1904ba84522188822fc57057",
+  "scope": "Only test harness repaired during these browser runs; no runtime edits, builds, staging, commits, real API/DB/provider/model/publish calls. Parent owns wider visual matrix and actual API proof.",
+  "checks": [
+    "native500ms dwell and hidden/occlusion/unmount/defaultOFF negatives",
+    "full original ordered signed candidate page through visual filtering",
+    "one Ideas link, blocked until canonical snapshot refetch, immediate and reload persistence",
+    "insufficient candidate visible with creation disabled and dismissal available",
+    "keyboard dismissal retained status focus and server-removed row creative anchor focus",
+    "pagination/filter-reset/empty/error preservation",
+    "axe serious/critical0 and horizontal overflow0 at all four viewports",
+    "scoped oxlint0 warnings0 errors"
+  ],
+  "axe": [
+    {
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "width": 768,
+      "violations": []
+    },
+    {
+      "width": 390,
+      "violations": []
+    },
+    {
+      "width": 430,
+      "violations": []
+    }
+  ],
+  "visual_inspection": [
+    "candidate-insufficient-1440.png",
+    "candidate-insufficient-768.png",
+    "candidate-insufficient-390.png",
+    "candidate-insufficient-430.png",
+    "ideas-immediate-390.png"
+  ],
+  "historical_failures": {
+    "r1": "harness request/route race plus localStorage on about:blank",
+    "r2": "harness native select exact-label mismatch",
+    "r3": "synthetic usage entitlement missing; initial source-before captured stale .next BUILD_ID, corrected in provenance-correction.json without overwriting",
+    "r4": "console diagnostics establish same fixture entitlement cause"
+  },
+  "artifact_sha256": {
+    "calls-1440.json": "7f3794374dd1f099b8c3e21aa38ecc5f6caeccd720e27545e301afd523097e8c",
+    "calls-390.json": "0ecb4f15d5935a6096e2e568710cbd0fe3f4e28ce6b345cdd3a88c48eb252bfc",
+    "calls-430.json": "290517bc76609cda5f0ec0d84235444b264171bf00dbc0534810e16852c5cf6b",
+    "calls-768.json": "748e242febd70cdb1f44019e3898e41ce2e564ba3a758803f5d0c8bf7cce76a2",
+    "candidate-insufficient-1440.png": "5f99b37fe59af96c3a35f8d95c4f56f76e6a6d798c09d73b237c86dd771e9a09",
+    "candidate-insufficient-390.png": "05a3e1b5f539e34843c4dcccd045271ba10190bacfe4696642e8e8c6245fdbfb",
+    "candidate-insufficient-430.png": "e1cddb126bf651928699daaa96ef62f3ddc29cac03209db66057a306884584fa",
+    "candidate-insufficient-768.png": "b5b3617855553e85dce0b34000814486bd84621dd3de6297a5ce66059ecb9184",
+    "dismissed-focus-1440.png": "68a416f85dfaaf81f16938f2de4b5bd95bac9aff25c4dd1920a43e108a5a74ba",
+    "dismissed-focus-390.png": "b6bc8e9a62ddfa20bc317b77f7802e0fc5b6c1c16f478d0794be6f5033d32908",
+    "dismissed-focus-430.png": "151ce4d76b7b96b54a2ca47ffd148069f94ed6690062c05f4e69aa1b229f4738",
+    "dismissed-focus-768.png": "42ea87d8a58705c1cdb163a1d5622c190e9c4513bd892d05051d638a22e72b8b",
+    "ideas-immediate-1440.png": "3a6327542dc60c71b99a10bda67d9e296765240de57d10eb515c8133629f34dc",
+    "ideas-immediate-390.png": "5f979e21bf44fa3995b731ace9c7c6cb8559b17e5e39f1bb3469bb2fa730bdaa",
+    "ideas-immediate-430.png": "7b178e7054ae4d5b79b494c4e0971a818654b5b825b26b951b429dc48edb83cb",
+    "ideas-immediate-768.png": "5be67437426e69e2da280185241cb01e9d9b881c1c9f01ec64ac7aef183b5c1a",
+    "results.json": "f3e9ab7f15cc7234538a06d1540c60f765438df07108db3ee43ecac1e966f4ae",
+    "source-after.json": "2bee36995afa5243781027ae54a67049f01d4a1911a9a0b347672634f1b6c678",
+    "source-before.json": "f1f88cb0b79560a71d6569228e2e8d3a167cedd86effb7c1589beae27a3382a3",
+    "/private/tmp/visual-current-integration-r5.log": "6baa6ba518132b1a733f439c8cbaf14546b6b78918b4f5cdce7e1ba7481fb888"
+  }
+}

@@ -1,0 +1,465 @@
+{
+  "scope_key": "sample",
+  "decision_cutoff": "2026-09-27T00:00:00Z",
+  "sources": [
+    {
+      "source_id": "forecast_source",
+      "canonical_id": "c0",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author0",
+      "original": true,
+      "event_at": "2026-09-25T00:00:00+00:00",
+      "available_at": "2026-09-25T00:00:00+00:00",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "\u539f\u6587 0 \u771f\u4fc2 useful\uff01"
+    }
+  ],
+  "fixture": true,
+  "history": [
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T00:00:00+00:00",
+      "window_end": "2026-09-25T01:00:00+00:00",
+      "available_at": "2026-09-25T01:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T01:00:00+00:00",
+      "window_end": "2026-09-25T02:00:00+00:00",
+      "available_at": "2026-09-25T02:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T02:00:00+00:00",
+      "window_end": "2026-09-25T03:00:00+00:00",
+      "available_at": "2026-09-25T03:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T03:00:00+00:00",
+      "window_end": "2026-09-25T04:00:00+00:00",
+      "available_at": "2026-09-25T04:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T04:00:00+00:00",
+      "window_end": "2026-09-25T05:00:00+00:00",
+      "available_at": "2026-09-25T05:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T05:00:00+00:00",
+      "window_end": "2026-09-25T06:00:00+00:00",
+      "available_at": "2026-09-25T06:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T06:00:00+00:00",
+      "window_end": "2026-09-25T07:00:00+00:00",
+      "available_at": "2026-09-25T07:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T07:00:00+00:00",
+      "window_end": "2026-09-25T08:00:00+00:00",
+      "available_at": "2026-09-25T08:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T08:00:00+00:00",
+      "window_end": "2026-09-25T09:00:00+00:00",
+      "available_at": "2026-09-25T09:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T09:00:00+00:00",
+      "window_end": "2026-09-25T10:00:00+00:00",
+      "available_at": "2026-09-25T10:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T10:00:00+00:00",
+      "window_end": "2026-09-25T11:00:00+00:00",
+      "available_at": "2026-09-25T11:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T11:00:00+00:00",
+      "window_end": "2026-09-25T12:00:00+00:00",
+      "available_at": "2026-09-25T12:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T12:00:00+00:00",
+      "window_end": "2026-09-25T13:00:00+00:00",
+      "available_at": "2026-09-25T13:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T13:00:00+00:00",
+      "window_end": "2026-09-25T14:00:00+00:00",
+      "available_at": "2026-09-25T14:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T14:00:00+00:00",
+      "window_end": "2026-09-25T15:00:00+00:00",
+      "available_at": "2026-09-25T15:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T15:00:00+00:00",
+      "window_end": "2026-09-25T16:00:00+00:00",
+      "available_at": "2026-09-25T16:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T16:00:00+00:00",
+      "window_end": "2026-09-25T17:00:00+00:00",
+      "available_at": "2026-09-25T17:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T17:00:00+00:00",
+      "window_end": "2026-09-25T18:00:00+00:00",
+      "available_at": "2026-09-25T18:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T18:00:00+00:00",
+      "window_end": "2026-09-25T19:00:00+00:00",
+      "available_at": "2026-09-25T19:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T19:00:00+00:00",
+      "window_end": "2026-09-25T20:00:00+00:00",
+      "available_at": "2026-09-25T20:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T20:00:00+00:00",
+      "window_end": "2026-09-25T21:00:00+00:00",
+      "available_at": "2026-09-25T21:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T21:00:00+00:00",
+      "window_end": "2026-09-25T22:00:00+00:00",
+      "available_at": "2026-09-25T22:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T22:00:00+00:00",
+      "window_end": "2026-09-25T23:00:00+00:00",
+      "available_at": "2026-09-25T23:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "training",
+      "window_start": "2026-09-25T23:00:00+00:00",
+      "window_end": "2026-09-26T00:00:00+00:00",
+      "available_at": "2026-09-26T00:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T00:00:00+00:00",
+      "window_end": "2026-09-26T01:00:00+00:00",
+      "available_at": "2026-09-26T01:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T01:00:00+00:00",
+      "window_end": "2026-09-26T02:00:00+00:00",
+      "available_at": "2026-09-26T02:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T02:00:00+00:00",
+      "window_end": "2026-09-26T03:00:00+00:00",
+      "available_at": "2026-09-26T03:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 12,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T03:00:00+00:00",
+      "window_end": "2026-09-26T04:00:00+00:00",
+      "available_at": "2026-09-26T04:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 13,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T04:00:00+00:00",
+      "window_end": "2026-09-26T05:00:00+00:00",
+      "available_at": "2026-09-26T05:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 10,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    },
+    {
+      "frame_id": "sample_count",
+      "metric_definition": "original_count_v1",
+      "episode_id": "holdout",
+      "window_start": "2026-09-26T05:00:00+00:00",
+      "window_end": "2026-09-26T06:00:00+00:00",
+      "available_at": "2026-09-26T06:00:00+00:00",
+      "complete": true,
+      "coverage": "stable",
+      "value": 11,
+      "evidence_refs": [
+        "forecast_source"
+      ]
+    }
+  ],
+  "seasonal_period": 4,
+  "embargo_hours": 0,
+  "target": {
+    "population": "observed_sample",
+    "frame_id": "sample_count",
+    "cohort": "fixture_en",
+    "metric_definition": "original_count_v1",
+    "horizon_steps": 2,
+    "bin_hours": 1,
+    "supported_horizon_hours": 24
+  },
+  "holdout_episode_ids": [
+    "holdout"
+  ],
+  "origins": [
+    "2026-09-26T00:00:00+00:00",
+    "2026-09-26T02:00:00+00:00",
+    "2026-09-26T04:00:00+00:00"
+  ]
+}

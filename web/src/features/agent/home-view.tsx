@@ -62,6 +62,7 @@ import { toSaved } from './attachments/state';
 import type { TextareaHandlers } from './home/idea-composer';
 import { createSubmissionGate } from './submission-gate';
 import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
+import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
@@ -732,6 +733,8 @@ function HomeWorkspace() {
       </div>
 
       <div className='mx-auto mt-10 flex w-full max-w-[1192px] flex-col gap-6'>
+        <WorkspaceOpportunityPreview pool='home' />
+
         {state && <RaffiPlanner state={state} revision={revision} canEdit={canEdit} isOwner={checkAccess(access, { permission: 'owner' })} />}
 
         {needsYou.length > 0 && (

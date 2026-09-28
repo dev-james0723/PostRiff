@@ -186,7 +186,7 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
             </span>
           </div>
           <p className='vi-note'>
-            {unit} · Observed history only. No qualified forecast is available.
+            {unit} · Observed history only. Supported forecasts are shown separately.
           </p>
           <Disclosure title='Exact timeline readings'>
             <div className='vi-table-wrap'>

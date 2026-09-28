@@ -34,10 +34,15 @@ function exportSchema() {
     watches: z.array(t.watchSchema),
     watch: t.watchSchema,
     lab_run: t.labRunSchema,
-    accepted_opportunity: t.acceptedOpportunitySchema
+    accepted_opportunity: t.acceptedOpportunitySchema,
+    exposure: t.exposureSchema,
+    dismissed_opportunity: t.dismissedOpportunitySchema
   })) {
     definitions[name + '_response'] = z.toJSONSchema(t.envelopeSchema(schema), { io: 'input' });
   }
+  definitions.opportunities_response = z.toJSONSchema(t.opportunitiesResponseSchema, {
+    io: 'input'
+  });
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     title: 'Rafii Trust Trend API 1.0',
@@ -84,6 +89,51 @@ if (require.main === module) {
     false
   );
 
+  const uuid = '00000000-0000-4000-8000-000000000001';
+  const exposure = {
+    event_id: uuid,
+    exposure_token: 'explicit-synthetic-token',
+    opportunity_id: uuid,
+    opportunity_revision: 1,
+    trust_receipt_id: uuid,
+    context_digest: 'digest',
+    eligible_candidates: [{ opportunity_id: uuid, revision: 1 }]
+  };
+  assert.equal(t.exposureInputSchema.safeParse(exposure).success, true);
+  for (const invalid of [
+    { ...exposure, text: 'no raw content' },
+    { ...exposure, client_time: 'no client time' },
+    { ...exposure, event_id: 'not-a-uuid' },
+    { ...exposure, eligible_candidates: [] },
+    { ...exposure, eligible_candidates: Array(21).fill(exposure.eligible_candidates[0]) },
+    { ...exposure, exposure_token: 'x'.repeat(4097) }
+  ])
+    assert.equal(t.exposureInputSchema.safeParse(invalid).success, false);
+  assert.equal(
+    t.dismissOpportunityInputSchema.safeParse({
+      revision: 1,
+      idempotency_key: 'test',
+      exposure_id: uuid
+    }).success,
+    true
+  );
+  assert.equal(
+    t.dismissOpportunityInputSchema.safeParse({
+      revision: 1,
+      idempotency_key: 'test',
+      reason: 'no inferred reasons'
+    }).success,
+    false
+  );
+  const accept = {
+    revision: 1,
+    angle_id: 'a',
+    channel_id: 'c',
+    goal: 'test',
+    idempotency_key: 'key'
+  };
+  assert.equal(t.acceptOpportunitySchema.safeParse(accept).success, true);
+  assert.equal(t.acceptOpportunitySchema.safeParse({ ...accept, exposure_id: uuid }).success, true);
   console.log(
     'PASS: canonical schema export, precise revocation enum, strict mutation input, restricted evidence projection'
   );

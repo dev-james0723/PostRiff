@@ -48,6 +48,8 @@ web/.env*.local
 /*.md
 /.phase3-qualification/
 /.pytest_cache/
+/.trend-storage-test/
+/.trend-operations-test/
 /.github/
 /integrations/
 /motion/

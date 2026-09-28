@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
 import {
   envelopeSchema,
+  trendMetricChoiceInputSchema,
+  trendMetricChoiceResponseSchema,
+  type TrendMetricChoiceInput,
   trendSchema,
   receiptSchema,
   methodologySchema,
@@ -10,7 +13,15 @@ import {
   genomeSchema,
   propagationSchema,
   saturationSchema,
-  opportunitySchema,
+  opportunitiesResponseSchema,
+  whitespaceResponseSchema,
+  forecastResponseSchema,
+  exposureInputSchema,
+  exposureSchema,
+  dismissOpportunityInputSchema,
+  dismissedOpportunitySchema,
+  type ExposureInput,
+  type DismissOpportunityInput,
   watchSchema,
   watchInputSchema,
   labInputSchema,
@@ -79,6 +90,8 @@ export function createTrendApi(getToken: TokenSource) {
   }
   const seg = encodeURIComponent;
   return {
+    recordMetricChoice: (w: string, input: TrendMetricChoiceInput) =>
+      request(w, '/learning/metric-choices', trendMetricChoiceResponseSchema, undefined, 'POST', trendMetricChoiceInputSchema.parse(input)),
     list: (w: string, filters: TrendFilters, signal?: AbortSignal) => {
       const params = new URLSearchParams({ limit: '20' });
       for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
@@ -95,7 +108,13 @@ export function createTrendApi(getToken: TokenSource) {
     languages: (w: string, signal?: AbortSignal) =>
       request(w, '/language-patterns', envelopeSchema(z.array(languagePatternSchema)), signal),
     opportunities: (w: string, signal?: AbortSignal) =>
-      request(w, '/opportunities', envelopeSchema(z.array(opportunitySchema)), signal),
+      request(w, '/opportunities', opportunitiesResponseSchema, signal),
+    whitespace: (w: string, signal?: AbortSignal) =>
+      request(w, '/opportunities/whitespace', whitespaceResponseSchema, signal),
+    forecast: (w: string, id: string, signal?: AbortSignal) =>
+      request(w, `/${seg(id)}/forecast`, forecastResponseSchema, signal),
+    opportunityPool: (w: string, pool: 'home' | 'weekly', signal?: AbortSignal) =>
+      request(w, `/opportunities?pool=${pool}&limit=3`, opportunitiesResponseSchema, signal),
     genome: (w: string, id: string, signal?: AbortSignal) =>
       request(w, `/${seg(id)}/genome`, envelopeSchema(genomeSchema), signal),
     propagation: (w: string, id: string, signal?: AbortSignal) =>
@@ -120,6 +139,24 @@ export function createTrendApi(getToken: TokenSource) {
         envelopeSchema(watchSchema),
         undefined,
         'DELETE'
+      ),
+    recordExposure: (w: string, body: ExposureInput, signal?: AbortSignal) =>
+      request(
+        w,
+        '/exposures',
+        envelopeSchema(exposureSchema),
+        signal,
+        'POST',
+        exposureInputSchema.parse(body)
+      ),
+    dismissOpportunity: (w: string, id: string, body: DismissOpportunityInput) =>
+      request(
+        w,
+        `/opportunities/${seg(id)}/dismiss`,
+        envelopeSchema(dismissedOpportunitySchema),
+        undefined,
+        'POST',
+        dismissOpportunityInputSchema.parse(body)
       ),
     acceptOpportunity: (w: string, id: string, body: AcceptOpportunityInput) =>
       request(

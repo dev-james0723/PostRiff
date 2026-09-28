@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const { fixtures } = require('./trend-fixtures.cjs');
+const { analysisFixtures, freshAnalysisEnvelope } = require('./visual-analysis.test.cjs');
 const workspaceFixture = require('./fixtures/wp04a-workspace.json');
 const base = process.env.TREND_WEB_URL;
 assert.ok(
@@ -69,6 +70,8 @@ async function run() {
       const f = fixtures({ longContent }),
         snapshot = structuredClone(workspaceFixture.snapshot),
         wid = snapshot.state.workspace.id;
+      const analysis = analysisFixtures({ workspace: wid, trend: f.trend });
+      let analysisState = 'supported';
       snapshot.state.phase2.jobs = [];
       snapshot.state.phase2.reviews = [];
       snapshot.state.variants = snapshot.state.variants.slice(0, 1);
@@ -279,7 +282,20 @@ async function run() {
                       : f.receipt
                   )
                 );
-          if (endpoint === '/synthetic-trend') return send(f.envelope(f.trend));
+          if (endpoint === '/opportunities/whitespace')
+            return send(
+              freshAnalysisEnvelope(
+                analysisState === 'proposed' ? analysis.proposed : analysis.whitespace
+              )
+            );
+          if (endpoint === '/synthetic-trend/forecast')
+            return analysisState === 'unavailable'
+              ? send(
+                  { code: 'source_unavailable', error: 'Explicit fixture qualification revoked' },
+                  503
+                )
+              : send(freshAnalysisEnvelope(analysis.forecast));
+          if (endpoint === '/synthetic-trend') return send(freshAnalysisEnvelope(analysis.detail));
           const values = {
             '/methodology': f.methodology,
             '/calibration': f.calibration,
@@ -398,6 +414,23 @@ async function run() {
         );
         record(width + ' browse stored data only, authenticated contract');
         await noOverflow(page, width + ' radar');
+        if (width === 390 || width === 430) {
+          const tabs = await page.getByRole('tablist', { name: 'Trend sections' }).boundingBox();
+          const help = await page.getByRole('button', { name: 'How this works' }).boundingBox();
+          const search = await page.getByLabel('Search trends', { exact: true }).boundingBox();
+          const filters = await page.getByRole('button', { name: /^Filters/ }).boundingBox();
+          assert.ok(
+            Math.abs(tabs.y - help.y) < 8,
+            'Mobile tabs and method control share one compact row'
+          );
+          assert.ok(Math.abs(search.y - filters.y) < 4, 'Search and filters share one compact row');
+          assert.ok(
+            help.height >= 44 && filters.height >= 44,
+            'Compact controls retain touch height'
+          );
+          record(width + ' mobile control hierarchy and 44px targets');
+        }
+
         await axe(page, width + ' radar');
         await page.screenshot({ path: path.join(out, `landing-${width}.png`), fullPage: false });
         assert.equal(
@@ -447,9 +480,67 @@ async function run() {
           .selectOption('synthetic-comparison');
         await page.locator('.vi-compare table').waitFor();
         assert.ok((await page.locator('.vi-compare table').innerText()).includes('Unknown'));
+        const whitespace = page.getByLabel('Creative whitespace', { exact: true });
+        await whitespace.getByText('Supported in this sample', { exact: true }).waitFor();
+        await whitespace.getByText('Evidence and comparison details', { exact: true }).click();
+        assert.ok((await whitespace.innerText()).includes('Observed comparison sample'));
+        assert.ok((await whitespace.innerText()).includes('Source decision cutoff'));
+        await axe(page, width + ' whitespace evidence disclosure');
+        await whitespace.getByText('Evidence and comparison details', { exact: true }).click();
+        const optionalForecast = page.getByRole('region', {
+          name: 'Optional stored forecast',
+          exact: true
+        });
+        assert.equal(
+          calls.filter((c) => c.path.endsWith('/forecast')).length,
+          0,
+          'No forecast request before explicit toggle'
+        );
+        await optionalForecast.getByRole('checkbox', { name: 'Show stored forecast' }).check();
+        assert.equal(await page.getByText(/Observed history only\. Supported forecasts are shown separately/).count(), 1);
+        assert.equal(await page.getByText(/No qualified forecast is available/).count(), 0);
+        await optionalForecast.getByText('Point estimate', { exact: true }).waitFor();
+        assert.equal(
+          await optionalForecast
+            .getByRole('row')
+            .filter({ has: page.getByRole('rowheader', { name: 'Point estimate', exact: true }) })
+            .getByRole('cell')
+            .innerText(),
+          String(analysis.forecast.data.predictions[0].point),
+          'Exact stored forecast value remains inspectable'
+        );
+        await optionalForecast.getByText('Calibration and qualification', { exact: true }).click();
+        await optionalForecast.getByText(/paired predictions across/).waitFor();
+        assert.equal(
+          await optionalForecast.locator('svg, canvas').count(),
+          0,
+          'Forecast is separate from the observed timeline'
+        );
+        assert.equal(await page.locator('.vi-timeline-svg [data-observed-segment]').count(), 2);
+        await noOverflow(page, width + ' supported sample and explicit forecast');
+        await axe(page, width + ' supported sample and explicit forecast');
+        await optionalForecast.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(out, `forecast-${width}.png`), fullPage: false });
+        await whitespace.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(out, `whitespace-${width}.png`), fullPage: false });
+        record(
+          width +
+            ' synthetic Python-produced whitespace and forecast support, explicit toggle, exact table, separate observed series'
+        );
         await page.locator('.vi-platform-row').filter({ hasText: 'TikTok' }).click();
         assert.equal(await page.locator('.vi-timeline-svg').count(), 0);
         await visibleText(page, /no platform-specific series is supplied/);
+        assert.equal(
+          await optionalForecast
+            .getByRole('checkbox', { name: 'Show stored forecast' })
+            .isChecked(),
+          false
+        );
+        assert.equal(
+          await optionalForecast.getByText('Point estimate', { exact: true }).count(),
+          0
+        );
+
         assert.equal(
           await page
             .getByRole('button', { name: 'Create original post', exact: true })
@@ -860,7 +951,24 @@ async function run() {
             });
             record('state ' + state);
           }
+          analysisState = 'proposed';
           scenario = 'fresh';
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await page
+            .getByLabel('Creative whitespace', { exact: true })
+            .getByText('Proposed · review required', { exact: true })
+            .waitFor();
+          assert.equal(
+            await page.getByText('Supported in this sample', { exact: true }).count(),
+            0
+          );
+          record('unreviewed question candidates remain proposed rather than claimed gaps');
+          analysisState = 'unavailable';
+          await page.getByRole('checkbox', { name: 'Show stored forecast' }).check();
+          await visibleText(page, /No qualified current forecast could be verified/);
+          assert.equal(await page.getByText('Point estimate', { exact: true }).count(), 0);
+          record('forecast qualification error fails closed without a stale prediction');
+          analysisState = 'supported';
           revokedReceipt = true;
           await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
           await page.getByRole('button', { name: 'Why should I trust this?' }).click();
@@ -949,25 +1057,29 @@ async function run() {
           await page.goto(base + '/app/trends');
           await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
         }
-        if (width === 768) {
+        if (width === 768 || width === 390) {
+          const halfWidth = width / 2;
+          const halfHeight = width === 768 ? 512 : 422;
           // Browser zoom changes the CSS viewport as well as pixel density; CSS `zoom` alone
           // leaves media queries at 768px and is not an equivalent test of browser zoom.
-          await page.setViewportSize({ width: 384, height: 512 });
+          await page.setViewportSize({ width: halfWidth, height: halfHeight });
           const cdp = await context.newCDPSession(page);
           await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: 384,
-            height: 512,
+            width: halfWidth,
+            height: halfHeight,
             deviceScaleFactor: 2,
             mobile: false
           });
           assert.equal(await page.evaluate(() => matchMedia('(max-width: 767px)').matches), true);
-          record('200% browser-zoom-equivalent reflow: 768 physical pixels / 384 CSS pixels');
-          await noOverflow(page, '768 at 200% zoom');
+          record(
+            `200% browser-zoom-equivalent reflow: ${width} physical pixels / ${halfWidth} CSS pixels`
+          );
+          await noOverflow(page, `${width} at 200% zoom`);
           await page.getByRole('button', { name: 'Why should I trust this?' }).click();
           await page.getByRole('dialog').getByRole('heading', { name: '1. What we saw' }).waitFor();
           await noOverflow(page, 'drawer at 200% zoom');
           await axe(page, '200% zoom');
-          await page.screenshot({ path: path.join(out, 'zoom-200.png'), fullPage: false });
+          await page.screenshot({ path: path.join(out, `zoom-200-${width}.png`), fullPage: false });
         }
         assert.deepEqual(errors, [], 'browser runtime errors');
         assert.deepEqual(unhandledMutations, [], 'unexpected mutations');

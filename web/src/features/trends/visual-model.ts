@@ -26,6 +26,17 @@ export function currentEvidence(trend: Trend, now = Date.now()) {
     Date.parse(trend.expires_at) > now
   );
 }
+/** Visibility preserves uncertainty and dismissal; creation has a separate gate. */
+export function displayableOpportunity(op: TrendOpportunity, trend: Trend, now = Date.now()) {
+  return (
+    currentEvidence(trend, now) &&
+    op.trend_id === trend.id &&
+    op.trust_receipt_id === trend.trust_receipt_id &&
+    op.verification_state === 'verified' &&
+    ['candidate', 'ready', 'accepted', 'dismissed'].includes(op.state) &&
+    Date.parse(op.expires_at) > now
+  );
+}
 export function usableOpportunity(op: TrendOpportunity, trend: Trend, now = Date.now()) {
   return (
     currentEvidence(trend, now) &&

@@ -1,12 +1,16 @@
 'use client';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useSnapshot } from '@/lib/api/hooks';
+import type { ExposurePage } from './opportunity-exposure';
+import { WhitespacePanel, ForecastPanel } from './visual-analysis-panels';
 import { motion } from 'motion/react';
 import { Surface, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { RAFII_EASE, RAFII_TIME, useMotionPreference } from '@/lib/rafii/motion';
 import type { Trend, TrendOpportunity } from '@/lib/coworker/trend-types';
 import { useExpired, useTrendContext, useTrendQuery } from './hooks';
-import { TrustDrawer, blockedVerification } from './trust-drawer';
+import { TrustDrawer, blockedVerification, CrowdingSampleDetails } from './trust-drawer';
 import { OpportunityCard } from './opportunity-card';
 import { WatchForm } from './watches';
 import { Disclosure } from './disclosure';
@@ -26,6 +30,7 @@ import {
   currentEvidence,
   movementState,
   usableOpportunity,
+  displayableOpportunity,
   compareDimensions,
   formatValue
 } from './visual-model';
@@ -71,6 +76,7 @@ function Crowding({ trend, platform }: { trend: Trend; platform: string }) {
                         <Metric name='Reported sample measure' metric={d.metric} advanced />
                       </dl>
                       <p>{d.uncertainty}</p>
+                      <CrowdingSampleDetails details={d.sample_details} dimension={d.dimension} />
                       <p>
                         Interval: {d.interval ?? 'Unknown'} · Method: {d.method}
                       </p>
@@ -93,11 +99,13 @@ function Crowding({ trend, platform }: { trend: Trend; platform: string }) {
 export function VisualIntelligence({
   trend,
   opportunities,
-  candidates
+  candidates,
+  page
 }: {
   trend: Trend;
   opportunities: TrendOpportunity[];
   candidates: Trend[];
+  page: ExposurePage;
 }) {
   const { flags } = useTrendContext();
   const expired = useExpired(trend.expires_at);
@@ -109,6 +117,36 @@ export function VisualIntelligence({
   const { reduced } = useMotionPreference();
   const creativeRef = useRef<HTMLDivElement>(null);
   const id = useId();
+  const snapshot = useSnapshot();
+  const deliveredIds = useRef(new Set<string>());
+  const focused = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    for (const op of opportunities) deliveredIds.current.add(op.id);
+    if (
+      focused.current &&
+      !focused.current.isConnected &&
+      document.activeElement === document.body
+    ) {
+      creativeRef.current?.focus({ preventScroll: true });
+      focused.current = null;
+    }
+  }, [opportunities]);
+  const savedSources = snapshot.isError
+    ? []
+    : (snapshot.data?.state.sources ?? []).filter((source) => {
+        const origin = source.origin;
+        if (!source.active || origin?.kind !== 'trend_opportunity' || !('trendLineage' in origin))
+          return false;
+        const lineage = origin.trendLineage;
+        return (
+          lineage !== null &&
+          typeof lineage === 'object' &&
+          'opportunity_id' in lineage &&
+          typeof lineage.opportunity_id === 'string' &&
+          deliveredIds.current.has(lineage.opportunity_id) &&
+          !opportunities.some((op) => op.id === lineage.opportunity_id)
+        );
+      });
   const blocked = expired || revoked || blockedVerification(trend.verification_state);
   const validated = currentEvidence(trend);
   const dimensions = trendDimensions(trend, flags);
@@ -120,11 +158,12 @@ export function VisualIntelligence({
   );
   const visibleOpportunities = opportunities.filter(
     (op) =>
-      usableOpportunity(op, trend) &&
+      displayableOpportunity(op, trend) &&
       (!platform || op.platform_targets.some((p) => p.toLowerCase() === platform.toLowerCase()))
   );
   const chosenOpportunity =
     visibleOpportunities.find((op) => op.id === opportunityId) ?? visibleOpportunities[0];
+  const canCreate = visibleOpportunities.some((op) => usableOpportunity(op, trend));
   const platformInsight =
     selectedPlatform && movementState(selectedPlatform, trend, flags).stage
       ? selectedPlatform.inferred.explanation
@@ -134,7 +173,10 @@ export function VisualIntelligence({
     validated && flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED && !platform
       ? trend.interpretation
       : null;
-  const fit = validated && flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED ? trend.workspace_fit : null;
+  const fit =
+    validated && flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED
+      ? (chosenOpportunity?.workspace_fit ?? trend.workspace_fit)
+      : null;
   const comparison = other ? compareDimensions(dimensions, trendDimensions(other, flags)) : [];
   useExpired(other?.expires_at);
   const nextExpiry = visibleOpportunities.map((o) => o.expires_at).toSorted()[0];
@@ -209,7 +251,7 @@ export function VisualIntelligence({
                 </p>
               )}
               <p className='vi-note'>
-                Evidence as of {date(trend.observed.latest_observed)}. Recheck before posting after{' '}
+                Evidence as of {date(trend.observed.latest_observed)}. Check again at{' '}
                 {date(trend.expires_at)}.
               </p>
               <Disclosure title='Why it may fit'>
@@ -218,15 +260,11 @@ export function VisualIntelligence({
               </Disclosure>
             </Surface>
             <div className='vi-primary'>
-              <Button
-                variant='glass'
-                onClick={focusCreative}
-                disabled={!visibleOpportunities.length}
-              >
+              <Button variant='glass' onClick={focusCreative} disabled={!canCreate}>
                 Create original post
               </Button>
               <p className='vi-note'>
-                {visibleOpportunities.length
+                {canCreate
                   ? 'Choose an original angle, then review the source in Ideas.'
                   : 'A current, supported opportunity is needed before creating from this trend.'}
               </p>
@@ -292,7 +330,10 @@ export function VisualIntelligence({
                 </p>
               </Disclosure>
             </Surface>
-            <MomentumCurve trend={trend} platform={platform} />
+            <div className='vi-momentum-stack'>
+              <MomentumCurve trend={trend} platform={platform} />
+              <ForecastPanel trend={trend} platform={platform} />
+            </div>
             <Surface
               as='section'
               material='glass'
@@ -361,6 +402,16 @@ export function VisualIntelligence({
               material='glass'
               className='vi-creative vi-panel'
               aria-labelledby={`${id}-creative`}
+              onFocusCapture={(event) => {
+                focused.current = event.target as HTMLElement;
+              }}
+              onBlurCapture={(event) => {
+                if (
+                  event.relatedTarget &&
+                  !event.currentTarget.contains(event.relatedTarget as Node)
+                )
+                  focused.current = null;
+              }}
             >
               <div ref={creativeRef} tabIndex={-1} className='rafii-focus vi-creative-anchor'>
                 <p className='vi-eyebrow'>From understanding to an original contribution</p>
@@ -376,15 +427,23 @@ export function VisualIntelligence({
                 </div>
                 <div>
                   <h4>Where there may be whitespace</h4>
-                  <p>
-                    Unknown. A qualified demand-and-supply comparison is not included in the current
-                    evidence. A proposed angle alone does not prove a gap.
-                  </p>
+                  <WhitespacePanel trend={trend} platform={platform} />
                 </div>
               </div>
               <h4>What’s crowded</h4>
               <Crowding trend={trend} platform={platform} />
               <h4>Original contribution angles</h4>
+              {savedSources.map((source) => (
+                <p key={source.id} role='status'>
+                  Saved to Ideas.{' '}
+                  <Link
+                    className='rafii-focus inline-flex min-h-11 items-center underline'
+                    href={`/app/ideas?source=${encodeURIComponent(source.id)}`}
+                  >
+                    Review source and create original post
+                  </Link>
+                </p>
+              ))}
               {visibleOpportunities.length > 1 && (
                 <label className='vi-opportunity-select'>
                   Choose an opportunity
@@ -429,7 +488,7 @@ export function VisualIntelligence({
                         Brand/voice context: {op.context_revision}
                       </p>
                     </Disclosure>
-                    <OpportunityCard opportunity={op} />
+                    <OpportunityCard opportunity={op} exposurePage={page} />
                   </div>
                 ))
               ) : (
@@ -635,10 +694,12 @@ export function VisualIntelligence({
 
 export function VisualCollection({
   trends,
-  opportunities
+  opportunities,
+  page
 }: {
   trends: Trend[];
   opportunities: TrendOpportunity[];
+  page: ExposurePage;
 }) {
   const [selected, setSelected] = useState(trends[0]?.id ?? '');
   const current = trends.find((t) => t.id === selected) ?? trends[0];
@@ -675,6 +736,7 @@ export function VisualCollection({
       >
         <VisualIntelligence
           trend={current}
+          page={page}
           candidates={trends}
           opportunities={opportunities.filter((o) => o.trend_id === current.id)}
         />

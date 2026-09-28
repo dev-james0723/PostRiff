@@ -213,8 +213,18 @@
   color: var(--muted-foreground);
   margin-top: 0.3rem;
 }
-.vi-momentum {
+.vi-momentum,
+.vi-momentum-stack {
   grid-area: momentum;
+}
+.vi-momentum-stack {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  align-content: start;
+}
+.vi-momentum-stack > .vi-momentum {
+  grid-area: auto;
 }
 .vi-chart-controls {
   display: grid;
@@ -637,5 +647,43 @@
   }
   .vi-dimension-button {
     color: ButtonText;
+  }
+}
+
+/* Keep the first mobile screen about the conversation; every control remains available. */
+@media (max-width: 767px) {
+  .trend-radar {
+    gap: 0.875rem;
+  }
+  .trend-radar .trend-section-bar {
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+  }
+  .trend-radar .trend-section-bar > [role='tablist'] {
+    flex-basis: auto;
+    min-width: 0;
+  }
+  .trend-radar .trend-section-bar > button {
+    max-width: 6.5rem;
+    min-height: 2.75rem;
+    flex-shrink: 0;
+  }
+  .trend-workspace > :not(:last-child),
+  .trend-workspace > [role='tabpanel'] > :not(:last-child) {
+    margin-block-end: 0.75rem;
+  }
+  .vi-collection {
+    gap: 0.875rem;
+  }
+}
+@media (min-width: 360px) and (max-width: 767px) {
+  .trend-radar .trend-filter-bar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .trend-radar .trend-filter-bar .trend-search {
+    grid-column: auto;
+  }
+  .trend-radar .trend-filter-bar > button {
+    min-height: 2.75rem;
   }
 }

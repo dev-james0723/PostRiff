@@ -1,0 +1,526 @@
+{
+  "run_id": "offline_synthetic_v1",
+  "hypothesis": "Independently implemented detectors have different failure modes; fixture evidence is not qualification.",
+  "preregistered_at": "2026-09-25T00:00:00Z",
+  "decision_cutoff": "2026-09-27T00:00:00Z",
+  "topics": [
+    {
+      "topic_id": "synthetic_0",
+      "cohort": "early",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_1",
+      "cohort": "broad_spike",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_2",
+      "cohort": "crowded",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_3",
+      "cohort": "declining",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_4",
+      "cohort": "evergreen",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_5",
+      "cohort": "seasonal",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_6",
+      "cohort": "synthetic_spike",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_7",
+      "cohort": "one_creator",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_8",
+      "cohort": "multiple_community",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_9",
+      "cohort": "cross_language",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_10",
+      "cohort": "early",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_11",
+      "cohort": "broad_spike",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_12",
+      "cohort": "crowded",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_13",
+      "cohort": "declining",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_14",
+      "cohort": "evergreen",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_15",
+      "cohort": "seasonal",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_16",
+      "cohort": "synthetic_spike",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_17",
+      "cohort": "one_creator",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_18",
+      "cohort": "multiple_community",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_19",
+      "cohort": "cross_language",
+      "split": "development"
+    },
+    {
+      "topic_id": "synthetic_20",
+      "cohort": "early",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_21",
+      "cohort": "broad_spike",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_22",
+      "cohort": "crowded",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_23",
+      "cohort": "declining",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_24",
+      "cohort": "evergreen",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_25",
+      "cohort": "seasonal",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_26",
+      "cohort": "synthetic_spike",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_27",
+      "cohort": "one_creator",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_28",
+      "cohort": "multiple_community",
+      "split": "holdout"
+    },
+    {
+      "topic_id": "synthetic_29",
+      "cohort": "cross_language",
+      "split": "holdout"
+    }
+  ],
+  "query_grid": [
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "US"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI agent",
+      "language": "en",
+      "window": "30d",
+      "geography": "US"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "agentic AI",
+      "language": "en",
+      "window": "30d",
+      "geography": "US"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "autonomous agents",
+      "language": "en",
+      "window": "30d",
+      "geography": "US"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 幫手",
+      "language": "yue",
+      "window": "30d",
+      "geography": "US"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "24h",
+      "geography": "global"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "24h",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "24h",
+      "geography": "US"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "7d",
+      "geography": "global"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "7d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "7d",
+      "geography": "US"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "30d",
+      "geography": "global"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "30d",
+      "geography": "HK"
+    },
+    {
+      "query": "AI 代理",
+      "language": "zh-Hant",
+      "window": "30d",
+      "geography": "US"
+    }
+  ],
+  "planned_observation_times": [
+    "2026-09-26T00:00:00Z",
+    "2026-09-26T01:00:00Z",
+    "2026-09-26T06:00:00Z",
+    "2026-09-27T00:00:00Z",
+    "2026-10-03T00:00:00Z"
+  ],
+  "actual_observation_times": [],
+  "rights_refs": [
+    "fixture_rights"
+  ],
+  "cost_cap": 0,
+  "input_hashes": [
+    "fixture_digest"
+  ],
+  "candidate_versions": {
+    "robust_mad": "1",
+    "ewma": "1",
+    "cusum": "1",
+    "count_residual": "1",
+    "rate_changes": "1"
+  },
+  "metric_definitions": {
+    "count": "synthetic original count per exposure hour"
+  },
+  "exclusions": [
+    "No product observations imported"
+  ],
+  "counterexamples": [
+    "single_author_burst",
+    "provider_outage",
+    "tiny_zero_baseline",
+    "translated_antonym",
+    "sarcastic_quote",
+    "seasonal_recurrence",
+    "coverage_change",
+    "stale_aggregate",
+    "crowded_hook_rising_topic",
+    "weak_demand_low_supply"
+  ],
+  "reviewer": "fixture only, not independent reviewer",
+  "preregistration_hash": "d1a2f126bf9fd16fb0bef9510f6babedeeb689e19b39f00f0f03177c5f61d884"
+}

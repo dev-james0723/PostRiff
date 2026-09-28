@@ -163,10 +163,13 @@ def hypotheses_from(rows, now):
     return out
 
 
-def refresh(cur, workspace_id, state, now, notifications=None):
+def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=None):
     """Recompute this workspace's hypotheses; update support, supersede flipped ones, expire stale ones."""
     rows = observations(cur, workspace_id, state, now)
     found = hypotheses_from(rows, now)
+    if trend_report is not None:
+        from ..growth.trends import learning
+        found += learning.hypotheses(trend_report, now)
     from . import flags
     if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
         from ..growth import scout_outcomes

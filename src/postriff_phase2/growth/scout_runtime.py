@@ -77,6 +77,11 @@ def complete(state, token, prepared, now):
 
 
 def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
+    from .trends.config import workspace_allowed
+    if workspace_allowed(workspace_id, getattr(service, "values", None)):
+        # The canonical durable trend worker owns collection for migrated workspaces.
+        # Legacy search/Scout must not create a second collection/model loop.
+        return {"workspaceId": workspace_id, "status": "stored_trend_mode", "reason": "durable_trend_worker"}
     now = service.clock()
     # Search timeout includes its existing retry; JEV max 8 x 2s + bounded completion.
     if deadline - time.monotonic() < research.TOTAL_BUDGET_SECONDS + 20:

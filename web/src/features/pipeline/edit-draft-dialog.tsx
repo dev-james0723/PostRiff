@@ -60,8 +60,10 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
             {notes.length === 0 && <p className='text-muted-foreground text-xs tabular-nums'>{Array.from(text).length} characters</p>}
             <OpportunityLabPanel draft={{ id: variant.id, revision: variant.revision, platform: variant.platform, text, dirty }} onApply={async edit => {
               if (!snapshot.data || dirty || variant.revision !== edit.expected_revision) throw new Error('The draft changed. Save and check again.');
-              await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text } });
-              setText(edit.text);
+              const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text } });
+              const savedVariant = saved.state.variants?.find((item) => item.id === variant.id);
+              if (!savedVariant) throw new Error('The saved draft is unavailable. Reload before continuing.');
+              setText(savedVariant.text);
               toast.success('Suggested edit saved. Review the new draft revision before scheduling.');
             }} />
 

@@ -157,3 +157,22 @@ test('comparison requires matching scope and denominator before displaying a num
     );
   }
 });
+
+test('uncertain candidates and dismissed choices remain inspectable without enabling creation', () => {
+  const f = fixtures();
+  for (const state of ['candidate', 'dismissed']) {
+    const op = {
+      ...f.opportunity,
+      state,
+      workspace_fit: { ...f.opportunity.workspace_fit, sufficient: false }
+    };
+    assert.equal(m.displayableOpportunity(op, f.trend), true);
+    assert.equal(m.usableOpportunity(op, f.trend), false);
+  }
+  for (const change of [
+    { state: 'blocked' },
+    { trust_receipt_id: 'foreign' },
+    { expires_at: '2000-01-01T00:00:00Z' }
+  ])
+    assert.equal(m.displayableOpportunity({ ...f.opportunity, ...change }, f.trend), false);
+});

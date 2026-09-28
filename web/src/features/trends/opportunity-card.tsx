@@ -1,5 +1,6 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Surface, StateMessage } from '@/components/rafii';
@@ -10,10 +11,18 @@ import { useExpired, useTrendContext } from './hooks';
 import { date, fieldClass, TrendError } from './present';
 import { Disclosure } from './disclosure';
 import { FitDetails } from './fit-details';
+import { useOpportunityExposure, type ExposurePage } from './opportunity-exposure';
 
-export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportunity }) {
-  const { api, w, enabled } = useTrendContext();
+export function OpportunityCard({
+  opportunity: op,
+  exposurePage
+}: {
+  opportunity: TrendOpportunity;
+  exposurePage: ExposurePage;
+}) {
+  const { api, w, enabled, flags } = useTrendContext();
   const snapshot = useSnapshot();
+  const client = useQueryClient();
   const canEdit = checkAccess(useWorkspaceAccess(), { permission: 'edit' });
   const expired = useExpired(op.expires_at);
   const [angle, setAngle] = useState(op.angles[0]?.id ?? '');
@@ -22,11 +31,48 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [source, setSource] = useState(op.source_id);
-  const request = useRef({ fingerprint: '', key: '' });
+  const request = useRef<{
+    fingerprint: string;
+    key: string;
+    bound?: boolean;
+    exposureId?: string;
+  }>({ fingerprint: '', key: '' });
+  const dismissal = useRef<{
+    fingerprint: string;
+    key: string;
+    bound?: boolean;
+    exposureId?: string;
+  }>({ fingerprint: '', key: '' });
+  const [dismissed, setDismissed] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+  const dismissedStatus = useRef<HTMLParagraphElement>(null);
+  const actionsOn = enabled && canEdit && flags.RAFII_TREND_TRUST_RECEIPTS_ENABLED === true;
+  const candidate = ['candidate', 'ready'].includes(op.state);
+  const exposure = useOpportunityExposure(
+    api,
+    w,
+    op,
+    exposurePage,
+    actionsOn &&
+      candidate &&
+      !source &&
+      !dismissed &&
+      !expired &&
+      op.verification_state === 'verified'
+  );
+  useEffect(() => {
+    if (dismissed) dismissedStatus.current?.focus();
+  }, [dismissed]);
   const channels = (snapshot.data?.state.phase2?.channels ?? []).filter(
     (c) =>
       !c.revoked && op.platform_targets.some((p) => p.toLowerCase() === c.platform.toLowerCase())
   );
+  if (dismissed || op.state === 'dismissed')
+    return (
+      <p ref={dismissedStatus} role='status' tabIndex={-1} className='rafii-focus text-sm'>
+        Marked not relevant. The conversation and its evidence remain available.
+      </p>
+    );
   if (
     expired ||
     op.verification_state !== 'verified' ||
@@ -40,19 +86,25 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
       />
     );
   async function accept() {
-    if (!enabled || !canEdit || busy || !channel || !goal.trim() || !angle) return;
+    if (!actionsOn || busy || !channel || !goal.trim() || !angle) return;
     const fingerprint = JSON.stringify([w, op.id, op.revision, angle, channel, goal.trim()]);
     if (request.current.fingerprint !== fingerprint)
       request.current = { fingerprint, key: crypto.randomUUID() };
     setBusy(true);
     setError(null);
     try {
+      if (!request.current.bound) {
+        request.current.exposureId = await exposure.getExposure();
+        request.current.bound = true;
+      }
+      const exposureId = request.current.exposureId;
       const result = await api.acceptOpportunity(w, op.id, {
         revision: op.revision,
         angle_id: angle,
         channel_id: channel,
         goal: goal.trim(),
-        idempotency_key: request.current.key
+        idempotency_key: request.current.key,
+        ...(exposureId ? { exposure_id: exposureId } : {})
       });
       const expected = `/app/ideas?source=${encodeURIComponent(result.data.source_id)}`;
       if (!result.data.verified || result.data.href !== expected)
@@ -60,10 +112,45 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
       // useSnapshot owns the canonical workspace query; refresh before the Ideas handoff.
       await snapshot.refetch({ throwOnError: true });
       setSource(result.data.source_id);
+      void client.invalidateQueries({ queryKey: ['trends', w, 'opportunities'] });
     } catch (e) {
       setError(e);
     } finally {
       setBusy(false);
+    }
+  }
+  async function dismiss() {
+    if (!actionsOn || busy || source || !candidate) return;
+    const fingerprint = JSON.stringify([w, op.id, op.revision]);
+    if (dismissal.current.fingerprint !== fingerprint)
+      dismissal.current = { fingerprint, key: crypto.randomUUID() };
+    setBusy(true);
+    setDismissing(true);
+    setError(null);
+    try {
+      if (!dismissal.current.bound) {
+        dismissal.current.exposureId = await exposure.getExposure();
+        dismissal.current.bound = true;
+      }
+      const exposureId = dismissal.current.exposureId;
+      const result = await api.dismissOpportunity(w, op.id, {
+        revision: op.revision,
+        idempotency_key: dismissal.current.key,
+        ...(exposureId ? { exposure_id: exposureId } : {})
+      });
+      if (
+        result.data.opportunity_id !== op.id ||
+        result.data.revision !== op.revision ||
+        result.data.state !== 'dismissed'
+      )
+        throw new Error('The dismissal could not be verified.');
+      setDismissed(true);
+      void client.invalidateQueries({ queryKey: ['trends', w, 'opportunities'] });
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+      setDismissing(false);
     }
   }
   return (
@@ -73,9 +160,12 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
       padding='none'
       className='trend-opportunity space-y-3'
       aria-label='Original contribution'
+      data-trend-opportunity
     >
       <p className='text-muted-foreground text-xs font-medium'>Try this angle</p>
-      <h3 className='text-lg font-semibold leading-snug'>{op.title}</h3>
+      <h3 ref={exposure.anchorRef} className='text-lg font-semibold leading-snug'>
+        {op.title}
+      </h3>
       <p>{op.contribution}</p>
       <p className='text-muted-foreground text-sm'>Keep in mind: {op.uncertainty}</p>
       <p className='text-sm'>Check again at {date(op.expires_at)}</p>
@@ -159,7 +249,7 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
                 <Button
                   variant='glass'
                   type='submit'
-                  disabled={!canEdit || busy || !channel || !angle || !goal.trim()}
+                  disabled={!actionsOn || busy || !channel || !angle || !goal.trim()}
                 >
                   {busy ? 'Saving…' : 'Save to Ideas'}
                 </Button>
@@ -172,6 +262,16 @@ export function OpportunityCard({ opportunity: op }: { opportunity: TrendOpportu
         </>
       ) : (
         <p>Content angles are unavailable until workspace fit has enough support.</p>
+      )}
+      {!source && candidate && (
+        <Button
+          variant='glass'
+          type='button'
+          disabled={!actionsOn || busy}
+          onClick={() => void dismiss()}
+        >
+          {dismissing ? 'Saving choice…' : 'Not relevant'}
+        </Button>
       )}
       <FitDetails fit={op.workspace_fit} />
       {error !== null && <TrendError error={error} />}

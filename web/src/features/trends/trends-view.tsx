@@ -16,6 +16,7 @@ import {
 } from './present';
 import { Watchlist } from './watches';
 import { VisualCollection } from './visual-intelligence';
+import { exposurePage } from './opportunity-exposure';
 import { Disclosure } from './disclosure';
 import { SourcesSummary } from './signal-summary';
 import './trends.css';
@@ -176,6 +177,8 @@ function RadarResults() {
     (a, w, s) => a.opportunities(w, s),
     tab === 'for_you' && !quality
   );
+  // The signed page binds the complete server-ordered candidate set, before any visual filtering.
+  const page = exposurePage(opportunities.data?.exposure_token, opportunities.data?.data ?? []);
   const changeFilter = (key: keyof typeof filters, value: string) => {
     setCursor(null);
     setFilters((old) => ({ ...old, [key]: value }));
@@ -340,7 +343,12 @@ function RadarResults() {
                     {data.length ? (
                       <VisualCollection
                         trends={data}
-                        opportunities={tab === 'for_you' && !opportunities.isError ? opportunities.data?.data ?? [] : []}
+                        page={page}
+                        opportunities={
+                          tab === 'for_you' && !opportunities.isError
+                            ? (opportunities.data?.data ?? [])
+                            : []
+                        }
                       />
                     ) : (
                       <StateMessage
@@ -387,7 +395,7 @@ export function TrendsView() {
   return (
     <PageContainer
       pageTitle='Social Trends Intel'
-      pageDescription='Understand what is rising, where it is spreading, and what to do next.'
+      pageDescription='Spot a conversation. Find your next idea.'
       className='trend-radar'
     >
       {status.isError ? (

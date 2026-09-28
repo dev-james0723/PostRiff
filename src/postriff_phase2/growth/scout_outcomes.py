@@ -112,8 +112,22 @@ def refresh(cur, workspace_id, state, now):
             if not job:
                 continue
             variant = variants.get(job.get("manifest", {}).get("variantId"), {})
-            plans = [b["executionPlan"] for b in variant.get("scoutLineage", [])]
-            plans += [(sources.get(sid, {}).get("origin") or {}).get("executionPlan") for sid in variant.get("sourceIds", [])]
+            manifest = job.get("manifest", {})
+            if "scoutLineage" in manifest:
+                plans = [b["executionPlan"] for b in manifest["scoutLineage"]]
+            else:  # Legacy published jobs predate frozen lineage.
+                plans = [b["executionPlan"] for b in variant.get("scoutLineage", [])]
+                plans += [(sources.get(sid, {}).get("origin") or {}).get("executionPlan") for sid in variant.get("sourceIds", [])]
+            for binding in manifest.get("trendLineage", []):
+                if binding["channel_id"] != manifest.get("channelId") or binding["platform"] != post.get("platform"):
+                    continue
+                # Free-text creator goals cannot be silently converted into a metric.
+                measured = from_insights(post, job, {"primaryObjective": "unmeasured", "opportunityId": binding["opportunity_id"], "id": binding["selection_digest"]}, window)
+                measured["trendLineage"] = {k: binding.get(k) for k in ("opportunity_id", "opportunity_revision", "trend_id", "trust_receipt_id", "context_digest", "angle_id", "goal", "selection_digest")}
+                if binding.get("exposure_id"):
+                    measured["trendLineage"]["exposure_id"] = binding["exposure_id"]
+                measured["publication"] = manifest.get("trendPublication")
+                rows.append(measured)
             for plan in plans:
                 if plan and plan["platform"] == post.get("platform") and plan["account"] == job.get("manifest", {}).get("channelId"):
                     rows.append(from_insights(post, job, plan, window))

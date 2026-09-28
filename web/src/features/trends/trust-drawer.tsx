@@ -13,7 +13,7 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { blockedVerification, publicStage } from './trust-contract';
 export { blockedVerification, publicStage } from './trust-contract';
-import type { Trend, TrendFlags, TrendReceipt } from '@/lib/coworker/trend-types';
+import type { Trend, TrendFlags, TrendReceipt, SaturationSampleDetails } from '@/lib/coworker/trend-types';
 import { useExpired, useTrendContext, useTrendQuery } from './hooks';
 import {
   CoverageDetails,
@@ -52,6 +52,48 @@ export function TrendTimeline({ trend }: { trend: Trend }) {
     </section>
   );
 }
+const sampleRatio = (value: number | null) => value === null
+  ? 'Unknown'
+  : `${(value * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}% (ratio ${value})`;
+
+export function CrowdingSampleDetails({ details, dimension }: { details?: SaturationSampleDetails; dimension: string }) {
+  return (
+    <Disclosure title='Pattern counts and methodology' className='trend-methodology'>
+      {!details ? <p>Pattern and sample details were not stored for this result.</p> : <div className='min-w-0 space-y-4 break-words'>
+        <p>Counts describe assignments within this sample. Pattern frequency does not establish copying or audience fatigue.</p>
+        <dl className='grid min-w-0 gap-3 text-sm sm:grid-cols-2'>
+          <div><dt>Unclassified observations</dt><dd>{details.unclassified_count}</dd></div>
+          <div><dt>Classification coverage</dt><dd>{sampleRatio(details.classification_coverage)}</dd></div>
+          <div><dt>Copy comparison</dt><dd>{details.copy_support === 'assessed' ? 'Assessed' : 'Unassessed'}</dd></div>
+          <div><dt>Redundant observations</dt><dd>{details.redundant_count ?? 'Unknown'}</dd></div>
+        </dl>
+        {details.copy_support === 'unassessed' && <p>Copying was not assessed. Pattern counts alone are not copy evidence.</p>}
+        <p>{details.patterns.length} of {details.total_patterns} stored patterns shown.{details.patterns_truncated ? ' The list is truncated.' : ''}</p>
+        {details.patterns.length ? <ul aria-label={`${words(dimension)} patterns`} className='min-w-0 space-y-4'>
+          {details.patterns.map((pattern, index) => <li key={index} className='min-w-0 space-y-2'>
+            <p className='break-all'><strong>Pattern ID: </strong><code>{Array.isArray(pattern.pattern_id) ? JSON.stringify(pattern.pattern_id) : pattern.pattern_id}</code></p>
+            <dl className='grid min-w-0 gap-3 text-sm sm:grid-cols-2'>
+              <div><dt>Assigned observations</dt><dd>{pattern.count}</dd></div>
+              <div><dt>Share of classified observations</dt><dd>{sampleRatio(pattern.classified_share)}</dd></div>
+              <div><dt>Unique creator support</dt><dd>{pattern.unique_creator_support}</dd></div>
+              <div className='min-w-0 break-words'><dt>Share interval</dt><dd>{pattern.interval
+                ? <>{pattern.interval.lower}–{pattern.interval.upper} (ratio)<br />Method: <span className='break-all'>{pattern.interval.method}</span><br />Interval level: {sampleRatio(pattern.interval.level)}</>
+                : 'Unknown'}</dd></div>
+            </dl>
+          </li>)}
+        </ul> : <p>No pattern rows were stored.</p>}
+        {details.creator ? <dl aria-label='Creator concentration details' className='grid min-w-0 gap-3 text-sm sm:grid-cols-2'>
+          <div><dt>Known-author observations</dt><dd>{details.creator.known_author_count}</dd></div>
+          <div><dt>Author coverage</dt><dd>{sampleRatio(details.creator.author_coverage)}</dd></div>
+          <div><dt>Largest creator share</dt><dd>{sampleRatio(details.creator.largest_creator_share)}</dd></div>
+          <div><dt>Effective creator count</dt><dd>{details.creator.effective_creator_count ?? 'Unknown'}</dd></div>
+        </dl> : <p>Creator concentration details: Unknown.</p>}
+        <p>Creator support counts observed keys. Effective creator count describes concentration, not proof of independent people. Shares cover the stated sample, not the whole platform.</p>
+      </div>}
+    </Disclosure>
+  );
+}
+
 function AdvancedProjection({
   id,
   tab
@@ -164,12 +206,13 @@ function AdvancedProjection({
                 {d.classified} classified / {d.eligible} eligible observations
               </p>
               <dl>
-                <Metric name='Classified share' metric={d.metric} advanced />
+                <Metric name='Reported metric' metric={d.metric} advanced />
               </dl>
               <p>
                 Interval: {d.interval ?? 'Unknown'} · Method: {d.method}
               </p>
               <p>{d.uncertainty}</p>
+              <CrowdingSampleDetails details={d.sample_details} dimension={d.dimension} />
             </Surface>
           ))}
         </section>
