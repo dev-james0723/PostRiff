@@ -67,7 +67,7 @@ test('the declaration is exact and branded content adds the Branded Content Poli
 
 test('a video is required and must fit the account limit; privacy must be one TikTok offers', () => {
   const choice = { ...initialChoice(), privacyLevel: 'PUBLIC_TO_EVERYONE', consent: true };
-  assert.ok(problems(choice, info, null).some((p) => p.startsWith('TikTok needs one video')));
+  assert.ok(problems(choice, info, null).some((p) => p.startsWith('TikTok needs one verified video')));
   assert.ok(problems(choice, info, { durationSec: 90 }).some((p) => p.includes('60 seconds')));
   assert.ok(problems({ ...choice, privacyLevel: 'MUTUAL_FOLLOW_FRIENDS' }, info, video).includes('TikTok doesn’t offer that privacy setting for this account.'));
   assert.deepEqual(problems(choice, info, video), []);

@@ -102,7 +102,7 @@ export function withCommercial(choice: TikTokChoice, commercial: Partial<TikTokC
 export function problems(choice: TikTokChoice, info: TikTokCreatorInfo | null, video: { durationSec: number | null } | null): string[] {
   const out: string[] = [];
   if (!info) out.push('Waiting for your TikTok settings.');
-  if (!video) out.push('TikTok needs one video. Rafii can’t upload videos yet.');
+  if (!video) out.push('TikTok needs one verified video. Upload a video to continue.');
   else if (info?.maxVideoPostDurationSec && video.durationSec !== null && video.durationSec > info.maxVideoPostDurationSec) {
     out.push(`This video is longer than TikTok allows this account (${info.maxVideoPostDurationSec} seconds).`);
   }

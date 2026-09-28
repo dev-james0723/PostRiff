@@ -203,7 +203,7 @@ export const channels: Channel[] = [
     description: 'Video uploads with the title, visibility and audience you choose.',
     formats: ['Video'],
     region: 'global',
-    notes: [hostedPending, 'Until Google audits Rafii, YouTube keeps every upload private.', 'Rafii can’t upload videos yet, so YouTube posts wait for that.']
+    notes: [hostedPending, 'Until Google audits Rafii, YouTube keeps every upload private.']
   },
   {
     slug: 'tiktok',
@@ -215,7 +215,7 @@ export const channels: Channel[] = [
     description: 'Short vertical video with TikTok’s own privacy, interaction and disclosure choices.',
     formats: ['Video'],
     region: 'global',
-    notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.', 'Rafii can’t upload videos yet, so TikTok posts wait for that.']
+    notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.']
   },
   {
     slug: 'pinterest',

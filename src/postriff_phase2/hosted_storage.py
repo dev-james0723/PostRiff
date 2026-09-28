@@ -151,6 +151,8 @@ class SupabaseStorage:
             if len(raw) != expected_bytes:
                 raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
             return raw
+        except (URLError, TimeoutError, OSError) as error:
+            raise AlphaError("Private storage is temporarily unavailable.", 503) from error
         finally:
             response.close()
 

@@ -193,6 +193,24 @@ class ApprovedVideoReadTests(unittest.TestCase):
             storage.get_verified_video(WS, f"{VID}.mp4", expected_bytes=100_000_001,
                                        expected_mime="video/mp4", expected_etag='"e1"')
 
+    def test_failed_body_read_is_a_storage_hold_before_publishing(self):
+        storage, handler = storage_with([(200, self.HEADERS, b""), (200, self.HEADERS, b"video")])
+        original_open = storage._open
+
+        def fail_get_read(method, url, headers, body, **kwargs):
+            response = original_open(method, url, headers, body, **kwargs)
+            if method == "GET":
+                def fail_read(_size):
+                    raise TimeoutError("read timed out")
+                response.read = fail_read
+            return response
+
+        storage._open = fail_get_read
+        with self.assertRaises(AlphaError) as caught:
+            self.read(storage)
+        self.assertEqual(caught.exception.status, 503)
+        self.assertTrue(handler.bodies[1].closed)
+
 
 class RangeTests(unittest.TestCase):
     def test_206(self):
