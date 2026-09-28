@@ -138,8 +138,8 @@ function PasskeysCardBody() {
   return (
     <SettingsSection
       id='profile-passkeys'
-      title='Passkeys for sign-in'
-      description='Sign in with Face ID, Touch ID or a security key. Two-factor still applies.'
+      title='Face ID / Touch ID account unlock'
+      description='Use a passkey to unlock Rafii with Face ID, Touch ID, Windows Hello or a security key. Two-factor still applies.'
     >
       {dev ? (
         <StateMessage kind='unsupported' layout='inline' title='Not available with a dev identity' />

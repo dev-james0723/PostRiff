@@ -1,0 +1,101 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio-live-agent/tests/phase2/postgres_agent_style.py", line 71, in <module>
+    assert stored(ONE) == {} and stored(SEVEN) == {}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+== tests/phase2/postgres_unified_notifications.py exit=0
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+
+== tests/phase2/postgres_agent_runtime.py exit=0
+o model spend
+PASS    R03 Forbidden effects never reach the Manager
+PASS    R04 Idempotent turns: the same key returns the same run
+PASS    R05 “Cancel that”: running work stops in the backend and it is confirmed before Rafii says so (V-A06)
+PASS    R06 Refining a request while it runs supersedes the earlier spoken one — never a typed turn (V-A05)
+PASS    R07 The Manager's false claim is replaced by what the ledger confirms (§23)
+PASS    R08 SDK human-in-the-loop: proposal_apply pauses; the person's yes applies via the app; the run resumes and verifies (ADR-H1)
+PASS    R09 Correlation id across browser → delegation → Manager → tool → audit → asset (§30)
+PASS    R10 Voice Mode refuses cleanly: flag off, no OpenAI key, viewer, Live busy (V-A14/V-A15)
+PASS    R11 Voice transcripts are text only and live on the voice session (no raw audio)
+PASS    GAP-V04 “Does this sound like me?” — Brand Intelligence uses the deterministic voice check with evidence; no “exactly your voice”
+PASS    GAP-D04 Shorten a draft through the writing pipeline: a proposed update on that exact draft; its text unchanged until accepted
+PASS    GAP-H05 Who linked the draft to the campaign? — attribution only from stored evidence; an unknown person is not guessed
+PASS    A01-agent “What should I pay attention to?” — stored facts and derived observations with their rules, shown under the answer (§22)
+PASS    MM15 Image publishing checks stay enforced: an image without alt text can't be attached to a scheduled post
+PASS    MEM01 Layered memory with provenance: explicit vs inferred, confidence, and cloud consent respected (§14)
+PASS    S-MOD2 Voice request → text approval: a proposal made by voice is approved by typing “yes” (same proposal store, same checks)
+PASS    S-MOD3 A stale approval (presented more than 10 minutes ago) is re-stated, not applied, after a reconnect or a pause
+PASS    S-MOD5 Text starts a task; voice continues it (V-A10)
+PASS    S-MOD4 The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step
+PASS    R12 Voice sessions belong to the person who started them; at most two live sessions per member
+PASS    HTTP01 The agent routes over HTTP: session, request guard, JSON, status, a turn, a decision, voice start — and no API-token access
+PASS    R13 A voice session the tab never ended is reaped: closed and billed to its last activity (never free, never held forever)
+PASS    R08b After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)
+PASS    R14 A “yes” the application refuses leaves the waiting step waiting; the owner can still apply it
+PASS    R15 Cancelling needs edit and reaches only your own requests
+PASS    R16 Voice is billed on the server's clock: a client reporting 0 seconds doesn't make a call free
+PASS    R17 The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation
+PASS    R18 Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)
+PASS    MM16 Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once
+PASS    LA01 Live agent: “How do I connect Instagram?” answers with a guide card that starts by itself; the screen's labels reach the Manager as data
+PASS    LA02 Live agent by voice: a style change reaches the panel (saved when migration 030 is applied, never a failed turn without it); goodbye ends the call
+PASS    LA03 Slash commands: /weather is answered without a model through the gate; /search reaches the Manager with its fixed instruction and the input fenced
+PASS    R19 What a spoken “yes” would apply is said in the application's words; model text is trimmed, never turned into an error
+PASS    R20 After a Rafii answer, 2–3 follow-up suggestions from the light model; never a decision; tapping one only sends it as a message (E2)
+{"PASS": 56, "PARTIAL": 0, "FAIL": 0}
+
+== tests/phase2/postgres_agent_runtime_references.py exit=0
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "manager turn answered",
+    "one writing run from draft_create",
+    "the writing run carries the chips and reports them",
+    "no client label reaches the report",
+    "chip ids are not listed as things Rafii read",
+    "malformed chips refused (400)",
+    "nothing stored for a refused turn",
+    "fallback: answered by the site agent",
+    "fallback: the chip is reported unused, not dropped"
+  ]
+}
+
+== tests/phase2/postgres_agent_style.py exit=1
+
+== tests/phase2/postgres_consumer_campaign_worker.py exit=0
+PASS: relational persistence, real worker/runtime call, restart/lease, idempotency, pause/cancel, legacy authority and no publish side effects
+PASS: explicit occurrence cost cap, in-flight cancellation, crash after provider completion reconciled without repeat charge
+PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused
+PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes
+PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts
+PASS: an automation in your voice without an allowed writing sample drafts in a neutral voice and says so
+
+== tests/phase2/postgres_consumer_deletion.py exit=0
+PASS deletion fence committed before storage; concurrent mutations denied; final identity result verified
+PASS storage retry, worker fences, unknown cost, subscription, other ownership, identity partial and bounded recovery
+PASS video objects, posters, frames, pending/aborted uploads, a deletionPending asset and the prefix are deleted before the workspace; no storage, no deletion
+
+== tests/phase2/postgres_quick_start_again.py exit=0
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "the same own idea drafted again reuses one run-only source (new conversation, no re-approval); its stored title stays generic so source text cannot bypass policy",
+    "pasted third-party text drafted again reuses its run-only source, keeps a non-content title and keeps rewrite_approval with nothing auto-approved",
+    "a different long idea still becomes its own run-only source without exposing the text through its stored title",
+    "Context Pocket: a chosen usable source is read with the idea; an unknown id is refused (409) before any source is stored",
+    "chips on a quick start reach the turn (the report is on the run, labels dropped), automation wording still drafts with the reminder, and a chip-less quick start carries no chip keys"
+  ]
+}
+
+{"status": "fail", "execution": "disposable-local-postgres", "failed": ["tests/phase2/postgres_agent_style.py"]}

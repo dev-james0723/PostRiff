@@ -5,13 +5,18 @@ import re
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, HTTPRedirectHandler, Request, build_opener, urlopen
 
 from postriff_alpha.domain import AlphaError
 
 
 SESSION = re.compile(r"[A-Za-z0-9_-]{16,160}")
 USER_ID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+class _NoAuthRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # Never forward a session token or passkey assertion to another endpoint.
 
 
 def _verified_payload(access_token, principal):
@@ -51,6 +56,29 @@ def verified_aal(access_token, principal):
     return "aal2" if value == "aal2" else "aal1"
 
 
+def verified_webauthn_time(access_token, principal):
+    """MFA method time, never JWT iat (refreshing a token is not fresh MFA)."""
+    methods = _verified_payload(access_token, principal).get('amr') or []
+    if not isinstance(methods, list):
+        return 0
+    return max((float(m['timestamp']) for m in methods if isinstance(m, dict)
+                and m.get('method') == 'mfa/webauthn' and type(m.get('timestamp')) in (int, float)), default=0)
+
+
+def verified_passkey_time(access_token, principal):
+    """Passkey sign-in time from Supabase's signed AMR claim.
+
+    A passkey sign-in is AAL1, not MFA.  It is nevertheless a phishing-resistant proof that the
+    credential was used to create this exact session.  Refresh-token ``iat`` is deliberately not
+    accepted here because refreshing a session does not touch the passkey.
+    """
+    methods = _verified_payload(access_token, principal).get('amr') or []
+    if not isinstance(methods, list):
+        return 0
+    return max((float(m['timestamp']) for m in methods if isinstance(m, dict)
+                and m.get('method') == 'passkey' and type(m.get('timestamp')) in (int, float)), default=0)
+
+
 class SupabaseIdentityAdmin:
     def __init__(self, project_url, publishable_key, service_key, send=None, fetch=None):
         self.project_url = project_url.rstrip("/")
@@ -86,7 +114,7 @@ class SupabaseIdentityAdmin:
             parsed = json.loads(raw) if raw else {}
         except ValueError:
             parsed = {}
-        return status, parsed if isinstance(parsed, dict) else {}
+        return status, parsed if isinstance(parsed, (dict, list)) else {}
 
     def _admin_headers(self):
         return {"apikey": self.service_key, "Authorization": "Bearer " + self.service_key, "Accept": "application/json"}
@@ -101,7 +129,7 @@ class SupabaseIdentityAdmin:
         status, body = self.fetch("GET", self.project_url + "/auth/v1/admin/users/" + quote(principal), self._admin_headers())
         if status == 404:
             return None
-        if status != 200:
+        if status != 200 or not isinstance(body, dict):
             raise AlphaError("The identity service could not resolve this account.", 502)
         email = body.get("email")
         if not isinstance(email, str) or "@" not in email or not 3 <= len(email) <= 254:
@@ -116,7 +144,7 @@ class SupabaseIdentityAdmin:
         status, body = self.fetch("GET", self.project_url + "/auth/v1/admin/users/" + quote(principal), self._admin_headers())
         if status == 404:
             return []
-        if status != 200:
+        if status != 200 or not isinstance(body, dict):
             raise AlphaError("The identity service could not resolve this account.", 502)
         factors = body.get("factors")
         if not isinstance(factors, list):
@@ -125,6 +153,29 @@ class SupabaseIdentityAdmin:
             {"id": str(item.get("id", "")), "type": str(item.get("factor_type", "")), "name": str(item.get("friendly_name") or "")[:80]}
             for item in factors
             if isinstance(item, dict) and item.get("status") == "verified"
+        ]
+
+    def registered_passkeys(self, principal):
+        """Passkeys currently registered for one user via the server-only Admin endpoint."""
+        if not isinstance(principal, str) or not USER_ID.fullmatch(principal):
+            raise AlphaError("Verified user required.", 400)
+        status, body = self.fetch(
+            "GET",
+            self.project_url + "/auth/v1/admin/users/" + quote(principal) + "/passkeys",
+            self._admin_headers(),
+        )
+        if status == 404:
+            return []
+        if status != 200 or not isinstance(body, list):
+            raise AlphaError("The identity service could not resolve this account's passkeys.", 502)
+        return [
+            {
+                "id": str(item.get("id", "")),
+                "name": str(item.get("friendly_name") or "")[:120],
+                "last_used_at": str(item.get("last_used_at") or "")[:64],
+            }
+            for item in body
+            if isinstance(item, dict) and USER_ID.fullmatch(str(item.get("id", "")))
         ]
 
     def logout(self, access_token):
@@ -160,3 +211,41 @@ class SupabaseIdentityAdmin:
         if status not in (200, 204, 404):
             raise AlphaError("Workspace data was removed, but identity deletion needs reconciliation.", 502)
         return status != 404
+
+
+    def _phone_mfa_post(self, access_token, factor, action, payload):
+        if not USER_ID.fullmatch(factor) or action not in ('challenge', 'verify'):
+            raise AlphaError('Call verification unavailable.', 409)
+        request = Request(self.project_url + '/auth/v1/factors/' + factor + '/' + action,
+            method='POST', data=json.dumps(payload).encode(), headers={'apikey': self.publishable_key,
+            'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'})
+        try:
+            opener = build_opener(_NoAuthRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+            with opener.open(request, timeout=8) as response:
+                raw = response.read(65537)
+                if len(raw) > 65536:
+                    raise ValueError('Oversized authentication response')
+                result = json.loads(raw)
+                if not isinstance(result, dict):
+                    raise ValueError('Malformed authentication response')
+                return result
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            # No response/error body, assertion, token or code is logged. Never retry a ceremony.
+            raise AlphaError('Passkey verification did not complete. Try again or use a new Agent Pairing Code.', 409) from None
+
+    def phone_mfa_challenge(self, token, factor, rp, site):
+        return self._phone_mfa_post(token, factor, 'challenge', {'webauthn': {'rpId': rp, 'rpOrigins': [site]}})
+
+    def phone_mfa_verify(self, token, factor, challenge, rp, site, credential):
+        if not isinstance(credential, dict) or len(json.dumps(credential)) > 16000:
+            raise AlphaError('Call verification unavailable.', 409)
+        try:
+            encoded = credential['response']['authenticatorData']
+            auth_data = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4))
+            if len(auth_data) < 37 or auth_data[32] & 5 != 5:
+                raise ValueError('User verification required')
+        except (KeyError, TypeError, ValueError):
+            raise AlphaError('Passkey user verification is required.', 409) from None
+        # Supabase verifies the signature over these same flags; the browser cannot forge them.
+        return self._phone_mfa_post(token, factor, 'verify', {'challenge_id': challenge,
+            'webauthn': {'type': 'request', 'rpId': rp, 'rpOrigins': [site], 'credential_response': credential}})

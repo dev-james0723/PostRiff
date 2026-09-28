@@ -1,0 +1,6 @@
+
+> postriff-web@0.1.0 lint
+> oxlint src
+
+Found 0 warnings and 0 errors.
+Finished in 1.9s on 805 files with 213 rules using 12 threads.

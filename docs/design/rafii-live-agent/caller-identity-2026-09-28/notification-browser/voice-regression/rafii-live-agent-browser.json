@@ -1,0 +1,233 @@
+{
+ "base": "http://localhost:3293",
+ "voiceBase": "http://localhost:3293",
+ "engine": "chromium",
+ "principal": "synthetic",
+ "sections": [
+  "voice",
+  "voice-phone",
+  "weather"
+ ],
+ "results": [
+  {
+   "name": "voice: the synthetic workspace may spend on voice (budget approved in the harness database)",
+   "ok": true
+  },
+  {
+   "name": "voice: the harness offers Voice Mode (agent status: voice available, RAFII_VOICE_ENABLED and RAFII_AGENT_V2_ENABLED on)",
+   "ok": true
+  },
+  {
+   "name": "voice: the Rafii panel opens",
+   "ok": true
+  },
+  {
+   "name": "voice: “Talk to Rafii” is offered",
+   "ok": true
+  },
+  {
+   "name": "voice: the first call opens the style picker first (“How should Rafii talk to you?”)",
+   "ok": true
+  },
+  {
+   "name": "voice: … offering the three starting points, before any call has started",
+   "ok": true
+  },
+  {
+   "name": "voice: the picker fits the screen",
+   "ok": true
+  },
+  {
+   "name": "voice: choosing “Explain in detail” saves it (GET /api/me → preferences.agentStyle, chosen)",
+   "ok": true
+  },
+  {
+   "name": "voice: … and only then does the call start",
+   "ok": true
+  },
+  {
+   "name": "voice: the call runs on the scriptable GPT-Live stand-in (development build)",
+   "ok": true
+  },
+  {
+   "name": "voice: the session came from the QA harness’s GPT-Live stand-in",
+   "ok": true
+  },
+  {
+   "name": "voice: the call is live and the status reads Listening",
+   "ok": true
+  },
+  {
+   "name": "voice: Mute becomes a pressed “Unmute” (aria-pressed=true, data-rafii-voice-mute=on)",
+   "ok": true
+  },
+  {
+   "name": "voice: … the button fill and status dot turn red, with the button’s paired foreground for contrast",
+   "ok": true
+  },
+  {
+   "name": "voice: … the status says Microphone off and the microphone is off",
+   "ok": true
+  },
+  {
+   "name": "voice: axe finds no serious or critical issue in the panel with a muted call",
+   "ok": true
+  },
+  {
+   "name": "voice: with the panel closed, the call indicator reads “Microphone off”",
+   "ok": true
+  },
+  {
+   "name": "voice: … with the microphone icon in the destructive colour",
+   "ok": true
+  },
+  {
+   "name": "voice: the indicator opens Rafii again, the call still live and muted",
+   "ok": true
+  },
+  {
+   "name": "voice: Unmute turns the microphone back on",
+   "ok": true
+  },
+  {
+   "name": "voice: Rafii was speaking when Stop talking was pressed",
+   "ok": true
+  },
+  {
+   "name": "voice: Stop talking marks the cut-off reply “(stopped)”",
+   "ok": true
+  },
+  {
+   "name": "voice: … and no more of that reply appears, although it kept streaming",
+   "ok": true
+  },
+  {
+   "name": "voice: … its audio stays off, Live is told to listen, and the status is back to Listening",
+   "ok": true
+  },
+  {
+   "name": "voice: “that’s all” alone goes to Rafii as a request (not a panel command) and is answered",
+   "ok": true
+  },
+  {
+   "name": "voice: … and does not hang up: no “Ending the call…”, still live 3 s after the reply",
+   "ok": true
+  },
+  {
+   "name": "voice: a goodbye shows “Ending the call…”",
+   "ok": true
+  },
+  {
+   "name": "voice: … Rafii says one short goodbye (“Bye for now; I’m ending the call.”), handled in the browser without a turn to Rafii",
+   "ok": true
+  },
+  {
+   "name": "voice: … then the call ends by itself (session.close sent, the panel says the call ended)",
+   "ok": true
+  },
+  {
+   "name": "voice: … about 1.2 s after the reply went quiet, and within 10 s of the goodbye",
+   "ok": true
+  },
+  {
+   "name": "voice: … and the server is told the session ended",
+   "ok": true
+  },
+  {
+   "name": "voice: Close returns the panel to its idle state, with “Talk to Rafii” again",
+   "ok": true
+  },
+  {
+   "name": "voice: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the synthetic workspace may spend on voice (budget approved in the harness database)",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the harness offers Voice Mode (agent status: voice available, RAFII_VOICE_ENABLED and RAFII_AGENT_V2_ENABLED on)",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the Rafii drawer opens",
+   "ok": true
+  },
+  {
+   "name": "voice phone: “Talk to Rafii” is offered",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the first call opens the style picker first (“How should Rafii talk to you?”)",
+   "ok": true
+  },
+  {
+   "name": "voice phone: … offering the three starting points, before any call has started",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the picker fits the screen",
+   "ok": true
+  },
+  {
+   "name": "voice phone: choosing “Friendly” saves it (GET /api/me → preferences.agentStyle, chosen)",
+   "ok": true
+  },
+  {
+   "name": "voice phone: … and only then does the call start",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the call runs on the scriptable GPT-Live stand-in (development build)",
+   "ok": true
+  },
+  {
+   "name": "voice phone: the session came from the QA harness’s GPT-Live stand-in",
+   "ok": true
+  },
+  {
+   "name": "voice phone: Mute, Stop talking and End voice are on screen",
+   "ok": true
+  },
+  {
+   "name": "voice phone: reduced motion drops the level meter; the status stays",
+   "ok": true
+  },
+  {
+   "name": "voice phone: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "voice phone: Mute turns pressed and red here too",
+   "ok": true
+  },
+  {
+   "name": "voice phone: End voice ends the call",
+   "ok": true
+  },
+  {
+   "name": "weather: the API is the agent QA harness (its GPT-Live stand-in answered), so /weather uses the Open-Meteo stand-in",
+   "ok": true
+  },
+  {
+   "name": "weather: the Rafii panel opens",
+   "ok": true
+  },
+  {
+   "name": "weather: the panel talks to the agent runtime here",
+   "ok": true
+  },
+  {
+   "name": "weather: /weather Hong Kong goes to Rafii as typed, with command { name: \"weather\", args: \"Hong Kong\" }",
+   "ok": true
+  },
+  {
+   "name": "weather: … and is answered without a model (composedBy: deterministic)",
+   "ok": true
+  },
+  {
+   "name": "weather: the panel shows the direct answer: place, temperature, conditions, today’s range, rain chance and source (the stand-in’s data)",
+   "ok": true
+  }
+ ]
+}

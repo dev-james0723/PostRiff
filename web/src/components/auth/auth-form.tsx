@@ -220,7 +220,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
           {offerPasskey && (
             <Button variant='action' size='control' disabled={busy} onClick={() => void run(passkey)}>
               <Icons.key className='size-4' aria-hidden />
-              Sign in with a passkey
+              Unlock with Face ID / Touch ID
             </Button>
           )}
           <Button variant='glass' size='control' disabled={busy} onClick={() => void run(google)}>

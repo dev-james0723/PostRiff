@@ -1,0 +1,96 @@
+{
+  "flags": 18,
+  "newFlags": 0,
+  "review": [
+    {
+      "path": "src/features/agent/attachments/plus-sheet.tsx",
+      "snippet": "${provider} \u00b7 ${connection.account}",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/agent/reasoning-map.ts",
+      "snippet": "Not applied by this provider",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/agent/reasoning-map.ts",
+      "snippet": "Provider default for ${modelLabel}: ${selected.id}",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/channels/channels-view.tsx",
+      "snippet": "What ${provider.platform} can publish",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/channels/channels-view.tsx",
+      "snippet": "${provider.platform} setup details",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/channels/connect-sheet.tsx",
+      "snippet": "Sign in as ${reconnect.account}${provider ?",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/channels/connect-sheet.tsx",
+      "snippet": "Nothing to connect on ${provider?.platform ?? 'this platform'} yet.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/channels/connect-sheet.tsx",
+      "snippet": "${provider.platform} is paused.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/coworker/notifications/notification-settings.tsx",
+      "snippet": "Optional important texts. Turning on Phone Mode never opts you in. Provider messaging rates may apply. Reply STOP to stop texts.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/coworker/notifications/notification-settings.tsx",
+      "snippet": "Your provider stopped text messages. Reply START to restore messaging, then opt in here again.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/coworker/notifications/notification-settings.tsx",
+      "snippet": "Text messages are currently unavailable.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/features/rafii-phone/phone-settings.tsx",
+      "snippet": "The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while ",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/components/forms/demo-form.tsx",
+      "snippet": "Form submitted successfully!",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/components/marketing/capability-badge.tsx",
+      "snippet": "Rafii publishes through the provider API after you approve.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/components/marketing/landing/sections.tsx",
+      "snippet": "Direct publishing switches on per platform once its provider review passes. Until then Rafii prepares the post and you complete the last ste",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/components/marketing/landing/sections.tsx",
+      "snippet": "None yet. LinkedIn, Threads and Instagram are hosted connectors awaiting provider review; until each passes, publishing is Assisted (Rafii p",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/components/marketing/landing/sections.tsx",
+      "snippet": "No. Drafts come only from sources you select and approve, and our provider contracts will prohibit training. See the Privacy Policy.",
+      "alreadyInBaseline": true
+    },
+    {
+      "path": "src/lib/attention.ts",
+      "snippet": "${unreviewed.map((provider) => provider.platform).join(', ')}: you post the last step",
+      "alreadyInBaseline": true
+    }
+  ]
+}

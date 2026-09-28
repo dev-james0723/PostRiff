@@ -1,0 +1,23 @@
+{
+  "dial-inbound-retry": {
+    "offlineTranscript": " Sorry, that Agent Pering Code did not connect. Say all 12 digits, then pause, or enter all 12 digits on your keypad and press star.",
+    "seconds": 8.65,
+    "rate": 24000,
+    "channels": 1,
+    "clippedSamples": 0
+  },
+  "dial-inbound": {
+    "offlineTranscript": " Please enter or say your 12 digit agent pairing code. If you enter it on your keypad, press star when you're done.",
+    "seconds": 7.25,
+    "rate": 24000,
+    "channels": 1,
+    "clippedSamples": 0
+  },
+  "dial-repeat": {
+    "offlineTranscript": " Welcome back. I've sent a secure verification request to your trusted device. Confirm it with FaceID, TouchID, or your Pasquite to continue. To use a new aged pairing code instead, press hash.",
+    "seconds": 13.25,
+    "rate": 24000,
+    "channels": 1,
+    "clippedSamples": 0
+  }
+}

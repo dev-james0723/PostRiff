@@ -1,0 +1,41 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_caller_identity.py
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+PASS trusted route only, exact call binding, fresh AMR not iat, wrong user/session, atomic racing consumption, replay
+PASS expiry, hangup, route/factor/membership/session revocation, deny, cancel: no admission
+PASS new-code recovery, ambiguous mapping fallback, caller ID cannot select an account
+PASS missing/disabled notification falls back; operator admission budget includes repeat waiting
+PASS deny suppression, forced RLS, browser grants denied, deletion cascades
+PASS caller identity PostgreSQL: synthetic Supabase/provider, no network effects
+PASS in-flight hangup invalidation, one provider verify per nonce including errors, three-ceremony cap
+PASS cross-call assertion rejection; transactional exact deep link; no code/caller/hash/private payload; no extra channels
+PASS HTTP authentication, wrong-user denial, origin guard, no-store, safe display metadata
+PASS signed repeat media + HTTP WebAuthn approval, no caller-ID/DTMF bypass, no Live/pre-auth audio before consumed challenge
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_inbound_phone.py
+/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "permission_denied", "phase": "stream_start"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "permission_denied", "phase": "stream_start"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_caller_limit", "phase": "inbound_admission"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+PASS account/conversation isolation, no SMS requirement, fresh login, one-use secret, scoped runtime revocation, no outbound egress
+PASS expired/revoked code, three guesses, budget rejection, concurrent replay has exactly one call and reservation set
+PASS signed ASGI code admission method: keypad plus star
+PASS signed inbound greeting/keypad → same real agent draft edit → audio reply; no publishing; no secret/audio before auth; final event dedupe and usage
+PASS server-only RLS, active-call exclusion/rollback, revoked membership, account deletion, disabled flag, shared caller/operator limits, retention cleanup
+PASS inbound phone integration: real local SQL/HTTP/WebSockets/agent; synthetic provider and model; zero paid calls
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_unified_notifications.py
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_caller_identity.py", "exitCode": 0, "seconds": 4.16}, {"script": "tests/phase2/postgres_inbound_phone.py", "exitCode": 0, "seconds": 2.76}, {"script": "tests/phase2/postgres_unified_notifications.py", "exitCode": 0, "seconds": 1.99}]}

@@ -1,3 +1,4 @@
+import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -415,6 +416,11 @@ export function createApi(getToken: TokenSource) {
 
     /* privacy */
     phoneSettings: (w: string) => get<PhoneSettingsData>(`${ws(w)}/phone`),
+    phoneAuthStatus: (id: string) => get<PhoneAuthChallenge>(`/api/phone/verify-call/${encodeURIComponent(id)}`),
+    phoneAuthApprove: (id: string, passkeyToken: string, useAvailableCredits: boolean) => send<{ state: string }>('POST', `/api/phone/verify-call/${encodeURIComponent(id)}/approve`, { passkeyToken, useAvailableCredits }),
+    phoneAuthDismiss: (id: string, action: 'deny' | 'fallback' | 'cancel') => send<{ state: string }>('POST', `/api/phone/verify-call/${encodeURIComponent(id)}/${action}`),
+    phoneTrustedCallers: (w: string) => get<{ callers: TrustedCaller[] }>(`${ws(w)}/phone/trusted-callers`),
+    phoneRevokeCaller: (w: string, id: string, passkeyToken: string) => send<{ revoked: boolean }>('POST', `${ws(w)}/phone/trusted-callers/${encodeURIComponent(id)}/revoke`, { passkeyToken }),
     phoneInboundCode: (w: string, body: { conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean }) => send<PhoneInboundCode>('POST', `${ws(w)}/phone/inbound-codes`, body),
     phoneInboundStatus: (w: string, id: string) => get<PhoneInboundStatus>(`${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),
     phoneInboundRevoke: (w: string, id: string) => send<{ revoked: boolean }>('DELETE', `${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),

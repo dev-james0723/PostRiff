@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { passkeyError } from '@/lib/auth/mfa';
+import { createPasskeyProofClient } from '@/lib/supabase/client';
 
 /**
  * Passkeys as the sign-in itself (Supabase's experimental passkey feature): one Face ID / Touch ID
@@ -53,4 +54,21 @@ export async function signInWithPasskey(client: SupabaseClient): Promise<void> {
   const { data, error } = await client.auth.signInWithPasskey();
   if (error) throw passkeyError(error);
   if (!data?.session) throw new Error('The passkey did not start a session. Try again or use your email.');
+}
+
+/**
+ * Ask for Face ID / Touch ID and lend the resulting session to exactly one callback. The session
+ * is memory-only and is revoked in `finally`; only its access token reaches the requested action.
+ */
+export async function withPasskeyProof<T>(run: (accessToken: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const client = createPasskeyProofClient();
+  const { data, error } = await client.auth.signInWithPasskey({ options: { signal } });
+  if (error) throw passkeyError(error);
+  if (!data?.session?.access_token) throw new Error('The passkey did not create an identity proof. Try again.');
+  try {
+    return await run(data.session.access_token);
+  } finally {
+    // Cleanup cannot change the inspected action result. No refresh token is persisted either way.
+    await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
+  }
 }

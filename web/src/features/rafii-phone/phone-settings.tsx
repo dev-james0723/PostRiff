@@ -13,6 +13,7 @@ import { coworkerKeys } from '@/lib/coworker/hooks';
 import type { CustomPhoneRule, PhonePreferences, PhoneProviderReadiness } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
 import { DialInRafii } from './dial-in-rafii';
+import { AgentCallSecurity } from './agent-call-security';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
 
 const EVENTS = [['publish.failed', 'Publication failed'], ['publish.uncertain', 'Publication outcome uncertain'], ['campaign.approval_required', 'Approval blocking a deadline'], ['campaign.blocked', 'Campaign blocked'], ['channel.reconnect_required', 'Account connection needs attention']] as const;
@@ -100,8 +101,9 @@ export function PhoneSettings() {
   return <div id='phone-mode'><SettingsSection id='phone-mode' title='Call Rafii' description='The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while credits or your plan’s calling allowance remain, subject to the provider’s account limit. Calls are never audio recorded. Text stays in this Rafii conversation.'>
     <div className='flex flex-col gap-4 text-sm'>
       {data.execution === 'fake' && <p>Local phone test. No telephone call or verification SMS is sent.</p>}
+      <AgentCallSecurity />
       <DialInRafii />
-      {data.inbound?.available && <p className='text-muted-foreground text-xs'>To receive callbacks from Rafii, save and verify your number below. Calling Rafii yourself uses the one-time sign-in code above.</p>}
+      {data.inbound?.available && <p className='text-muted-foreground text-xs'>To receive callbacks from Rafii, save and verify your number below. Calling Rafii yourself uses the Agent Pairing Code above.</p>}
       <p>{data.number ? `Phone ending ${data.number.lastFour} · ${data.number.verified ? 'Verified' : 'Not verified'}` : 'No phone number saved.'}</p>
       {membership?.role === 'owner' && data.execution === 'provider' && <div className='flex flex-col items-start gap-2'>
         <Button variant='glass' size='control' disabled={checking} onClick={() => void checkCallingSetup()}>{checking ? 'Checking…' : 'Check calling setup'}</Button>

@@ -1,0 +1,77 @@
+{
+  "scannedBeforeHTMLChanges": true,
+  "inventory": "installed-skill-inventory.txt",
+  "used": [
+    {
+      "skill": "react-email",
+      "path": "/Users/ouxianxing/.agents/skills/react-email/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/react-email/SKILL.md",
+      "sha256": "6316bdbe822e49f93a709e81bc011569d1a1ea20f7de78cd33ea8a0501ad79b7",
+      "contribution": "table/inline CSS, absolute PNGs, system fonts, semantic HTML, plain-text twin; retained Python renderer"
+    },
+    {
+      "skill": "design-partner",
+      "path": "/Users/ouxianxing/.agents/skills/design-partner/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/design-partner/SKILL.md",
+      "sha256": "0da7ba151263429ce363bb49ebb15873cdbfc2be56cb8b5e1f35b05529d8880c",
+      "contribution": "approved Rafii art direction, editorial hierarchy, restrained brand emphasis and visual review"
+    },
+    {
+      "skill": "frontend-design",
+      "path": "/Users/ouxianxing/.agents/skills/frontend-design/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/frontend-design/SKILL.md",
+      "sha256": "a570fd2bd44a20adb4e3521bac2dd19ed2a06d11354b8a07f0cf6e2fc70c3a27",
+      "contribution": "responsive spacing/typography and desktop/mobile visual craft with email-safe CSS only"
+    },
+    {
+      "skill": "redesign-existing-projects",
+      "path": "/Users/ouxianxing/.agents/skills/redesign-existing-projects/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/redesign-existing-projects/SKILL.md",
+      "sha256": "98ad3e5b051bfb71b2795f7e8a6aa0d32b51ee095606c098a4b2822ac07926c9",
+      "contribution": "audited and preserved existing renderer/Resend/locale/CTA contracts; shared direct-mail shell"
+    },
+    {
+      "skill": "brandkit",
+      "path": "/Users/ouxianxing/.agents/skills/brandkit/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/brandkit/SKILL.md",
+      "sha256": "b0c4837e1bd140ca816ae54948754ddd2ac1e2a4d3619363777a80caf00b2ede",
+      "contribution": "exact approved R plus Rafii wordmark, approved avatar asset, monochrome identity and whitespace"
+    },
+    {
+      "skill": "high-end-visual-design",
+      "path": "/Users/ouxianxing/.agents/skills/high-end-visual-design/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/high-end-visual-design/SKILL.md",
+      "sha256": "e1e32f5e2d420872c6c7332b53d5ff7721946766b78c4822b424c2d512c8fdbc",
+      "contribution": "static editorial restraint and spacing only; excluded motion, glass and web-font requirements"
+    },
+    {
+      "skill": "email-best-practices",
+      "path": "/Users/ouxianxing/.agents/skills/email-best-practices/SKILL.md",
+      "realPath": "/Users/ouxianxing/.agents/skills/email-best-practices/SKILL.md",
+      "sha256": "f1b957138619784e2c22f7ae689bde6e903a8134ee52d626d8846809382ef0c8",
+      "contribution": "email-safe semantics, header privacy, accessible labels/contrast, unsubscribe and degraded-image behavior"
+    },
+    {
+      "skill": "design:accessibility-review",
+      "path": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/accessibility-review/SKILL.md",
+      "realPath": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/accessibility-review/SKILL.md",
+      "sha256": "ef42982af0d51238dda2ab16d08626712891bdd41864876c32d1e7b13fb3124f",
+      "contribution": "WCAG2A/AA axe checks, readable contrast, semantic headings, decorative image alt and usable CTA"
+    },
+    {
+      "skill": "design:design-critique",
+      "path": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/design-critique/SKILL.md",
+      "realPath": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/design-critique/SKILL.md",
+      "sha256": "3a4f260eb9f60b431782bf6d90f22afb480c0c67860267a032df58a3e1bd19cd",
+      "contribution": "reviewed actual representative renders and image-blocked fallback, hierarchy and calm critical copy"
+    },
+    {
+      "skill": "design:ux-copy",
+      "path": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/ux-copy/SKILL.md",
+      "realPath": "/Users/ouxianxing/.codex/plugins/cache/claude-cowork/design/1.2.0/skills/ux-copy/SKILL.md",
+      "sha256": "d46a00a62ec637e9ca9d5f7823ea3e0a4ec26dffc53bb5035f59b48ebfcdcde7",
+      "contribution": "clear Off/Important only consent, STOP status, escalation and quiet-hours descriptions"
+    }
+  ],
+  "exclusions": "Identical aliases/duplicate provider variants counted once; unrelated animation/video/game/other-brand campaign skills not applied. Email compatibility overrides web-only advice."
+}

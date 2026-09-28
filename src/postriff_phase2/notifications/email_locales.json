@@ -246,6 +246,15 @@
           "lead": "Rafii couldn’t complete the phone call. Open the app to continue. This call won’t be redialed automatically.",
           "cta": "Open Rafii",
           "status": "warning"
+        },
+        "phone_call_verify": {
+          "subject": "Verify your current call",
+          "preheader": "Confirm this call with your passkey.",
+          "context": "Agent call security",
+          "headline": "Verify your Rafii call",
+          "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
+          "cta": "Verify call",
+          "status": "security"
         }
       }
     },
@@ -493,6 +502,15 @@
           "lead": "Rafii 未能完成電話通話。你可以打開應用程式繼續對話。系統不會自動重撥。",
           "cta": "打開 Rafii",
           "status": "warning"
+        },
+        "phone_call_verify": {
+          "subject": "Verify your current call",
+          "preheader": "Confirm this call with your passkey.",
+          "context": "Agent call security",
+          "headline": "Verify your Rafii call",
+          "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
+          "cta": "Verify call",
+          "status": "security"
         }
       }
     },
@@ -740,6 +758,15 @@
           "lead": "Rafii 未能完成電話通話。你可以開啟應用程式繼續對話。系統不會自動重撥。",
           "cta": "開啟 Rafii",
           "status": "warning"
+        },
+        "phone_call_verify": {
+          "subject": "Verify your current call",
+          "preheader": "Confirm this call with your passkey.",
+          "context": "Agent call security",
+          "headline": "Verify your Rafii call",
+          "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
+          "cta": "Verify call",
+          "status": "security"
         }
       }
     },
@@ -987,6 +1014,15 @@
           "lead": "Rafii 未能完成电话通话。你可以打开应用程序继续对话。系统不会自动重拨。",
           "cta": "打开 Rafii",
           "status": "warning"
+        },
+        "phone_call_verify": {
+          "subject": "Verify your current call",
+          "preheader": "Confirm this call with your passkey.",
+          "context": "Agent call security",
+          "headline": "Verify your Rafii call",
+          "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
+          "cta": "Verify call",
+          "status": "security"
         }
       }
     }

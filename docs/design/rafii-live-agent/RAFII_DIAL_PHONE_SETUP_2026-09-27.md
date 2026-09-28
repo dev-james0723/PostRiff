@@ -154,6 +154,11 @@ rounding before setting `RAFII_PHONE_USD_MICRO_PER_MINUTE`. GPT-Live adds its ex
 cost. Do not infer a free audio tier or treat starter credit as authorization to spend.
 Dial's account API supplies the free-account call cap; the adapter caps each call accordingly.
 
+On 2026-09-28, the configured account's authenticated Billing activity showed $0.13/minute
+and one billed minute for completed calls shorter than 60 seconds. Production configuration
+must therefore use `130000` micro USD per minute; re-check the account activity before changing
+or reusing this value. The separate unauthenticated-greeting cap remains $1.00 per rolling 24 hours.
+
 ## Validation and limits
 
 All HTTP, SMS and model events in these checks are synthetic. PostgreSQL, auth fences,

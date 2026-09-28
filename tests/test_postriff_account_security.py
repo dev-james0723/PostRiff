@@ -30,6 +30,19 @@ WORKSPACE = "00000000-0000-0000-0000-000000000010"
 AUTH = {"Authorization": "Bearer " + "t" * 32, "X-PostRiff-Request": "founder-alpha"}
 
 
+class SecuritySurfaceContract(unittest.TestCase):
+    def test_hosted_mfa_offers_totp_while_passkeys_are_account_unlock(self):
+        root = Path(__file__).resolve().parents[1] / "web" / "src" / "features" / "account"
+        security = (root / "security-card.tsx").read_text()
+        chooser = security[security.index("function MethodChooser"):security.index("function TwoFactor")]
+        self.assertIn("kind: 'totp'", chooser)
+        self.assertNotIn("kind: 'webauthn'", chooser)
+        self.assertNotIn("function PasskeyDialog", security)
+        self.assertIn("Face ID / Touch ID account unlock is managed separately", security)
+        passkeys = (root / "passkeys-card.tsx").read_text()
+        self.assertIn("title='Face ID / Touch ID account unlock'", passkeys)
+
+
 def jwt(payload):
     encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     return "header." + encoded + ".signature"
@@ -225,6 +238,9 @@ class AssuranceLevel(unittest.TestCase):
         with self.assertRaises(AlphaError) as refused:
             verify(aal1)
         self.assertEqual(refused.exception.status, 403)
+        # A separate passkey-proof token may be AAL1. The normal bearer still went through the
+        # enforced verifier; proof mode bypasses only that duplicate AAL check.
+        self.assertEqual(verify.proof(aal1), PRINCIPAL)
         self.assertEqual(verify(aal2), PRINCIPAL)
         self.assertEqual(verify.aal(aal2, PRINCIPAL), "aal2")
         flags["enforced"] = False
@@ -233,6 +249,8 @@ class AssuranceLevel(unittest.TestCase):
         with self.assertRaises(AlphaError) as revoked:
             verify(aal2)
         self.assertEqual(revoked.exception.status, 401)
+        with self.assertRaises(AlphaError):
+            verify.proof(aal1)
         self.assertIn("pr_mfa_enforcement", cursor.executed[-1][0])
 
 
