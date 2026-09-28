@@ -4698,9 +4698,9 @@
   },
   {
    "id": "rafii.policy.notification-planning",
-   "version": "1.2.1",
+   "version": "1.2.2",
    "kind": "policy",
-   "sha256": "sha256:07b308d9beda23b404a3e97340be310627d37ae9bdaaa819a7307f3a1eacf112",
+   "sha256": "sha256:b4a30dd35f09b2eedb9b63d20dad8a60b1b99ff86aec21e58a8f7d1d9ed87319",
    "description": "Deterministic unified attention planning: recipients by permission class, urgency, consent, separate SMS/phone channels, durable escalation, acknowledgement, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
 
    "intents": [
@@ -4762,7 +4762,7 @@
      "ref": "postriff_phase2.notifications.sms:SMS_DAILY_LIMIT"
     }
    ],
-   "lockedVersion": "1.2.1"
+   "lockedVersion": "1.2.2"
   },
   {
    "id": "rafii.evaluator.claim-evidence",
