@@ -1,0 +1,56 @@
+{
+  "schema": "rafii.closeout-reconciliation.v1",
+  "recorded_at": "2026-09-28T07:48:43.893803+00:00",
+  "source_head": "56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3",
+  "execution": "real_local_runtime_and_PostgreSQL_with_synthetic_external_inputs",
+  "provider_calls": 0,
+  "model_calls": 0,
+  "production_verified": false,
+  "ledger_counts": {
+    "NOT_APPLICABLE": 154,
+    "IN_PROGRESS": 1460,
+    "IMPLEMENTED_UNVERIFIED": 106,
+    "VERIFIED": 31,
+    "BLOCKED_EXTERNAL": 9,
+    "NOT_STARTED": 11
+  },
+  "open_milestones": [
+    "M1",
+    "M2"
+  ],
+  "M3": "per-modality and target/horizon only; none live-qualified",
+  "artifacts": {
+    "browser-harness.json": "d3956d7d2ab905b3187b30626cb0466ad4fbf8e63cc11ca8bfbd934b3b93b741",
+    "browser-results.json": "a1bd4c6a90e514ac7ff5c84fa27679d2416d424f8be73e7a74a0c8e054876982",
+    "browser.log": "6812d0101de0337a1a9ed9ab4d8e5571a18d4c6550cd4ab72b6719803642f74d",
+    "learning-postgres.log": "b11a93a43986cdf471f37bc442a2beec69f6728d3e1b3775415fb95424ab4429",
+    "learning-rights.log": "63dcd7df2d74d9201d7b1a8b61af8c05a14cc8597865a9a713b775f414fdd99b",
+    "lint.log": "f79f014662caf7acbba2796874ec769130da5e83dbbcb188b4fcdafe8c73a80c",
+    "offline-schema-recheck.json": "e69d5f3e37199d962976af321b4e65e42ab0c340e18b91dc91de609acc567a4a",
+    "offline-schema-recheck.log": "2e83255d1773f55bae4b2a0a76566e03d97ffa3f29815fa3f494fb3ba0568de0",
+    "offline-tests.json": "24d34d1dc690380747f23d8d3a352f8dee9d819c3fb3a50926af43f82e08aba8",
+    "offline-tests.log": "639296c8361d60ef478a79b9599dc8920d670bc85c5c68db494def08c14884df",
+    "postgres-initial.json": "76489605dd326550e6b8f7168834e9b3aa3c17e6307f51c282c985b5183a78ed",
+    "postgres-initial.log": "b4ce23b19c2619fab77f8b157b813af86df7f78431c5222edd8900a3df99d839",
+    "postgres-notifications.json": "df9de65ed722e686bac144d0778185fee7a50e629cf9a50f7d8bfe71d2aa2c49",
+    "postgres-notifications.log": "dc9c219342a00ee5850177a5d0f2aea443c4b5d23306f6f906a18a1980a9500f",
+    "postgres-pipeline.json": "739f551c0af4e65ca18ae8603dbf547428996614defec7d6606acdff13024ba4",
+    "postgres-pipeline.log": "f7d1c5aed71fa37ce0489214a95ba5eb60715d936e3858a1b3e07039c82a224d",
+    "prior-ledger-evidence.json": "6225a0c1844ac8fc141c564817d3e3a3e4acb5759e8152e06c4911753d394239",
+    "python-full.log": "4628d14a4581cb57f6b7643501de6cae40dcba601df93df0decdee3a0bcb8d70",
+    "repository-inventory.json": "f073a7cacf78126d97ae1e89b9f1ba4c94350758c8bae4461d2108198f79a491",
+    "typecheck.log": "b13539b82e2ccffed1b0c1ad7af2d320b56f47df84b5263771f5bbe8e32dd217",
+    "web-unit.log": "05a99625a69468b95a0d99acc6f26cb0e0d6a3b95b4bbf67df497b7492807a78"
+  },
+  "SQL_runner_corrections": [
+    "Class setUpClass skips are not test IDs; explicit classes10/10pass.",
+    "Shared pending outbox contaminated pipeline; fresh dedicated database9/9pass. Its only concurrent source drift was unrelated learning test file; all pipeline dependencies unchanged."
+  ],
+  "known_limits": [
+    "No approved live provider/model run",
+    "No real creator outcome or language cohorts",
+    "No staging/production activation or live verification",
+    "Physical mobile and manual VoiceOver unverified",
+    "Final concurrent release candidate not yet merged"
+  ]
+}

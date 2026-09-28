@@ -1,0 +1,9 @@
+
+> postriff-web@0.1.0 start
+> next start --hostname 127.0.0.1 --port 3297
+
+▲ Next.js 16.3.5
+- Local:         http://127.0.0.1:3297
+- Network:       http://127.0.0.1:3297
+✓ Ready in 666ms
+✓ Running next.config.ts took 5.1s

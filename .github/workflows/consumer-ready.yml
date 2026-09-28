@@ -50,7 +50,9 @@ jobs:
       - name: Disposable DB integration, migrations and restore
         run: python scripts/consumer_ready_check.py ci-postgres python scripts/postriff_pg_suite.py
       - name: Web contracts and locale checks
-        run: python scripts/consumer_ready_check.py ci-web node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs
+        run: |
+          python scripts/consumer_ready_check.py ci-web node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs
+          python scripts/consumer_ready_check.py ci-trend-schema node web/tests/trend-contract.cjs
       - name: Types, lint and isolated production build
         run: |
           python scripts/consumer_ready_check.py ci-types npm --prefix web run typecheck

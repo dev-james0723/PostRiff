@@ -272,6 +272,11 @@ export interface SourceFact {
 
 /** Where a web-research page came from (`ideas._research`). */
 export interface SourceOrigin {
+  trendLineage?: {
+    opportunity_id: string; opportunity_revision: number; trend_id: string;
+    trust_receipt_id: string; context_digest: string; expires_at: string;
+    angle_id: string; goal: string; channel_id: string; platform: string; language: string;
+  };
   executionPlan?: { id: string; platform: string; account: string; language: string; primaryObjective: string };
   opportunityId?: string;
   trendObjectId?: string;

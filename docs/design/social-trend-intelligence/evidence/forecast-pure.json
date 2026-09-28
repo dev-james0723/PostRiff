@@ -1,0 +1,178 @@
+{
+  "captured_at": "2026-09-28T02:04:48.613739+00:00",
+  "execution_state": "offline_synthetic_only",
+  "test_count": 30,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "seconds": 6.800899624999147,
+  "source_hashes_before": {
+    "src/postriff_phase2/growth/trends/forecast.py": "cd70dcfe71f081d1f763e2bd88116c4e340338a6c97253188e8d3ca4466b2f77",
+    "tests/test_trend_forecast.py": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
+    "src/postriff_phase2/growth/trends/context.py": "422bf44360bf73d4ffc4ef6c4327564169ae6030ad5abe2917393b8785f4be12"
+  },
+  "source_hashes_after": {
+    "src/postriff_phase2/growth/trends/forecast.py": "cd70dcfe71f081d1f763e2bd88116c4e340338a6c97253188e8d3ca4466b2f77",
+    "tests/test_trend_forecast.py": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
+    "src/postriff_phase2/growth/trends/context.py": "422bf44360bf73d4ffc4ef6c4327564169ae6030ad5abe2917393b8785f4be12"
+  },
+  "source_guard_unchanged": true,
+  "log_path": "/private/tmp/trend-forecast-validation.log",
+  "log_sha256": "0efa69f7ffad7ad02a3277b4baeee2fceed41201b840ed4eb93cc6d6da3167d1",
+  "adjacent_compatibility": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest test_trend_forecast test_trend_advanced test_trend_advanced_pipeline.AdvancedPure -v",
+    "observed_test_count": 75,
+    "observed_errors": 0,
+    "observed_failures": 0,
+    "observed_skips": 0,
+    "observed_seconds": 9.391,
+    "note": "Same forecast source; test-only two additional cases subsequently added."
+  },
+  "projection_example_is_synthetic": true,
+  "projection_example": {
+    "kind": "forecast",
+    "method_id": "trend_forecast_pure",
+    "method_version": "forecast_v2",
+    "payload": {
+      "scope_key": "sample",
+      "target": {
+        "population": "observed_sample",
+        "frame_id": "sample_count",
+        "cohort": "fixture_en",
+        "metric_definition": "original_count_v1",
+        "horizon_steps": 1,
+        "bin_hours": 1,
+        "supported_horizon_hours": 168
+      },
+      "method_bundle": {
+        "version": "forecast_v2",
+        "feature_version": "stable_sample_bins_v1",
+        "methods": {
+          "last_value": "1",
+          "seasonal_naive": "1",
+          "local_linear_count": "1"
+        },
+        "seasonal_period": 4,
+        "trend_window": 12,
+        "embargo_hours": 0,
+        "residual_window": {
+          "last_value": 10000,
+          "seasonal_naive": 10000,
+          "local_linear_count": 512
+        }
+      },
+      "issued_at": "2026-09-25T22:00:00+00:00",
+      "training_cutoff": "2026-09-25T22:00:00+00:00",
+      "target_start": "2026-09-25T22:00:00+00:00",
+      "horizon_end": "2026-09-25T23:00:00+00:00",
+      "embargo_hours": 0,
+      "coverage": "stable",
+      "structural_break": false,
+      "training_input_digest": "4874c14e08624486d603a5647ad27a1f5a13bd26604ee41a22ab6066dd735c34",
+      "prediction_digest": "d1c40f79ff77fbe872d3ec110669889d726e1fcebcd03b3a683410af260cdf71",
+      "state": "qualified",
+      "forecast_wording_enabled": true,
+      "predictions": [
+        {
+          "method": "local_linear_count",
+          "state": "qualified",
+          "point": 163.51515151515153,
+          "quantiles": {
+            "0.1": 162.33333333333334,
+            "0.5": 163.5,
+            "0.9": 164.62121212121212
+          },
+          "interval_basis": "past_rolling_residuals",
+          "residual_count": 64
+        }
+      ],
+      "uncertainty": "predictive_interval",
+      "qualification": {
+        "qualification_digest": "b3a6aa342ff327785145caf518b17c0881428b054be54f533b45907e65349ff5",
+        "report_digest": "b012859a54ee19cad340940fd629ff7eeed534cb098e37eeb80363456b4a8ff6",
+        "dataset_digest": "98b340867c7fb59189d652027d1276d27eceb35b90f35c307aaab425d6d95222",
+        "evaluation_cutoff": "2026-09-25T22:00:00+00:00",
+        "gate": {
+          "preregistered_at": "2026-09-22T00:00:00Z",
+          "holdout_opened_at": "2026-09-25T12:00:00+00:00",
+          "dataset_digest": "98b340867c7fb59189d652027d1276d27eceb35b90f35c307aaab425d6d95222",
+          "target_digest": "df2fc4358e27c8866c850cbf4bff3f239d7ede19b7d63f7f42f8dff4af0c1e59",
+          "primary_loss": "mae",
+          "min_episodes": 5,
+          "min_pairs": 10,
+          "coverage_tolerance": 0.05,
+          "reviewer": "fixture reviewer",
+          "operator_approved": true,
+          "rights_verified": true,
+          "reproducible": true,
+          "method_digest": "3cca60e8099d560ab95a961c0b3abec2c1ffbf8e4cea454d1e20928d3ba8501c",
+          "report_digest": "b012859a54ee19cad340940fd629ff7eeed534cb098e37eeb80363456b4a8ff6",
+          "evaluation_plan_digest": "a66c80f1cb05668a373a52e5fcf72c2bd6c16c28a2268ac2179b295941754e58",
+          "preregistration_digest": "a86b732c20ebd8890acd151c48e945841f755ccb1cb7b08d56098ce0f12a8e1d"
+        },
+        "gate_digest": "1d1f25ec10cbc2ae8723afdc1e830c13eb4db6be26fe69136e50eb03194eeb97",
+        "paired_count": 10,
+        "episode_count": 5,
+        "better_simple_baseline": "last_value",
+        "improvement_interval": {
+          "lower": 6.018181818181816,
+          "upper": 15.685314685314685,
+          "method": "paired_episode_block_bootstrap",
+          "confidence_level": 0.95,
+          "draws": 1000,
+          "seed": 0
+        },
+        "metrics": {
+          "last_value": {
+            "count": 10,
+            "mae": 12.6,
+            "quantile_loss": {
+              "0.1": 0.26,
+              "0.5": 0.8,
+              "0.9": 1.54
+            },
+            "interval_count": 10,
+            "interval_coverage": 0.8,
+            "sharpness": 2.0,
+            "nominal_coverage": 0.8
+          },
+          "local_linear_count": {
+            "count": 10,
+            "mae": 1.7622377622377627,
+            "quantile_loss": {
+              "0.1": 0.22783216783216803,
+              "0.5": 0.8801282051282072,
+              "0.9": 1.305617715617715
+            },
+            "interval_count": 10,
+            "interval_coverage": 0.8,
+            "sharpness": 1.9860139860139838,
+            "nominal_coverage": 0.8
+          },
+          "seasonal_naive": {
+            "count": 10,
+            "mae": 15.7,
+            "quantile_loss": {
+              "0.1": 0.27,
+              "0.5": 0.85,
+              "0.9": 1.19
+            },
+            "interval_count": 10,
+            "interval_coverage": 0.8,
+            "sharpness": 2.6,
+            "nominal_coverage": 0.8
+          }
+        }
+      }
+    }
+  },
+  "external_attestations": "Caller must verify current rights, provenance and preregistration authenticity; content digests are not signatures. Synthetic fixture_false exercises attested input code path only.",
+  "remaining_gates": [
+    "Real externally supported forecast cohort qualification",
+    "Preregistered sample/power/calibration acceptance",
+    "Parent durable integration/current source-policy DAG bindings",
+    "M3 remains incomplete"
+  ],
+  "provider_model_calls": 0,
+  "database_connections": 0
+}

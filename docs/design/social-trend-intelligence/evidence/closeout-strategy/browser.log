@@ -1,0 +1,17 @@
+psql:/Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+PASS 1440 current support bound; missing/stale support and foreign tenant rejected
+PASS 1440 keyboard adoption persists through actual API, database and reload
+PASS 1440 no horizontal overflow or serious/critical axe findings
+PASS 1440 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors
+PASS 768 current support bound; missing/stale support and foreign tenant rejected
+PASS 768 keyboard adoption persists through actual API, database and reload
+PASS 768 no horizontal overflow or serious/critical axe findings
+PASS 768 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors
+PASS 390 current support bound; missing/stale support and foreign tenant rejected
+PASS 390 keyboard adoption persists through actual API, database and reload
+PASS 390 no horizontal overflow or serious/critical axe findings
+PASS 390 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors
+PASS 430 current support bound; missing/stale support and foreign tenant rejected
+PASS 430 keyboard adoption persists through actual API, database and reload
+PASS 430 no horizontal overflow or serious/critical axe findings
+PASS 430 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors

@@ -25,6 +25,10 @@ TASKS = {
 }
 for _gate in ("signal", "cluster", "workspace_fit", "execution"):
     TASKS["scout." + _gate] = ("evaluate", "typesafe-ai/jev", (), 2.0, 1000)
+for _task in ("cluster_merge_check", "semantic_label_check", "culture_classify", "workspace_fit", "originality",
+              "execution_risk", "narrative_stance", "genome_support", "spread_mechanism", "whitespace_support",
+              "draft_diagnostic", "platform_fit"):
+    TASKS["trend." + _task] = ("evaluate", "typesafe-ai/jev", (), 3.0, 1000)
 RETRYABLE = (J.JevRateLimited, J.JevUpstream, J.JevTimeout)
 # Provider rejections that no other model or retry can fix: the key, the budget or the request itself.
 REJECTED_CODES = {401: "auth", 403: "auth", 402: "budget", 400: "bad_request", 413: "bad_request", 422: "bad_request"}
@@ -162,7 +166,8 @@ class AIModelRouter:
         last_error = None
         ids = {"workspace_id": workspace_id, "subject": subject}
         if self.jev is not None:
-            for attempt in range(2):
+            # Trend ingestion owns durable retry/budget reservations. Do not stack router retries.
+            for attempt in range(1 if task.startswith("trend.") else 2):
                 remaining = deadline - self.clock()
                 if remaining < MIN_ATTEMPT_S:
                     break

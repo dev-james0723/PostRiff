@@ -334,6 +334,8 @@ def _bind_runtime():
         from ..agent_runtime_v2 import specialists
     except ImportError:
         return
+    from ..growth.trends.tools import register as register_trend_tools
+    register_trend_tools()
     for agent_key, names in _scopes().items():
         try:
             specialists.extend_scope(agent_key, names)

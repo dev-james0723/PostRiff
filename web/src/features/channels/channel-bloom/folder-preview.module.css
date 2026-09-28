@@ -1,0 +1,295 @@
+.preview {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 180px;
+  height: 158px;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.scene {
+  position: absolute;
+  width: 200px;
+  height: 176px;
+  transform: scale(0.9);
+  transform-origin: top left;
+}
+.rig {
+  position: absolute;
+  inset: 0;
+  animation: arrive 1100ms cubic-bezier(0.22, 0.68, 0.2, 1) both;
+}
+.shadow {
+  position: absolute;
+  left: 36px;
+  right: 26px;
+  bottom: 9px;
+  height: 12px;
+  border-radius: 50%;
+  background: #24242e24;
+  filter: blur(9px);
+}
+.back,
+.front {
+  position: absolute;
+  inset: 0;
+  width: 200px;
+  height: 176px;
+  transform-origin: 50% 154px;
+}
+.back {
+  z-index: 0;
+  color: #ffffff24;
+  transform: translateY(-3px) rotate(-2deg);
+  animation: openBack 1100ms cubic-bezier(0.22, 0.68, 0.2, 1) both;
+}
+.backTop {
+  stop-color: #a5a6ae;
+}
+.backBottom {
+  stop-color: #75767f;
+}
+.faceTop {
+  stop-color: #c3c4cc;
+}
+.faceMiddle {
+  stop-color: #a8a9b2;
+}
+.faceBottom {
+  stop-color: #90919b;
+}
+.front {
+  z-index: 3;
+  transform: perspective(500px) rotateX(-10deg);
+  animation: openFront 1100ms cubic-bezier(0.22, 0.68, 0.2, 1) both;
+}
+.face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 6px 6px #18182013);
+}
+.symbol {
+  position: absolute;
+  left: 43px;
+  top: 117px;
+  width: 18px;
+  height: 18px;
+  color: #363740a6;
+}
+.handle {
+  position: absolute;
+  right: 39px;
+  top: 125px;
+  width: 22px;
+  height: 3px;
+  border-radius: 4px;
+  background: #41424c32;
+}
+.more {
+  position: absolute;
+  right: 21px;
+  top: 120px;
+  font-size: 10px;
+  line-height: 12px;
+  color: #363740;
+}
+.contents {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+.member {
+  position: absolute;
+  inset: 0;
+}
+.brand {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 1px #ffffff80,
+    0 3px 8px #1113;
+}
+.flight {
+  position: absolute;
+  left: 85px;
+  top: 21px;
+  opacity: 0;
+  animation: dropIn 900ms linear both;
+}
+.peek {
+  position: absolute;
+  left: calc(53px + var(--slot) * 30px);
+  top: 77px;
+  transform: rotate(var(--lean));
+}
+.newPeek {
+  animation: peekIn 1300ms cubic-bezier(0.22, 0.68, 0.2, 1) both;
+}
+.glow {
+  position: absolute;
+  z-index: 2;
+  top: 78px;
+  left: 63px;
+  width: 98px;
+  height: 30px;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(ellipse, #fff 0%, #f5f4ffdb 22%, #c4c8ff73 48%, transparent 72%);
+  filter: blur(6px);
+}
+
+/* Matte graphite in dark mode follows the supplied clip; silver uses the same
+   geometry, bevel and depth in Rafii's light dialog. */
+:global(.dark) .backTop {
+  stop-color: #303137;
+}
+:global(.dark) .backBottom {
+  stop-color: #17181d;
+}
+:global(.dark) .faceTop {
+  stop-color: #393a43;
+}
+:global(.dark) .faceMiddle {
+  stop-color: #26272d;
+}
+:global(.dark) .faceBottom {
+  stop-color: #1b1c21;
+}
+:global(.dark) .shadow {
+  background: #0005;
+}
+:global(.dark) .symbol {
+  color: #dddde580;
+}
+:global(.dark) .handle {
+  background: #d9d9ee26;
+}
+:global(.dark) .more {
+  color: #c8c8d2;
+}
+:global(.dark) .rig {
+  mask-image: linear-gradient(to bottom, #000 68%, #000b 84%, transparent 98%);
+}
+
+.preview[data-reduced-motion='true'] :is(.rig, .back, .front, .newPeek, .flight) {
+  animation: none;
+}
+.preview[data-reduced-motion='true'] :is(.flight, .glow) {
+  display: none;
+}
+
+@keyframes arrive {
+  0% {
+    transform: translateY(5px) scale(0.97);
+  }
+  38% {
+    transform: translateY(-3px) scale(1.015);
+  }
+  70% {
+    transform: translateY(1px) scale(0.998);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes openBack {
+  0% {
+    transform: translateY(12px) rotate(0);
+  }
+  40% {
+    transform: translateY(-9px) rotate(-5deg);
+  }
+  70% {
+    transform: translateY(-1px) rotate(-1deg);
+  }
+  100% {
+    transform: translateY(-3px) rotate(-2deg);
+  }
+}
+@keyframes openFront {
+  0% {
+    transform: perspective(500px) rotateX(0);
+  }
+  40% {
+    transform: perspective(500px) rotateX(-32deg) translateY(2px);
+  }
+  72% {
+    transform: perspective(500px) rotateX(-7deg);
+  }
+  100% {
+    transform: perspective(500px) rotateX(-10deg);
+  }
+}
+@keyframes dropIn {
+  0% {
+    opacity: 0;
+    transform: translate(33px, -12px) rotate(14deg) scale(0.84);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(18px, -5px) rotate(8deg) scale(1);
+  }
+  32% {
+    opacity: 1;
+    transform: translate(3px, 2px) rotate(-5deg) scale(1);
+  }
+  46% {
+    opacity: 1;
+    transform: translate(0, 10px) rotate(-3deg) scale(0.98);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(-2px, 47px) rotate(3deg) scale(0.86);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-2px, 84px) rotate(0) scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-2px, 100px) rotate(0) scale(0.65);
+  }
+}
+@keyframes peekIn {
+  0%,
+  66% {
+    opacity: 0;
+    transform: translateY(22px) rotate(var(--lean));
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(-3px) rotate(var(--lean));
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--lean));
+  }
+}
+
+@media (max-width: 480px) {
+  .preview {
+    width: 150px;
+    height: 132px;
+  }
+  .scene {
+    transform: scale(0.75);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rig,
+  .back,
+  .front,
+  .newPeek,
+  .flight {
+    animation: none;
+  }
+  .flight,
+  .glow {
+    display: none;
+  }
+}

@@ -30,19 +30,19 @@ export function HelpMenu() {
       <DropdownMenuTrigger render={<Button variant='ghost' size='icon' aria-label='Help' data-tour='help' />}>
         <Icons.help className='size-[1.2rem]' />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className={cn(rafiiMenu, 'min-w-60 p-1.5')}>
+      <DropdownMenuContent align='end' className={cn(rafiiMenu, 'min-w-60 p-1.5 max-[320px]:min-w-0 max-[320px]:w-[calc(100vw-1rem)] max-[320px]:max-w-[calc(100vw-1rem)]')}>
         <DropdownMenuGroup>
-          <DropdownMenuItem className='min-h-10 rounded-[0.625rem]' onClick={() => tourStore.start('welcome')}>
+          <DropdownMenuItem className='min-h-10 rounded-[0.625rem] max-[320px]:min-w-0 max-[320px]:flex-wrap max-[320px]:break-words max-[320px]:whitespace-normal' onClick={() => tourStore.start('welcome')}>
             <Icons.sparkles className='mr-2 size-4' />
             Take the tour
           </DropdownMenuItem>
           {pageTour && (
-            <DropdownMenuItem className='min-h-10 rounded-[0.625rem]' onClick={() => tourStore.start(pageTour.id)}>
+            <DropdownMenuItem className='min-h-10 rounded-[0.625rem] max-[320px]:min-w-0 max-[320px]:flex-wrap max-[320px]:break-words max-[320px]:whitespace-normal' onClick={() => tourStore.start(pageTour.id)}>
               <Icons.info className='mr-2 size-4' />
               Tips for {pageTour.title}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem className='min-h-10 rounded-[0.625rem]' onClick={() => query.toggle()}>
+          <DropdownMenuItem className='min-h-10 rounded-[0.625rem] max-[320px]:min-w-0 max-[320px]:flex-wrap max-[320px]:break-words max-[320px]:whitespace-normal' onClick={() => query.toggle()}>
             <Icons.search className='mr-2 size-4' />
             Jump to a page
             <span className='ml-auto flex items-center gap-0.5'>
@@ -51,7 +51,7 @@ export function HelpMenu() {
             </span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuItem className='hidden min-h-10 rounded-[0.625rem] md:flex' onClick={() => window.dispatchEvent(new Event(SHORTCUTS_EVENT))}>
+        <DropdownMenuItem className='hidden min-h-10 rounded-[0.625rem] max-[320px]:min-w-0 max-[320px]:flex-wrap max-[320px]:break-words max-[320px]:whitespace-normal md:flex' onClick={() => window.dispatchEvent(new Event(SHORTCUTS_EVENT))}>
           <Icons.listDetails className='mr-2 size-4' />
           Keyboard shortcuts
           <Kbd className='ml-auto'>?</Kbd>
@@ -59,7 +59,7 @@ export function HelpMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem
-            className='min-h-10 rounded-[0.625rem]'
+            className='min-h-10 rounded-[0.625rem] max-[320px]:min-w-0 max-[320px]:flex-wrap max-[320px]:break-words max-[320px]:whitespace-normal'
             onClick={() => {
               tourStore.reset();
               toast('Tips will show again');

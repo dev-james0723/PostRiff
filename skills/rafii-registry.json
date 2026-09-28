@@ -3,6 +3,64 @@
  "note": "Product-owned capability registry. Edit only with a version bump, then run scripts/rafii_skill_registry.py --lock. Global skills are immutable at runtime; workspaces personalise through overlays only.",
  "capabilities": [
   {
+   "id": "rafii-trend-intelligence",
+   "version": "1.1.0",
+   "kind": "workflow",
+   "sha256": "sha256:e231334bb311cccc169b04364f6373d4104abd6f6da2ac317aec93a2edb34eee",
+   "description": "Interpret verified trend evidence and inspect an opportunity-linked draft through existing Rafii workflows.",
+   "intents": [
+    "trend_intelligence",
+    "opportunity_lab"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research",
+    "content",
+    "scout"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skill_compiler:compile",
+     "probe": {
+      "task": {
+       "agent": "research",
+       "intent": "trend_intelligence"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_trend_integration.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-trend-intelligence"
+    }
+   ],
+   "writer": {
+    "self": true
+   },
+   "priority": 5,
+   "lockedVersion": "1.1.0"
+  },
+  {
    "id": "postriff-content-engine",
    "version": "1.1.0",
    "kind": "knowledge",

@@ -1,0 +1,219 @@
+{
+  "target": "staging",
+  "project_ref": "oxacvkhpfgytkepxcaqh",
+  "execution": "read_only_schema_metadata",
+  "tables": [
+    "pr_account_tombstones",
+    "pr_active_work_sessions",
+    "pr_agent_events",
+    "pr_agent_runs",
+    "pr_api_tokens",
+    "pr_approvals",
+    "pr_assets",
+    "pr_attachments",
+    "pr_audience_threads",
+    "pr_audit_events",
+    "pr_auth_throttle",
+    "pr_billing_events",
+    "pr_budgets",
+    "pr_campaigns",
+    "pr_channel_capabilities",
+    "pr_channel_pictures",
+    "pr_channels",
+    "pr_connector_credentials",
+    "pr_connector_fetches",
+    "pr_connector_oauth_transactions",
+    "pr_connector_selections",
+    "pr_conversations",
+    "pr_credit_disputes",
+    "pr_credit_orders",
+    "pr_credit_packs",
+    "pr_credit_payment_inbox",
+    "pr_credit_quotes",
+    "pr_credit_refunds",
+    "pr_credit_subscription_grants",
+    "pr_data_requests",
+    "pr_devices",
+    "pr_encrypted_credentials",
+    "pr_entitlements",
+    "pr_experiment_assignments",
+    "pr_invitations",
+    "pr_jobs",
+    "pr_learning_events",
+    "pr_media_notes",
+    "pr_media_uploads",
+    "pr_memberships",
+    "pr_memory_proposals",
+    "pr_memory_versions",
+    "pr_messages",
+    "pr_metric_definitions",
+    "pr_metric_observations",
+    "pr_mfa_enforcement",
+    "pr_notification_acknowledgements",
+    "pr_notification_deliveries",
+    "pr_notification_events",
+    "pr_notification_preferences",
+    "pr_notification_provider_events",
+    "pr_notification_scan",
+    "pr_notifications",
+    "pr_oauth_transactions",
+    "pr_phone_calls",
+    "pr_phone_delegations",
+    "pr_phone_numbers",
+    "pr_phone_preferences",
+    "pr_phone_provider_events",
+    "pr_phone_schedules",
+    "pr_phone_verification_limits",
+    "pr_plan_terms",
+    "pr_product_events",
+    "pr_profiles",
+    "pr_push_subscriptions",
+    "pr_receipts",
+    "pr_recurring_occurrences",
+    "pr_recurring_tasks",
+    "pr_reply_drafts",
+    "pr_research_evidence",
+    "pr_research_requests",
+    "pr_session_revocations",
+    "pr_sessions",
+    "pr_skill_releases",
+    "pr_skills",
+    "pr_sms_consents",
+    "pr_sources",
+    "pr_strategy_hypotheses",
+    "pr_subscriptions",
+    "pr_suggestions",
+    "pr_time_savings_calibrations",
+    "pr_time_savings_ledger",
+    "pr_time_savings_preferences",
+    "pr_tool_releases",
+    "pr_trials",
+    "pr_usage_ledger",
+    "pr_voice_profiles",
+    "pr_workspaces"
+  ],
+  "ledger_exists": true,
+  "migrations": [
+    {
+      "name": "001_phase2.sql",
+      "sha256": "48250315280c51fb2d4c40de57eb332c80029ae5514da1b62482cbec367d9bcc"
+    },
+    {
+      "name": "002_hosted_account_lifecycle.sql",
+      "sha256": "beb393985c4e58ec8255c9e9b27487d12bc96c29fa1560a243b247dc16be23a0"
+    },
+    {
+      "name": "004_consumer_web_tenancy.sql",
+      "sha256": "9b9f44b41b9660bf82b47beafbc280803a68678079d0b7c9e28a5be2aaf948fa"
+    },
+    {
+      "name": "005_consumer_web_ideas.sql",
+      "sha256": "baae632e07c0e30e1299838b8f32448771cb41eb5bc59e1b16211b049a93b78e"
+    },
+    {
+      "name": "006_consumer_web_channels.sql",
+      "sha256": "43626c283cb3b16106411bb247b17b2a73a67c294a2bb1e82a537f99547650b3"
+    },
+    {
+      "name": "007_consumer_web_billing.sql",
+      "sha256": "adff5e5d36ec6f8e3c253898d0843df972a151079f511a32457488b6ae9179de"
+    },
+    {
+      "name": "008_billing_provider_notifications.sql",
+      "sha256": "20d3bb334a9a177f3428f063720ddafb556a91ec66f097f6ac1315a09fbabca1"
+    },
+    {
+      "name": "009_account_security.sql",
+      "sha256": "e3fdcadc6f60802c6ebc5f296189d8b75c863da7406d7b6b3c99b2fded8f19dd"
+    },
+    {
+      "name": "010_preference_learning.sql",
+      "sha256": "5193407e018f3249cdc99f937f7917d49aead56ad8d6f1a61ae38035c96fce4f"
+    },
+    {
+      "name": "011_account_preferences.sql",
+      "sha256": "7b98bf8305813223a7bcf7235b57a089936291055aa4050f20138ac2883a12be"
+    },
+    {
+      "name": "012_channel_pictures.sql",
+      "sha256": "bfc4a8c7126ca438a4496594b74aa9ab813c75b20686f4cc9b493188e29d37e3"
+    },
+    {
+      "name": "013_locale_tags.sql",
+      "sha256": "fb1f45de7313f33f7b6f8803bb2d6c97ff168cdd9ff5e171cefb4c52f14e541f"
+    },
+    {
+      "name": "014_billing_cost_visibility.sql",
+      "sha256": "b8bea33b74c29854e3cbaf9aff7d3e9bf67db45fd75bf90e2b08cb4a0bef8665"
+    },
+    {
+      "name": "015_audit_visibility.sql",
+      "sha256": "35eea103e9e4d18eba28e093af6923f9228a01b06ddce240a3020faa0922dc44"
+    },
+    {
+      "name": "016_api_tokens.sql",
+      "sha256": "2cfd4e6cd3170594aff082cda128e33988c02852a599824a2a1171995cd6e4d0"
+    },
+    {
+      "name": "017_cli_reasoning.sql",
+      "sha256": "530769e7e970feb523f33604ad6ba30b7d441e21cfedb6959a8f8323dee27f55"
+    },
+    {
+      "name": "018_raffi_planning.sql",
+      "sha256": "e9ccc13a444f6eec9f1f03860be967d22cc137ba3f5533e1d67ddf0acc31b9bb"
+    },
+    {
+      "name": "019_research_requests.sql",
+      "sha256": "74ab96d77f01ca5f91c439d99d86740a47084b6ea46d6a846748e97c1a7f0446"
+    },
+    {
+      "name": "020_credit_quotes.sql",
+      "sha256": "d23a0f3bf458c52dc34fd80653bdd8fcc79219d5c80f0195d8d737ff78a5af92"
+    },
+    {
+      "name": "021_credit_purchases.sql",
+      "sha256": "d354474f5cbdb75c948a7ce12a4e13ad7ae419ebfb57544a09ef22a99add5895"
+    },
+    {
+      "name": "022_credit_payment_lifecycle.sql",
+      "sha256": "0f34bc6ee71ed1b5fc9773ba4898591faca99b4b201ea4649b5051f864e3a069"
+    },
+    {
+      "name": "023_time_savings.sql",
+      "sha256": "7a105a1a1d6d61fca317d767f67c9e672bc8e76b5e6c09a588ba4d189e2bf0a1"
+    },
+    {
+      "name": "024_notification_core.sql",
+      "sha256": "f39a37ec099fc7928edccafca189c07ed39717585deac81312cefb09a15f46cc"
+    },
+    {
+      "name": "025_coworker_evidence_growth.sql",
+      "sha256": "fc5f3e01ef93825e97bba21621ea834c4aba2622b9ac7504e2c872bd6b77f08e"
+    },
+    {
+      "name": "030_agent_style.sql",
+      "sha256": "4a4e43810abafe0e0331f263c348623e0bc6c3f7eaedea010ece1404b4097e6a"
+    },
+    {
+      "name": "031_chat_media.sql",
+      "sha256": "4403a1686045fe5a7ca2081ef57ebf136b7fd4cdd2a1f0768548dea240ab2a6c"
+    },
+    {
+      "name": "032_productivity_connectors.sql",
+      "sha256": "c125a2d8354ab62a5df92b8dea425392c449d85540ba5c52ce5a21a9de799ea1"
+    },
+    {
+      "name": "033_phone_mode.sql",
+      "sha256": "1c05526ab7c83660b4890bb978006697cd248fd7f997fdf90966828468662352"
+    },
+    {
+      "name": "034_unified_notifications.sql",
+      "sha256": "df29f5f056955d74098b6de470250cc8013e8b9e683be0ae75ad5d3e7412f717"
+    }
+  ],
+  "checksum_mismatches": [],
+  "unrecorded_in_ledger": [
+    "035_growth_metric_reads.sql",
+    "040_social_trend_intelligence.sql"
+  ]
+}

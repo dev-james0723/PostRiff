@@ -1,0 +1,10 @@
+{
+  "text": " Hi, this is Ravi. I'm your AI assistant. Say your 12-digit phone sign in code, one digit at a time, then pause. Or enter all 12 digits on your keypad and press star. Press hash to start over.",
+  "method": "offline cached Whisper tiny; not human audition",
+  "seconds": 12.9,
+  "phone_bytes": 103200,
+  "clipped_samples": 0,
+  "sha256": "d55a27719ad75fb026c47a8a9d5451b58126b45af79d874e1ce2c751c697f48c",
+  "channels": 1,
+  "review_sample_rate": 24000
+}

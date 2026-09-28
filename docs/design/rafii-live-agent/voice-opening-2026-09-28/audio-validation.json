@@ -1,0 +1,32 @@
+{
+  "dial-acceptance": {
+    "channels": 1,
+    "sample_rate": 24000,
+    "seconds": 5.9,
+    "peak": 16528,
+    "rms": 2651.62,
+    "clipped_samples": 0,
+    "phone_bytes": 47200,
+    "wav_header": "normalized from received frames locally; no regeneration"
+  },
+  "dial-inbound-retry": {
+    "channels": 1,
+    "sample_rate": 24000,
+    "seconds": 9.3,
+    "peak": 17612,
+    "rms": 2584.89,
+    "clipped_samples": 0,
+    "phone_bytes": 74400,
+    "wav_header": "normalized from received frames locally; no regeneration"
+  },
+  "dial-inbound": {
+    "channels": 1,
+    "sample_rate": 24000,
+    "seconds": 13.05,
+    "peak": 18406,
+    "rms": 2841.42,
+    "clipped_samples": 0,
+    "phone_bytes": 104400,
+    "wav_header": "normalized from received frames locally; no regeneration"
+  }
+}

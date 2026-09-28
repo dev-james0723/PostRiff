@@ -1,0 +1,4400 @@
+{
+  "execution": "synthetic_intercepted_browser",
+  "colorScheme": "dark",
+  "longContent": true,
+  "results": [
+    {
+      "name": "1440 flags off: zero trend requests",
+      "pass": true
+    },
+    {
+      "name": "1440 browse stored data only, authenticated contract",
+      "pass": true
+    },
+    {
+      "name": "1440 radar fits viewport",
+      "pass": true
+    },
+    {
+      "name": "1440 radar axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "1440 whitespace evidence disclosure axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "1440 supported sample and explicit forecast fits viewport",
+      "pass": true
+    },
+    {
+      "name": "1440 supported sample and explicit forecast axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "1440 synthetic Python-produced whitespace and forecast support, explicit toggle, exact table, separate observed series",
+      "pass": true
+    },
+    {
+      "name": "1440 expanded DNA and comparison fits viewport",
+      "pass": true
+    },
+    {
+      "name": "1440 expanded DNA and comparison axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "1440 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path",
+      "pass": true
+    },
+    {
+      "name": "meaningful 200ms motion; reduced motion removes it",
+      "pass": true
+    },
+    {
+      "name": "GSAP replays real geometry, uses six labelled colors, and cancels immediately for reduced motion",
+      "pass": true
+    },
+    {
+      "name": "1440 exact method windows units snapshots and seven independent fit dimensions",
+      "pass": true
+    },
+    {
+      "name": "1440 trust drawer axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "1440 reduced motion removes drawer transitions",
+      "pass": true
+    },
+    {
+      "name": "1440 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+      "pass": true
+    },
+    {
+      "name": "1440 insufficient calibration hides percentage",
+      "pass": true
+    },
+    {
+      "name": "1440 native language interpretation and evidence retained",
+      "pass": true
+    },
+    {
+      "name": "all section and filter queries preserved across navigation",
+      "pass": true
+    },
+    {
+      "name": "pagination and filter cursor reset preserve server contract",
+      "pass": true
+    },
+    {
+      "name": "watch persisted create + revision-safe disable",
+      "pass": true
+    },
+    {
+      "name": "accept opportunity into existing Ideas source, no generation",
+      "pass": true
+    },
+    {
+      "name": "empty exact filters and interval",
+      "pass": true
+    },
+    {
+      "name": "state loading",
+      "pass": true
+    },
+    {
+      "name": "state partial",
+      "pass": true
+    },
+    {
+      "name": "state collecting",
+      "pass": true
+    },
+    {
+      "name": "state unavailable",
+      "pass": true
+    },
+    {
+      "name": "state error",
+      "pass": true
+    },
+    {
+      "name": "state invalid",
+      "pass": true
+    },
+    {
+      "name": "state pending",
+      "pass": true
+    },
+    {
+      "name": "state expired",
+      "pass": true
+    },
+    {
+      "name": "state deleted",
+      "pass": true
+    },
+    {
+      "name": "state aggregate",
+      "pass": true
+    },
+    {
+      "name": "state low_confidence",
+      "pass": true
+    },
+    {
+      "name": "state opportunity_expired",
+      "pass": true
+    },
+    {
+      "name": "unreviewed question candidates remain proposed rather than claimed gaps",
+      "pass": true
+    },
+    {
+      "name": "forecast qualification error fails closed without a stale prediction",
+      "pass": true
+    },
+    {
+      "name": "receipt 410 removes card claims",
+      "pass": true
+    },
+    {
+      "name": "Lab populated diagnostics axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "Lab explicit check, user-fact guard, selective existing revision edit",
+      "pass": true
+    },
+    {
+      "name": "Lab existing editor axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "Lab stale-result race leaves changed draft untouched",
+      "pass": true
+    },
+    {
+      "name": "Lab absent server linkage stays unavailable",
+      "pass": true
+    },
+    {
+      "name": "1440 zero unexpected mutations/runtime errors",
+      "pass": true,
+      "detail": {
+        "externalBlocked": 0,
+        "consoleErrors": [
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A31.906Z",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A31.918Z",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A32.245Z",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A32.259Z",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/forecast",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 410 (Gone)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/receipts/synthetic-receipt",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          }
+        ],
+        "failedRequests": [
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/memory?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/saturation",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/saturation",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A26.479Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A28.117Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A29.764Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A31.013Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A31.518Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A31.906Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A32.581Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A32.930Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A33.328Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A34.954Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A35.430Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A36.728Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A37.664Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          }
+        ],
+        "expectedHttpFailures": [
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends",
+            "status": 503,
+            "code": "source_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends",
+            "status": 503,
+            "code": "source_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends",
+            "status": 400,
+            "code": "invalid_request"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends",
+            "status": 400,
+            "code": "invalid_request"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/forecast",
+            "status": 503,
+            "code": "source_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/synthetic-trend/receipts/synthetic-receipt",
+            "status": 410,
+            "code": "evidence_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "name": "768 flags off: zero trend requests",
+      "pass": true
+    },
+    {
+      "name": "768 browse stored data only, authenticated contract",
+      "pass": true
+    },
+    {
+      "name": "768 radar fits viewport",
+      "pass": true
+    },
+    {
+      "name": "768 radar axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 whitespace evidence disclosure axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 supported sample and explicit forecast fits viewport",
+      "pass": true
+    },
+    {
+      "name": "768 supported sample and explicit forecast axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 synthetic Python-produced whitespace and forecast support, explicit toggle, exact table, separate observed series",
+      "pass": true
+    },
+    {
+      "name": "768 expanded DNA and comparison fits viewport",
+      "pass": true
+    },
+    {
+      "name": "768 expanded DNA and comparison axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path",
+      "pass": true
+    },
+    {
+      "name": "768 exact method windows units snapshots and seven independent fit dimensions",
+      "pass": true
+    },
+    {
+      "name": "768 trust drawer axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 reduced motion removes drawer transitions",
+      "pass": true
+    },
+    {
+      "name": "768 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+      "pass": true
+    },
+    {
+      "name": "768 insufficient calibration hides percentage",
+      "pass": true
+    },
+    {
+      "name": "768 native language interpretation and evidence retained",
+      "pass": true
+    },
+    {
+      "name": "768 Lab fits viewport",
+      "pass": true
+    },
+    {
+      "name": "768 Lab populated diagnostics axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "200% browser-zoom-equivalent reflow: 768 physical pixels / 384 CSS pixels",
+      "pass": true
+    },
+    {
+      "name": "768 at 200% zoom fits viewport",
+      "pass": true
+    },
+    {
+      "name": "drawer at 200% zoom fits viewport",
+      "pass": true
+    },
+    {
+      "name": "200% zoom axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "768 zero unexpected mutations/runtime errors",
+      "pass": true,
+      "detail": {
+        "externalBlocked": 0,
+        "consoleErrors": [
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          }
+        ],
+        "failedRequests": [
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/channels?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A42.238Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/memory?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/account/profile?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/memory?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/account/profile?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/trends?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/library?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/memory?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/account/profile?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/analytics?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/members?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/roles?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/audit?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/brand?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/workspace/memory?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/account/profile?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A48.133Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/overview?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/ideas?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/automations?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          }
+        ],
+        "expectedHttpFailures": [
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "name": "390 flags off: zero trend requests",
+      "pass": true
+    },
+    {
+      "name": "390 browse stored data only, authenticated contract",
+      "pass": true
+    },
+    {
+      "name": "390 radar fits viewport",
+      "pass": true
+    },
+    {
+      "name": "390 mobile control hierarchy and 44px targets",
+      "pass": true
+    },
+    {
+      "name": "390 radar axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 whitespace evidence disclosure axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 supported sample and explicit forecast fits viewport",
+      "pass": true
+    },
+    {
+      "name": "390 supported sample and explicit forecast axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 synthetic Python-produced whitespace and forecast support, explicit toggle, exact table, separate observed series",
+      "pass": true
+    },
+    {
+      "name": "390 expanded DNA and comparison fits viewport",
+      "pass": true
+    },
+    {
+      "name": "390 expanded DNA and comparison axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path",
+      "pass": true
+    },
+    {
+      "name": "390 exact method windows units snapshots and seven independent fit dimensions",
+      "pass": true
+    },
+    {
+      "name": "390 trust drawer axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 reduced motion removes drawer transitions",
+      "pass": true
+    },
+    {
+      "name": "390 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+      "pass": true
+    },
+    {
+      "name": "390 insufficient calibration hides percentage",
+      "pass": true
+    },
+    {
+      "name": "390 native language interpretation and evidence retained",
+      "pass": true
+    },
+    {
+      "name": "390 Lab fits viewport",
+      "pass": true
+    },
+    {
+      "name": "390 Lab populated diagnostics axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "200% browser-zoom-equivalent reflow: 390 physical pixels / 195 CSS pixels",
+      "pass": true
+    },
+    {
+      "name": "390 at 200% zoom fits viewport",
+      "pass": true
+    },
+    {
+      "name": "drawer at 200% zoom fits viewport",
+      "pass": true
+    },
+    {
+      "name": "200% zoom axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "390 zero unexpected mutations/runtime errors",
+      "pass": true,
+      "detail": {
+        "externalBlocked": 0,
+        "consoleErrors": [
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          }
+        ],
+        "failedRequests": [
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A50.652Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A36%3A58.587Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          }
+        ],
+        "expectedHttpFailures": [
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "name": "430 flags off: zero trend requests",
+      "pass": true
+    },
+    {
+      "name": "430 browse stored data only, authenticated contract",
+      "pass": true
+    },
+    {
+      "name": "430 radar fits viewport",
+      "pass": true
+    },
+    {
+      "name": "430 mobile control hierarchy and 44px targets",
+      "pass": true
+    },
+    {
+      "name": "430 radar axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 whitespace evidence disclosure axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 supported sample and explicit forecast fits viewport",
+      "pass": true
+    },
+    {
+      "name": "430 supported sample and explicit forecast axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 synthetic Python-produced whitespace and forecast support, explicit toggle, exact table, separate observed series",
+      "pass": true
+    },
+    {
+      "name": "430 expanded DNA and comparison fits viewport",
+      "pass": true
+    },
+    {
+      "name": "430 expanded DNA and comparison axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path",
+      "pass": true
+    },
+    {
+      "name": "430 exact method windows units snapshots and seven independent fit dimensions",
+      "pass": true
+    },
+    {
+      "name": "430 trust drawer axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 reduced motion removes drawer transitions",
+      "pass": true
+    },
+    {
+      "name": "430 trust layers, native language, graph equivalent, focus trap/Escape/restore",
+      "pass": true
+    },
+    {
+      "name": "430 insufficient calibration hides percentage",
+      "pass": true
+    },
+    {
+      "name": "430 native language interpretation and evidence retained",
+      "pass": true
+    },
+    {
+      "name": "430 Lab fits viewport",
+      "pass": true
+    },
+    {
+      "name": "430 Lab populated diagnostics axe",
+      "pass": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "name": "430 zero unexpected mutations/runtime errors",
+      "pass": true,
+      "detail": {
+        "externalBlocked": 0,
+        "consoleErrors": [
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          },
+          {
+            "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "location": {
+              "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+              "line": 0,
+              "column": 0,
+              "lineNumber": 0,
+              "columnNumber": 0
+            }
+          }
+        ],
+        "failedRequests": [
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=je4k7BGL0ld1XZXZ",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A37%3A02.390Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=3WD-QtP-z6QVZymg",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/calendar?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/queue?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app/inbox?_rsc=itLCS_zoLmGw38wI",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends?limit=20&view=for_you&since=2026-09-21T05%3A37%3A07.180Z",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/coworker/trends/opportunities",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          },
+          {
+            "url": "http://127.0.0.1:3209/app?new=1&_rsc=2CkCP2_9WZzLmTlF",
+            "failure": {
+              "errorText": "net::ERR_ABORTED"
+            }
+          }
+        ],
+        "expectedHttpFailures": [
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          },
+          {
+            "path": "/api/workspaces/7be89518d0c54f04be66b6bb57b42d8c/phone",
+            "status": 404,
+            "code": "unrelated_fixture_unavailable"
+          }
+        ]
+      }
+    }
+  ]
+}

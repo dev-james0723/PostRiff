@@ -1,0 +1,43 @@
+{
+  "schema": "media.evidence-preservation.v1",
+  "purpose": "Byte-for-byte preservation of acknowledged receipts and small test logs; no implementation state upgrade.",
+  "artifacts": {
+    "media-core-receipt.json": {
+      "source": "/private/tmp/trend-media-jobs/receipt.json",
+      "bytes": 7739,
+      "sha256": "7ec31dc5572afe9b034ddc41718ccb9cda64ac59d85a81eaf35c8b17b39e1f5d"
+    },
+    "media-core-runtime.log": {
+      "source": "/private/tmp/trend-media-jobs/runtime.log",
+      "bytes": 137,
+      "sha256": "adddc0e81ecfe48e763c778bf0e0bcf06bc8dc545adba44e97671f200b8050aa"
+    },
+    "media-core-postgres.log": {
+      "source": "/private/tmp/trend-media-jobs/postgres.log",
+      "bytes": 6832,
+      "sha256": "fd9b0f9fdc18da8095e3e2217b49f2361c8da4f53a317c167868df97c98df7f3"
+    },
+    "media-http-receipt.json": {
+      "source": "/private/tmp/trend-media-http/receipt.json",
+      "bytes": 6815,
+      "sha256": "bb054f3e6cb77c671afdea56fa9f778d9fedfef6497cb6aa1bf459dd50ffaad3"
+    },
+    "media-http-portable.log": {
+      "source": "/private/tmp/trend-media-http/portable-final.log",
+      "bytes": 9713,
+      "sha256": "83ec0e4458e48834092a8ed5ce2aad589045d326a1731c3e31021fa1af16a6f6"
+    },
+    "media-http-regressions.log": {
+      "source": "/private/tmp/trend-media-http/existing-http-service.log",
+      "bytes": 122,
+      "sha256": "4281513b7eb2e755c6eb5ada4fc2fd5ef9af2a709b5bff5db76556c071e368ff"
+    }
+  },
+  "counts_overlap": "The51-test HTTP portable run includes the36-test core portable run. Do not add these counts as distinct tests.",
+  "source_hashes": "Captured before/after source and imported dependency hashes remain unchanged in the receipts. They describe their test-time snapshots, not later parent edits.",
+  "limitations": [
+    "Local PostgreSQL and locally generated media; grants/session verification/storage transports are explicit fixtures.",
+    "No production deployment or semantic qualification.",
+    "No large media fixtures copied."
+  ]
+}

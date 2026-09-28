@@ -1,0 +1,122 @@
+{
+  "captured_at": "2026-09-28T02:56:29.768404+00:00",
+  "execution_state": "pure_contract_tests_in_memory_sql_seam_actual_forecast_arithmetic",
+  "owned_files_sha256": {
+    "src/postriff_phase2/growth/trends/forecast_admission.py": "40135f75b3e8e8abfcba13e5bd4066e8a0082027c18b62cde9e628c7d9d0d544",
+    "tests/test_trend_forecast_admission.py": "894419d8fea3b319757d346192907040b3d2b669eec7c0a7a6b1e43cb0ce5692",
+    "src/postriff_phase2/growth/trends/forecast_evaluation.py": "ab81a55268bf8a5ba2bdd111ddb8d244a38b0e7dac198b0fa140c3884395f327",
+    "tests/test_trend_forecast_evaluation.py": "8595883635b45b29bea9c07cb7c372b44d82271206d7b284e52875ebd07f5d4f"
+  },
+  "source_guard_before": {
+    "src/postriff_phase2/growth/trends/forecast_admission.py": "40135f75b3e8e8abfcba13e5bd4066e8a0082027c18b62cde9e628c7d9d0d544",
+    "tests/test_trend_forecast_admission.py": "894419d8fea3b319757d346192907040b3d2b669eec7c0a7a6b1e43cb0ce5692",
+    "src/postriff_phase2/growth/trends/forecast_evaluation.py": "ab81a55268bf8a5ba2bdd111ddb8d244a38b0e7dac198b0fa140c3884395f327",
+    "tests/test_trend_forecast_evaluation.py": "8595883635b45b29bea9c07cb7c372b44d82271206d7b284e52875ebd07f5d4f",
+    "src/postriff_phase2/growth/trends/forecast.py": "cd70dcfe71f081d1f763e2bd88116c4e340338a6c97253188e8d3ca4466b2f77",
+    "src/postriff_phase2/growth/trends/context.py": "422bf44360bf73d4ffc4ef6c4327564169ae6030ad5abe2917393b8785f4be12",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "src/postriff_phase2/growth/trends/store.py": "7c989e2fae4ade8685ac29a915bae30851e9838c992d18d3ab0d7846b54ad6c1",
+    "src/postriff_phase2/growth/trends/config.py": "e20219b5f292d2855d9d1de95b44dc54016f8a5c1f905d7e47998f1178df30d9",
+    "src/postriff_phase2/growth/trends/pipeline.py": "0e2dc9a4d8d9899092017af3c1ee0682890be246cda53f0534cdddd3e5c422f9",
+    "tests/test_trend_forecast.py": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92"
+  },
+  "source_guard_after": {
+    "src/postriff_phase2/growth/trends/forecast_admission.py": "40135f75b3e8e8abfcba13e5bd4066e8a0082027c18b62cde9e628c7d9d0d544",
+    "tests/test_trend_forecast_admission.py": "894419d8fea3b319757d346192907040b3d2b669eec7c0a7a6b1e43cb0ce5692",
+    "src/postriff_phase2/growth/trends/forecast_evaluation.py": "ab81a55268bf8a5ba2bdd111ddb8d244a38b0e7dac198b0fa140c3884395f327",
+    "tests/test_trend_forecast_evaluation.py": "8595883635b45b29bea9c07cb7c372b44d82271206d7b284e52875ebd07f5d4f",
+    "src/postriff_phase2/growth/trends/forecast.py": "cd70dcfe71f081d1f763e2bd88116c4e340338a6c97253188e8d3ca4466b2f77",
+    "src/postriff_phase2/growth/trends/context.py": "422bf44360bf73d4ffc4ef6c4327564169ae6030ad5abe2917393b8785f4be12",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "src/postriff_phase2/growth/trends/store.py": "7c989e2fae4ade8685ac29a915bae30851e9838c992d18d3ab0d7846b54ad6c1",
+    "src/postriff_phase2/growth/trends/config.py": "e20219b5f292d2855d9d1de95b44dc54016f8a5c1f905d7e47998f1178df30d9",
+    "src/postriff_phase2/growth/trends/pipeline.py": "0e2dc9a4d8d9899092017af3c1ee0682890be246cda53f0534cdddd3e5c422f9",
+    "tests/test_trend_forecast.py": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92"
+  },
+  "source_guard_unchanged": true,
+  "validation": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest test_trend_forecast_admission test_trend_forecast_evaluation -v",
+    "tests": 47,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "seconds": 3.9573,
+    "log": "/private/tmp/trend-forecast-admission-evaluation-validation.log",
+    "log_sha256": "f8f2330b6af8d05e4c45e292d0f71e243c525265996bf06d429614a5d94c6bcc",
+    "postgres": "not_run; requires coordinated 55438 slot",
+    "provider_model_calls": 0,
+    "database_calls": 0
+  },
+  "prior_admission_receipt": {
+    "path": "/private/tmp/trend-forecast-admission-validation.json",
+    "sha256": "d1b40b521f5bfc3ac58ff314c4dd47319e341522051022415fd3999c3ad37376",
+    "superseded_reason": "Explicit scoped unfreeze for 1000-source chunked document bindings; old evidence preserved"
+  },
+  "frozen_forecast_receipt": {
+    "path": "/private/tmp/trend-forecast-validation.json",
+    "sha256": "7395757196f52149e89f071b2e93d65c449a7b94835fcf4ce4e533bee21dbb08"
+  },
+  "frozen_forecast_unchanged": true,
+  "admission_method_descriptor": {
+    "method_id": "trend.forecast.admission",
+    "method_version": "admission-4107205f494552df",
+    "artifact_digest": "4107205f494552df4a6171506cee653b7ca969854226a722ff9d0e48ce7ae6ac",
+    "config": {
+      "forecast_admission": {
+        "state": "production",
+        "role": "admission",
+        "runtime_digest": "4107205f494552df4a6171506cee653b7ca969854226a722ff9d0e48ce7ae6ac"
+      }
+    }
+  },
+  "evaluation_method_descriptor": {
+    "method_id": "trend.forecast.evaluation",
+    "method_version": "evaluation-c19e32ff85ad9ffb",
+    "artifact_digest": "c19e32ff85ad9ffb1dcb40bf24b5a3014c8aecfb605d36f938fce69329989c85",
+    "config": {
+      "forecast_admission": {
+        "state": "production",
+        "role": "evaluation",
+        "runtime_digest": "4107205f494552df4a6171506cee653b7ca969854226a722ff9d0e48ce7ae6ac",
+        "evidence_class": "retained_observed_data",
+        "allowed_access_methods": []
+      }
+    }
+  },
+  "interfaces": [
+    "ForecastAdmission(store, *, values=None).admit(workspace_id, actor_id, *, candidate, evaluation, review, cursor)",
+    "ForecastAdmission.persist(same arguments)",
+    "ForecastAdmission.read(workspace_id, actor_id, object_id, *, revision, cursor)",
+    "ForecastEvaluation(store, *, values=None).evaluate(workspace_id, actor_id, prereg_ref, candidate_refs, *, cursor)"
+  ],
+  "document_contract": {
+    "document": "{artifact: unchanged prediction/report, source_bindings: full exact refs, manifest_digest: digest excluding itself}",
+    "root": "prediction_ref/report_ref == source_bindings_ref == {manifest_id,document_digest}; no inline bindings",
+    "legacy": "inline source_bindings plus two-key {artifact,manifest_digest} document remains accepted",
+    "hydration": "Authenticated current same-scope ancestor required; full chunk/storage/document digests and full binding shape validated; memory-only, never truncated or public"
+  },
+  "bounds": {
+    "root_bytes": 65536,
+    "document_bytes": 8000000,
+    "chunks": 512,
+    "candidate_and_evaluation_sources": 1000,
+    "admission_sources": 996,
+    "admission_subject_dependencies": 4,
+    "evaluation_candidates": 32
+  },
+  "evaluation_contract": "Operator-only durable rolling evaluation from current stored forecast histories.\n\nForecastEvaluation(store, values=...).evaluate(wid, actor, prereg_ref,\ncandidate_refs, cursor=authenticated_cursor) creates no jobs or approvals.\nThe output is always unqualified; review/admission remains a separate action.\n\nIn addition to forecast_admission's preregistration contract, the preregistration\npayload must contain evaluation_plan with target, method_bundle, origins,\nholdout_episode_ids, excluded_training_episode_ids, holdout_group_ids,\nevaluation_cutoff and candidate_selection. Selection is either\n{candidate_refs:[{object_id,revision}]} or\n{slots:[{trend_id,target_start,target_digest,cohort,horizon_steps,bin_hours}]}; all declared slots must be present exactly\nonce. This permits planning before future opaque candidate IDs exist without\nallowing an operator to supply arbitrary history. The plan's target, method and\norigin/group split must match the preregistered digests. Candidate histories\nmerge only identical measurements/labels/source refs, retaining the earliest\nproven availability and earliest expiry. Conflicting measurements fail closed.\n\nThe method_descriptor is a registration candidate, never a promotion. Its\nregistry row must already be qualified, with an explicit production release,\nretained_observed_data evidence class and reviewed allowed_access_methods.\nNo request parameter can set fixture=False or provide sources/window values.\n",
+  "acceptance_evidence": [
+    "Actual rolling-origin arithmetic on 1000 synthetic current-store source records, 70 windows, 10 paired outcomes; all 1000 references retained in full report document and source DAG via selected candidates; no forecast promotion",
+    "Tampered binding list with recomputed chunk/storage hashes still rejected against sealed document digest",
+    "Missing/null/foreign/mismatched references, omitted binding document, duplicate/malformed/foreign-workspace/excess bindings, oversized root and absent DAG ancestor rejected",
+    "Legacy inline and chunked paths both replay; source bindings not copied into public output or persisted source root",
+    "Complete preregistered slots or exact refs required; missing slots explicit with no scoring/writes; no arbitrary caller history/fixture=False input",
+    "Current registry, actor, reviewed provenance, source policy/rights, receipt verification and retry validity gates tested via synthetic SQL seam"
+  ],
+  "limitations": [
+    "No real PostgreSQL/RLS/concurrency acceptance for these two new modules yet",
+    "No real external data qualification, production method promotion or M3 completion",
+    "Current lock_dependencies requires editor/owner; adapter read remains conservative",
+    "Parent owns producer/service integration and separately reviewed preregistration/qualification records"
+  ]
+}

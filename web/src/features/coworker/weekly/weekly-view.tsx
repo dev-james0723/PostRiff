@@ -17,6 +17,7 @@ import type { Recipe, Slot, Week } from '@/lib/coworker/types';
 import { cn } from '@/lib/utils';
 import { dayLabel, nextAction, summarizeSlots, weekStateLabel, type NextAction } from '../present';
 import { QueryProblem, ToneChip, WhyRafiiExplainer } from '../parts';
+import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
 import { OpportunitiesPanel } from './opportunities-panel';
 import { RecipeForm, RecipeSummary } from './recipe-form';
 import { SlotCard } from './slot-card';
@@ -193,6 +194,7 @@ export function WeeklyView() {
                   focusSlot={focusSlot}
                 />
               )}
+              <WorkspaceOpportunityPreview pool='weekly' />
               <WhyRafiiExplainer />
               <p className='text-muted-foreground text-xs'>
                 Voice, brand and strategy notes that shape these drafts are in{' '}

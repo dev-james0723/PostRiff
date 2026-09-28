@@ -252,7 +252,7 @@ class WebhookAndPushTest(unittest.TestCase):
 
 class RegistryGateTest(unittest.TestCase):
     def test_probe_workflows_must_be_entered_by_production_code(self):
-        self.assertEqual(skill_registry.production_workflows(), {"rafii-weekly-operator", "rafii-source-to-campaign", "rafii-engagement-triage"})
+        self.assertEqual(skill_registry.production_workflows(), {"rafii-weekly-operator", "rafii-source-to-campaign", "rafii-engagement-triage", "rafii-trend-intelligence"})
 
     def test_product_copy_is_scanned_for_one_persons_examples(self):
         with tempfile.TemporaryDirectory() as root:

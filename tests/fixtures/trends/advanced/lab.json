@@ -1,0 +1,120 @@
+{
+  "scope_key": "sample",
+  "decision_cutoff": "2026-09-27T00:00:00Z",
+  "workspace_id": "workspace_a",
+  "sources": [
+    {
+      "source_id": "s0",
+      "canonical_id": "c0",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author0",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 0 真係 useful！"
+    },
+    {
+      "source_id": "s1",
+      "canonical_id": "c1",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author1",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 1 真係 useful！"
+    },
+    {
+      "source_id": "s2",
+      "canonical_id": "c2",
+      "scope_key": "sample",
+      "platform": "bluesky",
+      "language": "yue",
+      "creator_key": "author2",
+      "original": true,
+      "event_at": "2026-09-26T12:00:00Z",
+      "available_at": "2026-09-26T12:00:00Z",
+      "rights": {
+        "analysis": true,
+        "creative": true,
+        "display": true
+      },
+      "text": "原文 2 真係 useful！"
+    }
+  ],
+  "target_platform": "bluesky",
+  "idempotency_key": "fixture_key",
+  "draft": {
+    "id": "draft_a",
+    "revision": 1,
+    "workspace_id": "workspace_a",
+    "saved": true,
+    "text": "Try this useful example. Explain the limits.",
+    "allowed_platforms": [
+      "bluesky"
+    ]
+  },
+  "context": {
+    "revision": "brand_1",
+    "workspace_id": "workspace_a",
+    "approved_user_fact_refs": []
+  },
+  "receipt": {
+    "id": "receipt_a",
+    "scope_key": "sample",
+    "verification_state": "verified",
+    "expires_at": "2026-09-28T00:00:00Z",
+    "available_at": "2026-09-26T12:00:00Z",
+    "evidence_refs": [
+      "s0"
+    ]
+  },
+  "opportunity": {
+    "id": "opp_a",
+    "revision": 1,
+    "workspace_id": "workspace_a",
+    "draft_id": "draft_a",
+    "context_revision": "brand_1",
+    "trust_receipt_id": "receipt_a",
+    "verification_state": "verified",
+    "expires_at": "2026-09-28T00:00:00Z",
+    "available_at": "2026-09-26T12:00:00Z",
+    "evidence_refs": [
+      "s0"
+    ],
+    "allowed_platforms": [
+      "bluesky"
+    ]
+  },
+  "findings": [
+    {
+      "dimension": "hook_crowding",
+      "assessment": "concern",
+      "claim": "Repeated opening in the supplied sample.",
+      "comparison_frame": "sample_yue_v1",
+      "evidence_refs": [
+        "s0"
+      ],
+      "available_at": "2026-09-26T12:00:00Z",
+      "suggested_edit": {
+        "id": "edit_a",
+        "before": "Try this useful example.",
+        "after": "Explore a practical question.",
+        "reason": "Use a different opening."
+      }
+    }
+  ]
+}

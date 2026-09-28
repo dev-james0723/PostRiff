@@ -1,0 +1,89 @@
+{
+  "execution": "local_production_ui_with_synthetic_intercepted_apis",
+  "baseline": "790e0d436306e428e11034cc69594d16843bae7d",
+  "branch": "codex/trend-visual-intelligence",
+  "production_build": "passed normal npm run build; no webpack/font mocks/config overrides",
+  "typecheck": "passed npm run typecheck -- --incremental false",
+  "lint": "0 warnings; 0 errors; 828 files",
+  "offline_tests": 15,
+  "strict_contract": "passed",
+  "viewports": [
+    [
+      1440,
+      900
+    ],
+    [
+      768,
+      1024
+    ],
+    [
+      390,
+      844
+    ],
+    [
+      430,
+      932
+    ]
+  ],
+  "browser_configurations": [
+    {
+      "configuration": "light",
+      "assertion_groups": 90,
+      "axe_runs": 18,
+      "axe_violations": 0,
+      "runtime_errors": 0,
+      "unexpected_mutations": 0,
+      "transport_failures": {
+        "net::ERR_ABORTED": 353
+      },
+      "fixture_http_responses": {
+        "404 unrelated_fixture_unavailable": 64,
+        "503 source_unavailable": 2,
+        "400 invalid_request": 2,
+        "410 evidence_unavailable": 1
+      },
+      "external_requests": 0
+    },
+    {
+      "configuration": "dark-long",
+      "assertion_groups": 90,
+      "axe_runs": 18,
+      "axe_violations": 0,
+      "runtime_errors": 0,
+      "unexpected_mutations": 0,
+      "transport_failures": {
+        "net::ERR_ABORTED": 405
+      },
+      "fixture_http_responses": {
+        "404 unrelated_fixture_unavailable": 67,
+        "503 source_unavailable": 2,
+        "400 invalid_request": 2,
+        "410 evidence_unavailable": 1
+      },
+      "external_requests": 0
+    }
+  ],
+  "source_sha256": {
+    "web/src/features/trends/trends-view.tsx": "3c3bb291c8a0e39b9e011ede24651192e94f00595c68eb5424ed297980ba7c24",
+    "web/src/features/trends/visual-intelligence.tsx": "143cc92c60544176ffe885072ddbbb9f1277635912c9255edf1090596e0262ff",
+    "web/src/features/trends/visual-intelligence.css": "b4761a680a8f0988444096cedd886e91c0a8f494686fa844049541e8e25fe1a1",
+    "web/src/features/trends/visual-model.ts": "dc3861dcd556cf2693b2c00a01feabfdf0f91320feb786aaa2c36823e33f0dd4",
+    "web/src/features/trends/visual-events.ts": "d21ef843ce97b047b64552c199707242bfe029dd641a73fbf45d7cbfeadfaf25",
+    "web/src/features/trends/trend-dna.tsx": "9398da4de18db7a6d2cfbfb757f26e7e1614a3b063fd586289110106f89514c3",
+    "web/src/features/trends/momentum-curve.tsx": "e8b5af8bb1a64d7c7929d3ad6e03022112da00ac4edab39350c1c57f252f6598",
+    "web/tests/visual-intelligence.test.cjs": "c2419a46360a5689e337b94d1fb7a8b68ace93808361be0368d06fed1e1a8091",
+    "web/tests/visual-intelligence-browser.cjs": "0473b617e56e84f26224b65b9c1f44ffe292f365e775c453ce7ef7b8d16003ec",
+    "web/tests/trend-fixtures.cjs": "bfebef6158f3b05b299ac787b1ea96ba6c6efeb7075bec5a1b3e1214b988818b"
+  },
+  "provider_or_model_execution": false,
+  "deployment": false,
+  "backend_integration": "validation_unavailable: service/http/pipeline/opportunity implementations are uncommitted in parent checkout and absent from baseline",
+  "zoom": "200 percent reflow equivalent: 384x512 CSS viewport at device scale 2 from 768x1024; not physical browser toolbar zoom",
+  "runtime": {
+    "node": "v25.9.0",
+    "next": "16.3.5",
+    "react": "19.2.4"
+  },
+  "usage_and_cost": "unknown; no provider counters",
+  "raw_screenshot_manifest": "screenshot-manifest.json"
+}

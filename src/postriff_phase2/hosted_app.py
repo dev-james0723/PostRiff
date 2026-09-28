@@ -560,6 +560,8 @@ class HostedApplication:
                 if repository is not None:   # flag-independent: a failed disconnect purge is retried even after a rollback
                     from .growth.history_import import sweep_pending_purges
                     result['historyPurges'] = sweep_pending_purges(repository.connection_factory)
+                from .growth.trends.worker import cron as trend_cron
+                result['trends'] = trend_cron(service)
                 ideas = getattr(service, 'ideas', None)
                 if ideas is not None:
                     site_agent = getattr(service, 'site_agent', None)

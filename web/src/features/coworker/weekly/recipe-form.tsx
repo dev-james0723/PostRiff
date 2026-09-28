@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Band, FIELD_CLASS, Panel, SelectField, TEXTAREA_CLASS } from '@/features/workspace/rafii-parts';
-import { useChannels, useModels } from '@/lib/api/hooks';
+import { useChannels, useModels, useSnapshot } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/coworker/api';
 import { useRecipeStatus, useSaveRecipe } from '@/lib/coworker/hooks';
 import type { Recipe, RecipeInput } from '@/lib/coworker/types';
@@ -76,7 +77,8 @@ function initial(recipe: Recipe | null, channelIds: string[]) {
     voiceMode: recipe?.voiceMode ?? 'neutral',
     expectImages: recipe?.expectImages ?? false,
     budgetUsd: String(((recipe?.maxCostUsdMicroPerWeek ?? 2_000_000) / 1_000_000).toFixed(2)),
-    model: recipe?.model ?? ''
+    model: recipe?.model ?? '',
+    sourceIds: recipe?.sourceIds ?? []
   };
 }
 
@@ -86,6 +88,12 @@ function initial(recipe: Recipe | null, channelIds: string[]) {
  */
 export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null; isOwner: boolean; onSaved?: (recipe: Recipe) => void }) {
   const channels = useChannels();
+  const snapshot = useSnapshot();
+  const params = useSearchParams();
+  const requestedSource = params.get('source');
+  const requested = snapshot.data?.state.sources?.find((s) => s.id === requestedSource && s.active);
+  const lineage = requested?.origin?.trendLineage;
+  const currentSource = requested && lineage && Date.parse(lineage.expires_at) > Date.now() ? requested : null;
   const models = useModels();
   const save = useSaveRecipe();
   const status = useRecipeStatus();
@@ -133,7 +141,9 @@ export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null
       expectImages: form.expectImages,
       useResearch: recipe?.useResearch ?? false,
       maxCostUsdMicroPerWeek: Math.round(budget * 1_000_000),
-      model: form.model || null
+      model: form.model || null,
+      sourceIds: form.sourceIds,
+      campaignIds: recipe?.campaignIds ?? []
     };
     try {
       const result = await save.mutateAsync({ recipeId: recipe?.id, values });
@@ -215,6 +225,20 @@ export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null
           <Textarea id={`${uid}-goals`} aria-describedby={`${uid}-goals-hint`} value={form.goals} rows={3} onChange={(e) => setForm((f) => ({ ...f, goals: e.target.value }))} placeholder={'Fill the autumn workshop\nShow how we make things by hand'} className={TEXTAREA_CLASS} />
         </div>
 
+        {(form.sourceIds.length > 0 || requestedSource) && (
+          <fieldset className='flex flex-col gap-2 text-sm'>
+            <legend className='font-medium'>Sources for this plan</legend>
+            <p>Only matching destinations use a trend source. Its facts and receipt must still be current when a week is prepared.</p>
+            {Array.from(new Set([...form.sourceIds, ...(currentSource ? [currentSource.id] : [])])).map((id) => (
+              <Label key={id} className='flex min-h-11 items-center gap-3'>
+                <Checkbox checked={form.sourceIds.includes(id)} onCheckedChange={(checked) => setForm((f) => ({ ...f, sourceIds: checked === true ? [...new Set([...f.sourceIds, id])] : f.sourceIds.filter((s) => s !== id) }))} />
+                {snapshot.data?.state.sources?.find((s) => s.id === id)?.title ?? 'Previously selected source'}
+              </Label>
+            ))}
+            {requestedSource && !currentSource && <p role='status'>This trend source is unavailable or expired. Return to Trends for a fresh opportunity.</p>}
+            <p>Review the source selection and save the plan to keep it. Saving drafts nothing.</p>
+          </fieldset>
+        )}
         <fieldset className='flex flex-col gap-2'>
           <legend className='text-foreground mb-2 text-sm font-medium'>Accounts and posts per week</legend>
           {channels.isPending && <StateMessage kind='loading' layout='inline' title='Loading accounts…' />}

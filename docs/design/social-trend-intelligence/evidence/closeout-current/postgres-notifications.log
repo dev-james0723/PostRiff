@@ -1,0 +1,16 @@
+test_real_manifest_binding_and_opportunity_revision_are_current (test_trend_notifications.NotificationPostgres.test_real_manifest_binding_and_opportunity_revision_are_current) ... ok
+test_real_membership_and_tenant_isolation (test_trend_notifications.NotificationPostgres.test_real_membership_and_tenant_isolation) ... ok
+test_real_policy_revocation_cancels_retry_before_transport (test_trend_notifications.NotificationPostgres.test_real_policy_revocation_cancels_retry_before_transport) ... ok
+test_real_preferences_quiet_hours_and_current_opt_out (test_trend_notifications.NotificationPostgres.test_real_preferences_quiet_hours_and_current_opt_out) ... ok
+test_real_reserved_cursor_isolation_generation_and_atomic_rollback_without003 (test_trend_notifications.NotificationPostgres.test_real_reserved_cursor_isolation_generation_and_atomic_rollback_without003) ... ok
+test_real_sweep_commit_duplicate_and_safe_in_app_delivery (test_trend_notifications.NotificationPostgres.test_real_sweep_commit_duplicate_and_safe_in_app_delivery) ... ok
+test_real_tick_advances_ineligible_catalogue_and_wraps_without_duplicates (test_trend_notifications.NotificationPostgres.test_real_tick_advances_ineligible_catalogue_and_wraps_without_duplicates) ... ok
+test_real_watch_revision_and_disable_cancel_delivery (test_trend_notifications.NotificationPostgres.test_real_watch_revision_and_disable_cancel_delivery) ... ok
+test_real_pipeline_receipt_dag_compose_then_source_loss_and_tenant_isolation (test_trend_platform_states.PlatformStatesPostgres.test_real_pipeline_receipt_dag_compose_then_source_loss_and_tenant_isolation) ... ok
+test_real_plain_manifest_mismatch_omits_link (test_trend_platform_states.PlatformStatesPostgres.test_real_plain_manifest_mismatch_omits_link) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 9.366s
+
+OK
+{"execution": "real_disposable_PostgreSQL_synthetic_inputs", "tests_run": 10, "failures": 0, "errors": 0, "skipped": 0, "drifted_files": [], "success": true}

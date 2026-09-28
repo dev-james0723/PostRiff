@@ -1,0 +1,206 @@
+{
+  "schema_version": "1.0",
+  "status": "VERIFIED_LOCAL_WP16",
+  "scope": "Canonical Lab saved-text repair and additive private visible exposure/dismiss integration",
+  "baseline_runtime_ui_sha256": "1a6630acb02851b49772524929d234ce2c1a868fdf78bb9a608bc455e152070c",
+  "current_ui_files_json_sha256": "62a11e2d7e21dbef1d01163702718d48573767ed8045f7131df43c2cc2e57129",
+  "hash_format": "SHA-256 of sorted compact JSON mapping runtime paths to SHA-256; includes new opportunity-exposure.ts",
+  "runtime_files": {
+    "web/src/app/app/trends/page.tsx": "0b427a9c0d2b1782b832558988f77450b53be74d8563fdfd3d76deef76d0fbd6",
+    "web/src/features/coworker/nav.ts": "f666b69cf316c334316a303435389d740e3645857b4d0a4228b8a4ea7a148353",
+    "web/src/features/pipeline/edit-draft-dialog.tsx": "b164943b8b7924ac892424e2aaa7fde2c636e2e8019428307493bb2e57ea0b35",
+    "web/src/features/trends/api.ts": "41f81ca74937516798f9cfeff9e15c6517f1ebbdd92b525ea7f48c0b388ae2c6",
+    "web/src/features/trends/creator-language.ts": "e0e69c359329656035aeef624e81371ed69c1c99a79cb17613dc9b0b18e0fac7",
+    "web/src/features/trends/disclosure.tsx": "aad81c24f2a3439742e0b66b30f25aece04a9198763a1ea35cc152159d573388",
+    "web/src/features/trends/fit-details.tsx": "1aec3dc0726c29f875f3933fe4aef953ba1eae5b56ae93f97939cef87f7dbb7d",
+    "web/src/features/trends/hooks.ts": "68411f166d9d6c87bf9ce47f614e410c429bc2172fa306e2850f0f54647b8525",
+    "web/src/features/trends/lab-contract.ts": "534f3133edb5a1329dd0b5d9b16a19632417cc340d3a5ea0fe919a9e82af8064",
+    "web/src/features/trends/lab-panel.tsx": "b4a2425e5b2c9073b5e242ffa700a69c6f792731b06a5c460a54450aec589dd3",
+    "web/src/features/trends/opportunity-card.tsx": "9034fb88a8e302ea9e88e708992a7a8531ca3fa8e84340b7f428f7f7922ce02d",
+    "web/src/features/trends/present.tsx": "4a07272a2bf7c6c8d09e71af7120ee6550ee064c37a7b301e376fdb40cb8d529",
+    "web/src/features/trends/signal-summary.tsx": "6f83f66a0b8e02554001533b3871cae9f9c84429310fd58050b181f6e872f07a",
+    "web/src/features/trends/trends-view.tsx": "c7a793173121b2d7ad2042e269fca0bea00b5cd2d7a8e944b7fd3e785396cb44",
+    "web/src/features/trends/trends.css": "c2ad410625203edfa128535f6f34044080a082f4e3634a1453b35d0410e269f9",
+    "web/src/features/trends/trust-contract.ts": "9c0387bc99e03621e6f3fc00fb7487b1437353b25f0e3d0887597eab42f56d7e",
+    "web/src/features/trends/trust-drawer.tsx": "d42e57fe696cae7dfae136885836438a78a50d39b73c8ea330e292970ed1bfc8",
+    "web/src/features/trends/watches.tsx": "cf0d118c6b9257f0c0d13c3dfb558635867621a158596d5d9e3e29924c868ec2",
+    "web/src/lib/coworker/trend-types.ts": "1828114013abb359162ceeeb4b1e1cf171a82bf8748beff53d110682f0583dfd",
+    "web/src/features/trends/opportunity-exposure.ts": "ae8d0a775d355365da7e0f7eca1cc0d1c7e65eb1bbcc94a4404fe79719db8f67"
+  },
+  "runtime_delta": {
+    "web/src/features/pipeline/edit-draft-dialog.tsx": {
+      "before": "3016c5b95f88d95c7d3865a87c85142a8d2e61d31048e3fef4619e9cf114be3a",
+      "after": "b164943b8b7924ac892424e2aaa7fde2c636e2e8019428307493bb2e57ea0b35"
+    },
+    "web/src/features/trends/api.ts": {
+      "before": "f77cfa6661028ff6d279cf34857f1c09b8d476fff755451f551dbdd5862db448",
+      "after": "41f81ca74937516798f9cfeff9e15c6517f1ebbdd92b525ea7f48c0b388ae2c6"
+    },
+    "web/src/features/trends/opportunity-card.tsx": {
+      "before": "a93a40cc58e91dc80be7441fa7b1367ba69c0649317d6134f72170698bfe64ba",
+      "after": "9034fb88a8e302ea9e88e708992a7a8531ca3fa8e84340b7f428f7f7922ce02d"
+    },
+    "web/src/features/trends/trends-view.tsx": {
+      "before": "578d7a1848b4e5b5f331d86ff51281e2f3d6eeaa96e1f65a83f70925b4303fcc",
+      "after": "c7a793173121b2d7ad2042e269fca0bea00b5cd2d7a8e944b7fd3e785396cb44"
+    },
+    "web/src/lib/coworker/trend-types.ts": {
+      "before": "769ff475769498f4596344ce5e35318b958a048116ada6213316ac31dbe342a1",
+      "after": "1828114013abb359162ceeeb4b1e1cf171a82bf8748beff53d110682f0583dfd"
+    },
+    "web/src/features/trends/opportunity-exposure.ts": {
+      "before": null,
+      "after": "ae8d0a775d355365da7e0f7eca1cc0d1c7e65eb1bbcc94a4404fe79719db8f67"
+    }
+  },
+  "files": {
+    "web/src/features/pipeline/edit-draft-dialog.tsx": "b164943b8b7924ac892424e2aaa7fde2c636e2e8019428307493bb2e57ea0b35",
+    "web/src/features/trends/opportunity-exposure.ts": "ae8d0a775d355365da7e0f7eca1cc0d1c7e65eb1bbcc94a4404fe79719db8f67",
+    "web/src/features/trends/opportunity-card.tsx": "9034fb88a8e302ea9e88e708992a7a8531ca3fa8e84340b7f428f7f7922ce02d",
+    "web/src/features/trends/trends-view.tsx": "c7a793173121b2d7ad2042e269fca0bea00b5cd2d7a8e944b7fd3e785396cb44",
+    "web/src/features/trends/api.ts": "41f81ca74937516798f9cfeff9e15c6517f1ebbdd92b525ea7f48c0b388ae2c6",
+    "web/src/lib/coworker/trend-types.ts": "1828114013abb359162ceeeb4b1e1cf171a82bf8748beff53d110682f0583dfd",
+    "web/src/features/trends/CONTRACT.md": "c161c55cd9e2b9199b6c6e437048ec5c2bb3f77423e849e98c4622b6179d19d6",
+    "docs/design/social-trend-intelligence/api.schema.json": "9e5646904e1ab40bfceb8ed275ca788afe2dc8fd1adf553733932107ff6fb4a6",
+    "web/tests/trend-contract.cjs": "6812e6b0ac69dbe71b53ce159267630d26894181b0b974184c6968b522109075",
+    "web/tests/trend-exposure-browser.cjs": "86110ebb64f1dacbbfc8b40f42210033179846397832dc0d811a25b2f9317bd5",
+    "web/tests/trend-live-api-browser.cjs": "cea84e5ebb4baf468012ea80f768e3ba50908540a849f96b4ca24592bfe8efe7",
+    "tests/phase2/seed_trend_browser.py": "e6e47da1420e714fcbe99ee2ee8b15ad3b97dc645fbe8775718caadd55188cd2",
+    "scripts/trend_browser.py": "b101f7974f50f29d599176bec0cfbb0ff0deabed7dee795d70e81907b2f8330a"
+  },
+  "backend_service_sha256": "0f1e2d32a1b2be403f23f46d0d7540283d83e2d61428156cfa70a50ba3ded44b",
+  "frontend_build": {
+    "dist": ".next-trend-live",
+    "reused": false,
+    "build_id": "9L4H7Tr2d3wlBYey8pBmN",
+    "api_origin": "http://127.0.0.1:4458"
+  },
+  "real_api": {
+    "checks": 46,
+    "widths": [
+      1440,
+      390
+    ],
+    "trend_api_interception": false,
+    "harness": "/private/tmp/trend-wp16-final-r2/harness-result.json",
+    "browser": "/private/tmp/trend-wp16-final-r2/browser-results.json",
+    "build_log": "/private/tmp/trend-wp16-final-r2/build.log",
+    "seed": "Explicit synthetic identity, observations, destination and saved Lab draft; actual stored service, PostgreSQL, permissions, receipt, exposure, decision and variant_edit"
+  },
+  "synthetic_browser": {
+    "checks": 30,
+    "widths": [
+      1440,
+      390
+    ],
+    "execution": "explicit_synthetic_api_and_visibility_fixture",
+    "native_intersection_observer": true,
+    "results": "/private/tmp/trend-exposure-fixture-receipt/results.json",
+    "accessibility": "axe serious/critical zero, keyboard dismissal/focus, no horizontal overflow, reduced motion"
+  },
+  "commands": [
+    "PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 /private/tmp/rafii-release-venv/bin/python scripts/trend_browser.py --out /private/tmp/trend-wp16-final-r2",
+    "npm run build -- --webpack (harness: POSTRIFF_DIST_DIR=.next-trend-live POSTRIFF_API_ORIGIN=http://127.0.0.1:4458 POSTRIFF_DEV_SSR=1; no mocked fonts)",
+    "TREND_WEB_URL=http://127.0.0.1:3198 TREND_EVIDENCE_DIR=/private/tmp/trend-exposure-fixture-receipt node web/tests/trend-exposure-browser.cjs",
+    "node web/tests/trend-contract.cjs",
+    "web/node_modules/.bin/oxlint web/src/features/trends/opportunity-exposure.ts web/src/features/trends/opportunity-card.tsx web/src/features/trends/trends-view.tsx web/src/features/trends/api.ts web/src/lib/coworker/trend-types.ts web/src/features/pipeline/edit-draft-dialog.tsx"
+  ],
+  "independent_database": {
+    "exposures": [
+      {
+        "scenario": "radar",
+        "width": 1440,
+        "exposures": 1,
+        "decisions": 1
+      },
+      {
+        "scenario": "radar",
+        "width": 390,
+        "exposures": 1,
+        "decisions": 1
+      },
+      {
+        "scenario": "dismiss",
+        "width": 1440,
+        "exposures": 1,
+        "decisions": 1
+      },
+      {
+        "scenario": "dismiss",
+        "width": 390,
+        "exposures": 1,
+        "decisions": 1
+      }
+    ],
+    "lab": [
+      {
+        "width": 1440,
+        "draft_revision": 4,
+        "needs_review": true,
+        "lineage_preserved": true,
+        "jobs": [
+          {
+            "state": "succeeded",
+            "kind": "trend.opportunity_lab.local",
+            "provider_id": null,
+            "reservation_id": null
+          },
+          {
+            "state": "succeeded",
+            "kind": "trend.opportunity_lab.local",
+            "provider_id": null,
+            "reservation_id": null
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "draft_revision": 4,
+        "needs_review": true,
+        "lineage_preserved": true,
+        "jobs": [
+          {
+            "state": "succeeded",
+            "kind": "trend.opportunity_lab.local",
+            "provider_id": null,
+            "reservation_id": null
+          },
+          {
+            "state": "succeeded",
+            "kind": "trend.opportunity_lab.local",
+            "provider_id": null,
+            "reservation_id": null
+          }
+        ]
+      }
+    ],
+    "model_usage_events": 0,
+    "provider_model_reservations": 0,
+    "backend_egress": []
+  },
+  "historical_findings": [
+    {
+      "evidence": "/private/tmp/trend-tier-c-lab-r3/harness-result.json",
+      "status": "passed_with_findings",
+      "finding": "Editor retained raw patch whitespace after server normalization",
+      "resolution": "Use canonical returned Snapshot variant text; exact immediate/reload and Review-enabled assertions passed in /private/tmp/trend-tier-c-lab-fixed and final46"
+    },
+    {
+      "evidence": "/private/tmp/trend-exposure-fixture-r3/failure-1440.json",
+      "finding": "IO v2 rejects readable glass with intersecting=true/isVisible=false",
+      "resolution": "Native intersection, >=500ms bounded hit-testing, visibility/occlusion/unmount cleanup"
+    },
+    {
+      "evidence": "/private/tmp/trend-wp16-final/real-failure-radar-1440.txt",
+      "finding": "Dwell did not resume after trust drawer closed",
+      "resolution": "Recheck after focus restoration/interaction/scroll; actual46 and focused30 pass"
+    }
+  ],
+  "limitations": [
+    "Client-reported view is not verified attention or the full candidate universe.",
+    "Stored Lab draft is an explicit synthetic fixture; no generation, provider or publication exercised by this browser harness.",
+    "Prior201 layout matrix retained as historical unchanged-layout evidence; affected controls/flows tested here, not a new201 result.",
+    "Local verification only; no commit, push, merge or deploy performed by this worker."
+  ],
+  "cleanup": "Owned3198/4458/4459/56449 processes stopped; only owned generated tsconfig includes removed. No tsconfig or next-env diff."
+}

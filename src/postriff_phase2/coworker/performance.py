@@ -163,10 +163,13 @@ def hypotheses_from(rows, now):
     return out
 
 
-def refresh(cur, workspace_id, state, now, notifications=None):
+def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=None):
     """Recompute this workspace's hypotheses; update support, supersede flipped ones, expire stale ones."""
     rows = observations(cur, workspace_id, state, now)
     found = hypotheses_from(rows, now)
+    if trend_report is not None:
+        from ..growth.trends import learning
+        found += learning.hypotheses(trend_report, now)
     from . import flags
     if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
         from ..growth import scout_outcomes
@@ -217,7 +220,7 @@ def refresh(cur, workspace_id, state, now, notifications=None):
     return {"posts": len(rows), "hypotheses": len(found), "created": created, "updated": updated, "superseded": superseded, "expired": expired}
 
 
-def view(cur, workspace_id, state, now):
+def view(cur, workspace_id, state, now, *, trend_report=None):
     from . import flags
     rows = observations(cur, workspace_id, state, now, basis=None)   # counts only; hypotheses were compared like-for-like
     cur.execute("""SELECT id::text, platform, dimension, statement, confidence, status, sample_a, sample_b, effect, evidence_ids, counter_evidence_ids, causal,
@@ -231,6 +234,17 @@ def view(cur, workspace_id, state, now):
               "planningAccepted": bool((r[16] or {}).get("planningAccepted")) and r[5] == "supported",
               "why": f"Compared {r[6]} and {r[7]} verified posts in one like-for-like group; {len(r[10] or [])} posts go against it. This is a pattern for this account, not a rule and not a cause."}
              for r in cur.fetchall()]
+    if any(h['dimension'].startswith('trend_') for h in items):
+        from ..growth.trends import learning
+        current = learning.current_hypotheses(cur, workspace_id, trend_report, now)
+        adoptable = learning.current_hypotheses(cur, workspace_id, {**trend_report, 'exposures':
+            [e for e in trend_report['exposures'] if e.get('retention_basis') == 'current_source_dependencies']}, now) if trend_report else {}
+        items = [h for h in items if not h['dimension'].startswith('trend_') or h['id'] in current]
+        for h in items:
+            if h['id'] in current:
+                h['supportDigest'] = current[h['id']]
+                h['canAcceptPlanning'] = h['id'] in adoptable and h['status'] in ('candidate', 'experiment', 'supported')
+                h['planningAccepted'] = h['canAcceptPlanning'] and h['planningAccepted'] and (h['experiment'] or {}).get('supportDigest') == current[h['id']]
     measured = [r for r in rows if r["value"] is not None]
     return {"posts": len(rows), "measured": len(measured), "unavailable": len(rows) - len(measured), "hypotheses": items,
             "rules": {"minimumPerGroup": MIN_ARM, "minimumDifference": f"{int(MIN_RELATIVE * 100)}%", "causal": False,
