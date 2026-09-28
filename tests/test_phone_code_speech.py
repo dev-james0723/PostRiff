@@ -58,21 +58,33 @@ class SpeechAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await transport.receive_audio(), base64.b64encode(b'live audio').decode())
         finally: await transport.close()
 
-    async def test_keypad_wins_and_cancels_pending_speech(self):
+    async def test_first_speech_wins_over_later_keypad(self):
         socket = Socket(); transport = DialMediaTransport(socket, collect_code=True)
-        started = asyncio.Event(); cancelled = asyncio.Event()
+        started = asyncio.Event(); release = asyncio.Event()
         async def recognize(_):
-            started.set()
-            try: await asyncio.Future()
-            finally: cancelled.set()
+            started.set(); await release.wait(); return CODE
         try:
             read = asyncio.create_task(transport.read_code(timeout=1, recognize=recognize))
             await asyncio.sleep(0); await self.feed_audio(socket); await started.wait()
+            for digit in '999999999999*': await socket.event(type='dtmf', digit=digit)
+            release.set()
+            self.assertEqual(await read, CODE)
+            self.assertTrue(transport.digits.empty())
+        finally: await transport.close()
+
+    async def test_keypad_first_cancels_speech_collection_and_waits_for_star(self):
+        socket = Socket(); transport = DialMediaTransport(socket, collect_code=True)
+        recognize = AsyncMock(return_value='999999999999')
+        try:
+            read = asyncio.create_task(transport.read_code(timeout=1, recognize=recognize))
+            await asyncio.sleep(0)
             for digit in CODE: await socket.event(type='dtmf', digit=digit)
-            await asyncio.wait_for(cancelled.wait(), .2)
+            await self.feed_audio(socket)
             self.assertFalse(read.done())
+            self.assertFalse(transport.collect_speech)
             await socket.event(type='dtmf', digit='*')
             self.assertEqual(await read, CODE)
+            recognize.assert_not_awaited()
         finally: await transport.close()
 
     async def test_invalid_speech_cost_is_capped_and_keypad_remains_available(self):

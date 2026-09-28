@@ -1,10 +1,26 @@
 # Telephone prompts — OpenAI Marin
 
-**Introduction revised:** The user approved one additional inbound generation. Its current opening is “Hi, this is Ravi. I'm your AI assistant.” The replacement was installed locally after offline transcription and format validation. See `intro-revision/generation.json` and `intro-revision/validation.json` in the evidence folder. The original three-request receipt remains historical. Total approved generation calls: four, without retries.
+Current local assets for caller identity. Three new requests were explicitly authorized with a US$0.25 total ceiling, one request per clip and no automatic retries. All three completed. Outbound acceptance is preserved. Actual provider billing was not returned.
 
-All three shipped `.mulaw` assets were generated with `gpt-4o-mini-tts`, voice `marin`, on 2026-09-28 from the generic scripts in `prompts.json`. They replace the earlier macOS voices. No account or workspace data was submitted. The original three approved requests completed without retries, followed by one separately approved inbound revision; actual provider billing was not returned.
+Playback: raw G.711 PCMU, 8 kHz mono. Review WAVs: PCM, 24 kHz mono. Source text, bytes and hashes are enforced by `phone/prompt_assets.py`; mismatch prevents playback.
 
-Playback format: raw G.711 mu-law, 8 kHz, mono. The review WAVs are 24 kHz mono PCM, with normalized length headers. Offline cached Whisper transcription confirms the spoken-code and keypad/star instructions. Signal checks found no clipped samples. This is machine content validation, not a human audition or a real handset test.
+## dial-inbound
+
+Please enter or say your 12-digit agent pairing code. If you enter it on your keypad, press star when you’re done.
+
+Duration: 7.25 seconds. PCMU SHA-256: `8fb13565a41db35a6e19b21825e08afd4ae075dd78d4a982f3a7debe694bc928`.
+
+## dial-inbound-retry
+
+Sorry, that Agent Pairing Code did not connect. Say all 12 digits, then pause. Or enter all 12 digits on your keypad and press star.
+
+Duration: 8.65 seconds. PCMU SHA-256: `ce5becb308870ced06eee6500ebd2625fdb7e25876e93ff8f15480a017b9e0ea`.
+
+## dial-repeat
+
+Welcome back. I’ve sent a secure verification request to your trusted device. Confirm it with Face ID, Touch ID, or your passkey to continue. To use a new Agent Pairing Code instead, press hash.
+
+Duration: 13.25 seconds. PCMU SHA-256: `8f6a325ce4e641f4bc632902990153793784784474161a410b1fd2a9d6e339c8`.
 
 ## dial-acceptance
 
@@ -12,18 +28,6 @@ Hi, this is Rafii, your AI assistant. Press one to connect, or simply hang up to
 
 Duration: 5.9 seconds. PCMU SHA-256: `d04165a5566f0bbf5b13ff9a440117cc07612b6abf7bf4fff51df27c2a6d18ed`.
 
-## dial-inbound
+Pre-authentication uses generic Marin. Only the authenticated conversation reads the caller’s Settings voice. Outbound acceptance requires `1`; inbound keypad requires exactly 12 digits followed by `*`, while spoken 12 digits submit on pause without star. `#` clears keypad entry.
 
-Hi, this is Ravi. I'm your AI assistant. Say your twelve-digit phone sign-in code, one digit at a time, then pause. Or enter all twelve digits on your keypad and press star. Press hash to start over.
-
-Duration: 12.9 seconds. PCMU SHA-256: `d55a27719ad75fb026c47a8a9d5451b58126b45af79d874e1ce2c751c697f48c`.
-
-## dial-inbound-retry
-
-Sorry, that code did not connect. Say all twelve digits again, one at a time, then pause. Or enter them on your keypad and press star.
-
-Duration: 9.3 seconds. PCMU SHA-256: `818acee53570533f747185f67d9500e856c1dd54323c0fb73789ae6ff3e82aee`.
-
-The pre-authentication prompt uses generic Marin because identity is not yet verified. The authenticated conversation reads the caller’s Settings voice. Outbound acceptance requires `1`; inbound callers speak 12 digits and pause or enter 12 digits and submit with `*`. `#` resets keypad entry.
-
-Evidence and review WAVs: `docs/design/rafii-live-agent/voice-opening-2026-09-28/`. Assets are installed locally; no deployment or live telephone test was performed.
+Evidence: `docs/design/rafii-live-agent/caller-identity-2026-09-28/`. Original assets, README and text/hashes are preserved there. Cached offline Whisper supports the expected content but has spelling errors on “pairing” and “passkey”; human audition remains a release gate. No deployment or real call in this task.

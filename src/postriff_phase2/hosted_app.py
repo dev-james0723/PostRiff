@@ -722,6 +722,8 @@ class HostedApplication:
                 # The Rafii Agent Runtime (text, voice, images); its routes live in agent_runtime_v2/http.py.
                 from .agent_runtime_v2.http import handle as agent_runtime_handle
                 return agent_runtime_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:3] == ['api', 'phone', 'verify-call']:
+                return phone_http.verify_call(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'phone':
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:

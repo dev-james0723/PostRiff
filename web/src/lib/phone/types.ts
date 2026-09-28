@@ -26,3 +26,10 @@ export type PhoneProviderReadiness = {
   maxSeconds?: number; smsReady?: boolean; smsRegistration?: string;
 };
 export const PHONE_TERMINAL = new Set(['completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'cancelled']);
+
+export type PhoneAuthChallenge = {
+  state: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed' | 'fallback';
+  startedAt: number; expiresAt: number; workspaceId: string;
+  spending: NonNullable<PhoneSettingsData['spending']>;
+};
+export type TrustedCaller = { id: string; pairedAt: number; lastUsedAt: number | null };

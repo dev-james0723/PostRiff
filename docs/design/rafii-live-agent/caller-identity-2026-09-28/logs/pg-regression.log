@@ -1,0 +1,59 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_billing_stripe.py
+{"status": "pass", "checks": ["first bootstrap sends one welcome email; later sign-ins do not", "proposed plan terms refuse checkout (D3); usage shows no purchasable plan", "active terms + price open checkout with workspace metadata and idempotency; absolute return URLs refused; portal needs a customer", "signed checkout.session.completed → active subscription, entitlement from terms, one activation email; replay is duplicate; bad signature 401", "portal opens for the Stripe customer; active workspaces cannot start a second checkout", "payment failure → past_due + grace + email; events without a PostRiff workspace are recorded as ignored", "price-only subscription.updated resolves plan terms by provider_price_id and reconciles entitlement", "invite sends the accept link with the raw token to the invitee", "reminder sweep sends once and dedupes; every notification is recorded with sent=true"]}
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_caller_identity.py
+/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+PASS trusted route only, exact call binding, fresh AMR not iat, wrong user/session, atomic racing consumption, replay
+PASS expiry, hangup, route/factor/membership/session revocation, deny, cancel: no admission
+PASS new-code recovery, ambiguous mapping fallback, caller ID cannot select an account
+PASS deny suppression, forced RLS, browser grants denied, deletion cascades
+PASS caller identity PostgreSQL: synthetic Supabase/provider, no network effects
+PASS in-flight hangup invalidation, one provider verify per nonce including errors, three-ceremony cap
+PASS cross-call assertion rejection; transactional exact deep link; no code/caller/hash/private payload; no extra channels
+PASS HTTP authentication, wrong-user denial, origin guard, no-store, safe display metadata
+PASS signed repeat media + HTTP WebAuthn approval, no caller-ID/DTMF bypass, no Live/pre-auth audio before consumed challenge
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_credits.py
+PASS: legacy isolation, funding replay, durable hold/settle, unknown, concurrency, request binding, expiry, permissions
+PASS: real Hosted service -> approved quote -> synthetic cloud -> durable credits settled once
+PASS: pausing does not prevent reconciliation; identical concurrent requests share one reservation
+PASS: explicit regenerate reuses the source while every model run requires its own credit approval
+PASS: current brief reaches cloud drafting without granting stored-source access
+PASS: a quote at the ceiling covers a turn with a post and an account chip; the estimate request equals the run request
+PASS: a quote for different chips does not authorize the turn (409)
+PASS: a reference photo priced as a full note keeps the ceiling above the run (no 402)
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_phone_duration.py
+PASS real PostgreSQL: balance exhaustion/atomic rollback, concurrent renewal once, 60/600/3600s boundaries, all minute holds settled once, signed handoff window and generation fencing; realCalls=0
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_phone_mode.py
+/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+{"event": "agent_turn.aborted", "errorClass": "AlphaError", "traceId": "trace_b33032c5933959a55454d4b1c7af3eef"}
+PASS verified encrypted identity, verification rate/attempts, cross-account disclosure
+PASS six saved Settings voices and authenticated first name reach phone Live configuration
+PASS text/browser/phone continuity; real second-draft edit; verified speakable result; publish approval; closed-call capability
+PASS ambiguous create reconciliation, single dial, duplicate and out-of-order signed events
+PASS membership/opt-out fencing, weekly schedule parser and exactly-once cron slot
+PASS Notification V2 phone outbox opt-in/single delivery/daily cap; routine and non-deadline approvals never call; fallback; phone payload redaction
+PASS signed ASGI audio roundtrip → actual draft visible through web API → verified spoken result; interruption; publish approval; uncertain hangup fences redial; signed final duration and usage reconciliation
+PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved
+PASS confirmed provider errors masked; immediate explicit retry/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy
+PASS credit-mode call approval, exact component holds, bounded shared Manager spend/unknown holds/releases, retry idempotency, release and standing automatic-call limit
+PASS PostgreSQL grants and RLS: client roles cannot read identity/call/delegation tables
+PASS custom phone rule review, same-post threshold, single fake call, spoken topic and edit revocation
+PASS number revocation and account-deletion cascades with global egress disabled
+{"execution": "local fake transport + actual Rafii runtime and PostgreSQL", "status": "PASS", "realCalls": 0}
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_unified_notifications.py
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_billing_stripe.py", "exitCode": 0, "seconds": 0.48}, {"script": "tests/phase2/postgres_caller_identity.py", "exitCode": 0, "seconds": 4.82}, {"script": "tests/phase2/postgres_credits.py", "exitCode": 0, "seconds": 1.52}, {"script": "tests/phase2/postgres_phone_duration.py", "exitCode": 0, "seconds": 1.98}, {"script": "tests/phase2/postgres_phone_mode.py", "exitCode": 0, "seconds": 4.3}, {"script": "tests/phase2/postgres_unified_notifications.py", "exitCode": 0, "seconds": 1.57}]}

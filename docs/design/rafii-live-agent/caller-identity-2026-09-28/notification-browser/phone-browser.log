@@ -1,0 +1,3 @@
+Loaded phone settings page
+Phone settings available
+{"status":"PASS","execution":"actual web UI + disposable PostgreSQL + fake phone/Live/Manager input","checks":["fake-only transport guard","verified masked number","credit approval and wallet gate","explicit single dial","navigation/reload never dial","phone delegation saves second draft through Rafii","edited draft refreshes in open web app without reload","publish approval still required","hangup","scheduled briefing","revoke","mobile","axe no serious/critical violations"],"realCalls":0,"screenshot":"/tmp/rafii-phone-browser.png"}

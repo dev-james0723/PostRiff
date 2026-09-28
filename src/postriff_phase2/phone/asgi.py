@@ -8,7 +8,7 @@ import os
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts, inbound, resume, store
+from . import contracts, inbound, call_auth, resume, store
 from .diagnostics import report_failure
 from .session import PhoneSessionController, bridge
 from .providers.twilio import TwilioMediaTransport
@@ -167,25 +167,51 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False, 
                 if not await asyncio.to_thread(inbound.begin, phone, call_ref, caller):
                     await transport.end_call()
                     return
-                deadline = asyncio.get_running_loop().time() + inbound.AUTH_SECONDS
-                from .code_speech import transcribe
-                async def recognize_code(audio):
-                    if code_transcribe is not None:
-                        return await code_transcribe(audio)
-                    return await transcribe(audio, phone.agent().cfg.credential('openai'))
-                transport.prepare_code_input()
-                await transport.play_prompt('dial-inbound')
-                for attempt in range(3):
-                    code = await transport.read_code(timeout=max(0, deadline - asyncio.get_running_loop().time()), recognize=recognize_code)
-                    if code is None:
-                        break
-                    call_id = await asyncio.to_thread(inbound.authenticate, phone, call_ref, code)
-                    code = None
-                    if call_id:
-                        break
-                    if attempt < 2:
-                        transport.prepare_code_input()
-                        await transport.play_prompt('dial-inbound-retry')
+                challenge = await asyncio.to_thread(call_auth.create, phone, call_ref)
+                if challenge:
+                    await transport.play_prompt('dial-repeat')
+                    repeat_deadline = asyncio.get_running_loop().time() + call_auth.CHALLENGE_SECONDS
+                    state = 'pending'
+                    while not transport.stopped.is_set() and asyncio.get_running_loop().time() < repeat_deadline:
+                        state = await asyncio.to_thread(call_auth.poll, phone, call_ref, challenge)
+                        if state == 'approved':
+                            call_id = await asyncio.to_thread(call_auth.consume, phone, call_ref, challenge)
+                            break
+                        if state != 'pending':
+                            break
+                        # Hash selects recovery only; it never authenticates or submits digits.
+                        if not transport.digits.empty() and transport.digits.get_nowait() == '#':
+                            break
+                        try:
+                            await asyncio.wait_for(transport.stopped.wait(), .3)
+                        except TimeoutError:
+                            pass
+                    if not call_id and (transport.stopped.is_set() or state == 'denied' or
+                            not await asyncio.to_thread(call_auth.fallback, phone, call_ref)):
+                        await transport.end_call()
+                        return
+                    while not transport.digits.empty():
+                        transport.digits.get_nowait()
+                if not call_id:
+                    deadline = asyncio.get_running_loop().time() + inbound.AUTH_SECONDS
+                    from .code_speech import transcribe
+                    async def recognize_code(audio):
+                        if code_transcribe is not None:
+                            return await code_transcribe(audio)
+                        return await transcribe(audio, phone.agent().cfg.credential('openai'))
+                    transport.prepare_code_input()
+                    await transport.play_prompt('dial-inbound')
+                    for attempt in range(3):
+                        code = await transport.read_code(timeout=max(0, deadline - asyncio.get_running_loop().time()), recognize=recognize_code)
+                        if code is None:
+                            break
+                        call_id = await asyncio.to_thread(inbound.authenticate, phone, call_ref, code)
+                        code = None
+                        if call_id:
+                            break
+                        if attempt < 2:
+                            transport.prepare_code_input()
+                            await transport.play_prompt('dial-inbound-retry')
                 if not call_id or not await transport.authorize_inbound():
                     await transport.end_call()
                     if call_id:

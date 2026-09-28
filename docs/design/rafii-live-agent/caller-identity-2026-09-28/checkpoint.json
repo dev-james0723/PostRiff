@@ -1,0 +1,45 @@
+{
+  "task": "Rafii caller identity: local implementation and human audio verified; pending supported-device acceptance",
+  "memory_revision": 280,
+  "summary": "Token Pilot：本輪未取得完整 tokens 紀錄；不用的對照基線未建立，節省量未知。API 等值 未能換算；訂閱額度百分比未能換算。API 等值不是訂閱實際扣款。",
+  "acceptance": {
+    "complete": false,
+    "requirements": {
+      "source": "passed",
+      "implementation": "passed",
+      "local-tests": "passed",
+      "audio-human": "passed",
+      "real-device": "unknown",
+      "release-boundary": "passed"
+    },
+    "status": "checked",
+    "basis": "caller supplied observations; not independent test execution"
+  },
+  "receipt": {
+    "version": "3.8.0",
+    "price_stale": false,
+    "with_pilot_measurement": "unknown",
+    "actual_tokens": null,
+    "without_tokens": null,
+    "saved_tokens": null,
+    "saved_percent": null,
+    "api_equivalent_usd": null,
+    "without_api_equivalent_usd": null,
+    "estimated_cost_difference_usd": null,
+    "actual_bill_usd": null,
+    "subscription": {
+      "percentage_points": null,
+      "task_attributed": false,
+      "basis": "account_window_change_not_per_prompt",
+      "window": null
+    },
+    "counterfactual_basis": "unavailable",
+    "components": [],
+    "text": "Token Pilot：本輪未取得完整 tokens 紀錄；不用的對照基線未建立，節省量未知。API 等值 未能換算；訂閱額度百分比未能換算。API 等值不是訂閱實際扣款。",
+    "coverage": "Only supplied normalized calls; missing children/final events are not zero",
+    "cost_sources": [],
+    "telemetry_error": null,
+    "scope": "Latest real user prompt through available log; final response and child/API usage may be missing",
+    "tail_incomplete": false
+  }
+}

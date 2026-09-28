@@ -1,0 +1,16 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_caller_identity.py
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+PASS trusted route only, exact call binding, fresh AMR not iat, wrong user/session, atomic racing consumption, replay
+PASS expiry, hangup, route/factor/membership/session revocation, deny, cancel: no admission
+PASS new-code recovery, ambiguous mapping fallback, caller ID cannot select an account
+PASS missing/disabled notification falls back; operator admission budget includes repeat waiting
+PASS deny suppression, forced RLS, browser grants denied, deletion cascades
+PASS caller identity PostgreSQL: synthetic Supabase/provider, no network effects
+PASS in-flight hangup invalidation, one provider verify per nonce including errors, three-ceremony cap
+PASS cross-call assertion rejection; transactional exact deep link; no code/caller/hash/private payload; no extra channels
+PASS HTTP authentication, wrong-user denial, origin guard, no-store, safe display metadata
+PASS signed repeat media + HTTP WebAuthn approval, no caller-ID/DTMF bypass, no Live/pre-auth audio before consumed challenge
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_caller_identity.py", "exitCode": 0, "seconds": 4.44}]}

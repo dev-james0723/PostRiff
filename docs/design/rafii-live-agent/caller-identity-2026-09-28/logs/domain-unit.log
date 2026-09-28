@@ -1,0 +1,6 @@
+.....................................{"event": "cron.completed", "requestId": "ab096a1d8f434b09a5552671d0babc14", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}, "phone": {"status": "disabled"}}
+.................
+----------------------------------------------------------------------
+Ran 54 tests in 0.042s
+
+OK

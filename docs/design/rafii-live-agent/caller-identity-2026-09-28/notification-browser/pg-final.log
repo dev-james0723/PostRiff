@@ -1,0 +1,49 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_coworker.py
+PASS N01: migrations 024/025: tables exist, RLS enabled and forced, browser roles cannot read server-only tables
+PASS N02: an event emitted twice creates one event and one delivery per person and channel (dedupe + idempotency)
+PASS N03: delivery: claim → commit → send with the delivery's idempotency key → sent; routine events wait for the digest; failures are immediate
+PASS N04: crash after claim: the lease expires, the row is re-claimed and resent with the SAME idempotency key (the provider dedupes; one email)
+PASS N05: transient failures retry with backoff, then dead-letter after the bound; the domain state is untouched
+PASS N06: a hard bounce from the provider webhook fails the delivery and suppresses future non-transactional email; replays are duplicates
+PASS N07: quiet hours in the person's time zone defer push; the digest groups routine events into one email sent once
+PASS N08: web push: explicit subscription stored encrypted; minimal encrypted payload; 410 revokes; unlisted endpoints refused
+PASS N09: one-click unsubscribe with a signed token (GET confirms, POST applies); tampered tokens refused
+PASS T01: another workspace's member cannot read or change this workspace's notifications (identical 403), and RLS hides other people's deliveries
+PASS W01: only an owner can save a weekly recipe; the saved recipe is re-read and verified
+PASS W02: prepare next week end-to-end: plan → drafts through the writing pipeline → quality stage → ready_for_review, with one campaign.week_ready
+PASS W03: preparing again is idempotent: no new drafts, no second notification, same week
+PASS W04: accept hands the draft to Queue; approved/scheduled are read back from real reviews and jobs, never set by Rafii
+PASS W05: blocked states: a personal post asks one question (needs_input), a disconnected account is channel_unavailable; answering unblocks
+PASS W07: answering a question in a week that is already ready for review reopens it, and the next preparation drafts that post
+PASS W06: the cron prepares a due recipe as its owner (private capability), and a disabled flag stops it
+PASS S01: one source → FactPack → brief → drafts linked to a new campaign; injected instructions are data; provenance ids survive every stage
+PASS R01: research results are stored with full provenance as search_snippet evidence and are never usable facts; provider failures are reported as failures
+PASS O01: owner notes are scoped, explicit, reversible and exportable; editors can't add them; a note can't touch protected policy
+PASS E01: triage is deterministic and never urgent; a suggested reply is a draft (never sent); spam gets no reply; viewers cannot draft
+PASS P01: comparable verified posts become a non-causal, sample-sized hypothesis; a causal row is refused; only an owner decides
+PASS A01: “What needs my attention?” is ordered by fixed rules, explains why, respects the person's permissions and never makes engagement urgent
+PASS G01: growth metrics compute from authoritative tables; experiment assignment is deterministic, logged and not hard-coded
+PASS L01: a watchlist turns fresh, relevant, novel results into scored opportunities with evidence and expiry; decisions are recorded
+PASS H01: hosted_app routes reach the coworker: notification centre, preferences, weekly, attention, status; API tokens refused; unknown routes 404
+PASS H02: the email webhook route verifies Svix signatures before any processing (401 on a forged request)
+PASS V01: turning notifications on never mails people about the past: an existing workspace's first scan is a silent baseline; a new condition after it notifies
+PASS V02: an idle workspace is re-checked hourly: a failed payment reaches its owner with no change to the workspace itself
+PASS V03: an unsubscribe applies to email already queued (suppressed at send time, never sent); re-subscribing is read back as verified
+PASS V04: a $0 weekly drafting limit plans the week but starts no paid writer run
+PASS V05: viewers and approvers can open a week (read-only); only an editor's read saves the Queue sync
+PASS V06: a viewer's research search or link source is refused before any provider is called (no egress)
+PASS N10: a notification delivery failure never rolls back domain work (the week stays ready; the delivery is failed/dead)
+PASS V07: the fleet growth report runs read-only (trial → paid and paid retention by positioning arm, exposure); the coworker cron runs every step inside its budget, including the retention sweep
+{"PASS": 35, "FAIL": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_unified_notifications.py
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_coworker.py", "exitCode": 0, "seconds": 12.16}, {"script": "tests/phase2/postgres_unified_notifications.py", "exitCode": 0, "seconds": 5.09}]}

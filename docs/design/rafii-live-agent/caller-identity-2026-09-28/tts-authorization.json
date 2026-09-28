@@ -1,0 +1,24 @@
+{
+  "authorized": true,
+  "requests": [
+    "dial-inbound",
+    "dial-inbound-retry",
+    "dial-repeat"
+  ],
+  "maxRequests": 3,
+  "budgetUSD": 0.25,
+  "automaticRetries": 0,
+  "text": {
+    "dial-inbound": "Please enter or say your 12-digit agent pairing code. If you enter it on your keypad, press star when you’re done.",
+    "dial-inbound-retry": "Sorry, that Agent Pairing Code did not connect. Say all 12 digits, then pause. Or enter all 12 digits on your keypad and press star.",
+    "dial-repeat": "Welcome back. I’ve sent a secure verification request to your trusted device. Confirm it with Face ID, Touch ID, or your passkey to continue. To use a new Agent Pairing Code instead, press hash."
+  },
+  "estimatedCostUSD": 0.03,
+  "actualCostUSD": null,
+  "humanAudition": {
+    "status": "passed",
+    "approvedAt": "2026-09-28",
+    "clips": 3
+  },
+  "note": "Budget is user ceiling; provider streaming speech response supplies no actual billing counter. Short fixed inputs and one request per clip. No acceptance regeneration."
+}

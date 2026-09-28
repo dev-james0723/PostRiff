@@ -14,7 +14,6 @@ import re
 import secrets
 import ssl
 import time
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, Request, build_opener
 
@@ -282,6 +281,7 @@ class DialMediaTransport:
         self.code_audio = asyncio.Queue(maxsize=256)
         self.collect_speech = False
         self.speech_attempts = 0
+        self.input_mode = None
         self.reader = asyncio.create_task(self._read())
 
     async def _read(self):
@@ -298,7 +298,9 @@ class DialMediaTransport:
                     break
                 elif event.get('type') == 'dtmf' and self.collect_code and not self.accepted:
                     digit = event.get('digit')
-                    if isinstance(digit, str) and digit in '0123456789*#' and len(digit) == 1:
+                    if isinstance(digit, str) and digit in '0123456789*#' and len(digit) == 1 and self.input_mode != 'spoken':
+                        self.input_mode = 'keypad'
+                        self.collect_speech = False
                         self.digits.put_nowait(digit)
                 elif event.get('type') == 'dtmf' and not self.acceptance.is_set():
                     self.accepted = event.get('digit') == '1'
@@ -309,7 +311,11 @@ class DialMediaTransport:
                             payload = event.get('payload')
                             if not isinstance(payload, str) or not payload or len(payload) > 48000:
                                 raise ValueError('Invalid code audio')
-                            self.code_audio.put_nowait(base64.b64decode(payload, validate=True))
+                            audio = base64.b64decode(payload, validate=True)
+                            from ..code_speech import PCM
+                            if audio and sum(PCM[c] ** 2 for c in audio) > len(audio) * 400 ** 2:
+                                self.input_mode = 'spoken'
+                            self.code_audio.put_nowait(audio)
                         continue  # Pre-auth audio is only for isolated code transcription; never Live.
                     payload = event.get('payload')
                     if not isinstance(payload, str) or not payload or len(payload) > 48000:
@@ -330,7 +336,8 @@ class DialMediaTransport:
 
     async def accept_call(self, *, timeout=20):
         """Generic prerecorded μ-law prompt; voicemail cannot authorize private agent access."""
-        prompt = (Path(__file__).resolve().parents[1] / 'assets' / 'dial-acceptance.mulaw').read_bytes()
+        from ..prompt_assets import read
+        prompt = read('dial-acceptance')
         if not 8000 <= len(prompt) <= 120000:
             raise ValueError('Dial acceptance prompt unavailable')
         if not self.accepted:
@@ -346,9 +353,10 @@ class DialMediaTransport:
         return True
 
     async def play_prompt(self, name):
-        if name not in ('dial-inbound', 'dial-inbound-retry'):
+        if name not in ('dial-inbound', 'dial-inbound-retry', 'dial-repeat'):
             raise ValueError('Unknown phone prompt')
-        prompt = (Path(__file__).resolve().parents[1] / 'assets' / (name + '.mulaw')).read_bytes()
+        from ..prompt_assets import read
+        prompt = read(name)
         if not 8000 <= len(prompt) <= 200000:
             raise ValueError('Phone prompt unavailable')
         await self.interrupt()
@@ -357,6 +365,7 @@ class DialMediaTransport:
 
     def prepare_code_input(self):
         """Arm only after signed admission, before prompt playback, so early speech is not lost."""
+        self.input_mode = None
         self.collect_speech = self.collect_code and not self.accepted and self.speech_attempts < 3
 
     async def _read_keypad(self):
@@ -368,8 +377,7 @@ class DialMediaTransport:
             self.keypad_selected.set()
             self.collect_speech = False
             if digit == '*':
-                if code:
-                    return code
+                return code
             elif digit == '#':
                 code = ''
             else:
@@ -398,7 +406,7 @@ class DialMediaTransport:
 
     async def read_code(self, *, timeout, recognize=None):
         self.keypad_selected = asyncio.Event()
-        self.collect_speech = self.collect_code and recognize is not None and self.speech_attempts < 3
+        self.collect_speech = self.collect_code and recognize is not None and self.speech_attempts < 3 and self.input_mode != 'keypad'
         tasks = [asyncio.create_task(self._read_keypad())]
         if self.collect_speech:
             tasks.append(asyncio.create_task(self._read_spoken(recognize)))
@@ -416,6 +424,7 @@ class DialMediaTransport:
             return None
         finally:
             self.collect_speech = False
+            self.input_mode = None
             keypad_selected.cancel()
             for task in tasks:
                 task.cancel()
@@ -456,3 +465,7 @@ class DialMediaTransport:
     async def close(self):
         self.reader.cancel()
         await asyncio.gather(self.reader, return_exceptions=True)
+        self.collect_speech = False
+        for queue in (self.code_audio, self.digits, self.audio):
+            while not queue.empty():
+                queue.get_nowait()

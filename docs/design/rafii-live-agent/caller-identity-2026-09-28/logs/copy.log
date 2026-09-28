@@ -1,0 +1,24 @@
+
+> postriff-web@0.1.0 audit:copy
+> node scripts/copy-audit.mjs
+
+src/features/agent/attachments/plus-sheet.tsx:247  [\bprovider\b]  ${provider} · ${connection.account}
+src/features/agent/reasoning-map.ts:29  [\bprovider\b]  Not applied by this provider
+src/features/agent/reasoning-map.ts:127  [\bprovider\b]  Provider default for ${modelLabel}: ${selected.id}
+src/features/channels/channels-view.tsx:132  [\bprovider\b]  What ${provider.platform} can publish
+src/features/channels/channels-view.tsx:141  [\bprovider\b]  ${provider.platform} setup details
+src/features/channels/connect-sheet.tsx:148  [\bprovider\b]  Sign in as ${reconnect.account}${provider ?
+src/features/channels/connect-sheet.tsx:238  [\bprovider\b]  Nothing to connect on ${provider?.platform ?? 'this platform'} yet.
+src/features/channels/connect-sheet.tsx:254  [\bprovider\b]  ${provider.platform} is paused.
+src/features/coworker/notifications/notification-settings.tsx:131  [\bprovider\b]  Optional important texts. Turning on Phone Mode never opts you in. Provider messaging rates may apply. Reply STOP to stop texts.
+src/features/coworker/notifications/notification-settings.tsx:135  [\bprovider\b]  Your provider stopped text messages. Reply START to restore messaging, then opt in here again.
+src/features/coworker/notifications/notification-settings.tsx:136  [\bcurrently\b]  Text messages are currently unavailable.
+src/features/rafii-phone/phone-settings.tsx:101  [\bprovider\b]  The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while 
+src/components/forms/demo-form.tsx:144  [\bsuccessfully\b]  Form submitted successfully!
+src/components/marketing/capability-badge.tsx:15  [\bprovider\b]  Rafii publishes through the provider API after you approve.
+src/components/marketing/landing/sections.tsx:56  [\bprovider\b]  Direct publishing switches on per platform once its provider review passes. Until then Rafii prepares the post and you complete the last ste
+src/components/marketing/landing/sections.tsx:164  [\bprovider\b]  None yet. LinkedIn, Threads and Instagram are hosted connectors awaiting provider review; until each passes, publishing is Assisted (Rafii p
+src/components/marketing/landing/sections.tsx:168  [\bprovider\b]  No. Drafts come only from sources you select and approve, and our provider contracts will prohibit training. See the Privacy Policy.
+src/lib/attention.ts:194  [\bprovider\b]  ${unreviewed.map((provider) => provider.platform).join(', ')}: you post the last step
+
+18 flagged phrases for manual review.

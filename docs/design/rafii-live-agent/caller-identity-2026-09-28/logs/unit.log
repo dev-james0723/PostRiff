@@ -1,0 +1,9 @@
+..................................................................Executing <Task pending name='Task-156' coro=<LiveSDKMediaTest.test_actual_sdk_and_twilio_transport_exchange_pcmu_and_final_usage() running at /Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio/tests/test_rafii_phone_media.py:133> wait_for=<Future pending cb=[BaseSelectorEventLoop._sock_write_done(7, handle=<Handle BaseS...events.py:317>)(), Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py:448> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py:100> took 0.160 seconds
+....................{"event": "weather.unavailable", "reason": "timeout", "traceId": "trace_4cf39a7bd8699f0dddd926d18fe3ed1b"}
+.........................{"event": "weather.unavailable", "reason": "URLError: <urlopen error [Errno 8] nodename>", "traceId": "trace_4be8d2ddd33c89363ec235bc3b5056b9"}
+{"event": "agent_tool.failed", "tool": "weather_now", "errorClass": "KeyError", "traceId": "trace_39ff93d3fd7f8bc49d594b6a8fde0513"}
+........................................
+----------------------------------------------------------------------
+Ran 151 tests in 1.277s
+
+OK

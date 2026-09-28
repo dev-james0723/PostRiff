@@ -18,6 +18,7 @@ AUDIENCES = ("approve", "edit", "manage_connections", "reply", "owner", "actor",
 
 # channel defaults: in_app always on unless listed False; email/push: "immediate" | "digest" | "off".
 EVENTS = {
+    'security.phone_call': {'category':'security','severity':'security','audience':'actor','email':'off','push':'immediate','template':'phone_call_verify','transactional':True},
     'phone.call_failed': {'category':'automation','severity':'warning','audience':'actor','email':'immediate','push':'immediate','template':'phone_call_failed'},
     "weekly_proof.generated": {"category": "analytics", "severity": "info", "audience": "owner", "email": "digest", "push": "immediate", "template": "weekly_performance"},
     "monthly_proof.generated": {"category": "analytics", "severity": "info", "audience": "owner", "email": "digest", "push": "off", "template": "weekly_performance"},

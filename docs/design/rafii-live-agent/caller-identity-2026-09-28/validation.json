@@ -1,0 +1,55 @@
+{
+  "execution": "local source, disposable SQL, synthetic provider/Supabase/model fixtures; virtual WebAuthn is not a real device",
+  "base": "eefff65844f7556276b5c3b13b7cb16907e0ed6f",
+  "capturedAt": "2026-09-28T08:40:59.569295+00:00",
+  "realPaidCalls": 0,
+  "paidTTSRequests": 3,
+  "ttsBudgetUSD": 0.25,
+  "ttsActualUSD": null,
+  "productionMigrated": false,
+  "pushed": false,
+  "merged": false,
+  "deployed": false,
+  "realDevice": {
+    "status": "validation_unavailable",
+    "reason": "New call-bound flow is local only; no approved HTTPS test deployment/live call. Current signed-in production Security UI shows MFA Off. User is willing; account choice/enrollment remains pending."
+  },
+  "humanAudioAudition": {
+    "status": "passed",
+    "approvedAt": "2026-09-28",
+    "review": "audio-review.html",
+    "evidence": "The user explicitly approved the three samples in the release thread."
+  },
+  "logs": {
+    "build.log": "26effec46ea7c438fbdf31572cbaec76633f197e0c1af39da2d9cde984b9f8ae",
+    "copy.log": "1397395cfc25afd05dd85476530c6bdfee6659d611fb77045ed940aceb1d3a29",
+    "domain-unit.log": "97fb85412744b65c9823846516de5d8793684dea516075323cc622adb237f50a",
+    "final-phone-unit.log": "cbc0eb511a4012af6ce22c5623f4224a2e1db8d6b641250c2c0a203af52bb923",
+    "hosted-unit.log": "267e84dc951b289c35a0477b0bd1b48276ff8e69a14ff86048013fcdbfcbc37d",
+    "lint.log": "ac9c993ed046afc5ce5d45755eff01ff0d6e3d8a639d1150cf5ab2fa40e3210e",
+    "live-browser.log": "79a5c40a4be4370f70a82e01b6c791896d7065f060de3c74bac126e3b0ecb8f7",
+    "notifications-browser.log": "74d5c0d5567c0ce373fc3e6cead7a90c4cdbf111d4d1b3bce525201d2a9f3cd1",
+    "passkey-browser.log": "174983c72970c0ac0eb69d26a8ed786203d8c2c2b42829687558b90d44ee86b7",
+    "pg-final.log": "1e1d0212ec628964070d007b26b65969a9960ecd2b0396c159de7863e77d79c9",
+    "pg-regression.log": "e8115822a7bc8361fbf28930af98fc3413b9ca1b1b810f1257e991723502f077",
+    "pg-security-final.log": "88aca37689d7be8b17532eec8ad79627d573c695f861d5591f3136cc316c8686",
+    "pg-security-lock.log": "e37717951dea345847d58f4885585aa603260dee9d34cdd631c0634907400232",
+    "pg.log": "a2425279a57456b0a048e1d9574e5dc28078309480de13455bacc2b0ad46ca49",
+    "phone-browser.log": "d4f6ee21ecab8527d3b662c3a4c582e84ae32f30e5c9f4e98da3afa0ae13cd72",
+    "security-unit.log": "ccf72afa99b7a618e046714371eaee82879cf103396b57d00af7d1c064cb5133",
+    "typecheck.log": "b13539b82e2ccffed1b0c1ad7af2d320b56f47df84b5263771f5bbe8e32dd217",
+    "ui-browser.log": "9177bc52cc3cbadaa19163fe421ac22dc8a2f9cbcb678076baba7ad46bb488bf",
+    "unit.log": "bad4dd270f89d5afce466bb2d10fc2ee3e8b6e1604655fec8e8675877779266a",
+    "voice-browser.log": "d04580ea33390301d414ae41f7965d28f9d93bd5718f7194a792290e627c6614",
+    "web-unit.log": "8591b83de93f671b7df5f3afa270176f0c6398d87cc9799c9dd34537b048911a"
+  },
+  "temporaryServers": "Stopped only this task's API4395, web3395 and disposable DB55795; listener check empty.",
+  "tokenPilot": {
+    "revision": 280,
+    "status": "active",
+    "acceptanceComplete": false,
+    "registryEntries": 256,
+    "usage": "unknown",
+    "comparison": "no measured baseline; savings unknown"
+  }
+}
