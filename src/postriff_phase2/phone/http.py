@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 from postriff_alpha.domain import AlphaError
 
 from ..agent_runtime_v2.api_guard import require_session_token
-from . import contracts, store, webhooks
+from . import contracts, inbound, store, webhooks
 
 
 def phone_for(hosted):
@@ -98,6 +98,11 @@ def dial_events(app, environ, start_response):
         cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE provider=\'dial\' AND provider_call_ref=%s',(normalized.call_ref,))
         bound = cur.fetchone()
     if not bound:
+        if normalized.direction == 'inbound':
+            # No account is available before keypad authentication. Unauthenticated calls never gain a ledger identity.
+            if normalized.state in contracts.TERMINAL:
+                inbound.ended(service, normalized.call_ref)
+            return app._json(start_response, 200, {'ignored': True})
         # A callback may precede create's response or a lost response's cron reconciliation. Let Dial retry.
         raise AlphaError('Phone call binding is pending.',503)
     return app._json(start_response,200,webhooks.apply(service,bound[0],url,event,signature))
@@ -122,6 +127,12 @@ def handle(app, environ, start_response, hosted, token, method, parts):
         result = service.delete_number(workspace_id, token)
     elif rest==['calls'] and method=='POST':
         result, status = service.request(workspace_id, token, app._body(environ)), 201
+    elif rest==['inbound-codes'] and method=='POST':
+        result, status = inbound.issue(service, workspace_id, token, app._body(environ)), 201
+    elif len(rest)==2 and rest[0]=='inbound-codes' and method=='GET':
+        result = inbound.status(service, workspace_id, token, rest[1])
+    elif len(rest)==2 and rest[0]=='inbound-codes' and method=='DELETE':
+        result = inbound.revoke(service, workspace_id, token, rest[1])
     elif len(rest)==2 and rest[0]=='calls' and method=='GET':
         result = service.view(workspace_id, token, rest[1])
     elif len(rest)==3 and rest[0]=='calls' and rest[2]=='end' and method=='POST':

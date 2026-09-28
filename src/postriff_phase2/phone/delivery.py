@@ -8,7 +8,7 @@ from . import billing, contracts, planner, store
 def deliver(service, call_id):
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         value = store.call(cur, call_id, lock=True)
-        if not value or value['state'] != 'requested':
+        if not value or value['state'] != 'requested' or value.get('direction') == 'inbound':
             return
         service._lock(cur, value['user_id'])
         identity = store.number(cur, value['user_id'])
@@ -77,11 +77,15 @@ def reconcile(service, call_id):
         if not value or value['state'] not in ('dialing','ambiguous','ringing','ending'):
             return
         identity = store.number(cur, value['user_id'])
-    if not identity or not service.provider:
+    is_inbound = value.get('direction') == 'inbound'
+    if (not identity and not is_inbound) or not service.provider:
         return  # unknown acceptance is kept charged/reserved until an operator can reconcile
     try:
-        receipt = service.provider.reconcile(number=service.vault.decrypt(identity['ciphertext'], identity['key_id']), call_id=call_id,
-                            call_ref=value['provider_call_ref'], requested_at=float(value['requested_at']))
+        if is_inbound:
+            receipt = service.provider.reconcile_inbound(value['provider_call_ref'])
+        else:
+            receipt = service.provider.reconcile(number=service.vault.decrypt(identity['ciphertext'], identity['key_id']), call_id=call_id,
+                                call_ref=value['provider_call_ref'], requested_at=float(value['requested_at']))
     except Exception:
         return
     if not receipt.call_ref:

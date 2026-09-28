@@ -9,6 +9,7 @@ from postriff_alpha.domain import AlphaError
 RETENTION_CLASSES = {
     "phone_identity": {"retention": "until number revocation or account deletion", "note": "Verified phone numbers encrypted at rest. Notifications and diagnostics never include the full number."},
     "phone_sessions": {"retention": "until account or workspace deletion", "note": "No audio recording. Call lifecycle, bounded costs and text transcript use the existing Rafii voice conversation policy. Signed provider payloads are normalized and discarded."},
+    "phone_sign_in": {"retention": "codes expire after five minutes; expired code digests older than one day and caller rate-limit digests older than two days are removed on the next incoming-call or enabled phone-maintenance pass", "note": "Single-use phone codes are stored only as keyed hashes, bound to the signed-in user, workspace and chosen conversation. No private context or AI session before authentication. Caller ID alone does not authenticate."},
     "drafts": {"retention": "until customer deletion", "note": "Revision history is kept with the draft."},
     "sources": {"retention": "until retraction or deletion", "note": "Retraction blocks future use and dependent drafts; deletion removes text and derived chunks."},
     "generated_media": {"retention": "until customer deletion", "note": "Immutable renditions; provenance kept as hashes."},
@@ -23,7 +24,7 @@ RETENTION_CLASSES = {
 }
 
 SUBPROCESSORS = [
-    {"name": "Dial", "purpose": "optional phone verification and outbound PSTN transport for Self-Hosted Phone Mode", "status": "only when Dial Phone Mode is configured and the person explicitly enables calls; no audio recording"},
+    {"name": "Dial", "purpose": "optional phone verification and inbound/outbound PSTN transport for Self-Hosted Phone Mode", "status": "only when Dial Phone Mode is configured and the person explicitly enables callbacks or creates a one-time dial-in code; no audio recording"},
     {"name": "Twilio", "purpose": "optional SMS notifications or legacy phone verification and PSTN transport", "status": "only when the corresponding service is configured and the person consents"},
     {"name": "OpenAI GPT-Live", "purpose": "browser and optional telephone voice conversation, delegated to the same Rafii runtime", "status": "only when configured; session storage disabled; text transcript stays in the Rafii conversation"},
     {"name": "Vercel", "purpose": "hosting / API runtime", "status": "configured hosting provider; release environment to be verified"},

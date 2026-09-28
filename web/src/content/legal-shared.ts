@@ -6,6 +6,7 @@
 export const RETENTION = [
   { data: 'Verified phone identity', retention: 'Until you revoke the number or delete the account', note: 'The number is encrypted at rest; notifications and diagnostics do not include the full number.' },
   { data: 'Phone sessions', retention: 'Until you delete the account or workspace', note: 'No audio recording. Call lifecycle, bounded costs and text transcript follow the Rafii voice conversation policy.' },
+  { data: 'Phone sign-in', retention: 'Codes expire after five minutes. Expired code digests older than one day and caller rate-limit digests older than two days are removed on the next incoming-call or enabled phone-maintenance pass.', note: 'Single-use codes are stored only as keyed hashes and belong to your account, workspace and chosen conversation. Caller ID alone does not authenticate. No private context or AI session before authentication.' },
   { data: 'Drafts and revision history', retention: 'Until you delete them', note: 'Revision history is kept with the draft.' },
   { data: 'Sources you add', retention: 'Until retraction or deletion', note: 'Retraction blocks future use and dependent drafts; deletion removes the text and derived chunks.' },
   { data: 'Generated media', retention: 'Until you delete it', note: 'Immutable renditions; provenance kept as hashes.' },
@@ -19,7 +20,7 @@ export const RETENTION = [
 ];
 
 export const SUBPROCESSORS = [
-  { name: 'Dial', purpose: 'Optional phone verification and outbound PSTN transport for Self-Hosted Phone Mode', region: 'Provider route to be verified', status: 'Only when Dial Phone Mode is configured and you explicitly enable calls; no audio recording' },
+  { name: 'Dial', purpose: 'Optional phone verification and inbound/outbound PSTN transport for Self-Hosted Phone Mode', region: 'Provider route to be verified', status: 'Only when Dial Phone Mode is configured and you explicitly enable callbacks or create a one-time dial-in code; no audio recording' },
   { name: 'Twilio', purpose: 'Optional SMS notifications or legacy phone verification and PSTN transport', region: 'Provider route to be verified', status: 'Only when the corresponding service is configured and you consent' },
   { name: 'OpenAI GPT-Live', purpose: 'Browser and optional phone voice conversations delegated to the same Rafii runtime', region: 'Provider route to be verified', status: 'Only when configured; session storage is disabled and the text transcript remains in Rafii' },
   { name: 'Vercel', purpose: 'Hosting and API runtime', region: 'Release region to be verified', status: 'Configured hosting provider' },

@@ -9,7 +9,7 @@ from postriff_alpha.domain import AlphaError
 STATES = ('requested', 'dialing', 'ringing', 'answered', 'live', 'ending', 'completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'ambiguous', 'cancelled')
 TERMINAL = frozenset(('completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'cancelled'))
 CALL_EVENTS = frozenset(('publish.failed', 'publish.uncertain', 'campaign.approval_required', 'campaign.blocked', 'channel.reconnect_required'))
-FLAGS = ('RAFII_PHONE_ENABLED', 'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED')
+FLAGS = ('RAFII_PHONE_ENABLED', 'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_INBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED')
 DEFAULTS = {'enabled': False, 'proactiveCalls': False, 'scheduledCalls': False, 'quietStart': 1320, 'quietEnd': 480,
             'timeZone': 'UTC', 'maxCallsPerDay': 2, 'maxMilliCreditsPerCall': 0, 'eventAllowlist': [], 'fallbackToPush': True, 'fallbackToEmail': True}
 GREETING = 'Hi, this is Rafii, your AI assistant.'
@@ -18,6 +18,7 @@ GREETING = 'Hi, this is Rafii, your AI assistant.'
 FAILURE_MESSAGES = {
     'phone_disabled': 'Phone Mode is unavailable on this deployment.',
     'outbound_disabled': 'Calling is temporarily disabled. Your verified number is saved.',
+    'inbound_disabled': 'Dial-in calling is temporarily unavailable.',
     'phone_unverified': 'Verify your phone number before calling.',
     'calling_off': 'Turn on Enable Call Rafii before calling.',
     'membership': 'You no longer have access to call Rafii in this workspace.',
@@ -81,6 +82,7 @@ class ProviderEvent:
     call_ref: str
     state: str
     duration_seconds: int | None = None
+    direction: str = 'outbound'
 
 
 @dataclass(frozen=True)

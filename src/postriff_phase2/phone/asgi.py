@@ -8,7 +8,7 @@ import os
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts, store
+from . import contracts, inbound, store
 from .diagnostics import report_failure
 from .session import PhoneSessionController, bridge
 from .providers.twilio import TwilioMediaTransport
@@ -137,6 +137,7 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             return
         await socket.accept()
         controller, transport, call_id = None, None, None
+        incoming = False
         try:
             import json
             async with asyncio.timeout(10):
@@ -144,19 +145,46 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             if len(raw) > 65536:
                 raise ValueError('Dial frame too large')
             meta = json.loads(raw)
+            direction = meta.get('direction')
             if not (meta.get('type') == 'call_connected' and meta.get('call_id') == call_ref and
-                    meta.get('direction') == 'outbound' and meta.get('from') == provider.originating_number and
+                    direction in ('outbound','inbound') and meta.get('to' if direction == 'inbound' else 'from') == provider.originating_number and
                     meta.get('formats') == {'inbound':'mulaw_8000','outbound':'mulaw_8000'} and not meta.get('reconnect')):
                 raise AlphaError('Invalid Dial phone stream.', 403)
             # Starts keepalive before DB/model initialization; never reinitialize a claimed call on reconnect.
-            transport = DialMediaTransport(socket)
-            call_id = await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta)
-            if not await transport.accept_call():
-                await transport.end_call()
-                await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
-                await asyncio.to_thread(phone.record_live_usage, call_id, 0)
-                return
-            await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta, accepted=True)
+            incoming = direction == 'inbound'
+            transport = DialMediaTransport(socket, collect_code=incoming)
+            if incoming:
+                caller = meta.get('from')
+                if not isinstance(caller, str) or not 1 <= len(caller) <= 200:
+                    raise AlphaError('Invalid Dial caller metadata.', 403)
+                if not await asyncio.to_thread(inbound.begin, phone, call_ref, caller):
+                    await transport.end_call()
+                    return
+                deadline = asyncio.get_running_loop().time() + inbound.AUTH_SECONDS
+                await transport.play_prompt('dial-inbound')
+                for attempt in range(3):
+                    code = await transport.read_code(timeout=max(0, deadline - asyncio.get_running_loop().time()))
+                    if code is None:
+                        break
+                    call_id = await asyncio.to_thread(inbound.authenticate, phone, call_ref, code)
+                    code = None
+                    if call_id:
+                        break
+                    if attempt < 2:
+                        await transport.play_prompt('dial-inbound-retry')
+                if not call_id or not await transport.authorize_inbound():
+                    await transport.end_call()
+                    if call_id:
+                        await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
+                    return
+            else:
+                call_id = await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta)
+                if not await transport.accept_call():
+                    await transport.end_call()
+                    await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
+                    await asyncio.to_thread(phone.record_live_usage, call_id, 0)
+                    return
+                await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta, accepted=True)
             controller = await asyncio.to_thread(PhoneSessionController, phone, call_id)
             if live_connect:
                 async with live_connect() as connection:
@@ -181,6 +209,8 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                 if controller is None:
                     await asyncio.to_thread(phone.record_live_usage, call_id, 0)
         finally:
+            if incoming:
+                await asyncio.to_thread(inbound.ended, phone, call_ref)
             if transport:
                 await transport.close()
             try:

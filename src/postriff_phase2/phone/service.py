@@ -16,7 +16,7 @@ from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.http import runtime_for
 from ..automation_runs import principal_repository
 from ..permissions import require
-from . import billing, contracts, planner, store
+from . import billing, contracts, inbound, planner, store
 from .config import PhoneConfig
 
 
@@ -51,6 +51,9 @@ class PhoneService:
             cur.execute('SELECT id::text,schedule,enabled,extract(epoch from next_at) FROM public.pr_phone_schedules WHERE user_id=%s AND workspace_id=%s ORDER BY created_at', (principal, workspace_id))
             schedules = [{'id': r[0], 'schedule': r[1], 'enabled': r[2], 'nextAt': float(r[3])} for r in cur.fetchall()]
             return {'available': True, 'providerReady': bool(self.provider and self.provider.configured), 'flags': self.config.public(),
+                    'inbound': {'available': inbound.available(self) and self.hosted.ideas._member(row).allows('edit'),
+                                'phoneNumber': self.provider.originating_number if inbound.available(self) else None,
+                                'spending': billing.spending(self, cur, workspace_id, direction='inbound')},
                     'spending': billing.spending(self, cur, workspace_id),
                     'execution': 'fake' if self.provider and not self.provider.real else 'provider',
                     'number': {'lastFour': number['last_four'], 'verified': number['verified']} if number else None,
@@ -153,8 +156,13 @@ class PhoneService:
             cur.execute('DELETE FROM public.pr_phone_schedules WHERE user_id=%s', (principal,))
         return {'deleted': True}
 
-    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True):
+    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None):
         self._require()
+        direction = 'inbound' if _inbound else 'outbound'
+        if _inbound:
+            inbound.require_available(self)
+            if kind != 'explicit' or dispatch:
+                raise AlphaError('Invalid inbound admission.', 403)
         key = payload.get('idempotencyKey')
         if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9:_-]{8,100}', key):
             raise AlphaError('Send a unique call request key.', 400)
@@ -165,6 +173,7 @@ class PhoneService:
             member = self.hosted.ideas._member(row)
             require(member, 'edit')
             self._lock(cur, principal)
+            ticket_id = inbound.claim(cur, self, principal, workspace_id, *_inbound) if _inbound else None
             cur.execute('SELECT id::text,workspace_id::text FROM public.pr_phone_calls WHERE user_id=%s AND idempotency_key=%s', (principal, key))
             prior = cur.fetchone()
             if prior:
@@ -172,25 +181,29 @@ class PhoneService:
                     raise AlphaError('Call unavailable.', 404)
                 return store.public_call(store.call(cur, prior[0]))
             identity, prefs = store.number(cur, principal), store.prefs(cur, principal, workspace_id)
+            if _inbound:
+                # This identity is the authenticated single-use web ticket, never the caller ID.
+                identity = {'hash': inbound.digest(self, 'principal', principal), 'verified': True}
             start = planner.day_start(now, prefs['timeZone'])
             cur.execute(f'SELECT count(*),coalesce(sum({billing.DAILY_COST_SQL}),0),count(*) FILTER(WHERE kind<>\'explicit\') '
                         'FROM public.pr_phone_calls WHERE user_id=%s AND requested_at>=to_timestamp(%s)', (principal, start))
             count, reserved, automatic = cur.fetchone()
-            reason = reason_key or 'explicit'
+            reason = 'inbound' if _inbound else reason_key or 'explicit'
             cur.execute('SELECT state,reason_key,requested_at>to_timestamp(%s) FROM public.pr_phone_calls WHERE user_id=%s AND (NOT(state=ANY(%s)) OR requested_at>to_timestamp(%s))',
                         (now - 300, principal, list(contracts.TERMINAL), now - 300))
             recent = cur.fetchall()
-            estimate_live, estimate_tel = billing.estimates(self)
+            estimate_live, estimate_tel = billing.estimates(self, direction=direction)
             estimate = estimate_live + estimate_tel
             blocker = planner.eligibility(kind, prefs, now=now, verified=bool(identity and identity['verified']), membership=member.allows('edit'),
                 configured=bool(self.provider and self.provider.configured and (not self.provider.real or self.config.telephony_rate > 0)),
                 live_configured=route.available and agent.cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=self.config.public(), event_type=event_type,
                 daily_calls=int(count if kind == 'explicit' else automatic), recent_equivalent=any(r[1] == reason and r[2] for r in recent),
-                active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate, daily_budget=self.config.daily_budget)
+                active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate, daily_budget=self.config.daily_budget,
+                direction=direction)
             if blocker:
                 raise AlphaError(contracts.failure_message(blocker), 409, code=blocker)
-            number = self.vault.decrypt(identity['ciphertext'], identity['key_id'])
-            if self.provider.real:
+            number = self.vault.decrypt(identity['ciphertext'], identity['key_id']) if not _inbound else None
+            if self.provider.real and not _inbound:
                 allowed = [c for c in self.config.values.get('RAFII_PHONE_ALLOWED_COUNTRY_CODES', '').split(',') if re.fullmatch(r'\+[1-9][0-9]{0,2}', c)]
                 if not any(number.startswith(c) for c in allowed):
                     raise AlphaError('Calls to this country aren’t enabled.', 403, code='phone_country')
@@ -223,6 +236,11 @@ class PhoneService:
                         'live_reservation_id,telephony_reservation_id,reserved_usd_micro,requested_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,\'requested\',%s,%s,%s,%s,%s,%s,to_timestamp(%s))',
                         (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], self.config.cap_seconds,
                          live_res['reservationId'], tel_res['reservationId'], estimate, now))
+            if _inbound:
+                cur.execute("UPDATE public.pr_phone_calls SET direction='inbound',state='answered',provider_call_ref=%s,"
+                            'answered_at=to_timestamp(%s),media_claimed_at=to_timestamp(%s) WHERE id=%s', (_inbound[0], now, now, call_id))
+                cur.execute('UPDATE public.pr_phone_inbound_codes SET call_id=%s WHERE id=%s', (call_id, ticket_id))
+                cur.execute('UPDATE public.pr_phone_inbound_sessions SET call_id=%s WHERE provider_call_ref=%s', (call_id, _inbound[0]))
         if dispatch:
             from .delivery import deliver
             deliver(self, call_id)
@@ -359,9 +377,12 @@ class PhoneService:
                 current = store.call(cur, call_id)
                 identity = store.number(cur, value['user_id'])
                 prefs = store.prefs(cur, value['user_id'], value['workspace_id'])
-            if not current or current['state'] not in ('answered','live') or not identity or not identity['verified'] or identity['hash'] != current['number_hash'] or not prefs['enabled']:
+            is_inbound = bool(current and current.get('direction') == 'inbound')
+            if not current or current['state'] not in ('answered','live'):
                 raise AlphaError('This phone session ended.', 409, code='phone_ended')
-            if not self.config.enabled('RAFII_PHONE_ENABLED') or not self.config.enabled('RAFII_PHONE_OUTBOUND_ENABLED'):
+            if not is_inbound and (not identity or not identity['verified'] or identity['hash'] != current['number_hash'] or not prefs['enabled']):
+                raise AlphaError('This phone session ended.', 409, code='phone_ended')
+            if not self.config.enabled('RAFII_PHONE_ENABLED') or not self.config.enabled('RAFII_PHONE_INBOUND_ENABLED' if is_inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'):
                 raise AlphaError('Phone Mode is disabled.', 403)
             if current['answered_at'] and self.clock() >= float(current['answered_at']) + current['max_seconds']:
                 raise AlphaError('The phone session reached its time limit.', 409, code='phone_expired')

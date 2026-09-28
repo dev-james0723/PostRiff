@@ -23,6 +23,10 @@ class PhoneConfig:
         return min(5_000_000, max(0, int(self.values.get('RAFII_PHONE_DAILY_USD_MICRO', 2_000_000))))
 
     @property
+    def inbound_auth_budget(self):
+        return min(5_000_000, max(0, int(self.values.get('RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO', 1_000_000))))
+
+    @property
     def base_url(self):
         return str(self.values.get('RAFII_PHONE_PUBLIC_BASE_URL') or '').rstrip('/')
 

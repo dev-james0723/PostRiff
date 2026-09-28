@@ -142,11 +142,11 @@ class DialProvider:
         return {'ready': True, 'maxSeconds': min(600, limit), 'smsReady': sms_ready,
                 'smsRegistration': registration_status}
 
-    def _receipt(self, value, *, number=None, call_id=None, call_ref=None):
+    def _receipt(self, value, *, number=None, call_id=None, call_ref=None, direction='outbound'):
         ref = value.get('id')
         if not isinstance(ref, str) or not IDENTIFIER.fullmatch(ref) or (call_ref and ref != call_ref):
             return CallReceipt('ambiguous')
-        if value.get('direction') != 'outbound' or value.get('from') != self.originating_number:
+        if value.get('direction') != direction or value.get('to' if direction == 'inbound' else 'from') != self.originating_number:
             return CallReceipt('ambiguous')
         if number is not None and value.get('to') != number:
             return CallReceipt('ambiguous')
@@ -189,7 +189,15 @@ class DialProvider:
         if not IDENTIFIER.fullmatch(call_ref):
             return False
         status, result = self.transport('GET', '/calls/' + call_ref)
-        return status == 200 and self._receipt(result.get('call') or {}, call_ref=call_ref).state in TERMINAL
+        value = result.get('call') or {}
+        direction = value.get('direction')
+        return status == 200 and direction in ('inbound','outbound') and self._receipt(value, call_ref=call_ref, direction=direction).state in TERMINAL
+
+    def reconcile_inbound(self, call_ref):
+        if not isinstance(call_ref, str) or not IDENTIFIER.fullmatch(call_ref):
+            return CallReceipt('ambiguous')
+        status, result = self.transport('GET', '/calls/' + call_ref)
+        return self._receipt(result.get('call') or {}, call_ref=call_ref, direction='inbound') if status == 200 else CallReceipt('ambiguous')
 
     def verify_media(self, call_ref, signature):
         return bool(IDENTIFIER.fullmatch(call_ref) and signature_valid(self.media_secret, signature, call_ref.encode(), self.clock()))
@@ -202,9 +210,10 @@ class DialProvider:
         data = parameters.get('data') or {}
         ref, kind = data.get('callId'), parameters.get('type')
         event_id = parameters.get('id')
+        direction = data.get('direction')
         if not (isinstance(ref, str) and IDENTIFIER.fullmatch(ref) and isinstance(event_id, str) and
                 1 <= len(event_id) <= 200 and kind in ('call.ended', 'call.status_changed') and
-                data.get('direction') == 'outbound' and data.get('from') == self.originating_number and
+                direction in ('inbound','outbound') and data.get('to' if direction == 'inbound' else 'from') == self.originating_number and
                 (parameters.get('relatedObject') or {}).get('id') == ref):
             raise ValueError('Invalid Dial call event')
         next_state = state(data)
@@ -213,7 +222,7 @@ class DialProvider:
         duration = data.get('durationSeconds')
         if duration is not None and (type(duration) is not int or not 0 <= duration <= 86400):
             raise ValueError('Invalid Dial duration')
-        return ProviderEvent(event_id, ref, next_state, duration)
+        return ProviderEvent(event_id, ref, next_state, duration, direction)
 
     def start_verification(self, number):
         phone_number(number)
@@ -247,13 +256,15 @@ class DialProvider:
 
 class DialMediaTransport:
     """Pump keepalive immediately, independently of Live startup and delegated work. Bounded audio queue."""
-    def __init__(self, socket, *, require_acceptance=True):
+    def __init__(self, socket, *, require_acceptance=True, collect_code=False):
         self.socket, self.ended = socket, False
         self.audio = asyncio.Queue(maxsize=256)
         self.stopped = asyncio.Event()
         self.error = None
         self.accepted = not require_acceptance
         self.acceptance = asyncio.Event()
+        self.collect_code = collect_code
+        self.digits = asyncio.Queue(maxsize=32)
         self.reader = asyncio.create_task(self._read())
 
     async def _read(self):
@@ -268,6 +279,10 @@ class DialMediaTransport:
                 elif event.get('type') == 'call_ended':
                     self.ended = True
                     break
+                elif event.get('type') == 'dtmf' and self.collect_code and not self.accepted:
+                    digit = event.get('digit')
+                    if isinstance(digit, str) and digit in '0123456789*#' and len(digit) == 1:
+                        self.digits.put_nowait(digit)
                 elif event.get('type') == 'dtmf' and not self.acceptance.is_set():
                     self.accepted = event.get('digit') == '1'
                     self.acceptance.set()
@@ -284,6 +299,9 @@ class DialMediaTransport:
         finally:
             self.stopped.set()
             self.acceptance.set()
+            if self.digits.full():
+                self.digits.get_nowait()
+            self.digits.put_nowait(None)
             if self.audio.full():
                 self.audio.get_nowait()
             self.audio.put_nowait(None)
@@ -303,6 +321,47 @@ class DialMediaTransport:
         if not self.accepted or self.stopped.is_set():
             return False
         await self.interrupt()  # Flush any unplayed greeting before starting Rafii's normal voice.
+        return True
+
+    async def play_prompt(self, name):
+        if name not in ('dial-inbound', 'dial-inbound-retry'):
+            raise ValueError('Unknown phone prompt')
+        prompt = (Path(__file__).resolve().parents[1] / 'assets' / (name + '.mulaw')).read_bytes()
+        if not 8000 <= len(prompt) <= 200000:
+            raise ValueError('Phone prompt unavailable')
+        await self.interrupt()
+        for offset in range(0, len(prompt), 1600):
+            await self.send_audio(base64.b64encode(prompt[offset:offset + 1600]).decode())
+
+    async def read_code(self, *, timeout):
+        code = ''
+        try:
+            async with asyncio.timeout(timeout):
+                while not self.stopped.is_set():
+                    digit = await self.digits.get()
+                    if digit is None:
+                        return None
+                    if digit == '*':
+                        code = ''
+                    elif digit == '#':
+                        if code:
+                            return code
+                    else:
+                        code += digit
+                        if len(code) == 12:
+                            return code
+        except TimeoutError:
+            return None
+        return None
+
+    async def authorize_inbound(self):
+        if self.stopped.is_set():
+            return False
+        await self.interrupt()
+        self.accepted = True
+        self.acceptance.set()
+        while not self.digits.empty():
+            self.digits.get_nowait()
         return True
 
     async def receive_audio(self):

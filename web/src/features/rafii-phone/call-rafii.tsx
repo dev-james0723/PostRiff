@@ -8,9 +8,10 @@ import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import { PHONE_TERMINAL } from '@/lib/phone/types';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
+import { DialInRafii } from './dial-in-rafii';
 
 /** Only this button's explicit click submits a call. Navigation and notification opens never dial. */
-export function CallRafii({ conversationId, onConversation }: { conversationId?: string | null; onConversation?: (id: string) => void }) {
+export function CallRafii({ conversationId, onConversation, showInbound = true }: { conversationId?: string | null; onConversation?: (id: string) => void; showInbound?: boolean }) {
   const { api, workspaceId } = useWorkspace();
   const settings = usePhoneSettings();
   const [busy, setBusy] = useState(false);
@@ -53,6 +54,7 @@ export function CallRafii({ conversationId, onConversation }: { conversationId?:
     finally { setBusy(false); }
   }
   return <div className='flex flex-wrap items-center gap-2 px-4 py-2 text-xs' aria-live='polite'>
+    {showInbound && <DialInRafii conversationId={conversationId} onConversation={onConversation} />}
     {ready && !active && spending?.usesCredits && <div className='w-full space-y-2'>
       <label className='flex flex-wrap items-center gap-2'>Maximum credits for this call<input aria-label='Maximum credits for this call' inputMode='decimal' value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} disabled={busy} placeholder='Set a limit' className='rafii-field min-h-11 w-28 rounded-lg px-3 text-base' /></label>
       <p>Phone and voice time holds up to {(Math.ceil(spending.ceilingMilliCredits / 100) / 10).toFixed(1)} credits. Set a higher limit to allow Rafii’s reasoning during the call. Unused credits return when the call settles; paid drafting, research and media keep their task approval rules.</p>

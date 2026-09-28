@@ -15,17 +15,17 @@ DAILY_COST_SQL = """CASE WHEN live_cost_usd_micro IS NOT NULL AND telephony_cost
     ELSE greatest(reserved_usd_micro, coalesce(live_cost_usd_micro,0) + coalesce(telephony_cost_usd_micro,0)) END"""
 
 
-def estimates(phone):
+def estimates(phone, *, direction='outbound'):
     return (
         phone.agent().cfg.live_usd_micro_per_minute * math.ceil((phone.config.cap_seconds + 15) / 60),
-        phone.config.telephony_rate * math.ceil(phone.config.cap_seconds / 60),
+        phone.config.telephony_rate * math.ceil((phone.config.cap_seconds + (45 if direction == 'inbound' else 0)) / 60),
     )
 
 
-def spending(phone, cur, workspace_id):
+def spending(phone, cur, workspace_id, *, direction='outbound'):
     book = phone.hosted.ledger.credits
     active = bool(book and book.policy(cur, workspace_id))
-    return {'usesCredits': active, 'ceilingMilliCredits': sum(millicredits(v) for v in estimates(phone)),
+    return {'usesCredits': active, 'ceilingMilliCredits': sum(millicredits(v) for v in estimates(phone, direction=direction)),
             'availableMilliCredits': book.view(cur, workspace_id)['availableMilliCredits'] if active else None}
 
 

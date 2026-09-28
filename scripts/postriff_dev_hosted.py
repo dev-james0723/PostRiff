@@ -265,6 +265,7 @@ def main():
     parser.add_argument("--port", type=int, default=4331)
     parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
     parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
+    parser.add_argument("--inbound-phone-fixture", action="store_true", help="local one-time inbound codes with a synthetic Dial transport; no network calls")
     parser.add_argument("--notification-fixture", action="store_true", help="unified notifications with fake SMS/Push/Email only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
@@ -293,6 +294,13 @@ def main():
         from postriff_phase2.phone.runtime import attach
         attach(service,{'RAFII_PHONE_ENABLED':'1','RAFII_PHONE_OUTBOUND_ENABLED':'1','RAFII_PHONE_SCHEDULED_ENABLED':'1',
                         'RAFII_PHONE_PROACTIVE_ENABLED':'1','RAFII_PHONE_PROVIDER':'fake'})
+    if args.inbound_phone_fixture:
+        from postriff_phase2.phone.service import PhoneService
+        from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
+        class InboundFixture(FakeTelephonyProvider):
+            name, originating_number = 'dial', '+12025550100'
+        service.phone = PhoneService(service, {'RAFII_PHONE_ENABLED': '1', 'RAFII_PHONE_INBOUND_ENABLED': '1',
+            'RAFII_PHONE_USD_MICRO_PER_MINUTE': '10000', 'RAFII_PHONE_MAX_SECONDS': '60'}, provider=InboundFixture())
     if args.notification_fixture:
         from postriff_phase2.coworker.runtime import attach as attach_notifications
         from postriff_phase2.notifications import sms, push
