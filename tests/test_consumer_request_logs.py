@@ -27,3 +27,17 @@ class RequestLogsTest(unittest.TestCase):
         self.assertEqual(route_pattern('/api/workspaces/5f0c1a52-8f3e-4b8e-9a53-0f5c2e1f9a10/ideas/runs/0123456789abcdef0123/events'),'/api/workspaces/:id/ideas/runs/:id/events')
         self.assertEqual(route_pattern('/api/invitations/AbCdEfGhIjKlMnOpQrStUvWxYz012345/accept'),'/api/invitations/:id/accept')
         self.assertEqual(route_pattern('/api/workspaces/abc/billing/credit-checkout'),'/api/workspaces/abc/billing/credit-checkout')
+
+    def test_cron_failure_records_source_location_without_private_exception_data(self):
+        from test_postriff_phase2_hosted import FakeService, invoke
+        class FailingWorker:
+            def tick(self):
+                raise TypeError("PRIVATE payload and credentials")
+        app = HostedApplication(FakeService(), FailingWorker(), {}, "c" * 24)
+        with self.assertLogs("postriff.request", level="INFO") as logs:
+            status, _, body = invoke(app, "GET", "/api/cron/worker", headers={"Authorization": "Bearer " + "c" * 24})
+        self.assertEqual(status, 500)
+        record = json.loads(logs.records[-1].getMessage())
+        self.assertRegex(record["failureSite"], r"^postriff_phase2\.hosted_app:_handle:\d+$")
+        self.assertEqual(record["exceptionType"], "TypeError")
+        self.assertNotIn("PRIVATE", str(logs.output) + json.dumps(body))
