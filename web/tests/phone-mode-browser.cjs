@@ -54,6 +54,29 @@ async function api(method,path,body) {
     await section.getByText('Phone ending 0123 · Verified',{exact:true}).waitFor();
     assert.equal((await section.innerText()).includes('+12025550123'),false,'Only masked phone after verification');
     await section.getByRole('switch',{name:'Enable Call Rafii',exact:true}).click();
+    const custom=section.getByRole('region',{name:'Custom proactive call situations'});
+    await section.getByRole('switch',{name:'Allow proactive calls',exact:true}).click();
+    await custom.locator('#phone-rule-when').fill('Call me if a scheduled post fails twice in one day');
+    await custom.locator('#phone-rule-discuss').fill('Tell me which post failed and why');
+    await custom.getByRole('button',{name:'Preview and save rule'}).click();
+    await custom.getByText('Paused · review this trigger and discussion before enabling').waitFor();
+    let customRules=(await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules;
+    assert.equal(customRules.length,1);
+    assert.equal(customRules[0].eventType,'publish.failed');
+    assert.equal(customRules[0].countAtLeast,2);
+    assert.equal(customRules[0].enabled,false,'New custom call rules start paused');
+    await custom.getByRole('button',{name:'Enable reviewed rule'}).click();
+    await custom.getByText('Active after all phone gates pass').waitFor();
+    customRules=(await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules;
+    assert.equal(customRules[0].enabled,true);
+    await custom.locator('[id^=rule-discuss-]').fill('Explain the failed post and next steps');
+    await custom.getByRole('button',{name:'Save changes for review'}).click();
+    await custom.getByText('Paused · review this trigger and discussion before enabling').waitFor();
+    customRules=(await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules;
+    assert.equal(customRules[0].enabled,false,'Editing revokes the prior rule approval');
+    await custom.getByRole('button',{name:'Delete rule'}).click();
+    assert.deepEqual((await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules,[]);
+    assert.equal(dialRequests,0,'Creating, reviewing, editing and deleting rules never dials');
     const button=section.getByRole('button',{name:'Have Rafii call me',exact:true});
     await button.waitFor();
     const spending=(await api('GET',`/api/workspaces/${wid}/phone`)).spending;
@@ -148,6 +171,6 @@ async function api(method,path,body) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile fits viewport');
     const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || '/tmp/rafii-phone-browser.png';
     await page.screenshot({path:out,fullPage:true});
-    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','immediate provider failure and history','active call error and preserved request key','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
+    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','custom rule review activation edit revocation and deletion without dialing','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','immediate provider failure and history','active call error and preserved request key','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
   } finally {if(page) await page.screenshot({path:'/tmp/rafii-phone-browser-final.png',fullPage:true}).catch(() => {});await browser.close();}
 })().catch((error) => {console.error(error); process.exitCode=1;});

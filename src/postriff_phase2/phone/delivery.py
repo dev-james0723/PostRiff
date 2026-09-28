@@ -2,7 +2,7 @@
 from postriff_alpha.domain import AlphaError
 
 from ..permissions import Membership
-from . import billing, contracts, planner, store
+from . import billing, contracts, planner, rules, store
 
 
 def deliver(service, call_id):
@@ -16,6 +16,17 @@ def deliver(service, call_id):
         cur.execute('SELECT role,can_publish,can_reply,can_moderate,can_manage_connections FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id '
                     'WHERE workspace_id=%s AND m.user_id=%s AND m.status=\'active\' AND p.deleted_at IS NULL', (value['workspace_id'], value['user_id']))
         member = cur.fetchone()
+        custom_ref = rules.reason_ref(value['reason_key']) if value['kind']=='proactive' else None
+        custom_event_current = True
+        if custom_ref:
+            delivery_id = value['idempotency_key'].split(':', 1)[1] if value['idempotency_key'].startswith('notification:') else ''
+            cur.execute('SELECT e.event_type=%s AND e.workspace_id=%s AND e.resolved_at IS NULL '
+                        'AND (e.expires_at IS NULL OR e.expires_at>now()) AND e.occurred_at>now()-interval \'15 minutes\' '
+                        'FROM public.pr_notification_deliveries d JOIN public.pr_notification_events e ON e.id=d.event_id '
+                        'WHERE d.id::text=%s AND d.user_id=%s AND d.workspace_id=%s',
+                        (value['reason_key'].split(':',1)[0], value['workspace_id'], delivery_id, value['user_id'], value['workspace_id']))
+            fresh = cur.fetchone()
+            custom_event_current = bool(fresh and fresh[0])
         route = service.agent().cfg.route('voice_front_end', reason='phone delivery')
         start = planner.day_start(service.clock(), prefs['timeZone'])
         cur.execute(f'SELECT count(*) FILTER(WHERE kind<>\'explicit\'),count(*),coalesce(sum({billing.DAILY_COST_SQL}),0) FROM public.pr_phone_calls WHERE user_id=%s '
@@ -25,7 +36,10 @@ def deliver(service, call_id):
                     membership=bool(member and Membership.from_row(*member).allows('edit')), configured=bool(service.provider and service.provider.configured and (not service.provider.real or service.config.telephony_rate>0)),
                     live_configured=route.available and service.agent().cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=service.config.public(),
                     event_type=value['reason_key'].split(':',1)[0], daily_calls=int(count if value['kind']=='explicit' else automatic),
+                    custom_rule_ref=custom_ref,
                     reserved_cost=int(reserved), estimate=value['reserved_usd_micro'], daily_budget=service.config.daily_budget)
+        if not custom_event_current:
+            blocker = 'event_not_allowed'
         if blocker:
             cur.execute('UPDATE public.pr_phone_calls SET failure_class=%s WHERE id=%s', (blocker, call_id))
             db.commit()

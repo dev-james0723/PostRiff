@@ -1,6 +1,11 @@
+export type CustomPhoneRule = {
+  id: string; when: string; discuss: string; enabled: boolean; version: string;
+  eventType: string; countAtLeast: number; windowHours: number; sameEntity: boolean;
+};
 export type PhonePreferences = {
   enabled: boolean; proactiveCalls: boolean; scheduledCalls: boolean; quietStart: number; quietEnd: number;
-  timeZone: string; maxCallsPerDay: number; maxMilliCreditsPerCall: number; eventAllowlist: string[]; fallbackToPush: boolean; fallbackToEmail: boolean;
+  timeZone: string; maxCallsPerDay: number; maxMilliCreditsPerCall: number; eventAllowlist: string[]; customRules: CustomPhoneRule[];
+  fallbackToPush: boolean; fallbackToEmail: boolean;
 };
 export type PhoneCall = {
   direction?: 'inbound' | 'outbound';

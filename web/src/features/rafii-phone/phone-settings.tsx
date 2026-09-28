@@ -10,7 +10,7 @@ import { SettingsSection } from '@/features/account/settings-section';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import { coworkerKeys } from '@/lib/coworker/hooks';
-import type { PhonePreferences, PhoneProviderReadiness } from '@/lib/phone/types';
+import type { CustomPhoneRule, PhonePreferences, PhoneProviderReadiness } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
 import { DialInRafii } from './dial-in-rafii';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
@@ -38,6 +38,29 @@ function readinessMessage(result: PhoneProviderReadiness) {
   return `${detail || 'Dial calling setup needs attention.'}${result.httpStatus ? ` HTTP ${result.httpStatus}.` : ''} This check did not place a call.`;
 }
 
+function CustomRuleCard({ rule, busy, canEnable, save, remove }: {
+  rule: CustomPhoneRule; busy: boolean; canEnable: boolean;
+  save: (rule: CustomPhoneRule) => void; remove: () => void;
+}) {
+  const [when, setWhen] = useState(rule.when);
+  const [discuss, setDiscuss] = useState(rule.discuss);
+  const changed = when !== rule.when || discuss !== rule.discuss;
+  return <div className='flex flex-col gap-2 rounded-lg border p-3'>
+    <Label htmlFor={`rule-when-${rule.id}`}>When Rafii should call</Label>
+    <Input id={`rule-when-${rule.id}`} value={when} maxLength={240} disabled={busy} onChange={(event) => setWhen(event.target.value)} />
+    <Label htmlFor={`rule-discuss-${rule.id}`}>What Rafii should discuss</Label>
+    <textarea id={`rule-discuss-${rule.id}`} aria-label='What Rafii should discuss' className='rafii-focus min-h-20 rounded-md border bg-background p-2' value={discuss} maxLength={500} disabled={busy} onChange={(event) => setDiscuss(event.target.value)} />
+    <p className='text-muted-foreground text-xs'>Reviewed trigger: {EVENTS.find(([key]) => key === rule.eventType)?.[1] || rule.eventType}{rule.countAtLeast > 1 ? ` · ${rule.countAtLeast} ${rule.sameEntity ? 'failures of the same post' : 'events'} within ${rule.windowHours} hours` : ''}. One call at most per rule in 24 hours.</p>
+    <p className='text-muted-foreground text-xs'>Discussion: {rule.discuss}</p>
+    <p className='text-xs' role='status'>{rule.enabled ? 'Active after all phone gates pass' : 'Paused · review this trigger and discussion before enabling'}</p>
+    <div className='flex flex-wrap gap-2'>
+      <Button variant='glass' size='control' disabled={busy || !changed} onClick={() => save({ ...rule, when, discuss, enabled: false })}>Save changes for review</Button>
+      <Button variant='glass' size='control' disabled={busy || changed || (!rule.enabled && !canEnable)} onClick={() => save({ ...rule, enabled: !rule.enabled })}>{rule.enabled ? 'Pause calls' : 'Enable reviewed rule'}</Button>
+      <Button variant='quiet' size='control' disabled={busy} onClick={remove}>Delete rule</Button>
+    </div>
+  </div>;
+}
+
 export function PhoneSettings() {
   const { api, workspaceId, membership } = useWorkspace();
   const settings = usePhoneSettings();
@@ -52,11 +75,13 @@ export function PhoneSettings() {
   const [checkError, setCheckError] = useState('');
   const [day, setDay] = useState('Monday');
   const [time, setTime] = useState('09:00');
+  const [ruleWhen, setRuleWhen] = useState('');
+  const [ruleDiscuss, setRuleDiscuss] = useState('');
   const data = settings.data;
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError('');
-    try { await action(); await settings.refetch(); if (workspaceId) await client.invalidateQueries({queryKey:coworkerKeys.preferences(workspaceId)}); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Couldn’t save phone settings.'); }
+    try { await action(); await settings.refetch(); if (workspaceId) await client.invalidateQueries({queryKey:coworkerKeys.preferences(workspaceId)}); return true; }
+    catch (err) { setError(err instanceof Error ? err.message : 'Couldn’t save phone settings.'); return false; }
     finally { setBusy(false); }
   }
   async function checkCallingSetup() {
@@ -104,7 +129,17 @@ export function PhoneSettings() {
         <Label htmlFor='rafii-phone-quiet-end' className='flex-col items-start'>Quiet hours end<Input id='rafii-phone-quiet-end' type='time' value={clock(prefs.quietEnd)} disabled={busy} onChange={(event) => { if (event.target.value) void save({ quietEnd: minutes(event.target.value) }); }} /></Label>
       </div>
       <Label htmlFor='rafii-phone-daily'>Automatic calls per day<select id='rafii-phone-daily' className='rafii-focus bg-background rounded-md border p-2' value={prefs.maxCallsPerDay} disabled={busy} onChange={(event) => void save({ maxCallsPerDay: Number(event.target.value) })}><option value='1'>1</option><option value='2'>2</option></select></Label>
-      <fieldset className='flex flex-col gap-2'><legend className='mb-2 font-medium'>Events allowed to call</legend>{EVENTS.map(([key, text]) => <Label key={key} htmlFor={`phone-${key}`} className='flex min-h-11 items-center justify-between gap-3'><span id={`phone-${key}-label`}>{text}</span><Switch id={`phone-${key}`} aria-labelledby={`phone-${key}-label`} aria-label={text} checked={prefs.eventAllowlist.includes(key)} disabled={busy} onCheckedChange={(value) => void save({ eventAllowlist: value ? [...prefs.eventAllowlist, key] : prefs.eventAllowlist.filter((item) => item !== key) })} /></Label>)}</fieldset>
+      <fieldset className='flex flex-col gap-2'><legend className='mb-2 font-medium'>Preset situations allowed to call</legend>{EVENTS.map(([key, text]) => <Label key={key} htmlFor={`phone-${key}`} className='flex min-h-11 items-center justify-between gap-3'><span id={`phone-${key}-label`}>{text}</span><Switch id={`phone-${key}`} aria-labelledby={`phone-${key}-label`} aria-label={text} checked={prefs.eventAllowlist.includes(key)} disabled={busy} onCheckedChange={(value) => void save({ eventAllowlist: value ? [...prefs.eventAllowlist, key] : prefs.eventAllowlist.filter((item) => item !== key) })} /></Label>)}</fieldset>
+      <section className='flex flex-col gap-3' aria-label='Custom proactive call situations'>
+        <div><h3 className='font-medium'>Custom call situations</h3><p className='text-muted-foreground text-xs'>Describe when Rafii should call and what to discuss. Supported triggers: a post fails, a post fails twice in one day, publication outcome is uncertain, approval is due within 24 hours, a campaign is blocked, or a channel needs reconnection. Unsupported conditions will not be enabled.</p></div>
+        {(prefs.customRules || []).map((rule) => <CustomRuleCard key={`${rule.id}:${rule.version}`} rule={rule} busy={busy} canEnable={Boolean(prefs.proactiveCalls && prefs.enabled && data.number?.verified && data.flags.RAFII_PHONE_PROACTIVE_ENABLED)} save={(updated) => void save({ customRules: prefs.customRules.map((item) => item.id === rule.id ? updated : item) })} remove={() => void save({ customRules: prefs.customRules.filter((item) => item.id !== rule.id) })} />)}
+        {prefs.customRules.length < 5 && <form className='flex flex-col gap-2' onSubmit={(event) => { event.preventDefault(); void (async () => { const created = { id: crypto.randomUUID(), when: ruleWhen, discuss: ruleDiscuss, enabled: false } as CustomPhoneRule; if (await run(() => api.phonePreferences(workspaceId, { customRules: [...prefs.customRules, created] }))) { setRuleWhen(''); setRuleDiscuss(''); } })(); }}>
+          <Label htmlFor='phone-rule-when'>When Rafii should call</Label><Input id='phone-rule-when' value={ruleWhen} maxLength={240} required disabled={busy} placeholder='Call me if a scheduled post fails twice in one day' onChange={(event) => setRuleWhen(event.target.value)} />
+          <Label htmlFor='phone-rule-discuss'>What Rafii should discuss</Label><textarea id='phone-rule-discuss' aria-label='What Rafii should discuss' className='rafii-focus min-h-20 rounded-md border bg-background p-2' value={ruleDiscuss} maxLength={500} required disabled={busy} placeholder='Tell me which post failed and what I can do' onChange={(event) => setRuleDiscuss(event.target.value)} />
+          <Button type='submit' variant='glass' size='control' disabled={busy}>Preview and save rule</Button>
+        </form>}
+        <p className='text-muted-foreground text-xs'>Saving or editing a rule leaves it paused until you review and enable it. Preset and custom calls share your quiet hours, daily limit and automatic-call credit limit.</p>
+      </section>
       {toggle('fallbackToPush', 'Fall back to push notifications')}{toggle('fallbackToEmail', 'Fall back to email')}
       <p className='text-muted-foreground text-xs'>Fallback uses your existing notification choices and verified delivery channels. Opening a notification does not call you.</p>
       {prefs.scheduledCalls && <form className='flex flex-wrap items-end gap-3' onSubmit={(event) => { event.preventDefault(); void run(() => api.phoneSchedule(workspaceId, { weekdays: day === 'Daily' ? ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] : [day], localTime: time, timeZone: prefs.timeZone })); }}>
