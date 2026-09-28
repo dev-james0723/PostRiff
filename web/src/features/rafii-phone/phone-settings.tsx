@@ -12,6 +12,7 @@ import { usePhoneSettings } from '@/lib/phone/hooks';
 import { coworkerKeys } from '@/lib/coworker/hooks';
 import type { PhonePreferences, PhoneProviderReadiness } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
+import { DialInRafii } from './dial-in-rafii';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
 
 const EVENTS = [['publish.failed', 'Publication failed'], ['publish.uncertain', 'Publication outcome uncertain'], ['campaign.approval_required', 'Approval blocking a deadline'], ['campaign.blocked', 'Campaign blocked'], ['channel.reconnect_required', 'Account connection needs attention']] as const;
@@ -74,6 +75,8 @@ export function PhoneSettings() {
   return <div id='phone-mode'><SettingsSection id='phone-mode' title='Call Rafii' description='The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to 10 minutes, and are never audio recorded. Text stays in this Rafii conversation.'>
     <div className='flex flex-col gap-4 text-sm'>
       {data.execution === 'fake' && <p>Local phone test. No telephone call or verification SMS is sent.</p>}
+      <DialInRafii />
+      {data.inbound?.available && <p className='text-muted-foreground text-xs'>To receive callbacks from Rafii, save and verify your number below. Calling Rafii yourself uses the one-time sign-in code above.</p>}
       <p>{data.number ? `Phone ending ${data.number.lastFour} · ${data.number.verified ? 'Verified' : 'Not verified'}` : 'No phone number saved.'}</p>
       {membership?.role === 'owner' && data.execution === 'provider' && <div className='flex flex-col items-start gap-2'>
         <Button variant='glass' size='control' disabled={checking} onClick={() => void checkCallingSetup()}>{checking ? 'Checking…' : 'Check calling setup'}</Button>
@@ -91,7 +94,7 @@ export function PhoneSettings() {
         <Button type='submit' variant='glass' size='control' disabled={busy}>Verify phone number</Button>
       </form>}
       {toggle('enabled', 'Enable Call Rafii', !data.number?.verified)}
-      <CallRafii />
+      <CallRafii showInbound={false} />
       {toggle('proactiveCalls', 'Allow proactive calls', !data.number?.verified || !data.flags.RAFII_PHONE_PROACTIVE_ENABLED)}
       {toggle('scheduledCalls', 'Allow scheduled briefings', !data.number?.verified || !data.flags.RAFII_PHONE_SCHEDULED_ENABLED)}
       {data.spending?.usesCredits && <Label htmlFor='phone-automatic-credits' className='flex-col items-start'>Maximum credits per automatic call<Input id='phone-automatic-credits' inputMode='decimal' defaultValue={String(prefs.maxMilliCreditsPerCall / 1000)} key={prefs.maxMilliCreditsPerCall} disabled={busy} onBlur={(event) => { const value = event.target.value.trim() === '0' ? 0 : parseCreditLimit(event.target.value); if (value !== null && value !== prefs.maxMilliCreditsPerCall) void save({ maxMilliCreditsPerCall: value }); }} /><span className='text-muted-foreground text-xs'>Zero blocks automatic calls. Phone and voice time can hold up to {(Math.ceil(data.spending.ceilingMilliCredits / 100) / 10).toFixed(1)} credits per call. Rafii’s reasoning uses the remaining limit.</span></Label>}

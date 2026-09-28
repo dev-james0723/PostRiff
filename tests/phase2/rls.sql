@@ -39,6 +39,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/035_growth_metric_reads.sql
 \ir ../../migrations/postriff/036_dial_phone_provider.sql
 \ir ../../migrations/postriff/041_context_navigation.sql
+\ir ../../migrations/postriff/042_phone_inbound.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset

@@ -5,7 +5,7 @@ from .contracts import DEFAULTS, TERMINAL, failure_message, transition
 
 CALL_COLUMNS = ('id', 'user_id', 'workspace_id', 'conversation_id', 'voice_run_id', 'kind', 'reason_key', 'provider', 'provider_call_ref', 'state',
                 'number_hash', 'max_seconds', 'live_reservation_id', 'telephony_reservation_id', 'reserved_usd_micro', 'requested_at', 'answered_at', 'ended_at',
-                'duration_seconds', 'failure_class', 'media_claimed_at', 'live_usage_seconds')
+                'duration_seconds', 'failure_class', 'media_claimed_at', 'live_usage_seconds', 'direction')
 SELECT_CALL = ','.join('extract(epoch from '+v+')' if v.endswith('_at') else v+'::text' if v in ('id','user_id','workspace_id','conversation_id','voice_run_id','live_reservation_id','telephony_reservation_id') else v for v in CALL_COLUMNS)
 
 
@@ -47,6 +47,7 @@ def set_state(cur, value, state, duration=None):
 
 def public_call(value):
     return {'id': value['id'], 'conversationId': value['conversation_id'], 'state': value['state'], 'kind': value['kind'], 'provider': value['provider'],
+            'direction': value.get('direction', 'outbound'),
             'requestedAt': float(value['requested_at']), 'durationSeconds': value['duration_seconds'], 'failure': value['failure_class'],
             'failureMessage': failure_message(value['failure_class']) if value['failure_class'] or value['state'] in ('failed', 'cancelled') else None,
             'maxSeconds': value['max_seconds'], 'execution': 'fake' if value['provider'] == 'fake' else 'provider'}

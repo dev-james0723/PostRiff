@@ -64,7 +64,7 @@ import type {
 } from './types';
 import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
-import type { PhoneCall, PhonePreferences, PhoneProviderReadiness, PhoneSettingsData } from '@/lib/phone/types';
+import type { PhoneCall, PhoneInboundCode, PhoneInboundStatus, PhonePreferences, PhoneProviderReadiness, PhoneSettingsData } from '@/lib/phone/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -406,6 +406,9 @@ export function createApi(getToken: TokenSource) {
 
     /* privacy */
     phoneSettings: (w: string) => get<PhoneSettingsData>(`${ws(w)}/phone`),
+    phoneInboundCode: (w: string, body: { conversationId?: string | null; maxMilliCredits?: number }) => send<PhoneInboundCode>('POST', `${ws(w)}/phone/inbound-codes`, body),
+    phoneInboundStatus: (w: string, id: string) => get<PhoneInboundStatus>(`${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),
+    phoneInboundRevoke: (w: string, id: string) => send<{ revoked: boolean }>('DELETE', `${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),
     phoneProviderReadiness: (w: string) => get<PhoneProviderReadiness>(`${ws(w)}/phone/provider-readiness`),
     phonePreferences: (w: string, patch: Partial<PhonePreferences>) => send<{ preferences: PhonePreferences }>('PATCH', `${ws(w)}/phone/preferences`, patch),
     phoneVerify: (w: string, number: string) => send<{ sent: boolean }>('POST', `${ws(w)}/phone/verification`, { number }),

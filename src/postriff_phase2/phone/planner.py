@@ -12,10 +12,11 @@ def day_start(now, time_zone):
 
 
 def eligibility(kind, prefs, *, now, verified, membership, configured, live_configured, flags, event_type=None,
-                daily_calls=0, recent_equivalent=False, active=False, reserved_cost=0, estimate=0, daily_budget=0):
+                daily_calls=0, recent_equivalent=False, active=False, reserved_cost=0, estimate=0, daily_budget=0, direction='outbound'):
+    inbound = direction == 'inbound'
     checks = [(flags.get('RAFII_PHONE_ENABLED'), 'phone_disabled'),
-              (flags.get('RAFII_PHONE_OUTBOUND_ENABLED'), 'outbound_disabled'),
-              (verified, 'phone_unverified'), (prefs['enabled'], 'calling_off'), (membership, 'membership'),
+              (flags.get('RAFII_PHONE_INBOUND_ENABLED' if inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'), 'inbound_disabled' if inbound else 'outbound_disabled'),
+              (verified, 'phone_unverified'), (inbound or prefs['enabled'], 'calling_off'), (membership, 'membership'),
               (configured, 'provider_unavailable'), (live_configured, 'live_unavailable'),
               (not active, 'call_active'), (kind == 'explicit' or not recent_equivalent, 'recent_equivalent'),
               (estimate > 0 and reserved_cost + estimate <= daily_budget, 'phone_budget')]

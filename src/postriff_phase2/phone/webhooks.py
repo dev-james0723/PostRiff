@@ -19,7 +19,7 @@ def apply(service, call_id, url, parameters, signature):
         raise AlphaError('Invalid phone duration.', 400)
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         value = store.call(cur, call_id, lock=True)
-        if not value or value['provider'] != provider.name or (value['provider_call_ref'] and value['provider_call_ref'] != event.call_ref):
+        if not value or value['provider'] != provider.name or value.get('direction', 'outbound') != event.direction or (value['provider_call_ref'] and value['provider_call_ref'] != event.call_ref):
             raise AlphaError('Call unavailable.', 404)
         cur.execute('INSERT INTO public.pr_phone_provider_events(provider,event_id,call_id,state) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING event_id',
                     (provider.name, event.event_id, call_id, event.state))

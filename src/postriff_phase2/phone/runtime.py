@@ -3,7 +3,7 @@ import copy
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts, delivery, store
+from . import contracts, delivery, inbound, store
 from .service import PhoneService
 
 
@@ -32,6 +32,7 @@ def cron(hosted, max_items=10):
         return {'status':'disabled'}
     # Recovery can end/reconcile an existing accepted call even when new outbound calls are disabled.
     with hosted.connection_factory() as db, db.cursor() as cur:
+        inbound.cleanup(phone, cur)
         cur.execute('SELECT id::text,state FROM public.pr_phone_calls WHERE state IN (\'requested\',\'dialing\',\'ambiguous\',\'ringing\',\'ending\') ORDER BY requested_at LIMIT %s', (max_items,))
         work = cur.fetchall()
         cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE state IN (\'answered\',\'live\') AND answered_at+make_interval(secs=>max_seconds)<now() LIMIT %s', (max_items,))

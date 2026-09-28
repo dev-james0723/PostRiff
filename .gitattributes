@@ -1,0 +1,2 @@
+# Telephone prompt audio is binary G.711 mu-law.
+*.mulaw binary

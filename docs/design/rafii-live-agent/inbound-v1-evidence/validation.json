@@ -1,0 +1,74 @@
+{
+  "execution": "local implementation, synthetic external transports; not deployed",
+  "checks": {
+    "python_tests": {
+      "passed": 63,
+      "log": "python-unit.log"
+    },
+    "postgres_suites": {
+      "passed": [
+        "postgres_dial_phone",
+        "postgres_phone_mode",
+        "postgres_inbound_phone"
+      ],
+      "logs": [
+        "postgres-regression.log",
+        "postgres-inbound.log"
+      ],
+      "note": "regression log includes an earlier inbound fixture missing synthetic deletion adapter; final inbound log supersedes that one result"
+    },
+    "web_tests": {
+      "passed": 3,
+      "log": "web-unit.log"
+    },
+    "lint": {
+      "exit_code": 0,
+      "log": "lint.log"
+    },
+    "production_build": {
+      "exit_code": 0,
+      "includes_typecheck": true,
+      "log": "build.log"
+    },
+    "browser": {
+      "execution": "local real app/disposable PostgreSQL; synthetic keypad-success fixture for consumed UI only",
+      "viewports": [
+        [
+          390,
+          844
+        ],
+        [
+          1280,
+          720
+        ]
+      ],
+      "passed": [
+        "credit gating",
+        "generate",
+        "cancel",
+        "used code removed",
+        "active call controls",
+        "correct conversation navigation",
+        "expired code removed",
+        "no horizontal overflow",
+        "no console errors"
+      ],
+      "screenshots": [
+        "mobile.png",
+        "desktop-expired.png"
+      ]
+    },
+    "secret_scan": {
+      "status": "PASS",
+      "files": 1708,
+      "findings": 322,
+      "unexpected": [],
+      "exit_code": 0,
+      "log": "secret-scan.log"
+    },
+    "whitespace": {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  }
+}

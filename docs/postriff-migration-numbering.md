@@ -20,7 +20,8 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 036 | `036_dial_phone_provider` | Rafii Dial Phone | Taken on `consumer-saas`; adds Dial to the existing phone provider constraint. |
 | 037–040 | `037_growth_phase1`, `038_growth_closed_loop`, `039_radar`, `040_social_trend_intelligence` | active Rafii release worktrees | Reserved to avoid colliding with in-flight Growth / Radar / Social Trend Intelligence work. They are not implied applied merely by this reservation; re-check before release. |
 | 041 | `041_context_navigation` | Rafii Context Navigation | Additive search indexes and workspace-scoped Moments; apply before the corresponding API release. |
-| 042 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 042 | `042_phone_inbound` | Shared inbound Rafii phone v1 | Reserved on `codex/rafii-inbound-v1`; additive, apply before releasing the direction-column reader. |
+| 043 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
