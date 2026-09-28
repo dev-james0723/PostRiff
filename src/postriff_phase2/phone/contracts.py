@@ -24,7 +24,7 @@ FAILURE_MESSAGES = {
     'provider_unavailable': 'The calling service is unavailable. Your verified number is saved.',
     'live_unavailable': 'Rafii’s voice service is unavailable. Your verified number is saved.',
     'call_active': 'A call is already in progress or its outcome is still being checked. Check recent calls.',
-    'recent_equivalent': 'A call was requested recently. Wait five minutes from that request before trying again.',
+    'recent_equivalent': 'A similar automatic call was requested recently. Wait five minutes from that request before trying again.',
     'phone_budget': 'Today’s phone spending limit has been reached or reserved by an unsettled call. Try again after it settles or tomorrow.',
     'explicit_daily_limit': 'Today’s limit of six call requests has been reached. Try again tomorrow.',
     'daily_limit': 'Today’s automatic call limit has been reached.',

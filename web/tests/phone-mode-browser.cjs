@@ -102,17 +102,17 @@ async function api(method,path,body) {
     await page.setViewportSize({width:390,height:844});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Long call errors fit the phone viewport');
     await section.screenshot({path:'/tmp/rafii-phone-repair-errors-mobile.png'});
-    const cooldown='A call was requested recently. Wait five minutes from that request before trying again.';
+    const callActive='A call is already in progress or its outcome is still being checked. Check recent calls.';
     const keys=[];
     await page.unroute(`**/api/workspaces/${wid}/phone/calls`);
     await page.route(`**/api/workspaces/${wid}/phone/calls`,(route) => {
       keys.push(route.request().postDataJSON().idempotencyKey);
-      return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:cooldown,code:'recent_equivalent'})});
+      return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:callActive,code:'call_active'})});
     });
     await button.click();
-    await section.getByRole('alert').filter({hasText:cooldown}).waitFor();
+    await section.getByRole('alert').filter({hasText:callActive}).waitFor();
     await button.click();
-    await section.getByRole('alert').filter({hasText:cooldown}).waitFor();
+    await section.getByRole('alert').filter({hasText:callActive}).waitFor();
     assert.equal(keys.length,2);
     assert.equal(keys[0],keys[1],'Unconfirmed responses retain the original idempotency key');
     await page.unroute(`**/api/workspaces/${wid}/phone/calls`);
@@ -138,6 +138,6 @@ async function api(method,path,body) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile fits viewport');
     const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || '/tmp/rafii-phone-browser.png';
     await page.screenshot({path:out,fullPage:true});
-    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','immediate provider failure and history','specific cooldown and preserved request key','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
+    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','immediate provider failure and history','active call error and preserved request key','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
   } finally {if(page) await page.screenshot({path:'/tmp/rafii-phone-browser-final.png',fullPage:true}).catch(() => {});await browser.close();}
 })().catch((error) => {console.error(error); process.exitCode=1;});
