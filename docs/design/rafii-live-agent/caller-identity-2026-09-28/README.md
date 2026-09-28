@@ -3,7 +3,7 @@
 Status: **release candidate committed and initial branch push completed; automated regression and human audio audition passed. Production migration/deployment and real-device gates remain pending.**
 
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio`.
-Current integration base: `822f25d21138be18dbcd0eb7d3d2bcb1baff87cc`. The release branch is `codex/rafii-phone-caller-identity`. The requested voice-opening worktree was clean at `eefff65`, not the historical dirty `84165f1`, and remains untouched. See [source reconciliation](source-state.md).
+Current integration base: `a25bb459b7676bdaec8c007c9f6096ac45a8ed3b`. The release branch is `codex/rafii-phone-caller-identity`. The requested voice-opening worktree was clean at `eefff65`, not the historical dirty `84165f1`, and remains untouched. See [source reconciliation](source-state.md).
 
 ## Plan execution
 
@@ -48,6 +48,7 @@ Full outputs are in [logs](logs/) and checksummed by [validation.json](validatio
 - Actual `navigator.credentials.get` + existing verifyPasskey helper under a Chromium **virtual** authenticator: signature, exact fresh nonce, RP, UV and abort/no-approval passed. This is not physical-device evidence.
 - TypeScript, lint (0 warnings/errors), production build, diff whitespace and offline secret scan passed. Seven exact public manifest hashes were reviewed in the existing secret allowlist; no broad exemption. Copy audit had 18 pre-existing flags, zero introduced flags (see copy-review.json).
 - After rebase onto the latest production source: 49 focused Phone tests and 94 hosted/notification tests passed; the seven-suite disposable PostgreSQL regression passed; spoken/no-star was rerun separately; TypeScript, lint and production build passed. Migration 045's pinned release runner also passed local plan/apply/idempotency/partial-state-refusal rehearsal.
+- After production advanced again to `a25bb45`, the release was rebased a second time. Final checks passed: 143 caller/hosted units, 269 overlapping hosted-social/registry units, 19 changed web tests, nine PostgreSQL suites, spoken/no-star, virtual WebAuthn, registry gate, lint, typecheck and production build.
 
 Representative commands (from this worktree; external transports injected):
 
