@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { ApiError } from '@/lib/api/client';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhoneInboundCode, PhoneSettingsData } from '@/lib/phone/types';
+import { inboundCodeCooldownSeconds, inboundCodeCooldownUntil } from './inbound-code-cooldown';
 
 type Props = { conversationId?: string | null; onConversation?: (id: string) => void };
 
@@ -24,14 +26,17 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now() / 1000);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const mounted = useRef(true);
   const notified = useRef<string | null>(null);
+  const cooldownSeconds = inboundCodeCooldownSeconds(now, cooldownUntil);
+  const cooldownActive = cooldownSeconds > 0;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    if (!ticket) return;
+    if (!ticket && !cooldownActive) return;
     const timer = setInterval(() => setNow(Date.now() / 1000), 1000);
     return () => clearInterval(timer);
-  }, [ticket]);
+  }, [ticket, cooldownActive]);
   const status = useQuery({
     queryKey: ['phone-inbound-status', workspaceId, ticket?.id],
     queryFn: () => api.phoneInboundStatus(workspaceId, ticket!.id),
@@ -56,12 +61,26 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
   }, [ticket?.code, usable]);
 
   async function generate() {
-    if (busy || !creditReady) return;
+    if (busy || !creditReady || cooldownActive) return;
     setBusy(true); setError(''); setTicket(null);
     try {
       const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
-      if (mounted.current) { setNow(Date.now() / 1000); setTicket(result); }
-    } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t create a Agent Pairing Code.'); }
+      if (mounted.current) {
+        const issuedAt = Date.now() / 1000;
+        setNow(issuedAt);
+        setCooldownUntil(inboundCodeCooldownUntil(issuedAt));
+        setTicket(result);
+      }
+    } catch (err) {
+      if (mounted.current) {
+        if (err instanceof ApiError && err.code === 'inbound_code_limit') {
+          const rejectedAt = Date.now() / 1000;
+          setNow(rejectedAt);
+          setCooldownUntil(inboundCodeCooldownUntil(rejectedAt));
+        }
+        setError(err instanceof Error ? err.message : 'Couldn’t create a Agent Pairing Code.');
+      }
+    }
     finally { if (mounted.current) setBusy(false); }
   }
   async function cancel() {
@@ -87,7 +106,8 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
       </div> : <>
         {ticket && <p role='status'>{status.data?.state === 'used' ? 'Code used. Your phone conversation is available in Rafii.' : status.isError ? 'Couldn’t confirm this code. Create a new one before calling.' : 'This code is no longer active. Create a new one to call.'}</p>}
         {status.data?.call && <Link className='rafii-focus min-h-11 content-center underline underline-offset-4' href={`/app/agent/${status.data.call.conversationId}`}>Open phone conversation</Link>}
-        <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void generate()}>{busy ? 'Creating code…' : 'Generate new Agent Pairing Code'}</Button>
+        {cooldownActive && <p role='status'>You can create another code in {cooldownSeconds}s.</p>}
+        <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady || cooldownActive} onClick={() => void generate()}>{busy ? 'Creating code…' : cooldownActive ? `Try again in ${cooldownSeconds}s` : 'Generate new Agent Pairing Code'}</Button>
       </>}
       <p className='text-muted-foreground text-xs'>Spoken codes are transcribed by OpenAI to verify this call; use the keypad if you prefer. The code lasts five minutes and works once. Creating a code sends no text and places no call. Your carrier may charge for the call.</p>
       {error && <p className='text-destructive' role='alert'>{error}</p>}

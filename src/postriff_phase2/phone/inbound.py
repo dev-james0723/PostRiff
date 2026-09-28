@@ -13,6 +13,13 @@ AUTH_SECONDS = 45
 CODE_DIGITS = 12
 
 
+def auth_exposure_usd_micro(unauthenticated, total, telephony_rate, speech_reserve, repeat_exposure=0):
+    """Worst-case rolling admission exposure before the next caller authenticates."""
+    return ((unauthenticated + 1) * telephony_rate
+            + (total + 1) * speech_reserve
+            + repeat_exposure)
+
+
 def digest(phone, purpose, value):
     return hmac.new(phone.vault.fernet._signing_key,
                     ('rafii-inbound-v1|' + purpose + '|' + value).encode(), hashlib.sha256).hexdigest()
@@ -111,8 +118,10 @@ def begin(phone, call_ref, caller):
         # Authenticated calls already reserve their 45s greeting in billing.estimates.
         # Keep failed/unknown greetings here, but never charge funded greetings twice.
         # The operator also reserves bounded STT for every admission, even if it later authenticates.
+        exposure = auth_exposure_usd_micro(
+            unauthenticated, total, phone.config.telephony_rate, RESERVE_USD_MICRO, repeat_exposure)
         reason = ('inbound_hourly_limit' if hourly >= 12 else 'inbound_caller_limit' if same_caller >= 3 else
-                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate + (total + 1) * RESERVE_USD_MICRO + repeat_exposure > phone.config.inbound_auth_budget else None)
+                  'inbound_auth_budget' if exposure > phone.config.inbound_auth_budget else None)
         if reason:
             from .diagnostics import report_failure
             report_failure(None, 'inbound_admission', AlphaError('Inbound admission unavailable.', 429, code=reason))
