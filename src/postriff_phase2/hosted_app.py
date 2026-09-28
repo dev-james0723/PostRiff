@@ -20,7 +20,13 @@ from postriff_alpha.profiles import metadata
 from postriff_alpha.templates import catalog
 from .hosted import HostedWorkspaceService
 from .hosted_storage import PrivateAssetService, SupabaseStorage
-from .hosted_identity import SupabaseIdentityAdmin, verified_aal, verified_auth_time, verified_session_id
+from .hosted_identity import (
+    SupabaseIdentityAdmin,
+    verified_aal,
+    verified_auth_time,
+    verified_passkey_time,
+    verified_session_id,
+)
 from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
@@ -59,7 +65,7 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
 
     candidate = SupabaseSessionCandidate(project_url, get_user or https_get_user)
 
-    def verify(access_token):
+    def validate(access_token, *, enforce_mfa):
         principal = candidate.verify(access_token)
         session_id = verified_session_id(access_token, principal)
         if connection_factory is not None:
@@ -71,13 +77,21 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
             # Someone who turned on two-factor authentication must present it on every session:
             # the UI hides nothing the API would not also refuse.
-            if mfa_required and verified_aal(access_token, principal) != "aal2":
+            if enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2":
                 raise AlphaError("Two-factor verification required.", 403, code="mfa_required")
         return principal
+
+    def verify(access_token):
+        return validate(access_token, enforce_mfa=True)
 
     verify.session_id = lambda access_token, principal: verified_session_id(access_token, principal)
     verify.auth_time = lambda access_token, principal: verified_auth_time(access_token, principal)
     verify.aal = lambda access_token, principal: verified_aal(access_token, principal)
+    # A call approval carries its normal authorized bearer separately.  The proof token is checked
+    # for identity, deletion and revocation here, while application MFA enforcement remains on the
+    # bearer.  This lets TOTP-enforced accounts use a separate, ephemeral passkey session as proof.
+    verify.proof = lambda access_token: validate(access_token, enforce_mfa=False)
+    verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
     return verify
 
 

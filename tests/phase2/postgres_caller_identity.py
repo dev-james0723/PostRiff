@@ -79,13 +79,13 @@ def sign(secret, payload):
     return 't=' + timestamp + ',v1=' + hmac.new(secret.encode(), timestamp.encode() + b'.' + payload, hashlib.sha256).hexdigest()
 
 from postriff_phase2.phone import call_auth
-from postriff_phase2.hosted_identity import verified_session_id, verified_aal
+from postriff_phase2.hosted_identity import verified_session_id
 from unittest.mock import patch
 
 # Supabase is replaced at its existing identity seam. No biometrics/provider calls in this suite.
-def jwt(user, *, aal='aal2', timestamp=None, session='caller-identity-synthetic-session'):
-    claims = {'sub': user, 'session_id': session, 'aal': aal, 'iat': time.time(),
-              'amr': [{'method': 'mfa/webauthn', 'timestamp': int(time.time() if timestamp is None else timestamp)}]}
+def jwt(user, *, timestamp=None, session=None, method='passkey'):
+    claims = {'sub': user, 'session_id': session or 'proof-'+uuid.uuid4().hex, 'aal': 'aal1', 'iat': time.time(),
+              'amr': [{'method': method, 'timestamp': int(time.time() if timestamp is None else timestamp)}]}
     return 'synthetic.' + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip('=') + '.signature'
 old_verify = verify
 def auth(token):
@@ -95,21 +95,13 @@ def auth(token):
     return old_verify(token)
 auth.auth_time = lambda *_: time.time()
 auth.session_id = lambda token,u: verified_session_id(token,u) if token.startswith('synthetic.') else 'caller-identity-synthetic-session'
-auth.aal = lambda token,u: verified_aal(token,u) if token.startswith('synthetic.') else 'aal2'
+auth.aal = lambda *_: 'aal2'
+auth.proof = auth
 service.repository.verify_session = auth
 service.public_base_url = 'https://rafii.test'
 class Passkeys(Identity):
-    def __init__(self): self.factors={};self.pending={};self.used=set();self.stale=False;self.other=False
-    def verified_factors(self,user): return [{'id':f,'type':'webauthn'} for f in self.factors.get(user,[])]
-    def phone_mfa_challenge(self,token,factor,rp,site):
-        assert (rp,site)==('rafii.test','https://rafii.test')
-        id=str(uuid.uuid4());self.pending[id]=(auth(token),factor)
-        return {'id':id,'type':'webauthn','webauthn':{'type':'request','credential_options':{'publicKey':{'challenge':id,'rpId':rp}}}}
-    def phone_mfa_verify(self,token,factor,id,rp,site,credential):
-        if id in self.used or self.pending.get(id)!=(auth(token),factor) or credential != {'assertionFor':id}:
-            raise AlphaError('Synthetic assertion refused.',409)
-        self.used.add(id)
-        return {'access_token':jwt(auth(token),timestamp=1 if self.stale else None,session='wrong-session-identifier' if self.other else 'caller-identity-synthetic-session'), 'refresh_token':'synthetic-refresh'}
+    def __init__(self): self.passkeys={}
+    def registered_passkeys(self,user): return [{'id':p} for p in self.passkeys.get(user,[])]
 identity=service.identity=Passkeys()
 from postriff_phase2.notifications.service import NotificationService
 service.notifications=NotificationService(service, {})
@@ -128,8 +120,8 @@ def setup():
     phone.finish(cid,'completed',1,live_seconds=0)
     route=call_auth.trusted(phone,w,u)['callers'][0]['id']
     assert not any(x in json.dumps(call_auth.trusted(phone,w,u)) for x in (caller,t['code']))
-    factor=str(uuid.uuid4());identity.factors[u]=[factor]
-    return u,w,caller,route,factor
+    passkey=str(uuid.uuid4());identity.passkeys[u]=[passkey]
+    return u,w,caller,route,passkey
 
 def repeat(u,caller):
     ref='repeat_'+uuid.uuid4().hex
@@ -140,21 +132,16 @@ def repeat(u,caller):
     assert sql('SELECT call_id FROM pr_phone_inbound_sessions WHERE provider_call_ref=%s',ref)==[(None,)]
     return ref,c
 
-def approve(u,c,factor):
-    data=call_auth.prepare(phone,u,c,{'factorId':factor})
-    assert set(data)=={'publicKey'}
-    return call_auth.approve(phone,u,c,{'credential':{'assertionFor':data['publicKey']['challenge']}})
+def approve(u,c,_passkey=None,*,proof=None):
+    return call_auth.approve(phone,u,c,{'passkeyToken':proof or jwt(u)})
 
 u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
 other,ow=new_user()
 denied(lambda:call_auth.status(phone,other,c),404)
 denied(lambda:call_auth.approve(phone,other,c,{}),404)
-denied(lambda:call_auth.approve(phone,u,c,{}),409) # old AAL2 alone is not an assertion
-identity.stale=True
-denied(lambda:approve(u,c,factor),409)
-identity.stale=False;identity.other=True
-denied(lambda:approve(u,c,factor),409)
-identity.other=False
+denied(lambda:call_auth.approve(phone,u,c,{}),409) # the normal signed-in session is not a passkey proof
+denied(lambda:approve(u,c,factor,proof=jwt(u,timestamp=1)),409)
+denied(lambda:approve(u,c,factor,proof=jwt(other)),409)
 assert approve(u,c,factor)['state']=='approved'
 assert call_auth.consume(phone,'different-provider-call',c) is None
 with ThreadPoolExecutor(max_workers=2) as pool:
@@ -163,17 +150,17 @@ assert sum(bool(v) for v in result)==1
 assert call_auth.poll(phone,ref,c)=='consumed'
 denied(lambda:call_auth.approve(phone,u,c,{}),409)
 assert call_auth.consume(phone,ref,c) is None
-print('PASS trusted route only, exact call binding, fresh AMR not iat, wrong user/session, atomic racing consumption, replay')
+print('PASS trusted route only, exact call binding, fresh passkey AMR not iat, wrong user, atomic racing consumption, replay')
 
 for mode in ('expire','hangup','revoke','factor','membership','session','deny','cancel'):
     u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
     if mode not in ('deny','cancel'): approve(u,c,factor)
     if mode=='expire': sql("UPDATE pr_phone_auth_challenges SET expires_at=created_at+interval '1 millisecond',created_at=created_at-interval '2 seconds' WHERE id=%s",c);phone.clock=lambda:time.time()+2
     elif mode=='hangup': inbound.ended(phone,ref)
-    elif mode=='revoke': call_auth.trusted(phone,w,u,revoke=route)
-    elif mode=='factor': identity.factors[u]=[]
+    elif mode=='revoke': call_auth.trusted(phone,w,u,revoke=route,proof_token=jwt(u))
+    elif mode=='factor': identity.passkeys[u]=[]
     elif mode=='membership': sql("UPDATE pr_memberships SET status='revoked' WHERE user_id=%s AND workspace_id=%s",u,w)
-    elif mode=='session': sql('INSERT INTO pr_session_revocations(user_id,session_id) VALUES(%s,%s)',u,'caller-identity-synthetic-session')
+    elif mode=='session': sql('INSERT INTO pr_session_revocations(user_id,session_id) SELECT user_id,approved_session_id FROM pr_phone_auth_challenges WHERE id=%s',c)
     else: call_auth.dismiss(phone,u,c,mode)
     assert call_auth.consume(phone,ref,c) is None, mode
     phone.clock=time.time
@@ -218,58 +205,69 @@ phone.config=original_config
 print('PASS missing/disabled notification falls back; operator admission budget includes repeat waiting')
 
 u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
+approve(u,c,factor)
 call_auth.dismiss(phone,u,c,'deny')
 ref2='fatigue_'+uuid.uuid4().hex
 assert inbound.begin(phone,ref2,caller);assert call_auth.create(phone,ref2) is None
 assert not call_auth.fallback(phone,ref)
 for role in ('anon','authenticated'):
-    for table in ('pr_phone_trusted_callers','pr_phone_auth_challenges'):
+    for table in ('pr_phone_trusted_callers','pr_phone_auth_challenges','pr_phone_passkey_proof_uses'):
         with connection() as db:
             db.execute('SET ROLE '+role)
             try: db.execute('SELECT * FROM '+table)
             except psycopg.errors.InsufficientPrivilege: db.rollback()
             else: raise AssertionError('Browser role can access server table')
-assert sql("SELECT count(*) FROM pg_class WHERE relname IN ('pr_phone_trusted_callers','pr_phone_auth_challenges') AND relrowsecurity AND relforcerowsecurity")==[(2,)]
+assert sql("SELECT count(*) FROM pg_class WHERE relname IN ('pr_phone_trusted_callers','pr_phone_auth_challenges','pr_phone_passkey_proof_uses') AND relrowsecurity AND relforcerowsecurity")==[(3,)]
+assert sql('SELECT count(*) FROM pr_phone_passkey_proof_uses WHERE user_id=%s',u)==[(1,)]
 assert service.delete_account(w,u,'DELETE')['workspaceDeleted']
 assert sql('SELECT count(*) FROM pr_phone_auth_challenges WHERE id=%s',c)==[(0,)]
 assert sql('SELECT count(*) FROM pr_phone_trusted_callers WHERE id=%s',route)==[(0,)]
+assert sql('SELECT count(*) FROM pr_phone_passkey_proof_uses WHERE user_id=%s',u)==[(0,)]
 print('PASS deny suppression, forced RLS, browser grants denied, deletion cascades')
 print('PASS caller identity PostgreSQL: synthetic Supabase/provider, no network effects')
 
-# A cancellation/hang-up during remote WebAuthn verification wins. No DB locks held over I/O.
+# A cancellation/hang-up during remote passkey-session verification wins. No DB locks held over I/O.
 u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
-prepared=call_auth.prepare(phone,u,c,{'factorId':factor})
-original=identity.phone_mfa_verify
+original=auth.proof
 calls=[]
-def hanging_up(*args):
-    calls.append(1);inbound.ended(phone,ref);return original(*args)
-with patch.object(identity,'phone_mfa_verify',side_effect=hanging_up):
-    denied(lambda:call_auth.approve(phone,u,c,{'credential':{'assertionFor':prepared['publicKey']['challenge']}}),409)
+def hanging_up(proof):
+    calls.append(1);inbound.ended(phone,ref);return original(proof)
+with patch.object(auth,'proof',side_effect=hanging_up):
+    denied(lambda:approve(u,c,factor),409)
 assert calls==[1] and call_auth.consume(phone,ref,c) is None
-u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
-p=call_auth.prepare(phone,u,c,{'factorId':factor})
-denied(lambda:call_auth.approve(phone,u,c,{'credential':{'assertionFor':'wrong'}}),409)
-denied(lambda:call_auth.approve(phone,u,c,{'credential':{'assertionFor':p['publicKey']['challenge']}}),409)
-for _ in range(2): call_auth.prepare(phone,u,c,{'factorId':factor})
-denied(lambda:call_auth.prepare(phone,u,c,{'factorId':factor}),409)
-print('PASS in-flight hangup invalidation, one provider verify per nonce including errors, three-ceremony cap')
 
-# Exact same credential from call A cannot approve call B even when the user/factor are identical.
+# A proof session may not be the app's ordinary authorization session.
 u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
-p=call_auth.prepare(phone,u,c,{'factorId':factor})
+denied(lambda:approve(u,c,factor,proof=jwt(u,session='caller-identity-synthetic-session')),409)
+
+# Three syntactically valid but failed/uncertain passkey proofs consume the ceremony cap.
+u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
+for bad in (jwt(u,timestamp=1),jwt(u,method='mfa/webauthn'),jwt(other)):
+    denied(lambda bad=bad:approve(u,c,factor,proof=bad),409)
+denied(lambda:approve(u,c,factor),409)
+assert sql('SELECT ceremony_attempts FROM pr_phone_auth_challenges WHERE id=%s',c)==[(3,)]
+print('PASS in-flight hangup invalidation, distinct proof session, failed-proof accounting, three-ceremony cap')
+
+# Exact same passkey-created session cannot approve call B even when the user/passkey are identical.
+u,w,caller,route,factor=setup();ref,c=repeat(u,caller)
 sql("UPDATE pr_phone_auth_challenges SET created_at=created_at-interval '2 minutes' WHERE id=%s",c)
 ref2,c2=repeat(u,caller)
-call_auth.prepare(phone,u,c2,{'factorId':factor})
-denied(lambda:call_auth.approve(phone,u,c2,{'credential':{'assertionFor':p['publicKey']['challenge']}}),409)
+shared_proof=jwt(u)
+assert approve(u,c,factor,proof=shared_proof)['state']=='approved'
+denied(lambda:approve(u,c2,factor,proof=shared_proof),409)
+denied(lambda:call_auth.trusted(phone,w,u,revoke=route,proof_token=shared_proof),409)
+assert call_auth.trusted(phone,w,u)['callers'][0]['id']==route
 assert call_auth.consume(phone,ref2,c2) is None
 # Transactional, private-free notification once per exact call; no email/SMS/phone delivery.
 notices=sql("SELECT e.payload,d.user_id::text,d.channel FROM pr_notification_events e JOIN pr_notification_deliveries d ON d.event_id=e.id WHERE e.dedupe_key=%s",'phone-auth:'+c2)
 assert notices and all(n[1]==u and n[2] in ('in_app','push') for n in notices)
 assert any(n[2]=='in_app' for n in notices)
+assert notices[0][0]['title']=='Verify this Rafii agent call'
+assert notices[0][0]['detail']=='Tap to verify with Face ID, Touch ID, Windows Hello, or a security key. If you did not start it, do not approve.'
 assert notices[0][0]['href']=='/app/phone/verify-call?challenge='+c2
 assert caller not in json.dumps(notices) and inbound.digest(phone,'caller',caller) not in json.dumps(notices)
 assert sql('SELECT count(*) FROM pr_notification_events WHERE dedupe_key=%s','phone-auth:'+c2)==[(1,)]
-print('PASS cross-call assertion rejection; transactional exact deep link; no code/caller/hash/private payload; no extra channels')
+print('PASS cross-action passkey-session replay rejection; exact-user biometric push deep link; no code/caller/hash/private payload; no extra channels')
 
 # HTTP through normal origin/token guards; uses the same service calls and no-store responses.
 app=create_app(service,phone)
@@ -310,10 +308,7 @@ with TestClient(create_app(service,phone,live_connection)) as client:
         for digit in '123456789012*': socket.send_json({'type':'dtmf','digit':digit})
         challenge=sql('SELECT id::text FROM pr_phone_auth_challenges WHERE provider_call_ref=%s',ref)[0][0]
         headers={'Authorization':'Bearer '+u,'X-PostRiff-Request':'founder-alpha'}
-        data=client.post('/api/phone/verify-call/'+challenge+'/prepare',json={'factorId':factor},headers=headers)
-        assert data.status_code==200,data.text
-        assert not connections
-        data=client.post('/api/phone/verify-call/'+challenge+'/approve',json={'credential':{'assertionFor':data.json()['publicKey']['challenge']}},headers=headers)
+        data=client.post('/api/phone/verify-call/'+challenge+'/approve',json={'passkeyToken':jwt(u)},headers=headers)
         assert data.status_code==200,data.text
         while socket.receive_json()!={'type':'media','payload':base64.b64encode(b'authenticated greeting').decode()}: pass
         assert len(connections)==1
@@ -321,4 +316,4 @@ with TestClient(create_app(service,phone,live_connection)) as client:
         socket.send_json({'type':'call_ended'})
     assert call_auth.poll(phone,ref,challenge)=='consumed'
     assert not any('private pre-auth audio' in json.dumps(w.sent) or base64.b64encode(b'private pre-auth audio').decode() in json.dumps(w.sent) for w in wires)
-print('PASS signed repeat media + HTTP WebAuthn approval, no caller-ID/DTMF bypass, no Live/pre-auth audio before consumed challenge')
+print('PASS signed repeat media + HTTP passkey proof, no caller-ID/DTMF bypass, no Live/pre-auth audio before consumed challenge')

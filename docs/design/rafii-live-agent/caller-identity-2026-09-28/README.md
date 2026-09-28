@@ -1,6 +1,12 @@
 # Rafii Phone caller identity — local implementation receipt
 
-Status: **production migration and deployment passed; automated regression and human audio audition passed. Authenticated supported-device passkey acceptance remains pending.**
+> **Superseded authentication design:** hosted Supabase rejected the WebAuthn-MFA enrollment used by
+> this historical candidate. The supported passkey-sign-in repair and current activation boundary
+> are recorded in [the passkey identity receipt](../passkey-identity-2026-09-28/README.md). The
+> evidence below remains a record of the original caller-routing candidate, not approval to release
+> its WebAuthn-MFA flow.
+
+Status: **release candidate committed and initial branch push completed; automated regression and human audio audition passed. Production migration/deployment and real-device gates remain pending.**
 
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio`.
 Current integration base: `a25bb459b7676bdaec8c007c9f6096ac45a8ed3b`. The release branch is `codex/rafii-phone-caller-identity`. The requested voice-opening worktree was clean at `eefff65`, not the historical dirty `84165f1`, and remains untouched. See [source reconciliation](source-state.md).
@@ -21,7 +27,7 @@ Current integration base: `a25bb459b7676bdaec8c007c9f6096ac45a8ed3b`. The releas
 | 9 Recordings | Exactly 3 freshly approved requests completed and installed; old assets preserved. Format/content checks and the user’s human audition passed. |
 | 10 Security regression | Local SQL/HTTP/signed ASGI, forced RLS/browser grants denied/deletion cascades, replay/races, fresh nonce and secret isolation passed. |
 | 11 Full validation | Local regression below passed; **real supported-device end-to-end gate unavailable** until approved environment and user enrollment/operation. |
-| 12 Release | Audio approval, commit/push, production migration 045, independent schema post-verification, exact-source Vercel deployment, alias verification and unauthenticated fail-closed smoke passed. No merge or real paid call. Authenticated supported-device acceptance remains. |
+| 12 Release | Audio approval, commit and initial branch push complete. Deployment is authorized, but its required production migration 045 remains separately gated. No merge, production migration, deployment or paid call has been executed yet. |
 
 ## Security details and review
 
@@ -68,8 +74,8 @@ RAFII_WEB_URL=http://localhost:3395 RAFII_HARNESS_PG_PORT=55795 RAFII_PYTHON=/pr
 
 [Listen to the 3 clips](audio-review.html). [Authorization](tts-authorization.json), [generation receipt](recordings/generation.json), [offline inspection](recordings/offline-validation.json), [original assets](original-assets/) are preserved. New lengths: 7.25 / 8.65 / 13.25 seconds. Total estimated TTS cost US$0.03; approved ceiling US$0.25; actual billing unavailable. No retry or fourth request was made. The user approved all three samples on 2026-09-28 after listening. Offline tiny-Whisper has spelling uncertainty on “pairing”/“passkey”; the human audition is the acceptance evidence. Current prompt text/hash/byte matching is enforced before playback.
 
-`validation_unavailable` — real supported-device end-to-end passkey/call handover: production is deployed, but the available in-app browser had no authenticated Rafii session and stopped at sign-in. The user is willing to participate. Credential enrollment and Face ID/Touch ID ceremony must be completed by the user; no automatic account change occurred and no real paid call was authorized or placed.
+`validation_unavailable` — real supported-device end-to-end passkey/call handover: this source is local only, no separately authorized HTTPS test deployment or real paid call exists for it. A read-only check of the currently signed-in production Security page showed “Two-factor authentication Off.” The user is willing to participate; the account choice/enrollment question remains pending. Credential enrollment must be completed by the user in existing Rafii Security; no automatic account change occurred.
 
-For the remaining gate, sign into the deployed production origin and inspect its existing Supabase MFA configuration. An existing passkey only works for its enrolled RP. A later real-call acceptance still needs separate paid-call authorization; on iPhone/Safari or installed PWA it must verify Face ID/Touch ID, exact current-call challenge, app switching, return after approval, cancel/new-code fallback, and replay/expiry refusal. Record the physical device/browser and results. Do not label virtual WebAuthn or desktop-only MFA as real-device evidence.
+For the remaining gate, first identify the approved secure test origin and its existing Supabase MFA configuration. An existing passkey only works for its enrolled RP; localhost/another Vercel preview cannot reuse it by bypassing origin validation. After separate environment/release/live-call authorization, verify on iPhone/Safari or installed PWA: real Face ID/Touch ID, exact current-call challenge, call surviving app switch, return after approval, cancel then newly issued pairing fallback, and a replay/expired request being refused. Record physical device/browser and results. Do not label virtual WebAuthn, desktop-only MFA or this local receipt production-complete.
 
 External API contract references checked against installed source and official documentation: [Supabase MFA](https://supabase.com/docs/guides/auth/auth-mfa), [Supabase auth types](https://github.com/supabase/supabase-js/blob/master/packages/core/auth-js/src/lib/types.ts). No Bilibili companion-ios change and no new biometric database.

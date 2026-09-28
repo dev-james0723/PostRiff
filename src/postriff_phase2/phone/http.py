@@ -130,7 +130,10 @@ def handle(app, environ, start_response, hosted, token, method, parts):
     elif rest==['trusted-callers'] and method=='GET':
         result = call_auth.trusted(service, workspace_id, token)
     elif len(rest)==3 and rest[0]=='trusted-callers' and rest[2]=='revoke' and method=='POST':
-        result = call_auth.trusted(service, workspace_id, token, revoke=rest[1])
+        body = app._body(environ)
+        if not isinstance(body, dict):
+            raise AlphaError('Send valid call verification options.', 400)
+        result = call_auth.trusted(service, workspace_id, token, revoke=rest[1], proof_token=body.get('passkeyToken'))
     elif rest==['inbound-codes'] and method=='POST':
         result, status = inbound.issue(service, workspace_id, token, app._body(environ)), 201
     elif len(rest)==2 and rest[0]=='inbound-codes' and method=='GET':
@@ -161,9 +164,7 @@ def verify_call(app, environ, start_response, hosted, token, method, parts):
         body = app._body(environ)
         if not isinstance(body, dict):
             raise AlphaError('Send valid call verification options.', 400)
-        if action == 'prepare':
-            result = call_auth.prepare(service, token, challenge, body)
-        elif action == 'approve':
+        if action == 'approve':
             result = call_auth.approve(service, token, challenge, body)
         else:
             result = call_auth.dismiss(service, token, challenge, action)

@@ -65,6 +65,20 @@ def verified_webauthn_time(access_token, principal):
                 and m.get('method') == 'mfa/webauthn' and type(m.get('timestamp')) in (int, float)), default=0)
 
 
+def verified_passkey_time(access_token, principal):
+    """Passkey sign-in time from Supabase's signed AMR claim.
+
+    A passkey sign-in is AAL1, not MFA.  It is nevertheless a phishing-resistant proof that the
+    credential was used to create this exact session.  Refresh-token ``iat`` is deliberately not
+    accepted here because refreshing a session does not touch the passkey.
+    """
+    methods = _verified_payload(access_token, principal).get('amr') or []
+    if not isinstance(methods, list):
+        return 0
+    return max((float(m['timestamp']) for m in methods if isinstance(m, dict)
+                and m.get('method') == 'passkey' and type(m.get('timestamp')) in (int, float)), default=0)
+
+
 class SupabaseIdentityAdmin:
     def __init__(self, project_url, publishable_key, service_key, send=None, fetch=None):
         self.project_url = project_url.rstrip("/")
@@ -100,7 +114,7 @@ class SupabaseIdentityAdmin:
             parsed = json.loads(raw) if raw else {}
         except ValueError:
             parsed = {}
-        return status, parsed if isinstance(parsed, dict) else {}
+        return status, parsed if isinstance(parsed, (dict, list)) else {}
 
     def _admin_headers(self):
         return {"apikey": self.service_key, "Authorization": "Bearer " + self.service_key, "Accept": "application/json"}
@@ -115,7 +129,7 @@ class SupabaseIdentityAdmin:
         status, body = self.fetch("GET", self.project_url + "/auth/v1/admin/users/" + quote(principal), self._admin_headers())
         if status == 404:
             return None
-        if status != 200:
+        if status != 200 or not isinstance(body, dict):
             raise AlphaError("The identity service could not resolve this account.", 502)
         email = body.get("email")
         if not isinstance(email, str) or "@" not in email or not 3 <= len(email) <= 254:
@@ -130,7 +144,7 @@ class SupabaseIdentityAdmin:
         status, body = self.fetch("GET", self.project_url + "/auth/v1/admin/users/" + quote(principal), self._admin_headers())
         if status == 404:
             return []
-        if status != 200:
+        if status != 200 or not isinstance(body, dict):
             raise AlphaError("The identity service could not resolve this account.", 502)
         factors = body.get("factors")
         if not isinstance(factors, list):
@@ -139,6 +153,29 @@ class SupabaseIdentityAdmin:
             {"id": str(item.get("id", "")), "type": str(item.get("factor_type", "")), "name": str(item.get("friendly_name") or "")[:80]}
             for item in factors
             if isinstance(item, dict) and item.get("status") == "verified"
+        ]
+
+    def registered_passkeys(self, principal):
+        """Passkeys currently registered for one user via the server-only Admin endpoint."""
+        if not isinstance(principal, str) or not USER_ID.fullmatch(principal):
+            raise AlphaError("Verified user required.", 400)
+        status, body = self.fetch(
+            "GET",
+            self.project_url + "/auth/v1/admin/users/" + quote(principal) + "/passkeys",
+            self._admin_headers(),
+        )
+        if status == 404:
+            return []
+        if status != 200 or not isinstance(body, list):
+            raise AlphaError("The identity service could not resolve this account's passkeys.", 502)
+        return [
+            {
+                "id": str(item.get("id", "")),
+                "name": str(item.get("friendly_name") or "")[:120],
+                "last_used_at": str(item.get("last_used_at") or "")[:64],
+            }
+            for item in body
+            if isinstance(item, dict) and USER_ID.fullmatch(str(item.get("id", "")))
         ]
 
     def logout(self, access_token):

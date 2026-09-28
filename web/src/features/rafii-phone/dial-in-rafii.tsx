@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { needsFreshSignIn } from '@/lib/auth/step-up';
 import { useSignInAgain } from '@/lib/auth/use-sign-in-again';
+
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhoneInboundCode, PhoneSettingsData } from '@/lib/phone/types';
@@ -68,6 +69,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
   async function generate() {
     if (busy || !creditReady || cooldownActive) return;
     setBusy(true); setError(null); setTicket(null);
+
     try {
       const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
       if (mounted.current) {
@@ -84,6 +86,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
           setCooldownUntil(inboundCodeCooldownUntil(rejectedAt));
         }
         setError({ message: err instanceof Error ? err.message : 'Couldn’t create an Agent Pairing Code.', requiresFreshSignIn: needsFreshSignIn(err) });
+
       }
     }
     finally { if (mounted.current) setBusy(false); }
@@ -114,6 +117,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
         <p className='text-xs'>On the call, say all 12 digits, or enter them on the keypad and press *. Pause after speaking. Keypad: press # to start over.</p>
         <p className='text-muted-foreground text-xs'>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}. Keep it private: it gives one call access to this workspace.</p>
         <div className='flex flex-wrap gap-2'><Button size='sm' variant='quiet' className='min-h-11' onClick={() => void navigator.clipboard.writeText(ticket.code).catch(() => setError({ message: 'Couldn’t copy the code.', requiresFreshSignIn: false }))}>Copy code</Button><a className='rafii-focus inline-flex min-h-11 items-center rounded-lg border px-3 font-medium' href={`tel:${ticket.phoneNumber}`}>Dial {ticket.phoneNumber}</a><Button size='sm' variant='quiet' className='min-h-11' disabled={busy} onClick={() => void cancel()}>Cancel code</Button></div>
+
       </div> : <>
         {ticket && <p role='status'>{status.data?.state === 'used' ? 'Code used. Your phone conversation is available in Rafii.' : status.isError ? 'Couldn’t confirm this code. Create a new one before calling.' : 'This code is no longer active. Create a new one to call.'}</p>}
         {status.data?.call && <Link className='rafii-focus min-h-11 content-center underline underline-offset-4' href={`/app/agent/${status.data.call.conversationId}`}>Open phone conversation</Link>}

@@ -13,7 +13,7 @@ src/features/channels/connect-sheet.tsx:254  [\bprovider\b]  ${provider.platform
 src/features/coworker/notifications/notification-settings.tsx:131  [\bprovider\b]  Optional important texts. Turning on Phone Mode never opts you in. Provider messaging rates may apply. Reply STOP to stop texts.
 src/features/coworker/notifications/notification-settings.tsx:135  [\bprovider\b]  Your provider stopped text messages. Reply START to restore messaging, then opt in here again.
 src/features/coworker/notifications/notification-settings.tsx:136  [\bcurrently\b]  Text messages are currently unavailable.
-src/features/rafii-phone/phone-settings.tsx:101  [\bprovider\b]  The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while 
+src/features/rafii-phone/phone-settings.tsx:101  [\bprovider\b]  The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while
 src/components/forms/demo-form.tsx:144  [\bsuccessfully\b]  Form submitted successfully!
 src/components/marketing/capability-badge.tsx:15  [\bprovider\b]  Rafii publishes through the provider API after you approve.
 src/components/marketing/landing/sections.tsx:56  [\bprovider\b]  Direct publishing switches on per platform once its provider review passes. Until then Rafii prepares the post and you complete the last ste
