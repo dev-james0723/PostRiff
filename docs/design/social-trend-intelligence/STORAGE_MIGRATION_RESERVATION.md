@@ -1,0 +1,34 @@
+# Durable storage migration reservation
+
+## Current freeze and evidence
+
+Migration040 remains frozen at SHA-256 `fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0`. At 2026-09-28 00:50 UTC, the collision rescan covered159 refs and59 worktrees: refs stop at039 and this worktree is the sole040 claim. A separate untracked041_context_navigation.sql is now claimed in `/Users/ouxianxing/.codex/worktrees/1db2/James-Au-Studio-all-updates`, SHA-256 `23eb78d3a8b3dc917a8b523316ecd1deb51bf036a2f2acb47304a6a355850ca7`. Coordinate that owner before allocating041. Exact inventory: `evidence/storage-migration-rescan.json`.
+
+Captured managed branch HEAD: `f0938cd0cc8402287c343a9e1a1d4d320e7dfe89`; local origin/consumer-saas: `17cb24ab3682b0cf6d9c039388a528aa07ac9934`. These are timestamped observations; concurrent parent work continues. The release owner subsequently reported production035+040 applied with exact planned hashes and verified checksums, staging036 compatibility applied, flags OFF and no sources admitted. This stream did not access either remote database or deploy the feature. Earlier pending-migration and baseline-HEAD notes below are historical.
+
+Current regression evidence, guarded source hashes and limitations are in `evidence/storage-postgres.json` and its log. Declared local load/fault evidence is separate in `evidence/storage-operations-load.json`; cold-statistics, malformed-fixture and pre-lineage-repair runs remain separately labeled. `STORAGE_RECOVERY_RUNBOOK.md` covers accounting, quarantine, purge, restore, statistics prerequisites and local commands. Neither local PostgreSQL success nor migration apply establishes deployed feature behavior, provider/language qualification,3-million-row capacity or a24-hour soak.
+
+The local56447/56451 servers remain temporarily shared by explicitly authorized acceptance streams. Cleanup requires every current consumer's release; only this stream's `.trend-storage-test` and `.trend-operations-test` directories may be removed after preserving evidence. This stream performed no commits, remote migrations, deployments or provider/model calls.
+
+## Historical implementation notes (superseded where stated above)
+
+040_social_trend_intelligence.sql is assigned to codex/social-trend-intelligence for WP01/02/10.
+Read-only inventory at 2026-09-27 22:22:24 UTC covered 134 refs and 56 worktrees: maximum 039, no untracked claim at 040 or higher. Existing untracked 036 matches the committed Dial migration. Re-scan before integration.
+
+Execution: local implementation and disposable PostgreSQL only; no production migration, provider call or commit authorized by this note.
+
+Final implementation rescan: 151 refs and 59 worktrees; maximum migration in refs remains039. The only040-or-higher worktree claim is this managed worktree's untracked040_social_trend_intelligence.sql. Branch codex/social-trend-intelligence remains at 1afda4a0352986e62a8d423b9f34d565b2029c3e. Other streams' dirty files remain untouched.
+
+Parent's saved production/staging schema audits confirm existing ledger checksums match; pending migrations are035_growth_metric_reads.sql and040_social_trend_intelligence.sql. Earlier suspected006–008 gaps were truncated output, not real gaps. These remote checks were performed by the parent; this storage stream used only disposable local PostgreSQL.
+
+Validation:68 real PostgreSQL checks passed on dedicated port56447, database trend_storage11, including non-superuser/non-bypass RLS, scoped foreign keys, concurrent spend reservations, stale fences, exact job claiming, live persistence timestamps, dependency-lock/revocation serialization, projection-head mutation races, outbox expiry rollback, content/hash purge, operational snapshot, and actual backup/restore tombstone replay. Six offline unittest checks passed. Synthetic sources only; zero provider/model calls. Full PostgreSQL output: .trend-storage-test/acceptance11.log. The dedicated server remains running for the explicitly authorized pipeline stream; do not stop while those tests use it. The untracked .trend-storage-test directory also contains disposable database files; exclude it from release staging.
+
+Storage freeze:040 SHA-256 fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0. No remaining reproduction errors in the focused suites. No remote migration, deployment, or commit was performed by this stream.
+
+Storage handoff: claim accepts job_id; finish_local completes fenced jobs with no provider/reservation. Every TrendStore method can use the authenticated caller's cursor. lock_dependencies(workspace_id,actor_id,bindings,cursor=cur) holds mutation locks through that transaction; bindings are kind/object_id/revision. put_projection accepts expected_revision and returns the existing immutable identity on exact replay. Membership and metric_snapshot use normal projection kinds. Full manifests retain bounded recipe/chunks/document_digest plus the input graph; revocation suppresses reads before purge clears content and verification hashes. No publisher or provider transport is added.
+
+The mutation lock uses the same scope|projection|kind|object_id advisory key as projection append, then rereads the current head and rejects superseded bindings. Live _policy manifests include the later DB policy/contract available_at; only explicit offline_replay permits historical fixture availability. Outbox completion rechecks its lease after local effects, and a waiting claim cannot overwrite a done consumer receipt. Keep transactions bounded and perform all external calls outside them.
+
+Retention closure:trend.ingested persists only bounded typed references/coverage controls and marker counts, never raw account DID/sync markers. Other nonempty outbox payloads require a dependency node so purge can reach them. Jobs reject embedded raw source records and erase payloads on every terminal transition, including unknown outcomes; the separate reservation retains monetary exposure. A terminal idempotency key returns its sealed execution receipt without retaining the original request or redispatching. Pending provider controls are cancelled/erased on policy revocation, expiry, or configured retention expiry. Ingestion batch digests cover execution coordinates/counts, not observation content.
+
+Repeat the focused unit check with PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src /private/tmp/rafii-release-venv/bin/python -m unittest discover -s tests -p test_trend_jobs.py -v. PostgreSQL acceptance requires a fresh disposable database initialized through035; set TREND_TEST_DSN to its explicit loopback connection and run tests/phase2/postgres_trend_trust.py with the same interpreter. The test applies040 if absent and supports the existing disposable runner's POSTRIFF_TEST_DSN. This is not a production release command or authorization.
