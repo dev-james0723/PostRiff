@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icons } from '@/components/icons';
+import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { navGroups } from '@/config/nav-config';
 import { useCoworkerNavGroups } from '@/features/coworker/nav';
@@ -12,24 +13,33 @@ const DESTINATIONS = ['/app', '/app/calendar', '/app/weekly', '/app/queue', '/ap
 
 /**
  * The fixed mobile navigation (DNA §8.3): the frequent top-level destinations plus More, on a
- * translucent panel with one selection lens that glides between the five slots.
+ * translucent panel with one selection lens that glides between the destination slots. Appearance
+ * is a direct thumb-reachable action; More stays at the outer edge for the full navigation drawer.
  */
 export function MobileTabBar() {
   const pathname = usePathname();
   const { toggleSidebar } = useSidebar();
-  const items = useFilteredNavGroups(useCoworkerNavGroups(navGroups)).flatMap((g) => g.items).filter((i) => DESTINATIONS.includes(i.url));
-  const slots = items.length + 1;
-  const activeIndex = items.findIndex((item) => (item.url === '/app' ? pathname === item.url : pathname.startsWith(item.url)));
+  const items = useFilteredNavGroups(useCoworkerNavGroups(navGroups))
+    .flatMap((g) => g.items)
+    .filter((i) => DESTINATIONS.includes(i.url));
+  const slots = items.length + 2;
+  const activeIndex = items.findIndex((item) =>
+    item.url === '/app' ? pathname === item.url : pathname.startsWith(item.url)
+  );
   return (
     <nav
       aria-label='Mobile navigation'
       style={{ ['--slots' as string]: slots }}
-      className='rafii-panel fixed inset-x-0 bottom-0 z-30 grid h-[calc(4.25rem+env(safe-area-inset-bottom))] grid-cols-[repeat(var(--slots),minmax(0,1fr))] px-2 pt-1.5 pb-[env(safe-area-inset-bottom)] md:hidden'
+      className='rafii-panel fixed inset-x-0 bottom-0 z-30 grid h-[calc(4.25rem+env(safe-area-inset-bottom))] grid-cols-[repeat(var(--slots),minmax(0,1fr))] px-1 pt-1.5 pb-[env(safe-area-inset-bottom)] md:hidden'
     >
       <span
         aria-hidden
-        className='rafii-lens rafii-spatial-motion pointer-events-none absolute top-1.5 left-2 h-[3.25rem] w-[calc((100%-1rem)/var(--slots)-0.25rem)] rounded-2xl transition-transform duration-[550ms] ease-[var(--rafii-ease-ui)]'
-        style={{ transform: `translateX(calc(${Math.max(0, activeIndex)} * (100% + 0.25rem)))`, opacity: activeIndex < 0 ? 0 : 1 }}
+        className='rafii-lens rafii-spatial-motion pointer-events-none absolute top-1.5 left-1 h-[3.25rem] rounded-2xl transition-transform duration-[550ms] ease-[var(--rafii-ease-ui)]'
+        style={{
+          width: 'calc((100% - 0.5rem) / var(--slots) - 0.25rem)',
+          transform: `translateX(calc(${Math.max(0, activeIndex)} * (100% + 0.25rem)))`,
+          opacity: activeIndex < 0 ? 0 : 1
+        }}
       />
       {items.map((item) => {
         const active = item.url === '/app' ? pathname === item.url : pathname.startsWith(item.url);
@@ -39,14 +49,23 @@ export function MobileTabBar() {
             key={item.url}
             href={item.url}
             aria-current={active ? 'page' : undefined}
-            className={cn('rafii-focus relative z-[1] flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-medium transition-colors', active ? 'text-foreground' : 'text-muted-foreground')}
+            className={cn(
+              'rafii-focus relative z-[1] flex min-h-[3.25rem] min-w-11 flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-medium transition-colors min-[360px]:text-[11px]',
+              active ? 'text-foreground' : 'text-muted-foreground'
+            )}
           >
             <Icon className='size-5' />
             {item.title}
           </Link>
         );
       })}
-      <button type='button' onClick={toggleSidebar} className='rafii-focus text-muted-foreground relative z-[1] flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-medium' aria-label='More navigation'>
+      <ThemeModeToggle mobileTab />
+      <button
+        type='button'
+        onClick={toggleSidebar}
+        className='rafii-focus text-muted-foreground relative z-[1] flex min-h-[3.25rem] min-w-11 flex-1 flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-medium min-[360px]:text-[11px]'
+        aria-label='More navigation'
+      >
         <Icons.menu className='size-5' />
         More
       </button>

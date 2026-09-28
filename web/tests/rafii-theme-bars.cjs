@@ -24,7 +24,7 @@ const CASES = [
   { name: 'legacy-cookie-light', appearance: 'light', cookies: { active_theme: 'vercel' }, theme: 'rafii', dark: false },
   { name: 'picked-vercel-dark', appearance: 'dark', cookies: { postriff_theme: 'vercel' }, theme: 'vercel', dark: true },
   { name: 'picked-vercel-light', appearance: 'light', cookies: { postriff_theme: 'vercel' }, theme: 'vercel', dark: false },
-  { name: 'default-dark', appearance: 'dark', cookies: {}, theme: 'rafii', dark: true }
+  { name: 'default-dark-320', appearance: 'dark', cookies: {}, theme: 'rafii', dark: true, width: 320 }
 ];
 
 let failures = 0;
@@ -38,7 +38,7 @@ function check(scene, name, ok, detail) {
   const browser = await engine.launch({ headless: true, executablePath: (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined });
   const results = [];
   for (const c of CASES) {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, colorScheme: c.appearance });
+    const context = await browser.newContext({ viewport: { width: c.width ?? 390, height: 844 }, deviceScaleFactor: 1, colorScheme: c.appearance });
     await context.addCookies([
       { name: 'postriff_dev', value: '1', url: base },
       { name: 'postriff_dev_principal', value: seed.principal, url: base },
@@ -82,6 +82,7 @@ function check(scene, name, ok, detail) {
         header: header && seen(header),
         tabBar: tabBar && seen(tabBar),
         page: seen(document.body),
+        overflow: document.documentElement.scrollWidth - innerWidth,
         legacyCookie: document.cookie.split('; ').some((x) => x.startsWith('active_theme='))
       };
     });
@@ -89,12 +90,41 @@ function check(scene, name, ok, detail) {
     results.push({ ...c, ...r, errors });
     check(c.name, 'theme', r.theme === c.theme, r.theme);
     check(c.name, 'appearance', r.dark === c.dark, r.dark);
+    check(c.name, 'no horizontal overflow', r.overflow <= 1, r.overflow);
     // Brightness 0–100 of the bar as seen on the page: dark bars stay under 20, light bars over 80.
     for (const bar of ['header', 'tabBar']) check(c.name, `${bar} matches the ${c.appearance} page`, r[bar] !== null && (c.dark ? r[bar] < 20 : r[bar] > 80), { [bar]: r[bar], page: r.page });
+    const switchLabel = c.dark ? 'Switch to light mode' : 'Switch to dark mode';
+    const modeToggle = page.getByRole('button', { name: switchLabel });
+    const toggleBox = await modeToggle.boundingBox();
+    check(c.name, 'mobile theme button is visible with a 44px tap target', Boolean(toggleBox && toggleBox.width >= 44 && toggleBox.height >= 44), toggleBox);
+    await modeToggle.click();
+    await page.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') !== wasDark, c.dark);
+    check(c.name, 'mobile theme button switches appearance', (await page.locator('html').evaluate((el) => el.classList.contains('dark'))) === !c.dark);
+    const restoreLabel = c.dark ? 'Switch to dark mode' : 'Switch to light mode';
+    await page.getByRole('button', { name: restoreLabel }).click();
+    await page.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') === wasDark, c.dark);
     check(c.name, 'retired theme cookie cleared', !r.legacyCookie);
     check(c.name, 'no page errors', errors.length === 0, errors);
     await context.close();
   }
+  const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, colorScheme: 'light' });
+  await desktop.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: seed.principal, url: base }]);
+  await desktop.addInitScript(({ id, tours }) => { localStorage.setItem('postriff-dev-principal', id); localStorage.setItem('theme', 'light'); localStorage.setItem('postriff-onboarding', tours); }, { id: seed.principal, tours: TOURS_SEEN });
+  const desktopPage = await desktop.newPage();
+  const desktopErrors = [];
+  desktopPage.on('pageerror', (error) => desktopErrors.push(error.message.slice(0, 200)));
+  await desktopPage.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+  const desktopEnter = desktopPage.getByRole('button', { name: 'Enter dev workspace' });
+  const desktopToggle = desktopPage.getByRole('button', { name: 'Switch to dark mode' });
+  await desktopToggle.or(desktopEnter).first().waitFor({ timeout: 400000 });
+  if (await desktopEnter.isVisible().catch(() => false)) { await desktopEnter.click(); await desktopToggle.waitFor({ timeout: 300000 }); }
+  check('desktop-light', 'desktop theme button remains visible', Boolean(await desktopToggle.boundingBox()));
+  check('desktop-light', 'mobile navigation stays hidden on desktop', await desktopPage.getByRole('navigation', { name: 'Mobile navigation' }).isHidden());
+  await desktopToggle.click();
+  await desktopPage.waitForFunction(() => document.documentElement.classList.contains('dark'));
+  check('desktop-light', 'desktop theme button still switches appearance', true);
+  check('desktop-light', 'no page errors', desktopErrors.length === 0, desktopErrors);
+  await desktop.close();
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify({ base, at: new Date().toISOString(), results }, null, 2) + '\n');
   await browser.close();
   process.stdout.write(`${failures ? `${failures} FAILED` : 'all passed'}\n`);
