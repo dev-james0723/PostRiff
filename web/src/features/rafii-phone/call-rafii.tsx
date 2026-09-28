@@ -58,7 +58,7 @@ export function CallRafii({ conversationId, onConversation }: { conversationId?:
       <p>Phone and voice time holds up to {(Math.ceil(spending.ceilingMilliCredits / 100) / 10).toFixed(1)} credits. Set a higher limit to allow Rafii’s reasoning during the call. Unused credits return when the call settles; paid drafting, research and media keep their task approval rules.</p>
       <p>Available: {((spending.availableMilliCredits ?? 0) / 1000).toFixed(1)} credits.</p>
     </div>}
-    {ready && !active && <Button type='button' variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void start()}>{busy ? 'Requesting call…' : 'Call Rafii'}</Button>}
+    {ready && !active && <Button type='button' variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void start()}>{busy ? 'Requesting call…' : 'Have Rafii call me'}</Button>}
     {!ready && !active && <Link href='/app/account/notifications#phone-mode' className='underline underline-offset-4'>Set up Call Rafii</Link>}
     {active && <><span>{data.execution === 'fake' ? 'Local test · ' : ''}{active.state === 'ambiguous' ? 'Call outcome uncertain. Checking the call; please wait.' : `Rafii call: ${active.state.replaceAll('_', ' ')}`}</span><Button type='button' variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void end()}>End call</Button></>}
     {error && <p className='text-destructive w-full' role='alert'>{error}</p>}
