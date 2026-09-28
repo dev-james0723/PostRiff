@@ -1,8 +1,27 @@
 import type { LiveTransport } from './live-transport';
 
 export type AvatarStatus = 'idle' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'offline';
-export type AvatarFrame = { generation: number; sequence: number; jpeg: string; generatedAt: number };
+export type AvatarFrame = { generation: number; sequence: number; jpeg: string; generatedAt: number; sourcePcmSentAt?: number | null };
 export type AvatarMetrics = {
+  connection: 'idle' | 'connecting' | 'connected' | 'reconnecting';
+  connectionError: string | null;
+  audioReceivedAt: number | null;
+  firstPcmSentAt: number | null;
+  audioAcceptedAt: number | null;
+  firstFrameReceivedAt: number | null;
+  firstFrameDisplayedAt: number | null;
+  interruptionRequestedAt: number | null;
+  cancellationAcknowledgedAt: number | null;
+  staleFrameDiscardedAt: number | null;
+  visibleStopAt: number | null;
+  reconnectMs: number | null;
+  steadyFrameIntervalMs: number | null;
+  steadyFrameLatencyMs: number | null;
+  workerRssBytes: number | null;
+  workerRssGrowthBytes: number | null;
+  workerCpuPercent: number | null;
+  gpuUtilPercent: number | null;
+  gpuMemoryUsedBytes: number | null;
   audioToWorkerMs: number | null;
   workerFirstFrameMs: number | null;
   firstAvatarFrameMs: number | null;
@@ -13,12 +32,12 @@ export type AvatarMetrics = {
   droppedAudioSamples: number;
   interruptToStopMs: number | null;
 };
+export type RendererMetric = Partial<AvatarMetrics> & { firstFrameMs?: number };
 export type AvatarSnapshot = { status: AvatarStatus; frame: AvatarFrame | null; error: string | null; metrics: AvatarMetrics };
 
 export interface AvatarRenderer {
   startSession(onFrame: (frame: AvatarFrame) => void, onError: (message: string) => void,
-    onMetric: (metric: { queueDepth?: number; firstFrameMs?: number; audioAcceptedAt?: number;
-      droppedFrames?: number; droppedAudioPackets?: number; droppedAudioSamples?: number }) => void): Promise<void>;
+    onMetric: (metric: RendererMetric) => void): Promise<void>;
   pushAudio(pcm16: Int16Array, generation: number): void;
   interrupt(generation: number): void;
   endSession(): void;
@@ -58,6 +77,11 @@ export class Pcm16Resampler {
 }
 
 const EMPTY_METRICS: AvatarMetrics = {
+  connection: 'idle', connectionError: null, audioReceivedAt: null, firstPcmSentAt: null, audioAcceptedAt: null,
+  firstFrameReceivedAt: null, firstFrameDisplayedAt: null, interruptionRequestedAt: null,
+  cancellationAcknowledgedAt: null, staleFrameDiscardedAt: null, visibleStopAt: null,
+  reconnectMs: null, steadyFrameIntervalMs: null, steadyFrameLatencyMs: null, workerRssBytes: null, workerRssGrowthBytes: null,
+  workerCpuPercent: null, gpuUtilPercent: null, gpuMemoryUsedBytes: null,
   audioToWorkerMs: null, workerFirstFrameMs: null, firstAvatarFrameMs: null,
   averageFps: null, queueDepth: 0, droppedFrames: 0, droppedAudioPackets: 0, droppedAudioSamples: 0, interruptToStopMs: null
 };
@@ -73,6 +97,10 @@ export class AvatarSession {
   private closed = false;
   private firstAudioAt: number | null = null;
   private previousFrameAt: number | null = null;
+  private previousDisplayAt: number | null = null;
+  private lastDisplayedSequence: number | null = null;
+  private localDroppedFrames = 0;
+  private rendererDroppedFrames = 0;
   private lastSoundAt: number | null = null;
   private interruptAt: number | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,7 +110,9 @@ export class AvatarSession {
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private set(patch: Partial<AvatarSnapshot>) {
     this.state = { ...this.state, ...patch };
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      try { listener(); } catch { /* an avatar observer cannot interrupt Live playback */ }
+    }
   }
   private metric(patch: Partial<AvatarMetrics>) { this.set({ metrics: { ...this.state.metrics, ...patch } }); }
 
@@ -93,6 +123,9 @@ export class AvatarSession {
     this.generation = 0;
     this.paused = false;
     this.lastSoundAt = null;
+    this.localDroppedFrames = 0;
+    this.rendererDroppedFrames = 0;
+    this.lastDisplayedSequence = null;
     this.resampler.reset();
     this.set({ status: 'thinking', frame: null, error: null, metrics: { ...EMPTY_METRICS } });
     this.offAudio = transport.onAssistantAudio?.((samples, rate, at) => this.pushAudio(samples, rate, at)) ?? null;
@@ -100,13 +133,23 @@ export class AvatarSession {
       await renderer.startSession(
         (frame) => this.receiveFrame(frame),
         (message) => this.fail(message),
-        (metric) => this.metric({ queueDepth: metric.queueDepth ?? this.state.metrics.queueDepth,
+        (metric) => {
+          if (metric.connection === 'reconnecting' || metric.connection === 'connecting') {
+            if (this.state.frame && this.lastDisplayedSequence !== this.state.frame.sequence) this.localDroppedFrames++;
+            this.lastDisplayedSequence = null;
+            this.set({ status: 'offline', frame: null, error: metric.connectionError ?? null });
+          }
+          else if (metric.connection === 'connected' && this.state.status === 'offline') this.set({ status: 'thinking', error: null });
+          if (metric.droppedFrames !== undefined) this.rendererDroppedFrames = metric.droppedFrames;
+          this.metric({ ...metric, queueDepth: metric.queueDepth ?? this.state.metrics.queueDepth,
+          firstFrameReceivedAt: this.state.metrics.firstFrameReceivedAt ?? metric.firstFrameReceivedAt ?? null,
           workerFirstFrameMs: metric.firstFrameMs ?? this.state.metrics.workerFirstFrameMs,
-          audioToWorkerMs: metric.audioAcceptedAt !== undefined && this.firstAudioAt !== null
+          audioToWorkerMs: metric.audioAcceptedAt != null && this.firstAudioAt !== null
             ? metric.audioAcceptedAt - this.firstAudioAt : this.state.metrics.audioToWorkerMs,
-          droppedFrames: metric.droppedFrames ?? this.state.metrics.droppedFrames,
+          droppedFrames: this.rendererDroppedFrames + this.localDroppedFrames,
           droppedAudioPackets: metric.droppedAudioPackets ?? this.state.metrics.droppedAudioPackets,
-          droppedAudioSamples: metric.droppedAudioSamples ?? this.state.metrics.droppedAudioSamples })
+          droppedAudioSamples: metric.droppedAudioSamples ?? this.state.metrics.droppedAudioSamples });
+        }
       );
       if (this.closed || this.renderer !== renderer) { renderer.endSession(); return; }
     } catch (error) {
@@ -115,7 +158,7 @@ export class AvatarSession {
   }
 
   pushAudio(samples: Float32Array, rate: number, at: number) {
-    if (this.closed || this.paused || !this.renderer || this.state.status === 'offline') return;
+    if (this.closed || this.paused || !this.renderer) return;
     const pcm = this.resampler.convert(samples, rate);
     if (!pcm.length) return;
     let energy = 0;
@@ -134,7 +177,12 @@ export class AvatarSession {
     if (this.firstAudioAt === null) {
       this.firstAudioAt = at;
       this.previousFrameAt = null;
-      this.set({ status: 'speaking', frame: null, metrics: { ...EMPTY_METRICS, droppedFrames: this.state.metrics.droppedFrames } });
+      this.previousDisplayAt = null;
+      this.lastDisplayedSequence = null;
+      this.set({ status: this.state.metrics.connection === 'connected' ? 'speaking' : 'offline', frame: null,
+        metrics: { ...this.state.metrics, audioReceivedAt: at, firstPcmSentAt: null, audioAcceptedAt: null,
+          firstFrameReceivedAt: null, firstFrameDisplayedAt: null, firstAvatarFrameMs: null,
+          steadyFrameIntervalMs: null, steadyFrameLatencyMs: null, workerFirstFrameMs: null, audioToWorkerMs: null } });
     }
     try { this.renderer.pushAudio(pcm, this.generation); }
     catch { this.fail('Avatar audio stream failed.'); }
@@ -160,12 +208,16 @@ export class AvatarSession {
     this.firstAudioAt = null;
     this.resampler.reset();
     this.interruptAt = performance.now();
+    this.metric({ interruptionRequestedAt: this.interruptAt, cancellationAcknowledgedAt: null, visibleStopAt: null });
     try { this.renderer.interrupt(this.generation); }
     catch { this.fail('Avatar interrupt failed.'); return; }
     this.set({ status: 'interrupted', frame: null, metrics: { ...this.state.metrics, queueDepth: 0 } });
-    requestAnimationFrame(() => {
-      if (this.interruptAt !== null) this.metric({ interruptToStopMs: performance.now() - this.interruptAt });
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (this.interruptAt !== null) {
+        const now = performance.now();
+        this.metric({ interruptToStopMs: now - this.interruptAt, visibleStopAt: now });
+      }
+    }));
   }
 
   resume() {
@@ -182,23 +234,33 @@ export class AvatarSession {
 
   receiveFrame(frame: AvatarFrame) {
     if (this.closed || this.paused || frame.generation !== this.generation || this.state.status === 'offline') {
-      this.metric({ droppedFrames: this.state.metrics.droppedFrames + 1 });
+      this.localDroppedFrames++;
+      this.metric({ droppedFrames: this.rendererDroppedFrames + this.localDroppedFrames, staleFrameDiscardedAt: performance.now() });
       return;
     }
+    if (this.state.frame && this.lastDisplayedSequence !== this.state.frame.sequence) this.localDroppedFrames++;
     const now = performance.now();
     const first = this.previousFrameAt === null;
     const elapsed = first ? 0 : now - this.previousFrameAt!;
     this.previousFrameAt = now;
     this.set({ status: 'speaking', frame,
       metrics: { ...this.state.metrics,
+        droppedFrames: this.rendererDroppedFrames + this.localDroppedFrames,
         workerFirstFrameMs: this.state.metrics.workerFirstFrameMs,
         averageFps: first ? null : (this.state.metrics.averageFps ?? (1000 / elapsed)) * 0.8 + (1000 / Math.max(1, elapsed)) * 0.2 }
     });
   }
 
   displayed(sequence: number) {
-    if (this.state.frame?.sequence !== sequence || this.state.metrics.firstAvatarFrameMs !== null || this.firstAudioAt === null) return;
-    this.metric({ firstAvatarFrameMs: performance.now() - this.firstAudioAt });
+    const frame = this.state.frame;
+    if (frame?.sequence !== sequence || this.firstAudioAt === null) return;
+    const now = performance.now();
+    this.metric({ firstAvatarFrameMs: this.state.metrics.firstAvatarFrameMs ?? now - this.firstAudioAt,
+      firstFrameDisplayedAt: this.state.metrics.firstFrameDisplayedAt ?? now,
+      steadyFrameLatencyMs: frame.sourcePcmSentAt == null ? null : now - frame.sourcePcmSentAt,
+      steadyFrameIntervalMs: this.previousDisplayAt === null ? null : now - this.previousDisplayAt });
+    this.previousDisplayAt = now;
+    this.lastDisplayedSequence = sequence;
   }
 
   fail(message: string) {

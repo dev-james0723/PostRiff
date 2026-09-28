@@ -1,5 +1,7 @@
 # Rafii Live → SoulX FlashHead avatar, Phase 1
 
+Phase 1 implementation was pushed to `origin/codex/rafii-soulx-avatar-20260928` as `394c2d484bef045dc44c3d42de9111b7b376dbdd`. [Phase 2 engineering and acceptance status](rafii-soulx-live-avatar-phase-2.md) supersedes the Phase 1 protocol and reference-image setup details below.
+
 ## Status and source
 
 This is a local proof of concept on branch `codex/rafii-soulx-avatar-20260928`, based on Rafii HEAD `a6033925bd8c94b8f8b98efea48741fb57f110da`. The official SoulX source checkout is `/Users/ouxianxing/Documents/SoulX-FlashHead`, HEAD `9bc03de06bb0de82cd6bc477804512ae06144bf2`, `origin=https://github.com/Soul-AILab/SoulX-FlashHead.git`, Apache 2.0. The [official model card](https://huggingface.co/Soul-AILab/SoulX-FlashHead-1_3B) also labels the FlashHead weights Apache 2.0; the wav2vec dependency has its own terms. No SoulX model weights were downloaded by this task. The previous local search found SoulX-Singer but no SoulX-FlashHead checkout, so the official source was cloned separately. The M3 Pro host has no NVIDIA CUDA device; **real SoulX inference and Rafii visual fidelity have not been demonstrated**. The protocol tests use a fake inference engine, not a substitute for a CUDA smoke test.

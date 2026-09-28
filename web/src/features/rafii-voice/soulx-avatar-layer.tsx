@@ -14,7 +14,8 @@ export function SoulXAvatarLayer() {
       {frame && snapshot.status === 'speaking' && (
         // The frame is produced by the configured local worker, not a user-supplied URL.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={frame.jpeg} alt='' className='h-full w-full object-contain' onLoad={() => requestAnimationFrame(() => avatarSession.displayed(frame.sequence))} />
+        <img src={frame.jpeg} alt='' className='h-full w-full object-contain'
+          onLoad={() => requestAnimationFrame(() => requestAnimationFrame(() => avatarSession.displayed(frame.sequence)))} />
       )}
       <span className='absolute bottom-1 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white' aria-live='polite'>
         {snapshot.status === 'offline' ? 'Avatar offline · voice continues' : `Avatar ${snapshot.status}`}

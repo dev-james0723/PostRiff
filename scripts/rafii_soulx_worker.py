@@ -11,7 +11,9 @@ from collections import deque
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import resource
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -22,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 SAMPLE_RATE = 16000
-MAX_PACKET_BYTES = 64004  # two seconds of PCM16 at 16 kHz, plus generation header
+MAX_PACKET_BYTES = 64008  # two seconds of PCM16 plus generation and packet ID
 MAX_PENDING_WINDOWS = 3
 
 
@@ -32,6 +34,7 @@ class AvatarCall:
     generation: int = 0
     sequence: int = 0
     audio: bytearray = field(default_factory=bytearray)
+    chunks: deque[tuple[int, int]] = field(default_factory=deque)  # packet ID, remaining bytes
     wake: asyncio.Event = field(default_factory=asyncio.Event)
     closed: bool = False
     first_audio_at: float | None = None
@@ -40,6 +43,7 @@ class AvatarCall:
     dropped_audio_samples: int = 0
     needs_reset: bool = False
     accepted: bool = False
+    stream_attached: bool = False
     history: deque[float] = field(default_factory=lambda: deque(maxlen=8 * SAMPLE_RATE))
     history_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -48,6 +52,7 @@ class AvatarCall:
             return
         self.generation = generation
         self.audio.clear()
+        self.chunks.clear()
         with self.history_lock:
             self.history.clear()
         self.first_audio_at = None
@@ -57,29 +62,44 @@ class AvatarCall:
         self.wake.set()
 
     def append(self, packet: bytes, window_bytes: int) -> bool:
-        if len(packet) < 6 or len(packet) > MAX_PACKET_BYTES or len(packet) % 2:
+        if len(packet) < 10 or len(packet) > MAX_PACKET_BYTES or len(packet) % 2:
             return False
         generation = struct.unpack_from("<I", packet)[0]
+        packet_id = struct.unpack_from("<I", packet, 4)[0]
         if generation != self.generation or self.closed:
             return False
         if self.first_audio_at is None:
             self.first_audio_at = time.monotonic()
-        self.audio.extend(packet[4:])
+        self.audio.extend(packet[8:])
+        self.chunks.append((packet_id, len(packet) - 8))
         cap = window_bytes * MAX_PENDING_WINDOWS
         if len(self.audio) > cap:
             remove = len(self.audio) - cap
             remove += remove % 2
             del self.audio[:remove]
+            self.consume_chunks(remove)
             self.dropped_audio_samples += remove // 2
         self.wake.set()
         return True
 
-    def next_window(self, window_bytes: int) -> bytes | None:
+    def consume_chunks(self, count: int) -> int | None:
+        last_id = None
+        while count and self.chunks:
+            packet_id, remaining = self.chunks.popleft()
+            taken = min(count, remaining)
+            count -= taken
+            remaining -= taken
+            last_id = packet_id
+            if remaining:
+                self.chunks.appendleft((packet_id, remaining))
+        return last_id
+
+    def next_window(self, window_bytes: int) -> tuple[bytes, int | None] | None:
         if len(self.audio) < window_bytes:
             return None
         window = bytes(self.audio[:window_bytes])
         del self.audio[:window_bytes]
-        return window
+        return window, self.consume_chunks(window_bytes)
 
 
 class SoulXEngine:
@@ -159,9 +179,39 @@ def create_app(engine: SoulXEngine) -> FastAPI:
     calls: dict[str, AvatarCall] = {}
     admission = asyncio.Lock()
 
+    def resource_snapshot() -> dict:
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        rss = None
+        try:  # Linux CUDA workers expose current RSS here; ru_maxrss is only a peak.
+            rss = int(Path("/proc/self/statm").read_text().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+        except (OSError, ValueError, IndexError):
+            pass
+        gpu_util = gpu_memory = None
+        try:
+            visible_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",", 1)[0].strip() or "0"
+            result = subprocess.run(
+                ["nvidia-smi", f"--id={visible_gpu}", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, check=True, timeout=1,
+            )
+            gpu_util, memory_mib = (int(value.strip()) for value in result.stdout.splitlines()[0].split(","))
+            gpu_memory = memory_mib * 1024 * 1024
+        except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+            pass
+        return {"processId": os.getpid(), "processRssBytes": rss, "cpuUserSeconds": usage.ru_utime,
+                "cpuSystemSeconds": usage.ru_stime, "gpuUtilPercent": gpu_util,
+                "gpuMemoryUsedBytes": gpu_memory}
+
     @app.get("/health")
     async def health():
-        return {"ready": True, "model": "soulx-flashhead-lite", "sampleRate": SAMPLE_RATE, "windowSamples": engine.window_samples, "activeSessions": len(calls)}
+        return {"ready": True, "model": "soulx-flashhead-lite", "protocolVersion": 2, "sampleRate": SAMPLE_RATE,
+                "windowSamples": engine.window_samples, "activeSessions": len(calls),
+                "modelRevision": os.environ.get("SOULX_MODEL_REVISION"),
+                "wav2vecRevision": os.environ.get("SOULX_WAV2VEC_REVISION"),
+                **(await asyncio.to_thread(resource_snapshot))}
+
+    @app.get("/ready")
+    async def ready():
+        return {"ready": True, "available": not calls, "activeSessions": len(calls)}
 
     @app.post("/session")
     async def create_session():
@@ -172,7 +222,14 @@ def create_app(engine: SoulXEngine) -> FastAPI:
             call.needs_reset = engine.session_count > 0
             engine.session_count += 1
             calls[call.id] = call
-        return {"id": call.id, "sampleRate": SAMPLE_RATE, "windowSamples": engine.window_samples}
+        async def expire_unattached():
+            await asyncio.sleep(float(os.environ.get("SOULX_SESSION_LEASE_SECONDS", "10")))
+            if not call.stream_attached and calls.get(call.id) is call:
+                call.closed = True
+                call.wake.set()
+                calls.pop(call.id, None)
+        asyncio.create_task(expire_unattached())
+        return {"id": call.id, "protocolVersion": 2, "sampleRate": SAMPLE_RATE, "windowSamples": engine.window_samples}
 
     @app.delete("/session/{session_id}")
     async def delete_session(session_id: str):
@@ -189,39 +246,66 @@ def create_app(engine: SoulXEngine) -> FastAPI:
             await websocket.close(code=1008)
             return
         await websocket.accept()
+        if call.stream_attached:
+            await websocket.close(code=1008)
+            return
+        call.stream_attached = True
+
+        async def send(payload: dict):
+            await asyncio.wait_for(websocket.send_json({"sessionId": session_id, **payload}),
+                                   timeout=float(os.environ.get("SOULX_SEND_TIMEOUT_SECONDS", "2")))
 
         async def render_loop():
             while not call.closed:
-                window = call.next_window(engine.window_bytes)
-                if window is None:
+                next_item = call.next_window(engine.window_bytes)
+                if next_item is None:
                     call.wake.clear()
                     await call.wake.wait()
                     continue
+                window, source_packet_id = next_item
                 generation = call.generation
                 reset = call.needs_reset
                 call.needs_reset = False
                 try:
                     frames = await asyncio.to_thread(engine.infer, call, window, reset, generation)
                 except Exception as error:
-                    await websocket.send_json({"type": "error", "message": f"SoulX inference failed: {type(error).__name__}"})
+                    await send({"type": "error", "message": f"SoulX inference failed: {type(error).__name__}"})
+                    await websocket.close(code=1011)
                     break
                 if call.closed or generation != call.generation:
                     call.dropped_frames += len(frames)
                     continue
                 if call.first_frame_ms is None and call.first_audio_at is not None:
                     call.first_frame_ms = (time.monotonic() - call.first_audio_at) * 1000
-                await websocket.send_json({"type": "metrics", "generation": generation, "queueDepth": len(call.audio) // engine.window_bytes,
-                                           "firstFrameMs": call.first_frame_ms, "droppedFrames": call.dropped_frames,
-                                           "droppedAudioSamples": call.dropped_audio_samples})
+                await send({"type": "metrics", "generation": generation, "queueDepth": len(call.audio) // engine.window_bytes,
+                            "firstFrameMs": call.first_frame_ms, "droppedFrames": call.dropped_frames,
+                            "droppedAudioSamples": call.dropped_audio_samples})
                 for jpeg in frames:
                     if call.closed or generation != call.generation:
                         call.dropped_frames += 1
                         break
                     call.sequence += 1
-                    await websocket.send_json({"type": "frame", "generation": generation, "sequence": call.sequence, "jpeg": jpeg})
+                    await send({"type": "frame", "generation": generation, "sequence": call.sequence,
+                                "sourcePacketId": source_packet_id, "jpeg": jpeg})
                     await asyncio.sleep(1 / engine.params["tgt_fps"])
 
         task = asyncio.create_task(render_loop())
+        def render_done(done: asyncio.Task):
+            if done.cancelled():
+                return
+            try:
+                done.result()
+            except Exception:  # a stalled socket or worker error is confined to this avatar session
+                pass
+            call.closed = True
+            call.wake.set()
+            async def close_socket():
+                try:
+                    await websocket.close(code=1011)
+                except RuntimeError:
+                    pass
+            asyncio.create_task(close_socket())
+        task.add_done_callback(render_done)
         try:
             while not call.closed:
                 message = await websocket.receive()
@@ -230,14 +314,14 @@ def create_app(engine: SoulXEngine) -> FastAPI:
                 if message.get("bytes") is not None:
                     if call.append(message["bytes"], engine.window_bytes) and not call.accepted:
                         call.accepted = True
-                        await websocket.send_json({"type": "audio_accepted", "generation": call.generation})
+                        await send({"type": "audio_accepted", "generation": call.generation})
                 elif message.get("text"):
                     import json
                     control = json.loads(message["text"])
                     if control.get("type") == "interrupt" and isinstance(control.get("generation"), int):
                         call.interrupt(control["generation"])
-                        await websocket.send_json({"type": "interrupted", "generation": call.generation})
-        except (WebSocketDisconnect, ValueError):
+                        await send({"type": "interrupted", "generation": call.generation})
+        except (WebSocketDisconnect, ValueError, RuntimeError):
             pass
         finally:
             call.closed = True

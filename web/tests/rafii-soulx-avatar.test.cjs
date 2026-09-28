@@ -30,7 +30,7 @@ function transport() {
 
 function renderer() {
   const result = { audio: [], interrupts: [], ended: false };
-  result.startSession = async (frame, error, metric) => { result.frame = frame; result.error = error; result.metric = metric; };
+  result.startSession = async (frame, error, metric) => { result.frame = frame; result.error = error; result.metric = metric; metric({ connection: 'connected' }); };
   result.pushAudio = (data, generation) => result.audio.push({ data: [...data], generation });
   result.interrupt = (generation) => result.interrupts.push(generation);
   result.endSession = () => { result.ended = true; };
@@ -68,8 +68,11 @@ test('interrupt rejects stale frames, clears image and resumes on new generation
   const call = new AvatarSession(); const live = transport(); const soulx = renderer();
   await call.start(live, soulx);
   live.emit(Float32Array.from({ length: 480 }, () => 0.4));
-  soulx.frame({ generation: 0, sequence: 1, jpeg: 'old', generatedAt: performance.now() });
+  const sentAt = performance.now() - 100;
+  soulx.frame({ generation: 0, sequence: 1, jpeg: 'old', generatedAt: performance.now(), sourcePcmSentAt: sentAt });
   assert.equal(call.get().frame.jpeg, 'old');
+  call.displayed(1);
+  assert.ok(call.get().metrics.steadyFrameLatencyMs >= 100);
   call.interrupt();
   assert.equal(call.get().frame, null);
   assert.deepEqual(soulx.interrupts, [1]);
@@ -120,6 +123,7 @@ test('resampler preserves chunk boundaries and handles 44.1 kHz input', () => {
 
 test('SoulX worker protocol opens, streams PCM, receives frames, interrupts and closes', async () => {
   const originalFetch = global.fetch; const originalWebSocket = global.WebSocket;
+  let client;
   const requests = [];
   class FakeSocket {
     static OPEN = 1;
@@ -134,25 +138,30 @@ test('SoulX worker protocol opens, streams PCM, receives frames, interrupts and 
     close() { this.readyState = 3; this.emit('close', {}); }
   }
   global.WebSocket = FakeSocket;
-  global.fetch = async (url, options) => { requests.push({ url: String(url), method: options.method }); return { ok: true, json: async () => ({ id: 'test-session' }) }; };
+  global.fetch = async (url, options) => { requests.push({ url: String(url), method: options.method }); return { ok: true, json: async () => ({ id: 'test-session', protocolVersion: 2 }) }; };
   try {
-    const client = new SoulXRenderer('http://127.0.0.1:8765');
+    client = new SoulXRenderer('http://127.0.0.1:8765');
     const frames = []; const metrics = [];
     await client.startSession((frame) => frames.push(frame), () => {}, (metric) => metrics.push(metric));
     client.pushAudio(Int16Array.from([100, -100]), 0);
+    for (let i = 0; !FakeSocket.instance?.sent.length && i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 1));
     const packet = FakeSocket.instance.sent[0];
     assert.equal(new DataView(packet).getUint32(0, true), 0);
-    assert.equal(new DataView(packet).getInt16(4, true), 100);
-    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'audio_accepted', generation: 0 }) });
-    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'metrics', generation: 0, queueDepth: 1, firstFrameMs: 123, droppedFrames: 0 }) });
-    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'frame', generation: 0, sequence: 1, jpeg: 'abc' }) });
+    assert.equal(new DataView(packet).getUint32(4, true), 1);
+    assert.equal(new DataView(packet).getInt16(8, true), 100);
+    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'audio_accepted', sessionId: 'test-session', generation: 0 }) });
+    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'metrics', sessionId: 'test-session', generation: 0, queueDepth: 1, firstFrameMs: 123, droppedFrames: 0 }) });
+    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'frame', sessionId: 'test-session', generation: 0, sequence: 1, sourcePacketId: 1, jpeg: 'abc' }) });
     assert.equal(frames[0].jpeg, 'data:image/jpeg;base64,abc');
-    assert.equal(metrics.at(-1).firstFrameMs, 123);
+    assert.equal(typeof frames[0].sourcePcmSentAt, 'number');
+    FakeSocket.instance.emit('message', { data: JSON.stringify({ type: 'frame', sessionId: 'other-session', generation: 0, sequence: 2, jpeg: 'wrong' }) });
+    assert.equal(frames.length, 1);
+    assert.equal(metrics.find((metric) => metric.firstFrameMs === 123).firstFrameMs, 123);
     client.interrupt(1);
     assert.deepEqual(JSON.parse(FakeSocket.instance.sent.at(-1)), { type: 'interrupt', generation: 1 });
     client.endSession();
-    assert.deepEqual(requests.map((item) => item.method), ['POST', 'DELETE']);
-  } finally { global.fetch = originalFetch; global.WebSocket = originalWebSocket; }
+    assert.deepEqual(requests.filter((item) => item.method).map((item) => item.method), ['POST', 'DELETE']);
+  } finally { client?.endSession(); global.fetch = originalFetch; global.WebSocket = originalWebSocket; }
 });
 
 test('disabled and production modes never expose the avatar worker URL', async () => {
@@ -167,6 +176,9 @@ test('disabled and production modes never expose the avatar worker URL', async (
     assert.deepEqual(await (await route.GET()).json(), { mode: 'disabled', url: null });
     process.env.AVATAR_MODE = 'soulx';
     assert.deepEqual(await (await route.GET()).json(), { mode: 'soulx', url: 'http://127.0.0.1:8765' });
+    process.env.SOULX_AVATAR_URL = 'https://untrusted.example/';
+    assert.deepEqual(await (await route.GET()).json(), { mode: 'disabled', url: null });
+    process.env.SOULX_AVATAR_URL = 'http://127.0.0.1:8765';
     process.env.NODE_ENV = 'production';
     assert.deepEqual(await (await route.GET()).json(), { mode: 'disabled', url: null });
   } finally {
@@ -183,4 +195,75 @@ test('two seconds of queued PCM is the upper bound during a stalled worker start
   assert.ok(pendingBytes <= 64000);
   assert.ok(client.dropped > 0);
   client.endSession();
+});
+
+test('worker disconnect reconnects, advances generation, and rejects old session frames', async () => {
+  const originalFetch = global.fetch; const originalWebSocket = global.WebSocket;
+  let posts = 0; let client;
+  const sockets = [];
+  class Socket {
+    static OPEN = 1;
+    readyState = 0; bufferedAmount = 0; sent = []; listeners = {};
+    constructor(url) { this.url = String(url); sockets.push(this); queueMicrotask(() => { this.readyState = 1; this.emit('open', {}); }); }
+    addEventListener(type, callback) { (this.listeners[type] ??= []).push(callback); }
+    emit(type, event) { for (const callback of this.listeners[type] ?? []) callback(event); }
+    send(value) { this.sent.push(value); }
+    close() { if (this.readyState === 3) return; this.readyState = 3; this.emit('close', {}); }
+  }
+  global.WebSocket = Socket;
+  global.fetch = async (_url, options = {}) => options.method === 'POST'
+    ? { ok: true, json: async () => ({ id: `s${++posts}`, protocolVersion: 2 }) }
+    : { ok: true, json: async () => ({ processRssBytes: 1000, cpuUserSeconds: 1, cpuSystemSeconds: 0 }) };
+  try {
+    const frames = []; const metrics = [];
+    client = new SoulXRenderer('http://127.0.0.1:8765');
+    await client.startSession((frame) => frames.push(frame), () => {}, (metric) => metrics.push(metric));
+    for (let i = 0; sockets.length < 1 && i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    client.interrupt(1);
+    sockets[0].close();
+    client.pushAudio(Int16Array.from([100, 200]), 1);
+    for (let i = 0; sockets.length < 2 && i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+    assert.equal(sockets.length, 2);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    assert.deepEqual(JSON.parse(sockets[1].sent[0]), { type: 'interrupt', generation: 1 });
+    assert.equal(new DataView(sockets[1].sent[1]).getUint32(0, true), 1);
+    sockets[0].emit('message', { data: JSON.stringify({ type: 'frame', sessionId: 's1', generation: 1, sequence: 1, jpeg: 'old' }) });
+    assert.equal(frames.length, 0);
+    sockets[1].emit('message', { data: JSON.stringify({ type: 'frame', sessionId: 's2', generation: 1, sequence: 2, jpeg: 'new' }) });
+    assert.equal(frames[0].sequence, 2);
+    assert.ok(metrics.some((metric) => metric.connection === 'reconnecting'));
+    assert.ok(metrics.some((metric) => typeof metric.reconnectMs === 'number'));
+  } finally { client?.endSession(); global.fetch = originalFetch; global.WebSocket = originalWebSocket; }
+});
+
+test('missing worker at startup retries without stopping the avatar audio observer', async () => {
+  const originalFetch = global.fetch; const originalWebSocket = global.WebSocket;
+  let attempts = 0; let client;
+  class Socket {
+    static OPEN = 1;
+    readyState = 0; bufferedAmount = 0; listeners = {}; sent = [];
+    constructor() { queueMicrotask(() => { this.readyState = 1; this.emit('open', {}); }); }
+    addEventListener(type, callback) { (this.listeners[type] ??= []).push(callback); }
+    emit(type, event) { for (const callback of this.listeners[type] ?? []) callback(event); }
+    send(value) { this.sent.push(value); }
+    close() { this.readyState = 3; this.emit('close', {}); }
+  }
+  global.WebSocket = Socket;
+  global.fetch = async (_url, options = {}) => {
+    if (options.method === 'POST' && ++attempts === 1) throw new Error('worker is starting');
+    return { ok: true, json: async () => ({ id: 'recovered', protocolVersion: 2 }) };
+  };
+  try {
+    const metrics = [];
+    client = new SoulXRenderer('http://127.0.0.1:8765');
+    await client.startSession(() => {}, () => {}, (metric) => metrics.push(metric));
+    client.pushAudio(Int16Array.from([500, 500]), 0);
+    for (let i = 0; !metrics.some((metric) => metric.connection === 'connected') && i < 100; i++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(attempts, 2);
+    assert.ok(metrics.some((metric) => metric.connection === 'reconnecting'));
+    assert.ok(metrics.some((metric) => metric.connection === 'connected'));
+    assert.ok(metrics.some((metric) => typeof metric.reconnectMs === 'number'));
+  } finally { client?.endSession(); global.fetch = originalFetch; global.WebSocket = originalWebSocket; }
 });
