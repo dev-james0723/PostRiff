@@ -1,10 +1,11 @@
 'use client';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Surface } from '@/components/rafii';
 import { Disclosure } from './disclosure';
 import { Metric } from './present';
 import type { Dimension } from './visual-model';
 import { visualEvent } from './visual-events';
+import { useDiagramMotion } from './diagram-motion';
 
 const point = (i: number, radius: number) => [
   260 + Math.sin((i * Math.PI) / 3) * radius,
@@ -20,6 +21,13 @@ export function TrendDNA({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const id = useId();
+  const diagram = useRef<SVGSVGElement>(null);
+  const [replay, setReplay] = useState(0);
+  const { reduced } = useDiagramMotion(
+    diagram,
+    dimensions.map((d) => `${d.id}:${d.value}`).join('|'),
+    replay
+  );
   const detail = dimensions.find((d) => d.id === selected);
 
   const labels = [
@@ -39,7 +47,15 @@ export function TrendDNA({
     >
       <div className='vi-heading'>
         <h3 id={`${id}-title`}>Trend DNA</h3>
-        <span>Six dimensions</span>
+        <button
+          type='button'
+          className='rafii-focus vi-replay'
+          aria-label='Replay Trend DNA animation'
+          disabled={reduced}
+          onClick={() => setReplay((n) => n + 1)}
+        >
+          {reduced ? 'Motion reduced' : 'Replay animation'}
+        </button>
       </div>
       <p className='vi-note'>
         A profile of this opportunity. Every dimension keeps its own evidence.
@@ -53,7 +69,7 @@ export function TrendDNA({
         }}
         aria-label='Trend DNA overview. Six dimensions with exact values and Unknown states in the table below.'
       >
-        <svg viewBox='0 0 520 380' aria-hidden='true' focusable='false'>
+        <svg ref={diagram} viewBox='0 0 520 380' aria-hidden='true' focusable='false'>
           {[40, 80, 122].map((r) => (
             <polygon
               key={r}
@@ -64,13 +80,21 @@ export function TrendDNA({
           {dimensions.map((d, i) => {
             const [x, y] = point(i, 122);
             return (
-              <g key={d.id}>
-                <path d={`M260 192 L${x} ${y}`} className='vi-dna-grid' />
+              <g
+                key={d.id}
+                data-dimension={d.id}
+                data-selected={selected === d.id}
+                className='vi-dna-axis'
+              >
+                <path d={`M260 192 L${x} ${y}`} className='vi-dna-spoke' data-diagram-path />
+                <circle cx={x} cy={y} r='13' className='vi-dna-halo' aria-hidden='true' />
                 <circle
                   cx={x}
                   cy={y}
                   r='6'
                   className='vi-dna-node'
+                  data-known={d.known}
+                  data-diagram-node
                   strokeDasharray={d.known ? undefined : '2 2'}
                 />
                 <text
@@ -100,9 +124,20 @@ export function TrendDNA({
           </text>
         </svg>
       </button>
+      <div className='vi-chart-legend' aria-label='Trend DNA legend'>
+        <span>
+          <i className='vi-legend-dot' aria-hidden='true' />
+          Reported value
+        </span>
+        <span>
+          <i className='vi-legend-dot vi-legend-unknown' aria-hidden='true' />
+          Unknown / not supplied
+        </span>
+      </div>
       <p className='vi-note'>
-        No shared numerical scale is supplied. The spokes identify dimensions; their length does not
-        encode a value. No polygon or missing value is inferred.
+        Color identifies the dimension, not its strength. No shared numerical scale is supplied. The
+        spokes identify dimensions; their length does not encode a value. No polygon or missing
+        value is inferred.
       </p>
       {!compact && (
         <>
@@ -118,7 +153,7 @@ export function TrendDNA({
               </thead>
               <tbody>
                 {dimensions.map((d) => (
-                  <tr key={d.id}>
+                  <tr key={d.id} data-dimension={d.id}>
                     <th scope='row'>
                       <button
                         type='button'
@@ -130,6 +165,7 @@ export function TrendDNA({
                           visualEvent('dna_dimension_opened');
                         }}
                       >
+                        <span className='vi-dimension-key' aria-hidden='true' />
                         {d.label}
                       </button>
                     </th>
@@ -142,7 +178,7 @@ export function TrendDNA({
           </div>
           <div id={`${id}-detail`} aria-live='polite'>
             {detail && (
-              <div className='vi-dimension-detail'>
+              <div className='vi-dimension-detail' data-dimension={detail.id}>
                 <h4>{detail.label}</h4>
                 <p>{detail.definition}</p>
                 <p>{detail.reason}</p>

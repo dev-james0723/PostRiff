@@ -451,3 +451,191 @@
     font-size: 20px;
   }
 }
+
+/* Scoped categorical palette: identity, never a strength or confidence scale. */
+.vi-cockpit {
+  --vi-momentum: #087669;
+  --vi-acceleration: #285eab;
+  --vi-spread: #76529e;
+  --vi-audience: #ab405d;
+  --vi-adaptability: #856017;
+  --vi-gap: #99552f;
+  --vi-provisional: #94640e;
+}
+.dark .vi-cockpit {
+  --vi-momentum: #7dd6c4;
+  --vi-acceleration: #9dc3f5;
+  --vi-spread: #c6b1ed;
+  --vi-audience: #f0a7bb;
+  --vi-adaptability: #e6cb8d;
+  --vi-gap: #eeb697;
+  --vi-provisional: #e6c278;
+}
+[data-dimension='momentum'] {
+  --vi-dimension: var(--vi-momentum);
+}
+[data-dimension='acceleration'] {
+  --vi-dimension: var(--vi-acceleration);
+}
+[data-dimension='spread'] {
+  --vi-dimension: var(--vi-spread);
+}
+[data-dimension='audience'] {
+  --vi-dimension: var(--vi-audience);
+}
+[data-dimension='adaptability'] {
+  --vi-dimension: var(--vi-adaptability);
+}
+[data-dimension='gap'] {
+  --vi-dimension: var(--vi-gap);
+}
+.vi-dna-figure {
+  margin-top: 0.75rem;
+  background:
+    radial-gradient(
+      ellipse at 30% 40%,
+      color-mix(in srgb, var(--vi-momentum) 5%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse at 75% 65%,
+      color-mix(in srgb, var(--vi-spread) 5%, transparent),
+      transparent 60%
+    );
+}
+.vi-dna-spoke {
+  fill: none;
+  stroke: var(--vi-dimension);
+  stroke-width: 1.4;
+  opacity: 0.6;
+}
+.vi-dna-axis .vi-axis-label {
+  fill: var(--vi-dimension);
+  font-weight: 600;
+}
+.vi-dna-node {
+  stroke: var(--vi-dimension);
+  stroke-width: 2;
+}
+.vi-dna-node[data-known='true'] {
+  fill: var(--vi-dimension);
+}
+.vi-dna-halo {
+  fill: var(--vi-dimension);
+  opacity: 0.08;
+  transition: opacity 180ms ease;
+}
+.vi-dna-axis[data-selected='true'] .vi-dna-halo {
+  opacity: 0.24;
+}
+.vi-dna-axis[data-selected='true'] .vi-dna-spoke {
+  opacity: 1;
+  stroke-width: 2.2;
+}
+.vi-dimension-key {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--vi-dimension);
+  margin-inline-end: 0.45rem;
+  vertical-align: 0.05em;
+}
+.vi-dimension-button {
+  color: var(--vi-dimension);
+}
+.vi-dimension-detail {
+  border-inline-start: 3px solid var(--vi-dimension);
+}
+.vi-replay {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--rafii-radius-control);
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  transition: background 180ms ease;
+}
+.vi-replay:hover:not(:disabled) {
+  background: var(--rafii-surface-quiet);
+  color: var(--foreground);
+}
+.vi-replay:disabled {
+  cursor: default;
+}
+.vi-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  margin-top: 0.65rem;
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+.vi-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.vi-legend-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  border: 1.5px solid var(--muted-foreground);
+}
+.vi-legend-unknown {
+  background: transparent;
+  border-style: dashed;
+}
+.vi-legend-observed {
+  background: var(--vi-momentum);
+  border-color: var(--vi-momentum);
+}
+.vi-legend-provisional {
+  background: transparent;
+  border: 2px solid var(--vi-provisional);
+}
+.vi-legend-gap {
+  width: 0.7rem;
+  border-top: 1.5px dashed var(--muted-foreground);
+}
+.vi-timeline-line {
+  stroke: var(--vi-momentum);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vi-observed-point {
+  fill: var(--vi-momentum);
+  stroke: var(--background);
+  stroke-width: 2;
+}
+.vi-provisional-point {
+  stroke: var(--vi-provisional);
+  stroke-width: 2.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vi-dna-halo,
+  .vi-replay {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .vi-dna-axis .vi-axis-label,
+  .vi-axis-value {
+    fill: CanvasText;
+  }
+  .vi-dna-spoke,
+  .vi-dna-node,
+  .vi-timeline-line,
+  .vi-provisional-point {
+    stroke: CanvasText;
+  }
+  .vi-dna-node[data-known='true'],
+  .vi-observed-point {
+    fill: CanvasText;
+  }
+  .vi-dimension-button {
+    color: ButtonText;
+  }
+}

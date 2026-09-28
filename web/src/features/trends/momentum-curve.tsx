@@ -1,11 +1,12 @@
 'use client';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Surface } from '@/components/rafii';
 import type { Trend } from '@/lib/coworker/trend-types';
 import { timelineData } from './visual-model';
 import { date, fieldClass } from './present';
 import { Disclosure } from './disclosure';
 import { visualEvent } from './visual-events';
+import { useDiagramMotion } from './diagram-motion';
 
 export function MomentumCurve({ trend, platform }: { trend: Trend; platform: string }) {
   const units = [...new Set(trend.observed.timeline.map((p) => p.unit))];
@@ -14,6 +15,9 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
   const [hours, setHours] = useState(168);
   const id = useId();
   const points = timelineData(trend, unit, hours, platform);
+  const diagram = useRef<SVGSVGElement>(null);
+  const [replay, setReplay] = useState(0);
+  const { reduced } = useDiagramMotion(diagram, JSON.stringify(points), replay);
   const values = points.flatMap((p) => (p.value === null ? [] : [p.value]));
   const times = points.map((p) => Date.parse(p.at));
   const minTime = Math.min(...times),
@@ -41,7 +45,15 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
     >
       <div className='vi-heading'>
         <h3 id={`${id}-title`}>Momentum Curve</h3>
-        <span>Observed history</span>
+        <button
+          type='button'
+          className='rafii-focus vi-replay'
+          aria-label='Replay Momentum animation'
+          disabled={reduced || !values.length}
+          onClick={() => setReplay((n) => n + 1)}
+        >
+          {reduced ? 'Motion reduced' : 'Replay animation'}
+        </button>
       </div>
       <p className='vi-note'>
         {platform
@@ -86,6 +98,7 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
       {points.length ? (
         <>
           <svg
+            ref={diagram}
             viewBox='0 0 600 290'
             role='img'
             aria-labelledby={`${id}-chart-title ${id}-chart-description`}
@@ -112,7 +125,13 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
               </g>
             ))}
             {segments.map((d, i) => (
-              <path key={i} d={d} className='vi-timeline-line' data-observed-segment />
+              <path
+                key={i}
+                d={d}
+                className='vi-timeline-line'
+                data-observed-segment
+                data-diagram-path
+              />
             ))}
             {points.map((p, i) =>
               p.value === null ? (
@@ -127,7 +146,8 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
                   key={i}
                   cx={x(p.at)}
                   cy={y(p.value)}
-                  r='5'
+                  r='6'
+                  data-diagram-node
                   className={
                     p.state === 'provisional' ? 'vi-provisional-point' : 'vi-observed-point'
                   }
@@ -151,9 +171,22 @@ export function MomentumCurve({ trend, platform }: { trend: Trend; platform: str
               </text>
             ))}
           </svg>
+          <div className='vi-chart-legend' aria-label='Momentum legend'>
+            <span>
+              <i className='vi-legend-dot vi-legend-observed' aria-hidden='true' />
+              Observed
+            </span>
+            <span>
+              <i className='vi-legend-dot vi-legend-provisional' aria-hidden='true' />
+              Provisional
+            </span>
+            <span>
+              <i className='vi-legend-gap' aria-hidden='true' />
+              Missing window
+            </span>
+          </div>
           <p className='vi-note'>
-            Filled marker: observed · hollow marker: provisional. {unit}. No qualified forecast is
-            available.
+            {unit} · Observed history only. No qualified forecast is available.
           </p>
           <Disclosure title='Exact timeline readings'>
             <div className='vi-table-wrap'>

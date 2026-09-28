@@ -1,5 +1,7 @@
 # Visual Intelligence local implementation receipt
 
+Historical receipt for implementation commit `9c25d34`. The subsequent diagram redesign and its current verification are recorded in [VISUAL_INTELLIGENCE_MOTION_RECEIPT.md](VISUAL_INTELLIGENCE_MOTION_RECEIPT.md). Evidence below remains attached to the original source.
+
 Status: local frontend implementation verified against the committed v1 contract. Full backend integration and the unsupported handoffs below remain blocked. This is not a deployed or live-provider result.
 
 ## BASELINE

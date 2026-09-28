@@ -56,6 +56,13 @@ async function run() {
     for (const width of (process.env.TREND_WIDTHS || '1440,768,390,430').split(',').map(Number)) {
       const context = await browser.newContext({
         viewport: { width, height: { 1440: 900, 768: 1024, 390: 844, 430: 932 }[width] },
+        recordVideo:
+          process.env.TREND_RECORD_VIDEO === '1'
+            ? {
+                dir: out,
+                size: { width, height: { 1440: 900, 768: 1024, 390: 844, 430: 932 }[width] }
+              }
+            : undefined,
         reducedMotion: 'reduce',
         colorScheme
       });
@@ -367,6 +374,24 @@ async function run() {
         flagsOn = true;
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
         await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
+        if (process.env.TREND_MOTION_PREVIEW_ONLY === '1') {
+          await page.emulateMedia({ reducedMotion: 'no-preference' });
+          for (const [panel, label] of [
+            ['.vi-dna', 'Replay Trend DNA animation'],
+            ['.vi-momentum', 'Replay Momentum animation']
+          ]) {
+            await page
+              .locator(panel)
+              .evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'instant' }));
+            await page.locator(panel + ' svg[data-motion-phase="complete"]').waitFor();
+            await page.getByRole('button', { name: label, exact: true }).click();
+            await page.locator(panel + ' svg[data-motion-phase="animating"]').waitFor();
+            await page.locator(panel + ' svg[data-motion-phase="complete"]').waitFor();
+            await page.waitForTimeout(500);
+          }
+          record('Recorded synthetic production UI motion preview');
+          continue;
+        }
         assert.equal(
           calls.some((c) => c.path.includes('/coworker/trends') && c.method !== 'GET'),
           false
@@ -466,6 +491,76 @@ async function run() {
                 .transitionDuration === '0s'
           );
           record('meaningful 200ms motion; reduced motion removes it');
+          await page.emulateMedia({ reducedMotion: 'no-preference' });
+          for (const [panel, label] of [
+            ['.vi-dna', 'Replay Trend DNA animation'],
+            ['.vi-momentum', 'Replay Momentum animation']
+          ]) {
+            const svg = page.locator(panel + ' svg').first();
+            await page
+              .locator(panel)
+              .evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'instant' }));
+            await svg.locator('[data-diagram-node]').first().waitFor();
+            const geometry = () =>
+              svg
+                .locator('[data-diagram-node]')
+                .evaluateAll((ns) =>
+                  ns.map((n) => [n.getAttribute('cx'), n.getAttribute('cy'), n.getAttribute('r')])
+                );
+            const before = await geometry();
+            await page.getByRole('button', { name: label, exact: true }).click();
+            await page.waitForFunction(
+              (selector) => document.querySelector(selector)?.dataset.motionPhase === 'animating',
+              panel + ' svg'
+            );
+            assert.ok(
+              await svg
+                .locator('[data-diagram-node]')
+                .first()
+                .evaluate((n) => Number(getComputedStyle(n).opacity) < 1)
+            );
+            await page.waitForFunction(
+              (selector) => document.querySelector(selector)?.dataset.motionPhase === 'complete',
+              panel + ' svg'
+            );
+            assert.deepEqual(await geometry(), before, 'Motion never changes stored coordinates');
+            assert.equal(
+              await svg
+                .locator('[data-diagram-node]')
+                .first()
+                .evaluate((n) => getComputedStyle(n).opacity),
+              '1'
+            );
+          }
+          const colors = await page
+            .locator('.vi-dna-axis .vi-axis-label')
+            .evaluateAll((ns) => ns.map((n) => getComputedStyle(n).fill));
+          assert.equal(new Set(colors).size, 6, 'Six labelled categorical colors');
+          await page
+            .locator('.vi-dna')
+            .evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'instant' }));
+          await page
+            .getByRole('button', { name: 'Replay Trend DNA animation', exact: true })
+            .click();
+          await page.locator('.vi-dna svg[data-motion-phase="animating"]').waitFor();
+          await page.emulateMedia({ reducedMotion: 'reduce' });
+          await page.locator('.vi-dna svg[data-motion-phase="reduced"]').waitFor();
+          assert.equal(
+            await page
+              .getByRole('button', { name: 'Replay Trend DNA animation', exact: true })
+              .isDisabled(),
+            true
+          );
+          assert.equal(
+            await page
+              .locator('.vi-dna [data-diagram-node]')
+              .first()
+              .evaluate((n) => getComputedStyle(n).opacity),
+            '1'
+          );
+          record(
+            'GSAP replays real geometry, uses six labelled colors, and cancels immediately for reduced motion'
+          );
         }
         await page.screenshot({ path: path.join(out, `radar-${width}.png`), fullPage: true });
         await page.screenshot({ path: path.join(out, `viewport-${width}.png`), fullPage: false });
@@ -918,7 +1013,9 @@ async function run() {
           .catch(() => {});
         throw error;
       } finally {
+        const video = page.video();
         await context.close();
+        if (video) await video.saveAs(path.join(out, `diagram-motion-${width}.webm`));
       }
     }
   } finally {

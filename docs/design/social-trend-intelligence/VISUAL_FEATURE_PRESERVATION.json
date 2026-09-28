@@ -5,8 +5,8 @@
   "historical_manifest_sha256": "67647d5f179fe71bddefaf2c97a333567aee975465252e4622879ec4c1b7230b",
   "historical_results_are_not_current_evidence": true,
   "current_results": [
-    "visual-validation/light/results.json",
-    "visual-validation/dark-long/results.json"
+    "diagram-motion-validation/light/results.json",
+    "diagram-motion-validation/dark-long/results.json"
   ],
   "execution": "local_production_ui_with_synthetic_intercepted_apis",
   "features": [
@@ -587,10 +587,11 @@
         "visual-intelligence.css",
         "trend-dna.tsx",
         "momentum-curve.tsx",
-        "disclosure.tsx"
+        "disclosure.tsx",
+        "diagram-motion.ts"
       ],
-      "representation": "Existing Rafii motion and reduced-motion preference, keyboard disclosures, semantic tables and focus semantics retained. Small-screen SVG labels enlarged after visual inspection.",
-      "verification": "Browser all four exact viewports, light/dark long content, keyboard, axe, focus trap/Escape/restore and 200% reflow"
+      "representation": "Scoped GSAP reveal of existing diagram paths and markers, on entry or explicit replay; no measurement interpolation. Six labelled categorical colors, solid/hollow/dashed states and exact accessible tables. Rafii reduced-motion preference cancels and restores current geometry.",
+      "verification": "Browser actual animation opacity and completion, unchanged positions, six distinct label colors, replay, mid-animation reduced-motion cancellation, four exact viewports, light/dark long content, keyboard, 36 axe checks and 200% equivalent reflow."
     },
     {
       "id": "accessibility",
@@ -604,5 +605,9 @@
       "representation": "Existing Rafii motion and reduced-motion preference, keyboard disclosures, semantic tables and focus semantics retained. Small-screen SVG labels enlarged after visual inspection.",
       "verification": "Browser all four exact viewports, light/dark long content, keyboard, axe, focus trap/Escape/restore and 200% reflow"
     }
+  ],
+  "previous_results": [
+    "visual-validation/light/results.json",
+    "visual-validation/dark-long/results.json"
   ]
 }
