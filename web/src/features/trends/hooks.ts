@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { coworkerKeys, useCoworkerApi } from '@/lib/coworker/hooks';
 import type { TrendFlag, TrendFlags } from '@/lib/coworker/trend-types';
+import { trendBetaStatusSchema } from '@/lib/coworker/trend-types';
 import { createTrendApi, type TrendApi } from './api';
 
 export function flagsFrom(value: object | undefined): TrendFlags {
@@ -28,13 +29,16 @@ export function useTrendContext() {
     refetchInterval: 30_000
   });
   const flags = flagsFrom(status.isError ? undefined : status.data?.flags);
+  const parsed = trendBetaStatusSchema.safeParse(status.isError ? undefined : status.data?.trend_beta);
+  const beta = parsed.success ? parsed.data : undefined;
   const api = useMemo(() => createTrendApi(getToken), [getToken]);
   return {
     api,
     w: workspaceId ?? '',
     flags,
     status,
-    enabled: Boolean(workspaceId) && radarEnabled(flags)
+    beta,
+    enabled: Boolean(workspaceId) && radarEnabled(flags) && beta?.radar_available === true
   };
 }
 export function useTrendQuery<T>(

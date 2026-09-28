@@ -82,15 +82,16 @@ def observations(cur, workspace_id, state, now, basis=insights.COMPARISON_BASIS)
     (hypotheses, anomalies); counts pass basis=None so recent and backfilled posts are still counted."""
     jobs = (state.get("phase2") or {}).get("jobs") or []
     summary = insights.summary(cur, workspace_id, jobs, now, basis=basis)
-    by_ref = {j.get("providerReference"): j for j in jobs if j.get("providerReference")}
+    by_job = {j.get("id"): j for j in jobs if j.get("providerReference")}
     rows = []
     for post in summary["posts"]:
         metric = PRIMARY.get(post["provider"])
         value = (post["metrics"].get(metric) or {}).get("value") if metric else None
-        job = by_ref.get(post["providerPostId"])
-        if job is None or job.get("state") != "verified":
+        job = by_job.get(post["jobId"])
+        if job is None or post["publishedState"] != "verified":
             continue  # only posts the application verified as published are evidence
-        rows.append({"postId": post["providerPostId"], "jobId": job.get("id"), "provider": post["provider"], "cohort": post["cohort"], "metric": metric,
+        cohort = {**post["cohort"], "definitionVersion": (post["metrics"].get(metric) or {}).get("definitionVersion")}
+        rows.append({"postId": post["providerPostId"], "jobId": job.get("id"), "provider": post["provider"], "cohort": cohort, "metric": metric,
                      "value": value, "observedAt": post["freshness"]["observedAt"], "publishedAt": published_at(job), "features": features(job)})
     return rows
 

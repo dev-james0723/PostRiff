@@ -55,7 +55,7 @@ async function browserChecks() {
     if(p.endsWith('/saturation')){const data=structuredClone(f.saturation);if(mode==='legacy')data.dimensions.forEach(d=>delete d.sample_details);if(mode==='invalid')data.dimensions[0].sample_details.extra='forbidden';return send({...f.envelope(data),execution_state:mode==='unavailable'?'unavailable':'stored_result'});}
     return send(f.envelope([]));
    }
-   if(p.endsWith('/coworker/status'))return send({flags,weekly:{recipes:0,weeks:0},notifications:{enabled:false}});
+   if(p.endsWith('/coworker/status'))return send({flags,trend_beta:{state:flags.RAFII_TREND_TRUST_RECEIPTS_ENABLED?'stored_radar':'feature_off',radar_available:flags.RAFII_TREND_TRUST_RECEIPTS_ENABLED===true,acquisition:'none',metric_reads_enabled:false,follower_conversion:'unavailable'},weekly:{recipes:0,weeks:0},notifications:{enabled:false}});
    if(p==='/api/auth/config')return send({provider:'dev',execution:'dev-synthetic',flow:'dev'});
    if(p==='/api/catalog')return send({authMode:'dev',execution:'dev-synthetic',phase2:true,templates:[],routes:[],profileMetadata:{}});
    if(p==='/api/bootstrap')return send({workspaceId:wid});
@@ -71,7 +71,7 @@ async function browserChecks() {
   });
   const page=await context.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));
   const load=()=>page.goto(base+'/app/trends',{timeout:180000});
-  await load();await page.getByText('Conversations aren’t available in this workspace yet',{exact:true}).waitFor();assert.equal(calls.some(c=>c.path.startsWith(root)),false);pass(`${width} flags OFF zero trend requests`);
+  await load();await page.getByText('Trend Beta is off',{exact:true}).waitFor();assert.equal(calls.some(c=>c.path.startsWith(root)),false);pass(`${width} flags OFF zero trend requests`);
   flags={RAFII_TREND_INTELLIGENCE_ENABLED:true,RAFII_TREND_RADAR_ENABLED:true,RAFII_TREND_TRUST_RECEIPTS_ENABLED:true,RAFII_TREND_SATURATION_ENABLED:true};
   const open=async()=>{await load();await page.getByRole('button',{name:'Why should I trust this?',exact:true}).click();const drawer=page.getByRole('dialog');await drawer.getByRole('tab',{name:'Crowding',exact:true}).focus();await page.keyboard.press('Enter');return drawer;};
   let drawer=await open();await drawer.getByRole('heading',{name:'Creative crowding',exact:true}).waitFor();assert.equal(await drawer.locator('.trend-crowding').count(),5);

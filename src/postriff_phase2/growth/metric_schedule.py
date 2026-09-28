@@ -185,13 +185,19 @@ class MetricScheduler:
         deletes them anyway) but a reading of Rafii's own post waits and retries: the purge never touches it, and a
         cancelled t0/1h/24h reading could never be taken again."""
         with self.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s", (row["workspaceId"],))
-            found = cur.fetchone()
-            if not found or found[0] or not analytics_direct(cur, row["workspaceId"], row["connectionId"]):
-                return "cancel"
-            if purge_pending(cur, row["workspaceId"], row["connectionId"]):
-                return "wait" if row.get("jobId") else "cancel"
-            return "read"
+            return self._eligibility(cur, row)
+
+    def _eligibility(self, cur, row, *, lock=False):
+        # Completion serializes with workspace disconnect/deletion commands;
+        # provider I/O still runs outside this short transaction.
+        cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s" +
+                    (" FOR UPDATE" if lock else ""), (row["workspaceId"],))
+        found = cur.fetchone()
+        if not found or found[0] or not analytics_direct(cur, row["workspaceId"], row["connectionId"]):
+            return "cancel"
+        if purge_pending(cur, row["workspaceId"], row["connectionId"]):
+            return "wait" if row.get("jobId") else "cancel"
+        return "read"
 
     def read(self, row, grants):
         """Outcome dict: {"state": "done"|"transient"|"unavailable"|"cancelled", ...}. Never raises."""
@@ -221,13 +227,19 @@ class MetricScheduler:
         return {"state": "transient", "failure": f"http_{status}", "http": status}
 
     def complete(self, row, outcome):
-        """Fenced on the lease. Returns True when this worker's outcome was recorded."""
+        """Fence on this claim generation, unexpired lease and current rights."""
         state = outcome["state"]
         with self.connection_factory() as db, db.cursor() as cur:
-            fence = (row["id"], self.worker_id)
+            if state == "done":
+                eligibility = self._eligibility(cur, row, lock=True)
+                if eligibility != "read":
+                    state = "cancelled" if eligibility == "cancel" else "transient"
+                    outcome = {"state": state, "failure": "not_eligible" if eligibility == "cancel" else "purge_pending"}
+            fence = (row["id"], self.worker_id, row["attempts"])
             if state == "done":
                 cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=NULL,
-                                      lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id=%s::uuid AND lease_owner=%s AND status='claimed'""", fence)
+                                      lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id=%s::uuid AND lease_owner=%s
+                                      AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""", fence)
                 recorded = cur.rowcount == 1
                 if recorded:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
@@ -236,13 +248,14 @@ class MetricScheduler:
             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
                                       failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
-                               WHERE id=%s::uuid AND lease_owner=%s AND status='claimed'""",
+                               WHERE id=%s::uuid AND lease_owner=%s AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""",
                             (backoff(row["id"], row["attempts"]), outcome.get("http"), outcome.get("failure"), *fence))
                 recorded = cur.rowcount == 1
             else:
                 final = {"transient": "dead", "unavailable": "unavailable", "cancelled": "cancelled"}.get(state, "dead")
                 cur.execute("""UPDATE public.pr_metric_reads SET status=%s, last_http_status=%s, failure_class=%s, lease_owner=NULL, lease_until=NULL,
-                                      updated_at=now() WHERE id=%s::uuid AND lease_owner=%s AND status='claimed'""",
+                                      updated_at=now() WHERE id=%s::uuid AND lease_owner=%s AND attempts=%s
+                                      AND lease_until>clock_timestamp() AND status='claimed'""",
                             (final, outcome.get("http"), outcome.get("failure"), *fence))
                 recorded = cur.rowcount == 1
             db.commit()
@@ -253,9 +266,11 @@ class MetricScheduler:
         if not rows:
             return
         with self.connection_factory() as db, db.cursor() as cur:
-            cur.execute("""UPDATE public.pr_metric_reads SET status='pending', attempts=greatest(0, attempts-1), lease_owner=NULL, lease_until=NULL,
-                                  updated_at=now() WHERE id = ANY(%s::uuid[]) AND lease_owner=%s AND status='claimed'""",
-                        ([r["id"] for r in rows], self.worker_id))
+            for row in rows:
+                cur.execute("""UPDATE public.pr_metric_reads SET status='pending', attempts=greatest(0, attempts-1), lease_owner=NULL, lease_until=NULL,
+                                      updated_at=now() WHERE id=%s::uuid AND lease_owner=%s AND attempts=%s
+                                      AND lease_until>clock_timestamp() AND status='claimed'""",
+                            (row["id"], self.worker_id, row["attempts"]))
             db.commit()
 
     def tick(self, max_reads=10, max_seconds=15.0):

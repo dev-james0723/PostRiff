@@ -22,6 +22,7 @@ class ChoiceOptions(unittest.TestCase):
         self.assertEqual(choice['metrics'],['views','likes'])
         self.assertEqual(choice['definition_version'],learning_options.DEFINITION_VERSION)
         self.assertIsNone(choice['saved_choice'])
+        self.assertNotIn('follower_conversion', choice['objectives'])
         payload={k:choice[k] for k in ('selection_digest','channel_id','provider','definition_version')}
         payload.update(metric='views',window='24h',objective='reach')
         learning_options.require_choice(options,payload)

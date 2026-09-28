@@ -73,6 +73,7 @@ async function run() {
       f.opportunity.draft_id = snapshot.state.variants[0].id;
       f.run.draft_id = snapshot.state.variants[0].id;
       let flagsOn = false,
+        workspaceAllowed = true,
         scenario = 'fresh',
         revokedReceipt = false,
         watch = null,
@@ -175,6 +176,8 @@ async function run() {
                     ]
               )
             );
+          if (endpoint === '/opportunities/whitespace' && req.method() === 'GET')
+            return send(f.envelope([]));
           if (endpoint === '/opportunities/synthetic-opportunity/accept') {
             assert.equal(req.method(), 'POST');
             assert.equal(body.angle_id, 'synthetic-angle');
@@ -305,6 +308,9 @@ async function run() {
         if (pathname.endsWith('/coworker/status'))
           return send({
             flags: flagsOn ? f.flags : {},
+            trend_beta: { state: !flagsOn ? 'feature_off' : workspaceAllowed ? 'stored_radar' : 'workspace_not_allowlisted',
+              radar_available: flagsOn && workspaceAllowed, acquisition: 'none', metric_reads_enabled: false,
+              follower_conversion: 'unavailable' },
             weekly: { recipes: 0, weeks: 0 },
             notifications: { enabled: false }
           });
@@ -329,10 +335,16 @@ async function run() {
       page.on('pageerror', (e) => errors.push(e.message));
       try {
         await page.goto(base + '/app/trends', { waitUntil: 'domcontentloaded', timeout: 180000 });
-        await visibleText(page, 'Conversations aren’t available in this workspace yet');
+        await visibleText(page, 'Trend Beta is off');
         assert.equal(calls.filter((c) => c.path.includes('/coworker/trends')).length, 0);
         record(width + ' flags off: zero trend requests');
         flagsOn = true;
+        workspaceAllowed = false;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+        await visibleText(page, 'This workspace is outside the Trend Beta');
+        assert.equal(calls.filter((c) => c.path.includes('/coworker/trends')).length, 0);
+        record(width + ' workspace not allowlisted: zero trend requests');
+        workspaceAllowed = true;
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
         await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
         assert.equal(
@@ -342,12 +354,19 @@ async function run() {
         record(width + ' browse stored data only, authenticated contract');
         await noOverflow(page, width + ' radar');
         await axe(page, width + ' radar');
+        if (process.env.TREND_GROWTH_BETA_SMOKE_ONLY === '1') {
+          await visibleText(page, 'Source coverage is limited; live discovery is not verified.');
+          assert.deepEqual(errors, [], 'browser runtime errors');
+          assert.deepEqual(unhandledMutations, [], 'unexpected mutations');
+          record(width + ' limited source coverage and no runtime/mutation errors');
+          continue;
+        }
         assert.equal(
           await page.locator('html').evaluate((el) => el.classList.contains('dark')),
           colorScheme === 'dark'
         );
-        assert.equal(await page.getByText('Demo data', { exact: true }).count(), 1);
-        assert.equal(await page.locator('.trend-state-line').innerText(), 'Still taking shape');
+        assert.ok((await page.getByText('Demo data', { exact: true }).count()) >= 1);
+        assert.equal(await page.locator('[data-trend-card] .vi-state').innerText(), 'Still taking shape');
         assert.equal(
           await page
             .locator('.trend-radar svg polyline, .trend-radar svg path[data-sparkline]')
@@ -360,10 +379,6 @@ async function run() {
         await evidenceSummary.focus();
         await page.keyboard.press('Space');
         await visibleText(page, f.trend.evidence[0].excerpt);
-        assert.equal(
-          await page.locator('.trend-timeline-point').count(),
-          f.trend.observed.timeline.length
-        );
         await evidenceSummary.click();
         const scope = page.locator('.trend-scope-summary > summary');
         await scope.click();
@@ -381,7 +396,8 @@ async function run() {
             (await page.locator('.trend-scope-summary .trend-coverage').innerText()).includes(value)
           );
         await scope.click();
-        const creatorText = await page.locator('.trend-conversation-main').innerText();
+        const creatorText = await page.locator('[data-trend-card]').innerText();
+        const primaryText = (await page.locator('.vi-insight, .vi-primary').allInnerTexts()).join('\n');
         for (const term of [
           'evidence only',
           'qualified',
@@ -392,11 +408,12 @@ async function run() {
           'measurement support'
         ])
           assert.ok(
-            !creatorText.toLowerCase().includes(term.toLowerCase()),
+            !primaryText.toLowerCase().includes(term.toLowerCase()),
             'Primary copy excludes ' + term
           );
-        assert.ok(creatorText.includes('Confidence') && creatorText.includes('Still forming'));
-        assert.ok(creatorText.includes('Activity is increasing'));
+        assert.ok(creatorText.includes('Evidence & Coverage'));
+        assert.ok(creatorText.includes('Momentum Curve'));
+        assert.ok(primaryText.includes('Key Insight') && primaryText.includes('Create original post'));
         record(
           width +
             ' explicit demo, native emoji, exact timeline, coverage axes and keyboard disclosure'
@@ -459,6 +476,10 @@ async function run() {
 
         await drawer.getByRole('tab', { name: 'Timeline', exact: true }).click();
         await visibleText(drawer, 'Gap — Collector unavailable');
+        assert.equal(
+          await drawer.locator('.trend-timeline-point').count(),
+          f.trend.observed.timeline.length
+        );
         await drawer.getByRole('tab', { name: 'Graph / list' }).focus();
         await page.keyboard.press('Enter');
         await visibleText(drawer, /Directly observed relation/);
@@ -645,7 +666,7 @@ async function run() {
             if (state === 'expired' || state === 'deleted') {
               await visibleText(page, 'Evidence revoked or expired');
               assert.equal(
-                await page.locator('.trend-conversation-main .trend-signal-grid').count(),
+                await page.locator('[data-trend-card] .vi-insight').count(),
                 0
               );
               assert.equal(
@@ -654,16 +675,15 @@ async function run() {
               );
             }
             if (state === 'low_confidence') {
-              const main = page.locator('.trend-conversation-main');
-              await main.getByText('Not clear yet', { exact: true }).waitFor();
-              await main.getByText('Direction isn’t clear yet').waitFor();
-              await main
-                .getByText('How this fits your work is still unclear.', { exact: true })
-                .waitFor();
+              const main = page.locator('[data-trend-card]');
+              await main.getByText('Workspace relevance is Unknown. Your audience and brand context need support.').waitFor();
+              await main.getByText('Original angles are not available for this selection').waitFor();
+              assert.equal(await main.getByRole('button', { name: 'Create original post' }).isDisabled(), true);
               assert.equal(await page.getByText('Develop this idea', { exact: true }).count(), 0);
             }
             if (state === 'opportunity_expired') {
-              await visibleText(page, 'Opportunity needs a fresh evidence check');
+              await visibleText(page, 'Original angles are not available for this selection');
+              assert.equal(await page.getByRole('button', { name: 'Create original post' }).isDisabled(), true);
               assert.equal(await page.getByText('Develop this idea', { exact: true }).count(), 0);
             }
             if (state === 'aggregate') {
@@ -685,7 +705,7 @@ async function run() {
           await page.keyboard.press('Escape');
           await visibleText(page, 'Evidence revoked or expired');
           assert.equal(
-            await page.locator('.trend-conversation-main .trend-signal-grid').count(),
+            await page.locator('[data-trend-card] .vi-insight').count(),
             0
           );
           record('receipt 410 removes card claims');

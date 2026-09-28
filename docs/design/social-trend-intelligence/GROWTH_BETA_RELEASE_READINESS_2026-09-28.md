@@ -1,0 +1,46 @@
+# Rafii Trend Growth Beta — release-readiness report
+
+**2026-09-28 status: locally implemented and verified; production activation is not yet release-ready.** This is a candidate on a dedicated branch. No merge, push, deployment, production environment change, provider activation, OAuth expansion, publishing permission, or paid/model operation occurred.
+
+## Release truth and work isolation
+
+- Read-only remote and GitHub checks put `origin/consumer-saas` at `7b5ece8b343c1f6aaaae45fe771a9a2b21b810cc`. The current Ready Vercel production deployment `dpl_2JX1JhWPnRt5odVWm91atJc6edFh` reports that same Git SHA for `postriff-phase2-private.vercel.app`. The handoff's `22e42b40d3aad82a7cf7902ab20d4d0fac7b3f95` deployment is historical.
+- The main checkout is at stale `468811b...` with hundreds of dirty paths. The existing `rafii-trend-growth-beta-20260928` worktree at `22e42b...` has uncommitted work. Both were left untouched. Its scoped Growth Beta candidate was reviewed and copied into a fresh managed worktree, with follow-up fixes there.
+- Candidate worktree: `/Users/ouxianxing/.codex/worktrees/trend-growth-beta-readiness/James-Au-Studio`; branch: `codex/trend-growth-beta-readiness-20260928`; starting HEAD: `7b5ece8b343c1f6aaaae45fe771a9a2b21b810cc`. The final local candidate is this branch's HEAD.
+
+## Delta against the verified release base
+
+The release base already has Trend admission/receipts, exposures and accept/dismiss, durable provider jobs, exact publication lineage, metric scheduling, and Performance Learning. The missing Growth Beta readiness pieces were a truthful browser/API availability contract, explicit per-post metric horizon state, stricter native observation/lease binding, qualified comparison feedback, and a fail-closed follower conversion contract.
+
+- Added read-only `trend_beta` to the workspace status response and `post_tracking` to the existing Performance response. Feature off, allowlist denial, stored Radar, no verified live acquisition, disabled reads, scheduled/pending/measured/unavailable horizons, disconnected/unsupported/rights-unavailable readings, and follower unavailability are explicit. The Trend page labels stored conversations and limited coverage; Performance shows the four horizons. No page mount starts acquisition or metric polling.
+- Hardened `pr_metric_reads` completion and release against stale claim generation, expired leases, and rights changes between provider read and commit. Existing t0/+1h/+24h/+7d, retry, append-only observation, and `POSTRIFF_METRIC_READS` scheduler gates remain intact.
+- Bound observation summaries and Growth/Performance consumption to verified job, provider, account, native post ID, metric definition, and +24h cohort. An unrelated post sharing a native ID cannot become evidence. Invalid native numbers remain unavailable. Exact opportunity revision, receipt, and context digest remain bound through publication feedback.
+- Added descriptive relative comparison with observed value, baseline median, comparable sample, evidence and counter-evidence IDs, and `causal=false`; hypothesis reuse is limited to the documented +24h basis. Existing owner review and expiry remain the authority.
+- Follower conversion has an empty reviewed native-contract registry. Metric choices and outcome calculation fail closed without a qualified `follows`/`profile_visits` pair, aligned provider/account/scope/definition/window, receipts, and positive denominator. No proxy or follower-growth promise was added. Current owned-post ingestion does not expose this pair. Meta's [official Threads post-insights request](https://www.postman.com/meta/threads/request/434u2bd/get-post-insights) lists post views, likes, replies, reposts, quotes, and shares; a future account-level telemetry proposal would need separate attribution and rights review.
+- The existing provider registry remains keyed by provider **and operation**; publishing identity does not admit discovery. Trend JEV remains a bounded interpretation result downstream of evidence, with no measured magnitude, stage, reach, popularity, or virality estimate populated from model output.
+
+Affected implementation and contracts: `src/postriff_phase2/growth/{metric_schedule.py,scout_outcomes.py,follower_conversion.py,trends/beta.py,trends/learning.py,trends/learning_options.py}`, `src/postriff_phase2/insights.py`, `src/postriff_phase2/coworker/{service.py,performance.py}`, `web/src/features/{trends/,coworker/personalization/personalization-view.tsx}`, `web/src/lib/coworker/{trend-types.ts,types.ts}`, and `docs/design/social-trend-intelligence/api.schema.json`. Focused Python, PostgreSQL, and browser fixtures were updated; the separate release checklist lists activation gates.
+
+## Local verification
+
+All local tests used synthetic provider/identity data; no external provider/model call was configured. The disposable-PostgreSQL harness applied project migrations locally, not in production.
+
+| Gate | Exact execution and result |
+| --- | --- |
+| Growth unit | `PYTHONPATH=src:tests <worktree Python> -m unittest tests.test_growth_beta tests.test_growth_metric_schedule tests.test_growth_scout tests.test_rafii_workflows -q`: **84/84 passed**. |
+| Broad Trend unit | `PYTHONPATH=src:tests <worktree Python> -m unittest discover -s tests -p 'test_trend_*.py' -q`: **1,029 run, 785 passed, 244 PostgreSQL-gated skips**. One operator CLI test failed transiently in the first run; its isolated rerun and the full second run passed without a source change. |
+| Metric PostgreSQL | `PYTHONPATH=src:tests <worktree Python> scripts/postriff_pg_suite.py postgres_growth_metric_reads`: **20/20 named checks passed**, including lease generation, revocation during HTTP, all four horizons, unavailable versus zero, usage ledger, RLS, and +24h comparison. |
+| Trend PostgreSQL | `PYTHONPATH=src:tests <worktree Python> scripts/postriff_pg_suite.py postgres_trend_services`: **138/138 passed**, covering admission, lineage, learning, JEV synthetic budget/rights, retention, and tenant behavior. |
+| Web contracts | Node 24 `npm --prefix web run typecheck`: **passed**. Scoped `oxlint src`: **0 errors/warnings across 851 files**. The isolated Next production build in the browser harness passed. |
+| Real API + PostgreSQL browser | `scripts/trend_browser.py --learning-only --out /tmp/trend-growth-beta-readiness-browser-20260928 --api-port 4668 --web-port 4669 --pg-port 56649`: **passed** at 1440, 768, 430 and 390 px; explicit choice persists, pending/null stays unmeasured, revocation removes current choices, zero unexpected egress, zero model usage/reservations. Evidence: `/tmp/trend-growth-beta-readiness-browser-20260928/harness-result.json`. |
+| Scoped Radar browser | `TREND_GROWTH_BETA_SMOKE_ONLY=1 ... node web/tests/trend-browser.cjs`: **18/18 passed** at 1440, 820 and 390 px, including off, denied allowlist, stored-only GET, limited coverage, axe, and overflow. Fixture-intercepted synthetic API. |
+| Learning browser | `... node web/tests/trend-learning-browser.cjs --browser`: **49/49 passed** at desktop/mobile, including measured zero, missing/pending/unavailable, no causal promise, owner/viewer controls, no unexpected egress, and responsive/axe checks. Fixture-intercepted synthetic API. |
+| Diff hygiene | `git diff --check` and `node --check web/tests/trend-browser.cjs`: **passed**. |
+
+The preexisting full `trend-browser.cjs` fixture, when run without scoped smoke mode, reaches the current UI but fails on a stale `.trend-state-line` selector after its initial off/allowlist/stored-only/axe checks. The scoped Beta browser checks above and real API/PostgreSQL browser harness passed; the full historical fixture is **not** claimed green. The first isolated Next build attempt hit local disk exhaustion; its own failed build directory was removed, and a complete rebuild passed. The broader Trend unit suite's one initial operator CLI failure did not reproduce in isolation or the full rerun.
+
+## Remaining release gates
+
+The [release checklist](GROWTH_BETA_RELEASE_CHECKLIST_2026-09-28.md) is the action order. Production database migration 035/040 state and RLS are unverified because the available Supabase connection did not expose this project. Production variable names for `RAFII_TREND_CURSOR_SIGNING_KEY`, the three core Trend flags, `RAFII_TREND_ALLOWED_OPERATIONS`, and `POSTRIFF_METRIC_READS` were absent at inspection. `RAFII_TREND_WORKSPACE_ALLOWLIST` exists, but its value and exact internal workspace membership were not inspected. No live provider rights/operation or authorized test publication has been approved, and no production smoke has run. Native follower conversion remains unavailable; an empirical creator outcome cohort has not been measured.
+
+Next action for a later authorized release task: **Review this branch and checklist; verify production migrations and the exact internal workspace, signing key, provider/analytics rights, cost caps, and release diff. If approved, merge through normal checks, deploy that reviewed commit, enable only the named internal workspace and approved flags/operations, run the production/API/DB/one-post smoke and rollback drill, then report the observed results.** Each production change needs its own scoped authorization; this candidate makes none of those changes.

@@ -130,7 +130,7 @@ class Media(unittest.TestCase):
         r=E.enrich({},workspace_id='w',adapter=None,ledger={},cache=[],now=NOW,deadline=1,relevant=True,useful=True)
         self.assertEqual(r['reason'],'adapter_unavailable'); self.assertTrue(ready()['opportunities'])
 
-def observation(n,value=10,objective='follower_conversion',window='24h',**changes):
+def observation(n,value=10,objective='shareability',window='24h',**changes):
     row={'id':str(n),'account':'a','provider':'threads','language':'en','format':'text','window':window,'objective':objective,'definition':'v1','publishedAt':NOW-100000+n*1000,
          'metrics':{k:{'value':v,'coverage':'available','receipt':f'r{n}{k}','observedAt':NOW} for k,v in {'likes':100000,'profile_visits':100,'follows':value,'views':1000,'shares':value}.items()}}
     row.update(changes); return row
@@ -142,7 +142,7 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(O.evaluate(observation(9,1,modelScore=100),history)['state'],'underperformed')
     def test_missing_profile_follows_likes_only_unavailable(self):
         for missing in ('profile_visits','follows'):
-            row=observation(9); row['metrics'].pop(missing)
+            row=observation(9,objective='follower_conversion'); row['metrics'].pop(missing)
             self.assertEqual(O.evaluate(row,[])['state'],'measurement_unavailable')
     def test_one_hour_never_durable(self): self.assertEqual(O.evaluate(observation(9,30,window='1h'),[])['state'],'observing')
     def test_mixed_cohorts_duplicates_and_zero(self):
@@ -151,7 +151,7 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(O.evaluate(observation(9),[observation(1)]*10)['samples'],1)
         self.assertEqual(O.evaluate(observation(9),[observation(i,0) for i in range(5)])['state'],'insufficient_data')
     def test_invalid_denominator_and_nan(self):
-        r=observation(9); r['metrics']['profile_visits']['value']=0; self.assertIsNone(O.objective_measure(r)[0])
+        r=observation(9,objective='follower_conversion'); r['metrics']['profile_visits']['value']=0; self.assertIsNone(O.objective_measure(r)[0])
         r['metrics']['follows']['value']=float('nan'); self.assertIsNone(O.value(r,'follows'))
     def test_business_return_and_retention_never_inferred(self): self.assertEqual(O.evaluate(observation(9),[])['businessReturn'],'unmeasured')
 

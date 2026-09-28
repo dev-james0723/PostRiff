@@ -28,7 +28,8 @@ def rate(row, numerator, denominator):
 def objective_measure(row):
     objective = row.get("objective")
     if objective == "follower_conversion":
-        return rate(row, "follows", "profile_visits")["value"], "follows/profile_visits"
+        from .follower_conversion import measure
+        return measure(row)["value"], "follows/profile_visits"
     if objective in ("shareability", "conversation"):
         for metric in (("shares", "reposts", "saves") if objective == "shareability" else ("replies", "comments")):
             for denominator in ("impressions", "reach", "views"):
@@ -86,8 +87,9 @@ def from_insights(post, job, plan, window):
         native = "saved" if name == "saves" and post["provider"] == "instagram" else name
         m = post.get("metrics", {}).get(native) or {}
         available = m.get("availability") == "available" and m.get("readOffset") == window
+        definition_version = m.get("definitionVersion") or post["definitionVersion"]
         metrics[name] = {"value": m.get("value") if available else None, "provider": post["provider"], "account": post["connectionId"],
-                         "window": window, "definition": f'{post["provider"]}:{post["definitionVersion"]}:{native}', "denominator": None,
+                         "window": window, "definition": f'{post["provider"]}:{definition_version}:{native}', "denominator": None,
                          "coverage": "available" if available else "unavailable", "observedAt": m.get("observedAt"),
                          "receipt": f'job:{job["id"]}:{name}:{window}:{m.get("observedAt")}' if available else None}
     return {"id": job["id"], "account": post["connectionId"], "provider": post["provider"], "language": post["language"],
@@ -111,8 +113,12 @@ def refresh(cur, workspace_id, state, now):
             job = by_job.get(post.get("jobId"))
             if not job:
                 continue
-            variant = variants.get(job.get("manifest", {}).get("variantId"), {})
             manifest = job.get("manifest", {})
+            if (post.get("publishedState") != "verified" or post.get("connectionId") != manifest.get("channelId")
+                    or post.get("provider") != str(manifest.get("platform", "")).lower()
+                    or post.get("providerPostId") != str(job.get("providerReference"))):
+                continue
+            variant = variants.get(manifest.get("variantId"), {})
             if "scoutLineage" in manifest:
                 plans = [b["executionPlan"] for b in manifest["scoutLineage"]]
             else:  # Legacy published jobs predate frozen lineage.
