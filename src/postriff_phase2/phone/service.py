@@ -16,7 +16,7 @@ from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.http import runtime_for
 from ..automation_runs import principal_repository
 from ..permissions import require
-from . import billing, contracts, inbound, planner, store
+from . import billing, contracts, inbound, planner, rules, store
 from .config import PhoneConfig
 
 
@@ -156,7 +156,7 @@ class PhoneService:
             cur.execute('DELETE FROM public.pr_phone_schedules WHERE user_id=%s', (principal,))
         return {'deleted': True}
 
-    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None):
+    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None, event_entity_id=None):
         self._require()
         direction = 'inbound' if _inbound else 'outbound'
         if _inbound:
@@ -181,6 +181,11 @@ class PhoneService:
                     raise AlphaError('Call unavailable.', 404)
                 return store.public_call(store.call(cur, prior[0]))
             identity, prefs = store.number(cur, principal), store.prefs(cur, principal, workspace_id)
+            custom_ref = rules.reason_ref(reason_key) if kind == 'proactive' else None
+            if custom_ref:
+                selected = rules.matching(cur, prefs, principal, workspace_id, event_type, event_entity_id, now)
+                if not selected or (selected['id'], selected['version']) != custom_ref:
+                    raise AlphaError('This custom call situation is no longer eligible.', 409, code='event_not_allowed')
             if _inbound:
                 # This identity is the authenticated single-use web ticket, never the caller ID.
                 identity = {'hash': inbound.digest(self, 'principal', principal), 'verified': True}
@@ -197,6 +202,7 @@ class PhoneService:
             blocker = planner.eligibility(kind, prefs, now=now, verified=bool(identity and identity['verified']), membership=member.allows('edit'),
                 configured=bool(self.provider and self.provider.configured and (not self.provider.real or self.config.telephony_rate > 0)),
                 live_configured=route.available and agent.cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=self.config.public(), event_type=event_type,
+                custom_rule_ref=custom_ref,
                 daily_calls=int(count if kind == 'explicit' else automatic), recent_equivalent=any(r[1] == reason and r[2] for r in recent),
                 active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate,
                 daily_budget=self.config.daily_budget,
@@ -365,6 +371,8 @@ class PhoneService:
             if not isinstance(deadline,(int,float)) or not self.clock() <= deadline <= self.clock()+86400:
                 return None
         prefs,identity = store.prefs(cur,principal,workspace_id),store.number(cur,principal)
+        custom = rules.matching(cur, prefs, principal, workspace_id, event['event_type'], event.get('entity_id'), self.clock())
+        reason_key = rules.reason_key(event['event_type'], custom, event['grouping_key']) if custom else event['event_type']+':'+event['grouping_key'][:100]
         cur.execute(f'SELECT count(*) FILTER(WHERE kind<>\'explicit\'),coalesce(sum({billing.DAILY_COST_SQL}),0) FROM public.pr_phone_calls '
                     'WHERE user_id=%s AND requested_at>=to_timestamp(%s)',(principal,planner.day_start(self.clock(),prefs['timeZone'])))
         count,reserved = cur.fetchone()
@@ -375,8 +383,19 @@ class PhoneService:
         return {'prefs':prefs,'verified':bool(identity and identity['verified']),'membership':recipient['membership'].allows('edit'),
                 'configured':bool(self.provider and self.provider.configured),'live_configured':self.agent().cfg.route('voice_front_end',reason='phone attention').available
                     and self.agent().cfg.enabled('RAFII_AGENT_V2_ENABLED'),'flags':self.config.public(),'daily_calls':int(count),
-                'active':any(r[0] not in contracts.TERMINAL for r in recent),'recent_equivalent':any(r[1]==event['event_type']+':'+event['grouping_key'][:100] for r in recent),
-                'reserved_cost':int(reserved),'estimate':estimate,'daily_budget':self.config.daily_budget}
+                'active':any(r[0] not in contracts.TERMINAL for r in recent),'recent_equivalent':any(r[1]==reason_key for r in recent),
+                'reserved_cost':int(reserved),'estimate':estimate,'daily_budget':self.config.daily_budget,
+                'custom_rule_ref':(custom['id'],custom['version']) if custom else None}
+
+    def proactive_briefing(self, call):
+        """Read the current reviewed discussion text; never expose it to the provider."""
+        ref = rules.reason_ref(call['reason_key'])
+        if not ref:
+            return None
+        with self.hosted.connection_factory() as db, db.cursor() as cur:
+            prefs = store.prefs(cur, call['user_id'], call['workspace_id'])
+        rule = rules.active_rule(prefs, *ref)
+        return rule['discuss'] if rule and rule['eventType'] == call['reason_key'].split(':', 1)[0] else None
 
     def stop_for_user(self, principal):
         with self.hosted.connection_factory() as db, db.cursor() as cur:
