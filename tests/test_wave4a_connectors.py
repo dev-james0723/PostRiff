@@ -52,6 +52,9 @@ class CapabilityContract(unittest.TestCase):
         values["POSTRIFF_OAUTH_DOUYIN_ENABLED"] = "true"
         flagged = registry_from_environment(values, transport=Wire([]))
         self.assertFalse(flagged["douyin"].execution_enabled)
+        with self.assertRaisesRegex(AlphaError, "provider application approval"):
+            OAuthService(None, None, CredentialVault(CredentialVault.generate_key()), flagged, "https://rafii.example").start(
+                "workspace", "session", "douyin", "identity")
         values["POSTRIFF_OAUTH_DOUYIN_VERIFIED"] = "true"
         verified = registry_from_environment(values, transport=Wire([]))
         self.assertTrue(verified["douyin"].execution_enabled)
