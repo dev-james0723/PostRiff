@@ -279,6 +279,9 @@ class DialMediaTransport:
         self.acceptance = asyncio.Event()
         self.collect_code = collect_code
         self.digits = asyncio.Queue(maxsize=32)
+        self.code_audio = asyncio.Queue(maxsize=256)
+        self.collect_speech = False
+        self.speech_attempts = 0
         self.reader = asyncio.create_task(self._read())
 
     async def _read(self):
@@ -302,7 +305,12 @@ class DialMediaTransport:
                     self.acceptance.set()
                 elif event.get('type') == 'media':
                     if not self.accepted:
-                        continue  # No model, retained audio or workspace context before a person accepts.
+                        if self.collect_speech:
+                            payload = event.get('payload')
+                            if not isinstance(payload, str) or not payload or len(payload) > 48000:
+                                raise ValueError('Invalid code audio')
+                            self.code_audio.put_nowait(base64.b64decode(payload, validate=True))
+                        continue  # Pre-auth audio is only for isolated code transcription; never Live.
                     payload = event.get('payload')
                     if not isinstance(payload, str) or not payload or len(payload) > 48000:
                         raise ValueError('Invalid Dial media')
@@ -321,7 +329,7 @@ class DialMediaTransport:
             self.audio.put_nowait(None)
 
     async def accept_call(self, *, timeout=20):
-        """Generic locally generated μ-law prompt; voicemail cannot authorize private agent access."""
+        """Generic prerecorded μ-law prompt; voicemail cannot authorize private agent access."""
         prompt = (Path(__file__).resolve().parents[1] / 'assets' / 'dial-acceptance.mulaw').read_bytes()
         if not 8000 <= len(prompt) <= 120000:
             raise ValueError('Dial acceptance prompt unavailable')
@@ -347,26 +355,73 @@ class DialMediaTransport:
         for offset in range(0, len(prompt), 1600):
             await self.send_audio(base64.b64encode(prompt[offset:offset + 1600]).decode())
 
-    async def read_code(self, *, timeout):
+    def prepare_code_input(self):
+        """Arm only after signed admission, before prompt playback, so early speech is not lost."""
+        self.collect_speech = self.collect_code and not self.accepted and self.speech_attempts < 3
+
+    async def _read_keypad(self):
         code = ''
+        while not self.stopped.is_set():
+            digit = await self.digits.get()
+            if digit is None:
+                return None
+            self.keypad_selected.set()
+            self.collect_speech = False
+            if digit == '*':
+                if code:
+                    return code
+            elif digit == '#':
+                code = ''
+            else:
+                code = (code + digit)[:13]
+        return None
+
+    async def _read_spoken(self, recognize):
+        from ..code_speech import Utterance, parse_code
+        utterance = Utterance()
+        try:
+            while not self.stopped.is_set():
+                audio = await self.code_audio.get()
+                candidate = utterance.feed(audio)
+                if candidate:
+                    if self.speech_attempts >= 3:
+                        await asyncio.Future()  # Keypad remains available, with no additional model cost.
+                    self.speech_attempts += 1
+                    self.collect_speech = False
+                    try:
+                        result = await recognize(candidate)
+                        return parse_code(result) or ''  # Empty is a failed auth attempt, never a credential.
+                    except Exception:
+                        return ''
+        finally:
+            utterance.clear()
+
+    async def read_code(self, *, timeout, recognize=None):
+        self.keypad_selected = asyncio.Event()
+        self.collect_speech = self.collect_code and recognize is not None and self.speech_attempts < 3
+        tasks = [asyncio.create_task(self._read_keypad())]
+        if self.collect_speech:
+            tasks.append(asyncio.create_task(self._read_spoken(recognize)))
+        keypad_selected = asyncio.create_task(self.keypad_selected.wait())
         try:
             async with asyncio.timeout(timeout):
-                while not self.stopped.is_set():
-                    digit = await self.digits.get()
-                    if digit is None:
-                        return None
-                    if digit == '*':
-                        code = ''
-                    elif digit == '#':
-                        if code:
-                            return code
-                    else:
-                        code += digit
-                        if len(code) == 12:
-                            return code
+                done, _ = await asyncio.wait([*tasks, keypad_selected], return_when=asyncio.FIRST_COMPLETED)
+                # Once the person chooses the keypad, cancel STT and wait for star; never race two auth attempts.
+                if self.keypad_selected.is_set():
+                    for task in tasks[1:]:
+                        task.cancel()
+                    return await tasks[0]
+                return next((task.result() for task in tasks if task in done), None)
         except TimeoutError:
             return None
-        return None
+        finally:
+            self.collect_speech = False
+            keypad_selected.cancel()
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, keypad_selected, return_exceptions=True)
+            while not self.code_audio.empty():
+                self.code_audio.get_nowait()
 
     async def authorize_inbound(self):
         if self.stopped.is_set():

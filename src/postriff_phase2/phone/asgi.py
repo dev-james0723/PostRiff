@@ -47,7 +47,7 @@ def create_lazy_app(*, values=None, application_factory=None):
                              WebSocketRoute('/api/phone/dial/media/{call_id}', media)])
 
 
-def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
+def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False, code_transcribe=None):
     from starlette.applications import Starlette
     from starlette.middleware.wsgi import WSGIMiddleware
     from starlette.routing import Mount, WebSocketRoute
@@ -168,9 +168,15 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                     await transport.end_call()
                     return
                 deadline = asyncio.get_running_loop().time() + inbound.AUTH_SECONDS
+                from .code_speech import transcribe
+                async def recognize_code(audio):
+                    if code_transcribe is not None:
+                        return await code_transcribe(audio)
+                    return await transcribe(audio, phone.agent().cfg.credential('openai'))
+                transport.prepare_code_input()
                 await transport.play_prompt('dial-inbound')
                 for attempt in range(3):
-                    code = await transport.read_code(timeout=max(0, deadline - asyncio.get_running_loop().time()))
+                    code = await transport.read_code(timeout=max(0, deadline - asyncio.get_running_loop().time()), recognize=recognize_code)
                     if code is None:
                         break
                     call_id = await asyncio.to_thread(inbound.authenticate, phone, call_ref, code)
@@ -178,6 +184,7 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                     if call_id:
                         break
                     if attempt < 2:
+                        transport.prepare_code_input()
                         await transport.play_prompt('dial-inbound-retry')
                 if not call_id or not await transport.authorize_inbound():
                     await transport.end_call()

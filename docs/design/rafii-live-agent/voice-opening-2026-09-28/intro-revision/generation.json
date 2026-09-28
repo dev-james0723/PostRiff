@@ -1,0 +1,8 @@
+{
+  "dial-inbound": {
+    "state": "completed",
+    "fingerprint": "a0a9f6c15c0fcf3a013ff151e54f7c0437ec7261a4a93017179372a252de6825",
+    "seconds": 12.9,
+    "sha256": "d55a27719ad75fb026c47a8a9d5451b58126b45af79d874e1ce2c751c697f48c"
+  }
+}
