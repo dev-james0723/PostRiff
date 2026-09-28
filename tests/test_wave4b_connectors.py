@@ -55,6 +55,7 @@ class Wave4BContracts(unittest.TestCase):
             "POSTRIFF_OAUTH_REDDIT_CONTACT": "u/rafii_builder", "POSTRIFF_OAUTH_REDDIT_ENABLED": "true",
         }
         registry = registry_from_environment(values, transport=Wire([]))
+        self.assertFalse(registry["reddit"].execution_enabled)
         service = OAuthService(None, None, CredentialVault(CredentialVault.generate_key()), registry, "https://rafii.example")
         blocked = next(item for item in service.provider_catalog() if item["id"] == "reddit")
         self.assertFalse(blocked["connectReady"])
@@ -63,6 +64,7 @@ class Wave4BContracts(unittest.TestCase):
 
         values["POSTRIFF_OAUTH_REDDIT_VERIFIED"] = "true"
         approved = registry_from_environment(values, transport=Wire([]))
+        self.assertTrue(approved["reddit"].execution_enabled)
         approved_service = OAuthService(None, None, CredentialVault(CredentialVault.generate_key()), approved, "https://rafii.example")
         ready = next(item for item in approved_service.provider_catalog() if item["id"] == "reddit")
         self.assertTrue(ready["connectReady"])

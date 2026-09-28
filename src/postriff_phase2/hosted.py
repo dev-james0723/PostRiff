@@ -325,7 +325,11 @@ class HostedPhase2Commands:
         asset["deletionPending"] = False
         return state
 
-    SERVER_VERIFIED_PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest", "Bluesky", "Mastodon", "Telegram", "Discord")
+    SERVER_VERIFIED_PLATFORMS = (
+        "LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest",
+        "Bluesky", "Mastodon", "Telegram", "Discord", "Weibo", "Bilibili", "Douyin", "Kuaishou",
+        "Google Business Profile", "LINE Official Account", "Reddit", "Zhihu", "Pixelfed", "Xiaohongshu",
+    )
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}

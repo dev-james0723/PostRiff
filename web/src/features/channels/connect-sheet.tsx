@@ -156,7 +156,7 @@ export function ConnectSheet({
     }
   }
 
-  /** Telegram: the code is claimed when Rafii's bot sees it in the channel; this asks whether that happened. */
+  /** Bot/device flows keep their confidential claim material server-side; this checks the stored transaction. */
   async function checkCode() {
     if (!pending?.code) return;
     setChecking(true);
@@ -221,32 +221,41 @@ export function ConnectSheet({
                   <span className='text-muted-foreground text-xs'>None</span>
                 )}
               </div>
-              {pending.connectKind === 'bot_code' && pending.code ? (
+              {(pending.connectKind === 'bot_code' || pending.connectKind === 'device_code') && pending.code ? (
                 <div className='flex flex-col gap-3'>
                   <ol className='flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed'>
                     {(pending.instructions ?? []).map((step) => (
                       <li key={step}>{step}</li>
                     ))}
                   </ol>
-                  <div className='flex items-center gap-2'>
-                    <code className='rafii-field min-w-0 flex-1 rounded-md px-2 py-1.5 font-mono text-sm break-all' aria-label='Code to post in your channel'>
-                      {pending.code}
-                    </code>
-                    <Button
-                      variant='glass'
-                      size='control'
-                      onClick={() => void navigator.clipboard.writeText(pending.code ?? '').then(() => toast.success('Code copied'))}
-                    >
-                      <Icons.copy className='size-4' aria-hidden />
-                      Copy
-                    </Button>
-                  </div>
+                  {pending.connectKind === 'bot_code' ? (
+                    <div className='flex items-center gap-2'>
+                      <code className='rafii-field min-w-0 flex-1 rounded-md px-2 py-1.5 font-mono text-sm break-all' aria-label='Code to post in your channel'>
+                        {pending.code}
+                      </code>
+                      <Button
+                        variant='glass'
+                        size='control'
+                        onClick={() => void navigator.clipboard.writeText(pending.code ?? '').then(() => toast.success('Code copied'))}
+                      >
+                        <Icons.copy className='size-4' aria-hidden />
+                        Copy
+                      </Button>
+                    </div>
+                  ) : pending.userCode ? (
+                    <div className='flex flex-col gap-1.5'>
+                      <span className='text-muted-foreground text-xs'>Provider confirmation code</span>
+                      <code className='rafii-field w-fit rounded-md px-2 py-1.5 font-mono text-sm' aria-label='Provider confirmation code'>
+                        {pending.userCode}
+                      </code>
+                    </div>
+                  ) : null}
                   {notSeenYet && (
                     <StateMessage
                       kind='partial'
                       layout='inline'
-                      title={`${pending.botUsername ?? 'Rafii’s bot'} hasn’t seen the code yet.`}
-                      description='Check that the bot is an admin that can post, then post the code again.'
+                      title={pending.connectKind === 'device_code' ? `${pending.platform} is still waiting for your approval.` : `${pending.botUsername ?? 'Rafii’s bot'} hasn’t seen the code yet.`}
+                      description={pending.connectKind === 'device_code' ? 'Finish the provider-controlled QR confirmation, or cancel there. Rafii cannot approve it for you.' : 'Check that the bot is an admin that can post, then post the code again.'}
                       className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
                     />
                   )}
@@ -355,16 +364,24 @@ export function ConnectSheet({
               <Button variant='glass' size='control' onClick={() => setPending(null)}>
                 Back
               </Button>
-              {pending.connectKind === 'bot_code' ? (
-                <StatefulButton
-                  variant='primary'
-                  className={cn(STATEFUL_ACTION, CONTROL_48)}
-                  state={checking ? 'loading' : 'idle'}
-                  loadingText='Checking…'
-                  onClick={() => void checkCode()}
-                >
-                  Check connection
-                </StatefulButton>
+              {pending.connectKind === 'bot_code' || pending.connectKind === 'device_code' ? (
+                <>
+                  {pending.connectKind === 'device_code' && pending.authorizeUrl && (
+                    <a href={pending.authorizeUrl} target='_blank' rel='noreferrer' className={cn(buttonVariants({ variant: 'glass', size: 'control' }), 'gap-2')}>
+                      Open {pending.platform}
+                      <Icons.externalLink className='size-4' aria-hidden />
+                    </a>
+                  )}
+                  <StatefulButton
+                    variant='primary'
+                    className={cn(STATEFUL_ACTION, CONTROL_48)}
+                    state={checking ? 'loading' : 'idle'}
+                    loadingText='Checking…'
+                    onClick={() => void checkCode()}
+                  >
+                    Check connection
+                  </StatefulButton>
+                </>
               ) : pending.authorizeUrl ? (
                 <a href={pending.authorizeUrl} data-tour='connect-authorize' className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
                   Continue to {pending.platform}

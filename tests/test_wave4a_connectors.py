@@ -50,8 +50,11 @@ class CapabilityContract(unittest.TestCase):
         self.assertIn("douyin", disabled)
         self.assertFalse(disabled["douyin"].execution_enabled)
         values["POSTRIFF_OAUTH_DOUYIN_ENABLED"] = "true"
-        enabled = registry_from_environment(values, transport=Wire([]))
-        self.assertTrue(enabled["douyin"].execution_enabled)
+        flagged = registry_from_environment(values, transport=Wire([]))
+        self.assertFalse(flagged["douyin"].execution_enabled)
+        values["POSTRIFF_OAUTH_DOUYIN_VERIFIED"] = "true"
+        verified = registry_from_environment(values, transport=Wire([]))
+        self.assertTrue(verified["douyin"].execution_enabled)
 
     def test_catalog_is_secret_free_and_keeps_readiness_gates_independent(self):
         values = {
