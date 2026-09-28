@@ -3,7 +3,7 @@
 import { LayoutGroup, motion } from 'motion/react';
 import { ChannelIcon } from '@/components/channel-icon';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
-import type { ChannelView, Thread } from '@/lib/api/types';
+import type { ChannelView, EngagementTriage, Thread } from '@/lib/api/types';
 import { SPRING_LAYOUT } from '@/lib/ease';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import { relativeTime } from '@/lib/time';
@@ -21,23 +21,27 @@ export function ThreadList({
   selectedId,
   onSelect,
   channelsById,
-  latestReply
+  latestReply,
+  triageById
 }: {
   threads: Thread[];
   selectedId: string | null;
   onSelect: (threadId: string) => void;
   channelsById: Map<string, ChannelView>;
   latestReply: (thread: Thread) => ReplyRecord | undefined;
+  triageById: Map<string, EngagementTriage['items'][number]>;
 }) {
   const { reduced } = useMotionPreference();
   return (
     <LayoutGroup id='inbox-threads'>
       <ul className='flex flex-col gap-1' aria-label='Comments'>
         {threads.map((thread) => {
-          const channel = channelsById.get(thread.connectionId);
+          const linked = channelsById.get(thread.connectionId);
+          const channel = linked?.platform.toLowerCase() === thread.provider.toLowerCase() ? linked : undefined;
           const selected = thread.threadId === selectedId;
           const time = threadTime(thread);
           const reply = latestReply(thread);
+          const triage = triageById.get(thread.threadId);
           return (
             <motion.li key={thread.threadId} className='relative' layout={reduced ? false : 'position'} transition={{ layout: SPRING_LAYOUT }}>
               {selected && (
@@ -60,13 +64,15 @@ export function ThreadList({
                 <span className='flex min-w-0 items-center gap-2'>
                   <ChannelIcon platform={channel?.platform ?? thread.provider} name={thread.provider} size='xs' />
                   <span className='text-foreground truncate text-sm font-medium'>{authorLabel(thread.author)}</span>
+                  {triage && <AnimatedBadge layout={false} size='sm' status='neutral' showIcon={false} className='rafii-quiet border-0' title={triage.why}>{triage.category.replaceAll('_', ' ')}</AnimatedBadge>}
                   {thread.tombstoned && (
-                    <AnimatedBadge size='sm' status='neutral' showIcon={false} className='rafii-quiet border-0'>
+                    <AnimatedBadge layout={false} size='sm' status='neutral' showIcon={false} className='rafii-quiet border-0'>
                       No longer returned
                     </AnimatedBadge>
                   )}
                   {reply && (
                     <AnimatedBadge
+                      layout={false}
                       size='sm'
                       status={replyStatusView(reply.status).badge}
                       showIcon={false}
@@ -79,6 +85,7 @@ export function ThreadList({
                   )}
                 </span>
                 <span className='text-muted-foreground line-clamp-2 text-sm break-words'>{thread.text || 'No text returned'}</span>
+                {triage && <span className='text-muted-foreground text-xs'>{triage.priority.replaceAll('_', ' ')} · {triage.why}</span>}
                 <span className='text-muted-foreground truncate text-xs'>
                   {channel?.account ?? providerName(thread.provider, channel)} · {time.firstSeen ? 'first seen ' : ''}
                   {relativeTime(time.at)}

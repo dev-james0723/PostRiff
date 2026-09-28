@@ -10,6 +10,7 @@ import type {
   WorkspaceApiToken, ApiTokenCreated, TokenScope,
   Analytics,
   Audience,
+  AudienceSyncResult,
   AuditEvent,
   Bootstrap,
   Catalog,
@@ -380,7 +381,8 @@ export function createApi(getToken: TokenSource) {
 
     /* analytics & audience */
     analytics: (w: string) => get<Analytics>(`${ws(w)}/analytics/summary`),
-    audience: (w: string) => get<Audience>(`${ws(w)}/audience/threads`),
+    audience: (w: string, cursor?: string | null) => get<Audience>(`${ws(w)}/audience/threads${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    syncAudience: (w: string) => send<AudienceSyncResult>('POST', `${ws(w)}/audience/sync`, {}),
     draftReply: (w: string, threadId: string, body: Record<string, unknown>) =>
       send<{ draftId: string; origin: string; text: string; label: string }>(
         'POST',

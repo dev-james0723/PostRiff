@@ -2,6 +2,7 @@
 
 import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
@@ -13,6 +14,7 @@ import { SHEET_ELEVATED } from '@/features/channels/rafii-materials';
 import { ApiError } from '@/lib/api/client';
 import { useAudience, useChannels } from '@/lib/api/hooks';
 import type { Audience, ChannelView, ProviderView, Thread } from '@/lib/api/types';
+import { relativeTime } from '@/lib/time';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
@@ -26,6 +28,7 @@ import {
   mergedReplies,
   replyHistoryReported,
   THREAD_PAGE_LIMIT,
+  TRIAGE_FILTERS,
   threadTime,
   type InboxFilter,
   type ReplyRecord
@@ -57,7 +60,7 @@ const PANE_HEIGHT = 'lg:max-h-[calc(100dvh-16rem)] lg:min-h-80';
 /** Conversation list beside the open thread from `lg` up (DNA §21.5); below it the thread is a separate step. */
 const PANES = 'grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]';
 
-const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', unanswered: 'Unanswered', replied: 'Replied' };
+const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', needs_reply: 'Needs reply', review: 'Review', fyi: 'FYI', unanswered: 'Unanswered', replied: 'Replied' };
 
 export function InboxView() {
   const { workspaceId } = useWorkspaceApi();
@@ -74,6 +77,7 @@ export function InboxView() {
 }
 
 function InboxPage() {
+  const { api, workspaceId } = useWorkspaceApi();
   const audience = useAudience();
   const channelsQuery = useChannels();
   const access = useWorkspaceAccess();
@@ -83,23 +87,50 @@ function InboxPage() {
   const [params, setParams] = useQueryStates(PARAMS, { history: 'replace', scroll: false });
   const [composers, setComposers] = useState<Record<string, ComposerState>>({});
   const [sessionReplies, setSessionReplies] = useState<Record<string, ReplyRecord[]>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [extraThreads, setExtraThreads] = useState<Thread[]>([]);
+  const [pageCursor, setPageCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   // The sheet keeps showing the comment it opened with while it slides closed.
   const [sheetThreadId, setSheetThreadId] = useState<string | null>(null);
 
   const data = audience.data;
+  useEffect(() => {
+    setExtraThreads([]);
+    setPageCursor(data?.nextCursor ?? null);
+  }, [data]);
   const channels = channelsQuery.data?.channels;
   const providers = channelsQuery.data?.providers;
   const channelsById = useMemo(() => new Map((channels ?? []).map((channel) => [channel.id, channel])), [channels]);
 
-  const threads = useMemo(() => (data?.threads ?? []).toSorted((a, b) => threadTime(b).at - threadTime(a).at), [data]);
+  const allThreads = useMemo(() => [...(data?.threads ?? []), ...extraThreads], [data, extraThreads]);
+  const triageById = useMemo(() => new Map(allThreads.filter((thread) => thread.triage).map((thread) => [thread.threadId, thread.triage!])), [allThreads]);
+  const threads = useMemo(() => {
+    const order: Record<string, number> = { needs_reply: 0, review: 1, fyi: 2, done: 3, ignore: 4 };
+    return allThreads.toSorted((a, b) =>
+      (triageById.has(a.threadId) && triageById.has(b.threadId)
+        ? (order[triageById.get(a.threadId)!.priority] - order[triageById.get(b.threadId)!.priority])
+        : 0) || threadTime(b).at - threadTime(a).at);
+  }, [allThreads, triageById]);
   const repliesFor = useCallback((thread: Thread) => mergedReplies(thread, sessionReplies[thread.threadId]), [sessionReplies]);
   const answered = useCallback((thread: Thread) => repliesFor(thread).some(isAnswered), [repliesFor]);
   const reported = replyHistoryReported(threads);
-  const counts = data ? countsFor(data, threads, reported, answered) : null;
-  const filtered = threads.filter((thread) => (params.filter === 'all' ? true : params.filter === 'replied' ? answered(thread) : !answered(thread)));
+  const triageComplete = data?.engagementEnabled === true && pageCursor === null && (data.nextCursor === null || extraThreads.length > 0);
+  const triageCount = (kind: string) => triageComplete ? [...triageById.values()].filter((item) => item.priority === kind).length : null;
+  const counts = data ? { ...countsFor(data, threads, reported, answered),
+    needs_reply: triageCount('needs_reply'), review: triageCount('review'), fyi: triageCount('fyi') } : null;
+  const activeFilter = TRIAGE_FILTERS.includes(params.filter) && !data?.engagementEnabled ? 'all' : params.filter;
+  const filtered = threads.filter((thread) => activeFilter === 'all' ? true
+    : activeFilter === 'replied' ? answered(thread)
+    : activeFilter === 'unanswered' ? !thread.tombstoned && !answered(thread)
+    : triageById.get(thread.threadId)?.priority === activeFilter);
   const freshReplyIds = useMemo(() => new Set(Object.values(sessionReplies).flatMap((list) => list.map((reply) => reply.draftId))), [sessionReplies]);
 
   const selected = params.thread ? (threads.find((thread) => thread.threadId === params.thread) ?? null) : null;
+  useEffect(() => {
+    if (selected && !twoPane) toast.dismiss('page-tour-inbox-tips');
+  }, [selected, twoPane]);
   const missing = Boolean(params.thread && data && !selected);
   if (selected && selected.threadId !== sheetThreadId) setSheetThreadId(selected.threadId);
   const sheetThread = sheetThreadId ? (threads.find((thread) => thread.threadId === sheetThreadId) ?? null) : null;
@@ -120,7 +151,7 @@ function InboxPage() {
       <ThreadDetail
         key={thread.threadId}
         thread={thread}
-        channel={channelsById.get(thread.connectionId)}
+        channel={channelsById.get(thread.connectionId)?.platform.toLowerCase() === thread.provider.toLowerCase() ? channelsById.get(thread.connectionId) : undefined}
         replies={repliesFor(thread)}
         freshReplyIds={freshReplyIds}
         composer={composers[thread.threadId] ?? EMPTY_COMPOSER}
@@ -128,6 +159,8 @@ function InboxPage() {
           setComposers((current) => ({ ...current, [thread.threadId]: { ...(current[thread.threadId] ?? EMPTY_COMPOSER), ...patch } }))
         }
         onApproved={(reply) => setSessionReplies((current) => ({ ...current, [thread.threadId]: [...(current[thread.threadId] ?? []), reply] }))}
+        triage={triageById.get(thread.threadId)}
+        replySendingEnabled={data?.replySendingEnabled === true}
         canEdit={canEdit}
         canReply={canReply}
       />
@@ -135,7 +168,7 @@ function InboxPage() {
   }
 
   // WHAT: the three reply-state views. Counts the server cannot vouch for are left out, never guessed.
-  const filterOptions: SegmentOption<InboxFilter>[] = INBOX_FILTERS.map((filter) => {
+  const filterOptions: SegmentOption<InboxFilter>[] = INBOX_FILTERS.filter((filter) => !TRIAGE_FILTERS.includes(filter) || data?.engagementEnabled === true).map((filter) => {
     const count = counts?.[filter] ?? null;
     return {
       value: filter,
@@ -193,14 +226,16 @@ function InboxPage() {
           )}
           <Surface material='quiet' radius='card' padding='none' data-tour='inbox-threads' className={cn('p-1.5 lg:overflow-y-auto', PANE_HEIGHT)}>
             {filtered.length > 0 ? (
-              <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} />
+              <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} triageById={triageById} />
             ) : (
               <StateMessage
                 kind='empty'
                 layout='inline'
                 title={
-                  params.filter === 'unanswered'
+                  activeFilter === 'unanswered' || activeFilter === 'needs_reply'
                     ? 'Nothing waiting for a reply.'
+                    : activeFilter === 'review' || activeFilter === 'fyi'
+                      ? 'No comments in this category.'
                     : reported
                       ? 'No replies yet.'
                       : 'No replies approved this visit.'
@@ -214,13 +249,17 @@ function InboxPage() {
               />
             )}
           </Surface>
+          {pageCursor && <Button variant='quiet' size='sm' disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? 'Loading…' : 'Load more comments'}
+          </Button>}
+          {pageCursor && data?.engagementEnabled && <p className='text-muted-foreground text-xs'>Engagement filters cover loaded comments. Load more to see older ones.</p>}
         </section>
         {twoPane && (
           <Surface material='quiet' radius='card' padding='none' className={cn('flex min-w-0 flex-col overflow-y-auto', PANE_HEIGHT)}>
             {selected ? (
               <>
                 <div className='rafii-panel sticky top-0 z-10 rounded-t-[var(--rafii-radius-card)] px-5 py-3'>
-                  <ThreadHeading thread={selected} channel={channelsById.get(selected.connectionId)} />
+                  <ThreadHeading thread={selected} channel={channelsById.get(selected.connectionId)?.platform.toLowerCase() === selected.provider.toLowerCase() ? channelsById.get(selected.connectionId) : undefined} />
                 </div>
                 <div className='px-5 py-4'>{detailFor(selected)}</div>
               </>
@@ -233,11 +272,57 @@ function InboxPage() {
     );
   }
 
-  const sheetHeadline = sheetThread ? threadHeadline(sheetThread, channelsById.get(sheetThread.connectionId)) : null;
+  const sheetHeadline = sheetThread ? threadHeadline(sheetThread, channelsById.get(sheetThread.connectionId)?.platform.toLowerCase() === sheetThread.provider.toLowerCase() ? channelsById.get(sheetThread.connectionId) : undefined) : null;
+  const syncRows = data?.sync ?? [];
+  const neverChecked = syncRows.length === 0 || syncRows.some((row) => row.lastSyncAt === null);
+  const oldestCheck = syncRows.length > 0 && !neverChecked ? Math.min(...syncRows.map((row) => row.lastSyncAt!)) : null;
+  const syncError = syncRows.find((row) => row.errorCode);
+
+  async function checkForComments() {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await api.syncAudience(workspaceId);
+      setSyncMessage(result.availability === 'available'
+        ? `Checked ${result.checkedPosts ?? 0} posts; ${result.ingested ?? 0} new comments.`
+        : result.reason ?? result.connections?.find((row) => row.reason)?.reason ?? 'Comment refresh is unavailable.');
+      await audience.refetch();
+    } catch (error) {
+      setSyncMessage(error instanceof ApiError ? error.message : 'Comment refresh is unavailable.');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function loadMore() {
+    if (!pageCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.audience(workspaceId, pageCursor);
+      setExtraThreads((current) => [...current, ...page.threads.filter((item) => !current.some((known) => known.threadId === item.threadId))]);
+      setPageCursor(page.nextCursor ?? null);
+    } catch (error) {
+      setSyncMessage(error instanceof ApiError ? error.message : 'Could not load older comments.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <PageContainer pageTitle='Inbox' infoContent={infoContent}>
       <div className='flex min-w-0 flex-col gap-5'>
+        <div className='flex flex-wrap items-center justify-between gap-2' aria-live='polite'>
+          <div className='text-muted-foreground text-sm'>
+            {oldestCheck === null ? 'Never checked for new comments' : `Checked ${relativeTime(oldestCheck)}`}
+            {syncError && <span> · Provider refresh unavailable ({syncError.errorCode})</span>}
+            {typeof data?.counts?.unanswered === 'number' && <span> · {data.counts.unanswered} unanswered</span>}
+          </div>
+          <Button variant='glass' size='control' disabled={syncing || !data} onClick={() => void checkForComments()}>
+            <Icons.refresh className='size-4' aria-hidden />
+            {syncing ? 'Checking…' : 'Check for new comments'}
+          </Button>
+          {syncMessage && <p className='text-muted-foreground w-full text-sm'>{syncMessage}</p>}
+        </div>
         <CoverageStrip
           channels={channels}
           providers={providers}
@@ -279,7 +364,7 @@ function InboxPage() {
 }
 
 /** Tab counts that are complete; a count the server cannot vouch for is left out rather than guessed. */
-function countsFor(data: Audience, threads: Thread[], reported: boolean, answered: (thread: Thread) => boolean): Record<InboxFilter, number | string | null> {
+function countsFor(data: Audience, threads: Thread[], reported: boolean, answered: (thread: Thread) => boolean): Partial<Record<InboxFilter, number | string | null>> {
   const server = apiCounts(data);
   const capped = threads.length >= THREAD_PAGE_LIMIT;
   const repliedHere = reported && !capped ? threads.filter(answered).length : null;
@@ -316,7 +401,7 @@ function InboxEmpty({ channels, providers }: { channels: ChannelView[] | undefin
           noAccounts
             ? undefined
             : anyDirect
-              ? 'Comments are read once, when Rafii verifies a post it published. Later comments aren’t collected yet.'
+              ? 'Rafii checks comments when a post is verified. Use Check for new comments to refresh later replies.'
               : `Comments appear for ${commentReadNames(providers)} accounts with Direct comments.`
         }
         media={

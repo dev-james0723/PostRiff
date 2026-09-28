@@ -1663,9 +1663,12 @@ export interface ReplyRecord {
   label?: string;
   updatedAt?: number | null;
   requiresReconfirmation?: boolean;
+  providerReference?: string | null;
+  events?: { at: number; state: string; message?: string }[];
 }
 
 export interface Thread {
+  triage?: EngagementTriage['items'][number];
   replies?: ReplyRecord[];
   permalink?: string | null;
   createdAtProvider?: number | null;
@@ -1685,9 +1688,30 @@ export interface Thread {
 export interface Audience {
   counts?: { all?: number; replied?: number; unanswered?: number };
   replySendingEnabled?: boolean;
+  engagementEnabled?: boolean;
   threads: Thread[];
   capabilities: { connectionId: string; commentsRead: string }[];
+  sync?: { connectionId: string; lastSyncAt: number | null; errorCode?: string | null; result?: { availability?: string; reason?: string } }[];
+  nextCursor?: string | null;
   limits: string;
+}
+
+export interface AudienceSyncResult {
+  availability: string;
+  reason?: string | null;
+  checkedPosts?: number;
+  pagesRead?: number;
+  ingested?: number;
+  updated?: number;
+  tombstoned?: number;
+  lastSyncAt?: number | null;
+  connections?: { connectionId: string; availability: string; reason?: string | null; lastSyncAt?: number | null }[];
+}
+
+export interface EngagementTriage {
+  items: { threadId: string; category: string; priority: 'needs_reply' | 'review' | 'fyi' | 'done' | 'ignore'; why: string; fresh: boolean; ageHours: number; urgent: false }[];
+  counts: Record<string, number>;
+  note: string;
 }
 
 /* ---------- members, invitations, sessions, audit, privacy ---------- */

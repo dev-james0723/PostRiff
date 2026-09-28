@@ -66,7 +66,9 @@ export function TourMount() {
     tourStore.markNudged(pageTourId);
     // Rafii is already showing this page: no second offer on top of it.
     if (guiding) return;
+    if (pathname === '/app/inbox' && new URLSearchParams(window.location.search).has('thread')) return;
     toast(`New to ${pageTitle}?`, {
+      id: `page-tour-${pageTourId}`,
       action: { label: 'Show me', onClick: () => tourStore.start(pageTourId) },
       duration: 8000
     });

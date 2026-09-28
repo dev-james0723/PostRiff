@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { MessageBubble, MessageBubbleContent } from '@/components/agents/message-bubble';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import type { ChannelView, Thread } from '@/lib/api/types';
+import type { ChannelView, EngagementTriage, Thread } from '@/lib/api/types';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
@@ -54,6 +55,8 @@ export function ThreadDetail({
   composer,
   onComposerChange,
   onApproved,
+  triage,
+  replySendingEnabled,
   canEdit,
   canReply
 }: {
@@ -64,6 +67,8 @@ export function ThreadDetail({
   composer: ComposerState;
   onComposerChange: (patch: Partial<ComposerState>) => void;
   onApproved: (reply: ReplyRecord) => void;
+  triage?: EngagementTriage['items'][number];
+  replySendingEnabled: boolean;
   canEdit: boolean;
   canReply: boolean;
 }) {
@@ -72,6 +77,7 @@ export function ThreadDetail({
   const permalink = threadPermalink(thread);
   const accountLabel = channel?.account ?? 'this account';
   const answered = replies.some(isAnswered);
+  const latestAnswered = replies.findLast(isAnswered);
 
   let composerArea;
   if (thread.tombstoned) {
@@ -118,9 +124,17 @@ export function ThreadDetail({
       <div className='rafii-quiet flex flex-wrap items-center justify-between gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2.5 text-sm' data-tour='inbox-composer'>
         <span className='text-muted-foreground inline-flex items-center gap-2'>
           <Icons.check className='size-4 shrink-0' aria-hidden />
-          Reply approved
+          {latestAnswered ? replyStatusView(latestAnswered.status).label : 'Reply approved'}
         </span>
-        {canEdit && (
+        {latestAnswered?.status === 'approved' && latestAnswered.requiresReconfirmation && replySendingEnabled && canReply && (
+          <Button variant='glass' size='control' onClick={() => {
+            onComposerChange({ text: latestAnswered.text, draft: { draftId: latestAnswered.draftId, text: latestAnswered.text, origin: latestAnswered.origin ?? 'manual', label: latestAnswered.label ?? 'Saved reply' } });
+            setWriteAnother(true);
+          }}>
+            Review this reply again
+          </Button>
+        )}
+        {canEdit && latestAnswered?.status === 'verified' && (
           <Button variant='glass' size='control' onClick={() => setWriteAnother(true)}>
             Write another
           </Button>
@@ -142,6 +156,7 @@ export function ThreadDetail({
         }}
         canEdit={canEdit}
         canReply={canReply}
+        disableSuggestion={triage?.category === 'spam' || triage?.category === 'abusive'}
       />
     );
   }
@@ -149,6 +164,9 @@ export function ThreadDetail({
   return (
     <div className='flex flex-col gap-5'>
       <div className='flex flex-col gap-2'>
+        {triage && <p className='text-muted-foreground text-sm' aria-label='Engagement Copilot assessment'>
+          {triage.priority.replaceAll('_', ' ')} · {triage.category.replaceAll('_', ' ')} · {triage.why}
+        </p>}
         {thread.tombstoned && (
           <AnimatedBadge size='sm' status='neutral' className='rafii-quiet w-fit border-0'>
             No longer on {platform}
@@ -190,6 +208,22 @@ export function ThreadDetail({
                   <span>{originLabel(reply.origin, reply.label)}</span>
                   {reply.updatedAt ? <span>· {relativeTime(reply.updatedAt)}</span> : null}
                 </div>
+                {reply.events && reply.events.length > 0 && <ol className='text-muted-foreground text-xs' aria-label='Reply receipt timeline'>
+                  {reply.events.map((event, index) => <li key={`${event.state}-${event.at}-${index}`}>
+                    {event.state.replaceAll('_', ' ')} · {formatDateTime(event.at)}{event.message ? ` · ${event.message}` : ''}
+                  </li>)}
+                </ol>}
+                {reply.providerReference && <span className='text-muted-foreground flex items-center gap-1 text-xs'>
+                  Provider reply ID: {reply.providerReference}
+                  <Button variant='quiet' size='icon-sm' aria-label='Copy provider reply ID' onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(reply.providerReference!);
+                      toast.success('Reply ID copied.');
+                    } catch {
+                      toast.error("Couldn't copy the reply ID.");
+                    }
+                  }}><Icons.copy className='size-3.5' /></Button>
+                </span>}
               </div>
             );
           })}
