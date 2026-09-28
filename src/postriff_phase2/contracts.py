@@ -36,7 +36,10 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Bilibili": {"version": "wave4a-draft-2026-09-28", "characters": 2000, "operation": "draft_video_or_article"},
           "Douyin": {"version": "wave4a-draft-2026-09-28", "characters": 1000, "operation": "draft_video"},
           "Kuaishou": {"version": "wave4a-draft-2026-09-28", "characters": 500, "operation": "draft_video"},
-          "Google Business Profile": {"version": "wave4a-draft-2026-09-28", "characters": 1500, "operation": "draft_local_post"}}
+          "Google Business Profile": {"version": "wave4a-draft-2026-09-28", "characters": 1500, "operation": "draft_local_post"},
+          "LINE Official Account": {"version": "wave4b-draft-2026-09-28", "characters": 2000, "operation": "draft_message"},
+          "Reddit": {"version": "wave4b-draft-2026-09-28", "characters": 40000, "operation": "draft_post"},
+          "Zhihu": {"version": "wave4b-draft-2026-09-28", "characters": 20000, "operation": "draft_answer_or_article"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):

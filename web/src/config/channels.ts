@@ -300,11 +300,12 @@ export const channels: Channel[] = [
     'Unsupported',
     { nameZh: '哔哩哔哩', region: 'cn' }
   ),
-  local(
+  wave4(
     'zhihu',
     'Zhihu',
-    'Long-form answers and articles for a knowledge-seeking readership.',
+    'Identity and owned-content access await a current approved Zhihu API contract; publishing stays unsupported.',
     ['Article', 'Answer'],
+    'Unsupported',
     { nameZh: '知乎', region: 'cn' }
   ),
   wave4(
@@ -356,11 +357,12 @@ export const channels: Channel[] = [
     ['Text', 'Image'],
     { region: 'tw' }
   ),
-  local(
+  wave4(
     'line-official-account',
     'LINE Official Account',
-    'Broadcasts to followers of your LINE Official Account.',
+    'Official Account channel onboarding needs a confidential token handoff and verified webhook before messaging opens.',
     ['Text', 'Image'],
+    'Unsupported',
     { region: 'jp' }
   ),
   local('note-jp', 'note', 'Articles for Japan’s creator publishing platform.', ['Article'], {
@@ -388,11 +390,13 @@ export const channels: Channel[] = [
     { region: 'in' }
   ),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('reddit', 'Reddit', 'Text and link posts to subreddits you belong to.', [
-    'Text',
-    'Link',
-    'Image'
-  ]),
+  wave4(
+    'reddit',
+    'Reddit',
+    'Identity-only OAuth is behind Reddit approval; every future post or comment remains a separate explicit user action.',
+    ['Text', 'Link', 'Image'],
+    'Direct'
+  ),
   local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
   local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', [
     'Text',

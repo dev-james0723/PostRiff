@@ -216,13 +216,15 @@ from .social_connectors import DiscordProvider, MastodonProvider, TelegramConnec
 from .wave3_connectors import FacebookPagesProvider, PinterestProvider, TikTokProvider, YouTubeProvider  # noqa: E402
 from .wave4_connectors import (BilibiliProvider, DouyinProvider, GoogleBusinessProfileProvider,
                                KuaishouProvider, WeiboProvider)  # noqa: E402
+from .wave4b_connectors import LineOfficialAccountProvider, RedditProvider, ZhihuProvider  # noqa: E402
 
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
             "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
             "discord": DiscordProvider, "x": XProvider,
             "facebook": FacebookPagesProvider, "youtube": YouTubeProvider, "tiktok": TikTokProvider, "pinterest": PinterestProvider,
             "weibo": WeiboProvider, "bilibili": BilibiliProvider, "douyin": DouyinProvider, "kuaishou": KuaishouProvider,
-            "google_business_profile": GoogleBusinessProfileProvider}
+            "google_business_profile": GoogleBusinessProfileProvider,
+            "line_official_account": LineOfficialAccountProvider, "reddit": RedditProvider, "zhihu": ZhihuProvider}
 
 
 def adapter_class_for_platform(platform):
