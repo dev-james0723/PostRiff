@@ -1,6 +1,6 @@
 # Seven social connectors: execution and onboarding receipt
 
-Baseline: `release/rafii-consolidation-20260928` at `bdf5c9f`; it contains the Wave 4A, 4B and 4C connector work from PRs #59, #61 and #63. `consumer-saas` at `a603392` is an ancestor. PR #67 is open; the canonical checkout has unrelated changes and was not edited.
+Baseline: `release/rafii-consolidation-20260928` at `bdf5c9f`; it contains the Wave 4A, 4B and 4C connector work from PRs #59, #61 and #63. The branch also merges `consumer-saas` through `ee68839`. PR #67 is open; the canonical checkout has unrelated changes and was not edited. Draft PR #70 is the mergeable review candidate.
 
 Production origin: `https://postriff-phase2-private.vercel.app`. The homepage, privacy, terms, data deletion and contact pages returned HTTP 200 on 2026-09-28. The fixed callback route was verified in `OAuthService.callback_uri`: `https://postriff-phase2-private.vercel.app/api/oauth/{provider}/callback`. No provider reviewed/live-test flag was enabled in this branch.
 
@@ -45,11 +45,11 @@ App name: **Rafii**. Purpose: let a person connect their own social account, rev
 ## Local validation and release boundary
 
 - Python domain/security suite: 2,936 tests passed, 259 skipped (synthetic provider transports; no live post).
-- Wave 4 focused suite: 33 passed after the final connector edits.
+- Wave 4 focused suite: 36 passed after the final hosted media and reconciliation edits.
 - Disposable PostgreSQL: `postgres_channels`, `postgres_instagram_lifecycle`, and `postgres_safety` passed. These cover encrypted grants, OAuth/RLS boundaries, scope downgrade and lifecycle safety. The full runner was attempted with the correct test environment but the host ran out of disk space during a later temporary cluster, so the full gate remains `validation_unavailable: ENOSPC` locally.
 - Frontend: Node 24 typecheck passed; lint found zero errors and zero warnings; 456 Node contract tests passed. Isolated `npm ci` completed. Node 24 webpack production build passed. The default Turbopack build did not pass locally because the host ran out of disk space during its cache/build and reported an async panic.
 - Local browser: `ui-simplification-browser.cjs` passed 64 checks against a real locally built Next app and disposable PostgreSQL harness, including shared connection status and no page/console errors. No authenticated provider OAuth/browser callback test could run without approved apps and grants.
-- Secret scan: `consumer_ready_secrets.py` passed: 2,132 files, 456 known findings, zero unexpected findings.
+- Secret scan: `consumer_ready_secrets.py` passed: 2,135 files, 456 known findings, zero unexpected findings.
 - No provider app was registered, no provider credential was issued or installed, no review was submitted, no runtime approval flag was enabled, no live provider authorization or public post occurred. This branch is a candidate for CI review, not a production release.
 - After reconciling the newer `consumer-saas` head, the full Python suite passed 2,952 tests (261 skipped), Node 24 typecheck and zero-warning lint passed, and focused growth-beta/performance tests passed. Draft PR #70 contains the merge resolution and is pending CI.
-- Additional immutable video stream tests passed after the merge: 26 hosted storage tests and 10 hosted Wave 4 publish tests. They cover exact HEAD/GET metadata, bounded chunks, changed-object refusal and fixed Douyin upload host.
+- Additional immutable video stream tests passed after the merge: 26 hosted storage tests and 12 hosted Wave 4 publish tests. They cover exact HEAD/GET metadata, bounded chunks, changed-object refusal, fixed Douyin upload host, Kuaishou approved cover handling, and Pixelfed media-id read-back.
