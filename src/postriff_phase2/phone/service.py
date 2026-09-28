@@ -56,6 +56,15 @@ class PhoneService:
                     'number': {'lastFour': number['last_four'], 'verified': number['verified']} if number else None,
                     'preferences': store.prefs(cur, principal, workspace_id), 'calls': calls, 'schedules': schedules}
 
+    def provider_readiness(self, workspace_id, token):
+        """Owner-only Dial GET checks; never returns credentials, URLs, numbers or provider bodies."""
+        with self.hosted.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self.hosted.ideas._member(row), 'owner')
+        self._require()
+        if not self.provider or self.provider.name != 'dial':
+            raise AlphaError('Dial is not the active phone provider.', 409, code='provider_unavailable')
+        return self.provider.readiness()
+
     def save_preferences(self, workspace_id, token, payload):
         self._require()
         with self.hosted.repository.transaction(token, workspace_id) as (cur, row, principal):

@@ -6,10 +6,16 @@ import hmac
 import io
 import json
 import unittest
+from contextlib import contextmanager
+from types import SimpleNamespace
 from urllib.error import HTTPError
 from unittest.mock import patch
 
 from postriff_phase2.phone.providers.dial import DialProvider, DialMediaTransport, state
+from postriff_phase2.phone.service import PhoneService
+from postriff_phase2.phone.config import PhoneConfig
+from postriff_phase2.permissions import Membership
+from postriff_alpha.domain import AlphaError
 from postriff_phase2.phone.asgi import create_lazy_app
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -66,6 +72,37 @@ class DialTests(unittest.TestCase):
                 provider=DialProvider(VALUES,transport=fixture)
                 self.assertEqual(provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=60).state,'failed')
                 self.assertFalse(any(r[0]=='POST' for r in fixture.requests))
+
+    def test_readiness_reports_safe_stage_without_provider_body_or_call(self):
+        fixture=DialFixture()
+        fixture.config['audio']['wsUrl']='wss://other.test/private'
+        provider=DialProvider(VALUES,transport=fixture)
+        self.assertEqual(provider.readiness(),{'ready':False,'reason':'provider_account','stage':'self_hosted_url'})
+        self.assertFalse(any(r[0]=='POST' for r in fixture.requests))
+
+        def denied(method,path,*_args):
+            return 403,{'error':'private destination and credential'}
+        provider.transport=denied
+        self.assertEqual(provider.readiness(),{'ready':False,'reason':'provider_account','stage':'self_hosted_http','httpStatus':403})
+
+    def test_provider_readiness_requires_workspace_owner(self):
+        class Repository:
+            @contextmanager
+            def transaction(self,_token,_workspace):
+                yield None, {}, 'user'
+        fixture=DialFixture()
+        provider=DialProvider(VALUES,transport=fixture)
+        member=Membership('viewer')
+        service=object.__new__(PhoneService)
+        service.config=PhoneConfig({'RAFII_PHONE_ENABLED':'1'})
+        service.provider=provider
+        service.hosted=SimpleNamespace(repository=Repository(),ideas=SimpleNamespace(_member=lambda _row:member))
+        with self.assertRaises(AlphaError):
+            service.provider_readiness('workspace','session')
+        self.assertEqual(fixture.requests,[])
+        member=Membership('owner')
+        self.assertTrue(service.provider_readiness('workspace','session')['ready'])
+        self.assertEqual([r[:2] for r in fixture.requests],[('GET','/self-hosted'),('GET','/numbers'),('GET','/account')])
 
     def test_10dlc_readiness_reports_sms_block_without_disabling_verified_voice(self):
         cases=[(None,'not_applicable',True),({'status':'approved'},'approved',True)]

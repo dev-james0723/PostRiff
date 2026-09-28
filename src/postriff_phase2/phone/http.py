@@ -110,6 +110,8 @@ def handle(app, environ, start_response, hosted, token, method, parts):
     result, status = None, 200
     if not rest and method=='GET':
         result = service.settings(workspace_id, token)
+    elif rest==['provider-readiness'] and method=='GET':
+        result = service.provider_readiness(workspace_id, token)
     elif rest==['preferences'] and method=='PATCH':
         result = service.save_preferences(workspace_id, token, app._body(environ))
     elif rest==['verification'] and method=='POST':

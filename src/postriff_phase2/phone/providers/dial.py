@@ -98,24 +98,36 @@ class DialProvider:
     def readiness(self):
         """Read-only checks immediately before egress; account configuration is never assumed from env."""
         if not self.configured:
-            return {'ready': False, 'reason': 'provider_auth'}
+            return {'ready': False, 'reason': 'provider_auth', 'stage': 'local_configuration'}
         status, hosted = self.transport('GET', '/self-hosted')
+        if status != 200:
+            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_account'
+            return {'ready': False, 'reason': reason, 'stage': 'self_hosted_http', 'httpStatus': status}
         audio = hosted.get('audio') or {}
-        if not (status == 200 and hosted.get('access') == 'granted' and hosted.get('enabled') is True and
-                hosted.get('activeMode') == 'audio' and audio.get('wsUrl') == self.media_url and
-                audio.get('audioInboundFormat') == audio.get('audioOutboundFormat') == 'mulaw_8000'):
-            return {'ready': False, 'reason': 'provider_account'}
+        for matches, stage in (
+            (hosted.get('access') == 'granted', 'self_hosted_access'),
+            (hosted.get('enabled') is True, 'self_hosted_disabled'),
+            (hosted.get('activeMode') == 'audio', 'self_hosted_mode'),
+            (audio.get('wsUrl') == self.media_url, 'self_hosted_url'),
+            (audio.get('audioInboundFormat') == audio.get('audioOutboundFormat') == 'mulaw_8000', 'self_hosted_format'),
+        ):
+            if not matches:
+                return {'ready': False, 'reason': 'provider_account', 'stage': stage}
         status, result = self.transport('GET', '/numbers')
+        if status != 200:
+            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_caller'
+            return {'ready': False, 'reason': reason, 'stage': 'numbers_http', 'httpStatus': status}
         lines = [n for n in result.get('numbers', []) if isinstance(n, dict) and n.get('number') == self.originating_number]
-        if not (status == 200 and len(lines) == 1 and 'call' in lines[0].get('capabilities', []) and
+        if not (len(lines) == 1 and 'call' in lines[0].get('capabilities', []) and
                 lines[0].get('setupStatus') == 'ready' and lines[0].get('callingEnabled') is True):
-            return {'ready': False, 'reason': 'provider_caller'}
+            return {'ready': False, 'reason': 'provider_caller', 'stage': 'outgoing_line'}
         status, account = self.transport('GET', '/account')
         if status != 200:
-            return {'ready': False, 'reason': 'provider_auth'}
+            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_account'
+            return {'ready': False, 'reason': reason, 'stage': 'account_http', 'httpStatus': status}
         limit = (account.get('limits') or {}).get('maxCallDurationSeconds', 600)
         if type(limit) is not int or not 60 <= limit <= 3600:
-            return {'ready': False, 'reason': 'provider_account'}
+            return {'ready': False, 'reason': 'provider_account', 'stage': 'account_limit'}
         capabilities = lines[0].get('capabilities', [])
         registration = lines[0].get('tenDlc')
         registration_status = 'not_applicable'
