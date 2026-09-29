@@ -1,0 +1,50 @@
+name: Preview window acceptance
+on:
+  pull_request:
+    paths:
+      - 'web/src/components/application/post-preview/preview-window*'
+      - 'web/src/features/agent/conversation-view.tsx'
+      - 'web/tests/preview-window*'
+      - '.github/workflows/preview-window-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: preview-window-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      PREVIEW_EVIDENCE_DIR: /tmp/preview-window-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - name: Geometry and integration regressions
+        run: node --test web/tests/preview-window.test.cjs
+      - name: Full application types and lint
+        run: |
+          npm --prefix web run typecheck
+          npm --prefix web run lint
+      - name: Install browser
+        working-directory: web
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Actual component browser interactions
+        run: node web/tests/preview-window.browser.cjs
+      - name: Retain isolated fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: preview-window-${{ github.event.pull_request.head.sha }}
+          path: /tmp/preview-window-evidence/
+          retention-days: 7
