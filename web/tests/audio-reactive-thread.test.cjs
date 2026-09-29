@@ -18,6 +18,14 @@ function load(relative) {
 
 const audio = load('lib/media/audio-reactive.ts');
 
+function setGlobal(key, value) {
+  Object.defineProperty(global, key, { configurable: true, writable: true, value });
+}
+
+function FakeMediaStream(tracks) {
+  return { tracks };
+}
+
 test('audio spectrum collapses to stable normalized liquid-rail bands', () => {
   const spectrum = Uint8Array.from({ length: 128 }, (_, index) =>
     index < 24 ? 255 : index < 64 ? 128 : 0
@@ -70,4 +78,109 @@ test('external capture requests system or window audio rather than guessing from
   assert.match(source, /systemAudio: 'include'/);
   assert.match(source, /windowAudio: 'system'/);
   assert.doesNotMatch(source, /fetch\(/);
+});
+
+test('external capture keeps the analyser graph live without echoing shared audio', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'lib', 'media', 'audio-reactive.ts'),
+    'utf8'
+  );
+  assert.match(source, /const silentSink = context\.createGain\(\)/);
+  assert.match(source, /silentSink\.gain\.value = 0/);
+  assert.match(source, /analyser\.connect\(silentSink\)/);
+  assert.match(source, /silentSink\.connect\(context\.destination\)/);
+  const externalGraph = source.slice(source.indexOf('const audioOnly'));
+  assert.equal((externalGraph.match(/\.connect\(context\.destination\)/g) ?? []).length, 1);
+});
+
+test('external capture wires a zero-gain sink at runtime', async () => {
+  const globalKeys = [
+    'navigator',
+    'AudioContext',
+    'MediaStream',
+    'requestAnimationFrame',
+    'cancelAnimationFrame'
+  ];
+  const originalGlobals = new Map(
+    globalKeys.map((key) => [key, { exists: key in global, value: global[key] }])
+  );
+  const connections = [];
+  const audioTrack = {
+    addEventListener() {},
+    stop() {}
+  };
+  const videoTrack = {
+    addEventListener() {},
+    stop() {}
+  };
+  const stream = {
+    getAudioTracks: () => [audioTrack],
+    getVideoTracks: () => [videoTrack],
+    getTracks: () => [audioTrack, videoTrack]
+  };
+
+  class FakeNode {
+    constructor(name) {
+      this.name = name;
+      this.gain = { value: 1 };
+    }
+
+    connect(target) {
+      connections.push([this.name, target.name]);
+      return target;
+    }
+  }
+
+  class FakeAudioContext {
+    constructor() {
+      this.destination = { name: 'destination' };
+    }
+
+    createAnalyser() {
+      const analyser = new FakeNode('analyser');
+      analyser.frequencyBinCount = 256;
+      analyser.fftSize = 512;
+      analyser.getByteFrequencyData = () => {};
+      analyser.getByteTimeDomainData = () => {};
+      return analyser;
+    }
+
+    createMediaStreamSource() {
+      return new FakeNode('media-stream-source');
+    }
+
+    createGain() {
+      return new FakeNode('silent-sink');
+    }
+
+    resume() {
+      return Promise.resolve();
+    }
+
+    close() {
+      return Promise.resolve();
+    }
+  }
+
+  setGlobal('navigator', { mediaDevices: { getDisplayMedia: async () => stream } });
+  setGlobal('AudioContext', FakeAudioContext);
+  setGlobal('MediaStream', FakeMediaStream);
+  setGlobal('requestAnimationFrame', () => 1);
+  setGlobal('cancelAnimationFrame', () => {});
+
+  try {
+    await audio.startExternalAudioSync();
+    assert.deepEqual(connections, [
+      ['media-stream-source', 'analyser'],
+      ['analyser', 'silent-sink'],
+      ['silent-sink', 'destination']
+    ]);
+    assert.equal(audio.useAudioReactive.getState().externalState, 'active');
+  } finally {
+    audio.stopExternalAudioSync();
+    for (const [key, original] of originalGlobals) {
+      if (original.exists) setGlobal(key, original.value);
+      else delete global[key];
+    }
+  }
 });

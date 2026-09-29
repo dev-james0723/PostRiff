@@ -229,6 +229,13 @@ export async function startExternalAudioSync(): Promise<void> {
     const analyser = context.createAnalyser();
     const audioOnly = new MediaStream([audioTrack]);
     context.createMediaStreamSource(audioOnly).connect(analyser);
+    // Keep the external graph renderable without sending a second audible copy of the
+    // shared device audio back through the page. Some browsers do not advance an analyser
+    // that is left disconnected from the destination, which makes the thread rail look frozen.
+    const silentSink = context.createGain();
+    silentSink.gain.value = 0;
+    analyser.connect(silentSink);
+    silentSink.connect(context.destination);
     const meter = new BrowserAudioMeter('external', context, analyser);
 
     externalStream = stream;
