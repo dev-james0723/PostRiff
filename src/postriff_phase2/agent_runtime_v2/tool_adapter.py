@@ -195,7 +195,7 @@ _SITE_NAMES = {
     "channels.capabilities": "channels_capabilities", "queue.summary": "queue_summary", "job.get": "job_get", "draft.get": "draft_get",
     "automation.list": "automation_list", "automation.get": "automation_get", "automation.explain": "automation_explain",
     "memory.summary": "memory_summary", "privacy.egress_state": "privacy_egress_state", "entitlements.summary": "entitlements_summary",
-    "models.summary": "models_summary", "ui.navigate": "ui_navigate", "ui.show_help": "ui_show_help", "brand.summary": "brand_summary",
+    "models.summary": "models_summary", "ui.navigate": "ui_navigate", "ui.activate": "ui_activate", "ui.show_help": "ui_show_help", "brand.summary": "brand_summary",
     "voice.profile": "voice_profile", "content.search": "content_search", "calendar.range": "calendar_range", "campaign.list": "campaign_list",
     "campaign.get": "campaign_get", "reviews.list": "reviews_list", "publishing.summary": "publishing_summary", "attention.summary": "attention_summary",
     "entity.status": "entity_status",
@@ -212,6 +212,7 @@ _SITE_NAMES = {
 _WANTS_TO_GO = re.compile(r"\bopen(?:s|ing)?\b|\btake\s+me\b|\bbring\s+me\b|\bgo\s+(?:back\s+)?to\b|\bnavigate\b|\bswitch\s+to\b|\bjump\s+to\b|\bhead\s+to\b"
                           r"|\bshow\s+me\s+(?:the\s+|my\s+)?[a-z& ]{2,30}\s+(?:page|screen|tab)\b"
                           r"|帶我去|带我去|打開|打开|開啟|开启|跳去|跳到|轉去|转去|切換到|切换到|去(?:返)?[^，。？！,.?!\s]{0,8}(?:頁|页|版)|開(?:返)?(?:個)?[^，。？！,.?!\s]{0,6}(?:頁|页)", re.I)
+_WANTS_TO_ACTIVATE = re.compile(r"\b(?:click|press|tap|select|choose|activate|connect)\b|撳|按|點擊|点击|揀|選|选|連接|连接", re.I)
 _WANTS_TO_BE_SHOWN = re.compile(r"\bhow\s+(?:do|does|can|could|should|would|to)\b|\bshow\s+me\b|\bteach\s+me\b|\bwalk\s+me\b|\bguide\s+me\b|\bwalk\s*through\b"
                                 r"|\bstep[\s-]+by[\s-]+step\b|\btutorial\b|\bhelp\s+me\s+(?:to\s+)?(?:set\s+up|connect|create|schedule|upload|add|turn\s+on|choose|write|approve)\b"
                                 r"|點樣|点样|點做|点做|點整|点整|點用|点用|點設定|教我|教下我|教吓我|示範|示范|怎麼|怎么|怎樣|怎样|如何|帶我做|带我做|一步一步|手把手", re.I)
@@ -223,6 +224,10 @@ def wants_to_go(text: str) -> bool:
 
 def wants_to_be_shown(text: str) -> bool:
     return bool(_WANTS_TO_BE_SHOWN.search(text or ""))
+
+
+def wants_to_activate(text: str) -> bool:
+    return bool(_WANTS_TO_ACTIVATE.search(text or ""))
 
 
 _ID_TYPES = {"draftId": "draft", "variantId": "draft", "campaignId": "campaign", "jobId": "job", "reviewId": "review", "automationId": "automation",
@@ -287,6 +292,11 @@ def _site_executor(tool_id: str):
             auto = args.get("auto") is True and wants_to_go(ctx.request_text)
             ctx.ledger.navigation.append(site_contracts.navigation(f"Open {data['title']}", data["href"], data["routeId"], auto=auto))
             data = {**data, "opensNow": auto}
+        if tool_id == "ui.activate" and result.get("ok") and isinstance(data, dict) and data.get("canActivate"):
+            from ..site_agent import contracts as site_contracts
+            auto = args.get("auto") is True and wants_to_activate(ctx.request_text)
+            ctx.ledger.client_actions.append(site_contracts.ui_action(data["actionId"], data.get("label") or "control", auto=auto))
+            data = {**data, "shownAs": "control", "activatesNow": auto}
         if tool_id == "ui.guide" and result.get("ok") and isinstance(data, dict):
             data = _guide_card(ctx, args, data)
         if tool_id == "ui.voice" and result.get("ok") and isinstance(data, dict):
@@ -346,6 +356,10 @@ def _client_tool_overrides() -> dict:
                                    "preset": {"type": "string", "enum": list(agent_style.PRESETS)}}}
     fields = "; ".join(f"{key} ({', '.join(values)})" for key, values in agent_style.FIELDS.items())
     return {
+        "ui.activate": {"description": "Activate one safe control that the current page explicitly exposed in its screen outline. Use only an actionId that "
+                                      "appears in the current APP_STATE screen data; never invent one. Set auto: true only when the person explicitly asked to click, "
+                                      "press, select, choose, activate or connect that control. The browser carries it out after the answer, so say what you are about "
+                                      "to do, never that it already happened."},
         "ui.navigate": {"description": "Put a link to one allowlisted Rafii page in the answer (routeId from the route manifest; params and query only where "
                                        "that page allows them). Set auto: true ONLY when the person explicitly asked to open, go to or be taken to a page: the panel "
                                        "then opens it at once. Returns whether this member may open it (canOpen, reason)."},
