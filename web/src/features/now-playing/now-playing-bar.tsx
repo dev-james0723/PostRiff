@@ -39,6 +39,7 @@ export function NowPlayingBar() {
   useEffect(() => {
     const element = video.current;
     if (!element || !track) return;
+    element.crossOrigin = 'anonymous';
     element.src = track.url;
     element.load();
     const begin = () => {
@@ -93,7 +94,7 @@ export function NowPlayingBar() {
       </div>
       {/* Only this element owns audio/video; inline cards open it instead of playing a second copy. */}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <video ref={video} playsInline preload='metadata' aria-label={track?.title || 'Rafii video'}
+      <video ref={video} crossOrigin='anonymous' playsInline preload='metadata' aria-label={track?.title || 'Rafii video'}
         className={expanded && track ? 'mt-2 max-h-52 w-full rounded-lg bg-black' : 'absolute size-px opacity-0'}
         onTimeUpdate={(event) => { useNowPlaying.getState().setPosition(event.currentTarget.currentTime); updateMediaPosition(navigator.mediaSession, event.currentTarget); }}
         onDurationChange={(event) => useNowPlaying.getState().setPosition(event.currentTarget.currentTime, Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : null)}
