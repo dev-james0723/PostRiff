@@ -245,9 +245,6 @@ function SearchView({
         aria-label={spec.placeholder}
         className='text-base md:text-sm'
       />
-      {view === 'posts' ? (
-        <p className='text-muted-foreground px-1 text-[11px]'>Hold a post to preview</p>
-      ) : null}
       <ul className='flex min-h-0 flex-col gap-1 overflow-y-auto'>
         {items.map((item) =>
           item.kind === 'post' ? (
@@ -634,6 +631,7 @@ export function PlusSheet({
       >
         <RafiiDialogHeader
           title={view ? TITLES[view] : TITLES.menu}
+          intro={view === 'posts' ? 'Hold a post to preview' : undefined}
           back={
             view && view !== 'menu' && !wide ? (
               <Button
