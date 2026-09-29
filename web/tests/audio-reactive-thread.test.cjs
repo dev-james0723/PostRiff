@@ -110,8 +110,8 @@ test('audio meter uses faster whole-rail response tuning', () => {
   );
   assert.match(source, /smoothingTimeConstant = 0\.54/);
   assert.match(source, /now - this\.lastCommit >= 22/);
-  assert.match(source, /globalPulse \* 0\.18/);
-  assert.match(source, /waveformPeak \* 0\.5/);
+  assert.match(source, /globalPulse \* 0\.1/);
+  assert.match(source, /waveformPeak \* 0\.64/);
   assert.match(source, /travellingTransient \* 0\.1/);
 });
 
