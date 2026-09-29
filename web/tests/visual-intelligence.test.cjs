@@ -22,7 +22,25 @@ function load(name) {
   return module.exports;
 }
 const m = load('visual-model');
-test('six stable dimensions retain native units and exact semantic layers; never fabricate a radar scale', () => {
+test('radar polish keeps trust copy outside the enlarged geometry and legend tokens profile-bound', () => {
+  const component = fs.readFileSync(
+    path.join(__dirname, '../src/features/trends/trend-dna.tsx'),
+    'utf8'
+  );
+  const styles = fs.readFileSync(
+    path.join(__dirname, '../src/features/trends/visual-intelligence.css'),
+    'utf8'
+  );
+  const trustCopy = 'Profile geometry, not a virality score. Exact values are shown separately.';
+  assert.match(component, /const OUTER_RADIUS = 124;/);
+  assert.doesNotMatch(component, /className='vi-center-(?:label|note)'/);
+  assert.ok(component.indexOf('</svg>') < component.indexOf(trustCopy));
+  assert.match(component, /Profile scale & evidence/);
+  assert.doesNotMatch(component, /data-ring-label/);
+  assert.match(styles, /\.vi-legend-profile \{[\s\S]*var\(--vi-profile-primary\)/);
+  assert.match(styles, /\.vi-legend-profile-comparison \{[\s\S]*var\(--vi-profile-comparison\)/);
+});
+test('six stable dimensions retain native units while receipt-bound profile geometry stays decomposable', () => {
   const f = fixtures(),
     before = JSON.stringify(f.trend);
   const ds = m.trendDimensions(f.trend, f.flags);
@@ -33,11 +51,28 @@ test('six stable dimensions retain native units and exact semantic layers; never
   assert.equal(ds[0].value, '60 posts/hour^2');
   assert.equal(ds[1].value, '30 posts/hour^3');
   assert.equal(ds[3].layer, 'interpretation');
-  assert.ok(ds.every((d) => d.radius === null));
+  assert.deepEqual(
+    ds.map((d) => d.radius),
+    [0.84, 0.72, 0.28, 0.78, 0.61, 0.54]
+  );
+  assert.deepEqual(
+    ds.map((d) => d.state),
+    ['High', 'High', 'Low', 'High', 'Moderate', 'Moderate']
+  );
+  assert.equal(ds[0].profile.scaleRef, 'synthetic-profile-scale-v1');
   assert.equal(JSON.stringify(f.trend), before);
+});
+test('native measurements never fabricate radar coordinates when the profile contract is absent or stale', () => {
+  const f = fixtures();
+  f.trend.dna_profile = null;
+  assert.ok(m.trendDimensions(f.trend, f.flags).every((d) => d.radius === null));
+  f.trend.dna_profile = fixtures().trend.dna_profile;
+  f.trend.dna_profile.trust_receipt_id = 'different-receipt';
+  assert.ok(m.trendDimensions(f.trend, f.flags).every((d) => d.radius === null));
 });
 test('Unknown remains Unknown, zero is retained, and unavailable interpretation does not erase measurement', () => {
   const f = fixtures();
+  f.trend.dna_profile = null;
   f.trend.calculated.velocity.value = 0;
   f.trend.calculated.acceleration = f.metric(null);
   const ds = m.trendDimensions(f.trend, {
@@ -132,6 +167,7 @@ test('comparison preserves missing dimensions and declines numerical comparison 
     other = structuredClone(f.trend);
   other.calculated.acceleration.value = null;
   other.calculated.acceleration.null_reason = 'missing';
+  other.dna_profile = null;
   other.calculated.velocity.definition_version = 'different';
   const rows = m.compareDimensions(a, m.trendDimensions(other, f.flags));
   assert.equal(rows[1].right, 'Unknown');
@@ -156,6 +192,15 @@ test('comparison requires matching scope and denominator before displaying a num
       'Separate contexts; no numeric ranking'
     );
   }
+});
+
+test('profile overlays require the same method, scale and reference population', () => {
+  const f = fixtures();
+  const a = m.trendDimensions(f.trend, f.flags);
+  const b = structuredClone(f.trend);
+  assert.equal(m.comparableDnaProfiles(a, m.trendDimensions(b, f.flags)), true);
+  b.dna_profile.scale_ref = 'different-scale';
+  assert.equal(m.comparableDnaProfiles(a, m.trendDimensions(b, f.flags)), false);
 });
 
 test('uncertain candidates and dismissed choices remain inspectable without enabling creation', () => {

@@ -57,12 +57,14 @@ async function runViewport(browser, base, out, viewport) {
   }];
   f.trend.id = randomUUID();
   f.trend.trust_receipt_id = randomUUID();
+  f.trend.dna_profile.trust_receipt_id = f.trend.trust_receipt_id;
   f.trend.canonical_topic = 'Demo data: native observation integration 🎹';
   f.receipt = { ...f.receipt, ...f.trend, receipt_id: f.trend.trust_receipt_id };
   const otherTrend = {
     ...structuredClone(f.trend), id: randomUUID(), trust_receipt_id: randomUUID(),
     canonical_topic: 'Demo data: another delivered conversation'
   };
+  otherTrend.dna_profile.trust_receipt_id = otherTrend.trust_receipt_id;
   const ready = {
     ...structuredClone(f.opportunity), id: randomUUID(), trend_id: f.trend.id,
     trust_receipt_id: f.trend.trust_receipt_id, source_id: null, draft_id: null,
@@ -216,7 +218,11 @@ async function runViewport(browser, base, out, viewport) {
       if (p === '/api/catalog') return send({ authMode: 'dev', execution: 'dev-synthetic', platforms: ['Bluesky'], languages: ['en'], presets: [], voices: [], phase2: true, templates: [], routes: [], profileMetadata: {} });
       if (p === '/api/workspaces') return send({ workspaces: [{ workspaceId: wid, membership: snapshot.membership, name: 'Demo visual integration workspace', plan: 'studio', memberCounts: { owner: 1 } }] });
       if (p === '/api/me') return send({ userId: '00000000-0000-0000-0000-000000000001', displayName: 'Synthetic owner', preferences: { timeZone: 'UTC', locale: 'en', alertNewDevice: false }, mfa: {} });
-      if (p.endsWith('/coworker/status')) return send({ flags, weekly: { recipes: 0, weeks: 0 }, notifications: { enabled: false } });
+      if (p.endsWith('/coworker/status')) return send({ flags,
+        trend_beta: { state: Object.keys(flags).length ? 'stored_radar' : 'feature_off',
+          radar_available: Object.keys(flags).length > 0, acquisition: 'none',
+          metric_reads_enabled: false, follower_conversion: 'unavailable' },
+        weekly: { recipes: 0, weeks: 0 }, notifications: { enabled: false } });
       if (p.endsWith('/usage')) return send({
         entitlement: { planTermsId: 'synthetic-studio', writingBatchesRemaining: 1, mediaCreditsRemaining: 0,
           connectedAccounts: 1, members: 1, storageMb: 1, resetsAt: null, source: 'synthetic', version: 1 },
@@ -264,7 +270,7 @@ async function runViewport(browser, base, out, viewport) {
   };
   try {
     await page.goto(base + '/app/trends');
-    await page.getByText('Conversations aren’t available in this workspace yet', { exact: true }).waitFor();
+    await page.getByText('Trend Beta is off', { exact: true }).waitFor();
     await visibility('visible'); await waitDwell(650);
     assert.equal(calls.filter(c => c.path.startsWith(root)).length, 0);
     pass(width, 'defaultOFF makes no trend reads, exposure or decision calls');

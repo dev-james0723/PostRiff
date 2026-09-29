@@ -1,10 +1,20 @@
 import type { Trend, TrendFlags, TrendMetric, TrendOpportunity } from '@/lib/coworker/trend-types';
 import { publicStage, blockedVerification } from './trust-contract';
 
+type TrendDnaDimension = NonNullable<Trend['dna_profile']>['dimensions'][number];
+export type DimensionProfile = {
+  methodId: string;
+  methodVersion: string;
+  scaleRef: string;
+  referencePopulation: string;
+  expiresAt: string;
+  limitations: string[];
+};
 export type Dimension = {
   id: string;
   label: string;
   shortLabel: string;
+  state: string;
   value: string;
   known: boolean;
   layer: 'calculated' | 'interpretation';
@@ -12,8 +22,9 @@ export type Dimension = {
   reason: string;
   metric: TrendMetric | null;
   evidenceRefs: string[];
-  // v1 has native units, but no cross-axis normalization contract. Never guess a radius.
-  radius: null;
+  // A radius is accepted only from the receipt-bound, versioned DNA profile contract.
+  radius: number | null;
+  profile: DimensionProfile | null;
   scope: string;
 };
 export const formatValue = (metric: TrendMetric | undefined) =>
@@ -50,6 +61,27 @@ export function usableOpportunity(op: TrendOpportunity, trend: Trend, now = Date
 }
 export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now()): Dimension[] {
   const valid = currentEvidence(trend, now);
+  const rawProfile = trend.dna_profile;
+  const profile =
+    valid &&
+    rawProfile &&
+    rawProfile.trust_receipt_id === trend.trust_receipt_id &&
+    Date.parse(rawProfile.expires_at) > now
+      ? rawProfile
+      : null;
+  const profileMeta: DimensionProfile | null = profile
+    ? {
+        methodId: profile.method_id,
+        methodVersion: profile.method_version,
+        scaleRef: profile.scale_ref,
+        referencePopulation: profile.reference_population,
+        expiresAt: profile.expires_at,
+        limitations: profile.limitations
+      }
+    : null;
+  const profileById = new Map<string, TrendDnaDimension>(
+    profile?.dimensions.map((dimension) => [dimension.id, dimension]) ?? []
+  );
   const measured = (
     id: string,
     label: string,
@@ -61,6 +93,7 @@ export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now(
     id,
     label,
     shortLabel,
+    state: valid && metric?.value != null ? 'Reported' : 'Unknown',
     value: valid ? formatValue(metric) : 'Unknown',
     known: valid && metric?.value != null,
     layer: 'calculated',
@@ -73,11 +106,12 @@ export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now(
     metric: valid ? (metric ?? null) : null,
     evidenceRefs: trend.trust_receipt_id ? [trend.trust_receipt_id] : [],
     radius: null,
+    profile: null,
     scope: trend.coverage.scope
   });
   const audience =
     valid && flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED ? trend.workspace_fit?.audience : null;
-  return [
+  const dimensions: Dimension[] = [
     measured(
       'momentum',
       'Momentum',
@@ -106,6 +140,10 @@ export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now(
       id: 'audience',
       label: 'Audience Fit',
       shortLabel: 'Audience fit',
+      state:
+        audience?.assessment && audience.assessment !== 'unknown'
+          ? audience.assessment[0].toUpperCase() + audience.assessment.slice(1)
+          : 'Unknown',
       value:
         audience?.assessment && audience.assessment !== 'unknown' ? audience.assessment : 'Unknown',
       known: Boolean(audience && audience.assessment !== 'unknown'),
@@ -116,6 +154,7 @@ export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now(
       metric: null,
       evidenceRefs: audience?.evidence_refs ?? [],
       radius: null,
+      profile: null,
       scope: trend.coverage.scope
     },
     measured(
@@ -135,6 +174,43 @@ export function trendDimensions(trend: Trend, flags: TrendFlags, now = Date.now(
       'Demand, supply comparison and a qualified whitespace method are not available.'
     )
   ];
+  return dimensions.map((dimension) => {
+    const visual = profileById.get(dimension.id);
+    const allowed =
+      visual && (visual.layer !== 'interpretation' || flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED)
+        ? visual
+        : null;
+    if (!allowed) return dimension;
+    const exactValue = dimension.value !== 'Unknown' ? dimension.value : allowed.display_value;
+    return {
+      ...dimension,
+      state: allowed.state,
+      value: exactValue,
+      known: dimension.known || allowed.value !== null,
+      layer: allowed.layer,
+      definition: allowed.definition,
+      reason:
+        allowed.value === null
+          ? allowed.null_reason
+          : `${allowed.reason} Exact values remain separate from profile geometry.`,
+      evidenceRefs: [...new Set([...dimension.evidenceRefs, ...allowed.evidence_refs])],
+      radius: allowed.value,
+      profile: profileMeta
+    };
+  });
+}
+
+export function comparableDnaProfiles(a: Dimension[], b: Dimension[]) {
+  const left = a.find((dimension) => dimension.profile)?.profile;
+  const right = b.find((dimension) => dimension.profile)?.profile;
+  return Boolean(
+    left &&
+    right &&
+    left.methodId === right.methodId &&
+    left.methodVersion === right.methodVersion &&
+    left.scaleRef === right.scaleRef &&
+    left.referencePopulation === right.referencePopulation
+  );
 }
 export function movementState(
   row: Trend['platform_states'][number],
@@ -207,6 +283,8 @@ export function compareDimensions(a: Dimension[], b: Dimension[]) {
     );
     return {
       label: left.label,
+      leftState: left.state,
+      rightState: right.state,
       left: left.value,
       right: right.value,
       difference: comparable

@@ -446,6 +446,332 @@
         }
       ]
     },
+    "dnaDimensionIdSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "momentum",
+        "acceleration",
+        "spread",
+        "audience",
+        "adaptability",
+        "gap"
+      ]
+    },
+    "dnaDimensionSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "enum": [
+                "momentum",
+                "acceleration",
+                "spread",
+                "audience",
+                "adaptability",
+                "gap"
+              ]
+            },
+            "display_value": {
+              "type": "string"
+            },
+            "layer": {
+              "type": "string",
+              "enum": [
+                "calculated",
+                "interpretation"
+              ]
+            },
+            "definition": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "Low",
+                "Moderate",
+                "High"
+              ]
+            },
+            "value": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "null_reason": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "id",
+            "display_value",
+            "layer",
+            "definition",
+            "reason",
+            "evidence_refs",
+            "state",
+            "value",
+            "null_reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "enum": [
+                "momentum",
+                "acceleration",
+                "spread",
+                "audience",
+                "adaptability",
+                "gap"
+              ]
+            },
+            "display_value": {
+              "type": "string"
+            },
+            "layer": {
+              "type": "string",
+              "enum": [
+                "calculated",
+                "interpretation"
+              ]
+            },
+            "definition": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "state": {
+              "type": "string",
+              "const": "Unknown"
+            },
+            "value": {
+              "type": "null"
+            },
+            "null_reason": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "display_value",
+            "layer",
+            "definition",
+            "reason",
+            "evidence_refs",
+            "state",
+            "value",
+            "null_reason"
+          ]
+        }
+      ]
+    },
+    "dnaProfileSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "method_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "method_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "scale_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reference_population": {
+          "type": "string"
+        },
+        "trust_receipt_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dimensions": {
+          "minItems": 6,
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "momentum",
+                      "acceleration",
+                      "spread",
+                      "audience",
+                      "adaptability",
+                      "gap"
+                    ]
+                  },
+                  "display_value": {
+                    "type": "string"
+                  },
+                  "layer": {
+                    "type": "string",
+                    "enum": [
+                      "calculated",
+                      "interpretation"
+                    ]
+                  },
+                  "definition": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "Low",
+                      "Moderate",
+                      "High"
+                    ]
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "null_reason": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "id",
+                  "display_value",
+                  "layer",
+                  "definition",
+                  "reason",
+                  "evidence_refs",
+                  "state",
+                  "value",
+                  "null_reason"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "momentum",
+                      "acceleration",
+                      "spread",
+                      "audience",
+                      "adaptability",
+                      "gap"
+                    ]
+                  },
+                  "display_value": {
+                    "type": "string"
+                  },
+                  "layer": {
+                    "type": "string",
+                    "enum": [
+                      "calculated",
+                      "interpretation"
+                    ]
+                  },
+                  "definition": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "state": {
+                    "type": "string",
+                    "const": "Unknown"
+                  },
+                  "value": {
+                    "type": "null"
+                  },
+                  "null_reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "display_value",
+                  "layer",
+                  "definition",
+                  "reason",
+                  "evidence_refs",
+                  "state",
+                  "value",
+                  "null_reason"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "method_id",
+        "method_version",
+        "scale_ref",
+        "reference_population",
+        "trust_receipt_id",
+        "expires_at",
+        "limitations",
+        "dimensions"
+      ]
+    },
     "trendSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -1632,6 +1958,196 @@
                 "timing",
                 "originality",
                 "risk"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dna_profile": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "method_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "method_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "scale_ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "reference_population": {
+                  "type": "string"
+                },
+                "trust_receipt_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "expires_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "dimensions": {
+                  "minItems": 6,
+                  "maxItems": 6,
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "momentum",
+                              "acceleration",
+                              "spread",
+                              "audience",
+                              "adaptability",
+                              "gap"
+                            ]
+                          },
+                          "display_value": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "enum": [
+                              "calculated",
+                              "interpretation"
+                            ]
+                          },
+                          "definition": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "evidence_refs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "Low",
+                              "Moderate",
+                              "High"
+                            ]
+                          },
+                          "value": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "null_reason": {
+                            "type": "null"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "display_value",
+                          "layer",
+                          "definition",
+                          "reason",
+                          "evidence_refs",
+                          "state",
+                          "value",
+                          "null_reason"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "momentum",
+                              "acceleration",
+                              "spread",
+                              "audience",
+                              "adaptability",
+                              "gap"
+                            ]
+                          },
+                          "display_value": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "enum": [
+                              "calculated",
+                              "interpretation"
+                            ]
+                          },
+                          "definition": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "evidence_refs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "state": {
+                            "type": "string",
+                            "const": "Unknown"
+                          },
+                          "value": {
+                            "type": "null"
+                          },
+                          "null_reason": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "display_value",
+                          "layer",
+                          "definition",
+                          "reason",
+                          "evidence_refs",
+                          "state",
+                          "value",
+                          "null_reason"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "method_id",
+                "method_version",
+                "scale_ref",
+                "reference_population",
+                "trust_receipt_id",
+                "expires_at",
+                "limitations",
+                "dimensions"
               ]
             },
             {
@@ -2844,6 +3360,196 @@
                 "timing",
                 "originality",
                 "risk"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dna_profile": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "method_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "method_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "scale_ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "reference_population": {
+                  "type": "string"
+                },
+                "trust_receipt_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "expires_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "dimensions": {
+                  "minItems": 6,
+                  "maxItems": 6,
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "momentum",
+                              "acceleration",
+                              "spread",
+                              "audience",
+                              "adaptability",
+                              "gap"
+                            ]
+                          },
+                          "display_value": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "enum": [
+                              "calculated",
+                              "interpretation"
+                            ]
+                          },
+                          "definition": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "evidence_refs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "Low",
+                              "Moderate",
+                              "High"
+                            ]
+                          },
+                          "value": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "null_reason": {
+                            "type": "null"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "display_value",
+                          "layer",
+                          "definition",
+                          "reason",
+                          "evidence_refs",
+                          "state",
+                          "value",
+                          "null_reason"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "momentum",
+                              "acceleration",
+                              "spread",
+                              "audience",
+                              "adaptability",
+                              "gap"
+                            ]
+                          },
+                          "display_value": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "enum": [
+                              "calculated",
+                              "interpretation"
+                            ]
+                          },
+                          "definition": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "evidence_refs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "state": {
+                            "type": "string",
+                            "const": "Unknown"
+                          },
+                          "value": {
+                            "type": "null"
+                          },
+                          "null_reason": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "display_value",
+                          "layer",
+                          "definition",
+                          "reason",
+                          "evidence_refs",
+                          "state",
+                          "value",
+                          "null_reason"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "method_id",
+                "method_version",
+                "scale_ref",
+                "reference_population",
+                "trust_receipt_id",
+                "expires_at",
+                "limitations",
+                "dimensions"
               ]
             },
             {
@@ -14949,6 +15655,196 @@
                     "type": "null"
                   }
                 ]
+              },
+              "dna_profile": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "method_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "method_version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "scale_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "reference_population": {
+                        "type": "string"
+                      },
+                      "trust_receipt_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      "limitations": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "dimensions": {
+                        "minItems": 6,
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "momentum",
+                                    "acceleration",
+                                    "spread",
+                                    "audience",
+                                    "adaptability",
+                                    "gap"
+                                  ]
+                                },
+                                "display_value": {
+                                  "type": "string"
+                                },
+                                "layer": {
+                                  "type": "string",
+                                  "enum": [
+                                    "calculated",
+                                    "interpretation"
+                                  ]
+                                },
+                                "definition": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "evidence_refs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Low",
+                                    "Moderate",
+                                    "High"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "null_reason": {
+                                  "type": "null"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "display_value",
+                                "layer",
+                                "definition",
+                                "reason",
+                                "evidence_refs",
+                                "state",
+                                "value",
+                                "null_reason"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "momentum",
+                                    "acceleration",
+                                    "spread",
+                                    "audience",
+                                    "adaptability",
+                                    "gap"
+                                  ]
+                                },
+                                "display_value": {
+                                  "type": "string"
+                                },
+                                "layer": {
+                                  "type": "string",
+                                  "enum": [
+                                    "calculated",
+                                    "interpretation"
+                                  ]
+                                },
+                                "definition": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "evidence_refs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "const": "Unknown"
+                                },
+                                "value": {
+                                  "type": "null"
+                                },
+                                "null_reason": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "display_value",
+                                "layer",
+                                "definition",
+                                "reason",
+                                "evidence_refs",
+                                "state",
+                                "value",
+                                "null_reason"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "method_id",
+                      "method_version",
+                      "scale_ref",
+                      "reference_population",
+                      "trust_receipt_id",
+                      "expires_at",
+                      "limitations",
+                      "dimensions"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -16332,6 +17228,196 @@
                   "type": "null"
                 }
               ]
+            },
+            "dna_profile": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "method_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "method_version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "scale_ref": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "reference_population": {
+                      "type": "string"
+                    },
+                    "trust_receipt_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "dimensions": {
+                      "minItems": 6,
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "momentum",
+                                  "acceleration",
+                                  "spread",
+                                  "audience",
+                                  "adaptability",
+                                  "gap"
+                                ]
+                              },
+                              "display_value": {
+                                "type": "string"
+                              },
+                              "layer": {
+                                "type": "string",
+                                "enum": [
+                                  "calculated",
+                                  "interpretation"
+                                ]
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "evidence_refs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "Low",
+                                  "Moderate",
+                                  "High"
+                                ]
+                              },
+                              "value": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "null_reason": {
+                                "type": "null"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_value",
+                              "layer",
+                              "definition",
+                              "reason",
+                              "evidence_refs",
+                              "state",
+                              "value",
+                              "null_reason"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "momentum",
+                                  "acceleration",
+                                  "spread",
+                                  "audience",
+                                  "adaptability",
+                                  "gap"
+                                ]
+                              },
+                              "display_value": {
+                                "type": "string"
+                              },
+                              "layer": {
+                                "type": "string",
+                                "enum": [
+                                  "calculated",
+                                  "interpretation"
+                                ]
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "evidence_refs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "state": {
+                                "type": "string",
+                                "const": "Unknown"
+                              },
+                              "value": {
+                                "type": "null"
+                              },
+                              "null_reason": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_value",
+                              "layer",
+                              "definition",
+                              "reason",
+                              "evidence_refs",
+                              "state",
+                              "value",
+                              "null_reason"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "method_id",
+                    "method_version",
+                    "scale_ref",
+                    "reference_population",
+                    "trust_receipt_id",
+                    "expires_at",
+                    "limitations",
+                    "dimensions"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -17708,6 +18794,196 @@
                     "timing",
                     "originality",
                     "risk"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dna_profile": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "method_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "method_version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "scale_ref": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "reference_population": {
+                      "type": "string"
+                    },
+                    "trust_receipt_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "dimensions": {
+                      "minItems": 6,
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "momentum",
+                                  "acceleration",
+                                  "spread",
+                                  "audience",
+                                  "adaptability",
+                                  "gap"
+                                ]
+                              },
+                              "display_value": {
+                                "type": "string"
+                              },
+                              "layer": {
+                                "type": "string",
+                                "enum": [
+                                  "calculated",
+                                  "interpretation"
+                                ]
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "evidence_refs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "Low",
+                                  "Moderate",
+                                  "High"
+                                ]
+                              },
+                              "value": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "null_reason": {
+                                "type": "null"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_value",
+                              "layer",
+                              "definition",
+                              "reason",
+                              "evidence_refs",
+                              "state",
+                              "value",
+                              "null_reason"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "momentum",
+                                  "acceleration",
+                                  "spread",
+                                  "audience",
+                                  "adaptability",
+                                  "gap"
+                                ]
+                              },
+                              "display_value": {
+                                "type": "string"
+                              },
+                              "layer": {
+                                "type": "string",
+                                "enum": [
+                                  "calculated",
+                                  "interpretation"
+                                ]
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "evidence_refs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "state": {
+                                "type": "string",
+                                "const": "Unknown"
+                              },
+                              "value": {
+                                "type": "null"
+                              },
+                              "null_reason": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_value",
+                              "layer",
+                              "definition",
+                              "reason",
+                              "evidence_refs",
+                              "state",
+                              "value",
+                              "null_reason"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "method_id",
+                    "method_version",
+                    "scale_ref",
+                    "reference_population",
+                    "trust_receipt_id",
+                    "expires_at",
+                    "limitations",
+                    "dimensions"
                   ]
                 },
                 {

@@ -181,6 +181,18 @@ async function run() {
             second.id = 'synthetic-comparison';
             second.canonical_topic = 'Synthetic fixture · A second conversation';
             second.calculated.acceleration = { ...f.metric(null), unit: 'posts/hour^3' };
+            if (second.dna_profile) {
+              const acceleration = second.dna_profile.dimensions.find(
+                (dimension) => dimension.id === 'acceleration'
+              );
+              Object.assign(acceleration, {
+                state: 'Unknown',
+                value: null,
+                display_value: 'Unknown',
+                reason: 'The comparison lacks a qualified acceleration coordinate.',
+                null_reason: 'Comparable acceleration support is missing.'
+              });
+            }
             const data = url.searchParams.get('query') === 'nothing' ? [] : [t, second];
             return send({
               ...f.envelope(
@@ -370,6 +382,13 @@ async function run() {
         if (pathname.endsWith('/coworker/status'))
           return send({
             flags: flagsOn ? f.flags : {},
+            trend_beta: {
+              state: flagsOn ? 'stored_radar' : 'feature_off',
+              radar_available: flagsOn,
+              acquisition: 'none',
+              metric_reads_enabled: false,
+              follower_conversion: 'unavailable'
+            },
             weekly: { recipes: 0, weeks: 0 },
             notifications: { enabled: false }
           });
@@ -401,7 +420,7 @@ async function run() {
       );
       try {
         await page.goto(base + '/app/trends', { waitUntil: 'domcontentloaded', timeout: 180000 });
-        await visibleText(page, 'Conversations aren’t available in this workspace yet');
+        await visibleText(page, 'Trend Beta is off');
         assert.equal(calls.filter((c) => c.path.includes('/coworker/trends')).length, 0);
         record(width + ' flags off: zero trend requests');
         flagsOn = true;
@@ -488,15 +507,121 @@ async function run() {
         await scope.click();
         const dna = page.locator('.vi-dna');
         assert.equal(await dna.locator('tbody tr').count(), 6);
+        assert.equal(await dna.locator('[data-profile-path="primary"]').count(), 1);
+        const outerRadius = await dna
+          .locator('.vi-dna-grid')
+          .last()
+          .evaluate((polygon) => {
+            const vertex = polygon.points.getItem(0);
+            return Math.hypot(vertex.x - 260, vertex.y - 205);
+          });
+        assert.ok(outerRadius >= 122, 'Trend DNA geometry is materially larger');
+        const svgCopy = await dna.locator('.vi-dna-figure > svg').textContent();
+        assert.ok(!svgCopy.includes('QUALIFIED PROFILE'));
+        assert.ok(!svgCopy.includes('not a virality score'));
+        await visibleText(
+          dna,
+          'Profile geometry, not a virality score. Exact values are shown separately.'
+        );
+        assert.equal(await dna.locator('svg [data-ring-label]').count(), 0);
+        const selectedSummary = dna.locator('[data-selected-summary]');
+        await visibleText(selectedSummary, 'Momentum');
+        assert.ok((await selectedSummary.innerText()).includes('High'));
+        assert.equal(await dna.locator('.vi-dna-axis[data-selected="true"]').count(), 1);
+        assert.equal(await dna.locator('tbody tr[data-selected="true"]').count(), 1);
+        assert.equal(
+          await dna.locator('.vi-dna-axis[data-selected="true"] .vi-dna-node').getAttribute('r'),
+          '8'
+        );
+        assert.ok(
+          (
+            await dna
+              .locator('.vi-dna-axis[data-selected="true"] .vi-axis-label')
+              .evaluate((node) => getComputedStyle(node).textDecorationLine)
+          ).includes('underline'),
+          'Selected chart axis has a non-color text cue'
+        );
+        assert.equal(
+          await dna
+            .locator('.vi-legend-profile')
+            .first()
+            .evaluate((node) => getComputedStyle(node).borderTopColor),
+          await dna
+            .locator('[data-profile-path="primary"]')
+            .evaluate((node) => getComputedStyle(node).stroke),
+          'Primary legend sample uses the primary profile token'
+        );
+        assert.ok(
+          new Set(
+            await dna
+              .locator('.vi-dna-axis [data-diagram-node]')
+              .evaluateAll((nodes) =>
+                nodes.map((node) => `${node.getAttribute('cx')}:${node.getAttribute('cy')}`)
+              )
+          ).size > 3,
+          'Qualified DNA coordinates form a non-uniform profile'
+        );
+        assert.deepEqual(
+          await dna.locator('svg text').evaluateAll((nodes) =>
+            nodes.flatMap((node) => {
+              const bounds = node.getBBox();
+              return bounds.x < -0.5 ||
+                bounds.y < -0.5 ||
+                bounds.x + bounds.width > 520.5 ||
+                bounds.y + bounds.height > 410.5
+                ? [node.textContent]
+                : [];
+            })
+          ),
+          [],
+          'Trend DNA labels stay inside the chart viewBox'
+        );
         await dna.getByRole('button', { name: 'Acceleration', exact: true }).focus();
         await page.keyboard.press('Enter');
         await visibleText(dna, '30 posts/hour^3');
         assert.ok((await dna.innerText()).includes('Definition: synthetic-rate / 1'));
+        assert.ok((await selectedSummary.innerText()).includes('Acceleration · High'));
+        assert.ok((await selectedSummary.innerText()).includes('30 posts/hour^3 · calculated'));
+        assert.equal(
+          await dna.locator('.vi-dna-axis[data-selected="true"]').getAttribute('data-dimension'),
+          'acceleration'
+        );
+        assert.equal(
+          await dna.locator('tbody tr[data-selected="true"]').getAttribute('data-dimension'),
+          'acceleration'
+        );
+        await dna.getByText('Profile scale & evidence', { exact: true }).click();
+        for (const value of [
+          'trend-dna.synthetic',
+          'synthetic-profile-scale-v1',
+          'Synthetic permitted sample with fixed demonstration thresholds'
+        ])
+          assert.ok((await dna.innerText()).includes(value));
+        await dna.getByText('Profile scale & evidence', { exact: true }).click();
         await page
           .getByRole('combobox', { name: 'Compare with', exact: true })
           .selectOption('synthetic-comparison');
         await page.locator('.vi-compare table').waitFor();
         assert.ok((await page.locator('.vi-compare table').innerText()).includes('Unknown'));
+        assert.equal(await page.locator('.vi-compare [data-profile-path="primary"]').count(), 1);
+        assert.ok(
+          await page.locator('.vi-compare [data-profile-path="comparison-partial"]').count()
+        );
+        assert.equal(
+          await page.locator('.vi-compare .vi-dna-comparison-missing').count(),
+          1,
+          'Unknown comparison vertex stays open and breaks the overlay'
+        );
+        assert.equal(
+          await page
+            .locator('.vi-compare .vi-legend-profile-comparison')
+            .evaluate((node) => getComputedStyle(node).borderTopColor),
+          await page
+            .locator('.vi-compare [data-profile-path="comparison-partial"]')
+            .first()
+            .evaluate((node) => getComputedStyle(node).stroke),
+          'Comparison legend sample uses the comparison profile token'
+        );
         const whitespace = page.getByLabel('Creative whitespace', { exact: true });
         await whitespace.getByText('Supported in this sample', { exact: true }).waitFor();
         await whitespace.getByText('Evidence and comparison details', { exact: true }).click();
@@ -939,6 +1064,11 @@ async function run() {
             }
             if (state === 'pending') {
               await page.locator('.vi-dna').waitFor();
+              assert.equal(await page.locator('.vi-dna [data-profile-path]').count(), 0);
+              await visibleText(
+                page.locator('.vi-dna'),
+                'No qualified shared scale is available. Native values are shown without radial placement.'
+              );
               assert.equal(
                 await page
                   .locator('.vi-dna tbody td')

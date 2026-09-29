@@ -150,6 +150,56 @@ def _metrics(value):
     return result
 
 
+def _dna_profile(value, receipt_id, now, *, allow_interpretation=False):
+    """Project only explicit receipt-bound display geometry; never derive radii here."""
+    dimension_ids = ("momentum", "acceleration", "spread", "audience", "adaptability", "gap")
+    if (not isinstance(value, dict) or value.get("trust_receipt_id") != receipt_id
+        or not isinstance(value.get("dimensions"), list) or len(value["dimensions"]) != len(dimension_ids)):
+        return None
+    try:
+        if opportunities.epoch(value["expires_at"]) <= now:
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    text_limits = {"method_id": 200, "method_version": 200, "scale_ref": 200,
+                   "reference_population": 1200, "trust_receipt_id": 200, "expires_at": 80}
+    if any(not isinstance(value.get(key), str) or not 1 <= len(value[key]) <= limit for key, limit in text_limits.items()):
+        return None
+    limitations = value.get("limitations", [])
+    if (not isinstance(limitations, list) or len(limitations) > 20
+        or any(not isinstance(item, str) or len(item) > 1200 for item in limitations)):
+        return None
+    dimensions = []
+    seen = set()
+    for item in value["dimensions"]:
+        if not isinstance(item, dict) or item.get("id") not in dimension_ids or item["id"] in seen:
+            return None
+        seen.add(item["id"])
+        state, coordinate, layer = item.get("state"), item.get("value"), item.get("layer")
+        if layer not in ("calculated", "interpretation") or (layer == "interpretation" and not allow_interpretation):
+            return None
+        if state == "Unknown":
+            if coordinate is not None or not isinstance(item.get("null_reason"), str) or not item["null_reason"]:
+                return None
+        elif (state not in ("Low", "Moderate", "High") or isinstance(coordinate, bool)
+              or not isinstance(coordinate, (int, float)) or not math.isfinite(coordinate)
+              or not 0 <= coordinate <= 1 or item.get("null_reason") is not None):
+            return None
+        refs = item.get("evidence_refs", [])
+        if (not isinstance(refs, list) or len(refs) > 20
+            or any(not isinstance(ref, str) or not 1 <= len(ref) <= 200 for ref in refs)):
+            return None
+        fields = {"display_value": 500, "definition": 1200, "reason": 1200}
+        if any(not isinstance(item.get(key), str) or not 1 <= len(item[key]) <= limit for key, limit in fields.items()):
+            return None
+        dimensions.append({key: copy.deepcopy(item.get(key)) for key in
+            ("id", "state", "value", "display_value", "layer", "definition", "reason", "evidence_refs", "null_reason")})
+    if seen != set(dimension_ids):
+        return None
+    return {key: copy.deepcopy(value[key]) for key in text_limits} | {
+        "limitations": copy.deepcopy(limitations), "dimensions": dimensions}
+
+
 def build_trend_payload(receipt, *, trend_id, episode_id, scope_key, evidence, canonical_topic, expires_at, method_bundle):
     """Pure v2 receipt -> stored wire projection. No verification or promotion.
 
@@ -378,6 +428,11 @@ class TrendService:
                   "limitations": list(p.get("limitations", []))[:30], "trust_receipt_id": receipt_id if receipt else None,
                   "verification_state": verification, "expires_at": opportunities.iso(min(opportunities.epoch(row["expires_at"]), opportunities.epoch(receipt["expires_at"]) if receipt else opportunities.epoch(row["expires_at"]))),
                   "platform_states": [], "evidence": [], "workspace_fit": None}
+        if verified:
+            dna_profile = _dna_profile(p.get("dna_profile"), receipt_id, now,
+                allow_interpretation=self._enabled("MODEL_ENRICHMENT") and p.get("interpretation_qualified") is True)
+            if dna_profile:
+                result["dna_profile"] = dna_profile
         for platform in p.get("platform_states", [])[:12]:
             result["platform_states"].append({"platform": platform["platform"], "coverage": coverage(platform.get("coverage"), row["scope_key"]),
                 "inferred": self._inference(platform.get("inferred"), verification, platform.get("cohort_qualified") is True, platform.get("method_state"))})
