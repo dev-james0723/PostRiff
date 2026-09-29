@@ -1,0 +1,80 @@
+name: Preview window repair and validation
+on:
+  push:
+    branches: ['codex/conversation-preview-window-20260929']
+    paths: ['.github/workflows/preview-window-repair.yml']
+permissions:
+  contents: read
+concurrency:
+  group: preview-window-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: github.repository == 'dev-james0723/PostRiff' && github.ref == 'refs/heads/codex/conversation-preview-window-20260929'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned dependencies
+        run: npm --prefix web ci
+      - name: Reproduce channel regression before repairing
+        shell: bash
+        run: |
+          mkdir -p /tmp/preview-evidence
+          if node --test web/tests/preview-window.test.cjs > /tmp/preview-evidence/red.txt 2>&1; then
+            cat /tmp/preview-evidence/red.txt
+            echo 'Expected the known channel regression to fail; source changed. Stop.'
+            exit 1
+          fi
+          cat /tmp/preview-evidence/red.txt
+          grep -q 'channel is not defined' /tmp/preview-evidence/red.txt
+      - name: Repair only the exact reviewed source blob
+        shell: bash
+        run: |
+          test "$(git hash-object web/src/features/agent/conversation-view.tsx)" = fa9100896218f1acf5766a8aaa2863527320c720
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('web/src/features/agent/conversation-view.tsx')
+          s = p.read_text()
+          replacements = {
+              'return { platform, account: account?.account, state: channel?.displayState };': 'return { platform, account: account?.account, state: account?.displayState };',
+              'if (recoveredTurn?.text) setText((current) => (current || recoveredTurn.text));': 'if (recoveredTurn?.text) setText((current) => current || recoveredTurn.text);',
+          }
+          for before, after in replacements.items():
+              assert s.count(before) == 1, before
+              s = s.replace(before, after)
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff -- web/src/features/agent/conversation-view.tsx
+      - name: Verify regression tests are green
+        run: node --test web/tests/preview-window.test.cjs | tee /tmp/preview-evidence/green.txt
+      - name: Commit the scoped fix to this feature branch only
+        shell: bash
+        run: |
+          git add -- web/src/features/agent/conversation-view.tsx
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: preserve account state in conversation preview integration'
+          git push origin HEAD:refs/heads/codex/conversation-preview-window-20260929
+          git rev-parse HEAD | tee /tmp/preview-evidence/source-sha.txt
+      - name: Full application typecheck
+        run: npm --prefix web run typecheck 2>&1 | tee /tmp/preview-evidence/typecheck.txt
+      - name: Application lint
+        if: success() || failure()
+        run: npm --prefix web run lint 2>&1 | tee /tmp/preview-evidence/lint.txt
+      - name: Retain repair and validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: preview-window-repair-${{ github.sha }}
+          path: /tmp/preview-evidence/
+          retention-days: 3
