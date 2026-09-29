@@ -452,6 +452,18 @@ class HostedWorkspaceService:
             return {"assetId": asset_id, "status": "unavailable", "reason": "reader_unavailable", "message": REASONS["reader_unavailable"]}
         return self.media_notes.read(workspace_id, token, payload)
 
+    def skill_preview(self, workspace_id, token, skill_id):
+        """One picker-visible SKILL.md for an authenticated workspace member.
+
+        Keep the public writer/model catalogue metadata-only. The workspace read is the auth
+        boundary; SkillLibrary.preview then applies the reviewed registry and safe loader rules.
+        """
+        self.repository.get(workspace_id, token)
+        preview = self.ideas.skills.preview(skill_id)
+        if preview is None:
+            raise AlphaError("Skill unavailable.", 404, code="skill_unavailable")
+        return preview
+
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):

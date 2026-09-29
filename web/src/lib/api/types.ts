@@ -1082,6 +1082,18 @@ export interface AttachmentsCatalog {
   skills?: { id: string; name: string; description: string; version: string }[];
 }
 
+/** Authenticated reader payload for one picker-visible installed skill. */
+export interface SkillPreview {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  sha256: string;
+  files: { path: string; sha256: string; chars: number }[];
+  /** Primary SKILL.md after its package frontmatter, exactly as the skill loader reads it. */
+  body: string;
+}
+
 /** Owner consent for photo and frame reading (SPEC §5.12). */
 export interface MediaConsent {
   cloud: boolean;

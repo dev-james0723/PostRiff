@@ -48,6 +48,7 @@ import type {
   MemoryFiles,
   PickerCategory,
   PickerSearchResult,
+  SkillPreview,
   ProductivityConnectorCatalog,
   ProductivityConnectorSearchResult,
   VideoCommitBody,
@@ -324,6 +325,8 @@ export function createApi(getToken: TokenSource) {
       get<PickerSearchResult>(
         `${ws(w)}/site-agent/search?${new URLSearchParams({ q, ...(categories.length ? { categories: categories.join(',') } : {}), limit: String(limit) })}`
       ),
+    skillPreview: (w: string, skillId: string) =>
+      get<SkillPreview>(`${ws(w)}/skills/${encodeURIComponent(skillId)}`),
     connectorCatalog: (w: string) => get<ProductivityConnectorCatalog>(`${ws(w)}/connectors`),
     connectorOauthStart: (w: string, provider: string) =>
       send<{ transactionId: string; provider: string; authorizeUrl: string; scopes: string[]; expiresAt: number }>(
