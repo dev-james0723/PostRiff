@@ -201,7 +201,7 @@ export function buildRailMotion({
   const waveformProfile = rawWaveform.map((value, index) => {
     const left = rawWaveform[Math.max(0, index - 1)] ?? value;
     const right = rawWaveform[Math.min(rawWaveform.length - 1, index + 1)] ?? value;
-    return clamp01(value * 0.64 + left * 0.18 + right * 0.18);
+    return clamp01(value * 0.8 + left * 0.1 + right * 0.1);
   });
   const phase = (tickMs / 1000) * 8.9;
   const globalPulse = easeOutCubic(level);
@@ -218,23 +218,23 @@ export function buildRailMotion({
         ? Math.max(0, 1 - Math.abs(index - activeIndex) / Math.max(4, count * 0.22))
         : 0;
 
-    const waveformPeak = Math.pow(clamp01(waveformProfile[index] ?? 0), 1.35);
+    const waveformPeak = Math.pow(clamp01(waveformProfile[index] ?? 0), 1.5);
 
     // The global envelope is now only a floor. Instantaneous waveform shape owns the peaks,
     // so adjacent dots can be tall/short at the same moment instead of breathing in lockstep.
     const energy = clamp01(
-      globalPulse * 0.18 +
-        bodyWave * 0.05 +
-        waveformPeak * 0.5 +
-        texture * 0.17 +
+      globalPulse * 0.1 +
+        bodyWave * 0.03 +
+        waveformPeak * 0.64 +
+        texture * 0.13 +
         travellingTransient * 0.1
     );
     const base = index === activeIndex ? 8 : 6;
-    const transitionMs = 24 + (1 - waveformPeak) * 46;
+    const transitionMs = 20 + (1 - waveformPeak) * 64;
 
     return {
-      width: base + energy * 24 + focus * 1.5,
-      height: base + energy * 5.5,
+      width: base + energy * 28 + focus * 1.2,
+      height: base + energy * 6.2,
       opacity: clamp01((index === activeIndex ? 0.92 : 0.46) + energy * 0.48),
       translateX: energy * 1.05 + travellingTransient * 1.7,
       borderRadius:
