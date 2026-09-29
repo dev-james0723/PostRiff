@@ -71,3 +71,10 @@ test('external capture requests system or window audio rather than guessing from
   assert.match(source, /windowAudio: 'system'/);
   assert.doesNotMatch(source, /fetch\(/);
 });
+
+
+test('Rafii-owned cross-origin media opts into CORS before Web Audio analysis', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'features', 'now-playing', 'now-playing-bar.tsx'), 'utf8');
+  assert.match(source, /element\.crossOrigin = 'anonymous';\s*element\.src = track\.url;/);
+  assert.match(source, /<video ref=\{video\} crossOrigin='anonymous'/);
+});
