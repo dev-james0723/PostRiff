@@ -153,12 +153,16 @@ async def drive(ctx: RafiiRunContext, run, timeout: float):
         await close_clients(ctx.clients)
 
 
-def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
+def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: dict | None):
     """Wrap any Agents SDK Model: count calls and tokens into the ledger (Manager and nested specialists alike)."""
     from agents.models.interface import Model
+    from . import thinking_state
+    ledger = ctx.ledger
 
     class MeteredModel(Model):
         async def get_response(self, *args, **kwargs):
+            op, reason = thinking_state.model_op(agent, ledger.tool_activity)
+            ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
             started = time.monotonic()
             response = await model.get_response(*args, **kwargs)
             usage = getattr(response, "usage", None)
@@ -169,6 +173,8 @@ def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
             return response
 
         def stream_response(self, *args, **kwargs):
+            op, reason = thinking_state.model_op(agent, ledger.tool_activity)
+            ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
             ledger.model_requests += 1
             return model.stream_response(*args, **kwargs)
 
@@ -216,7 +222,7 @@ def _build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standar
         route = cfg.route(load, reason=f"{name} agent") if model_factory is None else runtime_config.Route(load, "scripted", f"scripted:{name}", "deterministic test model", True)
         routes.append({**route.trace(), "agent": name})
         raw = model_factory(load, name) if model_factory is not None else provider_model(cfg, load)
-        return metered(raw, ctx.ledger, agent=name, workload=load, route=route.trace())
+        return metered(raw, ctx, agent=name, workload=load, route=route.trace())
 
     def model_settings(load):
         return None if model_factory is not None else settings_for(cfg, load)
