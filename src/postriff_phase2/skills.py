@@ -168,6 +168,27 @@ class SkillLibrary:
     def eligible_ids(self):
         return {item["id"] for item in self.eligible()}
 
+    def preview(self, skill_id):
+        """The installed primary Markdown document for one picker-visible product skill.
+
+        Eligibility is checked before loading so a caller cannot use this as a file browser for
+        private, inactive or merely installed packages. Reference files are intentionally not
+        expanded here: the preview is the skill's canonical SKILL.md, exactly as the writer's
+        loader reads it after frontmatter.
+        """
+        metadata = next((item for item in self.eligible() if item["id"] == skill_id), None)
+        if metadata is None:
+            return None
+        loaded = self.load(skill_id)
+        if loaded is None:
+            return None
+        return {
+            **metadata,
+            "sha256": loaded["sha256"],
+            "files": loaded["files"],
+            "body": loaded["body"],
+        }
+
     def _read(self, skill_id, relative):
         base = (self.root / skill_id).resolve()
         path = (base / relative).resolve()
