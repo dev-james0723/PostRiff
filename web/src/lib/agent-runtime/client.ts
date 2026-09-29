@@ -4,7 +4,7 @@
  * ever exists in the browser: Voice Mode sends its WebRTC offer to Rafii's server, which creates the GPT-Live session.
  */
 import { APP_GUARD_HEADER, ApiError, type TokenSource } from '@/lib/api/client';
-import type { AgentStatus, AgentTurnRequest, AgentTurnResponse, ConversationState, DecideResponse, VoiceSessionStart } from './types';
+import type { AgentActiveRun, AgentRunEvents, AgentStatus, AgentTurnRequest, AgentTurnResponse, ConversationState, DecideResponse, VoiceSessionStart } from './types';
 
 const base = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}/agent`;
 
@@ -57,6 +57,8 @@ export function createAgentApi(getToken: TokenSource) {
     status: (w: string) => get<AgentStatus>(`${base(w)}/status`),
     turn: (w: string, body: AgentTurnRequest, signal?: AbortSignal) => post<AgentTurnResponse>(`${base(w)}/turns`, turnPayload(body), signal),
     run: (w: string, runId: string) => get<AgentTurnResponse>(`${base(w)}/runs/${encodeURIComponent(runId)}`),
+    activeRun: (w: string, conversationId: string) => get<AgentActiveRun | null>(`${base(w)}/conversations/${encodeURIComponent(conversationId)}/active-run`),
+    runEvents: (w: string, runId: string, cursor = 0) => get<AgentRunEvents>(`${base(w)}/runs/${encodeURIComponent(runId)}/events?cursor=${encodeURIComponent(String(cursor))}`),
     cancel: (w: string, runId: string) => post<{ runId: string; status: string }>(`${base(w)}/runs/${encodeURIComponent(runId)}/cancel`),
     conversationState: (w: string, conversationId: string) => get<ConversationState>(`${base(w)}/conversations/${encodeURIComponent(conversationId)}/state`),
     decide: (w: string, body: { conversationId: string; messageId: string; proposalId: string; digest: string; decision: 'apply' | 'dismiss'; timeZone?: string }) =>
