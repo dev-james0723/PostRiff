@@ -15,13 +15,14 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps['theme']}
-      className='toaster group'
+      className='toaster group !z-[2147483647]'
       style={
         {
           '--normal-bg': 'var(--popover)',
           '--normal-text': 'var(--foreground)',
           '--normal-border': 'transparent',
-          '--border-radius': '1.25rem'
+          '--border-radius': '1.25rem',
+          zIndex: 2147483647
         } as React.CSSProperties
       }
       toastOptions={{
