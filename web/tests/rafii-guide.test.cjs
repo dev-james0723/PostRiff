@@ -167,10 +167,13 @@ test('isGuideSafe accepts marked elements, and tabs inside a marked tab list onl
   assert.equal(G.isGuideSafe(null), false);
 });
 
-test('an answer asks for a guide, a link or a style change', () => {
+test('an answer asks for a safe action, guide, link or style change', () => {
+  const action = { type: 'ui_action', action: 'activate', actionId: 'channels.connect', label: 'Connect account', auto: true };
   const guide = { type: 'guide_card', guideId: 'connect_account', routeId: 'channels', href: '/app/channels', title: 'Connect', summary: '', auto: true };
   const link = { type: 'navigation_card', label: 'Open Channels', href: '/app/channels', routeId: 'channels', auto: true };
   const style = { type: 'voice_command', command: 'style', style: { pace: 'slower' } };
+  assert.deepEqual(A.autoActionsOf([action, guide, link], 'text'), [{ kind: 'activate', actionId: 'channels.connect', label: 'Connect account' }], 'a safe page action wins');
+  assert.deepEqual(A.autoActionsOf([action], 'voice'), [{ kind: 'activate', actionId: 'channels.connect', label: 'Connect account' }], 'voice and text use the same action path');
   assert.deepEqual(A.autoActionsOf([link], 'text'), [{ kind: 'navigate', href: '/app/channels' }]);
   assert.deepEqual(A.autoActionsOf([link, guide], 'text'), [{ kind: 'guide', guideId: 'connect_account' }], 'a guide opens its own page');
   assert.deepEqual(A.autoActionsOf([guide, style], 'text'), [{ kind: 'guide', guideId: 'connect_account' }, { kind: 'style', style: { pace: 'slower' } }]);
