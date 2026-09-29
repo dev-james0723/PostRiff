@@ -53,7 +53,7 @@ def snapshot(db, table, where="true"):
 
 def rejects(db, statement, args, error):
     try:
-        with db.transaction():
+        with db.transaction(force_rollback=True):
             db.execute(statement, args)
     except error:
         return True
@@ -75,6 +75,8 @@ class PricingCatalogV2(unittest.TestCase):
                           if not line.startswith(("create role ", "\\")))
         paths = migrations()
         old = [p for p in paths if int(p.name[:3]) < 48]
+        cls.setup = setup
+        cls.old = old
         cls.paths = paths
         cls.legacy_before = {}
         with connect(BASE_DSN) as admin:
@@ -260,7 +262,7 @@ class PricingCatalogV2(unittest.TestCase):
                         db.execute("INSERT INTO auth.users(id) VALUES(%s)", (USER,))
                         wid = db.execute("SELECT pr_bootstrap(%s,'studio')", (USER,)).fetchone()
                     db.execute("INSERT INTO pr_price_experiment_assignments(workspace_id,experiment_key,price_variant_id,assignment_source) "
-                               "VALUES(%s,'rls-fixture','creator-49-v1','synthetic-test')", (wid[0],))
+                               "VALUES(%s,'creator-beta-v1','creator-49-v1','synthetic-test')", (wid[0],))
                     db.execute("CREATE ROLE pricing_catalog_reader NOLOGIN NOBYPASSRLS")
                     for table in NEW_TABLES:
                         db.execute(sql.SQL("GRANT SELECT,INSERT ON public.{} TO pricing_catalog_reader").format(sql.Identifier(table)))
@@ -297,6 +299,20 @@ class PricingCatalogV2(unittest.TestCase):
         for kind, dsn in self.each():
             with self.subTest(install=kind), connect(dsn) as db:
                 self.assertTrue(all(row["status"] == "APPLIED" for row in plan(db)))
+                # Persist real downstream references, not empty assignment collections.
+                user = "00000000-0000-0000-0000-000000000049"
+                db.execute("INSERT INTO auth.users(id) VALUES(%s)", (user,))
+                wid = db.execute("SELECT pr_bootstrap(%s,'studio')", (user,)).fetchone()[0]
+                with db.transaction():
+                    db.execute("SET LOCAL ROLE service_role")
+                    db.execute("INSERT INTO pr_price_experiment_assignments(workspace_id,experiment_key,price_variant_id,assignment_source) "
+                               "VALUES(%s,'creator-beta-v1','creator-59-v1','synthetic-replay')", (wid,))
+                    db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,price_variant_id,status,provider_subscription_id) "
+                               "VALUES(%s,'creator-v1','creator-59-v1','active','sub_synthetic_replay')", (wid,))
+                self.assertEqual(db.execute("SELECT a.price_variant_id,s.price_variant_id,s.plan_terms_id "
+                                            "FROM pr_price_experiment_assignments a JOIN pr_subscriptions s USING(workspace_id) "
+                                            "WHERE a.workspace_id=%s", (wid,)).fetchall(),
+                                 [("creator-59-v1", "creator-59-v1", "creator-v1")])
                 tables = ("pr_plan_terms", "pr_plan_price_variants", "pr_price_experiment_assignments", "pr_subscriptions", "pr_credit_packs")
                 before = {t: db.execute(sql.SQL("SELECT to_jsonb(t) FROM public.{} t ORDER BY to_jsonb(t)::text").format(sql.Identifier(t))).fetchall() for t in tables}
                 self.assertTrue(all(row["status"] == "APPLIED" for row in apply(db)))
@@ -304,6 +320,59 @@ class PricingCatalogV2(unittest.TestCase):
                 db.execute(body(MIGRATION), prepare=False)
                 after = {t: db.execute(sql.SQL("SELECT to_jsonb(t) FROM public.{} t ORDER BY to_jsonb(t)::text").format(sql.Identifier(t))).fetchall() for t in tables}
                 self.assertEqual(before, after)
+
+    def test_11_formerly_legal_pack_rows_survive_upgrade(self):
+        name = "pricing_catalog_v2_old_packs"
+        with connect(BASE_DSN) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+            self.databases.append(name)
+        dsn = make_conninfo(BASE_DSN, dbname=name)
+        with connect(dsn) as db:
+            db.execute(self.setup, prepare=False)
+            apply(db, self.old)
+            # 021 permitted any non-NULL text: active/inactive, empty, spaces,
+            # tabs/newlines, valid IDs, and IDs with surrounding whitespace.
+            prices = ("", " ", "   ", "\t\n\r", "price_synthetic", " price_synthetic ")
+            for active in (False, True):
+                for index, price in enumerate(prices):
+                    db.execute("INSERT INTO pr_credit_packs VALUES(%s,'Historical pack','old-policy',%s,1,'usd',1000,true,%s)",
+                               (f"historical-{active}-{index}", price, active))
+            before = snapshot(db, "pr_credit_packs")
+            try:
+                apply(db)
+            except psycopg.errors.CheckViolation as error:
+                self.fail(f"048 aborts on formerly legal legacy pack rows: {error.diag.constraint_name}")
+            self.assertEqual(snapshot(db, "pr_credit_packs", "id LIKE 'historical-%'"), before)
+            check = "SELECT convalidated FROM pg_constraint WHERE conrelid='pr_credit_packs'::regclass AND conname='pr_credit_packs_active_price_check'"
+            self.assertEqual(db.execute(check).fetchone(), (False,))
+            self.assertTrue(rejects(db, "ALTER TABLE pr_credit_packs VALIDATE CONSTRAINT pr_credit_packs_active_price_check",
+                                    None, psycopg.errors.CheckViolation))
+            for price in (*prices[:4], None):
+                self.assertTrue(rejects(db, "INSERT INTO pr_credit_packs VALUES('new-invalid','New pack','new-policy',%s,1,'usd',1000,false,true)",
+                                        (price,), psycopg.errors.CheckViolation))
+                self.assertTrue(rejects(db, "UPDATE pr_credit_packs SET active=true,price_id=%s WHERE id='credits-1000-v2'",
+                                        (price,), psycopg.errors.CheckViolation))
+            db.execute(body(MIGRATION), prepare=False)
+            self.assertEqual(snapshot(db, "pr_credit_packs", "id LIKE 'historical-%'"), before)
+        # On a known-clean fresh fixture an explicit validation succeeds; the
+        # migration itself leaves this operation to a separate reviewed step.
+        with connect(self.dsns["fresh"]) as db, db.transaction(force_rollback=True):
+            db.execute("ALTER TABLE pr_credit_packs VALIDATE CONSTRAINT pr_credit_packs_active_price_check")
+            self.assertEqual(db.execute(check).fetchone(), (True,))
+
+    def test_12_assignment_matches_variant_experiment(self):
+        with connect(self.dsns["upgraded"]) as db, db.transaction(force_rollback=True):
+            db.execute("SET LOCAL ROLE service_role")
+            statement = "INSERT INTO pr_price_experiment_assignments(workspace_id,experiment_key,price_variant_id,assignment_source) VALUES(%s,%s,%s,'synthetic-test')"
+            for variant in ("creator-49-v1", "creator-59-v1", "creator-79-v1"):
+                with self.subTest(variant=variant):
+                    self.assertTrue(rejects(db, statement, (self.wid, "wrong-experiment", variant), psycopg.errors.ForeignKeyViolation))
+            db.execute("INSERT INTO pr_plan_price_variants(id,plan_terms_id,variant_key,amount_cents,currency,status) "
+                       "VALUES('no-experiment','creator-v1','non-experiment',5900,'USD','proposed')")
+            self.assertTrue(rejects(db, statement, (self.wid, "wrong-experiment", "no-experiment"), psycopg.errors.ForeignKeyViolation))
+            db.execute(statement, (self.wid, "creator-beta-v1", "creator-49-v1"))
+            self.assertTrue(rejects(db, "UPDATE pr_plan_price_variants SET experiment_key='changed-experiment' WHERE id='creator-49-v1'",
+                                    None, psycopg.errors.ForeignKeyViolation))
 
 
 if __name__ == "__main__":

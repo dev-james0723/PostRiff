@@ -46,6 +46,8 @@ create table if not exists public.pr_plan_price_variants (
   unique (id,plan_terms_id),
   check (status <> 'active' or nullif(btrim(provider_price_id),'') is not null)
 );
+create unique index if not exists pr_plan_price_variants_id_experiment_idx
+  on public.pr_plan_price_variants(id,experiment_key);
 insert into public.pr_plan_price_variants
   (id,plan_terms_id,variant_key,amount_cents,currency,provider_price_id,status,experiment_key)
 values
@@ -57,11 +59,19 @@ on conflict (id) do nothing;
 create table if not exists public.pr_price_experiment_assignments (
   workspace_id uuid not null references public.pr_workspaces(id) on delete cascade,
   experiment_key text not null check (length(experiment_key) between 1 and 80),
-  price_variant_id text not null references public.pr_plan_price_variants(id),
+  price_variant_id text not null,
   assigned_at timestamptz not null default now(),
   assignment_source text not null check (length(assignment_source) between 1 and 200),
   primary key (workspace_id,experiment_key)
 );
+do $$ begin
+  if not exists (select 1 from pg_constraint where conrelid='public.pr_price_experiment_assignments'::regclass
+                 and conname='pr_price_experiment_assignments_variant_experiment_fkey') then
+    alter table public.pr_price_experiment_assignments
+      add constraint pr_price_experiment_assignments_variant_experiment_fkey
+      foreign key (price_variant_id,experiment_key) references public.pr_plan_price_variants(id,experiment_key);
+  end if;
+end $$;
 create index if not exists pr_price_experiment_assignments_variant_idx
   on public.pr_price_experiment_assignments(price_variant_id);
 
@@ -94,12 +104,23 @@ do $$ begin
 end $$;
 
 -- Extend the existing pack scaffold to represent inactive proposals without fake provider IDs.
+-- 021 allowed blank IDs even on active packs. NOT VALID preserves all historical
+-- row values while enforcing the new rule on inserts/updates. A separate reviewed
+-- preflight/remediation can eventually VALIDATE; this migration never rewrites IDs.
 alter table public.pr_credit_packs alter column price_id drop not null;
 do $$ begin
   if not exists (select 1 from pg_constraint where conrelid='public.pr_credit_packs'::regclass
                  and conname='pr_credit_packs_active_price_check') then
     alter table public.pr_credit_packs add constraint pr_credit_packs_active_price_check
-      check (not active or nullif(btrim(price_id),'') is not null);
+      check (not active or (price_id is not null and price_id ~ '[^[:space:]]')) not valid;
+  end if;
+end $$;
+do $$ declare invalid_active_packs bigint; begin
+  select count(*) into invalid_active_packs from public.pr_credit_packs
+    where active and (price_id is null or price_id !~ '[^[:space:]]');
+  if invalid_active_packs > 0 then
+    raise notice '% historical active credit packs have blank price IDs; rows preserved, constraint remains NOT VALID',
+      invalid_active_packs;
   end if;
 end $$;
 insert into public.pr_credit_packs
