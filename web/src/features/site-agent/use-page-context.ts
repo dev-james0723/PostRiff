@@ -233,11 +233,11 @@ export function buildPageOutline(roots: readonly (OutlineNode | null | undefined
   let chars = 0;
   let full = false;
 
-  const push = (role: Role, raw: string, target: string | null, state?: State) => {
+  const push = (role: Role, raw: string, target: string | null, state?: State, action?: string | null) => {
     const text = clean(raw);
     if (!text || looksLikeInstruction(raw)) return;
     const item: PageOutlineItem = { role, text, ...(target ? { target: target.slice(0, TEXT_MAX) } : {}), ...(action ? { action: action.slice(0, TEXT_MAX) } : {}), ...(state ? { state } : {}) };
-    const key = `${item.role}|${item.text}|${item.target ?? ''}|${item.state ?? ''}`;
+    const key = `${item.role}|${item.text}|${item.target ?? ''}|${item.action ?? ''}|${item.state ?? ''}`;
     if (seen.has(key)) return;
     // Counted as sent: the item's JSON and its comma.
     const size = JSON.stringify(item).length + 1;
@@ -266,7 +266,7 @@ export function buildPageOutline(roots: readonly (OutlineNode | null | undefined
       // A status line keeps its own words; the buttons inside it are listed on their own below.
       push('status', ariaName(node, options) || textOf(node, options, false), target);
     } else if (role) {
-      if (!named.has(node)) push(role, ariaName(node, options) || textOf(node, options), target, stateOf(node, role));
+      if (!named.has(node)) push(role, ariaName(node, options) || textOf(node, options), target, stateOf(node, role), action);
       return; // a label: nothing inside it is listed separately
     } else if (target) {
       // A region guides point at: named by its label, its first heading, or its own words when they are short.
