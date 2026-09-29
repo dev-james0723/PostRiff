@@ -172,7 +172,14 @@ function ProviderTile({
       )}
       {canManage && (
         <div className='mt-auto pt-1'>
-          <Button variant='glass' size='control' disabled={blocked} onClick={onConnect}>
+          <Button
+            variant='glass'
+            size='control'
+            disabled={blocked}
+            aria-label={alreadyConnected ? `Connect another ${provider.platform} account` : `Connect ${provider.platform}`}
+            data-rafii-action={`channels.connect.${provider.id}`}
+            onClick={onConnect}
+          >
             <Icons.add className='size-4' />
             {alreadyConnected ? 'Connect another account' : 'Connect'}
           </Button>
@@ -330,7 +337,7 @@ function ChannelsPage() {
   // With no accounts yet, the empty state below carries that action, so the header does not repeat it.
   const emptyOwnsAction = !isLoading && !error && channels.length === 0 && filter !== 'local';
   const headerAction = emptyOwnsAction ? undefined : canManage ? (
-    <Button data-tour='channels-connect' data-guide-safe variant='action' size='control' onClick={() => openConnect({})}>
+    <Button data-tour='channels-connect' data-guide-safe data-rafii-action='channels.connect' variant='action' size='control' onClick={() => openConnect({})}>
       <Icons.add className='size-4' />
       Connect account
     </Button>
@@ -395,7 +402,7 @@ function ChannelsPage() {
                       }
                       action={
                         canManage ? (
-                          <Button data-tour='channels-connect' data-guide-safe variant='action' size='control' onClick={() => openConnect({})}>
+                          <Button data-tour='channels-connect' data-guide-safe data-rafii-action='channels.connect' variant='action' size='control' onClick={() => openConnect({})}>
                             <Icons.add className='size-4' />
                             Connect account
                           </Button>
