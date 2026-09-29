@@ -1,0 +1,56 @@
+{
+ "base": "http://127.0.0.1:3190",
+ "engine": "webkit",
+ "principal": "synthetic",
+ "sections": "phone",
+ "results": [
+  {
+   "name": "seed: workspace, LinkedIn account and a confirmed draft",
+   "ok": true
+  },
+  {
+   "name": "phone: model, account, credit and style controls remain reachable",
+   "ok": true
+  },
+  {
+   "name": "phone: default view has no ambiguous Custom control or permanent phone controls",
+   "ok": true
+  },
+  {
+   "name": "phone: current page is visible and expandable",
+   "ok": true
+  },
+  {
+   "name": "phone: capability sheet exposes reachable creation and source actions",
+   "ok": true
+  },
+  {
+   "name": "phone: the composer is 16px so iOS does not zoom",
+   "ok": true
+  },
+  {
+   "name": "phone: chat fills the mobile viewport",
+   "ok": true
+  },
+  {
+   "name": "phone: reduced motion keeps the thinking ring still",
+   "ok": true
+  },
+  {
+   "name": "phone: the calendar question is a structured read-only card from stored state",
+   "ok": true
+  },
+  {
+   "name": "phone: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "phone: after an answer the composer is fully on screen",
+   "ok": true
+  },
+  {
+   "name": "phone: composer stays above a reduced visible viewport",
+   "ok": true
+  }
+ ]
+}

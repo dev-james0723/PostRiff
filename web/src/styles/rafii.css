@@ -501,3 +501,63 @@
   outline-offset: 2px;
   box-shadow: none;
 }
+
+/* Rafii's conversation is its own quiet workspace. Violet marks active work and review. */
+.rafii-chat,
+.rafii-mobile-chat {
+  --background: #0d0c14;
+  --foreground: #f8f6ff;
+  --popover: #15131f;
+  --popover-foreground: #f8f6ff;
+  --card: #181624;
+  --card-foreground: #f8f6ff;
+  --muted-foreground: #b9b2c9;
+  --rafii-panel: rgb(15 13 25 / 0.94);
+  --rafii-surface-glass: linear-gradient(145deg, rgb(91 62 129 / 0.22), rgb(29 26 45 / 0.9));
+  --rafii-surface-composer: linear-gradient(150deg, #252036, #171520);
+  --rafii-surface-elevated: #16131f;
+  --rafii-surface-quiet: #211c2d;
+  --rafii-action-fill: linear-gradient(135deg, #b647ef, #7a30d7);
+  --rafii-action-fg: #fff;
+  color: var(--foreground);
+  color-scheme: dark;
+}
+.rafii-chat {
+  background: radial-gradient(ellipse at 50% -18%, rgb(108 45 154 / 0.16), transparent 53%), var(--background);
+}
+.rafii-chat-header {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+  background: rgb(16 14 25 / 0.72);
+  backdrop-filter: blur(20px);
+}
+.rafii-chat-form {
+  background: linear-gradient(0deg, #0d0c14 75%, rgb(13 12 20 / 0));
+}
+.rafii-chat [data-rafii-execution] [data-step-status='running'] {
+  box-shadow: inset 3px 0 #ae54e9;
+}
+.rafii-chat [data-rafii-execution] [data-step-status='failed'] {
+  box-shadow: inset 3px 0 #ed8498;
+}
+.rafii-live-stage {
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(142 70 201 / 0.25), transparent 70%);
+}
+@media (max-width: 1023px) {
+  .rafii-mobile-chat {
+    top: var(--rafii-chat-visible-top, 0px);
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100vw;
+    height: min(var(--rafii-chat-visible-height, 100dvh), 100dvh);
+    max-height: min(var(--rafii-chat-visible-height, 100dvh), 100dvh);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rafii-chat *, .rafii-live * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

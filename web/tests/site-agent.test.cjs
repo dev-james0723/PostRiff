@@ -67,6 +67,16 @@ test('activity rows are only the steps that really ran', () => {
   assert.deepEqual(P.activityRows([], false), []);
 });
 
+test('execution cards preserve server step order and states without inventing progress', () => {
+  const rows = P.executionRows({ steps: ['find', 'draft', 'review', 'missing'], status: {
+    find: { state: 'done', detail: 'Read 3 sources' },
+    draft: { state: 'running', detail: 'Writing candidates' },
+    review: { state: 'needs_you', detail: 'Approve the exact draft', href: '/app/queue' }
+  } });
+  assert.deepEqual(rows.map(({ id, state }) => [id, state]), [['find', 'done'], ['draft', 'running'], ['review', 'needs_you']]);
+  assert.equal(rows[2].href, '/app/queue');
+});
+
 test('panel answers are recognised by their body', () => {
   assert.equal(P.isSiteAgentBody({ siteAgent: { blocks: [] } }), true);
   assert.equal(P.isSiteAgentBody({ text: 'Drafted 2 candidates' }), false);

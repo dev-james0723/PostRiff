@@ -24,6 +24,7 @@ import type { Snapshot } from '@/lib/api/types';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { safeHref, type RouteManifest } from '@/lib/site-agent/routes';
 import type { GuideCardBlock, SiteAgentBlock, SiteAgentBody, SiteAgentProposalView, VoiceCommandBlock } from '@/lib/site-agent/types';
+import { executionRows } from '@/lib/site-agent/panel-logic';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { AUTOMATION_CHANGED } from './store';
@@ -95,12 +96,21 @@ export function SiteAgentAnswer({ body, actions }: { body: SiteAgentBody; action
   const blocks = body.blocks ?? [];
   return (
     <div className='flex min-w-0 flex-col gap-3'>
+      {body.compound && <section className='flex flex-col gap-2' aria-label='Rafii work progress' data-rafii-execution>
+        <div className='flex items-center justify-between gap-2'><h3 className='text-sm font-semibold'>Rafii is working</h3>{body.compound.runId && <span className='text-muted-foreground truncate text-xs'>Run {body.compound.runId.slice(0, 8)}</span>}</div>
+        <ol className='flex flex-col gap-2'>{executionRows(body.compound).map((step) => <li key={step.id} className='rafii-glass flex min-h-16 flex-col justify-center rounded-xl px-4 py-3' data-step-status={step.state}>
+          <span className='flex items-center justify-between gap-2 text-sm font-medium'><span>{step.id.replaceAll('_', ' ')}</span><span className='text-muted-foreground text-xs'>{step.state.replaceAll('_', ' ')}</span></span>
+          {step.detail && <span className='text-muted-foreground mt-1 text-xs'>{step.detail}</span>}
+          {step.href && <SafeLink href={step.href} onNavigate={actions.onNavigate} className='mt-2 self-start text-sm underline underline-offset-2'>Review step</SafeLink>}
+          {step.state === 'failed' && actions.latest && actions.onAsk && <button type='button' className='rafii-focus mt-2 self-start rounded text-sm underline' onClick={() => actions.onAsk?.(`What failed in ${step.id}, and what can I do next?`)}>Ask how to recover</button>}
+        </li>)}</ol>
+      </section>}
       {body.compound?.pending && body.compound.runId && actions.messageId && actions.conversationId && (
         <CompoundWatcher runId={body.compound.runId} messageId={actions.messageId} conversationId={actions.conversationId} />
       )}
-      {blocks.map((block, index) => (
-        <AnswerBlock key={`${block.type}-${index}`} block={block} actions={actions} />
-      ))}
+      {blocks.map((block, index) => block.type === 'proposal_diff' ?
+        <section key={`${block.type}-${index}`} className='flex flex-col gap-2' aria-label='Result for review' data-rafii-review><h3 className='text-sm font-semibold'>Ready for your review</h3><AnswerBlock block={block} actions={actions} /></section>
+        : <AnswerBlock key={`${block.type}-${index}`} block={block} actions={actions} />)}
       {body.status === 'completed' && <AnswerMeta body={body} actions={actions} />}
     </div>
   );
@@ -512,6 +522,8 @@ function ProposalCard({ proposal, actions }: { proposal: SiteAgentProposalView; 
           <Button type='button' variant='quiet' size='sm' className='min-h-9 px-3' disabled={busy !== null || !target} onClick={() => void dismiss()}>
             Dismiss
           </Button>
+          {actions.latest && actions.onAsk && <Button type='button' variant='quiet' size='sm' className='min-h-9 px-3' disabled={busy !== null} onClick={() => actions.onAsk?.(`Revise the proposed change to ${view.name}. Show me the updated result for review.`)}>Ask Rafii to revise</Button>}
+          {scheduling && view.variantId && <SafeLink href={`/app/queue?view=drafts&draft=${encodeURIComponent(view.variantId)}`} onNavigate={actions.onNavigate} className='rafii-focus inline-flex min-h-9 items-center text-sm underline underline-offset-2'>Edit draft</SafeLink>}
           <span className='text-muted-foreground text-[11px]'>Nothing changes until you apply it.</span>
         </div>
       )}

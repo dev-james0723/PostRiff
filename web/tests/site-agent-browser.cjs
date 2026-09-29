@@ -3,7 +3,7 @@
  * header and ⌘J/Ctrl+J on every page; the conversation survives navigation and a reload; answers read the page's
  * selected item; a scheduling proposal is applied through the real review command and waits for approval; Escape
  * returns focus to the launcher; the help pages hand a question to the panel; desktop docks, tablet slides in, phone
- * opens a drawer; no page scrolls sideways; axe finds no serious or critical issue in the open panel; the avatar's
+ * opens full screen; no page scrolls sideways; axe finds no serious or critical issue in the open panel; the avatar's
  * thinking ring stops under reduced motion.
  *
  *   node web/tests/site-agent-browser.cjs [--browser=chromium|webkit] [--out=dir] [--shots=off] [--sections=desktop,help,tablet,phone]
@@ -88,7 +88,7 @@ async function context(browser, viewport, extra = {}) {
     localStorage.setItem('postriff-onboarding', tours);
     document.addEventListener('DOMContentLoaded', () => {
       const style = document.createElement('style');
-      style.textContent = '.tsqd-parent-container{display:none!important}';
+      style.textContent = '.tsqd-parent-container,nextjs-portal{display:none!important}';
       document.head.appendChild(style);
     });
   }, { id: principal, tours: TOURS });
@@ -245,6 +245,25 @@ async function axe(page) {
     check('desktop: axe finds no serious or critical issue in the open panel', violations.length === 0, violations);
     check('desktop: nothing scrolls sideways with the panel open', await noSideScroll(page));
     await shot(page, 'site-agent-desktop-docked.png');
+    if (want('phone')) {
+      // Keep this tab's session conversation while inspecting the server-backed results at mobile width.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForFunction(() => document.querySelector('#rafii-panel')?.tagName !== 'ASIDE', null, { timeout: 30000 });
+      await panel(page).waitFor({ state: 'visible', timeout: 30000 });
+      const progress = panel(page).locator('[data-rafii-execution]').first();
+      const review = panel(page).locator('[data-rafii-review]').first();
+      await progress.waitFor({ timeout: 60000 });
+      await progress.scrollIntoViewIfNeeded();
+      check('phone: the compound request retains server-backed step status', (await progress.locator('[data-step-status="needs_you"]').count()) > 0);
+      await shot(page, 'rafii-execution-mobile.png');
+      await review.waitFor({ timeout: 60000 });
+      await review.scrollIntoViewIfNeeded();
+      check('phone: the saved proposal remains readable in its review card', /Ready for your review/.test(await review.innerText()));
+      await shot(page, 'rafii-result-review-mobile.png');
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForFunction(() => document.querySelector('#rafii-panel')?.tagName === 'ASIDE', null, { timeout: 30000 });
+      await panel(page).waitFor({ state: 'visible', timeout: 30000 });
+    }
     await composer(page).focus();
     await page.keyboard.press('Escape');
     await panel(page).waitFor({ state: 'hidden', timeout: 10000 });
@@ -292,17 +311,33 @@ async function axe(page) {
     }
 
     if (want('phone')) {
-    // --- phone: a drawer, a 16px composer (no zoom on focus), no sideways scroll; reduced motion ------------------------
+    // --- phone: full viewport, context, capability sheet, 16px composer and reduced motion -------------------------------
     const phone = await context(browser, { width: 390, height: 844 }, { reducedMotion: 'reduce' });
     const ppage = await phone.newPage();
     await ppage.goto(`${base}/app/calendar`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(ppage);
     await launcher(ppage).click();
     await panel(ppage).waitFor({ state: 'visible', timeout: 30000 });
+    await panel(ppage).getByRole('button', { name: 'More Rafii options' }).click();
+    const options = panel(ppage).getByRole('group', { name: 'Rafii options' });
+    check('phone: model, account, credit and style controls remain reachable',
+      (await options.getByRole('link', { name: 'Model settings' }).count()) === 1
+      && (await options.getByRole('link', { name: 'Connected accounts' }).count()) === 1
+      && (await options.getByRole('link', { name: 'Usage & plan' }).count()) === 1
+      && (await options.getByRole('button', { name: /Rafii style/ }).count()) === 1);
+    await panel(ppage).getByRole('button', { name: 'New conversation' }).click();
+    check('phone: default view has no ambiguous Custom control or permanent phone controls', !/\bCustom\b/.test(await panel(ppage).innerText()) && (await panel(ppage).getByText('Have Rafii call me').count()) === 0);
+    check('phone: current page is visible and expandable', (await panel(ppage).getByText('Viewing Calendar').count()) === 1);
+    await shot(ppage, 'rafii-chat-home-mobile.png');
+    await panel(ppage).getByRole('button', { name: 'Add or create' }).click();
+    const addSheet = ppage.locator('[data-rafii-capabilities]');
+    check('phone: capability sheet exposes reachable creation and source actions', (await addSheet.getAttribute('aria-label')) === 'Add to Rafii' && (await addSheet.getByRole('link', { name: 'Library' }).count()) === 1);
+    await shot(ppage, 'rafii-plus-sheet-mobile.png');
+    await ppage.keyboard.press('Escape');
     const fontSize = await composer(ppage).evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     check('phone: the composer is 16px so iOS does not zoom', fontSize >= 16, fontSize);
     const box = await panel(ppage).boundingBox();
-    check('phone: the drawer fits the screen width', box && box.width <= 390 + 1, box);
+    check('phone: chat fills the mobile viewport', box && box.width >= 389 && box.width <= 391 && box.height >= 843, box);
     await composer(ppage).fill('What is scheduled this week?');
     await composer(ppage).press('Enter');
     const ring = await ppage.evaluate(() => {
@@ -319,6 +354,10 @@ async function axe(page) {
     const composerBox = await composer(ppage).boundingBox();
     check('phone: after an answer the composer is fully on screen', Boolean(composerBox) && composerBox.y >= 0 && composerBox.y + composerBox.height <= 844, composerBox);
     await shot(ppage, 'site-agent-phone.png');
+    await ppage.setViewportSize({ width: 390, height: 520 });
+    const smallPanel = await panel(ppage).boundingBox();
+    const smallComposer = await composer(ppage).boundingBox();
+    check('phone: composer stays above a reduced visible viewport', Boolean(smallPanel && smallComposer) && smallPanel.height <= 521 && smallComposer.y + smallComposer.height <= 520, { smallPanel, smallComposer });
     await phone.close();
     }
   } finally {

@@ -1,0 +1,53 @@
+{
+  "base": "http://127.0.0.1:3190",
+  "results": [
+    {
+      "name": "synthetic harness offers Live voice",
+      "ok": true
+    },
+    {
+      "name": "Live begins as a distinct, full-height screen with current context",
+      "ok": true
+    },
+    {
+      "name": "the supplied Meshy raccoon loads as the Live 3D model",
+      "ok": true
+    },
+    {
+      "name": "first Live call asks for a style before starting",
+      "ok": true
+    },
+    {
+      "name": "Live uses the scriptable local transport",
+      "ok": true
+    },
+    {
+      "name": "Live reports listening",
+      "ok": true
+    },
+    {
+      "name": "Live reports speaking from output events",
+      "ok": true
+    },
+    {
+      "name": "Stop speaking marks the transcript as interrupted",
+      "ok": true
+    },
+    {
+      "name": "Mute is visibly pressed and the microphone is off",
+      "ok": true
+    },
+    {
+      "name": "keyboard fallback returns to a usable composer",
+      "ok": true
+    },
+    {
+      "name": "Live call remains connected across mode changes",
+      "ok": true
+    },
+    {
+      "name": "End live conversation closes the session",
+      "ok": true
+    }
+  ]
+}
