@@ -34,6 +34,28 @@ test('audio bands resample to the exact number of visible thread clusters', () =
   assert.equal(audio.resampleBands([0.2, 0.8], 1)[0], 0.5);
 });
 
+test('spectral flux spikes on a fresh onset and falls on a steady frame', () => {
+  const previous = new Float32Array(4);
+  const onset = audio.spectralFlux(Uint8Array.from([0, 255, 255, 0]), previous);
+  const steady = audio.spectralFlux(Uint8Array.from([0, 255, 255, 0]), previous);
+  assert.ok(onset > 0.5);
+  assert.equal(steady, 0);
+});
+
+test('global music level moves the whole rail even when local spectrum is sparse', () => {
+  const points = audio.buildRailMotion({
+    count: 12,
+    activeIndex: 5,
+    level: 0.55,
+    transient: 0.35,
+    bands: [1, 0, 0, 0, 0, 0],
+    tickMs: 1200
+  });
+  assert.equal(points.length, 12);
+  assert.ok(points.every((point, index) => point.width > (index === 5 ? 8 : 6)));
+  assert.ok(points.every((point) => point.opacity > 0.5));
+});
+
 test('external playback capture has priority over Rafii-owned media frames', () => {
   const store = audio.useAudioReactive;
   store.getState().setExternalState('active');
@@ -77,4 +99,16 @@ test('Rafii-owned cross-origin media opts into CORS before Web Audio analysis', 
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'features', 'now-playing', 'now-playing-bar.tsx'), 'utf8');
   assert.match(source, /element\.crossOrigin = 'anonymous';\s*element\.src = track\.url;/);
   assert.match(source, /<video ref=\{video\} crossOrigin='anonymous'/);
+});
+
+
+test('audio meter uses faster whole-rail response tuning', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'lib', 'media', 'audio-reactive.ts'),
+    'utf8'
+  );
+  assert.match(source, /smoothingTimeConstant = 0\.54/);
+  assert.match(source, /now - this\.lastCommit >= 22/);
+  assert.match(source, /globalPulse \* 0\.58/);
+  assert.match(source, /travellingTransient \* 0\.1/);
 });

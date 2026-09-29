@@ -14,8 +14,16 @@ interface AudioReactiveState {
   active: boolean;
   level: number;
   bands: number[];
+  transient: number;
+  tickMs: number;
   externalState: ExternalAudioState;
-  setFrame: (source: Exclude<AudioReactiveSource, 'none'>, level: number, bands: number[]) => void;
+  setFrame: (
+    source: Exclude<AudioReactiveSource, 'none'>,
+    level: number,
+    bands: number[],
+    transient?: number,
+    tickMs?: number
+  ) => void;
   deactivate: (source: Exclude<AudioReactiveSource, 'none'>) => void;
   setExternalState: (state: ExternalAudioState) => void;
 }
@@ -25,25 +33,41 @@ export const useAudioReactive = create<AudioReactiveState>((set) => ({
   active: false,
   level: 0,
   bands: EMPTY_BANDS,
+  transient: 0,
+  tickMs: 0,
   externalState: 'idle',
-  setFrame: (source, level, bands) =>
+  setFrame: (source, level, bands, transient = 0, tickMs = 0) =>
     set((state) => {
       // A person explicitly sharing system/tab audio wins over Rafii-owned playback.
       if (source === 'rafii' && state.source === 'external' && state.externalState === 'active')
         return state;
-      return { source, active: true, level, bands };
+      return { source, active: true, level, bands, transient, tickMs };
     }),
   deactivate: (source) =>
     set((state) =>
       state.source === source
-        ? { source: 'none', active: false, level: 0, bands: EMPTY_BANDS }
+        ? {
+            source: 'none',
+            active: false,
+            level: 0,
+            bands: EMPTY_BANDS,
+            transient: 0,
+            tickMs: 0
+          }
         : state
     ),
   setExternalState: (externalState) =>
     set((state) => ({
       externalState,
       ...(externalState === 'idle' && state.source === 'external'
-        ? { source: 'none' as const, active: false, level: 0, bands: EMPTY_BANDS }
+        ? {
+            source: 'none' as const,
+            active: false,
+            level: 0,
+            bands: EMPTY_BANDS,
+            transient: 0,
+            tickMs: 0
+          }
         : {})
     }))
 }));
@@ -88,6 +112,92 @@ export function resampleBands(bands: readonly number[], count: number): number[]
   });
 }
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function easeOutCubic(value: number): number {
+  const t = clamp01(value);
+  return 1 - (1 - t) ** 3;
+}
+
+export function spectralFlux(current: ArrayLike<number>, previous: Float32Array): number {
+  if (!current.length || !previous.length) return 0;
+  const length = Math.min(current.length, previous.length);
+  let flux = 0;
+  for (let index = 0; index < length; index += 1) {
+    const value = Number(current[index] ?? 0) / 255;
+    const delta = value - previous[index];
+    if (delta > 0) flux += delta;
+    previous[index] = value;
+  }
+  return Math.min(1, flux / Math.max(1, length * 0.1));
+}
+
+export interface RailMotionPoint {
+  width: number;
+  height: number;
+  opacity: number;
+  translateX: number;
+  borderRadius: string;
+}
+
+export function buildRailMotion({
+  count,
+  activeIndex,
+  level,
+  transient,
+  bands,
+  tickMs
+}: {
+  count: number;
+  activeIndex: number;
+  level: number;
+  transient: number;
+  bands: readonly number[];
+  tickMs: number;
+}): RailMotionPoint[] {
+  if (count <= 0) return [];
+
+  const localBands = resampleBands(bands, count);
+  const phase = (tickMs / 1000) * 8.6;
+  const globalPulse = easeOutCubic(level);
+
+  return Array.from({ length: count }, (_, index) => {
+    const position = count <= 1 ? 0 : index / (count - 1);
+    const bodyWave =
+      (0.5 + 0.5 * Math.sin(phase - position * 4.4)) * globalPulse;
+    const travellingTransient =
+      (0.5 + 0.5 * Math.sin(phase * 1.35 - position * 9.2)) * clamp01(transient);
+    const texture = clamp01(localBands[index] ?? 0);
+    const focus =
+      activeIndex >= 0
+        ? Math.max(0, 1 - Math.abs(index - activeIndex) / Math.max(4, count * 0.22))
+        : 0;
+
+    // Most motion is shared by the whole rail. Spectrum adds texture instead of deciding
+    // which vertical section is allowed to move, so bass-heavy tracks animate end to end.
+    const energy = clamp01(
+      globalPulse * 0.58 +
+        bodyWave * 0.17 +
+        texture * 0.15 +
+        travellingTransient * 0.1
+    );
+    const base = index === activeIndex ? 8 : 6;
+
+    return {
+      width: base + energy * 19 + focus * 2,
+      height: base + energy * 4.5,
+      opacity: clamp01((index === activeIndex ? 0.92 : 0.5) + energy * 0.42),
+      translateX: energy * 1.2 + travellingTransient * 1.5,
+      borderRadius:
+        energy > 0.05
+          ? `${52 + energy * 18}% ${48 - energy * 12}% ${56 - energy * 8}% ${44 + energy * 12}%`
+          : '9999px'
+    };
+  });
+}
+
 function rootMeanSquare(samples: Uint8Array<ArrayBuffer>): number {
   if (!samples.length) return 0;
   let sum = 0;
@@ -102,6 +212,9 @@ class BrowserAudioMeter {
   private frame: number | null = null;
   private enabled = false;
   private lastCommit = 0;
+  private previousSpectrum: Float32Array;
+  private smoothedLevel = 0;
+  private smoothedTransient = 0;
 
   constructor(
     private readonly source: Exclude<AudioReactiveSource, 'none'>,
@@ -110,9 +223,10 @@ class BrowserAudioMeter {
   ) {
     this.analyser = analyser;
     this.analyser.fftSize = 512;
-    this.analyser.smoothingTimeConstant = 0.78;
+    this.analyser.smoothingTimeConstant = 0.54;
     this.frequency = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
     this.timeDomain = new Uint8Array(new ArrayBuffer(this.analyser.fftSize));
+    this.previousSpectrum = new Float32Array(this.analyser.frequencyBinCount);
   }
 
   setEnabled(enabled: boolean) {
@@ -137,13 +251,25 @@ class BrowserAudioMeter {
     this.frame = null;
     if (!this.enabled) return;
 
-    // 30 fps is enough for a fluid rail and avoids turning navigation into a 60 fps React render loop.
-    if (now - this.lastCommit >= 33) {
+    // ~45 fps keeps the rail fast enough to feel coupled to the music without forcing a 60 fps React loop.
+    if (now - this.lastCommit >= 22) {
       this.analyser.getByteFrequencyData(this.frequency);
       this.analyser.getByteTimeDomainData(this.timeDomain);
-      useAudioReactive
-        .getState()
-        .setFrame(this.source, rootMeanSquare(this.timeDomain), collapseSpectrum(this.frequency));
+
+      const rawLevel = rootMeanSquare(this.timeDomain);
+      const levelBlend = rawLevel > this.smoothedLevel ? 0.62 : 0.2;
+      this.smoothedLevel += (rawLevel - this.smoothedLevel) * levelBlend;
+
+      const rawTransient = spectralFlux(this.frequency, this.previousSpectrum);
+      this.smoothedTransient = Math.max(rawTransient, this.smoothedTransient * 0.74);
+
+      useAudioReactive.getState().setFrame(
+        this.source,
+        this.smoothedLevel,
+        collapseSpectrum(this.frequency),
+        this.smoothedTransient,
+        now
+      );
       this.lastCommit = now;
     }
     this.frame = requestAnimationFrame(this.tick);

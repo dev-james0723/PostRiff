@@ -7,7 +7,7 @@ import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { NavigationItem } from '@/lib/api/types';
-import { resampleBands, startExternalAudioSync, stopExternalAudioSync, useAudioReactive } from '@/lib/media/audio-reactive';
+import { buildRailMotion, startExternalAudioSync, stopExternalAudioSync, useAudioReactive } from '@/lib/media/audio-reactive';
 import { relativeTime } from '@/lib/time';
 import { clusterNavigation, MARKER_LABELS, navigationId } from './markers';
 
@@ -28,9 +28,26 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
   const audioActive = useAudioReactive((state) => state.active);
   const audioLevel = useAudioReactive((state) => state.level);
   const audioBands = useAudioReactive((state) => state.bands);
+  const audioTransient = useAudioReactive((state) => state.transient);
+  const audioTickMs = useAudioReactive((state) => state.tickMs);
   const audioSource = useAudioReactive((state) => state.source);
   const externalState = useAudioReactive((state) => state.externalState);
-  const groupEnergy = useMemo(() => resampleBands(audioBands, groups.length), [audioBands, groups.length]);
+  const activeGroupIndex = useMemo(
+    () => groups.findIndex((group) => group.some((item) => navigationId(item) === active)),
+    [active, groups]
+  );
+  const railMotion = useMemo(
+    () =>
+      buildRailMotion({
+        count: groups.length,
+        activeIndex: activeGroupIndex,
+        level: audioLevel,
+        transient: audioTransient,
+        bands: audioBands,
+        tickMs: audioTickMs
+      }),
+    [activeGroupIndex, audioBands, audioLevel, audioTickMs, audioTransient, groups.length]
+  );
 
   useEffect(() => {
     if (!renderedIds.length || typeof IntersectionObserver === 'undefined') return;
@@ -91,10 +108,15 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
             const selected = group.some((item) => navigationId(item) === active);
             const first = group[0];
             const preview = first.excerpt ? (first.excerpt.length > 88 ? `${first.excerpt.slice(0, 88)}…` : first.excerpt) : 'No text';
-            const energy = audioActive && !reduceMotion ? Math.min(1, (groupEnergy[index] ?? 0) * 0.86 + audioLevel * 0.14) : 0;
-            const base = selected ? 8 : 6;
-            const width = base + energy * 22;
-            const height = base + energy * 5;
+            const motion = audioActive && !reduceMotion
+              ? railMotion[index]
+              : {
+                  width: selected ? 8 : 6,
+                  height: selected ? 8 : 6,
+                  opacity: selected ? 1 : 0.58,
+                  translateX: 0,
+                  borderRadius: '9999px'
+                };
             return (
               <div key={navigationId(first)} className='group relative flex w-11 justify-end'>
                 <button type='button' aria-label={`${MARKER_LABELS[first.kind]}, turn ${first.seq}${group.length > 1 ? `, ${group.length} turns` : ''}`}
@@ -103,13 +125,14 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
                   onClick={() => group.length === 1 ? jump(first) : setClusterOpen(clusterOpen === index ? null : index)}>
                   <span aria-hidden className='block bg-current motion-reduce:transition-none'
                     style={{
-                      width: `${width}px`,
-                      height: `${height}px`,
-                      borderRadius: energy > 0.05 ? `${52 + energy * 18}% ${48 - energy * 12}% ${56 - energy * 8}% ${44 + energy * 12}%` : '9999px',
-                      opacity: selected ? 1 : 0.58 + energy * 0.36,
-                      transform: energy > 0.05 ? `translateX(${energy * 1.5}px)` : undefined,
+                      width: `${motion.width}px`,
+                      height: `${motion.height}px`,
+                      borderRadius: motion.borderRadius,
+                      opacity: selected ? 1 : motion.opacity,
+                      transform: motion.translateX > 0 ? `translateX(${motion.translateX}px)` : undefined,
                       transformOrigin: 'right center',
-                      transition: 'width 70ms linear, height 70ms linear, border-radius 100ms ease, opacity 100ms linear, transform 70ms linear',
+                      transition: 'width 38ms linear, height 38ms linear, border-radius 55ms ease-out, opacity 45ms linear, transform 38ms linear',
+                      willChange: audioActive && !reduceMotion ? 'width, height, transform' : undefined,
                     }} />
                 </button>
                 <div className='rafii-elevated pointer-events-none absolute top-1/2 right-full z-20 mr-2 hidden w-52 -translate-y-1/2 rounded-lg p-2 text-xs group-hover:block group-focus-within:block'>
