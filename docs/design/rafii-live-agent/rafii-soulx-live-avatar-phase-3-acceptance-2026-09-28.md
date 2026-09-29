@@ -7,7 +7,7 @@
 ## Starting state and scope
 
 - Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-soulx-avatar/James-Au-Studio`.
-- Starting and final feature implementation tip: `9aeaccab221438a29c8db4f23325bd30ea1e9f45` on `codex/rafii-soulx-avatar-20260928`; Phase 1 `394c2d4`, Phase 2 `69734ca`. No implementation code changed in this attempt. This report is the only intended new commit.
+- Starting and final feature implementation tip: `9aeaccab221438a29c8db4f23325bd30ea1e9f45` on `codex/rafii-soulx-avatar-20260928`; Phase 1 `394c2d4`, Phase 2 `69734ca`. No implementation code changed in this attempt; only this acceptance report changed.
 - Remote `origin` default/canonical release branch at audit time: `consumer-saas`, `ee688397dd39d9cf3df6c99f22c488fa355b54ee`. It was not modified.
 - Read-only production inspection found deployment `dpl_28Qi5dkEdjiSk41K5jJs599eZLSU` in `READY` state on `postriff-phase2-private.vercel.app`, sourced from `consumer-saas` at exactly `ee688397dd39d9cf3df6c99f22c488fa355b54ee`. This matches the audited canonical branch tip. It predates this acceptance attempt and does not contain the SoulX feature.
 - Reference: `web/public/raffi/avatar-256.png`, SHA-256 `6ac56752cb008d6dc27640cc53567fd724a4cd9068123289e8705683b88d792f`. SoulX source checkout was at `9bc03de06bb0de82cd6bc477804512ae06144bf2`.
@@ -17,9 +17,9 @@
 
 ## Paid-resource and credential preflight
 
-- RunPod console redirected to sign-in. The available GitHub path stopped at an OAuth consent screen asking to share read-only email/profile with RunPod; no consent was submitted, no account or balance was verified, and no pod was provisioned. Any account funding minimum/tax remains unknown. The sign-in tab was left for the account holder.
+- The user explicitly authorized RunPod's GitHub OAuth request for read-only email/profile access, and sign-in completed. The [RunPod Billing screen](https://console.runpod.io/user/billing) showed a **$0.00 balance**, **no payment methods**, and, when a custom **$3** credit amount was entered, the validation message **“The minimum transaction is $10.”** Auto-Pay remained disabled. No card was entered or saved, no charge was submitted, and no pod was provisioned. A $10 required top-up exceeds the approved $3 incremental-spend cap, so the paid path stopped at this gate.
 - No `RUNPOD_API_KEY`, `RUNPOD_API_TOKEN`, or `OPENAI_API_KEY` was injected into this task's shell. The existing local Rafii `.env.local` has no `OPENAI_API_KEY` entry. Vercel's **development** environment did not inject one through `vercel env run`; its **production** secret is protected from CLI injection (`37 Secret values cannot be pulled`), and no value was revealed or copied. No delegated billing path was created.
-- Without an accessible RunPod account and an authorized usable local Live credential, the approved real acceptance run could not start. Spending on a GPU before the Live path was available was avoided.
+- RunPod access is now verified, but its $10 minimum funding requirement exceeds the hard cap and no authorized usable local Live credential was available. The approved real acceptance run could not start. No GPU deployment was attempted.
 - **Actual incremental direct spend: USD $0.00.** RunPod pods created: 0. GPU runtime: 0. GPT Live usage: 0 minutes. Resource termination: not applicable; no paid resource was started. No tunnel was opened.
 - Current public list rates, **not incurred**: [RunPod Secure Cloud RTX 4090 $0.74/hour and container disk $0.10/GB/month](https://www.runpod.io/pricing); [OpenAI `gpt-live-1` $0.05/minute, with backend/tool charges separate](https://platform.openai.com/pricing). A two-hour pod and 20 Live minutes would be about $2.49 before account fees/tax or any separate backend calls; the approved $3.00 hard cap still governs an eventual attempt. Account-specific charges must be checked before provisioning.
 
@@ -58,6 +58,6 @@ No real-run recording, image sequence, timing JSON, GPU log, or visual acceptanc
 
 ## Smallest next action and release condition
 
-The account holder must complete the RunPod sign-in/consent flow and confirm that any required balance, deposit, fees, or tax keep incremental spend within **USD $3.00**, and make an already-authorized `OPENAI_API_KEY` available to the Rafii acceptance runtime through a secure process injection. Do not paste the value into a chat or file. Recheck prices and availability, then run the pinned setup on exactly one Secure Cloud RTX 4090, the real GPT Live scenarios, five-minute stability test, visual review, and measured report within the approved lifetime/usage limits. Terminate the pod immediately after the run.
+Under the present **USD $3.00** cap, this RunPod account cannot be funded: its minimum credit purchase is $10 and its balance is $0.00. A human must arrange sufficient pre-existing credit without violating the incremental-spend cap, or explicitly revise the budget in a later instruction. Separately, make an already-authorized `OPENAI_API_KEY` available to the Rafii acceptance runtime through a secure process injection; do not paste its value into a chat or file. Only after both blockers are resolved, recheck prices and availability, run the pinned setup on exactly one Secure Cloud RTX 4090, complete the real GPT Live scenarios, five-minute stability test, visual review, and measured report within the then-authorized lifetime/usage limits, and terminate the pod immediately.
 
 Only a **passing** real gate permits integration into the then-current canonical release branch, a second integrated-tree regression/build, push, production deployment at the exact commit, and Phase 4 canary guidance. For this attempt: **not merged, not deployed, default OFF, Phase 4 canary NOT READY**.
