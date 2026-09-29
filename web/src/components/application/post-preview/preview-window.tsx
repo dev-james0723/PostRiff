@@ -182,7 +182,7 @@ export function PreviewWindow({ active, available, label, onDock, children }: {
             style={{ left: dock.x, top: dock.y, width: dock.width, height: dock.height, opacity: candidate ? 1 : 0.35 }}>
             <span className='bg-background absolute inset-x-2 top-2 rounded-md p-3 text-center text-xs text-foreground'>{candidate ? 'Release to dock' : 'Original preview position'}</span>
           </div>}
-          <section data-preview-window data-mode={state.mode} role='region' aria-label='Post preview window' aria-hidden={!visible} inert={!visible}
+          <section data-preview-window data-mode={state.mode} aria-label='Post preview window' aria-hidden={!visible} inert={!visible}
             className='border-border bg-background text-foreground fixed z-30 flex flex-col overflow-hidden rounded-2xl border'
             style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height, visibility: visible ? 'visible' : 'hidden',
               pointerEvents: visible ? 'auto' : 'none', boxShadow: state.mode === 'floating' ? '0 18px 48px -18px rgb(0 0 0 / 0.32)' : 'none',
