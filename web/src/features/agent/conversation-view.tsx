@@ -37,6 +37,7 @@ import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
+import { PreviewWindow } from '@/components/application/post-preview/preview-window';
 import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { STATUS } from '@/lib/status-labels';
@@ -151,7 +152,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const snapshot = useSnapshot();
   const navigationConversations = useInfiniteQuery({
     queryKey: [...keys.conversations(workspaceId), 'navigation-pages'], initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, pageParam),
+    queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, conversationId, pageParam),
     getNextPageParam: (page) => page.nextCursor ?? undefined, enabled: Boolean(workspaceId)
   });
   const windowQuery = useInfiniteQuery({
@@ -445,7 +446,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
         void client.invalidateQueries({ queryKey: keys.memory(workspaceId) });
       } else if (result.status === 'automation') {
-        // A request for recurring drafts opened no run; the reply carries the automation it set up.
+        // A request for recurring drafts: the automation it set up.
         void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
@@ -467,10 +468,10 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   }
 
   return (
-    <PageContainer className='pt-4 md:pt-6'>
-      <div className='grid gap-6 lg:grid-cols-[14rem_1fr] xl:grid-cols-[14rem_1fr_21rem]'>
+    <PageContainer className='@container/conversation pt-4 md:pt-6'>
+      <div data-conversation-layout className='grid gap-6 @min-[44rem]/conversation:grid-cols-[minmax(0,1fr)_16rem] @min-[72rem]/conversation:grid-cols-[14rem_minmax(0,1fr)_21rem]'>
         {/* Conversations */}
-        <aside className='hidden lg:flex lg:flex-col lg:gap-2' aria-label='Conversations'>
+        <aside className='hidden @min-[72rem]/conversation:flex @min-[72rem]/conversation:flex-col @min-[72rem]/conversation:gap-2' aria-label='Conversations'>
           <div className='flex items-center justify-between px-1'>
             <span className='rafii-eyebrow'>Conversations</span>
             <Link href='/app?new=1' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center gap-1 rounded-md text-xs'>
@@ -742,7 +743,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         </section>
 
         {/* Inspector */}
-        <aside className='hidden xl:block' aria-label='Inspector'>
+        <aside className='order-first hidden min-w-0 md:block @min-[44rem]/conversation:order-none' aria-label='Inspector'>
+          <div className='sticky top-[4.5rem]'>
           <SegmentedControl
             pattern='tabs'
             label='Inspector'
@@ -754,19 +756,19 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               { value: 'sources', label: `Sources · ${sources.length}` }
             ]}
           />
-          {inspectorTab === 'preview' ? (
-            <div role='tabpanel' id='conversation-inspector-preview' aria-label='Preview' className='mt-3 flex flex-col items-center gap-3'>
-              {variants[variantIndex] ? (
-                <>
-                  <p className='text-muted-foreground w-full text-xs'>{destinationLabel(variants[variantIndex])}</p>
-                  {/* Keyed by draft so switching tabs draws the other app instead of morphing this one. */}
-                  <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}:${variants[variantIndex].channelId ?? ''}`} scale={0.7} {...draftFor(variants[variantIndex])} />
-                </>
-              ) : (
-                <StateMessage kind='empty' title='Nothing to preview yet' />
-              )}
-            </div>
-          ) : (
+          <div role='tabpanel' id='conversation-inspector-preview' aria-label='Preview' aria-hidden={inspectorTab !== 'preview'} className='mt-3'>
+            <PreviewWindow
+              active={inspectorTab === 'preview'}
+              available={Boolean(variants[variantIndex])}
+              label={variants[variantIndex] ? destinationLabel(variants[variantIndex]) : 'Draft preview'}
+              onDock={() => setInspectorTab('preview')}
+            >
+              {(scale) => variants[variantIndex] ? (
+                <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}:${variants[variantIndex].channelId ?? ''}`} scale={scale} {...draftFor(variants[variantIndex])} />
+              ) : null}
+            </PreviewWindow>
+          </div>
+          {inspectorTab === 'sources' && (
             <div role='tabpanel' id='conversation-inspector-sources' aria-label='Sources' className='mt-3 flex flex-col gap-2'>
               {sources.length === 0 ? (
                 <StateMessage kind='empty' title='No sources yet' />
@@ -788,6 +790,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               </Button>
             </div>
           )}
+          </div>
         </aside>
       </div>
     </PageContainer>
