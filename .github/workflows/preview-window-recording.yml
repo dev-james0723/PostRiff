@@ -1,0 +1,51 @@
+name: Record Rafii preview videos
+on:
+  push:
+    branches: ['codex/preview-window-recording-20260929']
+    paths:
+      - 'web/tests/preview-window-recording.*'
+      - '.github/workflows/preview-window-recording.yml'
+permissions:
+  contents: read
+concurrency:
+  group: rafii-preview-recording
+  cancel-in-progress: true
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      PREVIEW_EVIDENCE_DIR: /tmp/rafii-recordings
+    steps:
+      - name: Read exact public recording commit without credentials
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p /tmp/rafii-recordings
+          git rev-parse HEAD > /tmp/rafii-recordings/recording-harness-commit.txt
+          echo 'Product source pinned at 08bbd52d7d34b308c8cd1601d896cb3257458a52; no product component changes.' > /tmp/rafii-recordings/provenance.txt
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - name: Install recording browser
+        working-directory: web
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Record actual components with sample content
+        run: node web/tests/preview-window-recording.cjs
+      - name: Retain screen recordings and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafii-screen-recordings-${{ github.sha }}
+          path: /tmp/rafii-recordings/
+          retention-days: 3
