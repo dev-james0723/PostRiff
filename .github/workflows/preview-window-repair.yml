@@ -1,8 +1,8 @@
 name: Preview window repair and validation
 on:
-  push:
-    branches: ['codex/conversation-preview-window-20260929']
-    paths: ['.github/workflows/preview-window-repair.yml']
+  pull_request:
+    types: [opened, reopened]
+    branches: [consumer-saas]
 permissions:
   contents: read
 concurrency:
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   repair:
-    if: github.repository == 'dev-james0723/PostRiff' && github.ref == 'refs/heads/codex/conversation-preview-window-20260929'
+    if: github.repository == 'dev-james0723/PostRiff' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/conversation-preview-window-20260929'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -20,6 +20,8 @@ jobs:
       NEXT_PUBLIC_SENTRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
@@ -58,6 +60,7 @@ jobs:
           git diff --check
           git diff -- web/src/features/agent/conversation-view.tsx
       - name: Verify regression tests are green
+        shell: bash
         run: node --test web/tests/preview-window.test.cjs | tee /tmp/preview-evidence/green.txt
       - name: Commit the scoped fix to this feature branch only
         shell: bash
@@ -67,9 +70,11 @@ jobs:
           git push origin HEAD:refs/heads/codex/conversation-preview-window-20260929
           git rev-parse HEAD | tee /tmp/preview-evidence/source-sha.txt
       - name: Full application typecheck
+        shell: bash
         run: npm --prefix web run typecheck 2>&1 | tee /tmp/preview-evidence/typecheck.txt
       - name: Application lint
         if: success() || failure()
+        shell: bash
         run: npm --prefix web run lint 2>&1 | tee /tmp/preview-evidence/lint.txt
       - name: Retain repair and validation evidence
         if: always()
