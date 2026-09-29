@@ -4,7 +4,7 @@
  * The ＋ menu (chat-context SPEC §4.2). One attachment system owns local media, workspace references,
  * explicit skills and on-demand productivity connector picks. Connector content is never background-synced.
  */
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react';
 
 import { Icons } from '@/components/icons';
 import {
@@ -37,12 +37,14 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { LIMITS, type Chip } from './chips';
 import type { PickerCategory } from './matcher';
 import { LibraryGrid } from './library-grid';
+import { PostPickerPreview } from './post-picker-preview';
 import {
   pickerItems,
   type ConnectorItemLike,
   type PickerItem,
   type SkillLike
 } from './picker-items';
+import { SkillPreviewReader } from './skill-preview-reader';
 import { usePickerSearch } from './use-picker-search';
 
 export type PlusView =
@@ -118,6 +120,94 @@ function useWideFinePointer(): boolean {
   return wide;
 }
 
+const POST_HOLD_MS = 450;
+const POST_HOLD_MOVE_PX = 10;
+
+function PostSearchRow({
+  item,
+  onPick,
+  onPreview
+}: {
+  item: PickerItem;
+  onPick: (item: PickerItem) => void;
+  onPreview: (item: PickerItem) => void;
+}) {
+  const timer = useRef<number | null>(null);
+  const origin = useRef<{ x: number; y: number } | null>(null);
+  const held = useRef(false);
+
+  const cancelTimer = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    origin.current = null;
+  };
+
+  useEffect(() => cancelTimer, []);
+
+  const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    cancelTimer();
+    held.current = false;
+    origin.current = { x: event.clientX, y: event.clientY };
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      held.current = true;
+      onPreview(item);
+    }, POST_HOLD_MS);
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const start = origin.current;
+    if (!start) return;
+    if (
+      Math.abs(event.clientX - start.x) > POST_HOLD_MOVE_PX ||
+      Math.abs(event.clientY - start.y) > POST_HOLD_MOVE_PX
+    ) {
+      cancelTimer();
+    }
+  };
+
+  const choose = () => {
+    if (held.current) {
+      held.current = false;
+      return;
+    }
+    onPick(item);
+  };
+
+  return (
+    <li className='group flex min-h-11 items-center gap-1'>
+      <button
+        type='button'
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={cancelTimer}
+        onPointerCancel={cancelTimer}
+        onPointerLeave={cancelTimer}
+        onContextMenu={(event) => event.preventDefault()}
+        onClick={choose}
+        className='rafii-focus hover:bg-foreground/5 flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm [-webkit-touch-callout:none]'
+      >
+        <span className='min-w-0 flex-1 truncate'>{item.label}</span>
+        {item.sublabel ? (
+          <span className='text-muted-foreground max-w-[45%] shrink-0 truncate text-xs'>
+            {item.sublabel}
+          </span>
+        ) : null}
+      </button>
+      <button
+        type='button'
+        aria-label={'Preview ' + item.label + ' on iPhone'}
+        title='Preview post'
+        onClick={() => onPreview(item)}
+        className='rafii-focus text-muted-foreground hover:bg-foreground/5 hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-full opacity-40 transition-opacity group-hover:opacity-100 focus:opacity-100'
+      >
+        <Icons.phone aria-hidden className='size-4' />
+      </button>
+    </li>
+  );
+}
+
 function SearchView({
   view,
   snapshot,
@@ -130,6 +220,7 @@ function SearchView({
   onPick: (item: PickerItem) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [previewItem, setPreviewItem] = useState<PickerItem | null>(null);
   const spec = SEARCH[view];
   const local = useMemo(() => {
     const result = pickerItems(snapshot, owner, query, 50);
@@ -142,6 +233,7 @@ function SearchView({
     categories: spec?.groups
   });
   if (!spec) return null;
+
   return (
     <div className='flex min-h-0 flex-1 flex-col gap-3'>
       <Input
@@ -153,24 +245,44 @@ function SearchView({
         aria-label={spec.placeholder}
         className='text-base md:text-sm'
       />
+      {view === 'posts' ? (
+        <p className='text-muted-foreground px-1 text-[11px]'>Hold a post to preview</p>
+      ) : null}
       <ul className='flex min-h-0 flex-col gap-1 overflow-y-auto'>
-        {items.map((item) => (
-          <li key={`${item.kind}:${item.id}`}>
-            <button
-              type='button'
-              onClick={() => onPick(item)}
-              className='rafii-focus hover:bg-foreground/5 flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm'
-            >
-              <span className='min-w-0 flex-1 truncate'>{item.label}</span>
-              {item.sublabel ? (
-                <span className='text-muted-foreground max-w-[45%] shrink-0 truncate text-xs'>
-                  {item.sublabel}
-                </span>
-              ) : null}
-            </button>
-          </li>
-        ))}
+        {items.map((item) =>
+          item.kind === 'post' ? (
+            <PostSearchRow
+              key={item.kind + ':' + item.id}
+              item={item}
+              onPick={onPick}
+              onPreview={setPreviewItem}
+            />
+          ) : (
+            <li key={item.kind + ':' + item.id}>
+              <button
+                type='button'
+                onClick={() => onPick(item)}
+                className='rafii-focus hover:bg-foreground/5 flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm'
+              >
+                <span className='min-w-0 flex-1 truncate'>{item.label}</span>
+                {item.sublabel ? (
+                  <span className='text-muted-foreground max-w-[45%] shrink-0 truncate text-xs'>
+                    {item.sublabel}
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          )
+        )}
       </ul>
+      <PostPickerPreview
+        item={previewItem}
+        snapshot={snapshot}
+        open={Boolean(previewItem)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewItem(null);
+        }}
+      />
     </div>
   );
 }
@@ -183,24 +295,21 @@ function SkillsView({
   onPick: (item: PickerItem) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<SkillLike | null>(null);
   const items = useMemo(
     () =>
-      skills
-        .filter((skill) =>
-          [skill.name, skill.description, skill.version]
-            .join(' ')
-            .toLocaleLowerCase()
-            .includes(query.trim().toLocaleLowerCase())
-        )
-        .map<PickerItem>((skill) => ({
-          kind: 'skill',
-          id: skill.id,
-          label: skill.name,
-          sublabel: skill.description || skill.version,
-          search: [skill.description, skill.version].filter(Boolean).join('\n')
-        })),
+      skills.filter((skill) =>
+        [skill.name, skill.description, skill.version]
+          .join(' ')
+          .toLocaleLowerCase()
+          .includes(query.trim().toLocaleLowerCase())
+      ),
     [query, skills]
   );
+
+  if (selected) {
+    return <SkillPreviewReader skill={selected} onBack={() => setSelected(null)} onUse={onPick} />;
+  }
 
   return (
     <div className='flex min-h-0 flex-1 flex-col gap-3'>
@@ -215,20 +324,23 @@ function SkillsView({
       />
       {items.length ? (
         <ul className='flex min-h-0 flex-col gap-1 overflow-y-auto'>
-          {items.map((item) => (
-            <li key={item.id}>
+          {items.map((skill) => (
+            <li key={skill.id}>
               <button
                 type='button'
-                onClick={() => onPick(item)}
+                onClick={() => setSelected(skill)}
                 className='rafii-focus hover:bg-foreground/5 flex min-h-11 w-full items-center gap-3 rounded-md px-2 py-2 text-left'
               >
                 <Icons.sparkles aria-hidden className='text-muted-foreground size-4 shrink-0' />
                 <span className='flex min-w-0 flex-1 flex-col'>
-                  <span className='truncate text-sm'>{item.label}</span>
-                  {item.sublabel ? (
-                    <span className='text-muted-foreground line-clamp-2 text-xs'>{item.sublabel}</span>
+                  <span className='truncate text-sm'>{skill.name}</span>
+                  {skill.description || skill.version ? (
+                    <span className='text-muted-foreground line-clamp-2 text-xs'>
+                      {skill.description || skill.version}
+                    </span>
                   ) : null}
                 </span>
+                <Icons.chevronRight aria-hidden className='text-muted-foreground size-4 shrink-0' />
               </button>
             </li>
           ))}
