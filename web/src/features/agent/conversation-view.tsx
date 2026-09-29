@@ -152,7 +152,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const snapshot = useSnapshot();
   const navigationConversations = useInfiniteQuery({
     queryKey: [...keys.conversations(workspaceId), 'navigation-pages'], initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, conversationId, pageParam),
+    queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, pageParam),
     getNextPageParam: (page) => page.nextCursor ?? undefined, enabled: Boolean(workspaceId)
   });
   const windowQuery = useInfiniteQuery({
@@ -276,7 +276,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   }, [attachmentsOn, persistTurn, text, attachments.chips]);
   const recoveredTurn = attachments.recovered;
   useEffect(() => {
-    if (recoveredTurn?.text) setText((current) => current || recoveredTurn.text);
+    if (recoveredTurn?.text) setText((current) => (current || recoveredTurn.text));
   }, [recoveredTurn]);
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
@@ -285,7 +285,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   // One chip per platform; the composer expands it into one row per selected account (accountLabel).
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
-    return { platform, account: account?.account, state: account?.displayState };
+    return { platform, account: account?.account, state: channel?.displayState };
   });
   const deliveryOptions = useMemo<DeliveryTargetOption<DraftPlatform>[]>(
     () =>
@@ -446,7 +446,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
         void client.invalidateQueries({ queryKey: keys.memory(workspaceId) });
       } else if (result.status === 'automation') {
-        // A request for recurring drafts: the automation it set up.
+        // A request for recurring drafts opened no run; the reply carries the automation it set up.
         void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
