@@ -32,7 +32,7 @@ def runtime_for(service):
             import os
             placeholder = "-".join(("harness", "placeholder"))  # routes resolve to the stand-in transports below; nothing reaches OpenAI
             cfg = config.RuntimeConfig.from_environment({**os.environ, "OPENAI_API_KEY": placeholder, "RAFII_AGENT_V2_ENABLED": "1", "RAFII_VOICE_ENABLED": "1",
-                                                         "RAFII_IMAGE_AGENT_ENABLED": "1", "RAFII_SPECIALISTS_ENABLED": "1"})
+                                                         "RAFII_IMAGE_AGENT_ENABLED": "1", "RAFII_SPECIALISTS_ENABLED": "1", "RAFII_AGENT_THINKING_STATES_ENABLED": "1"})
             runtime = AgentRuntimeService(service, cfg, model_factory=harness.model_factory(), image_studio=creative.ImageStudio(cfg, transport=harness.provider_transport),
                                           vision=creative.VisionAnalyzer(cfg, transport=harness.provider_transport), live_transport=harness.live_transport)
             from .live_tools import Weather
@@ -54,11 +54,15 @@ def handle(app, environ, start_response, service, token, method, parts):
         return app._json(start_response, 200, runtime.status(workspace_id, token))
     if resource == "turns" and not rest and method == "POST":
         return app._json(start_response, 201, runtime.turn(workspace_id, token, app._body(environ)))
+    if resource == "conversations" and len(rest) == 2 and rest[1] == "active-run" and method == "GET":
+        return app._json(start_response, 200, runtime_service.active_run(runtime, workspace_id, token, rest[0]))
     if resource == "runs" and len(rest) == 1 and method == "GET":
         with service.repository.transaction(token, workspace_id) as (cur, row, _principal):
             from ..permissions import require
             require(service.ideas._member(row), "read")
             return app._json(start_response, 200, runtime._stored(cur, workspace_id, rest[0]))
+    if resource == "runs" and len(rest) == 2 and rest[1] == "events" and method == "GET":
+        return app._json(start_response, 200, runtime_service.run_events(runtime, workspace_id, token, rest[0], app._query_int(environ, "cursor")))
     if resource == "runs" and len(rest) == 2 and rest[1] == "cancel" and method == "POST":
         app._body(environ)
         return app._json(start_response, 200, runtime.cancel(workspace_id, token, rest[0]))
