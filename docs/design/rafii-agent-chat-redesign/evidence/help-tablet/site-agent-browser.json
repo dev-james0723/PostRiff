@@ -1,0 +1,36 @@
+{
+ "base": "http://127.0.0.1:3190",
+ "engine": "chromium",
+ "principal": "synthetic",
+ "sections": "help,tablet",
+ "results": [
+  {
+   "name": "seed: workspace, LinkedIn account and a confirmed draft",
+   "ok": true
+  },
+  {
+   "name": "help: an article opens from the index",
+   "ok": true
+  },
+  {
+   "name": "help: \"Ask Rafii about this\" opens the panel with the question ready",
+   "ok": true
+  },
+  {
+   "name": "tablet: the launcher opens the panel as a dialog sheet",
+   "ok": true
+  },
+  {
+   "name": "tablet: page question answered for Channels",
+   "ok": true
+  },
+  {
+   "name": "tablet: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "tablet: the close button closes the sheet",
+   "ok": true
+  }
+ ]
+}

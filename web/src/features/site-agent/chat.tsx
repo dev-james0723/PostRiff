@@ -15,10 +15,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { IconMicrophone } from '@tabler/icons-react';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 import { createImeGuard } from '@/lib/ime';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useModelChoice } from '@/features/agent/use-model';
 import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
@@ -36,7 +38,7 @@ import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-ac
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
-import { voiceSession } from '@/lib/agent-runtime/voice-session';
+import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
@@ -120,6 +122,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const noteId = useRef(0);
   const [caret, setCaret] = useState(0);
   const [styleOpen, setStyleOpen] = useState(false);
+  const [mode, setMode] = useState<'chat' | 'live'>('chat');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const liveState = useVoice((state) => state.state);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -150,6 +157,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const entity = page?.selectedEntity ?? (route?.id === 'conversation' ? { type: 'conversation', id: pathname.split('/').pop() ?? '' } : null);
   const contextLabel = route ? `${route.title}${entity ? ` · selected ${ENTITY_WORDS[entity.type] ?? entity.type}` : ''}` : 'A page Rafii does not know';
   const suggestions = suggestionsFor(route?.family ?? null, canEdit);
+  const voiceEnabled = Boolean(agent.status?.flags?.RAFII_VOICE_ENABLED && agent.status?.flags?.RAFII_AGENT_V2_ENABLED);
   const lastAssistant = messages.findLast((m) => m.role === 'assistant')?.messageId;
 
   /** Carry out what an answer asked for: its guide, or its link (re-checked against the route manifest), or a style. */
@@ -345,54 +353,52 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const name = me.data && 'displayName' in me.data ? String((me.data as { displayName?: string | null }).displayName ?? '').split(' ')[0] : '';
 
   return (
-    <div className='@container flex h-full min-h-0 flex-col'>
-      <div className='flex shrink-0 items-center gap-2.5 px-4 pt-3 pb-2'>
-        <RafiiAvatar size={32} thinking={busy} />
-        <div className='flex min-w-0 flex-1 flex-col'>
-          <h2 className='text-sm leading-tight font-semibold'>{siteConfig.name}</h2>
-          <span className='text-muted-foreground truncate text-[11px]' title={contextLabel}>
-            Looking at: {contextLabel}
-          </span>
-        </div>
-        {/* How Rafii talks; below about 360px of panel width the pill keeps only its icon. */}
-        <StyleButton open={styleOpen} onOpenChange={setStyleOpen} className='shrink-0 @max-[22.5rem]:px-2 @max-[22.5rem]:[&>.truncate]:hidden' />
-        <Button type='button' variant='quiet' size='icon-sm' aria-label='Start a new conversation' title='New conversation' onClick={startOver} disabled={busy}>
-          <Icons.add className='size-4' />
+    <div className='rafii-chat @container flex h-full min-h-0 flex-col' data-rafii-mode={mode}>
+      <div className='rafii-chat-header flex shrink-0 items-center gap-2.5 px-4 pt-3 pb-2'>
+        <Button type='button' variant='quiet' size='icon-control' className='shrink-0' aria-label={mode === 'live' ? 'Back to chat' : 'Close Rafii'} onClick={mode === 'live' ? () => setMode('chat') : onClose}>
+          {mode === 'live' ? <Icons.chevronLeft className='size-5' /> : <Icons.close className='size-5' />}
         </Button>
-        {conversationId && (
-          <Link
-            href={`/app/agent/${conversationId}`}
-            onClick={onNavigate}
-            aria-label='Open this conversation in full'
-            title='Open in full'
-            className='rafii-focus text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-[var(--rafii-radius-control)]'
-          >
-            <Icons.externalLink className='size-4' />
-          </Link>
-        )}
-        <Link href='/app/help' onClick={onNavigate} aria-label='Rafii help articles' title='Help articles' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-[var(--rafii-radius-control)]'>
-          <Icons.help className='size-4' />
-        </Link>
-        <Button type='button' variant='quiet' size='icon-sm' aria-label='Close Rafii' onClick={onClose}>
-          <Icons.close className='size-4' />
+        <RafiiAvatar size={36} thinking={busy} />
+        <div className='flex min-w-0 flex-1 flex-col'>
+          <h2 className='text-base leading-tight font-semibold'>{mode === 'live' ? `${siteConfig.name} Live` : siteConfig.name}</h2>
+          <button type='button' className='rafii-focus text-muted-foreground w-fit max-w-full truncate rounded text-left text-xs' title={contextLabel} aria-expanded={contextOpen} onClick={() => setContextOpen((open) => !open)}>
+            Viewing {contextLabel} <Icons.chevronDown aria-hidden className='inline size-3' />
+          </button>
+        </div>
+        {mode === 'chat' && voiceEnabled && <Button type='button' variant='quiet' size='icon-control' aria-label='Open Rafii Live' onClick={() => setMode('live')}>
+          <IconMicrophone className='size-5' />
+          <span className='sr-only'>{liveState === 'live' ? 'Live call in progress' : 'Start voice conversation'}</span>
+        </Button>}
+        <Button type='button' variant='quiet' size='icon-control' aria-label='More Rafii options' aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+          <Icons.dots className='size-5' />
         </Button>
       </div>
-
-      <CallRafii conversationId={conversationId} onConversation={onVoiceConversation} />
-      {agent.status?.flags?.RAFII_VOICE_ENABLED && agent.status?.flags?.RAFII_AGENT_V2_ENABLED && (
-        <VoiceMode conversationId={conversationId} pageContext={voicePageContext} onConversation={onVoiceConversation} onAnswer={onVoiceAnswer} timeZone={timeZone} model={choice.model} />
-      )}
-      <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3' role='log' aria-live='polite' aria-relevant='additions' aria-label={`Conversation with ${siteConfig.name}`}>
+      {contextOpen && <section className='rafii-glass mx-4 mb-2 shrink-0 rounded-2xl p-4 text-sm' aria-label='Current page context'>
+        <p className='font-medium'>Rafii is looking at {contextLabel}</p>
+        {entity && <p className='text-muted-foreground mt-1'>Selected {ENTITY_WORDS[entity.type] ?? entity.type}: {entity.id}</p>}
+        {page?.visibleState && Object.keys(page.visibleState).length > 0 && <ul className='text-muted-foreground mt-2 list-disc pl-5'>{Object.entries(page.visibleState).map(([key, value]) => <li key={key}>{key}: {Array.isArray(value) ? value.join(', ') : String(value)}</li>)}</ul>}
+        <p className='text-muted-foreground mt-2'>Page headings and selected items are shared as context. Typed fields and unselected files are not read from the screen. Workspace access still follows your permissions.</p>
+      </section>}
+      {menuOpen && <div className='rafii-glass mx-4 mb-2 flex max-h-[60dvh] shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl p-3' role='group' aria-label='Rafii options'>
+        <StyleButton open={styleOpen} onOpenChange={setStyleOpen} />
+        <Button type='button' variant='quiet' className='min-h-11 justify-start' onClick={() => { startOver(); setMenuOpen(false); }} disabled={busy}><Icons.add className='size-4' /> New conversation</Button>
+        {conversationId && <Link href={`/app/agent/${conversationId}`} onClick={onNavigate} className='rafii-focus flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm'><Icons.externalLink className='size-4' /> Open full conversation</Link>}
+        <Link href='/app/account/models' onClick={onNavigate} className='rafii-focus flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm'>Model settings</Link>
+        <Link href='/app/channels' onClick={onNavigate} className='rafii-focus flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm'>Connected accounts</Link>
+        <Link href='/app/account/billing' onClick={onNavigate} className='rafii-focus flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm'>Usage &amp; plan</Link>
+        <Link href='/app/help' onClick={onNavigate} className='rafii-focus flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm'><Icons.help className='size-4' /> Help articles</Link>
+        <CallRafii conversationId={conversationId} onConversation={onVoiceConversation} />
+      </div>}
+      {mode === 'live' && voiceEnabled ? <VoiceMode immersive onKeyboard={() => setMode('chat')} contextLabel={contextLabel} conversationId={conversationId} pageContext={voicePageContext} onConversation={onVoiceConversation} onAnswer={onVoiceAnswer} timeZone={timeZone} model={choice.model} /> : <>
+      <div className='rafii-chat-log min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3' role='log' aria-live='polite' aria-relevant='additions' aria-label={`Conversation with ${siteConfig.name}`}>
         {empty && !optimistic ? (
-          <div className='flex flex-col items-start gap-3 pt-4'>
+          <div className='flex flex-col items-start gap-5 pt-7'>
             <RafiiAvatar size={88} variant='full' className='self-center' />
-            <p className='text-sm leading-relaxed'>
-              {name ? `Hi ${name}, ` : 'Hi, '}I&apos;m {siteConfig.name}. Ask me about this page, a post or an automation, or ask me to write something. I show what I looked at, and I never publish, reply or change settings from a chat.
-            </p>
+            <div><h3 className='text-2xl font-semibold tracking-tight'>{name ? `Hi ${name}, ` : 'Hi, '}let’s get to work.</h3><p className='text-muted-foreground mt-2 text-sm leading-relaxed'>I can help with {route?.title ?? 'your workspace'}. Ask, create, or plan; you review changes before they happen.</p></div>
             <div className='flex flex-col items-stretch gap-2 self-stretch' role='group' aria-label='Suggested questions'>
               {suggestions.map((item) => (
-                <Button key={item} type='button' variant='glass' className='h-auto min-h-10 justify-start px-3 py-2 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={busy}>
-                  {item}
+                <Button key={item} type='button' variant='glass' className='h-auto min-h-14 justify-between rounded-2xl px-4 py-3 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={busy}>
+                  <span>{item}</span><Icons.arrowRight aria-hidden className='size-4 shrink-0' />
                 </Button>
               ))}
             </div>
@@ -435,10 +441,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         <div ref={end} />
       </div>
 
-      <form onSubmit={onSubmit} className='relative shrink-0 px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+      <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
         <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
         <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
-          {agentOn && <AttachImage conversationId={conversationId} onAttached={(image) => setImages((prev) => [...prev, image].slice(-4))} disabled={busy} />}
+          <Button type='button' variant='quiet' size='icon-control' aria-label='Add or create' aria-haspopup='dialog' onClick={() => setCapabilitiesOpen(true)}><Icons.add className='size-5' /></Button>
           <textarea
             ref={input}
             value={text}
@@ -450,26 +456,40 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             onKeyDown={onKeyDown}
             onCompositionStart={() => ime.current.onCompositionStart()}
             onCompositionEnd={() => ime.current.onCompositionEnd()}
-            rows={1}
+            rows={2}
             maxLength={4000}
             aria-label={`Ask ${siteConfig.name}`}
             placeholder={route ? `Ask about ${route.title}, or anything in ${siteConfig.name}…` : `Ask ${siteConfig.name}…`}
-            className='placeholder:text-muted-foreground max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-base leading-snug outline-none md:text-sm field-sizing-content'
+            className='placeholder:text-muted-foreground max-h-40 min-h-14 flex-1 resize-none bg-transparent px-2 py-3 text-base leading-snug outline-none field-sizing-content'
           />
           {composingRun ? (
             <Button type='button' variant='glass' size='icon-control' aria-label='Stop this answer' onClick={() => void api.siteAgentCancel(workspaceId as string, composingRun)}>
               <Icons.handStop className='size-4' />
             </Button>
-          ) : (
+          ) : text.trim() ? (
             <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!text.trim() || busy}>
               <Icons.send className='size-4' />
             </Button>
-          )}
+          ) : voiceEnabled ? (
+            <Button type='button' variant='action' size='icon-control' aria-label='Open Rafii Live' onClick={() => setMode('live')}><IconMicrophone className='size-5' /></Button>
+          ) : null}
         </div>
-        <p className='text-muted-foreground px-2 pt-1.5 text-[10.5px] leading-snug'>
-          {siteConfig.name} answers from its help and your workspace, and can propose changes you apply yourself.
-        </p>
       </form>
+      </>}
+      <Sheet open={capabilitiesOpen} onOpenChange={setCapabilitiesOpen}>
+        <SheetContent side='bottom' aria-label='Add to Rafii' data-rafii-capabilities className='rafii-elevated max-h-[70dvh] gap-3 rounded-t-3xl p-5 pb-[calc(1rem+env(safe-area-inset-bottom))]'>
+          <SheetTitle className='text-lg font-semibold'>Add to Rafii</SheetTitle>
+          <div className='grid grid-cols-2 gap-2 text-sm'>
+            {agentOn && <div className='rafii-glass flex min-h-14 items-center gap-2 rounded-xl px-3'><AttachImage conversationId={conversationId} onAttached={(image) => { setImages((prev) => [...prev, image].slice(-4)); setCapabilitiesOpen(false); }} disabled={busy} /><span>Photo</span></div>}
+            <button type='button' className='rafii-glass rafii-focus min-h-14 rounded-xl px-3 text-left' onClick={() => { setText('Research '); setCapabilitiesOpen(false); input.current?.focus(); }}>Research</button>
+            <Link href='/app/library' onClick={onNavigate} className='rafii-glass rafii-focus flex min-h-14 items-center rounded-xl px-3'>Library</Link>
+            <button type='button' className='rafii-glass rafii-focus min-h-14 rounded-xl px-3 text-left' onClick={() => { setText('Plan a campaign for '); setCapabilitiesOpen(false); input.current?.focus(); }}>Plan a campaign</button>
+            <Link href='/app/ideas' onClick={onNavigate} className='rafii-glass rafii-focus flex min-h-14 items-center rounded-xl px-3'>Sources</Link>
+            <Link href='/app/account/models' onClick={onNavigate} className='rafii-glass rafii-focus flex min-h-14 items-center rounded-xl px-3'>Model settings</Link>
+          </div>
+          <p className='text-muted-foreground text-xs'>Photos join this conversation. Other files are managed in Library and Sources.</p>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -507,7 +527,7 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
             <ul className='flex flex-col gap-1 text-xs'>
               {rows.map((row) => (
                 <li key={row.key} className={cn('flex items-center gap-1.5', row.status === 'running' ? 'text-foreground' : 'text-muted-foreground')}>
-                  {row.status === 'running' ? <ThinkingShimmer>{row.label}</ThinkingShimmer> : <><Icons.check className='size-3' aria-hidden /> {row.label}</>}
+                  {row.status === 'running' ? <ThinkingShimmer>{row.label}</ThinkingShimmer> : <>{row.status === 'done' ? <Icons.check className='size-3' aria-hidden /> : <Icons.warning className='size-3' aria-hidden />} {row.label} {row.status !== 'done' && `(${row.status})`}</>}
                 </li>
               ))}
             </ul>

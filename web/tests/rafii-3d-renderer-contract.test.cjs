@@ -13,14 +13,14 @@ test('live avatar owns a bounded Three.js lifecycle with local GLB and static fa
 
   for (const expected of [
     'GLTFLoader',
-    '/raffi/raffi-live-v1.glb',
+    '/raffi/raffi-live-meshy-20260928.glb',
     'requestAnimationFrame',
     'cancelAnimationFrame',
     'ResizeObserver',
     'visibilitychange',
     'renderer.dispose()',
     'dispose()',
-    '/raffi/full-512.png'
+    '/raffi/raffi-live-meshy-poster.png'
   ]) {
     assert.ok(source.includes(expected), `avatar lifecycle must include: ${expected}`);
   }

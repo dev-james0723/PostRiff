@@ -1,28 +1,22 @@
 /**
  * The Rafii live agent upgrade in a real browser against the local dev harness (docs/design/rafii-live-agent/CONTRACTS.md):
- * - how Rafii talks (Contract 1): the style pill in the conversation header, the style sheet and its three starting
+ * - how Rafii talks (Contract 1): the style control in More options, the style sheet and its three starting
  *   points, More options, Escape, Account › Preferences, a reload;
  * - `/` commands in the panel composer (Contract 7): the menu and its groups, filtering, Enter picks without sending,
  *   Esc, `/open channels`, `/style concise`, `/help`;
- * - the voice panel (Contract 4): the first call's style picker, a red Mute, "Microphone off" with the panel closed, a
- *   real "Stop talking", a goodbye that hangs up, a "that's all" that doesn't;
  * - `/weather Hong Kong` answered without a model.
+ * The full-screen Live mode is checked by rafii-chat-concepts-browser.cjs. The old compact voice scenes below are kept
+ * for historical reference and no longer run: their selectors describe the previous panel layout.
  * Guides and the on-screen cursor (Contract 5) are web/tests/rafii-guide-browser.cjs; they are not repeated here.
  *
  *   node web/tests/rafii-live-agent-browser.cjs [--browser=chromium|webkit] [--out=dir] [--shots=off]
- *     [--sections=style,style-phone,slash,slash-phone,voice,voice-phone,weather]
+ *     [--sections=style,style-phone,slash,slash-phone,weather]
  *
  * style, style-phone, slash and slash-phone run against RAFII_WEB_URL: any build of the web app and any local harness
  * that applied migration 030 (tests/phase2/rls.sql includes it).
  *
- * voice, voice-phone and weather run against RAFII_VOICE_WEB_URL (default: RAFII_WEB_URL), which must be:
- * - a development build (`next dev`): the scriptable GPT-Live stand-in (window.RAFII_FAKE_LIVE → window.rafiiLiveHarness)
- *   exists only when NODE_ENV !== 'production' (web/src/lib/agent-runtime/live-transport.ts, createTransport);
- * - proxying to an API harness started with RAFII_AGENT_HARNESS=1: Voice Mode on, a GPT-Live session stand-in, the
- *   scripted Manager and an Open-Meteo stand-in (src/postriff_phase2/agent_runtime_v2/harness.py, http.py; refused on
- *   Vercel);
- * - with RAFII_VOICE_PG_PORT set to that harness's --pg-port: a voice session reserves spend, so the scene approves the
- *   synthetic workspace's budget in the disposable database (tests/consumer_fixtures.py), as agent-runtime-browser.cjs does.
+ * Weather runs against RAFII_VOICE_WEB_URL (default: RAFII_WEB_URL), backed by RAFII_AGENT_HARNESS=1 and the
+ * disposable database at RAFII_VOICE_PG_PORT. It proves the API is the local stand-in before asking for weather.
  * The rafii-browser.yml job starts that pair on 4440/4441, beside the scenes' own harness and production build.
  *
  * Each section seeds its own synthetic principal through the harness API (`Bearer dev:<uuid>`), so a first call is
@@ -43,10 +37,10 @@ for (const url of [base, voiceBase]) {
 }
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]));
 const engine = args.browser === 'webkit' ? webkit : chromium;
-const SECTIONS = ['style', 'style-phone', 'slash', 'slash-phone', 'voice', 'voice-phone', 'weather'];
+const SECTIONS = ['style', 'style-phone', 'slash', 'slash-phone', 'weather'];
 const asked = args.sections ? String(args.sections).split(',').map((s) => s.trim()).filter(Boolean) : SECTIONS;
 const unknown = asked.filter((name) => !SECTIONS.includes(name));
-if (unknown.length) throw new Error(`Unknown section(s): ${unknown.join(', ')}. Sections: ${SECTIONS.join(', ')}. Guides are in web/tests/rafii-guide-browser.cjs.`);
+if (unknown.length) throw new Error(`Unknown section(s): ${unknown.join(', ')}. Sections: ${SECTIONS.join(', ')}. Full-screen Live is in web/tests/rafii-chat-concepts-browser.cjs.`);
 const want = (name) => asked.includes(name);
 const out = path.resolve(args.out || '.');
 fs.mkdirSync(out, { recursive: true });
@@ -226,6 +220,11 @@ const answers = (page) => panel(page).getByRole('article', { name: "Rafii's answ
 // StyleButton (rafii-voice/style-sheet.tsx) in the conversation header (site-agent/chat.tsx): "Rafii’s style: <preset>".
 // Voice Mode's idle row carries a second one while voice is on; the header's comes first.
 const stylePill = (page) => panel(page).getByRole('button', { name: /Rafii[’']s style:/ }).first();
+async function revealStylePill(page) {
+  const menu = panel(page).getByRole('button', { name: 'More Rafii options' });
+  if ((await menu.getAttribute('aria-expanded')) !== 'true') await menu.click();
+  await stylePill(page).waitFor({ timeout: 30000 });
+}
 const styleSheet = (page) => page.getByRole('dialog', { name: 'How Rafii talks to you' });
 const firstRunSheet = (page) => page.getByRole('dialog', { name: 'How should Rafii talk to you?' });
 const startingPoints = (sheet) => sheet.getByRole('radiogroup', { name: 'Starting points', exact: true });
@@ -334,7 +333,8 @@ async function styleSection(browser) {
     await page.goto(`${base}/app/calendar`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
     check('style: the Rafii panel opens', await openPanel(page));
-    const named = await panel(page).getByRole('button', { name: /Rafii[’']s style:\s*Friendly/ }).first().waitFor({ timeout: 60000 }).then(() => true, () => false);
+    await revealStylePill(page);
+    const named = await panel(page).getByRole('button', { name: /Rafii[’']s style:.*Friendly/ }).first().waitFor({ timeout: 60000 }).then(() => true, () => false);
     const pill = stylePill(page);
     check('style: the conversation header has the style pill, naming the style in use (Friendly)', named, await pill.textContent().catch(() => null));
     check('style: the pill says it opens a dialog, closed for now', (await pill.getAttribute('aria-haspopup')) === 'dialog' && (await pill.getAttribute('aria-expanded')) === 'false');
@@ -434,6 +434,7 @@ async function styleSection(browser) {
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
     await openPanel(page);
+    await revealStylePill(page);
     const pillAfter = await until(async () => {
       const text = await stylePill(page).textContent();
       return /Explain in detail/.test(text ?? '') ? text : null;
@@ -460,6 +461,7 @@ async function stylePhoneSection(browser) {
     await page.goto(`${base}/app/calendar`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
     check('style phone: the Rafii drawer opens', await openPanel(page));
+    await revealStylePill(page);
     const pill = stylePill(page);
     await pill.waitFor({ timeout: 60000 });
     const label = await until(async () => {
@@ -590,9 +592,11 @@ async function slashSection(browser) {
     const saved = await pollStyle(who, (s) => s.chosen === true && matches(s, PRESETS.concise.fields));
     check('slash: /style concise saves the style (GET /api/me)', saved.ok, saved.style);
     const styleNote = await commandNotes(page).getByText('Style set to Concise.', { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+    await revealStylePill(page);
     const pillSays = await until(async () => /Concise/.test((await stylePill(page).textContent()) ?? ''));
     check('slash: … says “Style set to Concise.”, the header pill follows, and nothing went to Rafii', styleNote && Boolean(pillSays) && net.turns.length === beforeStyle, { styleNote, pill: await stylePill(page).textContent().catch(() => null) });
     await shot(page, 'slash-desktop-4-style-concise.png');
+    await panel(page).getByRole('button', { name: 'More Rafii options' }).click();
 
     await input.fill('/help');
     await menu.waitFor({ timeout: 10000 }).catch(() => undefined);
@@ -1022,9 +1026,8 @@ async function weatherSection(browser) {
     await page.goto(`${voiceBase}/app/calendar`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
     check('weather: the Rafii panel opens', await openPanel(page));
-    // The panel sends `/` agent commands to Rafii only once the agent status has loaded (chat.tsx `agentOn`); Voice Mode
-    // appears from the same status, so it marks that moment.
-    const agentOn = await panel(page).locator('[data-rafii-voice]').first().waitFor({ timeout: 60000 }).then(() => true, () => false);
+    // The Live entry appears from the same agent status as typed agent commands.
+    const agentOn = await panel(page).getByRole('button', { name: 'Open Rafii Live' }).first().waitFor({ timeout: 60000 }).then(() => true, () => false);
     check('weather: the panel talks to the agent runtime here', agentOn);
     const turn = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/agent/turns'), { timeout: 120000 });
     await composer(page).fill('/weather Hong Kong');

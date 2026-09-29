@@ -266,7 +266,7 @@ export function StyleButton({ className, open, onOpenChange }: { className?: str
   const shown = open ?? ownOpen;
   const setShown = onOpenChange ?? setOwnOpen;
   const preset = presetOf(style);
-  const label = loading ? 'Style' : preset ? PRESETS[preset].label : 'Custom';
+  const label = loading ? 'Rafii style' : preset ? `Rafii style · ${PRESETS[preset].label}` : 'Rafii style settings';
   return (
     <>
       <button

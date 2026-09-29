@@ -20,6 +20,11 @@ export interface ActivityRow {
   status: 'done' | 'failed' | 'blocked' | 'running';
 }
 
+/** Only server-reported compound steps appear in Do mode. Waiting is not completion. */
+export function executionRows(compound: { steps: string[]; status: Record<string, { state: string; detail: string; href?: string | null }> }) {
+  return compound.steps.filter((step) => compound.status[step]).map((step) => ({ id: step, ...compound.status[step] }));
+}
+
 const SUGGESTIONS: Record<string, { read: string[]; edit?: string[] }> = {
   home: { read: ['What should I pay attention to this week?', 'What can Rafii do for me?'], edit: ['Write a LinkedIn post about what I learned this week'] },
   agent: { read: ['What did we decide in this conversation?', 'What can Rafii do for me?'] },

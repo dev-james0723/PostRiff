@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { IconMicrophone, IconMicrophoneOff, IconPhoneOff, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
+import { IconKeyboard, IconMicrophone, IconMicrophoneOff, IconPhoneOff, IconPlayerStop, IconRefresh, IconVolume } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
@@ -59,7 +59,10 @@ export function VoiceMode({
   onConversation,
   onAnswer,
   timeZone,
-  model
+  model,
+  immersive = false,
+  onKeyboard,
+  contextLabel
 }: {
   conversationId: string | null;
   pageContext: () => SiteAgentPageContext;
@@ -67,6 +70,9 @@ export function VoiceMode({
   onAnswer: (response: AgentTurnResponse) => void;
   timeZone?: string;
   model?: string;
+  immersive?: boolean;
+  onKeyboard?: () => void;
+  contextLabel?: string;
 }) {
   const { api, workspaceId, status } = useAgent();
   const { reduced } = useMotionPreference();
@@ -106,7 +112,8 @@ export function VoiceMode({
 
   // The first call offers the presets first; picking one saves it, then the call starts (a user gesture either way).
   const talk = useCallback(() => {
-    if (!style.chosen && !styleLoading) setFirstRun(true);
+    if (styleLoading) return;
+    if (!style.chosen) setFirstRun(true);
     else start();
   }, [start, style.chosen, styleLoading]);
 
@@ -139,6 +146,37 @@ export function VoiceMode({
       }}
     />
   ) : null;
+
+  if (immersive) {
+    const stateLabel = snapshot.state === 'live'
+      ? snapshot.speaker === 'rafii' ? 'Rafii is speaking' : running.length ? 'Rafii is thinking' : snapshot.micMuted ? 'Microphone off' : snapshot.speaker === 'user' ? 'Listening to you' : 'Listening'
+      : statusLine(snapshot) || 'Ready to connect';
+    return (
+      <section className='rafii-live flex min-h-0 flex-1 flex-col px-5 pb-[calc(1rem+env(safe-area-inset-bottom))]' aria-label='Rafii Live' data-rafii-voice={snapshot.state} data-rafii-live-state={snapshot.state}>
+        <p className='text-muted-foreground mt-2 text-center text-xs'>Current context: {contextLabel ?? 'this workspace'}</p>
+        <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 py-5'>
+          <div className='rafii-live-stage w-full max-w-[18rem]' data-rafii-avatar-slot>
+            <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+          </div>
+          <p role='status' aria-live='polite' className='text-center text-2xl font-medium' data-rafii-voice-status>{stateLabel}</p>
+          {active && <p className='text-muted-foreground text-center text-sm'>{snapshot.state === 'live' ? 'Speak naturally. Rafii keeps your place in this conversation.' : line}</p>}
+          {!active && snapshot.state !== 'error' && <Button type='button' variant='action' className='min-h-14 rounded-full px-7 text-base' disabled={!available || styleLoading} onClick={talk}><IconMicrophone className='size-5' /> Start live conversation</Button>}
+          {!available && <p className='text-muted-foreground max-w-sm text-center text-sm'>{status?.voice.blocker ?? 'Live voice is unavailable here. You can keep typing.'}</p>}
+          {(snapshot.state === 'error' || snapshot.state === 'reconnecting') && <div className='flex flex-col items-center gap-2' role='alert'><p className='text-sm'>{snapshot.error?.message ?? 'Connection interrupted.'}</p><Button type='button' variant='glass' className='min-h-11' disabled={!available} onClick={() => void (snapshot.state === 'reconnecting' ? voiceSession.reconnect() : start())}><IconRefresh className='size-4' /> Reconnect</Button></div>}
+        </div>
+        {transcript.length > 0 && <div className='rafii-glass max-h-[25dvh] shrink-0 overflow-y-auto rounded-2xl p-4' aria-label='Live transcript'><p className='text-muted-foreground mb-2 text-xs'>Transcript</p><ol className='flex flex-col gap-2 text-sm' data-rafii-voice-transcript>{transcript.map((entry) => <li key={entry.id} data-role={entry.role} data-stopped={entry.stopped ? '' : undefined}><span className='font-semibold'>{entry.role === 'user' ? 'You' : 'Rafii'}: </span>{entry.text}{entry.stopped ? ' (stopped)' : ''}</li>)}</ol></div>}
+        {running.length > 0 && <p className='text-muted-foreground mt-2 text-center text-xs'>{running.length} request{running.length === 1 ? '' : 's'} in progress</p>}
+        <div className='mt-4 flex shrink-0 items-center justify-around gap-3' role='group' aria-label='Live controls'>
+          <Button type='button' variant='glass' size='icon-control' className='size-12 rounded-full' aria-label='Stop Rafii speaking' disabled={snapshot.state !== 'live'} onClick={() => voiceSession.stopSpeaking()}><IconVolume className='size-5' /></Button>
+          <Button type='button' variant='destructive' size='icon-control' className='size-14 rounded-full' aria-label='End live conversation' disabled={!active} onClick={() => void voiceSession.end()}><IconPhoneOff className='size-6' /></Button>
+          <Button type='button' variant='glass' size='icon-control' className='size-12 rounded-full' aria-label='Return to keyboard' onClick={onKeyboard}><IconKeyboard className='size-5' /></Button>
+        </div>
+        <details className='text-muted-foreground mt-3 text-center text-xs'><summary className='rafii-focus inline-flex min-h-11 cursor-pointer items-center rounded-lg px-3'>Live options</summary><div className='flex flex-wrap items-center justify-center gap-2 py-2'><Button type='button' variant={snapshot.micMuted ? 'destructive' : 'quiet'} className='min-h-11' aria-pressed={snapshot.micMuted} data-rafii-voice-mute={snapshot.micMuted ? 'on' : 'off'} disabled={snapshot.state !== 'live'} onClick={() => voiceSession.setMicMuted(!snapshot.micMuted)}>{snapshot.micMuted ? <IconMicrophoneOff className='size-4' /> : <IconMicrophone className='size-4' />}{snapshot.micMuted ? 'Unmute' : 'Mute'}</Button><StyleButton /></div></details>
+        <p className='text-muted-foreground text-center text-xs'>Live uses GPT Live. A text transcript is kept; audio is not saved here.</p>
+        {sheet}
+      </section>
+    );
+  }
 
   if (!active && state !== 'error' && state !== 'ended') {
     return (

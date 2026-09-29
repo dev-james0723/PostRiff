@@ -13,7 +13,6 @@
  *   registers `openStyle`; `panelActions.setStyle` is registered once in the always-present shell.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
@@ -76,7 +75,8 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement) || document.activeElement?.closest(STYLE_SHEET)) return;
+      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement)
+        || document.activeElement?.closest(`${STYLE_SHEET}, [data-rafii-capabilities]`)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       close();
@@ -139,7 +139,7 @@ export function SiteAgentDock() {
       ref={panel}
       id={PANEL_ID}
       aria-label={siteConfig.name}
-      className='rafii-panel sticky top-0 z-20 flex h-svh w-[22rem] shrink-0 flex-col border-l border-[color-mix(in_oklch,var(--foreground)_8%,transparent)] xl:w-[25rem]'
+      className='rafii-panel sticky top-0 z-20 flex h-dvh w-[29rem] shrink-0 flex-col border-l border-[color-mix(in_oklch,var(--foreground)_8%,transparent)] xl:w-[33rem]'
     >
       <SiteAgentChat onClose={close} />
     </aside>
@@ -179,11 +179,28 @@ export function SiteAgentAbove() {
   );
 }
 
-/** The tablet sheet and phone bottom sheet; renders nothing when docked. */
+/** A full viewport conversation on phones; a spacious right sheet on tablets. */
 export function SiteAgentOverlay() {
   const open = usePanel((s) => s.open);
   const docked = useDocked();
   const wide = useWide();
+  useEffect(() => {
+    if (!open || docked || wide || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const update = () => {
+      document.documentElement.style.setProperty('--rafii-chat-visible-height', `${viewport.height}px`);
+      document.documentElement.style.setProperty('--rafii-chat-visible-top', `${viewport.offsetTop}px`);
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      document.documentElement.style.removeProperty('--rafii-chat-visible-height');
+      document.documentElement.style.removeProperty('--rafii-chat-visible-top');
+    };
+  }, [open, docked, wide]);
   const close = useCallback(() => {
     panelStore.setOpen(false);
     returnFocus();
@@ -193,22 +210,6 @@ export function SiteAgentOverlay() {
   const onOpenChange = (next: boolean) => {
     if (!next) close();
   };
-  if (!wide) {
-    return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent
-          id={PANEL_ID}
-          aria-label={siteConfig.name}
-          className='rafii-elevated [--drawer-content-max-height:calc(100dvh-3rem)] [--drawer-height:calc(100dvh-3rem)] data-[swipe-direction=down]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[swipe-direction=down]:border-t-0'
-        >
-          <DrawerTitle className='sr-only'>{siteConfig.name}</DrawerTitle>
-          <div className='flex min-h-0 flex-1 flex-col'>
-            <SiteAgentChat onClose={close} onNavigate={close} autoFocus={false} />
-          </div>
-        </DrawerContent>
-      </Drawer>
-    );
-  }
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -216,10 +217,12 @@ export function SiteAgentOverlay() {
         side='right'
         showCloseButton={false}
         aria-label={siteConfig.name}
-        className='rafii-elevated gap-0 p-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md'
+        className={wide
+          ? 'rafii-elevated gap-0 p-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-[36rem]'
+          : 'rafii-elevated rafii-mobile-chat fixed inset-0 h-dvh max-h-dvh w-screen max-w-none gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none'}
       >
         <SheetTitle className='sr-only'>{siteConfig.name}</SheetTitle>
-        <SiteAgentChat onClose={close} onNavigate={close} />
+        <SiteAgentChat onClose={close} onNavigate={close} autoFocus={wide} />
       </SheetContent>
     </Sheet>
   );

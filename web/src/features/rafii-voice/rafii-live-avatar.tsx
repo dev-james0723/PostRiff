@@ -4,8 +4,8 @@ import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { smoothMouth, targetMouthOpen, type RafiiAvatarMode } from './avatar-state';
 
-const MODEL_URL = '/raffi/raffi-live-v1.glb';
-const FALLBACK_URL = '/raffi/full-512.png';
+const MODEL_URL = '/raffi/raffi-live-meshy-20260928.glb';
+const FALLBACK_URL = '/raffi/raffi-live-meshy-poster.png';
 
 type LiveProps = {
   mode: RafiiAvatarMode;
@@ -106,6 +106,8 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
     let lastTime = performance.now();
     let mouthOpen = 0;
     let modelReady = false;
+    let unrigged = false;
+    let modelBaseY = 0;
     let visibilityHandler: (() => void) | null = null;
     let contextLostHandler: ((event: Event) => void) | null = null;
 
@@ -153,12 +155,21 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
       const target = targetMouthOpen({ mode: state.mode, level: state.level, outputMuted: state.outputMuted });
       mouthOpen = smoothMouth(mouthOpen, target, dt);
       if (state.outputMuted || state.mode !== 'speaking') mouthOpen = 0;
+      if (unrigged) mouthOpen = 0;
 
       stage.dataset.rafiiMouthOpen = mouthOpen.toFixed(3);
       stage.dataset.rafiiContinuousMotion = state.reducedMotion ? 'off' : 'on';
 
       // Always restore from the authored pose before layering this frame.
       for (const name of ['Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'ArmL', 'ArmR', 'Tail01', 'Tail02', 'Tail03', 'Tail04']) restoreAxis(name);
+
+      // The supplied Meshy character is one baked mesh, so pose the whole character without pretending it has a face rig.
+      if (unrigged && model) {
+        model.rotation.z = state.mode === 'listening' ? -0.035 : state.mode === 'thinking' ? 0.04
+          : state.mode === 'speaking' && !state.reducedMotion ? Math.sin(seconds * 2.8) * 0.035 : 0;
+        model.rotation.y = state.mode === 'speaking' && !state.reducedMotion ? Math.sin(seconds * 2.2) * 0.03 : 0;
+        model.position.y = modelBaseY + (!state.reducedMotion && state.mode !== 'idle' ? Math.sin(seconds * 2) * 0.012 : 0);
+      }
 
       setMorph('Open', mouthOpen);
       setMorph('Wide', state.mode === 'speaking' ? mouthOpen * (0.18 + 0.11 * Math.sin(seconds * 7.0)) : 0);
@@ -309,10 +320,12 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
 
             const framedHeight = Math.max(1, size.y * 0.90);
             const distance = framedHeight / (2 * Math.tan(THREE.MathUtils.degToRad(liveCamera.fov * 0.5)));
-            liveCamera.position.set(0, size.y * 0.03, Math.max(distance * 0.86, size.z * 3.2));
+            liveCamera.position.set(0, size.y * 0.03, Math.max(distance * 0.72, size.z * 2.65));
             liveCamera.lookAt(0, size.y * 0.08, 0);
 
             for (const name of ['Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'Mouth', 'ArmL', 'ArmR', 'Tail01', 'Tail02', 'Tail03', 'Tail04']) remember(name);
+            unrigged = !nodes.Body;
+            modelBaseY = model.position.y;
             modelReady = true;
             setRenderState('ready');
             resize();
@@ -374,11 +387,8 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
       data-rafii-model-ready={renderState}
       data-rafii-continuous-motion={reducedMotion ? 'off' : 'on'}
     >
-      {fallback ? (
-        <Image src={FALLBACK_URL} alt='' fill sizes='(max-width: 640px) 100vw, 480px' className='object-contain object-center' priority={false} />
-      ) : (
-        <div ref={mountRef} className='size-full' />
-      )}
+      {!fallback && <div ref={mountRef} className='size-full' />}
+      {renderState !== 'ready' && <Image src={FALLBACK_URL} alt='' fill sizes='(max-width: 640px) 100vw, 480px' className='object-contain object-center' priority />}
     </div>
   );
 }

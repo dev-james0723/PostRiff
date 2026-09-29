@@ -1,0 +1,263 @@
+{
+ "base": "http://127.0.0.1:3190",
+ "voiceBase": "http://127.0.0.1:3190",
+ "engine": "chromium",
+ "principal": "synthetic",
+ "sections": [
+  "style",
+  "style-phone",
+  "slash",
+  "slash-phone",
+  "weather"
+ ],
+ "results": [
+  {
+   "name": "style: a new person starts on the default style, not yet chosen (GET /api/me → preferences.agentStyle)",
+   "ok": true
+  },
+  {
+   "name": "style: the Rafii panel opens",
+   "ok": true
+  },
+  {
+   "name": "style: the conversation header has the style pill, naming the style in use (Friendly)",
+   "ok": true
+  },
+  {
+   "name": "style: the pill says it opens a dialog, closed for now",
+   "ok": true
+  },
+  {
+   "name": "style: the pill opens the style sheet with the three starting points (Friendly, Concise, Explain in detail)",
+   "ok": true
+  },
+  {
+   "name": "style: the sheet carries the marker that lets the panel leave Escape to it",
+   "ok": true
+  },
+  {
+   "name": "style: Friendly is marked as the one in use",
+   "ok": true
+  },
+  {
+   "name": "style: picking Concise saves it (GET /api/me: direct tone, concise detail, normal pace, waits to be asked; chosen)",
+   "ok": true
+  },
+  {
+   "name": "style: … sent as PATCH /api/me { agentStyle: { preset: \"concise\", chosen: true } }",
+   "ok": true
+  },
+  {
+   "name": "style: … and Concise is now the one marked",
+   "ok": true
+  },
+  {
+   "name": "style: More options starts folded for a starting point",
+   "ok": true
+  },
+  {
+   "name": "style: More options opens tone, detail, speaking pace, voice, language and suggestions, set as Concise sets them",
+   "ok": true
+  },
+  {
+   "name": "style: choosing the Cedar voice saves it and keeps Concise (a voice is not part of a starting point)",
+   "ok": true
+  },
+  {
+   "name": "style: a slower pace makes a custom mix: saved, no starting point marked, and the sheet says “Custom”",
+   "ok": true
+  },
+  {
+   "name": "style: picking Concise again restores its settings and keeps the chosen voice",
+   "ok": true
+  },
+  {
+   "name": "style: axe finds no serious or critical issue in the style sheet",
+   "ok": true
+  },
+  {
+   "name": "style: Escape closes the style sheet …",
+   "ok": true
+  },
+  {
+   "name": "style: … and only the sheet: the Rafii panel stays open, docked",
+   "ok": true
+  },
+  {
+   "name": "style: the pill now says Concise",
+   "ok": true
+  },
+  {
+   "name": "style: Account › Preferences has a “Rafii’s style” row with the saved style",
+   "ok": true
+  },
+  {
+   "name": "style: the row opens the same style sheet (its marker, the starting points, Concise marked)",
+   "ok": true
+  },
+  {
+   "name": "style: a change made from the Account row saves too (Explain in detail, voice kept)",
+   "ok": true
+  },
+  {
+   "name": "style: the row’s summary follows the change",
+   "ok": true
+  },
+  {
+   "name": "style: after a reload the pill, the Account row and GET /api/me still say Explain in detail with the Cedar voice",
+   "ok": true
+  },
+  {
+   "name": "style: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "style phone: the Rafii drawer opens",
+   "ok": true
+  },
+  {
+   "name": "style phone: the header pill keeps its label at phone width",
+   "ok": true
+  },
+  {
+   "name": "style phone: the style sheet fits the screen width",
+   "ok": true
+  },
+  {
+   "name": "style phone: the three starting points are on screen",
+   "ok": true
+  },
+  {
+   "name": "style phone: nothing scrolls sideways with the sheet open",
+   "ok": true
+  },
+  {
+   "name": "style phone: picking Explain in detail saves it (GET /api/me)",
+   "ok": true
+  },
+  {
+   "name": "style phone: More options fits the sheet (no option runs off the side)",
+   "ok": true
+  },
+  {
+   "name": "style phone: Escape closes only the sheet; the Rafii drawer stays",
+   "ok": true
+  },
+  {
+   "name": "slash: the Rafii panel opens",
+   "ok": true
+  },
+  {
+   "name": "slash: typing “/” opens the command menu with its group headings",
+   "ok": true
+  },
+  {
+   "name": "slash: a bare “/” lists every command",
+   "ok": true
+  },
+  {
+   "name": "slash: focus stays in the input, which drives the list (aria-controls, aria-activedescendant, aria-autocomplete=list)",
+   "ok": true
+  },
+  {
+   "name": "slash: axe finds no serious or critical issue in the panel with the menu open",
+   "ok": true
+  },
+  {
+   "name": "slash: the scrollable list keeps focus and supports arrow-key navigation",
+   "ok": true
+  },
+  {
+   "name": "slash: Escape from the list returns focus to the composer and keeps the panel open",
+   "ok": true
+  },
+  {
+   "name": "slash: “/wea” filters the menu to /weather",
+   "ok": true
+  },
+  {
+   "name": "slash: Enter picks /weather without sending: the input reads “/weather ”",
+   "ok": true
+  },
+  {
+   "name": "slash: … and the menu closes",
+   "ok": true
+  },
+  {
+   "name": "slash: Esc closes the menu, and only the menu (the panel stays open)",
+   "ok": true
+  },
+  {
+   "name": "slash: … and stays closed while the same word goes on (“/wea”)",
+   "ok": true
+  },
+  {
+   "name": "slash: /open channels goes to Channels and says so in the panel",
+   "ok": true
+  },
+  {
+   "name": "slash: … without a turn to Rafii (a client command)",
+   "ok": true
+  },
+  {
+   "name": "slash: /style concise saves the style (GET /api/me)",
+   "ok": true
+  },
+  {
+   "name": "slash: … says “Style set to Concise.”, the header pill follows, and nothing went to Rafii",
+   "ok": true
+  },
+  {
+   "name": "slash: /help shows the full menu (the input becomes “/”)",
+   "ok": true
+  },
+  {
+   "name": "slash: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "slash phone: the Rafii drawer opens",
+   "ok": true
+  },
+  {
+   "name": "slash phone: “/” opens the menu above the composer, inside the screen",
+   "ok": true
+  },
+  {
+   "name": "slash phone: nothing scrolls sideways with the menu open",
+   "ok": true
+  },
+  {
+   "name": "slash phone: “/wea” filters to /weather",
+   "ok": true
+  },
+  {
+   "name": "slash phone: Enter picks it without sending",
+   "ok": true
+  },
+  {
+   "name": "weather: the API is the agent QA harness (its GPT-Live stand-in answered), so /weather uses the Open-Meteo stand-in",
+   "ok": true
+  },
+  {
+   "name": "weather: the Rafii panel opens",
+   "ok": true
+  },
+  {
+   "name": "weather: the panel talks to the agent runtime here",
+   "ok": true
+  },
+  {
+   "name": "weather: /weather Hong Kong goes to Rafii as typed, with command { name: \"weather\", args: \"Hong Kong\" }",
+   "ok": true
+  },
+  {
+   "name": "weather: … and is answered without a model (composedBy: deterministic)",
+   "ok": true
+  },
+  {
+   "name": "weather: the panel shows the direct answer: place, temperature, conditions, today’s range, rain chance and source (the stand-in’s data)",
+   "ok": true
+  }
+ ]
+}

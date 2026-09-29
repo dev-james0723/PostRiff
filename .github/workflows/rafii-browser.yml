@@ -106,12 +106,17 @@ jobs:
             sleep 2
           done
           echo "voice harness or development web server did not start"; tail -n 50 voice-harness.log voice-web.log; exit 1
-      - name: Rafii live agent, Chromium (style pill and sheet, Account row, / commands, first-call style picker, red mute, stop talking, goodbye, /weather, phone)
+      - name: Rafii style, commands and weather, Chromium
         env:
-          # voice, voice-phone and weather use the development build and the voice harness started above.
+          # Weather uses the development build and synthetic voice harness; style and commands use the main build.
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
-        run: node web/tests/rafii-live-agent-browser.cjs --browser=chromium --out=docs/design/rafii-live-agent/evidence/ci-browser-chromium
+        run: node web/tests/rafii-live-agent-browser.cjs --browser=chromium --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-chromium
+      - name: Rafii Agent Chat and Meshy Live, Chromium
+        env:
+          RAFII_WEB_URL: http://127.0.0.1:4441
+          RAFII_VOICE_PG_PORT: '55480'
+        run: node web/tests/rafii-chat-concepts-browser.cjs --browser=chromium --out=docs/design/rafii-agent-chat-redesign/evidence/ci-browser-chromium
       - name: Rafii guide, Chromium (/guide connect opens Channels, cursor and ring, Next and Stop, only data-guide-safe clicks, stops at Continue, Escape, phone)
         run: node web/tests/rafii-guide-browser.cjs --browser=chromium --out=docs/design/rafii-live-agent/evidence/ci-guide-chromium
       - name: Install WebKit for Playwright
@@ -119,11 +124,16 @@ jobs:
         run: npx --prefix web playwright install --with-deps webkit
       - name: Site agent journey, WebKit (the same checks)
         run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
-      - name: Rafii live agent, WebKit (the same style, command, voice and weather checks)
+      - name: Rafii style, commands and weather, WebKit
         env:
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
-        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
+        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
+      - name: Rafii Agent Chat and Meshy Live, WebKit
+        env:
+          RAFII_WEB_URL: http://127.0.0.1:4441
+          RAFII_VOICE_PG_PORT: '55480'
+        run: node web/tests/rafii-chat-concepts-browser.cjs --browser=webkit --out=docs/design/rafii-agent-chat-redesign/evidence/ci-browser-webkit
       - name: Rafii guide, WebKit (safe guide clicks, stop, Escape and phone)
         run: node web/tests/rafii-guide-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-guide-webkit
       - name: Keep the evidence for this commit
