@@ -709,6 +709,8 @@ class HostedApplication:
             if len(parts) == 4 and parts[:2] == ["api", "tools"] and parts[3] == "invoke" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
+            if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "skills" and method == "GET":
+                return self._json(start_response, 200, service.skill_preview(parts[2], token, parts[4]))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connectors":
