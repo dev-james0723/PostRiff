@@ -509,7 +509,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         </aside>
 
         {/* Thread */}
-        <section className='relative flex min-w-0 flex-col gap-5 lg:pr-7'>
+        <section className='relative flex min-w-0 flex-col gap-5 lg:pr-14'>
           <ThreadNavigator items={navItems} renderedIds={renderedIds} onJump={jumpTo} />
           <div className='flex flex-wrap items-end justify-between gap-3'>
             <div className='flex min-w-0 flex-col gap-1'>

@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useReducedMotion } from 'motion/react';
+import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { NavigationItem } from '@/lib/api/types';
+import { resampleBands, startExternalAudioSync, stopExternalAudioSync, useAudioReactive } from '@/lib/media/audio-reactive';
 import { relativeTime } from '@/lib/time';
 import { clusterNavigation, MARKER_LABELS, navigationId } from './markers';
 
@@ -21,6 +24,13 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
   const [mobileGroup, setMobileGroup] = useState<number | null>(null);
   const groups = useMemo(() => clusterNavigation(items), [items]);
   const activeIndex = Math.max(0, items.findIndex((item) => navigationId(item) === active));
+  const reduceMotion = useReducedMotion();
+  const audioActive = useAudioReactive((state) => state.active);
+  const audioLevel = useAudioReactive((state) => state.level);
+  const audioBands = useAudioReactive((state) => state.bands);
+  const audioSource = useAudioReactive((state) => state.source);
+  const externalState = useAudioReactive((state) => state.externalState);
+  const groupEnergy = useMemo(() => resampleBands(audioBands, groups.length), [audioBands, groups.length]);
 
   useEffect(() => {
     if (!renderedIds.length || typeof IntersectionObserver === 'undefined') return;
@@ -42,28 +52,65 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
     onJump(item);
   };
 
+  const toggleExternalAudio = async () => {
+    if (externalState === 'requesting') return;
+    if (externalState === 'active') {
+      stopExternalAudioSync();
+      toast.success('Music sync stopped');
+      return;
+    }
+    try {
+      await startExternalAudioSync();
+      toast.success('Music sync is reacting to shared playback audio');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not start music sync');
+    }
+  };
+
+  const syncLabel = externalState === 'active' ? 'Stop music sync' : externalState === 'requesting' ? 'Starting music sync' : 'Sync music from this device';
+
   if (!items.length) return null;
   return (
     <>
       <div className='rafii-quiet sticky top-16 z-10 flex items-center justify-center gap-1 rounded-[var(--rafii-radius-control)] p-1 text-xs lg:hidden' aria-label='Thread navigation'>
+        <Button variant='quiet' size='icon-sm' aria-label={syncLabel} aria-pressed={externalState === 'active'} disabled={externalState === 'requesting'} onClick={() => void toggleExternalAudio()}>
+          <Icons.music className={`size-4 ${audioActive && !reduceMotion ? 'motion-safe:animate-pulse' : ''}`} />
+        </Button>
         <Button variant='quiet' size='icon-sm' aria-label='Previous moment' disabled={activeIndex === 0} onClick={() => jump(items[activeIndex - 1])}><Icons.chevronUp className='size-4' /></Button>
         <button type='button' className='rafii-focus min-h-9 rounded px-3' aria-label={`Open thread map, ${activeIndex + 1} of ${items.length}`} onClick={() => setSheetOpen(true)}>{activeIndex + 1} / {items.length}</button>
         <Button variant='quiet' size='icon-sm' aria-label='Next moment' disabled={activeIndex >= items.length - 1} onClick={() => jump(items[activeIndex + 1])}><Icons.chevronDown className='size-4' /></Button>
       </div>
 
-      <nav aria-label='Thread map' className='pointer-events-none absolute inset-y-0 right-0 hidden w-7 lg:block'>
-        <div className='pointer-events-auto sticky top-24 flex max-h-[75vh] flex-col items-end justify-center gap-1 py-2'>
+      <nav aria-label='Thread map' className='pointer-events-none absolute inset-y-0 right-0 hidden w-12 lg:block'>
+        <div className='pointer-events-auto sticky top-24 flex max-h-[75vh] flex-col items-end gap-1 py-2'>
+          <Button variant='quiet' size='icon-sm' className='mb-1 shrink-0 rounded-full' aria-label={syncLabel} aria-pressed={externalState === 'active'} disabled={externalState === 'requesting'} onClick={() => void toggleExternalAudio()} title={`${syncLabel}. Audio is analysed locally and is not uploaded.`}>
+            <Icons.music className={`size-4 ${audioActive && !reduceMotion ? 'motion-safe:animate-pulse' : ''}`} />
+          </Button>
+          <div className='flex min-h-0 flex-1 flex-col items-end justify-center gap-1'>
           {groups.map((group, index) => {
             const selected = group.some((item) => navigationId(item) === active);
             const first = group[0];
             const preview = first.excerpt ? (first.excerpt.length > 88 ? `${first.excerpt.slice(0, 88)}…` : first.excerpt) : 'No text';
+            const energy = audioActive && !reduceMotion ? Math.min(1, (groupEnergy[index] ?? 0) * 0.86 + audioLevel * 0.14) : 0;
+            const base = selected ? 8 : 6;
+            const width = base + energy * 22;
+            const height = base + energy * 5;
             return (
-              <div key={navigationId(first)} className='group relative flex justify-end'>
+              <div key={navigationId(first)} className='group relative flex w-11 justify-end'>
                 <button type='button' aria-label={`${MARKER_LABELS[first.kind]}, turn ${first.seq}${group.length > 1 ? `, ${group.length} turns` : ''}`}
                   aria-expanded={group.length > 1 ? clusterOpen === index : undefined}
-                  className={`rafii-focus flex min-h-2 min-w-5 items-center justify-end rounded-full pr-1 ${selected ? 'text-primary' : 'text-muted-foreground/50 hover:text-foreground'}`}
+                  className={`rafii-focus flex min-h-2 min-w-10 items-center justify-end rounded-full pr-1 ${selected ? 'text-primary' : 'text-muted-foreground/50 hover:text-foreground'}`}
                   onClick={() => group.length === 1 ? jump(first) : setClusterOpen(clusterOpen === index ? null : index)}>
-                  <span aria-hidden className={`block rounded-full bg-current ${selected ? 'size-2' : 'size-1.5'}`} />
+                  <span aria-hidden className='block bg-current motion-reduce:transition-none'
+                    style={{
+                      width: `${width}px`,
+                      height: `${height}px`,
+                      borderRadius: energy > 0.05 ? `${52 + energy * 18}% ${48 - energy * 12}% ${56 - energy * 8}% ${44 + energy * 12}%` : '9999px',
+                      opacity: selected ? 1 : 0.58 + energy * 0.36,
+                      transform: energy > 0.05 ? `translateX(${energy * 1.5}px)` : undefined,
+                      transformOrigin: 'right center',
+                      transition: 'width 70ms linear, height 70ms linear, border-radius 100ms ease, opacity 100ms linear, transform 70ms linear',
+                    }} />
                 </button>
                 <div className='rafii-elevated pointer-events-none absolute top-1/2 right-full z-20 mr-2 hidden w-52 -translate-y-1/2 rounded-lg p-2 text-xs group-hover:block group-focus-within:block'>
                   <p className='font-medium'>{MARKER_LABELS[first.kind]}{group.length > 1 ? ` · ${group.length} turns` : ''}</p>
@@ -80,6 +127,8 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
               </div>
             );
           })}
+          </div>
+          {audioActive && <span className='sr-only' aria-live='polite'>{audioSource === 'external' ? 'Thread map is reacting to shared playback audio' : 'Thread map is reacting to Rafii media'}</span>}
         </div>
       </nav>
 
