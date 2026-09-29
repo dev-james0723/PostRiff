@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Rafii × thinking-orbs — Official Engine Preview</title>
+  <style>
+    :root{--bg:#0a0a0a;--panel:#121212;--panel2:#171717;--text:#f4f4f4;--muted:#9a9a9a;--line:#2a2a2a;--accent:#fff;--good:#b6f5c1;--warn:#ffd68a}
+    html[data-theme="light"]{--bg:#f4f4f2;--panel:#fff;--panel2:#f7f7f5;--text:#111;--muted:#686868;--line:#ddd;--accent:#111;--good:#176a2f;--warn:#855500}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit}.wrap{max-width:1240px;margin:auto;padding:28px 18px 56px}.hero{display:grid;grid-template-columns:1.4fr .8fr;gap:18px;align-items:stretch;margin-bottom:18px}.hero>div,.controls{background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:24px}.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}h1{font-size:clamp(34px,7vw,72px);line-height:.95;letter-spacing:-.055em;margin:14px 0 14px;max-width:820px}.lede{font-size:17px;color:var(--muted);max-width:760px;margin:0}.truth{margin-top:18px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--panel2);font-size:13px}.truth b{color:var(--good)}.controls{display:flex;flex-direction:column;justify-content:space-between;gap:18px}.controlRow{display:flex;flex-wrap:wrap;gap:8px}.btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:999px;padding:10px 14px;font:inherit;cursor:pointer}.btn.active{background:var(--text);color:var(--bg)}.range{width:100%}.status{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.status.ok{color:var(--good)}.status.err{color:#ff8c8c}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;min-height:300px}.stage{height:168px;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.05),transparent 54%);position:relative}.stage canvas{width:96px;height:96px;display:block}.mini{position:absolute;right:18px;bottom:18px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}.mini canvas{width:20px;height:20px}.body{padding:18px}.topline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.num{font-size:12px;color:var(--muted)}h2{font-size:22px;letter-spacing:-.025em;margin:2px 0 6px}.repo{font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);border:1px solid var(--line);padding:5px 8px;border-radius:999px;white-space:nowrap}.desc{color:var(--muted);margin:8px 0 14px}.use{font-size:13px;background:var(--panel2);border:1px solid var(--line);padding:12px 13px;border-radius:14px}.use b{display:block;margin-bottom:4px;color:var(--text)}.composite{outline:1px dashed var(--warn);outline-offset:-7px}.composite .repo{color:var(--warn)}footer{color:var(--muted);font-size:12px;margin-top:18px;padding:0 4px}.source{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.source span{border:1px solid var(--line);border-radius:999px;padding:6px 9px}
+    @media(max-width:820px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.wrap{padding:16px 12px 42px}.hero>div,.controls{border-radius:22px;padding:20px}.card{border-radius:20px}.stage{height:150px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Rafii × Jakub Antalik / thinking-orbs</div>
+      <h1>Actual repo engine.<br>No imitation.</h1>
+      <p class="lede">Every moving dot below is rendered by the published <code>thinking-orbs@0.3.1</code> engine: <code>resolvePreset()</code> + <code>MODE_DRAWS</code>. Nine cards are official states. Card 10 is a Rafii workflow composite that switches between two official states.</p>
+      <div class="truth"><b>Important:</b> this page intentionally bypasses the React wrapper’s <code>prefers-reduced-motion</code> freeze so this review lab always animates. Geometry, timing profiles, dot counts and paint behavior still come directly from the repo engine.</div>
+    </div>
+    <aside class="controls">
+      <div>
+        <div class="eyebrow">Preview controls</div>
+        <div class="controlRow" style="margin-top:12px">
+          <button class="btn active" id="darkBtn">Dark</button>
+          <button class="btn" id="lightBtn">Light</button>
+          <button class="btn" id="pauseBtn">Pause</button>
+        </div>
+        <label style="display:block;margin-top:18px;color:var(--muted);font-size:12px">Speed <span id="speedOut">1.0×</span></label>
+        <input class="range" id="speed" type="range" min="0.35" max="2" value="1" step="0.05" />
+      </div>
+      <div id="moduleStatus" class="status">Loading official engine from jsDelivr…</div>
+    </aside>
+  </section>
+  <main class="grid" id="grid"></main>
+  <footer>
+    <div>This review page is pinned to <strong>thinking-orbs 0.3.1</strong>, matching the repository package manifest inspected for this build. MIT © Jakub Antalik. The package itself remains the source of animation behavior.</div>
+    <div class="source"><span>Official states: 9</span><span>Canvas 2D</span><span>64 / 20 tuned sizes</span><span>Rafii composite: official states only</span></div>
+  </footer>
+</div>
+<script type="module">
+  const SOURCE = 'https://cdn.jsdelivr.net/npm/thinking-orbs@0.3.1/dist/engine.es.js';
+  const STATES = [
+    {state:'working', title:'Working', desc:'Particles travel on tilted orbital paths.', use:'General tool execution, background work, file operations, and any “busy but not semantically specific” phase.', why:'The safest neutral busy state. It communicates active work without pretending Rafii is searching or reasoning.'},
+    {state:'searching', title:'Searching', desc:'A scanning meridian sweeps a dotted globe.', use:'Web research, library lookup, file retrieval, connected knowledge search.', why:'The scan motion reads as retrieval immediately, so the user can tell Rafii is looking outward for information.'},
+    {state:'solving', title:'Solving', desc:'Bands scramble and resolve back into order.', use:'Debugging, planning, comparing options, constraint solving, validation.', why:'Its disorder-to-order loop visually matches analytical convergence better than a generic spinner.'},
+    {state:'listening', title:'Listening', desc:'A waveform propagates through the rings.', use:'GPT Live, voice input, music/audio-aware interactions, speech capture.', why:'The waveform metaphor makes input reception legible before any transcript or text appears.'},
+    {state:'connecting', title:'Connecting', desc:'A constellation-like network wires itself together.', use:'OAuth, MCP, connector setup, device pairing, API/session handshakes.', why:'It maps directly to establishing links between Rafii and an external system.'},
+    {state:'weaving', title:'Weaving', desc:'Three strands plait around the sphere.', use:'Combining Brand Brain, research, user voice, campaign context, and multiple sources.', why:'This is unusually good for Rafii because synthesis is a core coworker behavior, not just “thinking”.'},
+    {state:'composing', title:'Composing', desc:'An undulating multi-band sash flows around the orb.', use:'Writing captions, posts, replies, campaign copy, scripts, and editorial drafts.', why:'It feels generative and editorial rather than analytical, giving writing its own recognizable phase.'},
+    {state:'breathing', title:'Breathing', desc:'A dotted ring slowly changes form.', use:'Ready/idle presence, waiting for the next live utterance, soft thinking pauses.', why:'It keeps Rafii feeling present without telling the user an expensive task is actively running.'},
+    {state:'shaping', title:'Shaping', desc:'A dotted outline morphs between geometric forms.', use:'Structuring an artifact, layout generation, image brief formation, campaign architecture.', why:'The literal act of changing form works well when Rafii is turning loose intent into a concrete deliverable.'},
+    {state:'composite', title:'Rafii Action', desc:'Composite review state: Connecting → Working, using only official repo animations.', use:'Publish, schedule, send, save, deploy, or any external side-effect after reasoning is finished.', why:'The repo has no tenth state. Rather than invent one, Rafii can signal action by sequencing two existing official states.'}
+  ];
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = STATES.map((s,i)=>`<article class="card ${s.state==='composite'?'composite':''}">
+    <div class="stage"><canvas class="orb" data-state="${s.state}" width="192" height="192" aria-label="${s.title}"></canvas><div class="mini"><canvas class="orbMini" data-state="${s.state}" width="40" height="40"></canvas><span>20px inline</span></div></div>
+    <div class="body"><div class="topline"><div><div class="num">${String(i+1).padStart(2,'0')}</div><h2>${s.title}</h2></div><span class="repo">${s.state==='composite'?'RAFII COMPOSITE':'REPO STATE'}</span></div>
+    <p class="desc">${s.desc}</p><div class="use"><b>Best Rafii use</b>${s.use}<br><br><b>Why it matters</b>${s.why}</div></div>
+  </article>`).join('');
+
+  const status = document.getElementById('moduleStatus');
+  let dark=true, paused=false, speedMul=1;
+  document.getElementById('speed').addEventListener('input',e=>{speedMul=Number(e.target.value);document.getElementById('speedOut').textContent=speedMul.toFixed(2).replace(/0$/,'')+'×'});
+  document.getElementById('darkBtn').onclick=()=>setTheme(true);
+  document.getElementById('lightBtn').onclick=()=>setTheme(false);
+  document.getElementById('pauseBtn').onclick=(e)=>{paused=!paused;e.currentTarget.textContent=paused?'Resume':'Pause';e.currentTarget.classList.toggle('active',paused)};
+  function setTheme(isDark){dark=isDark;document.documentElement.dataset.theme=isDark?'dark':'light';document.getElementById('darkBtn').classList.toggle('active',isDark);document.getElementById('lightBtn').classList.toggle('active',!isDark)}
+
+  try {
+    const { MODE_DRAWS, resolvePreset } = await import(SOURCE);
+    status.className='status ok'; status.textContent='✓ Official thinking-orbs engine loaded: '+SOURCE;
+    const items=[...document.querySelectorAll('canvas.orb, canvas.orbMini')].map(canvas=>{
+      const displaySize=canvas.classList.contains('orbMini')?20:96;
+      const presetSize=canvas.classList.contains('orbMini')?20:64;
+      const dpr=Math.min(2,window.devicePixelRatio||1);
+      canvas.width=Math.round(displaySize*dpr); canvas.height=Math.round(displaySize*dpr);
+      canvas.style.width=displaySize+'px'; canvas.style.height=displaySize+'px';
+      const ctx=canvas.getContext('2d');
+      return {canvas,ctx,displaySize,presetSize,dpr,state:canvas.dataset.state};
+    });
+    function drawOfficial(item,state,t){
+      const {mode,speed,opts}=resolvePreset(state,item.presetSize);
+      item.ctx.setTransform(item.dpr*(item.displaySize/item.presetSize),0,0,item.dpr*(item.displaySize/item.presetSize),0,0);
+      item.ctx.clearRect(0,0,item.presetSize,item.presetSize);
+      MODE_DRAWS[mode](item.ctx,item.presetSize,t*speed*speedMul,dark,opts);
+    }
+    let frozenT=0;
+    function frame(ms){
+      const liveT=ms/1000;
+      if(!paused) frozenT=liveT;
+      for(const item of items){
+        if(item.state==='composite'){
+          const cycle=(frozenT%5.2);
+          const state=cycle<2.15?'connecting':'working';
+          drawOfficial(item,state,frozenT);
+        } else drawOfficial(item,item.state,frozenT);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  } catch (err) {
+    status.className='status err';
+    status.innerHTML='Official engine could not load inside this viewer. Open this HTML in Safari/Chrome with internet access. Error: '+String(err);
+  }
+</script>
+</body>
+</html>
