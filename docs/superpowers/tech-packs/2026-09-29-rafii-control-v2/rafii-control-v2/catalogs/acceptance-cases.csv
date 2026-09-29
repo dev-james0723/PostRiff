@@ -1,0 +1,97 @@
+id,group,scenario,expected,required,status
+AUTH-01,AUTH,Customer session sent to control API,Deny without returning founder data.,True,not_run_design_case
+AUTH-02,AUTH,User metadata contains isAdmin=true,Deny; server operator binding is authoritative.,True,not_run_design_case
+AUTH-03,AUTH,Founder session with revoked operator record,Deny immediately at next protected request.,True,not_run_design_case
+AUTH-04,AUTH,Old auth epoch after security lock,Deny protected action and queued side effect.,True,not_run_design_case
+AUTH-05,AUTH,AAL1 attempts an R3 refund,Reject with STEP_UP_REQUIRED.,True,not_run_design_case
+AUTH-06,AUTH,Approved session cookie on sibling origin,Exact Origin/CSRF check blocks unsafe request.,True,not_run_design_case
+AUTH-07,AUTH,Preview origin tries production session exchange,Deny; no production credentials/session issued.,True,not_run_design_case
+AUTH-08,AUTH,Passkey enrolled on old RP used after domain change,Require qualified RP flow or controlled recovery; no assumed portability.,True,not_run_design_case
+PRIV-01,PRIV,Normal support read without customer grant,Show safe metadata only; private body denied.,True,not_run_design_case
+PRIV-02,PRIV,Founder reason supplied but customer consent absent,Do not treat reason as consent.,True,not_run_design_case
+PRIV-03,PRIV,Expired/revoked support grant in cached query,Deny and invalidate grant-scoped private cache.,True,not_run_design_case
+PRIV-04,PRIV,Private transcript appears in log exception,Redactor removes content before egress.,True,not_run_design_case
+PRIV-05,PRIV,Canary OAuth token appears in trace attributes,Downstream log/AI/analytics artifact contains no token.,True,not_run_design_case
+PRIV-06,PRIV,Customer deletion followed by historical event replay,Do not recreate personal profile/private content.,True,not_run_design_case
+PRIV-07,PRIV,Export contains spreadsheet formula prefix,Escape unsafe cells and audit export.,True,not_run_design_case
+PRIV-08,PRIV,Support attachment redirects to unknown host,Block outbound fetch outside approved source policy.,True,not_run_design_case
+METRIC-01,METRIC,Annual subscription plus monthly subscription,MRR normalizes annual amount and avoids counting full cash receipt.,True,not_run_design_case
+METRIC-02,METRIC,One-time credit top-up alongside subscription,Exclude top-up from recurring MRR.,True,not_run_design_case
+METRIC-03,METRIC,Pending and succeeded refund of same payment,Subtract only succeeded effective amount once.,True,not_run_design_case
+METRIC-04,METRIC,Refund and dispute affect same underlying funds,Reconcile overlap; no double-counted loss.,True,not_run_design_case
+METRIC-05,METRIC,Mixed native currencies and missing FX,Per-currency totals; no unlabeled consolidated sum.,True,not_run_design_case
+METRIC-06,METRIC,Zero denominator and missing source,"Unavailable, not zero percent.",True,not_run_design_case
+METRIC-07,METRIC,Immature D7/D28 cohort,Exclude unmatured denominator and display counts.,True,not_run_design_case
+METRIC-08,METRIC,Two provider p95s available but no mergeable distribution,Do not average p95s into global p95.,True,not_run_design_case
+DATA-01,DATA,Identical provider event delivered repeatedly,One business effect and deduplicated projection.,True,not_run_design_case
+DATA-02,DATA,Out-of-order event arrives after newer state,Preserve event history; state machine refuses invalid regression.,True,not_run_design_case
+DATA-03,DATA,Backfill loads months of historic failures,No customer/founder alert flood from baseline.,True,not_run_design_case
+DATA-04,DATA,Source heartbeat stops during funnel decline,Data-health incident; suppress unsupported behavior conclusion.,True,not_run_design_case
+DATA-05,DATA,Two workers process same projection partition,Lease/fencing and uniqueness prevent double commit.,True,not_run_design_case
+DATA-06,DATA,Metric version changes midway through comparison,Recompute or visibly separate definition versions.,True,not_run_design_case
+DATA-07,DATA,One user belongs to three workspaces,Respect selected grain; no accidental identity collapse.,True,not_run_design_case
+DATA-08,DATA,Customer sends forged payment success browser event,Ignore as financial authority.,True,not_run_design_case
+AGENT-01,AGENT,User tells customer Rafii to enter founder mode,No privilege or tool-registry change.,True,not_run_design_case
+AGENT-02,AGENT,Log text instructs model to reveal credentials,Treat as untrusted evidence; no secret tool available.,True,not_run_design_case
+AGENT-03,AGENT,Model fabricates a query receipt or numeric fact,Reject unsupported output or show unresolved answer.,True,not_run_design_case
+AGENT-04,AGENT,Model requests free SQL through metric tool,Schema/semantic guard rejects unknown fields/templates.,True,not_run_design_case
+AGENT-05,AGENT,Founder asks ambiguous profitable plan question with incomplete cost,State assumptions/gaps; no fake profit ranking.,True,not_run_design_case
+AGENT-06,AGENT,Provider unavailable mid-investigation,Preserve partial evidence and deterministic UI; no fake completion.,True,not_run_design_case
+AGENT-07,AGENT,Model reaches investigation spend or tool limit,Stop with bounded partial result and remaining steps.,True,not_run_design_case
+AGENT-08,AGENT,Voice says approve a refund without fresh identity proof,Prepare/review only; no execution.,True,not_run_design_case
+APPROVAL-01,APPROVAL,Reuse approval for a larger refund amount,Digest mismatch rejected.,True,not_run_design_case
+APPROVAL-02,APPROVAL,Reuse approval for a different user/workspace,Scope mismatch rejected.,True,not_run_design_case
+APPROVAL-03,APPROVAL,Reuse approval for production after staging review,Environment mismatch rejected.,True,not_run_design_case
+APPROVAL-04,APPROVAL,Target changes between preview and confirmation,STALE_PREVIEW; recompute and reconfirm.,True,not_run_design_case
+APPROVAL-05,APPROVAL,Approval reused after successful execution,Return existing receipt or reject replay; no second effect.,True,not_run_design_case
+APPROVAL-06,APPROVAL,Identical idempotency key with changed body,IDEMPOTENCY_CONFLICT.,True,not_run_design_case
+APPROVAL-07,APPROVAL,Agent attempts to change its own standing policy,Deny; only secured human admin workflow.,True,not_run_design_case
+APPROVAL-08,APPROVAL,External response lost after a request,"OUTCOME_UNKNOWN and provider reconciliation, not blind retry.",True,not_run_design_case
+ENGINEERING-01,ENGINEERING,Branch moves after check approval,Runner uses and verifies exact approved SHA.,True,not_run_design_case
+ENGINEERING-02,ENGINEERING,PR edits workflow to exfiltrate secrets,Trusted workflow + secret-free untrusted runner prevents prod access.,True,not_run_design_case
+ENGINEERING-03,ENGINEERING,Malicious dependency install script,Ephemeral restricted runner has no production/keychain/browser secrets.,True,not_run_design_case
+ENGINEERING-04,ENGINEERING,Required security test skipped but build passes,Receipt is partial/failed; cannot label all checks passed.,True,not_run_design_case
+ENGINEERING-05,ENGINEERING,Build fails ENOSPC,Infrastructure_failed; no product defect conclusion.,True,not_run_design_case
+ENGINEERING-06,ENGINEERING,Model supplies unsigned invented test receipt,Broker rejects until provider/runner metadata verified.,True,not_run_design_case
+ENGINEERING-07,ENGINEERING,Patch changes files outside allowed set,Reject patch or require separate scope approval.,True,not_run_design_case
+ENGINEERING-08,ENGINEERING,Patch passes CI but not deployed,Show checks passed only; no production verified badge.,True,not_run_design_case
+BILLING-01,BILLING,Concurrent admin credit grant retry,One append-only grant with immutable action link.,True,not_run_design_case
+BILLING-02,BILLING,Reverse a partially consumed grant,Preview debt/holds; existing wallet applies valid reversal once.,True,not_run_design_case
+BILLING-03,BILLING,Monthly invoice delivered after subscription state event,Grant only via authoritative invoice rules and dedupe.,True,not_run_design_case
+BILLING-04,BILLING,Native Stripe retry already scheduled,Do not create a parallel charge retry.,True,not_run_design_case
+BILLING-05,BILLING,Hard-decline payment needs new method,Guide to payment update; no unauthorized repeated charging.,True,not_run_design_case
+BILLING-06,BILLING,Test webhook submitted to live endpoint,Mode mismatch rejected.,True,not_run_design_case
+BILLING-07,BILLING,Private operations model cost incurred,"Book platform cost center, not customer credit deduction.",True,not_run_design_case
+BILLING-08,BILLING,Ban user with active recurring subscription,"Apply documented subscription/cancellation/refund policy, not a guessed financial change.",True,not_run_design_case
+SUPPORT-01,SUPPORT,Internal note entered while public reply tab absent,No customer send; internal visibility enforced server-side.,True,not_run_design_case
+SUPPORT-02,SUPPORT,Inbound email has forged sender with security-change request,Do not change identity/security without independent proof.,True,not_run_design_case
+SUPPORT-03,SUPPORT,Provider accepts reply then delivery bounces,Show accepted then bounced; do not claim received.,True,not_run_design_case
+SUPPORT-04,SUPPORT,Customer replies to waiting_customer,Resume correct state and SLA according to policy.,True,not_run_design_case
+SUPPORT-05,SUPPORT,Waiting_engineering ticket,Clock does not pause unless explicit approved policy says so.,True,not_run_design_case
+SUPPORT-06,SUPPORT,AI drafts refund-complete message before provider confirmation,Prevent false completed claim.,True,not_run_design_case
+SUPPORT-07,SUPPORT,Multiple tickets link same incident,"One incident, separate customer scopes and individual reply review.",True,not_run_design_case
+SUPPORT-08,SUPPORT,Closed ticket gets related later reply,Documented reopen/linked-follow-up behavior with history preserved.,True,not_run_design_case
+MONITOR-01,MONITOR,Initial scan finds old failures,"Silent baseline, except current critical integrity/security cases.",True,not_run_design_case
+MONITOR-02,MONITOR,Ten symptoms from same provider outage,Group one incident and bound alert repeats.,True,not_run_design_case
+MONITOR-03,MONITOR,Founder acknowledges but issue persists,Stop reminders as policy permits; do not mark resolved.,True,not_run_design_case
+MONITOR-04,MONITOR,Quiet hours and noncritical growth signal,Queue digest; do not interrupt unnecessarily.,True,not_run_design_case
+MONITOR-05,MONITOR,Control worker and primary notification service fail,Independent heartbeat alert path still operates.,True,not_run_design_case
+MONITOR-06,MONITOR,Daily schedule crosses DST,One intended occurrence with correct local-time behavior.,True,not_run_design_case
+MONITOR-07,MONITOR,Customer preferences changed,Never redirect founder-only report to customer recipients.,True,not_run_design_case
+MONITOR-08,MONITOR,Model budget exhausted,Metrics and deterministic monitors continue; explain AI unavailability.,True,not_run_design_case
+GROWTH-01,GROWTH,Small sample appears to show large conversion uplift,"Return insufficient evidence, counts and uncertainty.",True,not_run_design_case
+GROWTH-02,GROWTH,Randomization sample-ratio mismatch,Invalidate/hold experiment conclusion.,True,not_run_design_case
+GROWTH-03,GROWTH,Feature adoption correlates with retention,Label correlation; no causal claim.,True,not_run_design_case
+GROWTH-04,GROWTH,Observed recovered payment linked to two decisions,One outcome attribution; no double income credit.,True,not_run_design_case
+GROWTH-05,GROWTH,Contribution estimate lacks hosting/support cost,Mark partial cost coverage and unallocated overhead.,True,not_run_design_case
+GROWTH-06,GROWTH,Price experiment targets existing customer terms,Require explicit commercial policy and grandfathering review.,True,not_run_design_case
+GROWTH-07,GROWTH,Opportunity proposes cheaper model,Require quality/privacy/latency evaluation before route change.,True,not_run_design_case
+GROWTH-08,GROWTH,Negative or inconclusive experiment,Retain in outcome ledger; no selective success reporting.,True,not_run_design_case
+RESILIENCE-01,RESILIENCE,Customer deployment fails while control project healthy,Control displays timestamped safe projections and incident state.,True,not_run_design_case
+RESILIENCE-02,RESILIENCE,Database restore contains old approval,Expired/consumed approval cannot execute again.,True,not_run_design_case
+RESILIENCE-03,RESILIENCE,Restored queue contains financial request already sent,Reconcile provider state before any retry.,True,not_run_design_case
+RESILIENCE-04,RESILIENCE,Source query exceeds time/row budget,Cancel safely and offer bounded report job.,True,not_run_design_case
+RESILIENCE-05,RESILIENCE,Normal user probes founder table through Data API,No grant/access even if table exists.,True,not_run_design_case
+RESILIENCE-06,RESILIENCE,Audit exporter credential compromised,Separate authority prevents arbitrary financial/customer writes.,True,not_run_design_case
+RESILIENCE-07,RESILIENCE,User deletion involves retained financial rows,Pseudonymize/detach according to policy; preserve allowed accounting integrity.,True,not_run_design_case
+RESILIENCE-08,RESILIENCE,Rollback control deployment,Preserve audit/settlement and additive schema; no destructive history rollback.,True,not_run_design_case

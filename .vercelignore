@@ -62,3 +62,12 @@ web/.env*
 web/tests/
 web/plans/
 requirements-dev.txt
+
+# Rafii Control v2 ships only through its separate allowlisted deployment candidate.
+/.control-venv/
+/.control-browsers/
+/control-web/
+/src/rafii_control/
+/api/control.py
+/requirements-control.txt
+/vercel.control.json

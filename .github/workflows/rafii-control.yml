@@ -1,0 +1,60 @@
+name: Rafii Control foundation
+on:
+  pull_request:
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rafii-control-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      RAFII_CONTROL_ENABLED: '1'
+      RAFII_CONTROL_ORIGIN: http://localhost:4449
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: control-web/package-lock.json
+      - name: Install pinned dependencies and disposable PostgreSQL
+        run: |
+          python -m pip install -r requirements-control.txt
+          npm install -g npm@11.12.1
+          npm --prefix control-web ci
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Boundary, golden definitions, isolated tools, package and PostgreSQL roles
+        run: python scripts/rafii_control_pg.py
+      - name: Frontend contracts, types, lint and production build
+        run: |
+          npm --prefix control-web test
+          npm --prefix control-web run typecheck
+          npm --prefix control-web run lint
+          npm --prefix control-web run build
+      - name: Production-mode browser against disposable restricted PostgreSQL
+        run: |
+          cd control-web && npx playwright install --with-deps chromium && cd ..
+          python scripts/rafii_control_pg.py --browser
+      - name: Retain source-specific synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafii-control-${{ github.sha }}
+          path: docs/rafii-control-v2/evidence/
+          retention-days: 14

@@ -1,0 +1,99 @@
+{
+  "execution": "local/disposable synthetic checks; no production, provider/model or notification execution",
+  "baseSHA": "d91660b7936a5158b820914107306ad4a1e51c2d",
+  "consumerSourceFingerprint": "013a7d3a512eb6c999b94e02cdaed275378c69c0e71c5491459063ecb12e7286",
+  "python": {
+    "command": "PYTHONPATH=src:tests .control-venv/bin/python -m unittest discover -s tests -p test_*.py",
+    "status": "PASS",
+    "run": 3006,
+    "passed": 2755,
+    "skipped": 251,
+    "failed": 0,
+    "errors": 0,
+    "sourceUnchanged": true,
+    "receipt": "control-v2-final-stable-python.json"
+  },
+  "control": {
+    "command": "PLAYWRIGHT_BROWSERS_PATH=$PWD/.control-browsers .control-venv/bin/python scripts/rafii_control_pg.py --browser",
+    "status": "PASS",
+    "run": 45,
+    "passed": 45,
+    "skipped": 0,
+    "failed": 0,
+    "postgresTests": 7,
+    "migrationApplications": 2
+  },
+  "consumerWeb": {
+    "status": "PASS",
+    "tests": 478,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": "PASS with worktree-only missing GSAP dependency overlay; shared node_modules unchanged",
+    "lint": "0 errors; 1 existing consistent-function-scoping warning"
+  },
+  "controlWeb": {
+    "status": "PASS",
+    "contracts": 2,
+    "typecheck": "PASS",
+    "lint": "0 errors; 0 warnings",
+    "build": "PASS Next 16.3.5 / Node 24.15.0 production build",
+    "browser": "PASS production Next -> WSGI -> restricted disposable PostgreSQL; viewports 390 and 1440; pageErrors=0; settings axe violations=0 at both widths",
+    "browserReceipt": "browser.json",
+    "cleanCandidate": "PASS: typecheck and production build from fresh allowlisted candidate without existing .next artifacts"
+  },
+  "postgresRegression": {
+    "status": "PASS",
+    "scriptExecutions": 90,
+    "receipt": "postgres-regression.json",
+    "provenanceRepair": "postgres-whitespace-repaired.json"
+  },
+  "security": {
+    "sourceScan": "PASS, zero unexpected findings; source unchanged",
+    "scopedScan": "PASS, 79 files reviewed, 32 metadata/synthetic findings, zero unexpected",
+    "npmVulnerabilities": 0,
+    "pythonVulnerabilities": 0,
+    "compileall": "PASS",
+    "diffCheck": "PASS implementation files; supplied spec hard breaks/CSV CRLF preserved byte-for-byte with original warnings",
+    "review": "../security-review.md"
+  },
+  "artifacts": {
+    "control": {
+      "status": "PASS",
+      "files": 688,
+      "bytes": 2366692,
+      "sha256": "f2bb32449a68bad94671856f02ee9fd3d01df99074d587c2ff0075307124f5b7"
+    },
+    "consumer": {
+      "status": "PASS",
+      "files": 4759,
+      "bytes": 31007139,
+      "sha256": "96352785a3e50548fa9ba42ab4f0f89811a22879b40e196424b030b7b56a9366",
+      "controlExcluded": true
+    },
+    "deployment": "NOT_RUN"
+  },
+  "techPack": {
+    "status": "PASS",
+    "checksPassed": 66,
+    "checksFailed": 0,
+    "designedProductCases": 96,
+    "designedProductCasesExecutedAsSuite": false
+  },
+  "calls": {
+    "paidProviderModel": 0,
+    "email": 0,
+    "push": 0,
+    "refund": 0,
+    "productionMigration": 0,
+    "productionDeployment": 0
+  },
+  "recoverableRawLogs": "docs/rafii-control-v2/evidence/raw/ (local ignored) and docs/consumer-ready/evidence/*.log (local ignored)",
+  "preview": {
+    "status": "NOT_CREATED",
+    "reason": "Separate rafii-control project and qualified staging authority absent; current policy requires those gates"
+  },
+  "reviews": {
+    "security": "../security-review.md",
+    "specGap": "../spec-gap-review.md"
+  }
+}

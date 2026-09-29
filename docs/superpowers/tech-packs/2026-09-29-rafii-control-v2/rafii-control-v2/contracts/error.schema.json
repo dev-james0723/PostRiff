@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:error",
+  "title": "error",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "AUTH_REQUIRED",
+        "FOUNDER_REQUIRED",
+        "STEP_UP_REQUIRED",
+        "SCOPE_DENIED",
+        "STALE_PREVIEW",
+        "POLICY_CHANGED",
+        "BUDGET_EXCEEDED",
+        "SOURCE_UNAVAILABLE",
+        "RUNNER_NOT_CONNECTED",
+        "RATE_LIMITED",
+        "IDEMPOTENCY_CONFLICT",
+        "OUTCOME_UNKNOWN",
+        "VALIDATION_FAILED"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    }
+  },
+  "required": [
+    "requestId",
+    "code",
+    "message"
+  ],
+  "additionalProperties": false
+}

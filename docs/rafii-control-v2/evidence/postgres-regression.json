@@ -1,0 +1,459 @@
+{
+  "execution": "local-db; synthetic external services",
+  "results": [
+    {
+      "script": "tests/phase2/postgres_account.py",
+      "exitCode": 0,
+      "seconds": 0.57
+    },
+    {
+      "script": "tests/phase2/postgres_agent_plan.py",
+      "exitCode": 0,
+      "seconds": 0.57
+    },
+    {
+      "script": "tests/phase2/postgres_agent_runtime.py",
+      "exitCode": 0,
+      "seconds": 6.51
+    },
+    {
+      "script": "tests/phase2/postgres_agent_runtime_references.py",
+      "exitCode": 0,
+      "seconds": 1.55
+    },
+    {
+      "script": "tests/phase2/postgres_agent_style.py",
+      "exitCode": 0,
+      "seconds": 0.31
+    },
+    {
+      "script": "tests/phase2/postgres_api_tokens.py",
+      "exitCode": 0,
+      "seconds": 0.41
+    },
+    {
+      "script": "tests/phase2/postgres_audience.py",
+      "exitCode": 0,
+      "seconds": 0.29
+    },
+    {
+      "script": "tests/phase2/postgres_audit_access.py",
+      "exitCode": 0,
+      "seconds": 0.26
+    },
+    {
+      "script": "tests/phase2/postgres_billing.py",
+      "exitCode": 0,
+      "seconds": 0.37
+    },
+    {
+      "script": "tests/phase2/postgres_billing_stripe.py",
+      "exitCode": 0,
+      "seconds": 0.3
+    },
+    {
+      "script": "tests/phase2/postgres_budget_policy.py",
+      "exitCode": 0,
+      "seconds": 0.3
+    },
+    {
+      "script": "tests/phase2/postgres_caller_identity.py",
+      "exitCode": 0,
+      "seconds": 3.88
+    },
+    {
+      "script": "tests/phase2/postgres_caller_identity_migration.py",
+      "exitCode": 0,
+      "seconds": 0.17
+    },
+    {
+      "script": "tests/phase2/postgres_channels.py",
+      "exitCode": 0,
+      "seconds": 0.59
+    },
+    {
+      "script": "tests/phase2/postgres_chat_automation.py",
+      "exitCode": 0,
+      "seconds": 0.65
+    },
+    {
+      "script": "tests/phase2/postgres_cli_reasoning.py",
+      "exitCode": 0,
+      "seconds": 0.63
+    },
+    {
+      "script": "tests/phase2/postgres_cli_route.py",
+      "exitCode": 0,
+      "seconds": 0.92
+    },
+    {
+      "script": "tests/phase2/postgres_consumer_campaign_worker.py",
+      "exitCode": 0,
+      "seconds": 2.35
+    },
+    {
+      "script": "tests/phase2/postgres_consumer_deletion.py",
+      "exitCode": 0,
+      "seconds": 0.5
+    },
+    {
+      "script": "tests/phase2/postgres_consumer_migrations.py",
+      "exitCode": 0,
+      "seconds": 1.44
+    },
+    {
+      "script": "tests/phase2/postgres_consumer_model_safety.py",
+      "exitCode": 0,
+      "seconds": 1.01
+    },
+    {
+      "script": "tests/phase2/postgres_consumer_operations.py",
+      "exitCode": 0,
+      "seconds": 0.24
+    },
+    {
+      "script": "tests/phase2/postgres_context_navigation.py",
+      "exitCode": 0,
+      "seconds": 0.39
+    },
+    {
+      "script": "tests/phase2/postgres_coworker.py",
+      "exitCode": 0,
+      "seconds": 3.97
+    },
+    {
+      "script": "tests/phase2/postgres_credit_purchases.py",
+      "exitCode": 0,
+      "seconds": 0.64
+    },
+    {
+      "script": "tests/phase2/postgres_credits.py",
+      "exitCode": 0,
+      "seconds": 1.1
+    },
+    {
+      "script": "tests/phase2/postgres_developer_usage.py",
+      "exitCode": 0,
+      "seconds": 0.15
+    },
+    {
+      "script": "tests/phase2/postgres_dial_phone.py",
+      "exitCode": 0,
+      "seconds": 4.29
+    },
+    {
+      "script": "tests/phase2/postgres_entitlement_race.py",
+      "exitCode": 0,
+      "seconds": 0.52
+    },
+    {
+      "script": "tests/phase2/postgres_final_billing_notice_locks.py",
+      "exitCode": 0,
+      "seconds": 0.23
+    },
+    {
+      "script": "tests/phase2/postgres_final_campaign_destinations.py",
+      "exitCode": 0,
+      "seconds": 0.51
+    },
+    {
+      "script": "tests/phase2/postgres_final_credit_estimate.py",
+      "exitCode": 0,
+      "seconds": 0.44
+    },
+    {
+      "script": "tests/phase2/postgres_final_idempotency.py",
+      "exitCode": 0,
+      "seconds": 0.73
+    },
+    {
+      "script": "tests/phase2/postgres_final_image_routing.py",
+      "exitCode": 0,
+      "seconds": 0.29
+    },
+    {
+      "script": "tests/phase2/postgres_final_monthly_credits.py",
+      "exitCode": 0,
+      "seconds": 0.31
+    },
+    {
+      "script": "tests/phase2/postgres_final_ops_report.py",
+      "exitCode": 0,
+      "seconds": 0.27
+    },
+    {
+      "script": "tests/phase2/postgres_final_purchase_lifecycle.py",
+      "exitCode": 0,
+      "seconds": 0.93
+    },
+    {
+      "script": "tests/phase2/postgres_final_run_refs.py",
+      "exitCode": 0,
+      "seconds": 0.57
+    },
+    {
+      "script": "tests/phase2/postgres_final_unknown_usage.py",
+      "exitCode": 0,
+      "seconds": 1.66
+    },
+    {
+      "script": "tests/phase2/postgres_growth_history.py",
+      "exitCode": 0,
+      "seconds": 2.55
+    },
+    {
+      "script": "tests/phase2/postgres_growth_loop.py",
+      "exitCode": 0,
+      "seconds": 0.75
+    },
+    {
+      "script": "tests/phase2/postgres_growth_metric_reads.py",
+      "exitCode": 0,
+      "seconds": 0.59
+    },
+    {
+      "script": "tests/phase2/postgres_growth_phase1.py",
+      "exitCode": 0,
+      "seconds": 1.75
+    },
+    {
+      "script": "tests/phase2/postgres_growth_phase2.py",
+      "exitCode": 0,
+      "seconds": 1.19
+    },
+    {
+      "script": "tests/phase2/postgres_growth_scout.py",
+      "exitCode": 0,
+      "seconds": 0.62
+    },
+    {
+      "script": "tests/phase2/postgres_ideas.py",
+      "exitCode": 0,
+      "seconds": 0.46
+    },
+    {
+      "script": "tests/phase2/postgres_ideas_references.py",
+      "exitCode": 0,
+      "seconds": 1.42
+    },
+    {
+      "script": "tests/phase2/postgres_inbound_phone.py",
+      "exitCode": 0,
+      "seconds": 2.59
+    },
+    {
+      "script": "tests/phase2/postgres_instagram_lifecycle.py",
+      "exitCode": 0,
+      "seconds": 1.49
+    },
+    {
+      "script": "tests/phase2/postgres_safety.py",
+      "exitCode": 0,
+      "seconds": 0.29
+    },
+    {
+      "script": "tests/phase2/postgres_isolation.py",
+      "exitCode": 0,
+      "seconds": 0.67
+    },
+    {
+      "script": "tests/phase2/postgres_learning_decide.py",
+      "exitCode": 0,
+      "seconds": 0.37
+    },
+    {
+      "script": "tests/phase2/postgres_learning_events.py",
+      "exitCode": 0,
+      "seconds": 0.37
+    },
+    {
+      "script": "tests/phase2/postgres_learning_extract.py",
+      "exitCode": 0,
+      "seconds": 0.67
+    },
+    {
+      "script": "tests/phase2/postgres_media_notes.py",
+      "exitCode": 0,
+      "seconds": 0.73
+    },
+    {
+      "script": "tests/phase2/postgres_media_notes_credits.py",
+      "exitCode": 0,
+      "seconds": 0.37
+    },
+    {
+      "script": "tests/phase2/postgres_memory_egress.py",
+      "exitCode": 0,
+      "seconds": 0.56
+    },
+    {
+      "script": "tests/phase2/postgres_memory_proposals.py",
+      "exitCode": 0,
+      "seconds": 0.61
+    },
+    {
+      "script": "tests/phase2/postgres_migration_008.py",
+      "exitCode": 0,
+      "seconds": 0.13
+    },
+    {
+      "script": "tests/phase2/postgres_migration_013.py",
+      "exitCode": 0,
+      "seconds": 0.89
+    },
+    {
+      "script": "tests/phase2/postgres_onboarding_chat.py",
+      "exitCode": 0,
+      "seconds": 0.35
+    },
+    {
+      "script": "tests/phase2/postgres_orchestration.py",
+      "exitCode": 0,
+      "seconds": 7.46
+    },
+    {
+      "script": "tests/phase2/postgres_phone_duration.py",
+      "exitCode": 0,
+      "seconds": 1.71
+    },
+    {
+      "script": "tests/phase2/postgres_phone_mode.py",
+      "exitCode": 0,
+      "seconds": 4.39
+    },
+    {
+      "script": "tests/phase2/postgres_repository.py",
+      "exitCode": 0,
+      "seconds": 0.32
+    },
+    {
+      "script": "tests/phase2/postgres_plan_guards.py",
+      "exitCode": 0,
+      "seconds": 0.27
+    },
+    {
+      "script": "tests/phase2/postgres_postdoctor_v2.py",
+      "exitCode": 0,
+      "seconds": 0.96
+    },
+    {
+      "script": "tests/phase2/postgres_quick_start_again.py",
+      "exitCode": 0,
+      "seconds": 0.65
+    },
+    {
+      "script": "tests/phase2/postgres_radar.py",
+      "exitCode": 0,
+      "seconds": 2.55
+    },
+    {
+      "script": "tests/phase2/postgres_raffi_planning.py",
+      "exitCode": 0,
+      "seconds": 0.27
+    },
+    {
+      "script": "tests/phase2/postgres_raffi_voice_sources.py",
+      "exitCode": 0,
+      "seconds": 0.36
+    },
+    {
+      "script": "tests/phase2/postgres_research.py",
+      "exitCode": 0,
+      "seconds": 1.07
+    },
+    {
+      "script": "tests/phase2/postgres_reverify.py",
+      "exitCode": 0,
+      "seconds": 0.58
+    },
+    {
+      "script": "tests/phase2/postgres_site_agent.py",
+      "exitCode": 0,
+      "seconds": 0.92
+    },
+    {
+      "script": "tests/phase2/postgres_site_agent_scenarios.py",
+      "exitCode": 0,
+      "seconds": 3.45
+    },
+    {
+      "script": "tests/phase2/postgres_source_approval.py",
+      "exitCode": 0,
+      "seconds": 0.44
+    },
+    {
+      "script": "tests/phase2/postgres_time_savings.py",
+      "exitCode": 0,
+      "seconds": 0.8
+    },
+    {
+      "script": "tests/phase2/postgres_trend_advanced.py",
+      "exitCode": 0,
+      "seconds": 9.11
+    },
+    {
+      "script": "tests/phase2/postgres_trend_forecast.py",
+      "exitCode": 0,
+      "seconds": 4.4
+    },
+    {
+      "script": "tests/phase2/postgres_trend_frontier.py",
+      "exitCode": 0,
+      "seconds": 8.07
+    },
+    {
+      "script": "tests/phase2/postgres_trend_generation.py",
+      "exitCode": 0,
+      "seconds": 24.23
+    },
+    {
+      "script": "tests/phase2/postgres_trend_interpretation.py",
+      "exitCode": 0,
+      "seconds": 8.87
+    },
+    {
+      "script": "tests/phase2/postgres_trend_media.py",
+      "exitCode": 0,
+      "seconds": 10.86
+    },
+    {
+      "script": "tests/phase2/postgres_trend_pipeline.py",
+      "exitCode": 0,
+      "seconds": 118.35
+    },
+    {
+      "script": "tests/phase2/postgres_trend_planner.py",
+      "exitCode": 0,
+      "seconds": 0.9
+    },
+    {
+      "script": "tests/phase2/postgres_trend_services.py",
+      "exitCode": 0,
+      "seconds": 33.44
+    },
+    {
+      "script": "tests/phase2/postgres_trend_trust.py",
+      "exitCode": 0,
+      "seconds": 4.89
+    },
+    {
+      "script": "tests/phase2/postgres_trend_whitespace.py",
+      "exitCode": 0,
+      "seconds": 32.43
+    },
+    {
+      "script": "tests/phase2/postgres_unified_notifications.py",
+      "exitCode": 0,
+      "seconds": 1.66
+    },
+    {
+      "script": "tests/phase2/postgres_video.py",
+      "exitCode": 0,
+      "seconds": 0.43
+    }
+  ],
+  "status": "PASS",
+  "initialOutcome": "89 passed; one provenance check rejected in-repo dependency imports, with all 35 assertions passing",
+  "repair": "Same pinned dependencies copied outside repo; 35 tests, zero failures/errors/skips, source guard unchanged",
+  "limitation": "90 existing script executions reused for unchanged legacy inputs; Control changes verified separately"
+}

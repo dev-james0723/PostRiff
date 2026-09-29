@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:copilot-turn",
+  "title": "copilot-turn",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "conversationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000
+    },
+    "contextEvidenceIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "uniqueItems": true,
+      "maxItems": 20
+    },
+    "modality": {
+      "type": "string",
+      "enum": [
+        "text",
+        "voice"
+      ]
+    }
+  },
+  "required": [
+    "requestId",
+    "conversationId",
+    "message",
+    "contextEvidenceIds",
+    "modality"
+  ],
+  "additionalProperties": false
+}
