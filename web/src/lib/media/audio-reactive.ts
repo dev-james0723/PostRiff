@@ -14,6 +14,7 @@ interface AudioReactiveState {
   active: boolean;
   level: number;
   bands: number[];
+  waveform: number[];
   transient: number;
   tickMs: number;
   externalState: ExternalAudioState;
@@ -22,7 +23,8 @@ interface AudioReactiveState {
     level: number,
     bands: number[],
     transient?: number,
-    tickMs?: number
+    tickMs?: number,
+    waveform?: number[]
   ) => void;
   deactivate: (source: Exclude<AudioReactiveSource, 'none'>) => void;
   setExternalState: (state: ExternalAudioState) => void;
@@ -33,15 +35,16 @@ export const useAudioReactive = create<AudioReactiveState>((set) => ({
   active: false,
   level: 0,
   bands: EMPTY_BANDS,
+  waveform: EMPTY_BANDS,
   transient: 0,
   tickMs: 0,
   externalState: 'idle',
-  setFrame: (source, level, bands, transient = 0, tickMs = 0) =>
+  setFrame: (source, level, bands, transient = 0, tickMs = 0, waveform = EMPTY_BANDS) =>
     set((state) => {
       // A person explicitly sharing system/tab audio wins over Rafii-owned playback.
       if (source === 'rafii' && state.source === 'external' && state.externalState === 'active')
         return state;
-      return { source, active: true, level, bands, transient, tickMs };
+      return { source, active: true, level, bands, waveform, transient, tickMs };
     }),
   deactivate: (source) =>
     set((state) =>
@@ -51,6 +54,7 @@ export const useAudioReactive = create<AudioReactiveState>((set) => ({
             active: false,
             level: 0,
             bands: EMPTY_BANDS,
+            waveform: EMPTY_BANDS,
             transient: 0,
             tickMs: 0
           }
@@ -65,6 +69,7 @@ export const useAudioReactive = create<AudioReactiveState>((set) => ({
             active: false,
             level: 0,
             bands: EMPTY_BANDS,
+            waveform: EMPTY_BANDS,
             transient: 0,
             tickMs: 0
           }
@@ -112,6 +117,35 @@ export function resampleBands(bands: readonly number[], count: number): number[]
   });
 }
 
+export function sampleWaveform(
+  samples: ArrayLike<number>,
+  pointCount = AUDIO_REACTIVE_BAND_COUNT
+): number[] {
+  if (pointCount <= 0) return [];
+  if (!samples.length) return Array.from({ length: pointCount }, () => 0);
+
+  const points = Array.from({ length: pointCount }, (_, point) => {
+    const ratio = pointCount === 1 ? 0.5 : point / (pointCount - 1);
+    const center = Math.round(ratio * (samples.length - 1));
+    let amplitude = 0;
+    let weight = 0;
+
+    // A tiny local window stabilizes noise without averaging away the actual peaks/troughs.
+    for (let offset = -2; offset <= 2; offset += 1) {
+      const index = Math.max(0, Math.min(samples.length - 1, center + offset));
+      const localWeight = offset === 0 ? 2 : 1;
+      amplitude += (Math.abs(Number(samples[index] ?? 128) - 128) / 128) * localWeight;
+      weight += localWeight;
+    }
+    return amplitude / Math.max(1, weight);
+  });
+
+  // Normalize the spatial shape per frame. Overall loudness is carried separately by RMS,
+  // while this profile preserves visible peaks and valleys across the rail.
+  const framePeak = Math.max(0.08, ...points);
+  return points.map((value) => clamp01(value / framePeak));
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -140,6 +174,7 @@ export interface RailMotionPoint {
   opacity: number;
   translateX: number;
   borderRadius: string;
+  transitionMs: number;
 }
 
 export function buildRailMotion({
@@ -148,6 +183,7 @@ export function buildRailMotion({
   level,
   transient,
   bands,
+  waveform,
   tickMs
 }: {
   count: number;
@@ -155,12 +191,19 @@ export function buildRailMotion({
   level: number;
   transient: number;
   bands: readonly number[];
+  waveform?: readonly number[];
   tickMs: number;
 }): RailMotionPoint[] {
   if (count <= 0) return [];
 
   const localBands = resampleBands(bands, count);
-  const phase = (tickMs / 1000) * 8.6;
+  const rawWaveform = resampleBands(waveform ?? [], count);
+  const waveformProfile = rawWaveform.map((value, index) => {
+    const left = rawWaveform[Math.max(0, index - 1)] ?? value;
+    const right = rawWaveform[Math.min(rawWaveform.length - 1, index + 1)] ?? value;
+    return clamp01(value * 0.64 + left * 0.18 + right * 0.18);
+  });
+  const phase = (tickMs / 1000) * 8.9;
   const globalPulse = easeOutCubic(level);
 
   return Array.from({ length: count }, (_, index) => {
@@ -175,25 +218,30 @@ export function buildRailMotion({
         ? Math.max(0, 1 - Math.abs(index - activeIndex) / Math.max(4, count * 0.22))
         : 0;
 
-    // Most motion is shared by the whole rail. Spectrum adds texture instead of deciding
-    // which vertical section is allowed to move, so bass-heavy tracks animate end to end.
+    const waveformPeak = Math.pow(clamp01(waveformProfile[index] ?? 0), 1.35);
+
+    // The global envelope is now only a floor. Instantaneous waveform shape owns the peaks,
+    // so adjacent dots can be tall/short at the same moment instead of breathing in lockstep.
     const energy = clamp01(
-      globalPulse * 0.58 +
-        bodyWave * 0.17 +
-        texture * 0.15 +
+      globalPulse * 0.18 +
+        bodyWave * 0.05 +
+        waveformPeak * 0.5 +
+        texture * 0.17 +
         travellingTransient * 0.1
     );
     const base = index === activeIndex ? 8 : 6;
+    const transitionMs = 24 + (1 - waveformPeak) * 46;
 
     return {
-      width: base + energy * 19 + focus * 2,
-      height: base + energy * 4.5,
-      opacity: clamp01((index === activeIndex ? 0.92 : 0.5) + energy * 0.42),
-      translateX: energy * 1.2 + travellingTransient * 1.5,
+      width: base + energy * 24 + focus * 1.5,
+      height: base + energy * 5.5,
+      opacity: clamp01((index === activeIndex ? 0.92 : 0.46) + energy * 0.48),
+      translateX: energy * 1.05 + travellingTransient * 1.7,
       borderRadius:
         energy > 0.05
-          ? `${52 + energy * 18}% ${48 - energy * 12}% ${56 - energy * 8}% ${44 + energy * 12}%`
-          : '9999px'
+          ? `${52 + energy * 20}% ${48 - energy * 14}% ${56 - energy * 9}% ${44 + energy * 13}%`
+          : '9999px',
+      transitionMs
     };
   });
 }
@@ -268,7 +316,8 @@ class BrowserAudioMeter {
         this.smoothedLevel,
         collapseSpectrum(this.frequency),
         this.smoothedTransient,
-        now
+        now,
+        sampleWaveform(this.timeDomain)
       );
       this.lastCommit = now;
     }
