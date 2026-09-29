@@ -352,7 +352,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, pricing_v2_enabled=False, creator_experiment_enabled=False, creator_experiment_cohort=()):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -387,7 +387,7 @@ class HostedWorkspaceService:
         self.ideas.service_ref = self
         self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock)
         self.ideas.ledger = self.ledger
-        self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
+        self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock, pricing_v2_enabled=pricing_v2_enabled, creator_experiment_enabled=creator_experiment_enabled, creator_experiment_cohort=creator_experiment_cohort)
         from .credit_purchases import CreditPurchases
         self.credit_purchases = CreditPurchases(self.ledger._credit_book, self.billing.provider, clock) if self.billing.provider.id == "stripe" else None
         self.credit_purchases_enabled = credit_purchases_enabled and credits_enabled
@@ -532,10 +532,16 @@ class HostedWorkspaceService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "owner")
             throttle(cur, f"checkout:{workspace_id}", 5, 60)
-            cur.execute("SELECT status,provider_price_id FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
-            terms = cur.fetchone()
-            if not terms or terms[0] != "active" or not terms[1]:
-                raise AlphaError("This plan is not yet available for purchase.", 409)
+            variant_id = None
+            if self.billing.pricing_v2_enabled:
+                price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
+                variant_id, price_id = price["priceVariantId"], price["priceId"]
+            else:
+                cur.execute("SELECT status,provider_price_id,plan FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
+                terms = cur.fetchone()
+                if not terms or terms[0] != "active" or not terms[1] or terms[2] in ("creator", "starter", "free") or plan_terms_id == "studio-v2":
+                    raise AlphaError("This plan is not yet available for purchase.", 409)
+                price_id = terms[1]
             cur.execute("SELECT provider_customer_id,status FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
             existing = cur.fetchone()
             if existing and existing[1] in ("active", "past_due", "grace"):
@@ -545,8 +551,8 @@ class HostedWorkspaceService:
         customer_email = None if customer_id else self._email_for(principal)
         if not customer_id and not customer_email:
             raise AlphaError("Your account email could not be resolved for checkout.", 502)
-        key = digest({"checkout": workspace_id, "plan": plan_terms_id, "hour": int(self.clock() // 3600)})
-        return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=terms[1], success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+        key = digest({"checkout": workspace_id, "plan": plan_terms_id, **({"variant": variant_id} if variant_id else {}), "hour": int(self.clock() // 3600)})
+        return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=price_id, **({"price_variant_id": variant_id} if variant_id else {}), success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
 
     def billing_credit_packs(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):

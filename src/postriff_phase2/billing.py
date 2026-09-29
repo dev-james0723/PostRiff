@@ -16,6 +16,7 @@ from .contracts import digest
 from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
 from .developer_usage import ai_usage_exempt
+from .plan_pricing import PlanPricing
 
 USD = 1_000_000  # micro-dollars
 
@@ -351,18 +352,39 @@ class Billing:
         "subscription.grace": "grace", "subscription.cancelled": "cancelled", "subscription.expired": "expired",
     }
 
-    def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None):
+    def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None, pricing_v2_enabled=False, creator_experiment_enabled=False, creator_experiment_cohort=()):
         """`on_applied(event, status)` runs only for outcome 'applied' (e.g. notifications); its failures never break the webhook."""
         self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(), clock, on_applied
+
+        self.pricing_v2_enabled = pricing_v2_enabled
+        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort)
+
+    def assign_creator_price(self, cur, workspace_id):
+        return self.pricing.assign(cur, workspace_id)
 
     def process_webhook(self, cur, signature, body):
         """Signature-verified, replay-safe (unique provider+event id), out-of-order safe (event_at vs last_event_at)."""
         event = self.provider.parse_webhook(signature, body)
         payload_digest = hashlib.sha256(body).hexdigest()
+        # Serialize same-event deliveries before the replay lookup; the workspace lock alone
+        # cannot prevent two deliveries from both observing an absent event row.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (self.provider.id + ":" + event["id"],))
         cur.execute("SELECT outcome FROM public.pr_billing_events WHERE provider=%s AND event_id=%s", (self.provider.id, event["id"]))
         if cur.fetchone():
             return {"eventId": event["id"], "outcome": "duplicate"}
-        if not event.get("planTermsId") and event.get("priceId"):
+        versioned = False
+        valid = not event.get("metadataConflict", False)
+        if self.provider.id == "stripe" and self.TRANSITIONS.get(event["type"]):
+            # Old default-off deployments may not have 048. Existing v2 subscriptions
+            # still reconcile after the acquisition flag is disabled.
+            cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+            schema = cur.fetchone()
+            versioned = bool(schema and schema[0])
+            if versioned:
+                valid = valid and self.pricing.resolve_event(cur, event)
+            elif event.get("priceVariantId"):
+                valid = False
+        if not versioned and not event.get("planTermsId") and event.get("priceId"):
             # Live providers carry their price id; only an 'active' terms row (D3) may be bound to it.
             cur.execute("SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s AND status='active'", (event["priceId"],))
             resolved = cur.fetchone()
@@ -371,6 +393,8 @@ class Billing:
         kind = event["type"]
         status = self.TRANSITIONS.get(kind)
         outcome = "ignored" if status is None else "applied"
+        if status is not None and not valid:
+            outcome, status = "rejected", None
         if status is not None and not event.get("workspaceId"):
             outcome, status = "ignored", None  # no PostRiff workspace on the event: recorded, never applied
         if status is not None:
@@ -379,6 +403,10 @@ class Billing:
             row = cur.fetchone()
             if row and row[0] and float(row[0]) > float(event["createdAt"]):
                 outcome = "stale"
+                if versioned and event.get("priceVariantId"):
+                    # Fill a missing historical paid identity without touching newer lifecycle state.
+                    cur.execute("UPDATE public.pr_subscriptions SET price_variant_id=%s WHERE workspace_id=%s AND provider=%s AND provider_subscription_id=%s AND plan_terms_id=%s AND price_variant_id IS NULL",
+                                (event["priceVariantId"], event["workspaceId"], self.provider.id, event.get("subscriptionId"), event.get("planTermsId")))
             else:
                 terms_id = event.get("planTermsId")
                 if terms_id:
@@ -388,7 +416,10 @@ class Billing:
                         outcome = "rejected"  # unknown plan id from the client side never creates entitlement
                 if outcome == "applied":
                     grace = float(event["createdAt"]) + 7 * 86400 if status == "past_due" else None
-                    cur.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s)) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now()", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"])))
+                    variant_columns = ",price_variant_id" if versioned else ""
+                    variant_values = ",%s" if versioned else ""
+                    variant_update = ",price_variant_id=excluded.price_variant_id" if versioned else ""
+                    cur.execute(f"INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at{variant_columns}) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s){variant_values}) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now(){variant_update}", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"]), *((event.get("priceVariantId"),) if versioned else ())))
                     if terms_id and status == "active":
                         self._reconcile_entitlement(cur, event["workspaceId"], terms_id, terms[0], event.get("currentPeriodEnd"))
         # A verified paid plan invoice grants its period's credits even when its status update is stale.
@@ -443,8 +474,15 @@ class Billing:
         """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.
         Checkout needs the live provider plus at least one 'active' terms row bound to a provider price (D3)."""
         live = self.provider.id == "stripe"
-        cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' LIMIT 1")
-        purchasable = cur.fetchone() is not None
+        if self.pricing_v2_enabled:
+            try:
+                self.pricing.checkout(cur, workspace_id, "creator-v1")
+                purchasable = True
+            except AlphaError:
+                purchasable = False
+        else:
+            cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' LIMIT 1")
+            purchasable = cur.fetchone() is not None
         cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
         row = cur.fetchone()
         return {"provider": self.provider.id, "checkoutAvailable": live and purchasable, "portalAvailable": live and bool(row and row[0])}

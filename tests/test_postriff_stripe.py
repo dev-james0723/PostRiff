@@ -4,6 +4,7 @@ resolution plus the on_applied callback over a stub cursor."""
 import hashlib
 import hmac
 import json
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -320,6 +321,61 @@ class Availability(unittest.TestCase):
         block = Billing(ledger=Ledger()).availability(cur, "ws-1")
         self.assertEqual(block, {"provider": "fixture", "checkoutAvailable": False, "portalAvailable": False})
 
+
+
+class VariantMetadata(unittest.TestCase):
+    def test_creator_checkout_binds_variant_to_session_and_subscription(self):
+        self.assertIn("price_variant_id", inspect.signature(StripePaymentProvider.create_checkout_session).parameters,
+                      "missing trusted variant checkout binding")
+        transport = RecordingTransport()
+        provider(transport).create_checkout_session(workspace_id="ws-1", plan_terms_id="creator-v1",
+            price_variant_id="creator-59-v1", price_id="price_synthetic_59", success_url="https://app/ok",
+            cancel_url="https://app/cancel", customer_email="o@example.com", idempotency_key="variant-key")
+        form = transport.calls[0]["form"]
+        self.assertEqual(form["metadata[price_variant_id]"], "creator-59-v1")
+        self.assertEqual(form["subscription_data[metadata][price_variant_id]"], "creator-59-v1")
+        self.assertNotIn("payment_method_types", form)
+
+    def test_signed_subscription_and_invoice_recover_variant_and_price(self):
+        meta = {"workspace_id": "ws-1", "plan_terms_id": "creator-v1", "price_variant_id": "creator-49-v1"}
+        objects = [
+            ("customer.subscription.updated", {"id": "sub_1", "status": "active", "metadata": meta,
+                "items": {"data": [{"price": "price_synthetic_49"}]}}),
+            ("invoice.paid", {"id": "in_1", "status": "paid", "amount_paid": 4900, "currency": "usd",
+                "parent": {"subscription_details": {"subscription": "sub_1", "metadata": meta}},
+                "lines": {"data": [{"pricing": {"price_details": {"price": "price_synthetic_49"}},
+                                     "period": {"start": 100, "end": 200}}]}}),
+            ("checkout.session.completed", {"mode": "subscription", "client_reference_id": "ws-1", "metadata": meta})]
+        for kind, obj in objects:
+            with self.subTest(kind=kind):
+                body = stripe_event(kind, obj)
+                mapped = provider().parse_webhook(f"t={int(NOW)},v1={sign(body)}", body)
+                self.assertEqual(mapped.get("priceVariantId"), "creator-49-v1")
+                if kind != "checkout.session.completed":
+                    self.assertEqual(mapped.get("priceId"), "price_synthetic_49")
+
+    def test_conflicting_signed_checkout_workspace_is_marked_invalid(self):
+        mapped = StripePaymentProvider.map_event("evt", "checkout.session.completed", NOW,
+            {"mode": "subscription", "client_reference_id": "w2", "metadata": {"workspace_id": "w1"}})
+        self.assertTrue(mapped.get("metadataConflict"), "must not silently prefer a conflicting workspace")
+
+    def test_conflicting_invoice_metadata_or_multi_price_cannot_be_silently_selected(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"metadata": {"price_variant_id": "creator-79-v1"},
+             "subscription_details": {"metadata": {"price_variant_id": "creator-49-v1"}},
+             "lines": {"data": [{"price": "price_a"}, {"price": "price_b"}]}})
+        self.assertTrue(mapped.get("metadataConflict"))
+
+
+    def test_invoice_subscription_references_cannot_disagree(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_a", "parent": {"subscription_details": {"subscription": "sub_b"}}})
+        self.assertTrue(mapped.get("metadataConflict"))
+
+    def test_old_and_new_price_carriers_cannot_disagree(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"lines": {"data": [{"price": "price_a", "pricing": {"price_details": {"price": "price_b"}}}]}})
+        self.assertTrue(mapped.get("priceConflict"))
 
 if __name__ == "__main__":
     unittest.main()
