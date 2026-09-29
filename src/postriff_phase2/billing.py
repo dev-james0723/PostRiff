@@ -8,11 +8,12 @@ status is 'proposed' until an explicit commercial decision.
 import hashlib
 import hmac
 import json
+import math
 import os
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import POLICY_VERSION
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
 from .developer_usage import ai_usage_exempt
 
@@ -402,7 +403,7 @@ class Billing:
         return {"eventId": event["id"], "outcome": outcome, "status": status, "type": kind, "workspaceId": event.get("workspaceId") or None}
 
     def _grant_period_credits(self, cur, event):
-        """Candidate monthly-credit policy (FINAL-07): subscription_create and subscription_cycle invoices grant
+        """Versioned monthly-credit policy: subscription_create and subscription_cycle invoices grant
         the plan's monthlyCredits once per invoice id, expiring at the period end. Other invoices are recorded
         with a note and grant nothing. Legacy plans without a credit policy are untouched."""
         cur.execute("SELECT to_regclass('public.pr_credit_subscription_grants') IS NOT NULL")
@@ -414,11 +415,17 @@ class Billing:
         cur.execute("SELECT entitlements FROM public.pr_plan_terms WHERE id=%s", (terms_id,))
         row = cur.fetchone()
         ent = row[0] if row and isinstance(row[0], dict) else {}
-        if ent.get("creditPolicy") != POLICY_VERSION or type(ent.get("monthlyCredits")) is not int or ent["monthlyCredits"] <= 0:
+        if not isinstance(ent.get("creditPolicy"), str) or ent["creditPolicy"] not in SUPPORTED_POLICY_VERSIONS or type(ent.get("monthlyCredits")) is not int or ent["monthlyCredits"] <= 0:
             return None
         reason = event.get("billingReason") or ""
         grants = reason in ("subscription_create", "subscription_cycle")
         note = "" if grants else f"{reason or 'unknown'} invoice: no automatic credits (policy pending)"[:200]
+        if grants and ent["creditPolicy"] == V2_POLICY_VERSION:
+            start, end = event.get("periodStart"), event.get("currentPeriodEnd")
+            if (type(start) not in (int, float) or type(end) not in (int, float)
+                    or not math.isfinite(start) or not math.isfinite(end) or end <= start):
+                grants = False
+                note = "Incomplete paid period: no automatic credits."
         cur.execute("INSERT INTO public.pr_credit_subscription_grants(invoice_id,workspace_id,subscription_id,plan_terms_id,billing_reason,period_start,period_end,amount_cents,currency,payment_intent_id,millicredits,livemode,note) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(invoice_id) DO NOTHING RETURNING invoice_id",
                     (invoice_id, event["workspaceId"], event.get("subscriptionId"), terms_id, reason, event.get("periodStart"), event.get("currentPeriodEnd"), event["amountPaid"], event["currency"], event.get("paymentIntentId"), ent["monthlyCredits"] * 1000 if grants else 0, bool(getattr(self.provider, "live", False)), note))
         if not cur.fetchone() or not grants:

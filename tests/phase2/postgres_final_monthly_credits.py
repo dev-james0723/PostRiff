@@ -130,3 +130,37 @@ checks.append('every plan invoice is recorded with its grant; the proration invo
 
 for line in checks:
     print('PASS:', line)
+
+# Task2 v2 policy: signed synthetic invoices through the unchanged payment provider.
+USERS['v2'] = str(uuid.uuid4())
+with connection() as db:
+    db.execute('INSERT INTO auth.users(id) VALUES(%s)', (USERS['v2'],))
+    db.execute("INSERT INTO pr_plan_terms(id,plan,version,label,price_cents,status,entitlements,provider_price_id) VALUES('task2-monthly-v2','studio',992,'Synthetic v2 monthly',4900,'active',%s::jsonb,'price_task2_v2')", (json.dumps({**base, 'creditPolicy': 'credits-v2-2026-09-28', 'monthlyCredits': 3500}),))
+v2wid = service.bootstrap('v2', 'studio')['workspaceId']
+v2start, v2end = int(clock[0]), int(clock[0]) + 30 * DAY
+v2first = invoice('in_v2_first', v2wid, 'task2-monthly-v2', 'subscription_create', v2start, v2end, 'pi_v2_first')
+deliver('invoice.paid', v2first, event_id='evt_v2_first')
+assert wallet(v2wid) == 3500, 'A verified v2 invoice must grant its monthly credits'
+with connection() as db:
+    grant_id = db.execute("SELECT grant_id FROM pr_credit_subscription_grants WHERE invoice_id='in_v2_first'").fetchone()[0]
+    credit = db.execute("SELECT meta->'credits' FROM pr_usage_ledger WHERE id=%s", (grant_id,)).fetchone()[0]
+    assert credit['policy'] == 'credits-v2-2026-09-28' and credit['expiresAt'] == v2end, credit
+    assert service.ledger.credits.view(db.cursor(), v2wid).get('currentPeriodGrantMilliCredits') == 3_500_000
+    assert service.ledger.credits.view(db.cursor(), v2wid).get('currentPeriodExpiresAt') == v2end
+print('PASS: v2 paid invoice grants exactly 3,500 credits with the explicit v2 id and paid period expiry')
+deliver('invoice.paid', v2first, event_id='evt_v2_first_replay')
+assert wallet(v2wid) == 3500
+print('PASS: v2 invoice replay never grants twice')
+
+# Incomplete v2 period evidence must not create a perpetual monthly grant.
+for name, period in (('no_start', {'end': v2end}), ('no_end', {'start': v2start}), ('invalid_period', {'start': v2end, 'end': v2start})):
+    incomplete = invoice('in_v2_' + name, v2wid, 'task2-monthly-v2', 'subscription_cycle', v2start, v2end, 'pi_v2_' + name)
+    incomplete['lines']['data'][0]['period'] = period
+    deliver('invoice.paid', incomplete)
+    assert wallet(v2wid) == 3500, (name, wallet(v2wid))
+print('PASS: incomplete or reversed v2 invoice periods cannot create spendable monthly credits')
+clock[0] = v2end
+with connection() as db:
+    view = service.ledger.credits.view(db.cursor(), v2wid)
+assert view['availableMilliCredits'] == 0 and view['currentPeriodGrantMilliCredits'] is None and view['currentPeriodExpiresAt'] is None, view
+print('PASS: v2 monthly credits and evidence expire at the actual paid period end')
