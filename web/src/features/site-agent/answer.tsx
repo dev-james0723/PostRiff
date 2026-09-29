@@ -139,6 +139,13 @@ function AnswerBlock({ block, actions }: { block: SiteAgentBlock; actions: Answe
       );
     case 'guide_card':
       return <GuideCard block={block} actions={actions} />;
+    case 'ui_action':
+      return (
+        <p role='status' className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+          <Icons.arrowRight className='size-3.5 shrink-0' aria-hidden />
+          <span>{block.auto ? `Activating ${block.label}…` : `Ready to activate ${block.label}`}</span>
+        </p>
+      );
     case 'voice_command': {
       // The voice call carries these out (a text answer applies a style change once, in the panel); this is the record.
       const line = voiceCommandLine(block);
