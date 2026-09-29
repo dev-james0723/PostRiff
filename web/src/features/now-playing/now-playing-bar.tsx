@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { keys } from '@/lib/api/hooks';
+import { attachMediaElementAudioMeter, type MediaElementAudioMeter } from '@/lib/media/audio-reactive';
 import { attachMediaSession, formatMediaTime, updateMediaPosition, useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
@@ -14,6 +15,7 @@ export function NowPlayingBar() {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const video = useRef<HTMLVideoElement>(null);
+  const audioMeter = useRef<MediaElementAudioMeter | null>(null);
   const track = useNowPlaying((s) => s.track);
   const playing = useNowPlaying((s) => s.playing);
   const seconds = useNowPlaying((s) => s.seconds);
@@ -24,6 +26,15 @@ export function NowPlayingBar() {
   useEffect(() => {
     if (track && track.workspaceId !== workspaceId) useNowPlaying.getState().close();
   }, [track, workspaceId]);
+
+  useEffect(() => () => {
+    audioMeter.current?.close();
+    audioMeter.current = null;
+  }, []);
+
+  useEffect(() => {
+    audioMeter.current?.setEnabled(Boolean(track && playing));
+  }, [playing, track]);
 
   useEffect(() => {
     const element = video.current;
@@ -86,7 +97,13 @@ export function NowPlayingBar() {
         className={expanded && track ? 'mt-2 max-h-52 w-full rounded-lg bg-black' : 'absolute size-px opacity-0'}
         onTimeUpdate={(event) => { useNowPlaying.getState().setPosition(event.currentTarget.currentTime); updateMediaPosition(navigator.mediaSession, event.currentTarget); }}
         onDurationChange={(event) => useNowPlaying.getState().setPosition(event.currentTarget.currentTime, Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : null)}
-        onPlay={() => useNowPlaying.getState().setPlaying(true)} onPause={() => useNowPlaying.getState().setPlaying(false)} onEnded={() => useNowPlaying.getState().setPlaying(false)} />
+        onPlay={(event) => {
+          audioMeter.current ??= attachMediaElementAudioMeter(event.currentTarget);
+          audioMeter.current?.setEnabled(true);
+          useNowPlaying.getState().setPlaying(true);
+        }}
+        onPause={() => { audioMeter.current?.setEnabled(false); useNowPlaying.getState().setPlaying(false); }}
+        onEnded={() => { audioMeter.current?.setEnabled(false); useNowPlaying.getState().setPlaying(false); }} />
     </div>
   );
 }
