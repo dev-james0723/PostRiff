@@ -23,7 +23,7 @@ export function useSiteAgentPageContext(context: Pick<SiteAgentPageContext, 'sel
  * help and run a guided walkthrough. A voice call can also be controlled (`voice`), so only its requests declare it.
  * The server answers with a plain link or sentence for anything not declared.
  */
-export const UI_CAPABILITIES = ['navigate', 'show_help', 'guide'] as const;
+export const UI_CAPABILITIES = ['navigate', 'show_help', 'guide', 'activate_control'] as const;
 export const VOICE_UI_CAPABILITIES = [...UI_CAPABILITIES, 'voice'] as const;
 
 /** The page context a turn carries: the route, what the page registered, and what the screen shows. */
@@ -236,7 +236,7 @@ export function buildPageOutline(roots: readonly (OutlineNode | null | undefined
   const push = (role: Role, raw: string, target: string | null, state?: State) => {
     const text = clean(raw);
     if (!text || looksLikeInstruction(raw)) return;
-    const item: PageOutlineItem = { role, text, ...(target ? { target: target.slice(0, TEXT_MAX) } : {}), ...(state ? { state } : {}) };
+    const item: PageOutlineItem = { role, text, ...(target ? { target: target.slice(0, TEXT_MAX) } : {}), ...(action ? { action: action.slice(0, TEXT_MAX) } : {}), ...(state ? { state } : {}) };
     const key = `${item.role}|${item.text}|${item.target ?? ''}|${item.state ?? ''}`;
     if (seen.has(key)) return;
     // Counted as sent: the item's JSON and its comma.
@@ -256,6 +256,7 @@ export function buildPageOutline(roots: readonly (OutlineNode | null | undefined
     if (excluded(node, options)) return;
     const role = roleOf(node);
     const target = attr(node, 'data-tour');
+    const action = attr(node, 'data-rafii-action');
     if (role === 'dialog') {
       const heading = firstHeading(node, options);
       const name = ariaName(node, options) || (heading ? textOf(heading, options) : '');
