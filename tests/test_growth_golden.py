@@ -13,7 +13,7 @@ from postriff_phase2.growth import jev as J
 from postriff_phase2.growth import questions as Q
 from postriff_phase2.growth.judgments import Judgment, validate_answers
 
-QS = Q.get("postdoctor")
+QS = Q.get("postdoctor", 1)
 TEMPLATE = Path(__file__).resolve().parents[1] / "docs/design/growth-phase0/golden-template.csv"
 HEADER = list(G.REQUIRED) + ["better_than", "notes"]
 POSITIVE = {n for n in QS.names if not n.startswith("risk_")}

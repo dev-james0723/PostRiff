@@ -1,7 +1,6 @@
 'use client';
 
-import { forwardRef, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { ChannelLanguageChip, type ChipLanguage } from '@/components/application/language-picker/channel-language-chip';
+import { forwardRef, useCallback, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { LanguageName } from '@/components/application/language-picker/language-badge';
 import { IconWaveSine } from '@tabler/icons-react';
 import { Icons } from '@/components/icons';
@@ -9,7 +8,7 @@ import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { Checkbox } from '@/components/motion/checkbox';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import type { ModelOption } from '@/lib/api/types';
+import type { LocaleTag, ModelOption } from '@/lib/api/types';
 import { isImeEvent } from '@/lib/ime';
 import { locales } from '@/lib/locales';
 import { cn } from '@/lib/utils';
@@ -20,6 +19,8 @@ import type { ComposerAttachments } from './attachments/use-composer-attachments
 import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
 import type { SlashCommand } from '@/lib/agent-runtime/commands';
 import { ModelPicker } from './model-picker';
+import { DeliveryPlanner, type DeliveryTargetOption } from './delivery-planner';
+import { DeliverySummary, type DeliverySummaryRow } from './delivery-summary';
 import type { ChannelLanguages } from './use-channel-languages';
 
 /** A conversation turn's message text, mirroring the server's cap (ideas.MAX_TEXT). Unlike the Home quick
@@ -79,7 +80,9 @@ interface ComposerProps {
   hint?: string;
   /** The connected account's name for a selection item's `channelId` (account-level chips). */
   accountLabel?: (channelId: string) => string | undefined;
-  /** Chat attachments (chat-context SPEC §11.2): chips, uploads and the `@` list; the bar sits between the text and "Draft for". */
+  /** Opens the staged Channel × Language planner without introducing a second persistent store. */
+  deliveryPlanner: { open: boolean; onOpenChange: (open: boolean) => void; options: readonly DeliveryTargetOption<DraftPlatform>[] };
+  /** Chat attachments (chat-context SPEC §11.2): chips, uploads and the `@` list; the bar sits between the text and Delivery Summary. */
   attachments?: ComposerAttachments;
   attachmentBar?: Omit<AttachmentBarProps, 'attachments' | 'requestedView' | 'onRequestedViewHandled'>;
   slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
@@ -95,7 +98,7 @@ const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'template
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, attachments, attachmentBar, slash },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, deliveryPlanner, attachments, attachmentBar, slash },
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again. Send also waits for uploads (SPEC §4.7).
@@ -112,6 +115,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   );
   const [moreView, setMoreView] = useState<PlusView | null>(null);
   const [caret, setCaret] = useState(value.length);
+  const deliveryPlannerId = useId();
   const composerBox = useRef<HTMLDivElement>(null);
   const mention = attachments?.mention;
   const activeOption = mention?.open ? (mentionOptions(mention.listId, mention.query, mention.items)[mention.active]?.id ?? null) : null;
@@ -123,17 +127,18 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     return (items.length ? items : [null]).map((selection) => {
       const on = Boolean(selection) || parsed.perPlatform.has(chip.platform);
       const current = languages.languagesOf(selection ?? { platform: chip.platform, languages: null });
-      const effective: ChipLanguage[] = locales
+      const effective: EffectiveDeliveryLanguage[] = locales
         .effectiveLanguages(chip.platform, current, parsed)
-        .map((item) => ({ tag: item.tag, fromMessage: item.fromMessage, index: item.fromMessage ? null : current.indexOf(item.tag) }));
+        .map((item) => ({ tag: item.tag, label: locales.displayName(item.tag), fromMessage: item.fromMessage, index: item.fromMessage ? null : current.indexOf(item.tag) }));
       const account = selection?.channelId ? (accountLabel?.(selection.channelId) ?? chip.account) : chip.account;
       const key = selection?.key ?? chip.platform;
-      const label = selection?.channelId && items.length > 1 ? `${chip.platform} · ${account ?? 'account'}` : undefined;
-      return { chip, on, effective, key, account, label, target: selection?.channelId ? { platform: chip.platform, channelId: selection.channelId } : chip.platform };
+      return { chip, on, effective, key, account };
     });
   });
-  const channelCount = rows.filter((row) => row.on).length;
-  const reminder = reminderFor(rows.filter((row) => row.on), languages);
+  const activeRows = rows.filter((row) => row.on);
+  const summaryRows: DeliverySummaryRow[] = activeRows.map((row) => ({ key: row.key, platform: row.chip.platform, account: row.account, languages: row.effective }));
+  const messageLanguages = Object.fromEntries(activeRows.map((row) => [row.key, row.effective.filter((language) => language.fromMessage).map((language) => language.tag)]));
+  const reminder = reminderFor(activeRows, languages);
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // The `@` list's keys first (Escape closes only the list), then send; never while an IME is composing.
@@ -145,7 +150,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   }
 
   return (
-    <div ref={composerBox} className='rafii-composer @container/composer relative flex flex-col rounded-[var(--rafii-radius-card)]' data-tour='composer'>
+    <>
+      <div ref={composerBox} className='rafii-composer @container/composer relative flex flex-col rounded-[var(--rafii-radius-card)]' data-tour='composer'>
       {slash ? <SlashCommandMenu value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
       <Textarea
         ref={setTextarea}
@@ -164,9 +170,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         placeholder={placeholder}
         className='min-h-0 resize-none border-0 bg-transparent px-4 pt-4 text-base shadow-none focus-visible:ring-0 md:text-[15px] dark:bg-transparent'
       />
-      {attachments && attachmentBar && (
+      {attachments && attachmentBar && attachments.chips.length > 0 && (
         <div className='px-3 pt-1'>
-          <AttachmentBar attachments={attachments} {...attachmentBar} requestedView={moreView} onRequestedViewHandled={() => setMoreView(null)} />
+          <AttachmentBar attachments={attachments} {...attachmentBar} part='chips' />
         </div>
       )}
       {attachments && mention && (
@@ -187,41 +193,13 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           onClose={mention.close}
         />
       )}
-      {/* Destinations: one row of uniform pills that scrolls sideways instead of wrapping into ragged lines. */}
-      <div role='group' aria-label='Draft for' className='scrollbar-hide relative flex items-center gap-2 overflow-x-auto px-3 pt-1 pr-10 pb-2 [mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)]'>
-        <span className='text-muted-foreground shrink-0 pl-1 text-xs'>Draft for</span>
-        {rows.map(({ chip, on, effective, key, account, label, target }) => {
-          const remembered = languages.settings.channels[chip.platform] ?? [];
-          const usual = locales.usualFor(chip.platform);
-          const suggestions = [
-            ...remembered.map((tag) => ({ tag, reason: 'Last used here' })),
-            ...(usual ? [{ tag: usual, reason: `Usual for ${chip.platform}` }] : []),
-            ...languages.suggestions
-          ].filter((item, i, all) => all.findIndex((other) => other.tag === item.tag) === i);
-          return (
-            <ChannelLanguageChip
-              key={key}
-              platform={chip.platform}
-              label={label}
-              account={account}
-              state={chip.state}
-              on={on}
-              languages={effective}
-              channelCount={channelCount}
-              suggestions={suggestions}
-              disabled={disabled}
-              onToggle={() => languages.toggle(target)}
-              onChange={(index, tag) => (index === null ? languages.add(key, tag) : languages.change(key, index, tag))}
-              onAdd={(tag) => languages.add(key, tag)}
-              onRemove={(index) => languages.remove(key, index)}
-              onUseEverywhere={(tag) => languages.useEverywhere(tag)}
-            />
-          );
-        })}
-      </div>
+      <DeliverySummary rows={summaryRows} open={deliveryPlanner.open} controls={deliveryPlannerId} disabled={disabled} onOpen={() => deliveryPlanner.onOpenChange(true)} />
       {/* Tools on one line (same height, same material), the single primary action on the right. */}
-      <div className='flex items-center gap-2 px-3 pb-3'>
-        <div className='scrollbar-hide relative flex min-w-0 flex-1 items-center gap-2 overflow-x-auto'>
+      <div className='flex items-center gap-2 px-3 pb-2.5'>
+        <div data-slot='composer-tools' className='scrollbar-hide relative flex min-w-0 flex-1 items-center gap-2 overflow-x-auto'>
+          {attachments && attachmentBar && (
+            <AttachmentBar attachments={attachments} {...attachmentBar} part='plus' requestedView={moreView} onRequestedViewHandled={() => setMoreView(null)} />
+          )}
           <ModelPicker compact options={models} model={model} value={modelSelection} auto={autoModel} onChoose={onModel} disabled={disabled || busy} reasoning={reasoning} reasoningOptions={reasoningOptions} onReasoning={onReasoning} />
           {onVoiceMode && (
             <button
@@ -250,6 +228,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
             </button>
           )}
         </div>
+        {!consent && hint && !imageGeneration?.enabled && <span className='text-muted-foreground hidden shrink-0 text-xs @min-xl/composer:inline'>{hint}</span>}
         {/* The limit only matters near it. */}
         {value.length > MESSAGE_MAX * 0.8 && (
           <span className='text-muted-foreground shrink-0 text-xs tabular-nums' aria-live='polite'>
@@ -290,13 +269,30 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           {hint && <span className='text-muted-foreground ml-auto text-xs'>{hint}</span>}
         </div>
       )}
-      {!consent && hint && <div className='text-muted-foreground border-border/60 border-t px-4 py-2 text-xs'>{hint}</div>}
-    </div>
+      {!consent && hint && (!compact || imageGeneration?.enabled) && <div className='text-muted-foreground border-border/60 border-t px-4 py-2 text-xs'>{hint}</div>}
+      </div>
+      <DeliveryPlanner
+        id={deliveryPlannerId}
+        open={deliveryPlanner.open}
+        onOpenChange={deliveryPlanner.onOpenChange}
+        selection={languages.selection}
+        languages={languages}
+        options={deliveryPlanner.options}
+        messageLanguages={messageLanguages}
+      />
+    </>
   );
 });
 
+interface EffectiveDeliveryLanguage {
+  tag: LocaleTag;
+  label: string;
+  fromMessage: boolean;
+  index: number | null;
+}
+
 /** The first language reminder for the selected channels (languages plan §8). Reminders never block sending. */
-function reminderFor(rows: { chip: ChannelChip; effective: ChipLanguage[] }[], languages: ChannelLanguages<DraftPlatform>) {
+function reminderFor(rows: { chip: ChannelChip; effective: EffectiveDeliveryLanguage[] }[], languages: ChannelLanguages<DraftPlatform>) {
   const found: { platform: string; tag: string; text: string; tone: 'amber' | 'quiet'; choices?: boolean }[] = [];
   for (const { chip, effective } of rows) {
     for (const language of effective) {

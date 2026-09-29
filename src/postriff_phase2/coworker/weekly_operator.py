@@ -310,5 +310,6 @@ def sync_from_queue(state, week, now):
 def slot_brief(recipe, slot, state):
     """The material the writer receives for one slot: data, never instructions."""
     source_titles = [s.get("title") for s in state.get("sources") or [] if s.get("id") in slot["sourceIds"]]
-    return json.dumps({"weekOf": slot["day"], "goal": slot["goal"], "contentType": slot["contentType"], "platform": slot["platform"], "language": slot["language"],
+    from .growth_loop import planning_context
+    return json.dumps({"growthContext": planning_context(state, slot), "weekOf": slot["day"], "goal": slot["goal"], "contentType": slot["contentType"], "platform": slot["platform"], "language": slot["language"],
                        "angle": slot["angle"], "answer": slot.get("answer"), "sources": source_titles}, ensure_ascii=False)

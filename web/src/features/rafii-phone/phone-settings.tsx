@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Icons } from '@/components/icons';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -34,7 +35,7 @@ const CHECK_STAGE: Record<string, string> = {
   account_limit: 'Dial returned an unsupported call duration limit.',
 };
 function readinessMessage(result: PhoneProviderReadiness) {
-  if (result.ready) return `Dial is ready to create a call.${result.maxSeconds ? ` The provider allows up to ${Math.floor(result.maxSeconds / 60)} minutes per call.` : ''} This check did not place one.`;
+  if (result.ready) return `You can make and receive calls with Rafii.${result.maxSeconds ? ` Each call can last up to ${Math.floor(result.maxSeconds / 60)} minutes.` : ''}`;
   const detail = result.stage ? CHECK_STAGE[result.stage] : undefined;
   return `${detail || 'Dial calling setup needs attention.'}${result.httpStatus ? ` HTTP ${result.httpStatus}.` : ''} This check did not place a call.`;
 }
@@ -106,9 +107,12 @@ export function PhoneSettings() {
       {data.inbound?.available && <p className='text-muted-foreground text-xs'>To receive callbacks from Rafii, save and verify your number below. Calling Rafii yourself uses the Agent Pairing Code above.</p>}
       <p>{data.number ? `Phone ending ${data.number.lastFour} · ${data.number.verified ? 'Verified' : 'Not verified'}` : 'No phone number saved.'}</p>
       {membership?.role === 'owner' && data.execution === 'provider' && <div className='flex flex-col items-start gap-2'>
-        <Button variant='glass' size='control' disabled={checking} onClick={() => void checkCallingSetup()}>{checking ? 'Checking…' : 'Check calling setup'}</Button>
+        <Button variant='glass' size='control' disabled={checking} onClick={() => void checkCallingSetup()}>
+          {checking && <Icons.spinner aria-hidden className='size-4 animate-spin motion-reduce:animate-none' />}
+          {checking ? 'Checking…' : 'Check calling setup'}
+        </Button>
         <p className='text-muted-foreground text-xs'>Checks Dial’s settings without placing a call or sending a text.</p>
-        {readiness && <p role='status'>{readinessMessage(readiness)}</p>}
+        {readiness && <p role='status' className={readiness.ready ? 'flex items-start gap-2 text-emerald-600 dark:text-emerald-400' : undefined}>{readiness.ready && <span aria-hidden className='font-semibold'>✓</span>}<span>{readinessMessage(readiness)}</span></p>}
         {checkError && <p role='alert' className='text-destructive'>{checkError}</p>}
       </div>}
       {!data.number?.verified && <form className='flex flex-col gap-2' onSubmit={(event) => { event.preventDefault(); void run(async () => { await api.phoneVerify(workspaceId, number); setNumber(''); setSent(true); }); }}>

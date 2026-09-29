@@ -21,10 +21,10 @@ import math
 import os
 import re
 import unicodedata
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from .. import text_measure
-from . import calibration, questions
+from . import advice_context, calibration, questions
 from .judgments import subject_hash
 from .lang import lang_group
 
@@ -55,6 +55,7 @@ class DimensionResult:
     fixes: tuple               # localized hints for the weakest answered questions (max 2)
     answered_weight: float     # fraction of the dimension's total weight that was answered, 0..1
     calibrated: bool = False   # level used thresholds accepted for this language on the golden set
+    missing_context: tuple = ()
     p_strong: float | None = None   # calibrated P(a person rates this dimension strong or better); calibrated dims only.
                                     # For monitoring and ranking fixes; never shown as a score or read as virality.
 
@@ -68,6 +69,7 @@ class PostDoctorResult:
     confidence: str            # "low" | "medium" | "high"
     confidence_reasons: tuple
     judgment: object
+    context: dict = field(default_factory=dict)
 
 
 def _lang_key(mapping, lang):
@@ -241,24 +243,32 @@ class PostDoctorService:
         `profile`: a calibration profile from golden.calibration_profile / golden.load_profile. Without one every
         level uses the question-set defaults and confidence stays low."""
         self.judgments = judgments
-        self.qs = question_set or questions.get("postdoctor")
+        self.qs = question_set or questions.get("postdoctor", 2 if (os.environ if env is None else env).get("POSTRIFF_POST_DOCTOR_V2") == "1" else 1)
         self.model = model
         self.profile = None if profile is None else validate_profile(profile, self.qs)
         self.env = env
 
     def check(self, *, workspace_id, draft_text, platform, lang, creator=None, recent_texts=(),
-              posts_with_metrics=0):
+              posts_with_metrics=0, goal="general", format_id="text"):
         if not enabled(self.env):
             raise PostDoctorDisabled("Post Doctor is not enabled")
         if not isinstance(draft_text, str) or not draft_text.strip():
             raise ValueError("draft_text is required")
         creator = _creator_state(creator)
         state = {"draft": draft_text, "platform": platform, "lang": lang, "creator": creator}
-        subject = subject_hash("postdoctor", platform, lang, draft_text, questions.canonical(creator))
+        context = advice_context.build(creator, goal=goal, format_id=format_id) if self.qs.version >= 2 else {}
+        if context:
+            context.update(platform=platform,language=lang)
+            context["digest"]=questions.digest({k:v for k,v in context.items() if k!="digest"})
+            state.update(creator=context["creator"], goal=context["goal"], format=context["format"])
+        subject = subject_hash("postdoctor", platform, lang, draft_text, questions.canonical(creator), questions.canonical(context))
         judgment = self.judgments.judge(self.qs, state, subject=subject, scope=f"personal:{workspace_id}",
                                         model=self.model, workspace_id=workspace_id)
         accepted = self.accepted(lang, judgment)
         dims = levels_from_judgment(self.qs, judgment, thresholds={d: e["thresholds"] for d, e in accepted.items()}, lang=lang)
+        absent = advice_context.missing(self.qs, state) if context else {}
+        dims = tuple(replace(d, level=None, score=None, fixes=(), answered_weight=0, calibrated=False, missing_context=absent[d.id])
+                     if d.id in absent else d for d in dims)
         dims = tuple(replace(d, p_strong=round(calibration.isotonic_apply(accepted[d.id]["isotonic"], d.score), 4))
                      if d.calibrated else d for d in dims)
         calibrated = len(accepted) == len(self.qs.dimensions)
@@ -268,10 +278,12 @@ class PostDoctorService:
             "length_fit": length_fit(platform, draft_text),
         }
         level, reasons = confidence(self.qs, judgment, calibrated=calibrated, posts_with_metrics=posts_with_metrics)
+        if absent:
+            level, reasons = "low", reasons + ("missing_context",)
         if accepted and not calibrated:
             reasons = reasons + ("partly_calibrated",)
         return PostDoctorResult(self.qs.key, dims, risks_from_judgment(self.qs, judgment), computed, level,
-                                reasons, judgment)
+                                reasons, judgment, context)
 
     def accepted(self, lang, judgment):
         """{dimension: profile entry} accepted for this language group. Fits were made on primary answers from the

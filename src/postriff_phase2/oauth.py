@@ -91,12 +91,47 @@ class OAuthService:
             except AlphaError:
                 callback = None
                 issues.append('Set POSTRIFF_PUBLIC_BASE_URL to the fixed HTTPS app origin and register its callback with the provider.')
-            paused = adapter is not None and not getattr(adapter, 'execution_enabled', True)
+            wave = getattr(cls, 'wave', None)
+            paused = adapter is not None and (bool(diagnostic.get('operatorDisabled')) if wave else not getattr(adapter, 'execution_enabled', True))
             if paused:
                 issues.append('This connector is paused by the operator.')
+            feature_enabled = bool(diagnostic.get('featureFlagEnabled', not getattr(cls, 'feature_flag_required', False)))
+            if getattr(cls, 'feature_flag_required', False) and not feature_enabled:
+                issues.append('This connector is behind its independent server feature flag.')
+            contract_verified = bool(getattr(cls, 'oauth_contract_verified', True))
+            if not contract_verified:
+                issues.append('Current OAuth endpoint details remain behind the provider approval portal; connection stays unavailable until they are independently verified.')
+            provider_verified = bool(diagnostic.get('providerVerified'))
+            if getattr(cls, 'provider_approval_required', False) and not provider_verified:
+                issues.append('Provider application verification is not recorded; connection stays unavailable until the provider approves it.')
             history = pid == 'instagram' or (pid == 'linkedin' and bool(getattr(adapter, 'history_approved', False)))
-            connect_ready = adapter is not None and not issues
+            connect_ready = adapter is not None and not issues and contract_verified
             reviewed = bool(adapter and adapter.production_reviewed)
+            normalized = cls.normalized_capabilities() if getattr(cls, 'wave', None) else None
+            if normalized is None:
+                legacy = {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}
+            else:
+                legacy = {
+                    'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
+                    'posts_read': bool(adapter and normalized['owned_content_read'] == 'supported' and adapter.capability_scopes('posts_read')),
+                    'publish': bool(adapter and (getattr(adapter, 'publisher', None) is None or diagnostic.get('publishingPermission'))
+                                    and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video'))
+                                    and adapter.capability_scopes('publish')),
+                    'analytics': bool(adapter and normalized['owned_analytics'] == 'supported' and adapter.capability_scopes('analytics')),
+                    'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
+                    'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
+                }
+            requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            checklist = {
+                'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
+                'redirectUriConfigured': callback is not None,
+                'providerAppCreated': bool(diagnostic.get('providerAppCreated')), 'providerVerificationStatus': 'verified' if provider_verified else 'not_verified',
+                'requestedScopes': requested, 'approvedScopes': list(diagnostic.get('approvedScopes') or []),
+                'oauthLiveTest': bool(diagnostic.get('oauthLiveTest')), 'tokenRefreshLiveTest': bool(diagnostic.get('tokenRefreshLiveTest')),
+                'webhookVerified': bool(diagnostic.get('webhookVerified')), 'publishingPermission': bool(diagnostic.get('publishingPermission')),
+                'analyticsPermission': bool(diagnostic.get('analyticsPermission')), 'commentsPermission': bool(diagnostic.get('commentsPermission')),
+                'productionEnabled': bool(diagnostic.get('productionEnabled')) and not paused,
+            }
             readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
@@ -107,9 +142,11 @@ class OAuthService:
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
+                            'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': feature_enabled,
+                            'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
                             'destinationScope': getattr(cls, 'destination_scope', 'connection'), 'destinationLabel': getattr(cls, 'destination_label', 'Channel'),
-                            'capabilities': {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}})
+                            'capabilities': legacy})
         # Keep explicitly injected/test providers visible without changing their authority.
         for pid, adapter in self.providers.items():
             if pid not in ADAPTERS:
@@ -165,7 +202,14 @@ class OAuthService:
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
+            if not getattr(type(adapter), 'wave', None):
+                raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
+            diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
+            if bool(diagnostic.get('operatorDisabled')):
+                raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
+            if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
+                raise AlphaError("This connection is waiting for provider application approval.", 409)
+            raise AlphaError("This connection is not enabled yet.", 409)
         if capability not in (*CAPABILITIES, 'posts_read') or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
@@ -200,6 +244,11 @@ class OAuthService:
             state = adapter.new_code()
             context = {"kind": adapter.connect_kind}
             extra = {**adapter.connect_instructions(), "code": state}
+        elif adapter.connect_kind == "device_code":
+            state = secrets.token_urlsafe(32)
+            begun = adapter.begin_device(state, scopes)
+            context, authorize_url = begun["context"], begun["authorizeUrl"]
+            extra = {"code": state, "userCode": begun.get("userCode"), "instructions": begun.get("instructions", [])}
         else:
             state = secrets.token_urlsafe(32)
             spec = adapter.start_input or {}
@@ -230,8 +279,16 @@ class OAuthService:
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         adapter = self._provider(provider_id)
         bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
+        device_code = getattr(type(adapter), "connect_kind", "oauth") == "device_code"
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
+            if not getattr(type(adapter), 'wave', None):
+                raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
+            diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
+            if bool(diagnostic.get('operatorDisabled')):
+                raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
+            if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
+                raise AlphaError("This connection is waiting for provider application approval.", 409)
+            raise AlphaError("This connection is not enabled yet.", 409)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
@@ -252,9 +309,27 @@ class OAuthService:
                 raise AlphaError("This connection request expired. Start again.", 409)
             if bot_code and not error:
                 # The code is claimed by Rafii's bot seeing it in a channel (telegram_webhook), not by a redirect.
-                context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                try:
+                    context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                except (TypeError, ValueError) as exc:
+                    raise AlphaError("Connection request unavailable.", 404) from exc
                 if not isinstance(context.get("chat"), dict):
                     return {"connected": False, "reason": "waiting", "pending": True}
+            elif device_code and not error:
+                try:
+                    context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                except (TypeError, ValueError) as exc:
+                    raise AlphaError("Connection request unavailable.", 404) from exc
+                if not isinstance(context, dict) or context.get("kind") != "device_code":
+                    raise AlphaError("Connection request unavailable.", 404)
+                result = adapter.poll_device(context)
+                if not isinstance(result, dict):
+                    raise AlphaError("The provider did not complete this authorization step.", 502)
+                if result.get("pending") is True:
+                    return {"connected": False, "reason": result.get("reason", "waiting"), "pending": True}
+                grant = result.get("grant")
+                if not isinstance(grant, dict):
+                    raise AlphaError("The provider did not complete this authorization step.", 502)
             elif error or not code:
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='denied' WHERE id::text=%s", (transaction_id,))
                 audit(cur, workspace_id, principal, "oauth.denied", transaction_id, {"provider": provider_id})
@@ -263,6 +338,8 @@ class OAuthService:
             verifier = self.vault.decrypt(verifier_ct, key_id)
             if bot_code:
                 grant = adapter.grant_from_context(context)
+            elif device_code:
+                pass
             elif getattr(type(adapter), "requires_issuer", False) is True:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
@@ -285,7 +362,7 @@ class OAuthService:
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
-            matrix = self._capabilities(adapter, capability, granted, missing, now)
+            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
@@ -356,10 +433,15 @@ class OAuthService:
                 "destinations": adapter.destinations(grant["accessToken"])}
 
     def choose_destination(self, workspace_id, token, connection_id, destination_id):
-        # Connection-level destinations (Discord channels, Facebook Pages) are numeric ids; refuse anything else before any request.
-        if not isinstance(destination_id, str) or not re.fullmatch(r"\d{5,30}", destination_id):
+        # Reject malformed identifiers before decrypting a grant or contacting a provider. Existing hosted
+        # destinations are numeric; Google Business Profile uses its documented resource-name shape.
+        if not isinstance(destination_id, str) or not (re.fullmatch(r"\d{5,30}", destination_id) or re.fullmatch(r"accounts/[0-9]+/locations/[0-9]+", destination_id)):
             raise AlphaError("Choose where Rafii posts.", 400)
         adapter, grant = self._member_grant(workspace_id, token, connection_id, "manage_connections")
+        validator = getattr(adapter, 'valid_destination_id', None)
+        valid = validator(destination_id) if callable(validator) else isinstance(destination_id, str) and re.fullmatch(r"\d{5,30}", destination_id)
+        if not valid:
+            raise AlphaError("Choose where Rafii posts.", 400)
         if not getattr(adapter, "has_destinations", False) or getattr(type(adapter), "destination_scope", "connection") != "connection":
             raise AlphaError("This account's destination is chosen for each post.", 409)
         updated = adapter.with_destination(grant["accessToken"], destination_id)
@@ -375,6 +457,23 @@ class OAuthService:
             cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, key_id, workspace_id, connection_id, stored[1]))
             if cur.rowcount != 1:
                 raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
+            if adapter.id == "google_business_profile":
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                channel = next((item for item in state["phase2"]["channels"] if item["id"] == connection_id), None)
+                location_name = json.loads(updated).get("locationName")
+                if channel is None or not isinstance(location_name, str) or not location_name:
+                    raise AlphaError("This Business Profile location needs a fresh connection.", 409)
+                channel["account"] = location_name
+                now = self.clock()
+                matrix = self._capabilities(adapter, "publish", grant["scopes"],
+                                            sorted(set(adapter.capability_scopes("publish")) - set(grant["scopes"])), now, updated)
+                channel["capabilityVerified"] = matrix["publish"]["level"] == "Direct"
+                for name in ("publish", "schedule"):
+                    value = matrix[name]
+                    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()",
+                                (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
+                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                            (json.dumps(state), workspace_id))
             audit(cur, workspace_id, principal, "channel.destination_chosen", connection_id, {"provider": stored[0]})
         return {"connectionId": connection_id, "destinationId": destination_id}
 
@@ -422,6 +521,97 @@ class OAuthService:
             adapter.delete_message(chat["id"], message_id)
         return {"ok": True}
 
+    def xiaohongshu_webhook(self, headers, raw):
+        """Ingest Xiaohongshu authorization events without exposing tokens or trusting parsed-body signatures."""
+        adapter = self.providers.get("xiaohongshu")
+        webhook_secret = getattr(adapter, "webhook_secret", None) if adapter is not None else None
+        if not webhook_secret:
+            raise AlphaError("Webhook unavailable.", 404)
+        timestamp = headers.get("timestamp") if isinstance(headers, dict) else None
+        signature = headers.get("signature") if isinstance(headers, dict) else None
+        event_id = headers.get("eventId") if isinstance(headers, dict) else None
+        event_type = headers.get("eventType") if isinstance(headers, dict) else None
+        if not isinstance(timestamp, str) or not re.fullmatch(r"[0-9]{13}", timestamp):
+            return {"code": 1002, "msg": "timestamp_expired"}
+        now_ms = int(self.clock() * 1000)
+        if abs(now_ms - int(timestamp)) > 300_000:
+            return {"code": 1002, "msg": "timestamp_expired"}
+        from .wave4c_connectors import verify_xiaohongshu_webhook
+        if not verify_xiaohongshu_webhook(webhook_secret, timestamp, raw, signature, now_ms=now_ms):
+            return {"code": 1001, "msg": "invalid_signature"}
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if (not isinstance(payload, dict) or not isinstance(event_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id)
+                or payload.get("event_id") != event_id or payload.get("event_type") != event_type
+                or payload.get("event_time") != int(timestamp)):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if payload.get("app_id") != adapter.client_id:
+            return {"code": 1005, "msg": "unknown_app"}
+        if event_type not in ("authorization_revoked", "device_authorization_confirmed"):
+            return {"code": 1004, "msg": "unknown_event_type"}
+        open_id = payload.get("open_id")
+        if event_type == "authorization_revoked" and (not isinstance(open_id, str) or not 1 <= len(open_id) <= 200):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if event_type == "device_authorization_confirmed" and not re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{4}", str(payload.get("user_code") or "")):
+            return {"code": 1003, "msg": "invalid_payload"}
+        try:
+            with self.repository.connection_factory() as db:
+                with db.cursor() as cur:
+                    digest = hashlib.sha256(raw).hexdigest()
+                    cur.execute(
+                        "INSERT INTO public.pr_social_provider_events(provider,event_id,event_type,payload_digest) "
+                        "VALUES('xiaohongshu',%s,%s,%s) ON CONFLICT(provider,event_id) DO NOTHING RETURNING event_id",
+                        (event_id, event_type, digest),
+                    )
+                    if not cur.fetchone():
+                        return {"code": 0, "msg": "success"}
+                    affected = []
+                    if event_type == "authorization_revoked":
+                        cur.execute(
+                            "SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials "
+                            "WHERE provider='xiaohongshu' AND provider_account_id=%s AND revoked_at IS NULL FOR UPDATE",
+                            (open_id,),
+                        )
+                        affected = cur.fetchall()
+                        for workspace_id, connection_id in affected:
+                            cur.execute(
+                                "UPDATE public.pr_encrypted_credentials SET access_ciphertext='',refresh_ciphertext=NULL,"
+                                "scopes=ARRAY[]::text[],access_expires_at=now(),revoked_at=now(),updated_at=now() "
+                                "WHERE workspace_id=%s AND connection_id=%s",
+                                (workspace_id, connection_id),
+                            )
+                            cur.execute(
+                                "UPDATE public.pr_channel_capabilities SET level='Unsupported',"
+                                "evidence='Xiaohongshu reported that this authorization was revoked.',updated_at=now() "
+                                "WHERE workspace_id=%s AND connection_id=%s",
+                                (workspace_id, connection_id),
+                            )
+                            cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+                            row = cur.fetchone()
+                            state = json.loads(row[0]) if row and isinstance(row[0], str) else row[0] if row else None
+                            if isinstance(state, dict):
+                                channel = next((item for item in state.get("phase2", {}).get("channels", [])
+                                                if item.get("id") == connection_id), None)
+                                if channel is not None:
+                                    channel.update({"revoked": True, "identityVerified": False,
+                                                    "capabilityVerified": False, "expiresAt": self.clock()})
+                                    self.commands.engine.invalidate(state)
+                                    cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                                                (json.dumps(state), workspace_id))
+                            from .hosted import audit
+                            audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
+                                  {"provider": "xiaohongshu", "eventId": event_id})
+                    cur.execute(
+                        "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='xiaohongshu' AND event_id=%s",
+                        ("revoked" if affected else "acknowledged", event_id),
+                    )
+            return {"code": 0, "msg": "success"}
+        except Exception:  # provider should retry transient database failures; never echo database details
+            return {"code": 3001, "msg": "internal_error"}
+
     # --- Bluesky: public client documents -------------------------------------------------
     def bluesky_document(self, name):
         adapter = self.providers.get("bluesky")
@@ -430,13 +620,17 @@ class OAuthService:
         return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
-    def _capabilities(adapter, requested, granted, missing, now):
+    def _capabilities(adapter, requested, granted, missing, now, access_token=None):
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
         if requested in PUBLISH_CAPABILITIES:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
-            elif not adapter.production_reviewed:
+            elif (not adapter.production_reviewed or
+                  (getattr(adapter, "publisher", None) is not None and
+                   (not getattr(adapter, "publish_live_tested", False) or
+                    not getattr(adapter, "publishing_permission", False) or
+                    not getattr(adapter, "write_qualified", lambda _token: True)(access_token)))):
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
             else:
                 set_level(matrix, "publish", "Direct", "You approve each post; Rafii publishes it.", now, adapter.capability_version)
@@ -491,7 +685,11 @@ class OAuthService:
                 if expired or renew_instagram or renew_soon:
                     if not (refresh_supported and refresh_ct):
                         raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
-                    grant = self._provider(provider).refresh(self.vault.decrypt(refresh_ct, key_id))
+                    adapter = self._provider(provider)
+                    grant = adapter.refresh(self.vault.decrypt(refresh_ct, key_id))
+                    preserve = getattr(adapter, "preserve_destination", None)
+                    if preserve is not None:
+                        grant["accessToken"] = preserve(self.vault.decrypt(access_ct, key_id), grant["accessToken"])
                     access_ct, key_id = self.vault.encrypt(grant["accessToken"])
                     new_refresh = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else refresh_ct
                     expires = self.clock() + float(grant.get("expiresIn") or 3600)

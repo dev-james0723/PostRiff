@@ -17,6 +17,9 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
   const [outcome, flashOutcome] = useFlash<'success' | 'error'>();
   const manifest = review.manifest;
   const expired = manifest.expiresAt <= nowSeconds;
+  const actionLabel = manifest.platform === 'Douyin'
+    ? 'Approve Douyin video & schedule'
+    : 'Approve & schedule';
   if (!allowed || review.status !== 'needs_review') return null;
   return (
           <StatefulButton
@@ -61,7 +64,7 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
               );
             }}
           >
-            Approve & schedule
+            {actionLabel}
           </StatefulButton>
   );
 }

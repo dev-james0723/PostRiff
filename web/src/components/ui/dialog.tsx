@@ -65,6 +65,7 @@ function DialogContent({
             <span className='sr-only'>Close</span>
           </DialogPrimitive.Close>
         )}
+        <div data-rafii-guide-host='' className='empty:hidden' />
       </DialogPrimitive.Popup>
     </DialogPortal>
   );

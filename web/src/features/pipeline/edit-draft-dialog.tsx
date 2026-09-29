@@ -13,6 +13,7 @@ import { ApiError } from '@/lib/api/client';
 import { languageLabel, textAttributes } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
+import { PostDoctorPanel } from '@/features/growth/post-doctor-panel';
 
 /* Elevated glass dialog on the existing primitive (DNA §12.2); the editor is a readable, regular 15–16px surface (DNA §21.2). */
 const DIALOG = 'rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 sm:max-w-xl md:p-6';
@@ -45,7 +46,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={DIALOG}>
+      <DialogContent className={`${DIALOG} max-h-[90dvh] overflow-y-auto`}>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
@@ -58,6 +59,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
             <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className={EDITOR} aria-label='Draft text' autoFocus />
             {notes.map((note, index) => <p key={index} className={note.tone === 'problem' ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{note.text}</p>)}
             {notes.length === 0 && <p className='text-muted-foreground text-xs tabular-nums'>{Array.from(text).length} characters</p>}
+            <PostDoctorPanel key={`${variant.id}:${variant.revision}`} variant={variant} dirty={dirty} onAccepted={setText} />
             <OpportunityLabPanel draft={{ id: variant.id, revision: variant.revision, platform: variant.platform, text, dirty }} onApply={async edit => {
               if (!snapshot.data || dirty || variant.revision !== edit.expected_revision) throw new Error('The draft changed. Save and check again.');
               const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text } });

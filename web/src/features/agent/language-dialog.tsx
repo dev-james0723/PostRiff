@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
 import { IconCheck, IconChevronDown, IconPlus, IconSearch, IconWorld, IconX } from '@tabler/icons-react';
 import { LanguageName } from '@/components/application/language-picker/language-badge';
 import { groupsFor, loadRecent, saveRecent } from '@/components/application/language-picker/language-picker-content';
@@ -13,7 +13,7 @@ import { useMeasuredDisclosure, useMotionPreference } from '@/lib/rafii/motion';
 import { cn } from '@/lib/utils';
 import { cleanLanguages, MAX_LANGUAGES, planLanguageOps, runLanguageOp, stateKey, type LanguageDialogApi, type LanguageOp, type LanguageSelectionItem } from './language-dialog-ops';
 
-export type { LanguageDialogApi, LanguageSelectionItem } from './language-dialog-ops';
+export type { LanguageDialogApi, LanguageOp, LanguageSelectionItem } from './language-dialog-ops';
 
 export interface LanguageDialogProps<P extends string = string> {
   open: boolean;
@@ -117,7 +117,7 @@ export function useOpenGeneration(open: boolean) {
   return generation;
 }
 
-interface StageProps<P extends string> {
+export interface LanguageStageProps<P extends string> {
   selection: readonly LanguageSelectionItem<P>[];
   languages: LanguageDialogApi<P>;
   accountLabel: (item: LanguageSelectionItem<P>) => string;
@@ -126,11 +126,21 @@ interface StageProps<P extends string> {
   escapeRef: MutableRefObject<(() => boolean) | null>;
   onApply: (ops: LanguageOp<P>[]) => void;
   onCancel: () => void;
+  applyLabel?: string;
+  /** Effective languages explicitly requested in the message; displayed without changing staged settings. */
+  messageLanguages?: (item: LanguageSelectionItem<P>) => readonly LocaleTag[];
+  /** Delivery Planner only: removing a row stages a destination change until Apply. */
+  onRemoveItem?: (item: LanguageSelectionItem<P>) => void;
+  removeDisabled?: boolean;
+  /** Delivery Planner only: the staged + Add channel disclosure below the matrix. */
+  afterItems?: ReactNode;
+  /** Delivery Planner only: show the live staged destination/language count beside the matrix. */
+  showDeliveryCount?: boolean;
 }
 
 type Slot = 'target' | 'shared';
 
-function LanguageStage<P extends string>({ selection, languages, accountLabel, initialKey, applying, escapeRef, onApply, onCancel }: StageProps<P>) {
+export function LanguageStage<P extends string>({ selection, languages, accountLabel, initialKey, applying, escapeRef, onApply, onCancel, applyLabel = 'Apply languages', messageLanguages, onRemoveItem, removeDisabled = false, afterItems, showDeliveryCount = false }: LanguageStageProps<P>) {
   const ids = useId();
   const { reduced } = useMotionPreference();
   const items = selection;
@@ -143,6 +153,23 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
   const [shared, setShared] = useState(false);
   const [sharedTag, setSharedTag] = useState<LocaleTag | null>(null);
   const [catalogue, setCatalogue] = useState<{ slot: Slot; open: boolean }>({ slot: 'target', open: false });
+
+  // Delivery Planner can add or remove staged destinations without remounting this editor. Keep
+  // existing per-destination edits, seed only new rows, and forget removed rows.
+  const languagesOf = languages.languagesOf;
+  useEffect(() => {
+    setStaged((current) => {
+      const next = Object.fromEntries(items.map((item) => {
+        const key = stateKey(item);
+        return [key, current[key] ?? cleanLanguages(languagesOf(item))];
+      }));
+      const beforeKeys = Object.keys(current);
+      const nextKeys = Object.keys(next);
+      const same = beforeKeys.length === nextKeys.length && nextKeys.every((key) => current[key] === next[key]);
+      return same ? current : next;
+    });
+    setTarget((current) => (items.some((item) => stateKey(item) === current.key) ? current : { key: items[0] ? stateKey(items[0]) : '', index: 0, adding: false }));
+  }, [items, languagesOf]);
 
   const targetItem = items.find((item) => stateKey(item) === target.key) ?? items[0];
   const targetList = targetItem ? (staged[stateKey(targetItem)] ?? []) : [];
@@ -237,6 +264,14 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
   const canApply = !applying && items.length > 0 && (!shared || Boolean(sharedTag));
   const hint = shared ? (sharedTag ? 'Applies to every channel.' : 'Choose a language below.') : 'Each channel keeps its own.';
   const modeLabel = shared ? (sharedTag ? 'Shared language' : 'Choose a shared language') : 'Individual languages';
+  const stagedLanguageCount = new Set(
+    items.flatMap((item) => {
+      const fromMessage = messageLanguages?.(item) ?? [];
+      if (fromMessage.length) return fromMessage;
+      return shared && sharedTag ? [sharedTag] : (staged[stateKey(item)] ?? []);
+    })
+  ).size;
+  const deliveryCountLabel = `${items.length} ${items.length === 1 ? 'channel' : 'channels'} · ${stagedLanguageCount} ${stagedLanguageCount === 1 ? 'language' : 'languages'}`;
 
   function apply() {
     onApply(planLanguageOps(items, (item) => languages.languagesOf(item), staged, shared ? sharedTag : null));
@@ -325,7 +360,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
 
             <div className='mt-5 mb-2 flex items-center justify-between gap-3'>
               <span className='rafii-eyebrow'>Channel outputs</span>
-              <span className='text-muted-foreground text-xs'>{modeLabel}</span>
+              <span className='text-muted-foreground text-right text-xs'>{showDeliveryCount ? `${deliveryCountLabel} · ${modeLabel}` : modeLabel}</span>
             </div>
             <ul className='flex flex-col gap-1.5'>
               {items.map((item) => {
@@ -333,10 +368,23 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
                 const own = staged[key] ?? [];
                 const list = shared && sharedTag ? [sharedTag] : own;
                 const label = accountLabel(item);
+                const fromMessage = messageLanguages?.(item) ?? [];
                 return (
-                  <li key={key} className='rafii-quiet flex min-h-[3.125rem] flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-[1rem] px-2.5 py-1.5'>
+                  <li key={key} className='rafii-quiet flex min-h-[3.125rem] flex-wrap items-center gap-x-1.5 gap-y-1.5 rounded-[1rem] px-2.5 py-1.5'>
                     <ChannelIcon platform={item.platform} size='sm' />
-                    <span className='text-foreground min-w-[7.5rem] flex-1 text-sm font-medium break-words'>{label}</span>
+                    <span className='text-foreground min-w-24 flex-1 text-sm font-medium break-words'>{label}</span>
+                    {onRemoveItem && (
+                      <button
+                        type='button'
+                        aria-label={`Remove ${label} from delivery`}
+                        title={removeDisabled ? 'At least one channel is required' : `Remove ${label}`}
+                        disabled={removeDisabled}
+                        onClick={() => onRemoveItem(item)}
+                        className='rafii-focus text-muted-foreground hover:text-foreground flex size-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40'
+                      >
+                        <IconX aria-hidden className='size-4' />
+                      </button>
+                    )}
                     <span className='flex flex-wrap items-center gap-1.5'>
                       {list.map((tag, index) => {
                         const entry = locales.entry(tag);
@@ -355,7 +403,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
                               <IconChevronDown aria-hidden className='text-muted-foreground size-3.5 shrink-0' />
                             </button>
                             {!shared && own.length > 1 && (
-                              <button type='button' aria-label={`Remove ${entry?.english ?? tag} from ${label}`} onClick={() => removeSlot(key, index)} className='rafii-focus text-muted-foreground hover:text-foreground flex size-9 items-center justify-center rounded-full'>
+                              <button type='button' aria-label={`Remove ${entry?.english ?? tag} from ${label}`} onClick={() => removeSlot(key, index)} className='rafii-focus text-muted-foreground hover:text-foreground flex size-11 items-center justify-center rounded-full'>
                                 <IconX aria-hidden className='size-3.5' />
                               </button>
                             )}
@@ -368,10 +416,18 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
                         </button>
                       )}
                     </span>
+                    {fromMessage.length > 0 && (
+                      <span className='text-muted-foreground flex basis-full flex-wrap items-center gap-1 pl-8 text-[11px]' role='status'>
+                        <span className='text-foreground font-medium'>From message</span>
+                        {fromMessage.map((tag) => <LanguageName key={tag} language={tag} className='max-w-48' />)}
+                        <span>for this draft only</span>
+                      </span>
+                    )}
                   </li>
                 );
               })}
             </ul>
+            {afterItems}
             <p className='text-muted-foreground mt-4 text-xs leading-relaxed'>Applies to new drafts only.</p>
           </>
         )}
@@ -382,7 +438,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
             Cancel
           </Button>
           <Button variant='action' size='control' disabled={!canApply} aria-busy={applying || undefined} onClick={apply}>
-            {applying ? 'Applying…' : 'Apply languages'} <IconCheck aria-hidden />
+            {applying ? 'Applying…' : applyLabel} <IconCheck aria-hidden />
           </Button>
         </div>
       </RafiiDialogFooter>
@@ -567,4 +623,3 @@ function LocaleCatalogue({ id, open, selected, suggestions, onPick, onClose }: {
     </div>
   );
 }
-

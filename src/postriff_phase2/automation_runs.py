@@ -267,6 +267,9 @@ def generate(worker, claim):
         return {"cancelled": True}
     ideas = copy.copy(service.ideas)
     ideas.repository = repository
+    # Credit checks must read through the same worker-bound repository, not the service's original one (as campaign_worker).
+    from .credit_requests import CreditRequests
+    ideas.credit_requests = CreditRequests(ideas)
     ideas.recurring_binding = binding
     destinations = claim["destinations"]
     data = _data(task, campaign, claim.get("context", {}), record)

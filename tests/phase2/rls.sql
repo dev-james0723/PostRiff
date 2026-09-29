@@ -38,9 +38,13 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/034_unified_notifications.sql
 \ir ../../migrations/postriff/035_growth_metric_reads.sql
 \ir ../../migrations/postriff/036_dial_phone_provider.sql
+\ir ../../migrations/postriff/037_growth_phase1.sql
+\ir ../../migrations/postriff/038_growth_closed_loop.sql
+\ir ../../migrations/postriff/039_radar.sql
 \ir ../../migrations/postriff/041_context_navigation.sql
 \ir ../../migrations/postriff/042_phone_inbound.sql
 \ir ../../migrations/postriff/043_phone_duration.sql
+\ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');

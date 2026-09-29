@@ -68,6 +68,7 @@ function SheetContent({
             <span className='sr-only'>Close</span>
           </SheetPrimitive.Close>
         )}
+        <div data-rafii-guide-host='' className='shrink-0 empty:hidden' />
       </SheetPrimitive.Popup>
     </SheetPortal>
   );

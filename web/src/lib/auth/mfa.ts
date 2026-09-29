@@ -71,12 +71,27 @@ export async function verifyTotp(client: SupabaseClient, code: string, factorId?
   if (error) throw error;
 }
 
+export class PasskeyEnrollmentUnavailableError extends Error {
+  constructor() {
+    super('Face ID / Touch ID isn’t available right now. Use an authenticator app instead.');
+    this.name = 'PasskeyEnrollmentUnavailableError';
+  }
+}
+
+export function isPasskeyEnrollmentUnavailable(error: unknown): error is PasskeyEnrollmentUnavailableError {
+  return error instanceof PasskeyEnrollmentUnavailableError;
+}
+
 /** Cancelling the device prompt is not a failure worth a red banner. */
 export function passkeyError(error: { name?: string; message?: string }): Error {
-  if (error.name === 'NotAllowedError' || /not allowed|cancel|abort/i.test(error.message ?? '')) {
+  const message = error.message ?? '';
+  if (/MFA enroll is disabled for WebAuthn/i.test(message)) {
+    return new PasskeyEnrollmentUnavailableError();
+  }
+  if (error.name === 'NotAllowedError' || /not allowed|cancel|abort/i.test(message)) {
     return new Error('The passkey prompt was cancelled. Nothing changed.');
   }
-  return new Error(error.message || 'Your device did not complete the passkey step.');
+  return new Error(message || 'Your device did not complete the passkey step.');
 }
 
 /** Enrol, challenge and verify a new passkey in one ceremony; the session is AAL2 afterwards. */

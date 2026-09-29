@@ -12,6 +12,7 @@ import { keys, useSnapshot } from '@/lib/api/hooks';
 import type { Run } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { EditDraftDialog } from '@/features/pipeline/edit-draft-dialog';
+import { PostDoctorPanel } from '@/features/growth/post-doctor-panel';
 import { languageLabel } from '@/lib/locales';
 import { variantForRow } from './plan';
 
@@ -53,6 +54,7 @@ export function HomeResults({ run, loading, timeZone, canEdit }: { run: Run | nu
           {items.map((item) => <Button key={item.key} size='sm' variant='glass' aria-pressed={active.key === item.key} onClick={() => setSelected(item.key)}>{item.variant.account ?? item.variant.platform} · {languageLabel(item.variant.language)}</Button>)}
         </div>
         <PreviewDeck items={items} activeKey={active.key} onChange={setSelected} label='Generated draft previews' tools={false} scale={0.64} />
+        {active.saved && <PostDoctorPanel key={`${active.saved.id}:${active.saved.revision}`} variant={active.saved} />}
         <p className='text-muted-foreground text-xs'>Layout preview · not published</p>
         {(active.variant.unknowns.length > 0 || (active.variant.warnings?.length ?? 0) > 0) && <details><summary className='rafii-focus min-h-11 cursor-pointer py-3 text-sm'>Review notes</summary><p className='text-muted-foreground text-sm'>{[...active.variant.unknowns, ...(active.variant.warnings ?? [])].join(' ')}</p></details>}
         {canEdit && <div className='flex flex-wrap gap-2'>

@@ -52,6 +52,14 @@ try {
       if (path.endsWith('/usage')) return send({ subscription: { plan: 'studio', status: 'active' }, trial: {}, balances: [] });
       if (path.endsWith('/memory')) return send(fixture.memory);
       if (path.endsWith('/memory/proposals')) return send({ pending: [], recent: [], learning: { items: [] } });
+      if (path.endsWith('/coworker/growth-loop')) return send({
+        goal: null,
+        goals: [],
+        experiments: [],
+        proofs: [],
+        weekly: { activeRecipes: 0, nextAction: 'Prepare your week', href: '/app/weekly' },
+        metricOptions: { consistency: ['verified_posts'] }
+      });
       if (path.endsWith('/ideas/conversations')) return send({ conversations: [] });
       if (path === '/api/ideas/models') return send({ models: [{ id: 'deterministic-preview', label: 'Deterministic preview', qualified: true, costClass: 'none', detail: 'Local fixture', reasoning: [{ id: 'quick', available: true, detail: 'Local fixture' }] }], reasoning: [{ id: 'quick', available: true, detail: 'Local fixture' }], agents: [] });
       return send({ error: `Unhandled ${path}` }, 404);

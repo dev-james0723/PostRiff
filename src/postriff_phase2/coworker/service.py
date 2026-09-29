@@ -62,6 +62,8 @@ class CoworkerService:
         if engine is not None:
             from ..growth.trends.service import queue_bindings_current
             engine.trend_bindings_current = lambda state, bindings: queue_bindings_current(hosted.connection_factory, state, bindings, self.clock())
+        from .growth_loop import GrowthLoop
+        self.growth_loop = GrowthLoop(self)
 
     # --- plumbing ----------------------------------------------------------------------------------------------------------
     @property

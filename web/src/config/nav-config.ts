@@ -79,6 +79,18 @@ export const navGroups: NavGroup[] = [
     label: 'Grow',
     items: [
       {
+        title: 'Radar',
+        url: '/app/radar',
+        icon: 'search',
+        items: []
+      },
+      {
+        title: 'Growth Studio',
+        url: '/app/growth',
+        icon: 'sparkles',
+        items: []
+      },
+      {
         title: 'Analytics',
         url: '/app/analytics',
         icon: 'trendingUp',
@@ -115,6 +127,13 @@ export const navGroups: NavGroup[] = [
         title: 'Audit log',
         url: '/app/workspace/audit',
         icon: 'history',
+        items: [],
+        access: { role: 'admin' }
+      },
+      {
+        title: 'Provider readiness',
+        url: '/app/workspace/provider-readiness',
+        icon: 'shieldCheck',
         items: [],
         access: { role: 'admin' }
       },

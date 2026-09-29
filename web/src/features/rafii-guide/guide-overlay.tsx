@@ -326,6 +326,56 @@ export function GuideOverlay() {
   const buttonLabel = view?.button === 'next' ? 'Next' : view?.button === 'done' ? 'Done' : view?.button === 'close' ? 'Close' : null;
   const transition = { duration: reduced ? 0 : 0.28, ease: EASE_OUT };
 
+  // Modal focus and outside-press handling must own the guide's controls too.
+  const captionHost = dialogOpen
+    ? [...document.querySelectorAll<HTMLElement>('[role="dialog"][data-open] [data-rafii-guide-host]')].at(-1) ?? null
+    : null;
+  const caption = (
+      <AnimatePresence>
+        {active && view && (
+          <motion.section
+            key='card'
+            ref={cardRef}
+            aria-label={`${siteConfig.name} is showing you how`}
+            className={captionHost ? 'pointer-events-auto relative mx-4 mb-4' : 'pointer-events-auto absolute top-0 left-0'}
+            style={{ width: captionHost ? undefined : cardW }}
+            initial={{ opacity: 0, x: captionHost ? 0 : pos.x, y: captionHost ? 0 : pos.y + 6 }}
+            animate={{ opacity: 1, x: captionHost ? 0 : pos.x, y: captionHost ? 0 : pos.y }}
+            exit={{ opacity: 0, transition: { duration: reduced ? 0 : 0.15 } }}
+            transition={transition}
+          >
+            <Surface material='elevated' padding='none' className='flex flex-col gap-3 p-4'>
+              <div className='flex items-center gap-2'>
+                <RafiiAvatar size={24} thinking={busy} />
+                <span className='rafii-eyebrow'>{eyebrow}</span>
+                {view.yourTurn && !ended && <span className='rafii-quiet text-foreground ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium'>Your turn</span>}
+              </div>
+              <p className='text-foreground flex items-start gap-2 text-sm leading-relaxed'>
+                {busy && <Spinner className='mt-1 size-3.5 shrink-0' />}
+                <span>{view.text}</span>
+              </p>
+              <div className='flex items-center justify-between gap-2'>
+                {ended ? (
+                  <span />
+                ) : (
+                  <Button type='button' variant='quiet' size='sm' className='h-9' onClick={() => guideStore.stop()}>
+                    <Icons.handStop className='size-4' aria-hidden />
+                    Stop
+                  </Button>
+                )}
+                {buttonLabel && (
+                  <Button type='button' variant='action' size='sm' className='h-9 px-3.5' onClick={pressNext}>
+                    {buttonLabel}
+                    {view.button === 'next' && <Icons.chevronRight className='size-4' aria-hidden />}
+                  </Button>
+                )}
+              </div>
+            </Surface>
+          </motion.section>
+        )}
+      </AnimatePresence>
+  );
+
   return createPortal(
     <div data-guide-overlay='' className={cn('pointer-events-none fixed inset-0', dialogOpen ? 'z-[60]' : docked ? 'z-[15]' : 'z-[35]')}>
       <p className='sr-only' aria-live='polite'>
@@ -393,53 +443,7 @@ export function GuideOverlay() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {active && view && (
-          <motion.section
-            key='card'
-            ref={cardRef}
-            aria-label={`${siteConfig.name} is showing you how`}
-            // A modal sheet opened by a guide step hides everything outside it from assistive tech, except `[aria-live]`
-            // elements (floating-ui markOthers). "off" is the default politeness, so this only keeps the card's Next and
-            // Stop reachable by screen readers while the sheet is open; announcements stay on the sr-only line above.
-            aria-live='off'
-            className='pointer-events-auto absolute top-0 left-0'
-            style={{ width: cardW }}
-            initial={{ opacity: 0, x: pos.x, y: pos.y + 6 }}
-            animate={{ opacity: 1, x: pos.x, y: pos.y }}
-            exit={{ opacity: 0, transition: { duration: reduced ? 0 : 0.15 } }}
-            transition={transition}
-          >
-            <Surface material='elevated' padding='none' className='flex flex-col gap-3 p-4'>
-              <div className='flex items-center gap-2'>
-                <RafiiAvatar size={24} thinking={busy} />
-                <span className='rafii-eyebrow'>{eyebrow}</span>
-                {view.yourTurn && !ended && <span className='rafii-quiet text-foreground ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium'>Your turn</span>}
-              </div>
-              <p className='text-foreground flex items-start gap-2 text-sm leading-relaxed'>
-                {busy && <Spinner className='mt-1 size-3.5 shrink-0' />}
-                <span>{view.text}</span>
-              </p>
-              <div className='flex items-center justify-between gap-2'>
-                {ended ? (
-                  <span />
-                ) : (
-                  <Button type='button' variant='quiet' size='sm' className='h-9' onClick={() => guideStore.stop()}>
-                    <Icons.handStop className='size-4' aria-hidden />
-                    Stop
-                  </Button>
-                )}
-                {buttonLabel && (
-                  <Button type='button' variant='action' size='sm' className='h-9 px-3.5' onClick={pressNext}>
-                    {buttonLabel}
-                    {view.button === 'next' && <Icons.chevronRight className='size-4' aria-hidden />}
-                  </Button>
-                )}
-              </div>
-            </Surface>
-          </motion.section>
-        )}
-      </AnimatePresence>
+      {captionHost ? createPortal(caption, captionHost) : caption}
     </div>,
     document.body
   );

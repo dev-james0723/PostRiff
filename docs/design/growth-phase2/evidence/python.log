@@ -1,0 +1,25 @@
+............{"event": "weather.unavailable", "reason": "timeout", "traceId": "trace_0d3bd7a6775cea0b168f8a490cc6233d"}
+.........................{"event": "weather.unavailable", "reason": "URLError: <urlopen error [Errno 8] nodename>", "traceId": "trace_e6a524f2ce30e60e60149f9cbca770f6"}
+{"event": "agent_tool.failed", "tool": "weather_now", "errorClass": "KeyError", "traceId": "trace_f6a56813608ab44c0d332aa86fbfa91e"}
+......................................................................................................................................................................................................................{"event": "metric_reads.complete_failed", "exceptionType": "RuntimeError"}
+.{"event": "metric_reads.read_failed", "exceptionType": "ValueError"}
+.....error: /Users/ouxianxing/Documents/James-Au-Studio-v3-phase2/data/x.csv is inside a git checkout; write the dataset outside the repository
+.........................................................................................................................................................../opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <addinfourl at 4552310560 whose fp = <test_hosted_storage_video.CountingBody object at 0x10f57a3e0>>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 302: 'scripted'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...........................................................................................................................................................................................................{"event": "cron.completed", "requestId": "925a6ccaefa147ceb7762a2cbdfe240a", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+................................................/Users/ouxianxing/Documents/James-Au-Studio-v3-phase2/src/postriff_phase2/cli_runtime.py:420: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  sink.fail(str(error))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......................{"event": "request.completed", "requestId": "7c2cb53825ad4ff59fc30776cdecead3", "method": "POST", "status": 503, "durationMs": 0.06, "route": "api"}
+..........................................................................................................................................................................................................................................................{"event": "cron.completed", "requestId": "fb678e01cd874d5fae1744cbbcbc319e", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+.......................................................................................................................................................................................................................{"event": "time_back.write_failed", "exceptionType": "RuntimeError"}
+.{"event": "time_back.publish_failed", "exceptionType": "RuntimeError"}
+................................................................................{"event": "coworker.weekly_recipe_failed", "error": "TypeError"}
+...................................................................................................................................................................................................................................................................................................{"event": "request.completed", "requestId": "cc5d2dd30865447da5a3816b1f817606", "method": "GET", "status": 503, "durationMs": 0.38, "route": "api"}
+........................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1675 tests in 34.811s
+
+OK

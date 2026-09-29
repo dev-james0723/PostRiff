@@ -4,12 +4,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
+import { needsFreshSignIn } from '@/lib/auth/step-up';
+import { useSignInAgain } from '@/lib/auth/use-sign-in-again';
+
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhoneInboundCode, PhoneSettingsData } from '@/lib/phone/types';
 import { inboundCodeCooldownSeconds, inboundCodeCooldownUntil } from './inbound-code-cooldown';
 
 type Props = { conversationId?: string | null; onConversation?: (id: string) => void };
+type DialInError = { message: string; requiresFreshSignIn: boolean };
 
 export function DialInRafii(props: Props) {
   const { workspaceId } = useWorkspace();
@@ -22,9 +26,11 @@ export function DialInRafii(props: Props) {
 function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: Props & { workspaceId: string; inbound: NonNullable<PhoneSettingsData['inbound']> }) {
   const { api } = useWorkspace();
   const client = useQueryClient();
+  const signInAgain = useSignInAgain();
   const [ticket, setTicket] = useState<PhoneInboundCode | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState<DialInError | null>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const mounted = useRef(true);
@@ -62,7 +68,8 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
 
   async function generate() {
     if (busy || !creditReady || cooldownActive) return;
-    setBusy(true); setError(''); setTicket(null);
+    setBusy(true); setError(null); setTicket(null);
+
     try {
       const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
       if (mounted.current) {
@@ -78,17 +85,24 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
           setNow(rejectedAt);
           setCooldownUntil(inboundCodeCooldownUntil(rejectedAt));
         }
-        setError(err instanceof Error ? err.message : 'Couldn’t create a Agent Pairing Code.');
+        setError({ message: err instanceof Error ? err.message : 'Couldn’t create an Agent Pairing Code.', requiresFreshSignIn: needsFreshSignIn(err) });
+
       }
     }
     finally { if (mounted.current) setBusy(false); }
   }
   async function cancel() {
     if (!ticket || busy) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(null);
     try { await api.phoneInboundRevoke(workspaceId, ticket.id); if (mounted.current) setTicket(null); }
-    catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t cancel the code.'); }
+    catch (err) { if (mounted.current) setError({ message: err instanceof Error ? err.message : 'Couldn’t cancel the code.', requiresFreshSignIn: needsFreshSignIn(err) }); }
     finally { if (mounted.current) setBusy(false); }
+  }
+  async function reauthenticate() {
+    if (signingOut) return;
+    setSigningOut(true);
+    const navigating = await signInAgain();
+    if (!navigating && mounted.current) setSigningOut(false);
   }
   return <details aria-live='off' className='w-full rounded-xl border border-border/60 p-3 text-sm'>
     <summary className='rafii-focus min-h-11 cursor-pointer content-center font-medium'>Call Rafii by phone</summary>
@@ -102,7 +116,8 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
         <output aria-label='Agent Pairing Code' className='block break-words font-mono text-2xl tracking-wider'>{ticket.code.match(/.{1,4}/g)?.join(' ')}</output>
         <p className='text-xs'>On the call, say all 12 digits, or enter them on the keypad and press *. Pause after speaking. Keypad: press # to start over.</p>
         <p className='text-muted-foreground text-xs'>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}. Keep it private: it gives one call access to this workspace.</p>
-        <div className='flex flex-wrap gap-2'><Button size='sm' variant='quiet' className='min-h-11' onClick={() => void navigator.clipboard.writeText(ticket.code).catch(() => setError('Couldn’t copy the code.'))}>Copy code</Button><a className='rafii-focus inline-flex min-h-11 items-center rounded-lg border px-3 font-medium' href={`tel:${ticket.phoneNumber}`}>Dial {ticket.phoneNumber}</a><Button size='sm' variant='quiet' className='min-h-11' disabled={busy} onClick={() => void cancel()}>Cancel code</Button></div>
+        <div className='flex flex-wrap gap-2'><Button size='sm' variant='quiet' className='min-h-11' onClick={() => void navigator.clipboard.writeText(ticket.code).catch(() => setError({ message: 'Couldn’t copy the code.', requiresFreshSignIn: false }))}>Copy code</Button><a className='rafii-focus inline-flex min-h-11 items-center rounded-lg border px-3 font-medium' href={`tel:${ticket.phoneNumber}`}>Dial {ticket.phoneNumber}</a><Button size='sm' variant='quiet' className='min-h-11' disabled={busy} onClick={() => void cancel()}>Cancel code</Button></div>
+
       </div> : <>
         {ticket && <p role='status'>{status.data?.state === 'used' ? 'Code used. Your phone conversation is available in Rafii.' : status.isError ? 'Couldn’t confirm this code. Create a new one before calling.' : 'This code is no longer active. Create a new one to call.'}</p>}
         {status.data?.call && <Link className='rafii-focus min-h-11 content-center underline underline-offset-4' href={`/app/agent/${status.data.call.conversationId}`}>Open phone conversation</Link>}
@@ -110,7 +125,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
         <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady || cooldownActive} onClick={() => void generate()}>{busy ? 'Creating code…' : cooldownActive ? `Try again in ${cooldownSeconds}s` : 'Generate new Agent Pairing Code'}</Button>
       </>}
       <p className='text-muted-foreground text-xs'>Spoken codes are transcribed by OpenAI to verify this call; use the keypad if you prefer. The code lasts five minutes and works once. Creating a code sends no text and places no call. Your carrier may charge for the call.</p>
-      {error && <p className='text-destructive' role='alert'>{error}</p>}
+      {error && <p className='text-destructive' role='alert'>{error.requiresFreshSignIn ? <><button type='button' disabled={signingOut} className='rafii-focus cursor-pointer rounded-sm border-0 bg-transparent p-0 font-medium text-inherit underline underline-offset-4 disabled:cursor-wait disabled:opacity-70' onClick={() => void reauthenticate()}>{signingOut ? 'Signing out…' : 'Sign in again'}</button>{' '}to confirm this sensitive action.</> : error.message}</p>}
     </div>
   </details>;
 }

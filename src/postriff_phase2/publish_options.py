@@ -6,12 +6,13 @@ Guidelines: no default privacy level, interactions off unless the person allows 
 with at least one kind, branded content never private-only, and explicit consent to the exact declaration.
 """
 import re
+from datetime import date
 from urllib.parse import urlsplit
 from postriff_alpha.domain import AlphaError
 
 TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
 YOUTUBE_PRIVACY = ("private", "unlisted", "public")
-PLATFORMS = ("TikTok", "YouTube", "Pinterest")
+PLATFORMS = ("TikTok", "YouTube", "Pinterest", "Google Business Profile")
 
 
 def tiktok_consent_text(branded):
@@ -91,6 +92,56 @@ def _pinterest(options, media):
     return {"boardId": board, "title": title.strip(), "link": link}
 
 
+def _gbp(options, media):
+    selected = options.get("gbp")
+    if not isinstance(selected, dict) or selected.get("topicType") not in ("STANDARD", "EVENT", "OFFER"):
+        raise AlphaError("Choose an Update, Event or Offer for this Business Profile post.", 400)
+    if len(media) > 1 or (media and media[0].get("mime") != "image/jpeg"):
+        raise AlphaError("Business Profile needs at most one approved JPEG.", 409)
+    topic = selected["topicType"]
+    result = {"topicType": topic}
+    if topic in ("EVENT", "OFFER"):
+        event = selected.get("event")
+        if not isinstance(event, dict) or not isinstance(event.get("title"), str) or not 1 <= len(event["title"].strip()) <= 58:
+            raise AlphaError("Give this Business Profile Event or Offer a title of up to 58 characters.", 400)
+        schedule = event.get("schedule")
+        if not isinstance(schedule, dict):
+            raise AlphaError("Choose the Event or Offer start and end times.", 400)
+        for prefix in ("start", "end"):
+            day, clock = schedule.get(prefix + "Date"), schedule.get(prefix + "Time")
+            if not isinstance(day, dict) or not isinstance(clock, dict):
+                raise AlphaError("Choose the Event or Offer start and end times.", 400)
+            try:
+                date(day["year"], day["month"], day["day"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise AlphaError("Choose valid Event or Offer dates.", 400) from error
+            if type(clock.get("hours")) is not int or type(clock.get("minutes")) is not int or not 0 <= clock["hours"] <= 23 or not 0 <= clock["minutes"] <= 59:
+                raise AlphaError("Choose valid Event or Offer times.", 400)
+        start = (schedule["startDate"]["year"], schedule["startDate"]["month"], schedule["startDate"]["day"],
+                 schedule["startTime"]["hours"], schedule["startTime"]["minutes"])
+        end = (schedule["endDate"]["year"], schedule["endDate"]["month"], schedule["endDate"]["day"],
+               schedule["endTime"]["hours"], schedule["endTime"]["minutes"])
+        if end <= start:
+            raise AlphaError("The Event or Offer must end after it starts.", 400)
+        result["event"] = {"title": event["title"].strip(), "schedule": {
+            key: {field: schedule[key][field] for field in (("year", "month", "day") if key.endswith("Date") else ("hours", "minutes"))}
+            for key in ("startDate", "startTime", "endDate", "endTime")}}
+    if topic == "OFFER":
+        offer = selected.get("offer")
+        if not isinstance(offer, dict):
+            raise AlphaError("Add an Offer code, redemption URL or terms.", 400)
+        fields = {key: value.strip() for key in ("couponCode", "redeemOnlineUrl", "termsConditions")
+                  if isinstance(value := offer.get(key), str) and value.strip()}
+        if not fields or any(len(value) > 1000 for value in fields.values()):
+            raise AlphaError("Add valid Offer details.", 400)
+        if "redeemOnlineUrl" in fields:
+            url = urlsplit(fields["redeemOnlineUrl"])
+            if url.scheme != "https" or not url.hostname or url.username or url.password:
+                raise AlphaError("The Offer redemption URL must be HTTPS.", 400)
+        result["offer"] = fields
+    return {"gbp": result}
+
+
 def normalize(platform, options, media, text):
     """The canonical options for the manifest, or None for platforms that need none (their manifests stay unchanged)."""
     if platform not in PLATFORMS:
@@ -101,4 +152,6 @@ def normalize(platform, options, media, text):
         return _tiktok(options, media)
     if platform == "YouTube":
         return _youtube(options, media, text)
+    if platform == "Google Business Profile":
+        return _gbp(options, media)
     return _pinterest(options, media)

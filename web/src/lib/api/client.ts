@@ -1,3 +1,4 @@
+import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
@@ -68,6 +69,7 @@ import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsight
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { PhoneCall, PhoneInboundCode, PhoneInboundStatus, PhonePreferences, PhoneProviderReadiness, PhoneSettingsData } from '@/lib/phone/types';
 import type { TikTokCreatorInfo } from '@/lib/channels/tiktok-rules';
+import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody, GrowthOverview, Postmortem, AudienceInsights } from '@/lib/growth/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -135,6 +137,24 @@ export function createApi(getToken: TokenSource) {
   }
 
   return {
+    /* Growth advice never sends a post. Each model request has its own explicit confirmation. */
+    radarCatalog: (w: string) => get<RadarCatalog>(`${ws(w)}/growth/radar/catalog`),
+    radarScans: (w: string) => get<{ scans: RadarScan[] }>(`${ws(w)}/growth/radar/scans`),
+    radarQuote: (w: string, body: RadarRequest) => send<RadarScan>('POST', `${ws(w)}/growth/radar/quotes`, body),
+    radarStart: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/start`, { confirmed: true }),
+    radarAdvance: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/advance`, {}, 90_000),
+    growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
+    postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
+    postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
+    creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
+    analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
+    performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
+    growthOverview: (w: string) => get<GrowthOverview>(`${ws(w)}/growth/postmortems`),
+    postmortem: (w: string, body: { jobId: string; horizon: string; confirmed: boolean; requestKey: string }) => send<Postmortem>('POST', `${ws(w)}/growth/postmortems`, body, 90_000),
+    audienceInsights: (w: string) => get<AudienceInsights>(`${ws(w)}/growth/audience`),
+    analyzeAudience: (w: string, body: { days: number; confirmed: boolean; requestKey: string }) => send<{ clusters: AudienceInsights['clusters']; analyzed: number; available: number; withheld: number; partial: boolean }>('POST', `${ws(w)}/growth/audience`, body, 240_000),
+    publicPostDoctor: async (body: { text: string; platform: string; language: string; confirmed: boolean }) => parse<PostCheck>(await fetch('/api/post-doctor', { method: 'POST', headers: await headers(false), body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) })),
+    contentDNA: (token: string) => get<{ labels: string[]; description: string }>(`/api/content-dna/${encodeURIComponent(token)}`, false),
     /* public */
     tools: () => get<ToolRegistry>('/api/tools', false),
     catalog: () => get<Catalog>('/api/catalog', false),
@@ -421,6 +441,7 @@ export function createApi(getToken: TokenSource) {
     phoneAuthDismiss: (id: string, action: 'deny' | 'fallback' | 'cancel') => send<{ state: string }>('POST', `/api/phone/verify-call/${encodeURIComponent(id)}/${action}`),
     phoneTrustedCallers: (w: string) => get<{ callers: TrustedCaller[] }>(`${ws(w)}/phone/trusted-callers`),
     phoneRevokeCaller: (w: string, id: string, passkeyToken: string) => send<{ revoked: boolean }>('POST', `${ws(w)}/phone/trusted-callers/${encodeURIComponent(id)}/revoke`, { passkeyToken }),
+
     phoneInboundCode: (w: string, body: { conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean }) => send<PhoneInboundCode>('POST', `${ws(w)}/phone/inbound-codes`, body),
     phoneInboundStatus: (w: string, id: string) => get<PhoneInboundStatus>(`${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),
     phoneInboundRevoke: (w: string, id: string) => send<{ revoked: boolean }>('DELETE', `${ws(w)}/phone/inbound-codes/${encodeURIComponent(id)}`),

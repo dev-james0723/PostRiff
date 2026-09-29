@@ -1,0 +1,102 @@
+{
+  "status": "PASS",
+  "checkedAt": "2026-09-27T18:38:48.891211+00:00",
+  "branch": "codex/rafii-v3-phase1-20260927",
+  "baseCommit": "d5bb9d6b1e03df832a8b9c2b1505cf6ae4f33d7f",
+  "execution": "local application + disposable PostgreSQL + deterministic model/provider fixtures",
+  "python": {
+    "tests": 1664,
+    "status": "PASS",
+    "log": "python.log"
+  },
+  "web": {
+    "tests": 293,
+    "status": "PASS",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "logs": [
+      "web-tests.log",
+      "web-build.log",
+      "web-typecheck.log"
+    ]
+  },
+  "postgres": {
+    "phase1": "PASS",
+    "history": "PASS",
+    "repository": "PASS",
+    "publicationSafety": "PASS",
+    "memoryEgress": "PASS",
+    "metricReads": "PASS",
+    "logs": [
+      "postgres-phase1.log",
+      "postgres-history.log"
+    ],
+    "note": "Existing core scripts passed in the earlier shared run; history and Phase 1 passed in fresh databases after seeded-fixture interference."
+  },
+  "browser": {
+    "status": "PASS",
+    "execution": "actual UI + disposable PostgreSQL + deterministic model/provider fixtures",
+    "checks": [
+      "composer consent, nine levels, selected edits and publishing boundary",
+      "Genome corpus, evidence, approval, public label preview and revoke",
+      "exact publication revision and native observed feedback screen",
+      "public checks, qualitative feedback, mobile layout and accessibility"
+    ],
+    "realModelCalls": 0,
+    "livePosts": 0
+  },
+  "diffCheck": "PASS",
+  "productionMigration": "NOT_RUN",
+  "deployment": "NOT_RUN",
+  "paidModelRequests": 0,
+  "livePosts": 0,
+  "liveAnalyticsRequests": 0,
+  "humanCalibration": "NOT_RUN",
+  "betaGates": "NOT_RUN",
+  "files": {
+    "browser.json": {
+      "sha256": "8ab18cb822fa09240cf83b8ff5be6f72a2376d2e6fdeb978a1bf481235e13e73"
+    },
+    "browser.log": {
+      "sha256": "8649b891e899a6aacb03f1094edc4e3eac9a28fbcfc48bfd6b8ab14e626e15ef"
+    },
+    "composer-mobile.png": {
+      "sha256": "ebcd42b01a1cf7a050729d12af1be12e5ef31cd549bfde24656cc42e4bf4a9fd"
+    },
+    "content-dna.png": {
+      "sha256": "bef490af39d121817069baf7300018f47cfee9f01578b2120fa1a918d5b53c05"
+    },
+    "feedback-mobile.png": {
+      "sha256": "d3fa26996b7f935fcfb65315a60b98a6834af5cf7a2cf37867e8930500d574dc"
+    },
+    "genome-mobile.png": {
+      "sha256": "f5cb504600ffdbe0c4ad896b8d8b47bf17c31f10174b5ac8d57f27d3ca8b3fb4"
+    },
+    "last-state.png": {
+      "sha256": "af7cc6d53076b100db652389f13affce51bef02912bd6d23b93a8081ba2b13f7"
+    },
+    "postgres-history.log": {
+      "sha256": "a522b93cc221d09b5a88345c49f06d72ad11ed44d104f304eb971a6e788e6f49"
+    },
+    "postgres-phase1.log": {
+      "sha256": "422749e61684e68094eb3874987bef5f09a435d99e7f2cbd3a3f35618ba2fb8c"
+    },
+    "public-mobile.png": {
+      "sha256": "04a4aef40d14e0698310b1936fcaa561e7c190402ae5f87ba2618607e4365184"
+    },
+    "python.log": {
+      "sha256": "27fa4d9466b40458e3e75a7179ed2514a696bcca8bee0efe1fbf09ff06f563fa"
+    },
+    "web-build.log": {
+      "sha256": "f9fbaf8588c7398964ee4f029cb4065a46002767141dc0d2fd59b84d10c494fa"
+    },
+    "web-tests.log": {
+      "sha256": "f6b5b22f526a8672f78c04e31fb4ee0c6623e4419d15ad4e55d23891baa2af5d"
+    },
+    "web-typecheck.log": {
+      "sha256": "f09beac437abf97c90ded63e323e376c1882dcce17defbf756c3ad0b366874c3"
+    }
+  },
+  "logFormat": "Terminal carriage returns and trailing whitespace normalized in saved web build/typecheck logs; originals retained in /tmp/rafii-phase1-web-build.log and /tmp/rafii-phase1-final-typecheck.log."
+}

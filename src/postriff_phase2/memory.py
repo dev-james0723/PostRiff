@@ -124,6 +124,13 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     if withheld:
         body += f"\n\n> {withheld} more boundar{'y is' if withheld == 1 else 'ies are'} private or local-only and not shared here. Keep drafts conservative about personal details."
 
+    # Approved Genome extends the current voice file; stale/deleted/revoked evidence is excluded.
+    from .growth.service import current_genome
+    approved_genome=current_genome(state)
+    if approved_genome:
+        lines=[s['text'] for s in approved_genome.get('statements',[]) if s.get('grade')=='supported'][:12]
+        if lines:
+            voice+='\n\n## Approved Creator Genome\nObserved writing preferences, never new personal facts or guaranteed outcomes.\n'+'\n'.join('- '+line for line in lines)
     agent = "\n".join(["# Agent", "", "How Rafii works with you.", ""] + [f"- {rule}" for rule in AGENT_RULES])
     brand = "\n".join([
         "# Brand", "",

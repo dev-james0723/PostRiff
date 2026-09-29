@@ -1,6 +1,6 @@
 /**
  * Conversation wiring for chat attachments (chat-context SPEC §4.7, §11.2; PLAN S29), checked in the source:
- * the composer mounts the bar between the text and "Draft for", composes the textarea handlers, keeps its
+ * the composer mounts attachment chips between the text and Delivery Summary, composes the textarea handlers, keeps its
  * accessible name, guards ⌘/Ctrl+Enter against IME and waits for uploads; the conversation sends the same chip
  * fields to the estimate and the turn, none with quick replies, clears only what went out, and shows the report.
  *
@@ -15,11 +15,12 @@ const AGENT = path.join(__dirname, '..', 'src', 'features', 'agent');
 const composer = fs.readFileSync(path.join(AGENT, 'composer.tsx'), 'utf8');
 const view = fs.readFileSync(path.join(AGENT, 'conversation-view.tsx'), 'utf8');
 
-test('the composer mounts the bar between the textarea and "Draft for"', () => {
+test('the composer mounts attachment chips between the textarea and Delivery Summary', () => {
   const textarea = composer.indexOf('<Textarea');
-  const bar = composer.search(/<AttachmentBar\s+attachments=/);
-  const draftFor = composer.indexOf("aria-label='Draft for'");
-  assert.ok(textarea > 0 && bar > textarea && draftFor > bar, 'Textarea → AttachmentBar → Draft for');
+  const bar = composer.search(/<AttachmentBar\s+attachments=[\s\S]*?part='chips'/);
+  const delivery = composer.indexOf('<DeliverySummary');
+  assert.ok(textarea > 0 && bar > textarea && delivery > bar, 'Textarea → AttachmentBar → Delivery Summary');
+  assert.match(composer, /<AttachmentBar\s+attachments=[\s\S]*?part='plus'[\s\S]*?requestedView=\{moreView\}/);
   assert.match(composer, /<MentionList/);
   assert.match(composer, /aria-label='Message'/);
 });

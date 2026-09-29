@@ -257,6 +257,8 @@ def get(qs_id, version=None, directory=None):
             return sets[f"{qs_id}.v{int(version)}"]
         except KeyError:
             raise KeyError(f"question set {qs_id}.v{version} not found") from None
+    if qs_id in sets:
+        return sets[qs_id]
     candidates = [qs for qs in sets.values() if qs.id == qs_id]
     if not candidates:
         raise KeyError(f"question set {qs_id} not found")

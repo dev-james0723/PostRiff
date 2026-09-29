@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "execution": "local engineering validation, synthetic data and deterministic models",
+  "pythonTests": 1675,
+  "webTests": 293,
+  "postgres": [
+    "Phase 2 closed loop",
+    "Phase 1 regression"
+  ],
+  "browser": {
+    "status": "PASS",
+    "execution": "zero-network deterministic fixtures, disposable database",
+    "checks": [
+      "result review, native comparison, explicit Genome approval and no publishing",
+      "Threads privacy abstention, classified evidence, saved idea and normal draft boundary",
+      "1440px, 390px, 320px, dark mode, reduced motion, keyboard tabs and axe serious/critical checks",
+      "shared visual system and Growth Studio entry on Home and Genome"
+    ],
+    "realModelCalls": 0,
+    "consoleErrors": []
+  },
+  "typecheck": "PASS",
+  "lint": "PASS: 0 warnings/errors",
+  "productionBuild": "PASS: Next 16.3.5 webpack",
+  "liveModels": "NOT_RUN",
+  "productionMigration": "NOT_RUN",
+  "deployment": "NOT_RUN",
+  "realEfficacyGates": "NOT_RUN"
+}

@@ -38,6 +38,24 @@ function harness(responses = []) {
   return { calls, api: coworker.createCoworkerApi(async () => 'session-token') };
 }
 
+test('growth loop commands retain idempotency keys, use guarded sessions and encode workspace and entity ids', async () => {
+  const { calls, api } = harness();
+  const w = 'workspace/../other';
+  await api.growthLoop(w);
+  await api.createGrowthGoal(w, { name: 'Publish consistently', goalType: 'consistency', primaryMetric: 'verified_posts', baselineValue: 0, targetValue: 6, targetAt: '2030-01-01', idempotencyKey: 'request-0001' });
+  await api.proposeGrowthExperiment(w, { hypothesisId: 'h1', minimumPerArm: 5, windowDays: 14, idempotencyKey: 'request-0002' });
+  await api.growthExperimentAction(w, 'e/../other', 'apply');
+  await api.generateGrowthProof(w, 'monthly');
+  await api.growthProofAction(w, 'p/../other', 'opened');
+  assert.equal(calls[0].url, '/api/workspaces/workspace%2F..%2Fother/coworker/growth-loop');
+  assert.equal(JSON.parse(calls[1].init.body).idempotencyKey, 'request-0001');
+  assert.equal(JSON.parse(calls[2].init.body).idempotencyKey, 'request-0002');
+  assert.ok(calls[3].url.endsWith('/experiments/e%2F..%2Fother/action'));
+  assert.deepEqual(JSON.parse(calls[4].init.body), { frequency: 'monthly' });
+  assert.ok(calls[5].url.endsWith('/proofs/p%2F..%2Fother/action'));
+  for (const call of calls) assert.equal(call.init.headers.Authorization, 'Bearer session-token');
+});
+
 test('reads go to the documented routes with the guard header, the session and no-store', async () => {
   const { calls, api } = harness([{ status: 200, body: { recipes: [], weeks: [] } }]);
   await api.weekly('ws 1');

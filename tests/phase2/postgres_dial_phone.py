@@ -250,7 +250,11 @@ with TestClient(app) as client,api:
         assert read(declined['id'])['state']=='declined'
         http.calls[dref].update(status='completed',duration=2)
         socket.send_json({'type':'call_ended','reason':'customer_hangup'})
-    value=finished(declined['id'])
+        # Keep the synthetic carrier socket alive until the server consumes its
+        # terminal frame. Closing it immediately races TestClient cancellation
+        # against the durable decline settlement and does not model Dial's
+        # authoritative end-of-call acknowledgement.
+        value=finished(declined['id'])
     assert value['state']=='declined' and value['media_claimed_at'] is None and value['live_usage_seconds']==0
     assert connect_count==before
     print('PASS declined/voicemail guard: generic prompt only, no Live session or private workspace access')

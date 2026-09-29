@@ -1,0 +1,5 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-postdoctor-v2/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+== tests/phase2/postgres_postdoctor_v2.py exit=0
+{"status": "PASS", "checks": ["missing context", "grounded comparison in both orders", "no-cost replay", "revocation between comparison calls"], "realModelCalls": 0}
+
+{"status": "pass", "execution": "disposable-local-postgres", "failed": []}

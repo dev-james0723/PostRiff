@@ -12,7 +12,7 @@ from postriff_phase2.growth import outcomes as O
 from postriff_phase2.growth import questions as Q
 from postriff_phase2.growth.judgments import Judgment, validate_answers
 
-QS = Q.get("postdoctor")
+QS = Q.get("postdoctor", 1)
 INVERTED = {i["q"] for d in QS.dimensions.values() for i in d["items"] if i.get("invert")}
 ROOT = Path(__file__).resolve().parents[1]
 def _script(name):

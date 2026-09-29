@@ -49,6 +49,7 @@ import { isSiteAgentBody } from '@/lib/site-agent/panel-logic';
 import type { SiteAgentBody } from '@/lib/site-agent/types';
 import { ActivityStrip } from './activity-strip';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
+import type { DeliveryTargetOption } from './delivery-planner';
 import { useChannelLanguages } from './use-channel-languages';
 import { useLiveRegion } from './attachments/attachment-bar';
 import type { PickerItem } from './attachments/picker-items';
@@ -213,6 +214,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const [text, setText] = useState('');
   const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; conversationId: string; id: string }) | null>(null);
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
+  const [deliveryPlannerOpen, setDeliveryPlannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [voiceChoice, setVoiceChoice] = useState<'neutral' | 'personalized' | null>(null);
   const [imageRequested, setImageRequested] = useState(false);
@@ -284,6 +286,16 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     const account = channels.find((c) => c.platform === platform);
     return { platform, account: account?.account, state: account?.displayState };
   });
+  const deliveryOptions = useMemo<DeliveryTargetOption<DraftPlatform>[]>(
+    () =>
+      DRAFT_PLATFORMS.flatMap((platform) => [
+        ...channels
+          .filter((channel) => channel.platform === platform && !channel.revoked)
+          .map((channel) => ({ key: channel.id, platform, channelId: channel.id, account: channel.account, state: channel.displayState })),
+        { key: platform, platform, platformOnly: true }
+      ]),
+    [channels]
+  );
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : models.data ? choice.label : models.isError ? 'Model list unavailable' : 'Loading models…';
   // The composer's picker offers Auto first, named by the writer it resolves to now.
@@ -718,6 +730,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               }}
               hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
+              deliveryPlanner={{ open: deliveryPlannerOpen, onOpenChange: setDeliveryPlannerOpen, options: deliveryOptions }}
               slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               attachments={attachmentsOn ? attachments : undefined}
               attachmentBar={{ conversationId, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
