@@ -230,7 +230,10 @@ export function buildRailMotion({
     );
     const baseDiameter = selected ? 4.25 : 2.25 + cadenceBoost;
     const maxDiameter = selected ? 9 : 8.25;
-    const diameter = Math.min(maxDiameter, baseDiameter + energy * 5.85);
+    // Compress quiet energy while preserving strong peaks: the rail stays fine-grained at
+    // normal levels, but musical peaks can still bloom into clearly distinct beads.
+    const beadEnergy = Math.pow(energy, 1.35);
+    const diameter = Math.min(maxDiameter, baseDiameter + beadEnergy * 8.6);
     const transitionMs = 20 + (1 - waveformPeak) * 64;
     const haloEnergy = clamp01((energy - 0.42) / 0.58);
 
