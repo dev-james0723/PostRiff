@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from 'react';
 
-import {
-  ExpandedPreviewDialog,
-  type DeckItem
-} from '@/components/application/post-preview/expanded-preview-dialog';
+import { ExpandedPreviewDialog } from '@/components/application/post-preview/expanded-preview-dialog';
+import type { DeckItem } from '@/components/application/post-preview/preview-deck';
 import { previewFromDraft } from '@/components/application/post-preview/draft-preview';
 import { useAccountPicture } from '@/components/application/post-preview/use-account-picture';
 import {
