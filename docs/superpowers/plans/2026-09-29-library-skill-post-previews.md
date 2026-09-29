@@ -22,7 +22,7 @@ Branch: `feat/library-skill-post-previews-20260929`
 1. Keep the existing skills search/list.
 2. Change skill row tap from attach to preview.
 3. Add reader state with loading/error.
-4. Render the returned Markdown with a small safe renderer.
+4. Render the returned Markdown faithfully in a safe read-only text reader.
 5. Add Back and **Use skill**.
 6. Only **Use skill** calls the existing `onPick` path.
 
