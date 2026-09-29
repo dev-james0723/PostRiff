@@ -167,6 +167,8 @@ export function PreviewWindow({ active, available, label, onDock, children }: {
 
   return (
     <>
+      {/* CSS responds immediately when the OS preference changes, even before React rerenders. */}
+      <style>{'@media (prefers-reduced-motion: reduce) { [data-preview-window] { transition: none !important; } }'}</style>
       <div ref={slot} data-preview-dock-slot className='relative w-full'
         style={{ height: active ? (available ? (geometry.compact && state.mode === 'floating' ? 64 : dock.height) : 80) : 0 }}>
         {active && !available && <p className='text-muted-foreground py-4 text-sm'>Nothing to preview yet</p>}
