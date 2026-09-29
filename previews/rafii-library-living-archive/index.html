@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rafii Library 2.0 — Living Archive Selection Rationale</title>
+<meta name="description" content="Interactive rationale for the selected Rafii Library 2.0 Living Archive direction.">
+<style>
+:root{--bg:#f6f6f2;--ink:#111;--muted:#6c6e68;--line:rgba(17,17,17,.10);--card:rgba(255,255,255,.82);--ease:cubic-bezier(.2,.8,.2,1)}
+*{box-sizing:border-box}html{background:var(--bg);color:var(--ink)}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;letter-spacing:-.012em;background:radial-gradient(circle at 80% 5%,#fff,transparent 28rem),var(--bg)}button,a{font:inherit;color:inherit}.wrap{width:min(1180px,calc(100% - 28px));margin:auto;padding:24px 0 90px}
+nav{position:sticky;top:12px;z-index:20;width:min(760px,100%);margin:0 auto 58px;padding:8px 12px 8px 15px;border:1px solid #ffffffaa;border-radius:999px;background:#f1f1edcc;backdrop-filter:blur(18px);display:flex;align-items:center;justify-content:space-between;box-shadow:0 16px 40px -34px #0008}.brand{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700}.mark{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#080808;color:white;font-size:11px}.meta{font-size:11px;color:var(--muted)}
+.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:56px;align-items:end;margin-bottom:70px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.14em;font-weight:800;color:#50524e}.hero h1{margin:14px 0 0;font-size:clamp(54px,9vw,104px);line-height:.9;letter-spacing:-.065em}.hero p{font-size:18px;line-height:1.5;color:#50524e;max-width:700px}.verdict{padding:20px;border:1px solid var(--line);border-radius:26px;background:#ffffffaa;box-shadow:0 26px 70px -52px #0009}.verdict b{font-size:18px}.verdict p{font-size:13px}.dials{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}.dial{padding:9px;border-radius:12px;background:#1111110d;font-size:10px;color:#666}.dial strong{display:block;color:#111;font-size:16px;margin-top:3px}
+section{margin-top:82px}.section-head{display:grid;grid-template-columns:1fr 360px;gap:28px;align-items:end;margin-bottom:25px}.section-head h2{margin:0;font-size:clamp(34px,5vw,56px);line-height:.98;letter-spacing:-.05em}.section-head p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.stage{position:relative;overflow:hidden;padding:26px;border:1px solid var(--line);border-radius:34px;background:linear-gradient(#00000008 1px,transparent 1px),linear-gradient(90deg,#00000008 1px,transparent 1px),#ffffff8f;background-size:32px 32px;box-shadow:0 32px 80px -58px #000}.stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 10%,#ffffffdb,transparent 45%)}.stage>*{position:relative;z-index:2}.mock-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.mock-title small{font-size:9px;text-transform:uppercase;letter-spacing:.13em;font-weight:800;color:#6a6b67}.mock-title h3{margin:6px 0 0;font-size:30px;letter-spacing:-.045em}.mock-title p{font-size:12px;color:var(--muted);margin:5px 0}.upload{border:0;border-radius:12px;background:linear-gradient(145deg,#333,#000 68%,#2a2a2a);color:white;padding:11px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.filters{position:relative;display:inline-flex;gap:3px;padding:4px;border-radius:999px;background:#1111110d;margin:26px 0;max-width:100%;overflow:auto;scrollbar-width:none}.filters::-webkit-scrollbar{display:none}.pill{position:absolute;left:4px;top:4px;height:calc(100% - 8px);width:52px;border-radius:999px;background:#fff;box-shadow:0 5px 14px -10px #000a;transition:transform .23s var(--ease),width .23s var(--ease)}.filter{position:relative;z-index:2;border:0;background:transparent;padding:8px 12px;border-radius:999px;font-size:11px;color:#666;cursor:pointer;white-space:nowrap}.filter[aria-pressed=true]{color:#111;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.asset{--mx:50%;--my:20%;position:relative;overflow:hidden;border:1px solid #11111110;border-radius:20px;background:#fff;box-shadow:0 18px 32px -28px #0009;transition:transform .16s var(--ease),box-shadow .16s var(--ease)}.asset:hover{transform:translateY(-2px);box-shadow:0 22px 38px -29px #000b}.asset:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle 160px at var(--mx) var(--my),#ffffffcc,transparent 60%);opacity:0;transition:opacity .15s}.asset:hover:after{opacity:.45}.asset.selected{box-shadow:0 0 0 2px #111 inset,0 20px 35px -28px #0009}.preview{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#e8e8e4;overflow:hidden}.blue{background:radial-gradient(circle at 25% 15%,#ffffff55,transparent 30%),linear-gradient(145deg,#2f70b5,#2a65a2)}.dark{background:linear-gradient(145deg,#111,#3d3d3d);color:white;font-size:28px}.paper{padding:18px;align-items:flex-start;justify-content:flex-start}.file{position:absolute;top:12px;left:12px;padding:6px 8px;border-radius:8px;background:#ffffffd9;font-size:9px;font-weight:800}.doc{font-size:9px;line-height:1.5;color:#3d3f3a}.doc b{display:block;font-size:11px;margin-bottom:8px}.sel{position:absolute;top:9px;right:9px;z-index:4;width:30px;height:30px;border-radius:50%;border:1px solid #11111118;background:#ffffffdc;opacity:0;cursor:pointer;transition:opacity .15s,transform .15s var(--ease)}.asset:hover .sel,.asset.selected .sel{opacity:1}.asset.selected .sel{background:#111;color:white}.info{position:relative;z-index:3;padding:12px 13px 14px}.info b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.info span{display:block;margin-top:5px;color:#7a7c76;font-size:10px}
+.island{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));z-index:50;display:flex;align-items:center;gap:4px;padding:6px;border-radius:999px;background:#090909f2;color:white;box-shadow:0 25px 70px -34px #000c;transform:translate(-50%,110px);opacity:0;pointer-events:none;transition:transform .25s var(--ease),opacity .18s}.island.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}.island span{padding:0 8px;font-size:11px;color:#ddd}.island button{border:0;border-radius:999px;background:#ffffff14;color:white;padding:8px 11px;font-size:11px}
+.choices{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}.choice{min-height:250px;padding:20px;border:1px solid var(--line);border-radius:26px;background:#ffffffa3;box-shadow:0 22px 55px -46px #0008;position:relative}.choice:nth-child(1){grid-column:span 7}.choice:nth-child(2){grid-column:span 5}.choice:nth-child(n+3){grid-column:span 4}.tag{display:inline-flex;padding:6px 9px;border-radius:999px;background:#111;color:white;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.choice h3{margin:40px 0 9px;font-size:24px;letter-spacing:-.04em}.choice p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
+.folder{position:absolute;right:28px;bottom:23px;width:142px;height:104px}.folder button{position:absolute;inset:0;border:0;background:transparent;cursor:pointer;z-index:5}.leaf{position:absolute;left:25px;bottom:18px;width:96px;height:68px;border-radius:13px;background:white;box-shadow:0 10px 22px -15px #0007;transform-origin:50% 100%;transition:transform .32s var(--ease)}.leaf:nth-of-type(1){transform:rotate(-2deg) translateY(-5px)}.leaf:nth-of-type(2){transform:rotate(1deg) translateY(-8px);background:#efefeb}.leaf:nth-of-type(3){transform:rotate(3deg) translateY(-2px);background:#e3e3df}.shell{position:absolute;left:8px;bottom:5px;width:126px;height:76px;border-radius:12px 20px 20px 20px;background:linear-gradient(155deg,#191919,#050505);box-shadow:0 14px 28px -18px #000c;transition:transform .32s var(--ease);transform-origin:50% 100%}.shell:before{content:"";position:absolute;left:0;top:-11px;width:54px;height:24px;border-radius:11px 11px 0 0;background:#151515}.folder:hover .leaf:nth-of-type(1),.folder.open .leaf:nth-of-type(1){transform:rotate(-11deg) translate(-7px,-17px)}.folder:hover .leaf:nth-of-type(2),.folder.open .leaf:nth-of-type(2){transform:rotate(0) translateY(-26px)}.folder:hover .leaf:nth-of-type(3),.folder.open .leaf:nth-of-type(3){transform:rotate(12deg) translate(9px,-16px)}.folder:hover .shell,.folder.open .shell{transform:rotateX(-10deg) translateY(3px)}
+.drop{min-height:260px;border:1px dashed #1111112e;border-radius:26px;background:#ffffff80;position:relative;overflow:hidden;transition:transform .2s var(--ease),border-color .2s,background .2s}.drop:before{content:"";position:absolute;inset:0;opacity:.15;background:linear-gradient(#0001 1px,transparent 1px),linear-gradient(90deg,#0001 1px,transparent 1px);background-size:26px 26px;mask-image:radial-gradient(circle at 50% 50%,#000,transparent 70%)}.drop.drag{transform:scale(.995);border-color:#111;background:#fff}.drop.drag:before{opacity:.4}.drop-inner{position:relative;z-index:2;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:25px}.drop-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:#111;color:white;margin-bottom:14px}.drop b{font-size:18px}.drop span{margin-top:6px;color:var(--muted);font-size:12px}
+.rejects{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.reject{padding:18px;border-radius:22px;background:#1111110c}.reject b{font-size:14px}.reject p{font-size:12px;line-height:1.55;color:var(--muted)}
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.phase{padding:18px;border-top:1px solid #1112}.phase small{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:800}.phase h3{font-size:18px;margin:20px 0 8px}.phase p{font-size:12px;color:var(--muted);line-height:1.55}
+.links{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.links a{display:flex;justify-content:space-between;gap:14px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#ffffff85;text-decoration:none}.links strong{font-size:12px}.links span{font-size:10px;color:var(--muted)}
+footer{margin-top:80px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:11px;line-height:1.5}
+:focus-visible{outline:2px solid #111;outline-offset:3px}
+@media(max-width:840px){.hero,.section-head{grid-template-columns:1fr}.choices .choice{grid-column:span 12!important}.grid{grid-template-columns:repeat(2,1fr)}.rejects{grid-template-columns:1fr}.road{grid-template-columns:repeat(2,1fr)}.links{grid-template-columns:1fr}.folder{position:relative;right:auto;bottom:auto;margin:28px auto 0}}
+@media(max-width:540px){.wrap{width:calc(100% - 20px)}nav{top:8px;margin-bottom:44px}.meta{display:none}.hero{gap:28px}.hero h1{font-size:18vw}.hero p{font-size:16px}.stage{padding:14px;border-radius:25px}.mock-title p{max-width:210px}.grid{gap:8px}.paper{padding:11px}.road{grid-template-columns:1fr}.phase{padding-left:2px;padding-right:2px}footer{flex-direction:column}.island{width:calc(100% - 18px);justify-content:center}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}.asset:hover{transform:none}.asset:after{display:none}.folder .leaf,.folder .shell{transform:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<nav><div class="brand"><span class="mark">R</span>Rafii Library 2.0</div><div class="meta">Remote preview · 28 Sep 2026</div></nav>
+
+<header class="hero">
+<div><div class="eyebrow">Selected direction</div><h1>Living<br>Archive.</h1><p>I chose a quiet, tactile archive rather than a louder AI dashboard. The artistic moments are spatial and physical, but they appear only when the user interacts.</p></div>
+<aside class="verdict"><b>Soft Structuralism + restrained spatial motion</b><p>Mostly white / silver-grey, black actions, real previews, paper-and-glass depth. Think Apple Photos × Linear × a physical studio archive, without copying any one product.</p><div class="dials"><div class="dial">Variance<strong>7/10</strong></div><div class="dial">Motion<strong>6/10</strong></div><div class="dial">Density<strong>4/10</strong></div></div></aside>
+</header>
+
+<section>
+<div class="section-head"><h2>The core feeling</h2><p>Keep the page calm by default. Search and filtering feel precise; cards have tiny physical response; selected objects form a temporary workbench at the bottom.</p></div>
+<div class="stage">
+<div class="mock-head"><div class="mock-title"><small>Your private content</small><h3>Library</h3><p>Files, media, and final artifacts saved for this workspace.</p></div><button class="upload" id="upload">↑ Upload files</button></div>
+<div class="filters" id="filters"><span class="pill" id="pill"></span><button class="filter" aria-pressed="true">All</button><button class="filter" aria-pressed="false">Images</button><button class="filter" aria-pressed="false">Docs</button><button class="filter" aria-pressed="false">Video</button><button class="filter" aria-pressed="false">Audio</button></div>
+<div class="grid">
+<article class="asset"><div class="preview blue"><button class="sel" aria-pressed="false" aria-label="Select library test cover">✓</button></div><div class="info"><b>Library test cover 60b…</b><span>Image · 78 B</span></div></article>
+<article class="asset"><div class="preview paper"><span class="file">MD</span><button class="sel" aria-pressed="false" aria-label="Select Weekly Piano Practice">✓</button><div class="doc"><b>Weekly Piano Practice</b>60bfa610 Scales and repertoire daily.<br><br>• Warm-up<br>• Scales<br>• Repertoire</div></div><div class="info"><b>Weekly Piano Practice…</b><span>Text · 62 B</span></div></article>
+<article class="asset"><div class="preview paper"><span class="file">PDF</span><button class="sel" aria-pressed="false" aria-label="Select Research Brief">✓</button><div class="doc"><b>Research Brief</b>Sources, decisions and evidence collected for a campaign.</div></div><div class="info"><b>Research Brief</b><span>Document · 8 pages</span></div></article>
+<article class="asset"><div class="preview dark"><button class="sel" aria-pressed="false" aria-label="Select Campaign cut">✓</button>▶</div><div class="info"><b>Campaign cut</b><span>Video · 0:42</span></div></article>
+</div>
+</div>
+<div class="island" id="island"><span id="count">0 selected</span><button>Open</button><button>Download</button><button>More ···</button></div>
+</section>
+
+<section>
+<div class="section-head"><h2>What I chose</h2><p>Five interaction ideas survived the filter. Each one has a job. None is allowed to become permanent decoration.</p></div>
+<div class="choices">
+<article class="choice"><span class="tag">01 · Selected</span><h3>Spatial archive folders</h3><p>Borrow the “contents fan open” idea from Rare UI, but rebuild it in Rafii’s monochrome material language. It gives Collections one memorable physical interaction without infecting every card with 3D effects.</p><div class="folder" id="folder"><button aria-expanded="false" aria-label="Toggle folder demo"></button><span class="leaf"></span><span class="leaf"></span><span class="leaf"></span><span class="shell"></span></div></article>
+<article class="choice"><span class="tag">02 · Selected</span><h3>Card → detail morph</h3><p>Inspired by Motion Primitives’ morphing popover. A file should feel like the same object expanding into a detail canvas, not like an unrelated right sidebar appearing.</p></article>
+<article class="choice"><span class="tag">03 · Selected</span><h3>Sliding filter surface</h3><p>Use the Animated Background principle for file-type filters. It makes the toolbar feel continuous while keeping every option readable and keyboard-accessible.</p></article>
+<article class="choice"><span class="tag">04 · Selected</span><h3>Selection action island</h3><p>Borrow the compactness of a Floating Dock, but only after files are selected. Powerful multi-file actions without a permanent toolbar.</p></article>
+<article class="choice"><span class="tag">05 · Selected</span><h3>Drag-only ambient grid</h3><p>Use the reactive upload-space idea only while dragging files or when the Library is empty. The normal archive remains visually quiet.</p></article>
+</div>
+</section>
+
+<section id="drop-section">
+<div class="section-head"><h2>Upload becomes a moment</h2><p>The Upload button stays. Dragging simply gives the whole workspace a receiving state, which is both more useful and more expressive.</p></div>
+<div class="drop" id="drop" tabindex="0"><div class="drop-inner"><div class="drop-icon">↓</div><b id="dropTitle">Drop into Library</b><span id="dropSub">Drag any file over this panel. Nothing is uploaded; this is a visual concept.</span></div></div>
+</section>
+
+<section>
+<div class="section-head"><h2>What I did not choose</h2><p>More animation is not automatically more artistic. These ideas make the product less useful if applied broadly.</p></div>
+<div class="rejects">
+<article class="reject"><b>Focus Cards blur</b><p>Rejected for the main grid. Blurring sibling files hurts scanning and does not translate well to keyboard or touch.</p></article>
+<article class="reject"><b>Full parallax cards</b><p>Rejected. 3D mouse parallax across hundreds of files would become tiring, expensive and visually noisy.</p></article>
+<article class="reject"><b>Permanent reactive background</b><p>Rejected. The grid effect is stronger when it appears only in an upload/empty state.</p></article>
+<article class="reject"><b>Heavy glass everywhere</b><p>Rejected. Glass stays on transient controls and overlays; file previews need calm contrast.</p></article>
+<article class="reject"><b>Knowledge graph as homepage</b><p>Demoted to a Connections view after real relationship data exists. Otherwise it is visual theatre.</p></article>
+<article class="reject"><b>New animation libraries</b><p>Rejected for Phase 1. Rafii already has Motion, dropzone and enough primitives.</p></article>
+</div>
+</section>
+
+<section>
+<div class="section-head"><h2>Build order</h2><p>The design should become more useful before it becomes more intelligent.</p></div>
+<div class="road">
+<article class="phase"><small>Phase 0</small><h3>Protect the candidate</h3><p>Snapshot the current Universal Library WIP. Do not reset migration 047 or overwrite the dedicated worktree.</p></article>
+<article class="phase"><small>Phase 1</small><h3>Living Archive shell</h3><p>Filters, better cards, detail morph, multi-select, action island, drag state, sparse/empty composition, accessibility.</p></article>
+<article class="phase"><small>Phase 2</small><h3>Collections + previews</h3><p>Only with real data: manual collections, PDF/PPT rendering, usage details, generated-document ingestion.</p></article>
+<article class="phase"><small>Phase 3</small><h3>Library intelligence</h3><p>Approved analyzer, semantic retrieval, Ask Rafii with citations, smart collections and optional Connections view.</p></article>
+</div>
+</section>
+
+<section>
+<div class="section-head"><h2>Interaction references</h2><p>These are references, not packages Rafii must import. Production should use the project’s existing stack.</p></div>
+<div class="links">
+<a href="https://www.rareui.com/components/foldercomponent" target="_blank" rel="noreferrer"><strong>Rare UI · Folder</strong><span>folder fan / reveal</span></a>
+<a href="https://motion-primitives.com/docs/morphing-popover" target="_blank" rel="noreferrer"><strong>Motion Primitives · Morphing Popover</strong><span>object continuity</span></a>
+<a href="https://motion-primitives.com/docs/animated-background" target="_blank" rel="noreferrer"><strong>Motion Primitives · Animated Background</strong><span>filter selection</span></a>
+<a href="https://ui.aceternity.com/components/file-upload" target="_blank" rel="noreferrer"><strong>Aceternity · File Upload</strong><span>drag state</span></a>
+<a href="https://ui.aceternity.com/components/floating-dock" target="_blank" rel="noreferrer"><strong>Aceternity · Floating Dock</strong><span>contextual action island</span></a>
+<a href="https://magicui.design/docs/components/interactive-grid-pattern" target="_blank" rel="noreferrer"><strong>Magic UI · Interactive Grid</strong><span>ambient upload surface</span></a>
+</div>
+</section>
+
+<footer><div><strong>Rafii Library 2.0 — Living Archive</strong><br>Remote static design preview. No Vercel deployment.</div><div>Phase 1 uses existing Motion + dropzone + Rafii tokens.<br>Semantic AI/collections stay future-gated until real.</div></footer>
+</main>
+<script>
+(()=>{const bar=document.getElementById('filters'),pill=document.getElementById('pill'),filters=[...bar.querySelectorAll('.filter')];
+function move(btn){pill.style.width=btn.offsetWidth+'px';pill.style.transform='translateX('+(btn.offsetLeft-4)+'px)'}
+filters.forEach(btn=>btn.addEventListener('click',()=>{filters.forEach(x=>x.setAttribute('aria-pressed',String(x===btn)));move(btn)}));
+requestAnimationFrame(()=>move(filters[0]));addEventListener('resize',()=>move(filters.find(x=>x.getAttribute('aria-pressed')==='true')||filters[0]));
+const assets=[...document.querySelectorAll('.asset')],island=document.getElementById('island'),count=document.getElementById('count');
+function sync(){const n=assets.filter(x=>x.classList.contains('selected')).length;count.textContent=n+' selected';island.classList.toggle('on',n>0)}
+assets.forEach(asset=>{asset.querySelector('.sel').addEventListener('click',e=>{e.stopPropagation();const on=asset.classList.toggle('selected');e.currentTarget.setAttribute('aria-pressed',String(on));sync()});asset.addEventListener('pointermove',e=>{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const r=asset.getBoundingClientRect();asset.style.setProperty('--mx',(e.clientX-r.left)+'px');asset.style.setProperty('--my',(e.clientY-r.top)+'px')})});
+const folder=document.getElementById('folder'),fb=folder.querySelector('button');fb.addEventListener('click',()=>{const on=folder.classList.toggle('open');fb.setAttribute('aria-expanded',String(on))});
+const drop=document.getElementById('drop'),title=document.getElementById('dropTitle'),sub=document.getElementById('dropSub');
+['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('drag');title.textContent='Release to place it here';sub.textContent='Production would validate size/type, then show real upload and indexing states.'}));
+['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('drag');title.textContent=n==='drop'?'Concept drop received':'Drop into Library';sub.textContent=n==='drop'?'Nothing was uploaded. The point is the whole workspace briefly becomes a receiving surface.':'Drag any file over this panel. Nothing is uploaded; this is a visual concept.'}));
+document.getElementById('upload').addEventListener('click',()=>{document.getElementById('drop-section').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});drop.classList.add('drag');title.textContent='Upload remains a real button';sub.textContent='Drag is enhancement, never the only path.';setTimeout(()=>drop.classList.remove('drag'),1000)})})();
+</script>
+</body></html>
