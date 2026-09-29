@@ -33,13 +33,15 @@
   },
   "controlWeb": {
     "status": "PASS",
-    "contracts": 2,
+    "contracts": 3,
     "typecheck": "PASS",
     "lint": "0 errors; 0 warnings",
     "build": "PASS Next 16.3.5 / Node 24.15.0 production build",
     "browser": "PASS production Next -> WSGI -> restricted disposable PostgreSQL; viewports 390 and 1440; pageErrors=0; settings axe violations=0 at both widths",
     "browserReceipt": "browser.json",
-    "cleanCandidate": "PASS: typecheck and production build from fresh allowlisted candidate without existing .next artifacts"
+    "cleanCandidate": "Fresh install typecheck/production build and actual PostgreSQL/browser journeys PASS",
+    "dependencyInstall": "Fresh npm ci, 86 installed packages, zero vulnerabilities; registry-only portable lockfile regression PASS",
+    "firstCI": "Failed on local-linked lockfile; repaired with regression test, final provider CI tracked on PR #83"
   },
   "postgresRegression": {
     "status": "PASS",
@@ -49,7 +51,7 @@
   },
   "security": {
     "sourceScan": "PASS, zero unexpected findings; source unchanged",
-    "scopedScan": "PASS, 79 files reviewed, 32 metadata/synthetic findings, zero unexpected",
+    "scopedScan": "PASS: original 79 scoped files plus rescan of both changed frontend files; 31 verified checksum metadata findings and one synthetic denied URL fixture, zero unexpected",
     "npmVulnerabilities": 0,
     "pythonVulnerabilities": 0,
     "compileall": "PASS",
@@ -61,7 +63,7 @@
       "status": "PASS",
       "files": 688,
       "bytes": 2366692,
-      "sha256": "f2bb32449a68bad94671856f02ee9fd3d01df99074d587c2ff0075307124f5b7"
+      "sha256": "3e1f032752927b13bca1ee5faffd0830ac0be03b52681e421c2bd8700dee265f"
     },
     "consumer": {
       "status": "PASS",

@@ -24,6 +24,7 @@ Execution: inline source, SQL grants, contract, dependency, artifact and synthet
 4. Prohibited routes and dispatch denials lacked a complete request-bound audit outcome. Both now record content-free denied events.
 5. The separate package omitted a reused locale data dependency. The allowlist includes it, and a fresh candidate imports the actual application and catalogs successfully.
 6. A Preview could otherwise receive a miswired database DSN despite having a staging auth URL. Database project binding, distinct parsed logins, verified TLS and redirect rejection now fail closed.
+7. The first CI run exposed local linked paths in a lockfile generated using shared dependencies. A new portability contract fails on any linked, extraneous or non-registry path. The corrected lockfile and fresh installation passed local type/build/browser checks; final CI outcome is reported separately.
 
 ## Remaining qualification gates
 
