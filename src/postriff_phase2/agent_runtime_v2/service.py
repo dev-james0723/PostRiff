@@ -275,6 +275,12 @@ class AgentRuntimeService:
         item = target["bind"]
         proposal = item.get("proposal") or {}
         try:
+            if wants == "apply" and self.cfg.enabled("RAFII_AGENT_THINKING_STATES_ENABLED"):
+                try:
+                    from . import thinking_state
+                    self._emit_thinking(workspace_id, token, run_id, thinking_state.event("acting", "tool", "approval_apply"))
+                except Exception:  # noqa: BLE001 — semantic telemetry never changes approval authority
+                    pass
             decided = approvals.decide(self.service, workspace_id, token, conversation_id=conversation_id, message_id=item["messageId"], proposal_id=item["proposalId"],
                                        digest=proposal.get("digest") or item.get("digest"), decision=wants, zone=zone)
         except AlphaError as error:
@@ -402,6 +408,13 @@ class AgentRuntimeService:
         row = cur.fetchone()
         return row[0] if row else None
 
+    def _emit_thinking(self, workspace_id, token, run_id, event) -> None:
+        """Store one already-validated semantic progress event while this exact run is still active."""
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            if self._run_status(cur, workspace_id, run_id) != "running":
+                return
+            self.service.ideas._insert_event(cur, workspace_id, run_id, event)
+
     # --- the Manager ------------------------------------------------------------------------------------------------------
     def _manager_turn(self, workspace_id, token, conversation_id, text, modality, run_key, trace_id, page, zone, payload, attachments, now) -> dict:
         _ = now
@@ -460,6 +473,8 @@ class AgentRuntimeService:
                               style=style, command=commands.parse(payload.get("command")))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
+        ctx.thinking("working", "run", "run_open")
         holder["ctx"] = ctx
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
@@ -1084,6 +1099,41 @@ def _conversation_of(cur, workspace_id, run_id):
     cur.execute("SELECT conversation_id::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
     row = cur.fetchone()
     return row[0] if row else None
+
+
+def active_run(runtime: "AgentRuntimeService", workspace_id, token, conversation_id):
+    """Latest active Agent Runtime turn for one authenticated conversation; safe identifiers only."""
+    ideas = runtime.service.ideas
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        require(ideas._member(row), "read")
+        ideas._conversation(cur, workspace_id, conversation_id)
+        cur.execute(
+            "SELECT id::text,status,extract(epoch from created_at) FROM public.pr_agent_runs "
+            "WHERE workspace_id=%s AND conversation_id::text=%s AND status='running' AND idempotency_key LIKE 'agent:%%' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (workspace_id, conversation_id),
+        )
+        found = cur.fetchone()
+    if not found:
+        return None
+    return {"runId": found[0], "status": found[1], "startedAt": float(found[2])}
+
+
+def run_events(runtime: "AgentRuntimeService", workspace_id, token, run_id, cursor=0) -> dict:
+    """Read the existing safe event stream for an Agent Runtime run with normal workspace read permission."""
+    if type(cursor) is not int or cursor < 0:
+        raise AlphaError("Invalid event cursor.", 400)
+    ideas = runtime.service.ideas
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        require(ideas._member(row), "read")
+        found = ideas._events_for(cur, workspace_id, run_id, cursor)
+    return {
+        "runId": found["runId"],
+        "conversationId": found["conversationId"],
+        "status": found["status"],
+        "events": found["events"],
+        "cursor": found["cursor"],
+    }
 
 
 def task_view(runtime: "AgentRuntimeService", workspace_id, token, task_id, cursor=0) -> dict:

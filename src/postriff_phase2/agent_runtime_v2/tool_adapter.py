@@ -83,6 +83,10 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         if spec.effect != contracts.READ:
             ctx.check_cancelled()
         _check_schema(tool.schema, args)
+        from . import thinking_state
+        op = thinking_state.tool_op(spec.name)
+        if op:
+            ctx.thinking(op, "tool", spec.name)
         result = tool.executor(ctx, args)
     except AlphaError as error:
         code = error.code or ("not_found" if error.status == 404 else "forbidden" if error.status == 403 else "conflict" if error.status == 409 else "failed")
