@@ -42,7 +42,7 @@ test('spectral flux spikes on a fresh onset and falls on a steady frame', () => 
   assert.equal(steady, 0);
 });
 
-test('global music level moves the whole rail even when local spectrum is sparse', () => {
+test('global music level gives Needle Pulse a subtle movement floor', () => {
   const points = audio.buildRailMotion({
     count: 12,
     activeIndex: 5,
@@ -53,8 +53,8 @@ test('global music level moves the whole rail even when local spectrum is sparse
     tickMs: 1200
   });
   assert.equal(points.length, 12);
-  assert.ok(points.every((point, index) => point.width > (index === 5 ? 8 : 6)));
-  assert.ok(points.every((point) => point.opacity > 0.5));
+  assert.ok(points.every((point) => point.width > 4));
+  assert.ok(points.every((point) => point.height <= 1.5));
 });
 
 test('external playback capture has priority over Rafii-owned media frames', () => {
@@ -127,7 +127,7 @@ test('time-domain waveform sampler preserves spatial peaks and valleys', () => {
   assert.ok(Math.min(...profile) < 0.45);
 });
 
-test('waveform peaks create different dot lengths and different response speeds', () => {
+test('waveform peaks create different Needle Pulse lengths and response speeds', () => {
   const points = audio.buildRailMotion({
     count: 8,
     activeIndex: -1,
@@ -156,4 +156,69 @@ test('waveform peak contrast outweighs the shared global pulse', () => {
     tickMs: 900
   });
   assert.ok(points[2].width - points[0].width > 9);
+});
+
+
+test('Needle Pulse keeps hairline geometry with a strong selected resting state', () => {
+  const idle = audio.buildRailMotion({
+    count: 10,
+    activeIndex: -1,
+    level: 0,
+    transient: 0,
+    bands: [0, 0, 0],
+    waveform: [0, 0, 0],
+    tickMs: 0
+  });
+  assert.ok(idle.every((point) => point.height === 1));
+  assert.ok(idle.every((point) => Math.abs(point.width - 4) < 0.01));
+
+  const selected = audio.buildRailMotion({
+    count: 10,
+    activeIndex: 4,
+    level: 0,
+    transient: 0,
+    bands: [0, 0, 0],
+    waveform: [0, 0, 0],
+    tickMs: 0
+  });
+  assert.ok(selected[4].width >= 11);
+  assert.equal(selected[4].height, 1.5);
+  assert.equal(selected[4].opacity, 1);
+});
+
+test('Needle Pulse waveform peaks preserve at least ten pixels of peak-valley contrast', () => {
+  const points = audio.buildRailMotion({
+    count: 8,
+    activeIndex: -1,
+    level: 0.42,
+    transient: 0.15,
+    bands: [0.4, 0.5, 0.4, 0.5],
+    waveform: [0.05, 0.2, 0.95, 0.25, 0.08, 0.82, 0.18, 0.05],
+    tickMs: 1600
+  });
+  const lengths = points.map((point) => point.width);
+  const speeds = points.map((point) => point.transitionMs);
+  assert.ok(Math.max(...lengths) - Math.min(...lengths) >= 10);
+  assert.ok(Math.max(...speeds) - Math.min(...speeds) >= 20);
+});
+
+test('Needle Pulse source includes magnetic pointer exploration and past-message previews on desktop and mobile', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'features', 'context-navigation', 'thread-navigator.tsx'),
+    'utf8'
+  );
+  const conversation = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'features', 'agent', 'conversation-view.tsx'),
+    'utf8'
+  );
+  assert.match(source, /data-needle-pulse/);
+  assert.match(source, /data-needle-surface='desktop'/);
+  assert.match(source, /data-needle-surface='mobile'/);
+  assert.match(source, /data-needle-preview/);
+  assert.match(source, /data-needle-mobile-preview/);
+  assert.match(source, /nearestNeedle/);
+  assert.match(source, /scale: 1 \+ proximity \* 0\.42/);
+  assert.match(source, /shiftX: -proximity \* 4\.5/);
+  assert.match(source, /Tap to jump/);
+  assert.match(conversation, /pr-8 lg:pr-14/);
 });

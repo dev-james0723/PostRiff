@@ -175,6 +175,10 @@ export interface RailMotionPoint {
   translateX: number;
   borderRadius: string;
   transitionMs: number;
+  glowPx: number;
+  haloOpacity: number;
+  energy: number;
+  waveformPeak: number;
 }
 
 export function buildRailMotion({
@@ -213,11 +217,7 @@ export function buildRailMotion({
     const travellingTransient =
       (0.5 + 0.5 * Math.sin(phase * 1.35 - position * 9.2)) * clamp01(transient);
     const texture = clamp01(localBands[index] ?? 0);
-    const focus =
-      activeIndex >= 0
-        ? Math.max(0, 1 - Math.abs(index - activeIndex) / Math.max(4, count * 0.22))
-        : 0;
-
+    const selected = index === activeIndex;
     const waveformPeak = Math.pow(clamp01(waveformProfile[index] ?? 0), 1.5);
 
     // The global envelope is now only a floor. Instantaneous waveform shape owns the peaks,
@@ -229,19 +229,23 @@ export function buildRailMotion({
         texture * 0.13 +
         travellingTransient * 0.1
     );
-    const base = index === activeIndex ? 8 : 6;
+    const baseLength = selected ? 11 : 4;
+    const maxLength = selected ? 31 : 28;
     const transitionMs = 20 + (1 - waveformPeak) * 64;
+    const length = Math.min(maxLength, baseLength + energy * 24);
+    const glowEnergy = clamp01((energy - 0.56) / 0.44);
 
     return {
-      width: base + energy * 28 + focus * 1.2,
-      height: base + energy * 6.2,
-      opacity: clamp01((index === activeIndex ? 0.92 : 0.46) + energy * 0.48),
-      translateX: energy * 1.05 + travellingTransient * 1.7,
-      borderRadius:
-        energy > 0.05
-          ? `${52 + energy * 20}% ${48 - energy * 14}% ${56 - energy * 9}% ${44 + energy * 13}%`
-          : '9999px',
-      transitionMs
+      width: length,
+      height: selected ? 1.5 : 1,
+      opacity: selected ? 1 : clamp01(0.28 + energy * 0.66),
+      translateX: Math.min(1.5, energy * 0.8 + travellingTransient * 0.45),
+      borderRadius: '9999px',
+      transitionMs,
+      glowPx: glowEnergy > 0 ? 2 + glowEnergy * 5 : 0,
+      haloOpacity: glowEnergy * 0.18,
+      energy,
+      waveformPeak
     };
   });
 }
