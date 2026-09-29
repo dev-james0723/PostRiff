@@ -32,7 +32,7 @@ MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_c
 # by role. Every value is derived from rows the member may already see; nothing here is per-member.
 WORKSPACE_SUMMARY_COLUMNS = (
     "coalesce(w.state->'workspace'->>'name',''),"
-    "(SELECT pt.plan FROM public.pr_subscriptions s JOIN public.pr_plan_terms pt ON pt.id=s.plan_terms_id WHERE s.workspace_id=w.id AND s.status IN ('active','past_due','grace')),"
+    "coalesce((SELECT pt.plan FROM public.pr_subscriptions s JOIN public.pr_plan_terms pt ON pt.id=s.plan_terms_id WHERE s.workspace_id=w.id AND s.status IN ('active','past_due','grace')), (SELECT pt.plan FROM public.pr_entitlements e JOIN public.pr_plan_terms pt ON pt.id=e.plan_terms_id WHERE e.workspace_id=w.id AND pt.plan='free')),"
     "(SELECT t.plan FROM public.pr_trials t WHERE t.workspace_id=w.id ORDER BY t.started_at LIMIT 1),"
     "(SELECT o.user_id::text FROM public.pr_memberships o WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
     "(SELECT coalesce(op.display_name,'') FROM public.pr_memberships o JOIN public.pr_profiles op ON op.user_id=o.user_id WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
@@ -64,12 +64,11 @@ def _membership(row):
 
 
 def workspace_summary(name, subscription_plan, trial_plan, owner_id, owner_name, counts):
-    """Shape the WORKSPACE_SUMMARY_COLUMNS tail of a row. A workspace is on a paid plan only while a
-    subscription is live; otherwise it is a trial of `trialPlan`."""
+    """Shape the effective paid/Free plan and retain historical trial selection."""
     counts = counts if isinstance(counts, dict) else {}
     return {
         "name": name or "My workspace",
-        "plan": subscription_plan if subscription_plan in ("studio", "assist") else "trial",
+        "plan": subscription_plan if subscription_plan in ("studio", "assist", "creator", "starter", "free") else "trial",
         "trialPlan": trial_plan if trial_plan in ("studio", "assist") else None,
         "owner": {"userId": owner_id, "displayName": owner_name or ""} if owner_id else None,
         "memberCounts": {role: int(counts.get(role, 0) or 0) for role in ROLES},
@@ -222,7 +221,18 @@ class HostedPhase2Commands:
         self.engine.images = FixtureImages()
 
     def present(self, state, revision):
-        return self.engine._present(state, revision)
+        if state.get("phase2", {}).get("trial"):
+            return self.engine._present(state, revision)
+        # The fixture presenter requires a trial. Hosted Free has none; retain the
+        # shared draft/content/media projections without manufacturing a grant.
+        result = Store._present(self.engine, state, revision)
+        ensure_content_state(result["state"])
+        result["state"]["contentTypes"] = content_projection(result["state"])
+        p = result["state"]["phase2"]
+        p["art"]["providerBrief"] = self.engine.art_brief(state)
+        p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
+        p["channels"] = [{**x, "displayState": self.engine.channel_state(x)} for x in p["channels"]]
+        return result
 
     def __call__(self, state, principal, action, payload):
         if not isinstance(action, str) or not isinstance(payload, dict):
@@ -268,12 +278,16 @@ class HostedPhase2Commands:
             return state
         if action.startswith("p2_"):
             hosted_action = action[3:]
+            if hosted_action == "plan" and not state["phase2"].get("trial"):
+                raise AlphaError("Choose a paid plan through the hosted billing checkout.", 409)
             if hosted_action in self.SERVER_ACTIONS:
                 raise AlphaError("This operation requires its dedicated hosted endpoint.", 409)
             self.engine.apply_phase2(_NoDatabase(), state, hosted_action, payload, {"id": "supabase-session", "user_id": principal})
         else:
             if action in ("generate", "adapt"):
-                trial = state["phase2"]["trial"]
+                trial = state["phase2"].get("trial")
+                if not trial:
+                    raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402)
                 if trial["expiresAt"] <= self.clock() or trial["writingUsed"] >= trial["writingGrant"]:
                     raise AlphaError("The trial has no writing allowance left. Drafts and exports remain available.")
                 trial["writingUsed"] += 1
@@ -386,7 +400,7 @@ class HostedWorkspaceService:
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
-        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock)
+        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock, pricing_v2_enabled=pricing_v2_enabled)
         self.ideas.ledger = self.ledger
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock, pricing_v2_enabled=pricing_v2_enabled, creator_experiment_enabled=creator_experiment_enabled, creator_experiment_cohort=creator_experiment_cohort)
         from .credit_purchases import CreditPurchases
@@ -468,8 +482,9 @@ class HostedWorkspaceService:
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+            lifecycle = self.billing.lifecycle(cur, workspace_id, self.clock())
             view = self.ledger.usage_view(cur, workspace_id, actor)
-            view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
+            view["lifecycle"] = lifecycle
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
             if not _membership(row).allows("owner"):
@@ -538,6 +553,7 @@ class HostedWorkspaceService:
             require(_membership(row), "owner")
             throttle(cur, f"checkout:{workspace_id}", 5, 60)
             variant_id = None
+            self.billing.lifecycle(cur, workspace_id, self.clock())
             if self.billing.pricing_v2_enabled:
                 price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
                 variant_id, price_id = price["priceVariantId"], price["priceId"]
@@ -722,7 +738,7 @@ class HostedWorkspaceService:
         return shown
 
     def bootstrap(self, token, plan="studio", client=None, client_label=""):
-        if plan not in PLANS:
+        if plan not in PLANS and plan != "free":
             raise AlphaError("This plan is not available.")
         if client:
             with self.connection_factory() as db:
@@ -733,18 +749,24 @@ class HostedWorkspaceService:
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 throttle(cur, f"verify-user:{principal}", 60, 60)
-                cur.execute("SELECT public.pr_bootstrap(%s,%s)", (principal, plan))
+                if self.billing.pricing_v2_enabled:
+                    cur.execute("SELECT public.pr_bootstrap_free(%s)", (principal,))
+                else:
+                    cur.execute("SELECT public.pr_bootstrap(%s,%s)", (principal, "studio" if plan == "free" else plan))
                 workspace_id = str(cur.fetchone()[0])
-                cur.execute(f"SELECT w.revision,w.state,t.plan,extract(epoch from t.started_at),extract(epoch from t.expires_at),t.writing_grant,t.writing_used,t.artwork_grant,{MEMBER_COLUMNS} FROM public.pr_workspaces w JOIN public.pr_trials t ON t.workspace_id=w.id JOIN public.pr_memberships m ON m.workspace_id=w.id AND m.user_id=%s WHERE w.id=%s FOR UPDATE OF w", (principal, workspace_id))
+                cur.execute(f"SELECT w.revision,w.state,t.plan,extract(epoch from t.started_at),extract(epoch from t.expires_at),t.writing_grant,t.writing_used,t.artwork_grant,{MEMBER_COLUMNS} FROM public.pr_workspaces w LEFT JOIN public.pr_trials t ON t.workspace_id=w.id JOIN public.pr_memberships m ON m.workspace_id=w.id AND m.user_id=%s AND m.status='active' WHERE w.id=%s FOR UPDATE OF w", (principal, workspace_id))
                 revision, state, saved_plan, started, expires, writing_grant, writing_used, artwork_grant, *member = cur.fetchone()
                 state = json.loads(state) if isinstance(state, str) else state
                 if not state or "phase2" not in state:
-                    state = initial_phase2_state(workspace_id, principal, "Rafii member", saved_plan, float(started), execution="hosted-candidate")
-                    state["phase2"]["trial"].update({"expiresAt": float(expires), "writingGrant": writing_grant, "writingUsed": writing_used, "artworkSets": artwork_grant})
+                    saved_plan = saved_plan or "free"
+                    state = initial_phase2_state(workspace_id, principal, "Rafii member", saved_plan, float(started) if started is not None else self.clock(), execution="hosted-candidate")
+                    if started is not None:
+                        state["phase2"]["trial"].update({"expiresAt": float(expires), "writingGrant": writing_grant, "writingUsed": writing_used, "artworkSets": artwork_grant})
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
                     audit(cur, workspace_id, principal, "workspace.created", "", {"plan": saved_plan})
                     created = True
+                self.billing.lifecycle(cur, workspace_id, self.clock())
                 self._touch_session(cur, principal, self._session_id(token, principal), client_label)
         if created and self.public_base_url:
             address = self._email_for(principal)
@@ -757,6 +779,11 @@ class HostedWorkspaceService:
         return self._present(self.repository.get(workspace_id, token))
 
     def mutate(self, workspace_id, token, revision, action, payload):
+        if action in ("generate", "adapt"):
+            with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+                require(_membership(row), "edit")
+                if self.ledger.ensure_entitlement(cur, workspace_id, None)["planTermsId"] == "free-v1":
+                    raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
         if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
             from .voice_ai import HostedVoiceAnalysis
             return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
@@ -768,6 +795,9 @@ class HostedWorkspaceService:
         principal = self.verify_session(token)
         with self.connection_factory() as db:
             with db.cursor() as cur:
+                cur.execute("SELECT w.id::text FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.id FOR UPDATE OF w", (principal,))
+                for (wid,) in cur.fetchall():
+                    self.billing.lifecycle(cur, wid, self.clock())
                 cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},extract(epoch from w.created_at),{WORKSPACE_SUMMARY_COLUMNS} FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
                 rows = cur.fetchall()
         return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6]), **workspace_summary(*row[7:13])} for row in rows]}

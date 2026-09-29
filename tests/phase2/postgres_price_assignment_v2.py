@@ -44,7 +44,7 @@ class AssignmentV2(unittest.TestCase):
         with connection() as db:
             assert db.info.host == '127.0.0.1' and db.info.port == 55438
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
-                         '048_pricing_credit_catalog_v2.sql'):
+                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())
 
     def setUp(self):
@@ -407,12 +407,16 @@ class AssignmentV2(unittest.TestCase):
             self.assertEqual(credit['milli'], 3500000)
 
 
-    def test_ended_paid_subscription_cannot_open_an_incompatible_new_checkout(self):
+    def test_ended_creator_explicit_checkout_retains_paid_variant(self):
         self.activate(); self.webhook(self.sub('79'))
         with connection() as db:
             db.execute("UPDATE pr_subscriptions SET status='cancelled' WHERE workspace_id=%s", (self.wid,))
         self.assertEqual(self.assignment()['priceVariantId'], 'creator-79-v1')
-        self.deny_checkout()
+        checkout = self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')
+        self.assertEqual(checkout['sessionId'], 'cs_synthetic')
+        form = self.transport.calls[-1][1]
+        self.assertEqual(form['line_items[0][price]'], 'price_synthetic_79')
+        self.assertEqual(form['customer'], 'cus_synthetic' + self.wid)
 
 
     def prepare_review_legacy(self, status='cancelled'):

@@ -68,9 +68,11 @@ class PlanPricing:
         package = cur.fetchone()
         if terms_id != 'creator-v1' or not package or package != ('creator', 'active', 'public', True):
             raise AlphaError('This plan is not yet available for purchase.', 409)
-        cur.execute("SELECT status,provider_subscription_id,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
+        cur.execute("SELECT status,provider_subscription_id,plan_terms_id,price_variant_id,provider_customer_id,provider FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
         prior = cur.fetchone()
-        if prior and (prior[0] in ('active', 'past_due', 'grace') or prior[1] or prior[2] not in ('trial-v1', 'free-v1')):
+        ended_creator = bool(prior and prior[0] in ('cancelled', 'expired') and prior[2] == terms_id
+                             and prior[3] in VARIANTS and prior[1] and prior[4] and prior[5] == 'stripe')
+        if prior and not ended_creator and (prior[0] in ('active', 'past_due', 'grace') or prior[1] or prior[2] not in ('trial-v1', 'free-v1')):
             raise AlphaError('This workspace already has a subscription. Use the billing portal.', 409)
         variant = self.assign(cur, workspace_id)
         if variant['planTermsId'] != terms_id or variant['status'] != 'active' or not (variant['priceId'] or '').strip():
@@ -217,9 +219,13 @@ class PlanPricing:
                 or (event.get('stripeType') == 'invoice.paid' and event.get('invoicePaid')
                     and event.get('billingReason') == 'subscription_create')))
             fresh = prior[5] is None or float(event['createdAt']) >= float(prior[5])
-            if not (prior[6] in ('cancelled', 'expired') and not prior[1] and old_package
-                    and old_package[0] == 'legacy' and package[0] == 'legacy' and not variant_id
-                    and starts_subscription and fresh and (package[1] or '').strip()):
+            legacy_replacement = (not prior[1] and old_package and old_package[0] == 'legacy'
+                                  and package[0] == 'legacy' and not variant_id and (package[1] or '').strip())
+            creator_replacement = (prior[0] == terms_id == 'creator-v1' and prior[1] == variant_id
+                                   and variant_id in VARIANTS and prior[3] and event.get('customerId') == prior[3]
+                                   and price_id == variant['priceId'])
+            if not (prior[6] in ('cancelled', 'expired') and starts_subscription and fresh
+                    and (legacy_replacement or creator_replacement)):
                 return False
         if terms_id == 'creator-v1':
             if variant_id not in VARIANTS or not subscription:

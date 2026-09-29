@@ -96,7 +96,8 @@ def _window_start_sql(kind):
 class Ledger:
     """All methods take an open cursor inside the caller's transaction (workspace row locked)."""
 
-    def __init__(self, credits_enabled=False, clock=time.time):
+    def __init__(self, credits_enabled=False, clock=time.time, pricing_v2_enabled=False):
+        self.clock, self.pricing_v2_enabled = clock, pricing_v2_enabled
         self._credit_book = CreditBook(clock)
         self.credits = self._credit_book if credits_enabled else None
 
@@ -125,6 +126,8 @@ class Ledger:
         return int(cur.fetchone()[0])
 
     def ensure_entitlement(self, cur, workspace_id, plan):
+        from .free_lifecycle import lifecycle
+        lifecycle(cur, workspace_id, self.clock(), pricing_v2_enabled=self.pricing_v2_enabled)
         cur.execute("SELECT plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,extract(epoch from resets_at),source,version FROM public.pr_entitlements WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
         if row:
@@ -146,6 +149,10 @@ class Ledger:
             raise AlphaError("Invalid usage reservation.", 400)
         if self.credits:
             cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+        entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        exempt = ai_usage_exempt(member_id)
+        if not exempt and entitlement["planTermsId"] == "free-v1" and (charge_batch or estimated_usd_micro > 0):
+            raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
         fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model})
         cur.execute("SELECT id::text,reservation_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, idempotency_key))
         existing = cur.fetchone()
@@ -156,11 +163,9 @@ class Ledger:
         policy = active_budget_policy() if estimated_usd_micro > 0 else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
-        exempt = ai_usage_exempt(member_id)
         if policy and not exempt and estimated_usd_micro > policy["requestMax"]:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
-        entitlement = self.ensure_entitlement(cur, workspace_id, None)
         if not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
@@ -354,7 +359,7 @@ class Billing:
 
     def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None, pricing_v2_enabled=False, creator_experiment_enabled=False, creator_experiment_cohort=()):
         """`on_applied(event, status)` runs only for outcome 'applied' (e.g. notifications); its failures never break the webhook."""
-        self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(), clock, on_applied
+        self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(clock=clock, pricing_v2_enabled=pricing_v2_enabled), clock, on_applied
 
         self.pricing_v2_enabled = pricing_v2_enabled
         self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort)
@@ -494,23 +499,10 @@ class Billing:
         cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'subscription') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=excluded.plan_terms_id,writing_batches_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.writing_batches_remaining ELSE least(public.pr_entitlements.writing_batches_remaining,excluded.writing_batches_remaining) END,media_credits_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.media_credits_remaining ELSE least(public.pr_entitlements.media_credits_remaining,excluded.media_credits_remaining) END,connected_accounts=excluded.connected_accounts,members=excluded.members,storage_mb=excluded.storage_mb,resets_at=greatest(excluded.resets_at,public.pr_entitlements.resets_at),source='subscription',version=public.pr_entitlements.version+1,updated_at=now()", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], period_end))
 
     def lifecycle(self, cur, workspace_id, now):
-        """Consistent state derivation: grace expiry → cancelled; cancelled keeps export; deletion is separate."""
-        cur.execute("SELECT status,extract(epoch from grace_until),cancel_at_period_end,extract(epoch from current_period_end) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
-        row = cur.fetchone()
-        if not row:
-            cur.execute("SELECT extract(epoch from expires_at) FROM public.pr_trials WHERE workspace_id=%s", (workspace_id,))
-            trial = cur.fetchone()
-            active = bool(trial and trial[0] is not None and now < float(trial[0]))
-            return {"status": "trial" if active else "expired", "exportAvailable": True, "draftsRetained": True, "canPublish": active}
-        status, grace_until, cancel_at_end, period_end = row
-        if status == "trial" and (period_end is None or now >= float(period_end)):
-            status = "expired"
-        elif status in ("past_due", "grace") and grace_until and now >= float(grace_until):
-            status = "cancelled"
-        elif status == "active" and cancel_at_end and period_end and now >= float(period_end):
-            status = "cancelled"
-        cur.execute("UPDATE public.pr_subscriptions SET status=%s,updated_at=now() WHERE workspace_id=%s", (status, workspace_id))
-        return {"status": status, "exportAvailable": True, "draftsRetained": True, "canPublish": status in ("trial", "active", "grace", "past_due")}
+        """Lifecycle derivation shared with the before-I/O entitlement boundary."""
+        from .free_lifecycle import lifecycle
+        return lifecycle(cur, workspace_id, now, pricing_v2_enabled=self.pricing_v2_enabled)
+
 
 
 def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):

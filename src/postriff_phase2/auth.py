@@ -10,7 +10,7 @@ from .contracts import PLANS
 
 def initial_phase2_state(workspace_id, user_id, display_name, plan, clock, *, execution="local-fixtures", identities=None):
     """Build the shared Phase 2 state without creating a backend-specific session."""
-    if plan not in PLANS:
+    if plan not in PLANS and not (plan == "free" and execution != "local-fixtures"):
         raise AlphaError("This plan is not available.")
     state = initial_state(workspace_id)
     state["account"] = {
@@ -42,6 +42,9 @@ def initial_phase2_state(workspace_id, user_id, display_name, plan, clock, *, ex
         "devices": [],
         "identities": list(identities or []),
     }
+    if plan == "free":
+        del state["phase2"]["trial"]
+        state["phase2"]["acquisitionPlan"] = "free"
     return state
 
 
