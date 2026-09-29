@@ -109,6 +109,28 @@ def _invoice_fields(obj):
     }
 
 
+
+def _invoice_price_lines(obj):
+    """Keep signed line facts together; only the server catalog can select the plan line."""
+    lines = _path(obj, "lines", "data")
+    result = []
+    for line in lines if isinstance(lines, list) else []:
+        if not isinstance(line, dict):
+            continue
+        parent_kind = _path(line, "parent", "type")
+        kind = "unknown"
+        if line.get("type") == "subscription" or parent_kind == "subscription_item_details":
+            kind = "subscription"
+        elif line.get("type") in ("invoiceitem", "invoice_item") or parent_kind == "invoice_item_details":
+            kind = "addon"
+        prices = {_ref(line.get("price")), _ref(_path(line, "pricing", "price_details", "price"))} - {None}
+        result.append({"priceIds": sorted(prices), "kind": kind,
+                       "subscriptionId": _ref(line.get("subscription")),
+                       "periodStart": _epoch(_path(line, "period", "start")),
+                       "periodEnd": _epoch(_path(line, "period", "end"))})
+    return result
+
+
 def _checkout_fields(obj):
     meta = _metadata(obj, ("metadata",))
     return {
@@ -195,6 +217,9 @@ class StripePaymentProvider:
         event["stripeType"] = stripe_type
         metadata = [obj.get("metadata")]
         if stripe_type.startswith("invoice."):
+            event["invoicePriceLines"] = _invoice_price_lines(obj)
+            if any(len(line["priceIds"]) > 1 for line in event["invoicePriceLines"]):
+                event["metadataConflict"] = True
             metadata += [_path(obj, "subscription_details", "metadata"),
                          _path(obj, "parent", "subscription_details", "metadata")]
             subscriptions = {_ref(obj.get("subscription")), _ref(_path(obj, "subscription_details", "subscription")),

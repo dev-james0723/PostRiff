@@ -384,6 +384,8 @@ class Billing:
                 valid = valid and self.pricing.resolve_event(cur, event)
             elif event.get("priceVariantId"):
                 valid = False
+        if not versioned and not event.get("planTermsId") and event.get("invoicePriceLines"):
+            valid = valid and self.pricing.invoice_price(cur, event, versioned=False)
         if not versioned and not event.get("planTermsId") and event.get("priceId"):
             # Live providers carry their price id; only an 'active' terms row (D3) may be bound to it.
             cur.execute("SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s AND status='active'", (event["priceId"],))

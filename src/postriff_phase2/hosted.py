@@ -4,6 +4,7 @@ The caller supplies a connection factory and a server-side verified Auth princip
 No browser may supply the principal. No service key or profile metadata is accepted.
 """
 from contextlib import contextmanager
+from uuid import UUID
 import copy
 import hashlib
 import io
@@ -524,6 +525,10 @@ class HostedWorkspaceService:
     def billing_checkout(self, workspace_id, token, plan_terms_id, success_path=None, cancel_path=None):
         """Owner-only. Only 'active' plan terms bound to a provider price are purchasable (D3).
         Nothing is written until the provider's webhook confirms the subscription."""
+        try:
+            workspace_id = str(UUID(str(workspace_id)))
+        except ValueError as error:
+            raise AlphaError("Invalid workspace identity.", 400) from error
         provider = self._live_provider()
         if not isinstance(plan_terms_id, str) or not 1 <= len(plan_terms_id) <= 64:
             raise AlphaError("Choose a plan.")

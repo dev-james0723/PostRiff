@@ -30,9 +30,11 @@ def connection():
 class Transport:
     def __init__(self):
         self.calls = []
+        self.headers = []
 
     def __call__(self, method, url, headers=None, form=None):
         self.calls.append((url, form))
+        self.headers.append(headers or {})
         return {'status': 200, 'body': {'id': 'cs_synthetic', 'url': 'https://checkout.stripe.com/c/synthetic'}}
 
 
@@ -54,7 +56,7 @@ class AssignmentV2(unittest.TestCase):
         with connection() as db:
             db.execute('INSERT INTO auth.users(id) VALUES(%s)', (self.actor,))
             self.wid = str(db.execute("SELECT pr_bootstrap(%s,'studio')", (self.actor,)).fetchone()[0])
-            db.execute("UPDATE pr_plan_terms SET status='proposed',new_checkout_enabled=false WHERE id='creator-v1'")
+            db.execute("UPDATE pr_plan_terms SET status='proposed',catalog_state='public',new_checkout_enabled=false WHERE id='creator-v1'")
             db.execute("UPDATE pr_plan_price_variants SET status='proposed',provider_price_id=NULL")
         def verify(token):
             if token != 'fixture':
@@ -411,6 +413,233 @@ class AssignmentV2(unittest.TestCase):
             db.execute("UPDATE pr_subscriptions SET status='cancelled' WHERE workspace_id=%s", (self.wid,))
         self.assertEqual(self.assignment()['priceVariantId'], 'creator-79-v1')
         self.deny_checkout()
+
+
+    def prepare_review_legacy(self, status='cancelled'):
+        ent = {'writingBatches': 0, 'mediaCredits': 0, 'members': 1, 'connectedAccounts': 3, 'storageMb': 1000,
+               'monthlyCredits': 3500, 'creditPolicy': 'credits-candidate-2026-09-23-v1'}
+        with connection() as db:
+            db.execute("INSERT INTO pr_plan_terms(id,plan,version,label,price_cents,status,catalog_state,provider_price_id,entitlements) "
+                       "VALUES('task3-review-legacy','studio',994,'Synthetic reviewed legacy',4900,'active','legacy','price_review_legacy',%s::jsonb) ON CONFLICT(id) DO NOTHING", (json.dumps(ent),))
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,provider,provider_subscription_id,provider_customer_id,status,last_event_at) "
+                       "VALUES(%s,'task3-review-legacy','stripe',%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id) DO UPDATE SET "
+                       "plan_terms_id=excluded.plan_terms_id,price_variant_id=NULL,provider=excluded.provider,provider_subscription_id=excluded.provider_subscription_id,"
+                       "provider_customer_id=excluded.provider_customer_id,status=excluded.status,last_event_at=excluded.last_event_at",
+                       (self.wid, 'sub_old' + self.wid, 'cus_synthetic' + self.wid, status, NOW - 20))
+            self.service.billing._reconcile_entitlement(db.cursor(), self.wid, 'task3-review-legacy', ent, NOW + 300)
+        self.service = self.make_service(enabled=False)
+
+    def review_legacy_completion(self, subscription='sub_new'):
+        return {'mode': 'subscription', 'client_reference_id': self.wid,
+                'subscription': subscription + self.wid, 'customer': 'cus_synthetic' + self.wid,
+                'metadata': {'workspace_id': self.wid, 'plan_terms_id': 'task3-review-legacy'}}
+
+    def review_legacy_invoice(self, subscription='sub_new', reason='subscription_create'):
+        invoice = self.invoice('49', 'in_review_' + subscription, subscription=subscription)
+        invoice['billing_reason'] = reason
+        invoice['subscription_details']['metadata'] = {'workspace_id': self.wid, 'plan_terms_id': 'task3-review-legacy'}
+        invoice['lines']['data'][0]['price'] = 'price_review_legacy'
+        return invoice
+
+    def review_binding(self):
+        with connection() as db:
+            return db.execute('SELECT provider_subscription_id,status,extract(epoch from last_event_at) FROM pr_subscriptions WHERE workspace_id=%s', (self.wid,)).fetchone()
+
+    def test_review_f1_ended_legacy_checkout_completion_activates_replacement(self):
+        for status in ('cancelled', 'expired'):
+            with self.subTest(status=status):
+                self.prepare_review_legacy(status)
+                self.service.billing_checkout(self.wid, 'fixture', 'task3-review-legacy')
+                self.assertEqual(self.transport.calls[-1][1]['line_items[0][price]'], 'price_review_legacy')
+                signed = self.signed('checkout.session.completed', self.review_legacy_completion())
+                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
+                self.assertEqual(self.review_binding()[:2], ('sub_new' + self.wid, 'active'))
+                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+
+    def test_review_f1_new_paid_invoice_can_arrive_before_checkout_completion(self):
+        self.prepare_review_legacy('expired')
+        self.service.billing_checkout(self.wid, 'fixture', 'task3-review-legacy')
+        invoice = self.review_legacy_invoice()
+        signed = self.signed('invoice.paid', invoice)
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
+        self.assertEqual(self.review_binding()[:2], ('sub_new' + self.wid, 'active'))
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+        with connection() as db:
+            credit = db.execute("SELECT u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchone()[0]
+            self.assertEqual((credit['milli'], credit['policy']), (3500000, 'credits-candidate-2026-09-23-v1'))
+
+    def test_review_f1_old_subscription_events_cannot_replace_new_but_stale_invoice_grants_once(self):
+        self.prepare_review_legacy()
+        self.assertEqual(self.webhook(self.review_legacy_completion(), 'checkout.session.completed')['outcome'], 'applied')
+        newer = self.review_binding()
+        deleted = {'id': 'sub_old' + self.wid, 'customer': 'cus_synthetic' + self.wid,
+                   'metadata': {'workspace_id': self.wid, 'plan_terms_id': 'task3-review-legacy'}}
+        self.assertEqual(self.webhook(deleted, 'customer.subscription.deleted', created=NOW - 10)['outcome'], 'rejected')
+        self.assertEqual(self.webhook(self.review_legacy_completion('sub_old'), 'checkout.session.completed', created=NOW - 10)['outcome'], 'rejected')
+        invoice = self.review_legacy_invoice('sub_old', 'subscription_cycle')
+        signed = self.signed('invoice.paid', invoice, created=NOW - 5)
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'stale')
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+        self.assertEqual(self.review_binding(), newer)
+        with connection() as db:
+            credits = db.execute("SELECT u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchall()
+            self.assertEqual(len(credits), 1)
+            self.assertEqual((credits[0][0]['milli'], credits[0][0]['policy']), (3500000, 'credits-candidate-2026-09-23-v1'))
+
+    def test_review_f1_active_customer_mapping_and_event_order_guards(self):
+        for status in ('active', 'past_due', 'grace'):
+            with self.subTest(status=status):
+                self.prepare_review_legacy(status)
+                self.assertEqual(self.webhook(self.review_legacy_completion(), 'checkout.session.completed')['outcome'], 'rejected')
+                self.assertEqual(self.review_binding()[0], 'sub_old' + self.wid)
+        self.prepare_review_legacy()
+        wrong = self.review_legacy_completion(); wrong['customer'] = 'cus_foreign'
+        self.assertEqual(self.webhook(wrong, 'checkout.session.completed')['outcome'], 'rejected')
+        wrong = self.review_legacy_invoice(); wrong['lines']['data'][0]['price'] = 'price_unknown'
+        self.assertEqual(self.webhook(wrong, 'invoice.paid')['outcome'], 'rejected')
+        self.assertEqual(self.webhook(self.review_legacy_completion(), 'checkout.session.completed', created=NOW - 30)['outcome'], 'rejected')
+        self.assertEqual(self.review_binding()[0], 'sub_old' + self.wid)
+
+    def test_review_f1_cross_workspace_subscription_binding_is_still_rejected(self):
+        self.prepare_review_legacy()
+        actor2 = str(uuid.uuid4())
+        with connection() as db:
+            db.execute('INSERT INTO auth.users(id) VALUES(%s)', (actor2,))
+            other = db.execute("SELECT pr_bootstrap(%s,'studio')", (actor2,)).fetchone()[0]
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,provider,provider_subscription_id,provider_customer_id,status) VALUES(%s,'task3-review-legacy','stripe',%s,%s,'active')",
+                       (other, 'sub_new' + self.wid, 'cus_synthetic' + self.wid))
+        self.assertEqual(self.webhook(self.review_legacy_completion(), 'checkout.session.completed')['outcome'], 'rejected')
+        self.assertEqual(self.review_binding()[0], 'sub_old' + self.wid)
+
+
+    def review_assignment_for(self, billing, spelling):
+        with connection() as db:
+            return billing.assign_creator_price(db.cursor(), spelling)
+
+    def test_review_f2_uppercase_first_is_the_same_eligible_uuid_and_replay(self):
+        canonical = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        with connection() as db:
+            db.execute('INSERT INTO pr_workspaces(id) VALUES(%s)', (canonical,))
+        billing = self.make_service(experiment=True, cohort=(canonical,)).billing
+        upper = self.review_assignment_for(billing, canonical.upper())
+        self.assertEqual(upper['priceVariantId'], 'creator-49-v1')
+        self.assertEqual(self.review_assignment_for(billing, canonical), upper)
+        self.assertEqual(self.review_assignment_for(billing, canonical.upper()), upper)
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*),min(workspace_id::text) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (canonical,)).fetchone(), (1, canonical))
+
+    def test_review_f2_hyphenless_first_cannot_bypass_cohort_or_change_bucket(self):
+        canonical = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        with connection() as db:
+            db.execute('INSERT INTO pr_workspaces(id) VALUES(%s)', (canonical,))
+        billing = self.make_service(experiment=True, cohort=(canonical,)).billing
+        alias = canonical.replace('-', '').upper()
+        first = self.review_assignment_for(billing, alias)
+        self.assertEqual(first['priceVariantId'], 'creator-49-v1')
+        self.assertEqual(self.review_assignment_for(billing, canonical), first)
+        self.assertEqual(self.review_assignment_for(billing, canonical.upper()), first)
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (canonical,)).fetchone()[0], 1)
+
+    def test_review_f2_mixed_uuid_spellings_share_one_concurrent_immutable_assignment(self):
+        canonical = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+        with connection() as db:
+            db.execute('INSERT INTO pr_workspaces(id) VALUES(%s)', (canonical,))
+        billing = self.make_service(experiment=True, cohort=(canonical,)).billing
+        # All initial arrivals use an alias; a canonical winner must not mask the first-offer bypass.
+        spellings = [canonical.upper(), canonical.replace('-', ''), canonical.replace('-', '').upper()] * 8
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            rows = list(pool.map(lambda value: self.review_assignment_for(billing, value), spellings))
+        self.assertEqual({row['priceVariantId'] for row in rows}, {'creator-49-v1'})
+        self.assertEqual(self.review_assignment_for(billing, canonical), rows[0])
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (canonical,)).fetchone()[0], 1)
+
+
+    def test_review_f2_checkout_uuid_aliases_share_metadata_and_provider_idempotency_key(self):
+        self.activate()
+        self.service = self.make_service(experiment=True, cohort=(self.wid,))
+        for spelling in (self.wid.upper(), self.wid.replace('-', ''), self.wid):
+            self.service.billing_checkout(spelling, 'fixture', 'creator-v1')
+            self.assertEqual(self.transport.calls[-1][1]['metadata[workspace_id]'], self.wid)
+        self.assertEqual(len({headers['Idempotency-Key'] for headers in self.transport.headers}), 1)
+        self.assertEqual(len({form['metadata[price_variant_id]'] for _, form in self.transport.calls}), 1)
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 1)
+
+
+    def review_addon_invoice(self, metadata=True):
+        invoice = self.review_legacy_invoice('sub_old', 'subscription_cycle')
+        if not metadata:
+            invoice['subscription_details']['metadata'] = {}
+        invoice['lines']['data'][0].update(type='subscription', subscription='sub_old' + self.wid)
+        invoice['lines']['data'].insert(0, {'type': 'invoiceitem', 'price': 'price_unknown_addon',
+                                          'period': {'start': NOW - 100, 'end': NOW - 90}})
+        return invoice
+
+    def test_review_f3_addon_first_legacy_metadata_binds_actual_package_period(self):
+        self.prepare_review_legacy('active')
+        invoice = self.review_addon_invoice()
+        for order in ('addon-first', 'plan-first'):
+            with self.subTest(order=order):
+                if order == 'plan-first':
+                    invoice['lines']['data'].reverse()
+                self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'applied')
+                with connection() as db:
+                    row = db.execute("SELECT g.period_start,g.period_end,u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchone()
+                    self.assertEqual(row[:2], (NOW - 10, NOW + 300))
+                    self.assertEqual((row[2]['milli'], row[2]['expiresAt'], row[2]['policy']), (3500000, NOW + 300, 'credits-candidate-2026-09-23-v1'))
+                    self.assertEqual(db.execute('SELECT count(*) FROM pr_credit_subscription_grants WHERE invoice_id=%s', (invoice['id'],)).fetchone()[0], 1)
+
+    def test_review_f3_addon_first_without_plan_metadata_recovers_known_subscription_package(self):
+        self.prepare_review_legacy('active')
+        for metadata in ({'workspace_id': self.wid}, {}):
+            with self.subTest(metadata=metadata):
+                invoice = self.review_addon_invoice(metadata=False)
+                invoice['subscription_details']['metadata'] = metadata
+                self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'applied')
+                self.assertEqual(self.persisted()[:2], ('task3-review-legacy', None))
+                with connection() as db:
+                    row = db.execute('SELECT plan_terms_id,period_end,millicredits FROM pr_credit_subscription_grants WHERE invoice_id=%s', (invoice['id'],)).fetchone()
+                    self.assertEqual(row, ('task3-review-legacy', NOW + 300, 3500000))
+
+    def test_review_f3_addon_cannot_authorize_unknown_conflicting_or_ambiguous_subscription_price(self):
+        self.prepare_review_legacy('active')
+        invoice = self.review_addon_invoice()
+        invoice['lines']['data'][0]['price'] = 'price_review_legacy'
+        invoice['lines']['data'][1]['price'] = 'price_unknown_subscription'
+        self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'rejected')
+        self.activate()
+        invoice = self.review_addon_invoice()
+        invoice['lines']['data'][1]['price'] = 'price_synthetic_59'
+        self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'rejected')
+        with connection() as db:
+            db.execute("UPDATE pr_plan_terms SET provider_price_id='price_review_other' WHERE id='studio-v1'")
+        invoice = self.review_addon_invoice()
+        invoice['lines']['data'].append({'type': 'subscription', 'price': 'price_review_other'})
+        self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'rejected')
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_credit_subscription_grants WHERE invoice_id=%s', (invoice['id'],)).fetchone()[0], 0)
+
+    def test_review_f3_v2_addon_first_and_price_carrier_conflicts_remain_denied(self):
+        self.activate(); self.webhook(self.sub())
+        invoice = self.invoice()
+        invoice['lines']['data'].insert(0, {'type': 'invoiceitem', 'price': 'price_unknown_addon'})
+        self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'rejected')
+        self.prepare_review_legacy('active')
+        invoice = self.review_addon_invoice()
+        invoice['lines']['data'][1]['pricing'] = {'price_details': {'price': 'price_unknown_conflicting_carrier'}}
+        self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'rejected')
+
+
+    def test_review_f3_unknown_recurring_addon_cannot_hide_the_unique_known_package(self):
+        self.prepare_review_legacy('active')
+        for metadata in (True, False):
+            with self.subTest(metadata=metadata):
+                invoice = self.review_addon_invoice(metadata=metadata)
+                invoice['lines']['data'][0].update(type='subscription', subscription='sub_old' + self.wid)
+                self.assertEqual(self.webhook(invoice, 'invoice.paid')['outcome'], 'applied')
+                self.assertEqual(self.persisted()[:2], ('task3-review-legacy', None))
 
 
 if __name__ == '__main__':

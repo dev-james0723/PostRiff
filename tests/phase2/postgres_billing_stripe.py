@@ -183,4 +183,20 @@ with connection() as db:
 assert [r[0] for r in rows] == ["subscription_activated", "payment_failed", "subscription_activated", "trial_ending"] and all(r[1] for r in rows), rows
 checks.append("reminder sweep sends once and dedupes; every notification is recorded with sent=true")
 
+
+# Review F3: the legacy runtime before048 also recovers an addon-first invoice's known plan.
+clock[0] += 5
+obj = {"id": "in_review_addon_first", "status": "paid", "amount_paid": 4900, "currency": "usd",
+       "billing_reason": "subscription_cycle", "customer": "cus_1", "subscription": "sub_1",
+       "subscription_details": {"metadata": {"workspace_id": wid}},
+       "lines": {"data": [{"type": "invoiceitem", "price": "price_unknown_addon", "period": {"start": 1, "end": 2}},
+                           {"type": "subscription", "price": "price_assist", "period": {"start": int(clock[0]), "end": int(clock[0]) + 30 * 86400}}]}}
+sig, body = signed("invoice.paid", obj, "evt_review_addon_first")
+assert service.billing_webhook(sig, body)["outcome"] == "applied"
+with connection() as db:
+    plan = db.execute("SELECT plan_terms_id FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone()[0]
+assert plan == "assist-v1", ("leading addon must not choose the subscription plan", plan)
+assert service.billing_webhook(sig, body)["outcome"] == "duplicate"
+checks.append("without048 addon-first legacy invoice recovers known subscription plan independent of line order and replays safely")
+
 print(json.dumps({"status": "pass", "checks": checks}, ensure_ascii=False))

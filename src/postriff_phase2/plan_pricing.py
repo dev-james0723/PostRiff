@@ -36,6 +36,10 @@ class PlanPricing:
         return dict(zip(('priceVariantId', 'planTermsId', 'priceId', 'status', 'amountCents', 'currency'), row))
 
     def assign(self, cur, workspace_id):
+        try:
+            workspace_id = str(UUID(str(workspace_id)))
+        except ValueError as error:
+            raise AlphaError('Invalid workspace identity.', 400) from error
         cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
         if not cur.fetchone():
             raise AlphaError('Workspace unavailable.', 404)
@@ -76,6 +80,48 @@ class PlanPricing:
             raise AlphaError('The server price mapping is ambiguous.', 409)
         return variant
 
+    @staticmethod
+    def invoice_price(cur, event, *, versioned=True):
+        """Select one known subscription Price and its period, independent of addon order.
+
+        Explicit addon lines never supply package authority. Multiple known subscription
+        Prices or conflicting periods are refused; unknown addon lines may coexist
+        with exactly one known package line for legacy invoices.
+        """
+        lines = event.get('invoicePriceLines')
+        if not lines:
+            return True
+        candidates = []
+        has_prices = any(line.get('priceIds') for line in lines)
+        for line in lines:
+            if line.get('kind') == 'addon' or not line.get('priceIds'):
+                continue
+            if len(line['priceIds']) != 1:
+                return False
+            if line.get('subscriptionId') and event.get('subscriptionId') and line['subscriptionId'] != event['subscriptionId']:
+                return False
+            price_id = line['priceIds'][0]
+            if versioned:
+                cur.execute('SELECT plan_terms_id,id FROM public.pr_plan_price_variants WHERE provider_price_id=%s UNION ALL SELECT id,NULL FROM public.pr_plan_terms WHERE provider_price_id=%s', (price_id, price_id))
+            else:
+                cur.execute("SELECT id,NULL FROM public.pr_plan_terms WHERE provider_price_id=%s AND status='active'", (price_id,))
+            rows = cur.fetchall()
+            if len(rows) > 1:
+                return False
+            if rows:
+                candidates.append((price_id, rows[0], line.get('periodStart'), line.get('periodEnd')))
+        if not candidates:
+            return not has_prices
+        # Include periods: a second line must not silently change the funded paid period.
+        if len(set(candidates)) != 1:
+            return False
+        price_id, mapping, start, end = candidates[0]
+        if (event.get('planTermsId') and event['planTermsId'] != mapping[0]
+                or event.get('priceVariantId') and event['priceVariantId'] != mapping[1]):
+            return False
+        event.update(priceId=price_id, periodStart=start, currentPeriodEnd=end)
+        return True
+
     def resolve_event(self, cur, event):
         """Resolve signed facts, including stale invoices, before any mutation/grant.
 
@@ -105,17 +151,20 @@ class PlanPricing:
         cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace,))
         if not cur.fetchone():
             return False
-        cur.execute('SELECT plan_terms_id,price_variant_id,provider_subscription_id,provider_customer_id,provider,extract(epoch from last_event_at) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE', (workspace,))
+        cur.execute('SELECT plan_terms_id,price_variant_id,provider_subscription_id,provider_customer_id,provider,extract(epoch from last_event_at),status FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE', (workspace,))
         prior = cur.fetchone()
+        different_subscription = bool(prior and prior[4] == 'stripe' and subscription and prior[2] and subscription != prior[2])
         if prior and prior[4] == 'stripe':
-            if subscription and prior[2] and subscription != prior[2]:
-                return False
             if event.get('customerId') and prior[3] and event['customerId'] != prior[3]:
+                return False
+            if different_subscription and prior[3] and event.get('customerId') != prior[3]:
                 return False
         if subscription:
             cur.execute('SELECT workspace_id::text FROM public.pr_subscriptions WHERE provider=\'stripe\' AND provider_subscription_id=%s', (subscription,))
             if any(row[0] != workspace for row in cur.fetchall()):
                 return False
+        if not self.invoice_price(cur, event):
+            return False
         terms_id, variant_id, price_id = event.get('planTermsId'), event.get('priceVariantId'), event.get('priceId')
         if price_id:
             cur.execute('SELECT plan_terms_id,id FROM public.pr_plan_price_variants WHERE provider_price_id=%s UNION ALL SELECT id,NULL FROM public.pr_plan_terms WHERE provider_price_id=%s', (price_id, price_id))
@@ -144,19 +193,34 @@ class PlanPricing:
             terms_id, variant_id = prior[:2]
         if terms_id == 'creator-v1' and not variant_id and same_subscription and prior[0] == terms_id:
             variant_id = prior[1]
-        historical_legacy_invoice = bool(
-            same_subscription and event.get('stripeType') == 'invoice.paid' and event.get('invoicePaid')
-            and price_id and mapped_variant is None and terms_id != prior[0]
-            and prior[5] is not None and float(event['createdAt']) < float(prior[5]))
-        if prior and prior[1] and not historical_legacy_invoice:
+        older_invoice = bool(
+            prior and event.get('stripeType') == 'invoice.paid' and event.get('invoicePaid')
+            and price_id and prior[5] is not None and float(event['createdAt']) < float(prior[5]))
+        historical_legacy_invoice = bool(older_invoice and same_subscription and mapped_variant is None and terms_id != prior[0])
+        historical_replaced_invoice = bool(older_invoice and different_subscription)
+        if prior and prior[1] and not (historical_legacy_invoice or historical_replaced_invoice):
             if terms_id != prior[0] or variant_id != prior[1]:
                 return False
         if not terms_id:
             return False
-        cur.execute('SELECT catalog_state FROM public.pr_plan_terms WHERE id=%s', (terms_id,))
+        cur.execute('SELECT catalog_state,provider_price_id FROM public.pr_plan_terms WHERE id=%s', (terms_id,))
         package = cur.fetchone()
         if not package:
             return False
+        if different_subscription and not historical_replaced_invoice:
+            # Default-off legacy checkout allows ended subscriptions to start again. Only a
+            # fresh verified start can replace that binding; old events cannot resurrect it.
+            cur.execute('SELECT catalog_state FROM public.pr_plan_terms WHERE id=%s', (prior[0],))
+            old_package = cur.fetchone()
+            starts_subscription = (event.get('type') in ('subscription.activated', 'subscription.updated') and (
+                event.get('stripeType') in ('checkout.session.completed', 'customer.subscription.created')
+                or (event.get('stripeType') == 'invoice.paid' and event.get('invoicePaid')
+                    and event.get('billingReason') == 'subscription_create')))
+            fresh = prior[5] is None or float(event['createdAt']) >= float(prior[5])
+            if not (prior[6] in ('cancelled', 'expired') and not prior[1] and old_package
+                    and old_package[0] == 'legacy' and package[0] == 'legacy' and not variant_id
+                    and starts_subscription and fresh and (package[1] or '').strip()):
+                return False
         if terms_id == 'creator-v1':
             if variant_id not in VARIANTS or not subscription:
                 return False

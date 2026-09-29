@@ -377,5 +377,15 @@ class VariantMetadata(unittest.TestCase):
             {"lines": {"data": [{"price": "price_a", "pricing": {"price_details": {"price": "price_b"}}}]}})
         self.assertTrue(mapped.get("priceConflict"))
 
+
+    def test_review_f3_invoice_keeps_each_price_period_and_subscription_line_kind(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_1", "lines": {"data": [
+                {"parent": {"type": "invoice_item_details"}, "pricing": {"price_details": {"price": "price_addon"}}, "period": {"start": 10, "end": 20}},
+                {"type": "subscription", "subscription": "sub_1", "price": "price_plan", "period": {"start": 100, "end": 200}}]}})
+        self.assertEqual(mapped.get("invoicePriceLines"), [
+            {"priceIds": ["price_addon"], "kind": "addon", "subscriptionId": None, "periodStart": 10.0, "periodEnd": 20.0},
+            {"priceIds": ["price_plan"], "kind": "subscription", "subscriptionId": "sub_1", "periodStart": 100.0, "periodEnd": 200.0}])
+
 if __name__ == "__main__":
     unittest.main()
