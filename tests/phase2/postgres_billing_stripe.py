@@ -199,4 +199,41 @@ assert plan == "assist-v1", ("leading addon must not choose the subscription pla
 assert service.billing_webhook(sig, body)["outcome"] == "duplicate"
 checks.append("without048 addon-first legacy invoice recovers known subscription plan independent of line order and replays safely")
 
+
+# Review F4: signed plan metadata before048 must not bypass line/invoice identity checks.
+for parent_kind in ("subscription_item_details", "invoice_item_details"):
+    for old, nested in ((None, "sub_foreign"), ("sub_1", "sub_foreign"), ("sub_foreign", "sub_1")):
+        clock[0] += 5
+        invoice = {**obj, "id": "in_review_carriers_" + str(int(clock[0])),
+                   "subscription_details": {"metadata": {"workspace_id": wid, "plan_terms_id": "assist-v1"}},
+                   "lines": {"data": [{"pricing": {"price_details": {"price": "price_assist"}},
+                        "parent": {"type": parent_kind, parent_kind: {"subscription": nested}},
+                        "period": {"start": int(clock[0]), "end": int(clock[0]) + 900}}]}}
+        if old is not None:
+            invoice["lines"]["data"][0]["subscription"] = old
+        with connection() as db:
+            prior = db.execute("SELECT provider_subscription_id,current_period_end,last_event_at FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone()
+        sig, body = signed("invoice.paid", invoice, "evt_review_carriers_" + str(int(clock[0])))
+        assert service.billing_webhook(sig, body)["outcome"] == "rejected", "foreign/conflicting carriers must reject before048 even with signed plan metadata"
+        assert service.billing_webhook(sig, body)["outcome"] == "duplicate"
+        with connection() as db:
+            assert db.execute("SELECT provider_subscription_id,current_period_end,last_event_at FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone() == prior
+checks.append("without048 modern foreign and conflicting line subscriptions reject before status/period mutation with signed plan metadata")
+for shape in ("modern", "old", "both", "absent"):
+    clock[0] += 5
+    line = {"price": "price_assist", "period": {"start": int(clock[0]), "end": int(clock[0]) + 900}}
+    if shape in ("modern", "both"):
+        line["parent"] = {"type": "subscription_item_details", "subscription_item_details": {"subscription": "sub_1"}}
+    if shape in ("old", "both"):
+        line["subscription"] = "sub_1"
+    addon = {"price": "price_unknown_addon", "parent": {"type": "invoice_item_details"}, "period": {"start": 1, "end": 2}}
+    if shape in ("modern", "both"):
+        addon["parent"]["invoice_item_details"] = {"subscription": "sub_1"}
+    if shape in ("old", "both"):
+        addon["subscription"] = "sub_1"
+    invoice = {**obj, "id": "in_review_compatible_" + shape, "lines": {"data": [addon, line]}}
+    sig, body = signed("invoice.paid", invoice, "evt_review_compatible_" + shape)
+    assert service.billing_webhook(sig, body)["outcome"] == "applied"
+checks.append("without048 matching modern/old/both and absent line carrier fixtures retain legacy known-plan compatibility")
+
 print(json.dumps({"status": "pass", "checks": checks}, ensure_ascii=False))

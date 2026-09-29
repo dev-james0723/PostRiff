@@ -642,5 +642,86 @@ class AssignmentV2(unittest.TestCase):
                 self.assertEqual(self.persisted()[:2], ('task3-review-legacy', None))
 
 
+
+    def assert_review_line_rejected(self, invoice):
+        prior = self.review_binding()
+        signed = self.signed('invoice.paid', invoice)
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'rejected')
+        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+        self.assertEqual(self.review_binding(), prior)
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_credit_subscription_grants WHERE invoice_id=%s', (invoice['id'],)).fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_usage_ledger WHERE idempotency_key=%s', ('subscription-invoice:' + invoice['id'],)).fetchone()[0], 0)
+
+    def test_review_f4_modern_foreign_line_never_binds_or_grants_its_period_to_invoice_subscription(self):
+        self.prepare_review_legacy('active')
+        for legacy in (True, False):
+            with self.subTest(legacy=legacy):
+                if legacy:
+                    invoice = self.review_legacy_invoice('sub_old', 'subscription_cycle')
+                else:
+                    self.activate(); self.service = self.make_service()
+                    self.assertEqual(self.webhook(self.sub(subscription='sub_old'))['outcome'], 'applied')
+                    invoice = self.invoice(invoice='in_review_modern_foreign', subscription='sub_old')
+                line = invoice['lines']['data'][0]
+                line['pricing'] = {'price_details': {'price': line.pop('price')}}
+                line['parent'] = {'type': 'subscription_item_details', 'subscription_item_details': {'subscription': 'sub_foreign' + self.wid}}
+                line['period'] = {'start': NOW - 100, 'end': NOW + 900}
+                self.assert_review_line_rejected(invoice)
+        self.prepare_review_legacy('active')
+        invoice = self.review_addon_invoice()
+        invoice['id'] += '_modern_foreign_addon'
+        invoice['lines']['data'][0]['parent'] = {'type': 'invoice_item_details', 'invoice_item_details': {'subscription': 'sub_foreign' + self.wid}}
+        self.assert_review_line_rejected(invoice)
+
+    def test_review_f4_line_carrier_conflicts_and_invoice_conflicts_cannot_select_a_funding_period(self):
+        self.prepare_review_legacy('active')
+        actual = 'sub_old' + self.wid
+        foreign = 'sub_foreign' + self.wid
+        for parent_kind in ('subscription_item_details', 'invoice_item_details'):
+            for old, nested in ((actual, foreign), (foreign, actual)):
+                with self.subTest(parent_kind=parent_kind, old=old, nested=nested):
+                    invoice = self.review_addon_invoice()
+                    invoice['id'] += old + parent_kind
+                    line = invoice['lines']['data'][0 if parent_kind == 'invoice_item_details' else 1]
+                    line.update(subscription=old, parent={'type': parent_kind, parent_kind: {'subscription': nested}})
+                    self.assert_review_line_rejected(invoice)
+        invoice = self.review_legacy_invoice('sub_old', 'subscription_cycle')
+        invoice['parent'] = {'subscription_details': {'subscription': foreign}}
+        invoice['lines']['data'][0]['parent'] = {'type': 'subscription_item_details', 'subscription_item_details': {'subscription': actual}}
+        self.assert_review_line_rejected(invoice)
+
+    def test_review_f4_matching_modern_old_both_and_absent_carriers_keep_plan_period_and_policy(self):
+        self.prepare_review_legacy('active')
+        for legacy in (True, False):
+            if not legacy:
+                self.activate(); self.service = self.make_service()
+                self.assertEqual(self.webhook(self.sub(subscription='sub_old'))['outcome'], 'applied')
+            for shape in ('modern', 'old', 'both', 'absent'):
+                with self.subTest(legacy=legacy, shape=shape):
+                    invoice = self.review_legacy_invoice('sub_old', 'subscription_cycle') if legacy else self.invoice(subscription='sub_old')
+                    invoice['id'] += shape
+                    line = invoice['lines']['data'][0]
+                    if shape in ('modern', 'both'):
+                        line['parent'] = {'type': 'subscription_item_details', 'subscription_item_details': {'subscription': invoice['subscription']}}
+                        line['pricing'] = {'price_details': {'price': line.pop('price')}}
+                    if shape in ('old', 'both'):
+                        line['subscription'] = invoice['subscription']
+                    if legacy:
+                        addon = {'price': 'price_unknown_addon', 'parent': {'type': 'invoice_item_details'}, 'period': {'start': NOW - 100, 'end': NOW + 900}}
+                        if shape in ('modern', 'both'):
+                            addon['parent']['invoice_item_details'] = {'subscription': invoice['subscription']}
+                        if shape in ('old', 'both'):
+                            addon['subscription'] = invoice['subscription']
+                        invoice['lines']['data'].insert(0, addon)
+                    signed = self.signed('invoice.paid', invoice)
+                    self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
+                    self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+                    self.assertEqual(self.review_binding()[0], invoice['subscription'])
+                    with connection() as db:
+                        row = db.execute("SELECT g.subscription_id,g.plan_terms_id,g.period_start,g.period_end,u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchone()
+                        self.assertEqual(row[:4], (invoice['subscription'], 'task3-review-legacy' if legacy else 'creator-v1', NOW - 10, NOW + 300))
+                        self.assertEqual((row[4]['milli'], row[4]['policy']), (3500000, 'credits-candidate-2026-09-23-v1' if legacy else 'credits-v2-2026-09-28'))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

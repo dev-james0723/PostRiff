@@ -124,8 +124,12 @@ def _invoice_price_lines(obj):
         elif line.get("type") in ("invoiceitem", "invoice_item") or parent_kind == "invoice_item_details":
             kind = "addon"
         prices = {_ref(line.get("price")), _ref(_path(line, "pricing", "price_details", "price"))} - {None}
+        subscriptions = {_ref(line.get("subscription")),
+                         _ref(_path(line, "parent", "subscription_item_details", "subscription")),
+                         _ref(_path(line, "parent", "invoice_item_details", "subscription"))} - {None}
         result.append({"priceIds": sorted(prices), "kind": kind,
-                       "subscriptionId": _ref(line.get("subscription")),
+                       "subscriptionId": next(iter(subscriptions)) if len(subscriptions) == 1 else None,
+                       "subscriptionIds": sorted(subscriptions),
                        "periodStart": _epoch(_path(line, "period", "start")),
                        "periodEnd": _epoch(_path(line, "period", "end"))})
     return result
@@ -224,6 +228,9 @@ class StripePaymentProvider:
                          _path(obj, "parent", "subscription_details", "metadata")]
             subscriptions = {_ref(obj.get("subscription")), _ref(_path(obj, "subscription_details", "subscription")),
                              _ref(_path(obj, "parent", "subscription_details", "subscription"))} - {None}
+            # Check every signed carrier before package/period selection, including addon lines.
+            subscriptions.update(subscription_id for line in event["invoicePriceLines"]
+                                 for subscription_id in line["subscriptionIds"])
             if len(subscriptions) > 1:
                 event["metadataConflict"] = True
         for key, field in (("workspace_id", "workspaceId"), ("plan_terms_id", "planTermsId"), ("price_variant_id", "priceVariantId")):
