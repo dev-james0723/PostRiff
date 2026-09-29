@@ -175,6 +175,8 @@ export interface RailMotionPoint {
   translateX: number;
   borderRadius: string;
   transitionMs: number;
+  glowPx: number;
+  haloOpacity: number;
 }
 
 export function buildRailMotion({
@@ -213,11 +215,8 @@ export function buildRailMotion({
     const travellingTransient =
       (0.5 + 0.5 * Math.sin(phase * 1.35 - position * 9.2)) * clamp01(transient);
     const texture = clamp01(localBands[index] ?? 0);
-    const focus =
-      activeIndex >= 0
-        ? Math.max(0, 1 - Math.abs(index - activeIndex) / Math.max(4, count * 0.22))
-        : 0;
-
+    const selected = index === activeIndex;
+    const cadenceBoost = index % 5 === 0 ? 0.2 : 0;
     const waveformPeak = Math.pow(clamp01(waveformProfile[index] ?? 0), 1.5);
 
     // The global envelope is now only a floor. Instantaneous waveform shape owns the peaks,
@@ -229,19 +228,21 @@ export function buildRailMotion({
         texture * 0.13 +
         travellingTransient * 0.1
     );
-    const base = index === activeIndex ? 8 : 6;
+    const baseDiameter = selected ? 4.25 : 2.25 + cadenceBoost;
+    const maxDiameter = selected ? 9 : 8.25;
+    const diameter = Math.min(maxDiameter, baseDiameter + energy * 5.85);
     const transitionMs = 20 + (1 - waveformPeak) * 64;
+    const haloEnergy = clamp01((energy - 0.42) / 0.58);
 
     return {
-      width: base + energy * 28 + focus * 1.2,
-      height: base + energy * 6.2,
-      opacity: clamp01((index === activeIndex ? 0.92 : 0.46) + energy * 0.48),
-      translateX: energy * 1.05 + travellingTransient * 1.7,
-      borderRadius:
-        energy > 0.05
-          ? `${52 + energy * 20}% ${48 - energy * 14}% ${56 - energy * 9}% ${44 + energy * 13}%`
-          : '9999px',
-      transitionMs
+      width: diameter,
+      height: diameter,
+      opacity: selected ? 1 : clamp01(0.32 + energy * 0.62),
+      translateX: Math.min(2, energy * 1.45 + travellingTransient * 0.55),
+      borderRadius: '9999px',
+      transitionMs,
+      glowPx: haloEnergy > 0 ? 2 + haloEnergy * 6 : 0,
+      haloOpacity: haloEnergy * 0.22
     };
   });
 }

@@ -42,7 +42,7 @@ test('spectral flux spikes on a fresh onset and falls on a steady frame', () => 
   assert.equal(steady, 0);
 });
 
-test('global music level moves the whole rail even when local spectrum is sparse', () => {
+test('global music level gives the Mono Beads rail a subtle movement floor', () => {
   const points = audio.buildRailMotion({
     count: 12,
     activeIndex: 5,
@@ -53,8 +53,8 @@ test('global music level moves the whole rail even when local spectrum is sparse
     tickMs: 1200
   });
   assert.equal(points.length, 12);
-  assert.ok(points.every((point, index) => point.width > (index === 5 ? 8 : 6)));
-  assert.ok(points.every((point) => point.opacity > 0.5));
+  assert.ok(points.every((point) => point.width > 2.25));
+  assert.ok(points.every((point) => point.width === point.height));
 });
 
 test('external playback capture has priority over Rafii-owned media frames', () => {
@@ -127,7 +127,7 @@ test('time-domain waveform sampler preserves spatial peaks and valleys', () => {
   assert.ok(Math.min(...profile) < 0.45);
 });
 
-test('waveform peaks create different dot lengths and different response speeds', () => {
+test('waveform peaks create different Mono Bead diameters and response speeds', () => {
   const points = audio.buildRailMotion({
     count: 8,
     activeIndex: -1,
@@ -139,13 +139,13 @@ test('waveform peaks create different dot lengths and different response speeds'
   });
   const widths = points.map((point) => point.width);
   const speeds = points.map((point) => point.transitionMs);
-  assert.ok(Math.max(...widths) - Math.min(...widths) > 8);
+  assert.ok(Math.max(...widths) - Math.min(...widths) >= 3.5);
   assert.ok(Math.max(...speeds) - Math.min(...speeds) > 20);
   assert.ok(points[2].width > points[0].width);
   assert.ok(points[2].transitionMs < points[0].transitionMs);
 });
 
-test('waveform peak contrast outweighs the shared global pulse', () => {
+test('Mono Bead peak contrast outweighs the shared global pulse', () => {
   const points = audio.buildRailMotion({
     count: 6,
     activeIndex: -1,
@@ -155,5 +155,60 @@ test('waveform peak contrast outweighs the shared global pulse', () => {
     waveform: [0, 0.15, 1, 0.2, 0.75, 0.05],
     tickMs: 900
   });
-  assert.ok(points[2].width - points[0].width > 9);
+  assert.ok(points[2].width - points[0].width >= 3.5);
+});
+
+
+test('Mono Beads stay circular, tiny at rest, and preserve selected hierarchy', () => {
+  const idle = audio.buildRailMotion({
+    count: 10,
+    activeIndex: -1,
+    level: 0,
+    transient: 0,
+    bands: [0, 0, 0],
+    waveform: [0, 0, 0],
+    tickMs: 0
+  });
+  assert.ok(idle.every((point) => point.width === point.height));
+  assert.ok(Math.max(...idle.map((point) => point.width)) <= 3);
+
+  const selected = audio.buildRailMotion({
+    count: 10,
+    activeIndex: 4,
+    level: 0,
+    transient: 0,
+    bands: [0, 0, 0],
+    waveform: [0, 0, 0],
+    tickMs: 0
+  });
+  assert.ok(selected[4].width >= 4);
+  assert.ok(selected[4].width > selected[3].width);
+  assert.equal(selected[4].opacity, 1);
+});
+
+test('Mono Bead halo appears only for meaningful peaks', () => {
+  const points = audio.buildRailMotion({
+    count: 6,
+    activeIndex: -1,
+    level: 0.2,
+    transient: 0,
+    bands: [0.2, 0.2, 0.2],
+    waveform: [0.02, 0.1, 1, 0.12, 0.05, 0.02],
+    tickMs: 600
+  });
+  assert.ok(points[2].glowPx > points[0].glowPx);
+  assert.ok(points[2].haloOpacity > points[0].haloOpacity);
+  assert.equal(points[0].glowPx, 0);
+});
+
+test('Thread Map renders a hairline Mono Beads spine without shrinking hit targets', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'features', 'context-navigation', 'thread-navigator.tsx'),
+    'utf8'
+  );
+  assert.match(source, /data-mono-bead-spine/);
+  assert.match(source, /data-mono-bead/);
+  assert.match(source, /min-w-10/);
+  assert.match(source, /size-3/);
+  assert.match(source, /rounded-full/);
 });

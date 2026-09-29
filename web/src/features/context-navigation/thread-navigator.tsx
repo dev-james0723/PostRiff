@@ -105,7 +105,8 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
           <Button variant='quiet' size='icon-sm' className='mb-1 shrink-0 rounded-full' aria-label={syncLabel} aria-pressed={externalState === 'active'} disabled={externalState === 'requesting'} onClick={() => void toggleExternalAudio()} title={`${syncLabel}. Audio is analysed locally and is not uploaded.`}>
             <Icons.music className={`size-4 ${audioActive && !reduceMotion ? 'motion-safe:animate-pulse' : ''}`} />
           </Button>
-          <div className='flex min-h-0 flex-1 flex-col items-end justify-center gap-1'>
+          <div className='relative flex min-h-0 flex-1 flex-col items-end justify-center gap-1'>
+          <span aria-hidden data-mono-bead-spine className='pointer-events-none absolute top-1 right-[6px] bottom-1 w-px bg-current opacity-[0.12]' />
           {groups.map((group, index) => {
             const selected = group.some((item) => navigationId(item) === active);
             const first = group[0];
@@ -113,30 +114,37 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
             const motion = audioActive && !reduceMotion
               ? railMotion[index]
               : {
-                  width: selected ? 8 : 6,
-                  height: selected ? 8 : 6,
-                  opacity: selected ? 1 : 0.58,
+                  width: selected ? 4.25 : 2.25 + (index % 5 === 0 ? 0.2 : 0),
+                  height: selected ? 4.25 : 2.25 + (index % 5 === 0 ? 0.2 : 0),
+                  opacity: selected ? 1 : 0.34,
                   translateX: 0,
                   borderRadius: '9999px',
-                  transitionMs: 70
+                  transitionMs: 70,
+                  glowPx: 0,
+                  haloOpacity: 0
                 };
             return (
               <div key={navigationId(first)} className='group relative flex w-11 justify-end'>
                 <button type='button' aria-label={`${MARKER_LABELS[first.kind]}, turn ${first.seq}${group.length > 1 ? `, ${group.length} turns` : ''}`}
                   aria-expanded={group.length > 1 ? clusterOpen === index : undefined}
-                  className={`rafii-focus flex min-h-2 min-w-10 items-center justify-end rounded-full pr-1 ${selected ? 'text-primary' : 'text-muted-foreground/50 hover:text-foreground'}`}
+                  className={`rafii-focus flex min-h-2 min-w-10 items-center justify-end rounded-full pr-0 ${selected ? 'text-primary' : 'text-muted-foreground/50 hover:text-foreground'}`}
                   onClick={() => group.length === 1 ? jump(first) : setClusterOpen(clusterOpen === index ? null : index)}>
-                  <span aria-hidden className='block bg-current motion-reduce:transition-none'
-                    style={{
-                      width: `${motion.width}px`,
-                      height: `${motion.height}px`,
-                      borderRadius: motion.borderRadius,
-                      opacity: selected ? 1 : motion.opacity,
-                      transform: motion.translateX > 0 ? `translateX(${motion.translateX}px)` : undefined,
-                      transformOrigin: 'right center',
-                      transition: `width ${motion.transitionMs}ms linear, height ${motion.transitionMs}ms linear, border-radius ${motion.transitionMs + 12}ms ease-out, opacity ${motion.transitionMs + 8}ms linear, transform ${motion.transitionMs}ms linear`,
-                      willChange: audioActive && !reduceMotion ? 'width, height, transform' : undefined,
-                    }} />
+                  <span className='relative flex size-3 shrink-0 items-center justify-center'>
+                    <span aria-hidden data-mono-bead className='block rounded-full bg-current motion-reduce:transition-none'
+                      style={{
+                        width: `${motion.width}px`,
+                        height: `${motion.height}px`,
+                        borderRadius: motion.borderRadius,
+                        opacity: selected ? 1 : motion.opacity,
+                        transform: motion.translateX > 0 ? `translateX(${motion.translateX}px)` : undefined,
+                        boxShadow: motion.haloOpacity > 0.01
+                          ? `0 0 ${motion.glowPx}px rgba(241, 245, 249, ${motion.haloOpacity})`
+                          : 'none',
+                        transformOrigin: 'center',
+                        transition: `width ${motion.transitionMs}ms linear, height ${motion.transitionMs}ms linear, opacity ${motion.transitionMs + 8}ms linear, transform ${motion.transitionMs}ms linear, box-shadow ${motion.transitionMs + 12}ms ease-out`,
+                        willChange: audioActive && !reduceMotion ? 'width, height, transform, opacity' : undefined,
+                      }} />
+                  </span>
                 </button>
                 <div className='rafii-elevated pointer-events-none absolute top-1/2 right-full z-20 mr-2 hidden w-52 -translate-y-1/2 rounded-lg p-2 text-xs group-hover:block group-focus-within:block'>
                   <p className='font-medium'>{MARKER_LABELS[first.kind]}{group.length > 1 ? ` · ${group.length} turns` : ''}</p>
