@@ -431,7 +431,7 @@ class Billing:
         if not cur.fetchone() or not grants:
             return None
         try:
-            granted = self.ledger._credit_book.grant(cur, event["workspaceId"], None, "subscription-invoice:" + invoice_id, ent["monthlyCredits"] * 1000, event.get("currentPeriodEnd"), source="verified-stripe-invoice")
+            granted = self.ledger._credit_book.grant(cur, event["workspaceId"], None, "subscription-invoice:" + invoice_id, ent["monthlyCredits"] * 1000, event.get("currentPeriodEnd"), source="verified-stripe-invoice", policy_version=ent["creditPolicy"])
         except AlphaError as error:
             # The workspace is not on active credit terms: keep the paid invoice on record for review.
             cur.execute("UPDATE public.pr_credit_subscription_grants SET note=%s WHERE invoice_id=%s", (f"not granted: {error}"[:200], invoice_id))

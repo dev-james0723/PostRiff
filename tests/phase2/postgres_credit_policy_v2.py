@@ -259,6 +259,51 @@ class CreditPolicyV2PostgresTests(unittest.TestCase):
                 grants = db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (self.wid,)).fetchone()[0]
                 self.assertEqual(grants, 0)
 
+    def verified_grant(self, cur, key, policy, source='verified-stripe-invoice'):
+        try:
+            return self.ledger.credits.grant(cur, self.wid, self.actor, key, 10_000, NOW + 60,
+                                             source=source, policy_version=policy)
+        except TypeError as error:
+            self.fail('Verified funding policy binding API unavailable: ' + str(error))
+
+    def test_verified_funding_policy_replays_without_changing_history(self):
+        with connection() as db:
+            cur = db.cursor()
+            first = self.verified_grant(cur, 'verified-policy-replay', POLICY_VERSION)
+            db.execute('UPDATE pr_entitlements SET plan_terms_id=%s WHERE workspace_id=%s', ('task2-' + POLICY_VERSION, self.wid))
+            replay = self.verified_grant(cur, 'verified-policy-replay', POLICY_VERSION)
+            self.assertTrue(replay['duplicate'])
+            self.assertEqual(replay['entryId'], first['entryId'])
+            with self.assertRaises(AlphaError) as conflict:
+                self.verified_grant(cur, 'verified-policy-replay', V2)
+            self.assertEqual(conflict.exception.status, 409)
+            policy = db.execute("SELECT meta->'credits'->>'policy' FROM pr_usage_ledger WHERE id=%s", (first['entryId'],)).fetchone()[0]
+            self.assertEqual(policy, POLICY_VERSION)
+            db.rollback()
+
+    def test_policy_override_rejects_unsupported_unverified_and_noncredit_funding(self):
+        with connection() as db:
+            cur = db.cursor()
+            for policy in ('unknown-policy', ['credits-v2-2026-09-28'], True):
+                with self.subTest(policy=policy):
+                    with self.assertRaises(AlphaError) as error:
+                        self.verified_grant(cur, 'unsupported-policy', policy)
+                    self.assertEqual(error.exception.status, 409)
+            with self.assertRaises(AlphaError) as unverified:
+                self.verified_grant(cur, 'unverified-policy', POLICY_VERSION, source='client-request')
+            self.assertEqual(unverified.exception.status, 409)
+            db.execute("UPDATE pr_entitlements SET plan_terms_id='trial-v1' WHERE workspace_id=%s", (self.wid,))
+            with self.assertRaises(AlphaError) as allowance:
+                self.verified_grant(cur, 'noncredit-policy', V2)
+            self.assertEqual(allowance.exception.status, 409)
+            db.execute('UPDATE pr_entitlements SET plan_terms_id=%s WHERE workspace_id=%s', (self.terms, self.wid))
+            db.execute("UPDATE pr_plan_terms SET status='proposed' WHERE id=%s", (self.terms,))
+            with self.assertRaises(AlphaError) as inactive:
+                self.verified_grant(cur, 'inactive-policy', POLICY_VERSION)
+            self.assertEqual(inactive.exception.status, 409)
+            self.assertEqual(db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (self.wid,)).fetchone()[0], 0)
+            db.rollback()
+
     def test_missing_monthly_evidence_table_keeps_legacy_wallet_readable(self):
         with connection() as db:
             db.execute('UPDATE pr_entitlements SET plan_terms_id=%s WHERE workspace_id=%s', ('task2-' + POLICY_VERSION, self.wid))

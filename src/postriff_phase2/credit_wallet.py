@@ -123,10 +123,19 @@ class CreditBook:
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,kind,dimension,unit,cost_state,idempotency_key,meta) VALUES(%s,%s,'adjust','action','credit','actual',%s,%s::jsonb) RETURNING id::text",(workspace_id,actor,key,json.dumps({'credits':credit,'creditFingerprint':fingerprint})))
         return {'entryId':cur.fetchone()[0],'duplicate':False}
 
-    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test'):
+    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test', *, policy_version=None):
+        """Append funding under the workspace lock. Verified server funding consumers
+        may bind policy_version from stored invoice terms/order, never client input.
+        The current active credit-plan gate still applies, including on replay.
+        """
         import math
         policy=self.policy(cur,workspace_id)
         if policy is None: raise AlphaError('This workspace uses its existing allowance plan.',409)
+        if policy_version is not None:
+            if (not isinstance(policy_version, str) or policy_version not in SUPPORTED_POLICY_VERSIONS
+                    or source not in ('verified-stripe-invoice', 'verified-stripe-checkout')):
+                raise AlphaError('Credit policy binding requires supported verified funding.',409)
+            policy = policy_version
         amount(milli)
         if not isinstance(key,str) or not key or len(key)>100: raise AlphaError('Invalid credit event key.',400)
         if expires_at is not None and (type(expires_at) not in (float,int) or not math.isfinite(expires_at)):
