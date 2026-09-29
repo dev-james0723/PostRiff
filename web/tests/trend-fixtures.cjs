@@ -82,7 +82,13 @@ function fixtures({ longContent = false } = {}) {
     },
     calculated: {
       velocity: { ...metric(60), unit: 'posts/hour^2' },
-      acceleration: { ...metric(30), unit: 'posts/hour^3' }
+      acceleration: { ...metric(30), unit: 'posts/hour^3' },
+      observed_platform_count: {
+        ...metric(1),
+        unit: 'qualified platforms',
+        definition_id: 'synthetic-independent-platform-count',
+        denominator: 'Authorized platforms with independent corroboration'
+      }
     },
     inferred,
     interpretation: {
@@ -124,7 +130,86 @@ function fixtures({ longContent = false } = {}) {
       },
       { id: 'restricted', display_state: 'restricted', reason: 'Display not permitted' }
     ],
-    workspace_fit: fit
+    workspace_fit: fit,
+    dna_profile: {
+      method_id: 'trend-dna.synthetic',
+      method_version: '1',
+      scale_ref: 'synthetic-profile-scale-v1',
+      reference_population: 'Synthetic permitted sample with fixed demonstration thresholds',
+      trust_receipt_id: 'synthetic-receipt',
+      expires_at: iso(3600000),
+      limitations: [
+        'Synthetic display coordinates prove rendering only; they are not a production cohort.'
+      ],
+      dimensions: [
+        {
+          id: 'momentum',
+          state: 'High',
+          value: 0.84,
+          display_value: 'High relative to the synthetic baseline',
+          layer: 'calculated',
+          definition: 'Versioned synthetic movement relative to its declared test baseline.',
+          reason: 'The synthetic burst ratio crosses the fixed demonstration threshold.',
+          evidence_refs: ['synthetic-receipt', 'synthetic-snapshot-2'],
+          null_reason: null
+        },
+        {
+          id: 'acceleration',
+          state: 'High',
+          value: 0.72,
+          display_value: 'High positive change in synthetic velocity',
+          layer: 'calculated',
+          definition: 'Versioned synthetic change in velocity across comparable test windows.',
+          reason: 'Three comparable synthetic windows produce positive acceleration.',
+          evidence_refs: ['synthetic-receipt', 'synthetic-snapshot-2'],
+          null_reason: null
+        },
+        {
+          id: 'spread',
+          state: 'Low',
+          value: 0.28,
+          display_value: 'Low · 1 qualified platform',
+          layer: 'calculated',
+          definition: 'Independent corroboration within authorized platform coverage.',
+          reason: 'Only one synthetic platform has qualified independent support.',
+          evidence_refs: ['synthetic-receipt'],
+          null_reason: null
+        },
+        {
+          id: 'audience',
+          state: 'High',
+          value: 0.78,
+          display_value: 'High workspace fit',
+          layer: 'interpretation',
+          definition: 'Workspace-specific relevance backed by the synthetic audience context.',
+          reason: 'The synthetic teaching workspace matches the practice conversation.',
+          evidence_refs: ['synthetic-evidence'],
+          null_reason: null
+        },
+        {
+          id: 'adaptability',
+          state: 'Moderate',
+          value: 0.61,
+          display_value: 'Moderate format adaptability',
+          layer: 'interpretation',
+          definition: 'Ability to turn the pattern into an original supported creator format.',
+          reason: 'A demonstration format is supported, but repeatable performance is not claimed.',
+          evidence_refs: ['synthetic-evidence'],
+          null_reason: null
+        },
+        {
+          id: 'gap',
+          state: 'Moderate',
+          value: 0.54,
+          display_value: 'Moderate narrative whitespace',
+          layer: 'calculated',
+          definition: 'Demand and sampled supply comparison under the synthetic whitespace method.',
+          reason: 'The admitted synthetic comparison supports one bounded narrative gap.',
+          evidence_refs: ['synthetic-receipt'],
+          null_reason: null
+        }
+      ]
+    }
   };
   const receipt = {
     ...trend,

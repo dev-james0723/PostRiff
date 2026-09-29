@@ -132,6 +132,56 @@ const fit = z.object({
   originality: fitDimension,
   risk: fitDimension
 });
+export const dnaDimensionIdSchema = z.enum([
+  'momentum',
+  'acceleration',
+  'spread',
+  'audience',
+  'adaptability',
+  'gap'
+]);
+const dnaDimensionFields = {
+  id: dnaDimensionIdSchema,
+  display_value: text,
+  layer: z.enum(['calculated', 'interpretation']),
+  definition: text,
+  reason: text,
+  evidence_refs: strings
+};
+export const dnaDimensionSchema = z.union([
+  z.object({
+    ...dnaDimensionFields,
+    state: z.enum(['Low', 'Moderate', 'High']),
+    value: z.number().finite().min(0).max(1),
+    null_reason: z.null()
+  }),
+  z.object({
+    ...dnaDimensionFields,
+    state: z.literal('Unknown'),
+    value: z.null(),
+    null_reason: text.min(1)
+  })
+]);
+export const dnaProfileSchema = z.object({
+  method_id: id,
+  method_version: id,
+  scale_ref: id,
+  reference_population: text,
+  trust_receipt_id: id,
+  expires_at: iso,
+  limitations: strings,
+  dimensions: z
+    .array(dnaDimensionSchema)
+    .length(6)
+    .superRefine((dimensions, ctx) => {
+      const ids = dimensions.map((dimension) => dimension.id);
+      if (new Set(ids).size !== ids.length)
+        ctx.addIssue({ code: 'custom', message: 'Trend DNA dimensions must be unique.' });
+      for (const required of dnaDimensionIdSchema.options)
+        if (!ids.includes(required))
+          ctx.addIssue({ code: 'custom', message: `Trend DNA dimension ${required} is required.` });
+    })
+});
 export const trendSchema = z.object({
   id,
   canonical_topic: text,
@@ -163,7 +213,9 @@ export const trendSchema = z.object({
     z.object({ platform: text, inferred: inferenceSchema, coverage: coverageSchema })
   ),
   evidence: z.array(evidenceSchema),
-  workspace_fit: fit.nullable()
+  workspace_fit: fit.nullable(),
+  /** Optional, receipt-bound display geometry. Native metrics never become chart radii client-side. */
+  dna_profile: dnaProfileSchema.nullable().optional()
 });
 export const receiptSchema = trendSchema.extend({
   receipt_id: id,

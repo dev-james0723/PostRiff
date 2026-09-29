@@ -1,0 +1,20 @@
+{
+  "light": {
+    "checks": 116,
+    "failures": 0,
+    "rawSha256": "ea3ce4da1a7e1d8cd0fc3baab57590fe7d4cb8d0e5b2f3f3f63b5cd037104d4c",
+    "execution": "synthetic_intercepted_browser"
+  },
+  "dark": {
+    "checks": 116,
+    "failures": 0,
+    "rawSha256": "80445b652c0bbd20b4f67a5d4163e8df44efe7b6411f1ca2f17fc46ffa469523",
+    "execution": "synthetic_intercepted_browser"
+  },
+  "ideasIntegration": {
+    "checks": 36,
+    "failures": 0,
+    "rawSha256": "f3e9ab7f15cc7234538a06d1540c60f765438df07108db3ee43ecac1e966f4ae",
+    "execution": "explicit_synthetic_API_signed_page_and_visibility_fixtures"
+  }
+}

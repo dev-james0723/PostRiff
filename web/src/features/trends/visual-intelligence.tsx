@@ -32,6 +32,7 @@ import {
   usableOpportunity,
   displayableOpportunity,
   compareDimensions,
+  comparableDnaProfiles,
   formatValue
 } from './visual-model';
 import { TrendDNA } from './trend-dna';
@@ -177,7 +178,9 @@ export function VisualIntelligence({
     validated && flags.RAFII_TREND_MODEL_ENRICHMENT_ENABLED
       ? (chosenOpportunity?.workspace_fit ?? trend.workspace_fit)
       : null;
-  const comparison = other ? compareDimensions(dimensions, trendDimensions(other, flags)) : [];
+  const otherDimensions = other ? trendDimensions(other, flags) : [];
+  const comparison = other ? compareDimensions(dimensions, otherDimensions) : [];
+  const canOverlayProfiles = other ? comparableDnaProfiles(dimensions, otherDimensions) : false;
   useExpired(other?.expires_at);
   const nextExpiry = visibleOpportunities.map((o) => o.expires_at).toSorted()[0];
   useExpired(nextExpiry);
@@ -498,7 +501,6 @@ export function VisualIntelligence({
                   description='A current receipt, supported workspace fit and an eligible original contribution are needed. No replacement angles have been invented.'
                 />
               )}
-
             </Surface>
           </>
         )}
@@ -624,6 +626,21 @@ export function VisualIntelligence({
                   Both use the same six dimensions. Unknown values stay Unknown; differences in
                   scope and methods remain visible.
                 </p>
+                {canOverlayProfiles ? (
+                  <TrendDNA
+                    dimensions={dimensions}
+                    compact
+                    embedded
+                    title='Profile overlay'
+                    primaryLabel={trend.canonical_topic}
+                    comparison={{ dimensions: otherDimensions, label: other.canonical_topic }}
+                  />
+                ) : (
+                  <p className='vi-empty'>
+                    A visual overlay needs matching method, scale and reference-population
+                    contracts. Exact native values remain available below.
+                  </p>
+                )}
                 <div className='vi-table-wrap'>
                   <table>
                     <caption>Exact dimension comparison</caption>
@@ -638,8 +655,14 @@ export function VisualIntelligence({
                       {comparison.map((row) => (
                         <tr key={row.label}>
                           <th scope='row'>{row.label}</th>
-                          <td>{row.left}</td>
-                          <td>{row.right}</td>
+                          <td>
+                            <strong>{row.leftState}</strong>
+                            <small>{row.left}</small>
+                          </td>
+                          <td>
+                            <strong>{row.rightState}</strong>
+                            <small>{row.right}</small>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

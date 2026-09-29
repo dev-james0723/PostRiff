@@ -97,27 +97,37 @@
 }
 .vi-dna {
   grid-area: dna;
+  --vi-profile-primary: #8fe4cf;
+  --vi-profile-comparison: #c7a6ff;
 }
 .vi-dna-figure {
   width: 100%;
   border-radius: var(--rafii-radius-control);
   outline-offset: 4px;
+  overflow: hidden;
 }
 .vi-dna-figure:focus-visible {
   outline: 2px solid var(--ring);
 }
 .vi-dna-figure svg {
+  display: block;
   width: 100%;
-  max-height: 23rem;
+  max-height: 26rem;
+  margin-inline: auto;
 }
 .vi-dna-grid {
   fill: none;
-  stroke: var(--border);
+  stroke: var(--vi-chart-grid, var(--border));
+  stroke-width: 1;
+}
+.vi-dna-guide {
+  fill: none;
+  stroke: var(--vi-chart-grid, var(--border));
   stroke-width: 1;
 }
 .vi-dna-node {
-  stroke: var(--foreground);
-  fill: var(--background);
+  stroke: var(--vi-chart-dimension, var(--foreground));
+  fill: var(--vi-chart-bg, var(--background));
   stroke-width: 1.5;
 }
 .vi-axis-label {
@@ -125,22 +135,18 @@
   font-size: 12px;
 }
 .vi-axis-value {
-  fill: var(--foreground);
-  font-size: 16px;
-  font-weight: 600;
+  fill: var(--vi-chart-muted, var(--foreground));
+  font-size: 13px;
+  font-weight: 500;
+}
+.vi-axis-state {
+  fill: var(--vi-chart-ink, var(--foreground));
+  font-size: 15px;
+  font-weight: 650;
 }
 .vi-axis-unknown {
-  fill: var(--muted-foreground);
+  fill: var(--vi-chart-muted, var(--muted-foreground));
   font-size: 14px;
-}
-.vi-center-label {
-  fill: var(--muted-foreground);
-  font-size: 11px;
-  letter-spacing: 3px;
-}
-.vi-center-note {
-  fill: var(--muted-foreground);
-  font-size: 11px;
 }
 .vi-table-wrap {
   min-width: 0;
@@ -172,15 +178,47 @@
   font-size: 0.8125rem;
   margin-bottom: 0.5rem;
 }
+.vi-dimension-table td strong,
+.vi-dimension-table td small {
+  display: block;
+}
+.vi-dimension-table td strong {
+  font-weight: 600;
+}
+.vi-dimension-table td small {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  margin-top: 0.15rem;
+}
 .vi-dimension-button {
   min-height: 2.75rem;
   text-align: start;
   border-radius: 0.4rem;
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
-.vi-dimension-button[aria-expanded='true'] {
+.vi-dimension-button[aria-pressed='true'] {
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+.vi-dimension-selected {
+  margin-inline-start: auto;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.vi-dimension-table tr[data-selected='true'] {
+  background: var(--rafii-surface-quiet);
+  box-shadow: inset 3px 0 0 var(--vi-dimension);
 }
 .vi-dimension-detail {
   padding: 1rem;
@@ -189,6 +227,34 @@
   display: grid;
   gap: 0.6rem;
   font-size: 0.8125rem;
+}
+.vi-profile-basis {
+  display: grid;
+  gap: 0.65rem;
+}
+.vi-profile-basis dt {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+.vi-profile-basis dd {
+  overflow-wrap: anywhere;
+}
+.vi-profile-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin-block-end: 1rem;
+}
+.vi-profile-evidence > div {
+  min-width: 0;
+}
+.vi-profile-evidence dt {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+.vi-profile-evidence dd {
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
 }
 .vi-actions {
   grid-area: actions;
@@ -418,7 +484,17 @@
     grid-template-columns: 1fr;
   }
   .vi-axis-value {
-    font-size: 14px;
+    font-size: 13px;
+  }
+  .vi-dna .vi-heading {
+    align-items: start;
+  }
+  .vi-dna-status {
+    max-width: 11rem;
+    text-align: end;
+  }
+  .vi-profile-evidence {
+    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -449,13 +525,16 @@
 }
 @media (max-width: 1199px) {
   .vi-dna-figure .vi-axis-label {
-    font-size: 18px;
+    font-size: 15px;
+  }
+  .vi-dna-figure .vi-axis-state {
+    font-size: 16px;
   }
   .vi-dna-figure .vi-axis-value {
-    font-size: 19px;
+    font-size: 14px;
   }
   .vi-dna-figure .vi-axis-unknown {
-    font-size: 18px;
+    font-size: 15px;
   }
   .vi-timeline-svg .vi-axis-label {
     font-size: 20px;
@@ -500,47 +579,200 @@
   --vi-dimension: var(--vi-gap);
 }
 .vi-dna-figure {
+  --vi-chart-bg: #0c1115;
+  --vi-chart-ink: #f5f7f5;
+  --vi-chart-muted: #a9b2b8;
+  --vi-chart-grid: rgb(255 255 255 / 0.11);
   margin-top: 0.75rem;
   background:
-    radial-gradient(
-      ellipse at 30% 40%,
-      color-mix(in srgb, var(--vi-momentum) 5%, transparent),
-      transparent 62%
-    ),
-    radial-gradient(
-      ellipse at 75% 65%,
-      color-mix(in srgb, var(--vi-spread) 5%, transparent),
-      transparent 60%
-    );
+    radial-gradient(circle at 28% 22%, rgb(74 172 156 / 0.16), transparent 42%),
+    radial-gradient(circle at 78% 72%, rgb(126 98 181 / 0.16), transparent 44%),
+    linear-gradient(145deg, #10171b, var(--vi-chart-bg));
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 -24px 80px rgb(0 0 0 / 0.18);
 }
-.vi-dna-spoke {
+.vi-dna-figure [data-dimension='momentum'] {
+  --vi-chart-dimension: #7dd6c4;
+}
+.vi-dna-figure [data-dimension='acceleration'] {
+  --vi-chart-dimension: #9dc3f5;
+}
+.vi-dna-figure [data-dimension='spread'] {
+  --vi-chart-dimension: #c6b1ed;
+}
+.vi-dna-figure [data-dimension='audience'] {
+  --vi-chart-dimension: #f0a7bb;
+}
+.vi-dna-figure [data-dimension='adaptability'] {
+  --vi-chart-dimension: #e6cb8d;
+}
+.vi-dna-figure [data-dimension='gap'] {
+  --vi-chart-dimension: #eeb697;
+}
+.vi-dna-gradient-start {
+  stop-color: #78e1cf;
+  stop-opacity: 0.28;
+}
+.vi-dna-gradient-end {
+  stop-color: #ad94f4;
+  stop-opacity: 0.12;
+}
+.vi-dna-profile {
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vi-dna-profile:not(.vi-dna-profile-fill) {
   fill: none;
-  stroke: var(--vi-dimension);
-  stroke-width: 1.4;
-  opacity: 0.6;
+}
+.vi-dna-profile-primary {
+  stroke: var(--vi-profile-primary);
+  stroke-width: 2.5;
+}
+.vi-dna-profile-fill {
+  fill-opacity: 1;
+}
+.vi-dna-profile-comparison {
+  fill: none;
+  stroke: var(--vi-profile-comparison);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.vi-dna-comparison-node {
+  fill: var(--vi-chart-bg);
+  stroke: var(--vi-profile-comparison);
+  stroke-width: 2;
+}
+.vi-dna-comparison-missing {
+  stroke-dasharray: 2 2;
+  opacity: 0.82;
+}
+.vi-legend-profile {
+  width: 0.9rem;
+  border-top: 2px solid var(--vi-profile-primary);
+}
+.vi-legend-profile-comparison {
+  border-color: var(--vi-profile-comparison);
+  border-top-style: dashed;
+}
+.vi-dna-status {
+  font-variant-numeric: tabular-nums;
+}
+.vi-dna-embedded {
+  margin-block: 1rem;
+  min-width: 0;
+}
+.vi-dna-embedded .vi-dna-figure {
+  max-width: 44rem;
+}
+.vi-dna-axis[data-interactive='true'] {
+  cursor: pointer;
+}
+.vi-compare td strong,
+.vi-compare td small {
+  display: block;
+}
+.vi-compare td small {
+  color: var(--muted-foreground);
+  margin-top: 0.15rem;
 }
 .vi-dna-axis .vi-axis-label {
-  fill: var(--vi-dimension);
+  fill: var(--vi-chart-dimension, var(--vi-dimension));
   font-weight: 600;
 }
 .vi-dna-node {
-  stroke: var(--vi-dimension);
+  stroke: var(--vi-chart-dimension, var(--vi-dimension));
   stroke-width: 2;
 }
 .vi-dna-node[data-known='true'] {
-  fill: var(--vi-dimension);
+  fill: var(--vi-chart-dimension, var(--vi-dimension));
+}
+.vi-dna-node[data-profile-missing='true'] {
+  fill: var(--vi-chart-bg);
+  opacity: 0.82;
 }
 .vi-dna-halo {
-  fill: var(--vi-dimension);
+  fill: var(--vi-chart-dimension, var(--vi-dimension));
   opacity: 0.08;
   transition: opacity 180ms ease;
 }
 .vi-dna-axis[data-selected='true'] .vi-dna-halo {
-  opacity: 0.24;
+  opacity: 0.34;
 }
-.vi-dna-axis[data-selected='true'] .vi-dna-spoke {
-  opacity: 1;
-  stroke-width: 2.2;
+.vi-dna-guide,
+.vi-dna-axis {
+  transition:
+    opacity 180ms ease,
+    stroke-width 180ms ease;
+}
+.vi-dna-figure[data-selected-dimension] .vi-dna-guide[data-selected='false'] {
+  opacity: 0.28;
+}
+.vi-dna-figure[data-selected-dimension] .vi-dna-axis[data-selected='false'] {
+  opacity: 0.58;
+}
+.vi-dna-guide[data-selected='true'] {
+  stroke: var(--vi-chart-dimension, var(--vi-dimension));
+  stroke-width: 2.5;
+}
+.vi-dna-axis[data-selected='true'] .vi-axis-label {
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.vi-dna-axis[data-selected='true'] .vi-dna-node {
+  stroke-width: 3.5;
+}
+.vi-dna-selection {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--vi-dimension);
+  border-radius: var(--rafii-radius-control);
+  background: var(--rafii-surface-quiet);
+}
+.vi-dna-selection-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+}
+.vi-dna-selection-heading p,
+.vi-dna-selection-meta,
+.vi-dna-selection-reason {
+  margin: 0;
+}
+.vi-dna-selection-eyebrow {
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.vi-dna-selection-heading p {
+  font-size: 0.875rem;
+}
+.vi-dna-selection-meta,
+.vi-dna-selection-reason {
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+.vi-dna-selection-meta {
+  color: var(--muted-foreground);
+}
+.vi-dna-selection-reason {
+  overflow-wrap: anywhere;
+}
+.vi-dna-trust {
+  font-weight: 600;
+  color: var(--foreground);
 }
 .vi-dimension-key {
   display: inline-block;
@@ -626,17 +858,22 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .vi-dna-halo,
+  .vi-dna-guide,
+  .vi-dna-axis,
   .vi-replay {
     transition: none;
   }
 }
 @media (forced-colors: active) {
   .vi-dna-axis .vi-axis-label,
+  .vi-axis-state,
   .vi-axis-value {
     fill: CanvasText;
   }
-  .vi-dna-spoke,
+  .vi-dna-guide,
+  .vi-dna-profile,
   .vi-dna-node,
+  .vi-dna-comparison-node,
   .vi-timeline-line,
   .vi-provisional-point {
     stroke: CanvasText;
@@ -647,6 +884,11 @@
   }
   .vi-dimension-button {
     color: ButtonText;
+  }
+  .vi-dna-selection,
+  .vi-dimension-selected,
+  .vi-dimension-table tr[data-selected='true'] {
+    border-color: CanvasText;
   }
 }
 

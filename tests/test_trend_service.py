@@ -240,6 +240,27 @@ class TrendServiceTests(unittest.TestCase):
         self.assertIsNone(data["inferred"]["stage"])
         self.assertTrue(data["observed"]["metrics"])
 
+    def test_dna_profile_requires_current_receipt_and_qualified_interpretation(self):
+        ids = ("momentum", "acceleration", "spread", "audience", "adaptability", "gap")
+        profile = {
+            "method_id": "trend-dna.fixture", "method_version": "1", "scale_ref": "fixture-scale-v1",
+            "reference_population": "Fixture comparison population", "trust_receipt_id": RID,
+            "expires_at": END, "limitations": ["Fixture geometry only"],
+            "dimensions": [{"id": name, "state": "Moderate", "value": .5,
+                "display_value": "Moderate fixture state",
+                "layer": "interpretation" if name in ("audience", "adaptability") else "calculated",
+                "definition": "Fixture display coordinate", "reason": "Receipt-bound fixture basis",
+                "evidence_refs": [RID], "null_reason": None} for name in ids]}
+        payload = self.store.rows["trend", TID]["payload"]
+        payload.update(dna_profile=profile, interpretation_qualified=True)
+        result = self.svc.get(WID, "session", TID)
+        self.assertEqual(result["data"]["dna_profile"]["dimensions"][0]["value"], .5)
+        payload["dna_profile"]["trust_receipt_id"] = OTHER
+        self.assertNotIn("dna_profile", self.svc.get(WID, "session", TID)["data"])
+        payload["dna_profile"]["trust_receipt_id"] = RID
+        self.svc.values["RAFII_TREND_MODEL_ENRICHMENT_ENABLED"] = "0"
+        self.assertNotIn("dna_profile", self.svc.get(WID, "session", TID)["data"])
+
     def test_display_and_model_rights_are_independent(self):
         row = self.store.rows["trend", TID]
         row["policy"]["llm_process"] = False
