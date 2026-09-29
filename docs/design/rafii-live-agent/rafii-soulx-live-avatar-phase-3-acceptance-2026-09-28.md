@@ -9,6 +9,7 @@
 - Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-soulx-avatar/James-Au-Studio`.
 - Starting and final feature implementation tip: `9aeaccab221438a29c8db4f23325bd30ea1e9f45` on `codex/rafii-soulx-avatar-20260928`; Phase 1 `394c2d4`, Phase 2 `69734ca`. No implementation code changed in this attempt. This report is the only intended new commit.
 - Remote `origin` default/canonical release branch at audit time: `consumer-saas`, `ee688397dd39d9cf3df6c99f22c488fa355b54ee`. It was not modified.
+- Read-only production inspection found deployment `dpl_28Qi5dkEdjiSk41K5jJs599eZLSU` in `READY` state on `postriff-phase2-private.vercel.app`, sourced from `consumer-saas` at exactly `ee688397dd39d9cf3df6c99f22c488fa355b54ee`. This matches the audited canonical branch tip. It predates this acceptance attempt and does not contain the SoulX feature.
 - Reference: `web/public/raffi/avatar-256.png`, SHA-256 `6ac56752cb008d6dc27640cc53567fd724a4cd9068123289e8705683b88d792f`. SoulX source checkout was at `9bc03de06bb0de82cd6bc477804512ae06144bf2`.
 - Pinned model revisions in `scripts/setup_rafii_soulx_lite.sh`: SoulX Lite `59119b6c681230c3eeee157e224ae1941746711e`, wav2vec2 `22aad52d435eb6dbaf354bdad9b0da84ce7d6156`. Neither model was downloaded in this attempt; weights and checksums were not observed.
 - GPT Live model configured by the existing Rafii backend: `gpt-live-1`. No Live session was opened.
