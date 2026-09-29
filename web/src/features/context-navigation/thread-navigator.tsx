@@ -28,6 +28,7 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
   const audioActive = useAudioReactive((state) => state.active);
   const audioLevel = useAudioReactive((state) => state.level);
   const audioBands = useAudioReactive((state) => state.bands);
+  const audioWaveform = useAudioReactive((state) => state.waveform);
   const audioTransient = useAudioReactive((state) => state.transient);
   const audioTickMs = useAudioReactive((state) => state.tickMs);
   const audioSource = useAudioReactive((state) => state.source);
@@ -44,9 +45,10 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
         level: audioLevel,
         transient: audioTransient,
         bands: audioBands,
+        waveform: audioWaveform,
         tickMs: audioTickMs
       }),
-    [activeGroupIndex, audioBands, audioLevel, audioTickMs, audioTransient, groups.length]
+    [activeGroupIndex, audioBands, audioLevel, audioTickMs, audioTransient, audioWaveform, groups.length]
   );
 
   useEffect(() => {
@@ -115,7 +117,8 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
                   height: selected ? 8 : 6,
                   opacity: selected ? 1 : 0.58,
                   translateX: 0,
-                  borderRadius: '9999px'
+                  borderRadius: '9999px',
+                  transitionMs: 70
                 };
             return (
               <div key={navigationId(first)} className='group relative flex w-11 justify-end'>
@@ -131,7 +134,7 @@ export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
                       opacity: selected ? 1 : motion.opacity,
                       transform: motion.translateX > 0 ? `translateX(${motion.translateX}px)` : undefined,
                       transformOrigin: 'right center',
-                      transition: 'width 38ms linear, height 38ms linear, border-radius 55ms ease-out, opacity 45ms linear, transform 38ms linear',
+                      transition: `width ${motion.transitionMs}ms linear, height ${motion.transitionMs}ms linear, border-radius ${motion.transitionMs + 12}ms ease-out, opacity ${motion.transitionMs + 8}ms linear, transform ${motion.transitionMs}ms linear`,
                       willChange: audioActive && !reduceMotion ? 'width, height, transform' : undefined,
                     }} />
                 </button>

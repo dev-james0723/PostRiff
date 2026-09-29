@@ -49,6 +49,7 @@ test('global music level moves the whole rail even when local spectrum is sparse
     level: 0.55,
     transient: 0.35,
     bands: [1, 0, 0, 0, 0, 0],
+    waveform: [],
     tickMs: 1200
   });
   assert.equal(points.length, 12);
@@ -109,6 +110,50 @@ test('audio meter uses faster whole-rail response tuning', () => {
   );
   assert.match(source, /smoothingTimeConstant = 0\.54/);
   assert.match(source, /now - this\.lastCommit >= 22/);
-  assert.match(source, /globalPulse \* 0\.58/);
+  assert.match(source, /globalPulse \* 0\.1/);
+  assert.match(source, /waveformPeak \* 0\.64/);
   assert.match(source, /travellingTransient \* 0\.1/);
+});
+
+
+test('time-domain waveform sampler preserves spatial peaks and valleys', () => {
+  const samples = Uint8Array.from({ length: 97 }, (_, index) => {
+    const phase = (index / 96) * Math.PI * 4;
+    return Math.round(128 + Math.sin(phase) * 118);
+  });
+  const profile = audio.sampleWaveform(samples, 12);
+  assert.equal(profile.length, 12);
+  assert.ok(Math.max(...profile) > 0.9);
+  assert.ok(Math.min(...profile) < 0.45);
+});
+
+test('waveform peaks create different dot lengths and different response speeds', () => {
+  const points = audio.buildRailMotion({
+    count: 8,
+    activeIndex: -1,
+    level: 0.42,
+    transient: 0.15,
+    bands: [0.4, 0.5, 0.4, 0.5],
+    waveform: [0.05, 0.2, 0.95, 0.25, 0.08, 0.82, 0.18, 0.05],
+    tickMs: 1600
+  });
+  const widths = points.map((point) => point.width);
+  const speeds = points.map((point) => point.transitionMs);
+  assert.ok(Math.max(...widths) - Math.min(...widths) > 8);
+  assert.ok(Math.max(...speeds) - Math.min(...speeds) > 20);
+  assert.ok(points[2].width > points[0].width);
+  assert.ok(points[2].transitionMs < points[0].transitionMs);
+});
+
+test('waveform peak contrast outweighs the shared global pulse', () => {
+  const points = audio.buildRailMotion({
+    count: 6,
+    activeIndex: -1,
+    level: 0.65,
+    transient: 0,
+    bands: [0.5, 0.5, 0.5],
+    waveform: [0, 0.15, 1, 0.2, 0.75, 0.05],
+    tickMs: 900
+  });
+  assert.ok(points[2].width - points[0].width > 9);
 });
