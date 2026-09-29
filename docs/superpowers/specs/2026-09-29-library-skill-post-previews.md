@@ -71,16 +71,7 @@ No reference file is fetched implicitly. The preview is the actual primary skill
 
 ### Rendering
 
-Render Markdown as safe React elements, never `dangerouslySetInnerHTML`. Minimum supported syntax:
-- headings;
-- paragraphs;
-- unordered and ordered lists;
-- blockquotes;
-- fenced code;
-- horizontal rules;
-- inline code and emphasis where practical.
-
-Unknown syntax remains readable text.
+Render the installed Markdown faithfully in a safe, read-only text reader. Preserve whitespace and line breaks, use readable product typography, and never use `dangerouslySetInnerHTML`; raw Markdown syntax is allowed to remain visible so no instruction text is silently reinterpreted or lost.
 
 ## Post preview
 
