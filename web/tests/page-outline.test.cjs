@@ -182,7 +182,7 @@ test('roots: open dialogs (the one on top first), then main; Rafii’s own panel
   assert.deepEqual(outline.map((item) => item.text), ['Schedule a draft', 'Prepare review', 'Queue'], 'a dialog inside main is read once, first');
 });
 
-test('the panel declares guides; only a voice call declares voice control', () => {
-  assert.deepEqual([...O.UI_CAPABILITIES], ['navigate', 'show_help', 'guide']);
-  assert.deepEqual([...O.VOICE_UI_CAPABILITIES], ['navigate', 'show_help', 'guide', 'voice']);
+test('the panel declares safe page actions; only a voice call additionally declares voice control', () => {
+  assert.deepEqual([...O.UI_CAPABILITIES], ['navigate', 'show_help', 'guide', 'activate_control']);
+  assert.deepEqual([...O.VOICE_UI_CAPABILITIES], ['navigate', 'show_help', 'guide', 'activate_control', 'voice']);
 });
