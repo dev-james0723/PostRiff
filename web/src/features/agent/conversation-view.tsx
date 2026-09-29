@@ -276,7 +276,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   }, [attachmentsOn, persistTurn, text, attachments.chips]);
   const recoveredTurn = attachments.recovered;
   useEffect(() => {
-    if (recoveredTurn?.text) setText((current) => (current || recoveredTurn.text));
+    if (recoveredTurn?.text) setText((current) => current || recoveredTurn.text);
   }, [recoveredTurn]);
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
@@ -285,7 +285,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   // One chip per platform; the composer expands it into one row per selected account (accountLabel).
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
-    return { platform, account: account?.account, state: channel?.displayState };
+    return { platform, account: account?.account, state: account?.displayState };
   });
   const deliveryOptions = useMemo<DeliveryTargetOption<DraftPlatform>[]>(
     () =>
