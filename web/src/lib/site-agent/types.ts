@@ -12,6 +12,8 @@ export interface PageOutlineItem {
   text: string;
   /** The element's `data-tour` id, when it has one (guides point at these). */
   target?: string;
+  /** A safe client action explicitly exposed by the page. Never inferred from arbitrary DOM controls. */
+  action?: string;
   state?: 'selected' | 'disabled' | 'expanded' | 'checked';
 }
 
@@ -135,6 +137,7 @@ export type SiteAgentBlock =
   /** A step-by-step walkthrough from the guide manifest; `auto` when the person asked to be shown or taught. */
   | { type: 'guide_card'; guideId: string; routeId: string; href: string; title: string; summary: string; auto?: boolean }
   | { type: 'voice_command'; command: VoiceCommandName; style?: AgentStylePatch | null }
+  | { type: 'ui_action'; action: 'activate'; actionId: string; label: string; auto?: boolean }
   | {
       type: 'diagnostic_card';
       title: string;

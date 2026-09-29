@@ -20,9 +20,9 @@ VERSION = 1
 MAX_MESSAGE = 4000
 ENTITY_TYPES = ("conversation", "source", "automation", "automation_run", "job", "review", "draft", "connection", "asset",
                 "memory_proposal", "help_document")
-UI_CAPABILITIES = ("navigate", "show_help", "highlight", "focus_composer", "guide", "voice")
+UI_CAPABILITIES = ("navigate", "show_help", "highlight", "focus_composer", "guide", "voice", "activate_control")
 BLOCK_TYPES = ("text", "citation_list", "navigation_card", "diagnostic_card", "proposal_diff", "question_form", "tool_activity",
-               "warning", "handoff_card", "error", "operate_result", "result_list", "calendar_card", "guide_card", "voice_command")
+               "warning", "handoff_card", "error", "operate_result", "result_list", "calendar_card", "guide_card", "voice_command", "ui_action")
 VOICE_COMMANDS = ("end_call", "mute", "stop_speaking", "style")
 MAX_VISIBLE_KEYS = 12
 _KEY = re.compile(r"^[a-zA-Z][a-zA-Z0-9]{0,31}$")
@@ -72,6 +72,9 @@ def outline(raw) -> list[dict]:
         target = item.get("target")
         if isinstance(target, str) and _TARGET.match(target):
             entry["target"] = target
+        action = item.get("action")
+        if isinstance(action, str) and _TARGET.match(action):
+            entry["action"] = action
         if item.get("state") in OUTLINE_STATES:
             entry["state"] = item["state"]
         size = sum(len(value) for value in entry.values())
@@ -164,6 +167,11 @@ def navigation(label: str, href: str, route_id: str, *, reason: str | None = Non
 def guide_card(guide_id: str, route_id: str, href: str, title: str, summary: str, *, auto: bool = False) -> dict:
     """A step-by-step guide the panel can run on the screen (Contract 2); `auto` when the person asked to be shown."""
     return {"type": "guide_card", "guideId": guide_id, "routeId": route_id, "href": href, "title": title, "summary": summary, "auto": bool(auto)}
+
+
+def ui_action(action_id: str, label: str, *, auto: bool = False) -> dict:
+    """A safe client control explicitly exposed by the page; the browser executes it after the answer."""
+    return {"type": "ui_action", "action": "activate", "actionId": action_id, "label": label[:80], "auto": bool(auto)}
 
 
 def voice_command(command: str, style: dict | None = None) -> dict:

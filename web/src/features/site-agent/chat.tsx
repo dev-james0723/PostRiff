@@ -31,6 +31,7 @@ import { ApiError } from '@/lib/api/client';
 import { keys, useMe, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { Message } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { activateClientControl } from '@/lib/agent-runtime/client-actions';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
@@ -154,7 +155,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
 
   /** Carry out what an answer asked for: its guide, or its link (re-checked against the route manifest), or a style. */
   const runAuto = useCallback(
-    (actions: AutoAction[]) => {
+    async (actions: AutoAction[]) => {
       for (const action of actions) {
         if (action.kind === 'guide') {
           const start = panelActions().startGuide;
@@ -169,6 +170,12 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
           if (navigate) navigate(href);
           else router.push(href);
           onNavigate?.();
+        } else if (action.kind === 'activate') {
+          const receipt = await activateClientControl(action.actionId);
+          if (receipt.status === 'blocked') {
+            noteId.current += 1;
+            setNotes((prev) => [...prev.slice(-3), { id: noteId.current, text: `Couldn't activate ${action.label}: the control is no longer available.` }]);
+          }
         } else {
           void Promise.resolve(panelActions().setStyle?.(action.style as AgentStylePatch)).catch(() => undefined);
         }
@@ -271,7 +278,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         }
         if (result.delegated) void client.invalidateQueries({ queryKey: keys.snapshot(w) });
         // "Take me to …" or "show me how": the answer's own link or guide, once, and only for the newest request.
-        if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) runAuto(autoActionsOf(blocks, 'text'));
+        if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) void runAuto(autoActionsOf(blocks, 'text'));
       } catch (error) {
         if (workspaceRef.current !== w) return;
         setOptimistic(null);
@@ -295,7 +302,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
     // A spoken "show me how" or "take me to" runs here too; the call itself carries out its voice commands.
     const ticket = AUTO.begin();
     if (AUTO.claim(response.messageId ?? response.runId ?? response.traceId ?? `voice:${ticket}`, ticket)) {
-      runAuto(autoActionsOf(response.result?.blocks ?? response.siteAgent?.message?.siteAgent?.blocks, 'voice'));
+      void runAuto(autoActionsOf(response.result?.blocks ?? response.siteAgent?.message?.siteAgent?.blocks, 'voice'));
     }
     if (!workspaceId || !response.conversationId) return;
     void client.invalidateQueries({ queryKey: keys.messages(workspaceId, response.conversationId) });
@@ -467,7 +474,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
           )}
         </div>
         <p className='text-muted-foreground px-2 pt-1.5 text-[10.5px] leading-snug'>
-          {siteConfig.name} answers from its help and your workspace, and can propose changes you apply yourself.
+          {siteConfig.name} can inspect this page and use safe available controls; it asks when your approval or sign-in is required.
         </p>
       </form>
     </div>

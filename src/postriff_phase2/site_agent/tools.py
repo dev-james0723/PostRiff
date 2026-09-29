@@ -48,6 +48,8 @@ _DEFINITIONS = (
     ("models.summary", "read", "Which writers are available here and why others are not.", {}, ()),
     ("ui.navigate", "client_action", "Open an allowlisted Rafii page.",
      {"routeId": {"type": "string", "pattern": _ID}, "params": {"type": "object"}, "query": {"type": "object"}, "auto": {"type": "boolean"}}, ("routeId",)),
+    ("ui.activate", "client_action", "Activate a safe control explicitly exposed by the current page.",
+     {"actionId": {"type": "string", "maxLength": 80}, "auto": {"type": "boolean"}}, ("actionId",)),
     ("ui.show_help", "client_action", "Open a help article.", {"documentId": {"type": "string", "pattern": _ID}, "anchor": {"type": "string", "maxLength": 80}}, ("documentId",)),
     ("ui.guide", "client_action", "Start an allowlisted step-by-step guide: the panel opens the guide's page and a pointer shows each step on the screen.",
      {"guideId": {"type": "string", "enum": guides.ids()}, "auto": {"type": "boolean"}}, ("guideId",)),
@@ -177,7 +179,7 @@ LABELS = {
     "automation.list": "Listed your automations", "automation.get": "Read the automation", "automation.explain": "Read the automation's run history",
     "memory.summary": "Read what Rafii remembers", "privacy.egress_state": "Checked what may leave Rafii",
     "entitlements.summary": "Checked your plan and allowances", "models.summary": "Checked the available writers",
-    "ui.navigate": "Prepared a link", "ui.show_help": "Prepared a help link", "automation.patch_propose": "Prepared a proposed change",
+    "ui.navigate": "Prepared a link", "ui.activate": "Prepared a page action", "ui.show_help": "Prepared a help link", "automation.patch_propose": "Prepared a proposed change",
     "ui.guide": "Prepared a step-by-step guide", "ui.voice": "Prepared a voice panel control",
     "brand.summary": "Read your Brand Brain", "voice.profile": "Read your voice profile", "content.search": "Searched your workspace",
     "calendar.range": "Read the calendar", "campaign.list": "Listed your campaigns", "campaign.get": "Read the campaign", "reviews.list": "Checked reviews and returns",
@@ -606,6 +608,26 @@ def ui_navigate(ctx, routeId, params=None, query=None, auto=False):
     return contracts.result({"href": href, "routeId": routeId, "title": route["title"], "canOpen": allowed, "reason": reason}, now=ctx.now, source="client")
 
 
+def ui_activate(ctx, actionId, auto=False):
+    """Resolve one safe client control from the page snapshot. Execution happens in the browser after the answer."""
+    _ = auto
+    if "activate_control" not in (ctx.page.get("uiCapabilities") or []):
+        raise AlphaError("This surface cannot activate page controls.", 400, code="tool_input")
+    matches = [item for item in (ctx.page.get("outline") or []) if item.get("action") == actionId]
+    if not matches:
+        raise AlphaError("That control is not available on the current page.", 400, code="tool_input")
+    enabled = [item for item in matches if item.get("state") != "disabled"]
+    if len(enabled) != 1:
+        if not enabled:
+            raise AlphaError("That control is disabled right now.", 400, code="tool_input")
+        raise AlphaError("That control is ambiguous on the current page.", 400, code="tool_input")
+    item = enabled[0]
+    if item.get("role") not in ("button", "link", "tab"):
+        raise AlphaError("That page item is not an activatable control.", 400, code="tool_input")
+    return contracts.result({"actionId": actionId, "label": item.get("text") or "control", "canActivate": True},
+                            now=ctx.now, source="client", verified=False)
+
+
 def ui_guide(ctx, guideId, auto=False):
     """A step-by-step guide from the guide manifest, and whether this member may open its page."""
     _ = auto
@@ -682,7 +704,7 @@ EXECUTORS = {
     "channels.capabilities": channels_capabilities, "queue.summary": queue_summary, "job.get": job_get, "draft.get": draft_get,
     "automation.list": automation_list, "automation.get": automation_get, "automation.explain": automation_explain_tool,
     "memory.summary": memory_summary, "privacy.egress_state": privacy_egress_state, "entitlements.summary": entitlements_summary,
-    "models.summary": models_summary, "ui.navigate": ui_navigate, "ui.show_help": ui_show_help, "automation.patch_propose": automation_patch_propose,
+    "models.summary": models_summary, "ui.navigate": ui_navigate, "ui.activate": ui_activate, "ui.show_help": ui_show_help, "automation.patch_propose": automation_patch_propose,
     "ui.guide": ui_guide, "ui.voice": ui_voice,
 }
 from . import reads  # noqa: E402 — reads builds on the helpers above

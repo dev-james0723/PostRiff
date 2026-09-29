@@ -8,6 +8,7 @@
 export type AutoAction =
   | { kind: 'guide'; guideId: string }
   | { kind: 'navigate'; href: string }
+  | { kind: 'activate'; actionId: string; label: string }
   | { kind: 'style'; style: Record<string, unknown> };
 
 type Loose = Record<string, unknown>;
@@ -22,9 +23,13 @@ const nonEmpty = (value: unknown): value is string => typeof value === 'string' 
 export function autoActionsOf(blocks: readonly unknown[] | null | undefined, modality: 'text' | 'voice'): AutoAction[] {
   const list = Array.isArray(blocks) ? blocks.filter(isObject) : [];
   const actions: AutoAction[] = [];
+  const activate = list.find(
+    (block) => block.type === 'ui_action' && block.action === 'activate' && block.auto === true && nonEmpty(block.actionId) && nonEmpty(block.label)
+  );
   const guide = list.find((block) => block.type === 'guide_card' && block.auto === true && nonEmpty(block.guideId));
   const link = list.find((block) => block.type === 'navigation_card' && block.auto === true && nonEmpty(block.href));
-  if (guide) actions.push({ kind: 'guide', guideId: String(guide.guideId) });
+  if (activate) actions.push({ kind: 'activate', actionId: String(activate.actionId), label: String(activate.label) });
+  else if (guide) actions.push({ kind: 'guide', guideId: String(guide.guideId) });
   else if (link) actions.push({ kind: 'navigate', href: String(link.href) });
   if (modality === 'text') {
     const style = list.find((block) => block.type === 'voice_command' && block.command === 'style' && isObject(block.style));
