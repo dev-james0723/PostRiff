@@ -33,6 +33,7 @@ class EffectLedger:
     errors: list[dict] = field(default_factory=list)
     navigation: list[dict] = field(default_factory=list)       # site-agent navigation blocks from ui.navigate
     guides: list[dict] = field(default_factory=list)           # guide_card blocks from ui.guide (Contract 2)
+    client_actions: list[dict] = field(default_factory=list)   # ui_action blocks: safe controls explicitly exposed by the page
     voice_commands: list[dict] = field(default_factory=list)   # voice_command blocks from ui.voice (Contract 2)
     known_ids: set = field(default_factory=set)
     spans: list[dict] = field(default_factory=list)
@@ -60,8 +61,14 @@ class EffectLedger:
         """The answer's client blocks (Contract 2): navigation cards, then at most one guide card, then voice commands.
         At most one of them acts by itself: an `auto` guide opens its own page, so it wins over `auto` navigation, and
         only the first `auto` navigation card keeps it."""
-        guides = self.guides[:1]
-        acted = any(card.get("auto") for card in guides)
+        actions = self.client_actions[:1]
+        acted = any(card.get("auto") for card in actions)
+        guides = []
+        for card in self.guides[:1]:
+            if card.get("auto") and acted:
+                card = {**card, "auto": False}
+            acted = acted or bool(card.get("auto"))
+            guides.append(card)
         navigation = []
         for card in self.navigation[:2]:
             if card.get("auto") and acted:
@@ -76,7 +83,7 @@ class EffectLedger:
                 commands[name] = {**commands[name], "style": {**(commands[name].get("style") or {}), **(block.get("style") or {})}}
             elif name not in commands:
                 commands[name] = block
-        return navigation + guides + list(commands.values())[:3]
+        return actions + navigation + guides + list(commands.values())[:3]
 
 
 @dataclass
