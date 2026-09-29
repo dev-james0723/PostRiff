@@ -113,8 +113,10 @@ class CoworkerService:
         state = self._state(workspace_id, token)
         weekly = weekly_operator.view(state)
         notifications = getattr(self.hosted, "notifications", None)
+        from ..growth.trends.store import TrendStore
         return {**flags.public(), "registryRelease": skill_registry.default_registry().release(),
-                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=getattr(self.hosted, "metric_reads", None) is not None),
+                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=getattr(self.hosted, "metric_reads", None) is not None,
+                                           store=TrendStore(self.hosted.connection_factory)),
                 "notifications": notifications.status() if notifications else {"enabled": False},
                 "research": research_broker.ResearchBroker(state=state).diagnostics() if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
                 "weekly": {"recipes": len([r for r in weekly["recipes"] if r.get("status") != "deleted"]), "weeks": len(weekly["weeks"])}}

@@ -74,6 +74,7 @@ async function run() {
       f.run.draft_id = snapshot.state.variants[0].id;
       let flagsOn = false,
         workspaceAllowed = true,
+        acquisitionState = 'none',
         scenario = 'fresh',
         revokedReceipt = false,
         watch = null,
@@ -309,7 +310,7 @@ async function run() {
           return send({
             flags: flagsOn ? f.flags : {},
             trend_beta: { state: !flagsOn ? 'feature_off' : workspaceAllowed ? 'stored_radar' : 'workspace_not_allowlisted',
-              radar_available: flagsOn && workspaceAllowed, acquisition: 'none', metric_reads_enabled: false,
+              radar_available: flagsOn && workspaceAllowed, acquisition: acquisitionState, metric_reads_enabled: false,
               follower_conversion: 'unavailable' },
             weekly: { recipes: 0, weeks: 0 },
             notifications: { enabled: false }
@@ -354,8 +355,22 @@ async function run() {
         record(width + ' browse stored data only, authenticated contract');
         await noOverflow(page, width + ' radar');
         await axe(page, width + ' radar');
+        for (const [state, text] of [
+          ['none', 'Live source acquisition is off.'],
+          ['unverified', 'awaiting a verified collection.'],
+          ['active', 'A recent bounded Bluesky sample was collected.'],
+          ['degraded', 'The Bluesky source is paused or degraded.']
+        ]) {
+          acquisitionState = state;
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+          await visibleText(page, text);
+          assert.equal(calls.some((c) => c.path.includes('/coworker/trends') && c.method !== 'GET'), false);
+          record(width + ' source status ' + state + ' without acquisition');
+        }
+        acquisitionState = 'none';
         if (process.env.TREND_GROWTH_BETA_SMOKE_ONLY === '1') {
-          await visibleText(page, 'Source coverage is limited; live discovery is not verified.');
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+          await visibleText(page, 'Live source acquisition is off.');
           assert.deepEqual(errors, [], 'browser runtime errors');
           assert.deepEqual(unhandledMutations, [], 'unexpected mutations');
           record(width + ' limited source coverage and no runtime/mutation errors');
@@ -634,9 +649,14 @@ async function run() {
             .waitFor();
           record('accept opportunity into existing Ideas source, no generation');
           await page.getByLabel('Search trends').fill('nothing');
+          acquisitionState = 'active';
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+          await page.getByLabel('Search trends').fill('nothing');
           await page.getByRole('button', { name: 'Search', exact: true }).click();
           await visibleText(page, 'No matches in the available scope');
+          await visibleText(page, 'The live Bluesky sample was collected, but no current Trend matches these filters.');
           record('empty exact filters and interval');
+          acquisitionState = 'none';
           for (const state of [
             'loading',
             'partial',

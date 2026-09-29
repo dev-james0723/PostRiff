@@ -152,7 +152,7 @@ function Languages() {
     </QueryContent>
   );
 }
-function RadarResults() {
+function RadarResults({ acquisition }: { acquisition: 'none' | 'unverified' | 'active' | 'degraded' }) {
   const [tab, setTab] = useState('for_you');
   const [quality, setQuality] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -354,7 +354,7 @@ function RadarResults() {
                       <StateMessage
                         kind='empty'
                         title='No matches in the available scope'
-                        description={`Filters: ${filters.query || 'any topic'}; ${filters.platform || 'available platforms'}; ${filters.language || 'available languages'}; ${filters.niche || 'all niches'}. Since ${date(filters.since)}. This does not imply platform-wide absence.`}
+                        description={`${acquisition === 'active' ? 'The live Bluesky sample was collected, but no current Trend matches these filters. ' : ''}Filters: ${filters.query || 'any topic'}; ${filters.platform || 'available platforms'}; ${filters.language || 'available languages'}; ${filters.niche || 'all niches'}. Since ${date(filters.since)}. This does not imply platform-wide absence.`}
                       />
                     )}
                     {opportunities.isError && tab === 'for_you' && (
@@ -415,9 +415,15 @@ export function TrendsView() {
       ) : (
         <>
           <p className='text-muted-foreground mb-4 text-sm' data-trend-beta-status>
-            Beta · Stored conversations. Source coverage is limited; live discovery is not verified.
+            {beta?.acquisition === 'active'
+              ? 'Beta · A recent bounded Bluesky sample was collected. Source coverage remains limited.'
+              : beta?.acquisition === 'degraded'
+                ? 'Beta · The Bluesky source is paused or degraded. Stored results remain available.'
+                : beta?.acquisition === 'unverified'
+                  ? 'Beta · Live Bluesky acquisition is admitted, awaiting a verified collection.'
+                  : 'Beta · Stored conversations. Live source acquisition is off.'}
           </p>
-          <RadarResults key={w} />
+          <RadarResults key={w} acquisition={beta?.acquisition ?? 'none'} />
         </>
       )}
     </PageContainer>

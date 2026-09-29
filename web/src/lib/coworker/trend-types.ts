@@ -507,7 +507,7 @@ const count = z.number().int().nonnegative();
 const finite = z.number().finite();
 export const trendBetaStatusSchema = z.strictObject({
   state: z.enum(['feature_off', 'workspace_not_allowlisted', 'stored_radar']),
-  radar_available: z.boolean(), acquisition: z.enum(['none', 'unverified']),
+  radar_available: z.boolean(), acquisition: z.enum(['none', 'unverified', 'active', 'degraded']),
   metric_reads_enabled: z.boolean(), follower_conversion: z.literal('unavailable')
 });
 export const postTrackingSchema = z.strictObject({
