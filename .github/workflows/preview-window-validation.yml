@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
@@ -20,10 +21,17 @@ jobs:
       NEXT_PUBLIC_SENTRY_DISABLED: '1'
       PREVIEW_EVIDENCE_DIR: /tmp/preview-window-evidence
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
+      # Public source needs no credential. Avoid checkout's recursive auth cleanup,
+      # which fails on an existing unrelated vendor gitlink with no .gitmodules entry.
+      - name: Check out the exact public feature commit without credentials
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
