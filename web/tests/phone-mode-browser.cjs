@@ -42,6 +42,8 @@ async function api(method,path,body) {
     await ctx.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:id,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
     await ctx.addInitScript(({principal,tours}) => {localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-onboarding',tours);},{principal:id,tours});
     page=await ctx.newPage();
+    // The CI development server can cold-compile a new page beyond Playwright's default 30 seconds.
+    page.setDefaultNavigationTimeout(120000);
     let dialRequests=0;
     page.on('request',(req) => {if(req.method()==='POST' && /\/phone\/calls$/.test(new URL(req.url()).pathname)) dialRequests++;});
     await page.goto(base+'/app/account/notifications',{waitUntil:'domcontentloaded',timeout:120000});
