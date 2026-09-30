@@ -129,10 +129,10 @@ class QueryService:
             self.require(principal, 'engineering.read')
             rows=self.store.read('engineering')
             for row in rows:
-                if row['kind']=='check' and row['state'] in ('checks_passed','merged','deployed','production_verified'):
+                if row['state'] in ('checks_passed','merged','deployed','production_verified'):
                     row['observed_stage']=row['state']
                     row['state']='suspected'
-                    row['qualification']='trusted_required_check_manifest_not_qualified'
+                    row['qualification']='trusted_required_check_manifest_not_qualified' if row['kind']=='check' else 'trusted_stage_evidence_not_qualified'
             return dict(evidence=rows, stages=['suspected','reproduced','candidate_fix','checks_passed','merged','deployed','production_verified'], checksDispatchEnabled=False, patchEnabled=False, _dataState='partial')
         if path.startswith('/metrics/receipts/'):
             self.require(principal, 'metrics.query')

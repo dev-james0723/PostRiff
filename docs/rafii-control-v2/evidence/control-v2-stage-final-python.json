@@ -1,0 +1,23 @@
+{
+  "name": "control-v2-stage-final-python",
+  "command": [
+    ".control-venv/bin/python",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests",
+    "-p",
+    "test_*.py"
+  ],
+  "cwd": "/Users/ouxianxing/.codex/worktrees/rafii-founder-control-v2/James-Au-Studio",
+  "startedAt": "2026-09-30T00:07:22.661200+00:00",
+  "finishedAt": "2026-09-30T00:09:03.697299+00:00",
+  "seconds": 101.04,
+  "exitCode": 0,
+  "head": "c2f5d9b7f148f199731c04d6703048f9a2ef0ec2",
+  "source": "09c98474358c25ac7db6834576240fd056048836185a1feac28c60627e5624b3",
+  "sourceUnchanged": true,
+  "status": "PASS",
+  "log": "docs/consumer-ready/evidence/control-v2-stage-final-python.log"
+}

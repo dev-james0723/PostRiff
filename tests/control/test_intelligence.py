@@ -66,10 +66,12 @@ class IntelligenceTests(unittest.TestCase):
         self.assertNotEqual(engineering_state(rows, sha, required_count=1), 'production_verified')
 
     def test_read_model_never_promotes_a_single_provider_green_without_trusted_manifest(self):
-        self.store.read=lambda kind,identifier=None:[{'id':str(uuid.uuid4()),'kind':'check','provider':'github','exact_sha':'a'*40,'attested':True,'required':True,'conclusion':'skipped','state':'checks_passed'}] if kind=='engineering' else []
-        result=self.service.dispatch('/engineering',{},self.principal,str(uuid.uuid4()))
-        self.assertEqual(result['evidence'][0]['state'],'suspected')
-        self.assertEqual(result['evidence'][0]['observed_stage'],'checks_passed')
+        for evidence_kind,stage in [('check','checks_passed'),('deployment','production_verified'),('error','merged')]:
+            with self.subTest(kind=evidence_kind,stage=stage):
+                self.store.read=lambda kind,identifier=None:[{'id':str(uuid.uuid4()),'kind':evidence_kind,'provider':'github','exact_sha':'a'*40,'attested':True,'required':True,'conclusion':'skipped','state':stage}] if kind=='engineering' else []
+                result=self.service.dispatch('/engineering',{},self.principal,str(uuid.uuid4()))
+                self.assertEqual(result['evidence'][0]['state'],'suspected')
+                self.assertEqual(result['evidence'][0]['observed_stage'],stage)
 
     def test_founder_tools_have_no_customer_context_or_effect_executor(self):
         self.assertTrue(all(tool.tenant == 'founder' and tool.effect in ('READ','CREATE_DRAFT') for tool in FOUNDER_TOOLS))

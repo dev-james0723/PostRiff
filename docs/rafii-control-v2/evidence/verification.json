@@ -1,7 +1,7 @@
 {
   "execution": "local/disposable synthetic checks; no production, provider/model or notification execution",
   "baseSHA": "d91660b7936a5158b820914107306ad4a1e51c2d",
-  "consumerSourceFingerprint": "013a7d3a512eb6c999b94e02cdaed275378c69c0e71c5491459063ecb12e7286",
+  "consumerSourceFingerprint": "09c98474358c25ac7db6834576240fd056048836185a1feac28c60627e5624b3",
   "python": {
     "command": "PYTHONPATH=src:tests .control-venv/bin/python -m unittest discover -s tests -p test_*.py",
     "status": "PASS",
@@ -11,7 +11,7 @@
     "failed": 0,
     "errors": 0,
     "sourceUnchanged": true,
-    "receipt": "control-v2-final-stable-python.json"
+    "receipt": "control-v2-stage-final-python.json"
   },
   "control": {
     "command": "PLAYWRIGHT_BROWSERS_PATH=$PWD/.control-browsers .control-venv/bin/python scripts/rafii_control_pg.py --browser",
@@ -50,7 +50,7 @@
     "provenanceRepair": "postgres-whitespace-repaired.json"
   },
   "security": {
-    "sourceScan": "PASS, zero unexpected findings; source unchanged",
+    "sourceScan": "PASS source unchanged; control-v2-stage-final-secrets.json",
     "scopedScan": "PASS: original 79 scoped files plus rescan of both changed frontend files; 31 verified checksum metadata findings and one synthetic denied URL fixture, zero unexpected",
     "npmVulnerabilities": 0,
     "pythonVulnerabilities": 0,
@@ -63,7 +63,7 @@
       "status": "PASS",
       "files": 688,
       "bytes": 2366692,
-      "sha256": "3e1f032752927b13bca1ee5faffd0830ac0be03b52681e421c2bd8700dee265f"
+      "sha256": "44308f9a24b706573c2822e17c1cc815bf0740e1dbc2452c4bfaed6b384c36d6"
     },
     "consumer": {
       "status": "PASS",
@@ -96,6 +96,7 @@
   },
   "reviews": {
     "security": "../security-review.md",
-    "specGap": "../spec-gap-review.md"
+    "specGap": "../spec-gap-review.md",
+    "stageQualification": "Checks, deployments and errors with unqualified advanced stages retain observations but remain suspected; two regression subcases reproduced before repair"
   }
 }
