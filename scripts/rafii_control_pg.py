@@ -31,11 +31,14 @@ def main():
         try:
             migration = ROOT / 'migrations/postriff/049_rafii_control_foundation.sql'
             workflow = ROOT / 'migrations/postriff/051_rafii_control_read_workflow.sql'
-            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow]  # Reapplication must be safe.
+            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql']  # Reapplication must be safe.
             for file in files:
                 subprocess.run([str(PG / 'psql'), env['RAFII_CONTROL_TEST_DSN'], '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(file)], check=True, stdout=subprocess.DEVNULL, env=env)
-            result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', 'test_*.py', '-v'], cwd=ROOT, env=env)
-            if result.returncode or '--browser' not in sys.argv: return result.returncode
+            result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', 'test_*.py', '-v'], cwd=ROOT, env=env) if '--browser-only' not in sys.argv else None
+            if result and result.returncode:return result.returncode
+            if '--browser' not in sys.argv:return 0
+            if '--capture' in sys.argv:env['RAFII_CONTROL_TEST_CAPTURE']=str(Path(sys.argv[sys.argv.index('--capture')+1]).resolve(strict=True))
+            if '--evidence-dir' in sys.argv:env['RAFII_CONTROL_TEST_EVIDENCE_DIR']=str(Path(sys.argv[sys.argv.index('--evidence-dir')+1]).resolve())
             return browser(env)
         finally:
             subprocess.run([str(PG / 'pg_ctl'), '-D', str(data), '-m', 'fast', '-w', 'stop'], check=True, stdout=subprocess.DEVNULL, env=env)
@@ -44,24 +47,25 @@ def main():
 def browser(env):
     # Both servers are local test children and are stopped before the disposable database is removed.
     children=[]
-    out=ROOT/'docs/rafii-control-v2/evidence/raw/read-workflow'
+    out=Path(env.get('RAFII_CONTROL_TEST_EVIDENCE_DIR',ROOT/'docs/rafii-control-v2/evidence/raw/read-workflow'))
     out.mkdir(parents=True,exist_ok=True)
     node=Path('/opt/homebrew/opt/node@24/bin/node')
     if not node.is_file(): node=Path('node')
-    browser_env={**env,'RAFII_CONTROL_ENABLED':'1','RAFII_CONTROL_ORIGIN':'http://localhost:4449','RAFII_CONTROL_LOCAL_API':'http://127.0.0.1:4450'}
+    browser_env={**env,'RAFII_CONTROL_ENABLED':'1','RAFII_CONTROL_ORIGIN':'http://localhost:4549','RAFII_CONTROL_LOCAL_API':'http://127.0.0.1:4550','PLAYWRIGHT_BROWSERS_PATH':os.environ.get('PLAYWRIGHT_BROWSERS_PATH',str(ROOT/'.control-browsers'))}
+    env={**env,'RAFII_CONTROL_TEST_ORIGIN':'http://localhost:4549','RAFII_CONTROL_TEST_API_PORT':'4550'}
     try:
         with (out/'api.log').open('w') as api_log,(out/'next.log').open('w') as next_log:
             children.append(subprocess.Popen([sys.executable,'tests/control/serve.py'],cwd=ROOT,env=env,stdout=api_log,stderr=api_log))
-            children.append(subprocess.Popen([str(node),'node_modules/next/dist/bin/next','start','-p','4449'],cwd=ROOT/'control-web',env=browser_env,stdout=next_log,stderr=next_log))
+            children.append(subprocess.Popen([str(node),'node_modules/next/dist/bin/next','start','-p','4549'],cwd=ROOT/'control-web',env=browser_env,stdout=next_log,stderr=next_log))
             deadline=time.monotonic()+30
             while time.monotonic()<deadline:
                 if any(child.poll() is not None for child in children): raise RuntimeError('Browser server exited; inspect evidence/raw logs')
                 try:
-                    with urlopen('http://localhost:4449/sign-in',timeout=1) as response:
+                    with urlopen('http://localhost:4549/sign-in',timeout=1) as response:
                         if response.status==200: break
                 except OSError: time.sleep(.15)
             else: raise RuntimeError('Browser servers failed to become ready')
-            return subprocess.run([str(node),'tests/browser.cjs'],cwd=ROOT/'control-web',env=browser_env).returncode
+            return subprocess.run([str(node),'tests/founder-home-browser.cjs' if '--home-browser' in sys.argv else 'tests/workspace-browser.cjs'],cwd=ROOT/'control-web',env=browser_env).returncode
     finally:
         for child in children: child.terminate()
         for child in children:

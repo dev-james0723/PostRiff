@@ -91,8 +91,8 @@ class IntelligenceTests(unittest.TestCase):
         self.principal['operator']['capabilities'].append('customers.read')
         with self.assertRaises(ControlError): self.service.dispatch('/users/../../private', {}, self.principal, str(uuid.uuid4()))
         result = self.service.dispatch('/overview', {}, self.principal, str(uuid.uuid4()))
-        self.assertEqual(result['_dataState'], 'unavailable')
-        self.assertTrue(all(cell['value'] is None for cell in result['metrics']))
+        self.assertEqual(result['evidenceReadiness']['businessHealth'], 'unavailable')
+        self.assertIn('sources',result)
 
     def test_copilot_validates_permissions_and_evidence_before_reserving(self):
         request = dict(requestId=str(uuid.uuid4()), conversationId=str(uuid.uuid4()), message='Inspect revenue', contextEvidenceIds=[], modality='text')
@@ -106,7 +106,7 @@ class IntelligenceTests(unittest.TestCase):
         self.assertEqual(self.store.receipts, [])
 
     def test_reserved_read_failure_has_content_free_terminal_record(self):
-        request = dict(requestId=str(uuid.uuid4()), conversationId=str(uuid.uuid4()), message='PRIVATE_TEST_CANARY', contextEvidenceIds=[], modality='text')
+        request = dict(requestId=str(uuid.uuid4()), conversationId=str(uuid.uuid4()), message='Inspect checks PRIVATE_TEST_CANARY', contextEvidenceIds=[], modality='text')
         def failed_read(kind, identifier=None): raise RuntimeError('PRIVATE_PROVIDER_CANARY')
         self.store.read = failed_read
         with self.assertRaises(RuntimeError): self.service.copilot_turn(request, self.principal)

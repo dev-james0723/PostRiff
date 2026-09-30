@@ -1,5 +1,6 @@
 """Explicit SQL projections; no generic table/SQL interface or production superuser fallback."""
 from contextlib import contextmanager
+from .deadlines import remaining
 from datetime import datetime
 import hashlib
 import psycopg
@@ -27,7 +28,7 @@ class PostgresStore:
             con.row_factory = dict_row
             with con.transaction():
                 if read: con.execute('SET TRANSACTION READ ONLY')
-                con.execute("SET LOCAL statement_timeout='5s'")
+                con.execute("SELECT set_config('statement_timeout',%s,true)", (str(max(1,int(remaining()*1000))),))
                 role = con.execute("SELECT current_user AS name, rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user").fetchone()
                 expected = 'rafii_control_reader' if read else 'rafii_control_session'
                 if role['name'] != expected or role['rolsuper'] or role['rolbypassrls']:
@@ -80,7 +81,7 @@ class PostgresStore:
             'workspaces': 'SELECT id,created_at,member_count,subscription_status,plan,terms_version FROM rafii_control.safe_workspaces ORDER BY id LIMIT 200',
             'sources': 'SELECT source_id,state,watermark,checked_at,reason_code FROM rafii_control.source_health ORDER BY source_id LIMIT 100',
             'engineering': 'SELECT id,kind,provider,external_id,exact_sha,state,conclusion,failure_class,attested,required,observed_at FROM rafii_control.engineering_evidence ORDER BY observed_at DESC LIMIT 200',
-            'receipt': 'SELECT id,query_digest,metric_versions,data_state,source_watermarks,row_count,created_at,expires_at,result_rows,execution_state FROM rafii_control.query_receipts WHERE id=%s',
+            'receipt': 'SELECT id,operator_id,query_digest,metric_versions,data_state,source_watermarks,row_count,created_at,expires_at,result_rows,execution_state,normalized_query,calculated_at,source_versions,coverage FROM rafii_control.query_receipts WHERE id=%s',
             'recommendations': 'SELECT id,evidence_ids,proposal,state,created_at,expires_at FROM rafii_control.recommendations ORDER BY created_at DESC LIMIT 100',
         }
         if kind not in templates: raise ControlError('VALIDATION_FAILED', 400)
@@ -93,8 +94,8 @@ class PostgresStore:
 
     def receipt(self, receipt):
         with self.transaction() as con:
-            con.execute('INSERT INTO rafii_control.query_receipts(id,operator_id,environment,request_id,query_digest,metric_versions,data_state,source_watermarks,row_count,result_rows,execution_state) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-                        (receipt['id'], receipt['operator'], self.environment, receipt['requestId'], receipt['queryDigest'], Jsonb(receipt['metricVersions']), receipt['dataState'], Jsonb(receipt['sourceWatermarks']), receipt['rowCount'], Jsonb(receipt['rows']), receipt['executionState']))
+            con.execute('INSERT INTO rafii_control.query_receipts(id,operator_id,environment,request_id,query_digest,metric_versions,data_state,source_watermarks,row_count,result_rows,execution_state,normalized_query,calculated_at,source_versions,coverage) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                        (receipt['id'], receipt['operator'], self.environment, receipt['requestId'], receipt['queryDigest'], Jsonb(receipt['metricVersions']), receipt['dataState'], Jsonb(receipt['sourceWatermarks']), receipt['rowCount'], Jsonb(receipt['rows']), receipt['executionState'], Jsonb(receipt['normalizedQuery']), receipt['calculatedAt'], Jsonb(receipt['sourceVersions']), Jsonb(receipt['coverage'])))
 
     def query_check_rollups(self, query, version):
         # Fixed metric/fixture policy, parameterized dimensions, SQL aggregation and capped output.
@@ -128,27 +129,53 @@ class PostgresStore:
             if row: return str(row['id']), None
             cached = con.execute('SELECT id,request_digest,result FROM rafii_control.founder_runs WHERE operator_id=%s AND request_id=%s', (principal['operator']['user_id'],request['requestId'])).fetchone()
             if not cached or cached['request_digest'] != request_digest: raise ControlError('IDEMPOTENCY_CONFLICT', 409)
-            return str(cached['id']), cached['result']
+            self._expire_running(con, cached['id'], principal['operator']['user_id'])
+            current = con.execute('SELECT result FROM rafii_control.founder_runs WHERE id=%s', (cached['id'],)).fetchone()
+            return str(cached['id']), current['result']
 
     def save_run(self, run, principal, conversation):
         with self.transaction() as con:
-            con.execute('UPDATE rafii_control.founder_runs SET result=%s WHERE id=%s AND operator_id=%s', (Jsonb(run),run['runId'],principal['operator']['user_id']))
+            return con.execute("UPDATE rafii_control.founder_runs SET result=%s WHERE id=%s AND operator_id=%s AND result->>'state'='running'", (Jsonb(run),run['runId'],principal['operator']['user_id'])).rowcount==1
 
     def run(self, identifier, operator):
         with self.transaction() as con:
+            self._expire_running(con, identifier, operator)
             row = con.execute('SELECT result FROM rafii_control.founder_runs WHERE id=%s AND operator_id=%s', (identifier, operator)).fetchone()
             return row['result'] if row else None
+
+
+    @staticmethod
+    def _expire_running(con, identifier, operator):
+        rows=con.execute("UPDATE rafii_control.founder_runs SET result=jsonb_build_object('runId',id,'state','blocked','code','SOURCE_UNAVAILABLE','answerText','Interrupted read; outcome unknown. No action was performed.','queryReceiptIds','[]'::jsonb,'changedEntities','[]'::jsonb) WHERE id=%s AND operator_id=%s AND result->>'state'='running' AND created_at < now()-interval '2 minutes' RETURNING request_id,operator_id,environment", (identifier,operator)).fetchall()
+        for row in rows:
+            con.execute("INSERT INTO rafii_control.admin_audit_log(request_id,actor,environment,action,result,error_code) VALUES(%s,%s,%s,'copilot.use','failed','SOURCE_UNAVAILABLE')",(row['request_id'],row['operator_id'],row['environment']))
+
+
+    def check_snapshots(self):
+        with self.transaction(read=True) as con:
+            return serial(con.execute('SELECT id,exact_sha,provenance,observed_at,payload FROM rafii_control.github_check_snapshots ORDER BY observed_at DESC,id LIMIT 20').fetchall())
+
+    def check_snapshot(self, identifier):
+        with self.transaction(read=True) as con:
+            row=con.execute('SELECT payload FROM rafii_control.github_check_snapshots WHERE id=%s',(identifier,)).fetchone()
+            return row['payload'] if row else None
 
 
 def connection_factory(dsn, role, environment):
     """Dedicated non-superuser logins must be enrolled separately; role membership is checked by PostgreSQL."""
     def connect():
-        con = psycopg.connect(dsn, prepare_threshold=None, connect_timeout=5)
+        budget=remaining();millis=max(1,int(budget*1000))
+        con = psycopg.connect(dsn, prepare_threshold=None, connect_timeout=max(1, int(budget)), options=f'-c statement_timeout={millis} -c lock_timeout={millis}',keepalives_idle=1,keepalives_interval=1,keepalives_count=1,tcp_user_timeout=millis)
         try:
+            remaining()
             login = con.execute('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=session_user').fetchone()
             if environment != 'local' and (login[0] or login[1]): raise ControlError('SOURCE_UNAVAILABLE', 503)
+            con.execute(f'SET statement_timeout={max(1,int(remaining()*1000))}')
+            remaining()
             con.execute(psycopg.sql.SQL('SET ROLE {}').format(psycopg.sql.Identifier(role)))
+            remaining()
             con.commit()
+            remaining()
             return con
         except Exception:
             con.close()

@@ -31,7 +31,7 @@ def package(output):
     for path in (ROOT/'control-web').rglob('*'):
         relative=path.relative_to(ROOT/'control-web')
         if any(part in ('node_modules','.next','tests') or part.startswith('.env') for part in relative.parts):continue
-        if path.is_file() and not path.is_symlink() and path.suffix in ('.ts','.tsx','.mjs','.css','.json'):files.append(path)
+        if path.is_file() and not path.is_symlink() and path.suffix in ('.ts','.tsx','.mjs','.mts','.css','.json'):files.append(path)
     for directory in ('catalogs','contracts'):
         files.extend(path for path in (ROOT/PACK/directory).glob('*') if path.suffix in ('.json','.yaml'))
     manifest={}

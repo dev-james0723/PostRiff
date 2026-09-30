@@ -1,0 +1,11 @@
+{
+  "execution": "local synthetic identities; real Next/API/restricted PostgreSQL and canonical Rafii repository",
+  "status": "passed",
+  "checks": [
+    "Unauthenticated UI/API and non-founder AAL2 exchange rejected",
+    "1440: all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed",
+    "390: all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed",
+    "Explicit database failure hides Live records; Demo requires explicit selection"
+  ],
+  "expectedPrefetchCancellations": 102
+}

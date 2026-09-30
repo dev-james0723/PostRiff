@@ -1,0 +1,67 @@
+{
+  "state": "local database/browser verified; hosted release blocked",
+  "execution": "Disposable PostgreSQL + actual canonical Rafii repository + real Next/Python API; synthetic founder identities",
+  "database": {
+    "passed": 97,
+    "skipped": 0,
+    "migrationsReapplied": [
+      49,
+      51,
+      52,
+      53
+    ],
+    "log": "database-final.log"
+  },
+  "frontendContracts": {
+    "passed": 8,
+    "failed": 0
+  },
+  "typecheck": "passed",
+  "lint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "productionBuild": "passed",
+  "browser": {
+    "execution": "local synthetic identities; real Next/API/restricted PostgreSQL and canonical Rafii repository",
+    "status": "passed",
+    "checks": [
+      "Unauthenticated UI/API and non-founder AAL2 exchange rejected",
+      "1440: all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed",
+      "390: all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed",
+      "Explicit database failure hides Live records; Demo requires explicit selection"
+    ],
+    "expectedPrefetchCancellations": 102
+  },
+  "preservedFounderHomeBrowser": {
+    "widths": [
+      390,
+      768,
+      1440
+    ],
+    "axeChecks": 9,
+    "violations": 0,
+    "evidence": "engineering/browser-results.json"
+  },
+  "functionArchive": {
+    "passed": true,
+    "sha256": "4f1220a6ba6ccc8fa24587bb2d066a62fbc13e03eb8ace3b5e117bd695f861dc",
+    "bytes": 8554159,
+    "files": 933,
+    "record": "control-artifact.json",
+    "archiveSourceFilesVerified": 49,
+    "currentBusinessCodeInArchiveVerified": true
+  },
+  "productionAccountReadOrChanged": false,
+  "hostedMigrationApplied": false,
+  "controlDeployed": false,
+  "messagesSent": false,
+  "chargesMade": false,
+  "pending": [
+    "Reconcile current integration base and run its checks before push/review",
+    "Dedicated Control staging configuration and approved hosted migrations/enrollment",
+    "Deployed authenticated acceptance with approved account and exact test workspace"
+  ],
+  "gitStagingPermission": "resolved by reviewed escalation",
+  "ciWorkflow": "YAML validated; browser install/cache path aligned, 052/053 triggers and exact-content artifact build included"
+}

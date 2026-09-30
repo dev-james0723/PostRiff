@@ -14,7 +14,7 @@ from postriff_phase2.hosted_identity import _verified_payload
 from postriff_alpha.domain import AlphaError
 
 COOKIE = '__Host-rafii-control'
-CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'workspaces.read', 'engineering.read', 'audit.read', 'copilot.use'})
+CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'workspaces.read', 'engineering.read', 'audit.read', 'copilot.use', 'workspaces.test.rename'})
 
 
 class ControlError(Exception):

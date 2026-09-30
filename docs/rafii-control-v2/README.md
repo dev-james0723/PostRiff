@@ -1,8 +1,8 @@
-# Rafii Control v2 — Phase 0 and Phase 1
+# Rafii Founder Control
 
 This work adds a separate disabled-by-default founder boundary and read-only Control application from the same repository. It does not mount founder routes in the consumer deployment. The authoritative v2 design is `docs/superpowers/specs/2026-09-29-rafii-founder-control-center-v2-design.md`, SHA-256 `1ababaaff637a04be105fa41caf1eb57f071c1e57819eb39116c030fea993002`. Runtime catalogs and schemas are read directly from the supplied tech-pack; they are not reauthored elsewhere.
 
-Current local milestone: the synthetic source -> projection -> query -> chart/table -> receipt -> grounded copilot workflow is verified. Hosted operational acceptance remains blocked. See `milestone-handoff.md`, `staging-qualification.md`, the current sections in the three review documents, and `evidence/verification.json`. Older counts below belong to the foundation snapshot.
+Current continuation: the everyday founder workspace, persistent isolated Demo, global record search/pagination and approved test rename path are locally database/browser verified. Founder Home's committed work is integrated under Advanced. See [the current release receipt](founder-workspace-release.md), [the secure staging candidate](founder-workspace-staging-candidate.json) and `evidence/business-workspace/verification.json`. Hosted qualification is pending. Earlier milestone receipts and counts below remain historical evidence.
 
 ## Local verification
 
@@ -14,11 +14,11 @@ PYTHONPATH=src:tests .control-venv/bin/python -m unittest discover -s tests/cont
 PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix control-web test
 PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix control-web run typecheck
 PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix control-web run lint
-PATH=/opt/homebrew/opt/node@24/bin:$PATH RAFII_CONTROL_ENABLED=1 RAFII_CONTROL_ORIGIN=http://localhost:4449 npm --prefix control-web run build
+PATH=/opt/homebrew/opt/node@24/bin:$PATH RAFII_CONTROL_ENABLED=1 RAFII_CONTROL_ORIGIN=http://localhost:4549 npm --prefix control-web run build
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.control-browsers" .control-venv/bin/python scripts/rafii_control_pg.py --browser
 ```
 
-The PostgreSQL runner creates its own cluster on an available loopback port, applies the existing RLS harness plus 049 and 051 twice, runs the restricted-role tests, then removes only its own disposable cluster. Browser mode starts and terminates its own Next/WSGI children. Synthetic identity injection exists only under `tests/control/`; those files are excluded from the deployment candidate. The browser harness uses no paid model, email, push or financial provider.
+The PostgreSQL runner creates its own cluster on an available loopback port, applies the existing RLS harness plus 049, 051, 052 and 053 twice, runs the restricted-role tests, then removes only its own disposable cluster. Browser mode starts and terminates its own Next/WSGI children. Synthetic identity injection exists only under `tests/control/`; those files are excluded from the deployment candidate. The browser harness uses no paid model, email, push or financial provider.
 
 ## Separate deployment candidate
 
@@ -38,6 +38,6 @@ Metric definitions are proposed in the authoritative pack. Their query foundatio
 
 Founder Rafii has its own principal namespace, persisted runs and bounded read/proposal tool registry using existing agent contracts. Deterministic named reads are available; paid model generation, scheduled investigations, customer memory and effect executors are absent. Recommendation contracts preserve evidence, hypotheses, unknown impact, digest, measurement, approval and expiry. Engineering evidence keeps suspected/reproduced/candidate/checks/merge/deploy/production verification distinct; code-check dispatch and patch/deploy actions remain disabled.
 
-No refund, ban, deletion, deployment, migration, code write, unrestricted impersonation, raw SQL or plaintext secret viewer is mounted. Private customer content remains suppressed until a later scoped support-access implementation.
+The approved test-workspace rename requires fresh MFA, its own capability and an expiring exact grant. Migration 053 creates no live grants or enrollment. No refund, ban, deletion, deployment, migration, code write, unrestricted impersonation, raw SQL or plaintext secret viewer is mounted. Private customer content remains suppressed until a later scoped support-access implementation.
 
 See `implementation-log.md`, `evidence/verification.json`, `security-review.md` and `spec-gap-review.md` for exact evidence and remaining gates. A local test or artifact is not a production deployment or an activated integration.

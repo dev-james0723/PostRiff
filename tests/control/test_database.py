@@ -74,7 +74,7 @@ class DatabaseTests(unittest.TestCase):
         result=queries.dispatch('/users/'+user,{},principal,str(uuid.uuid4()))
         self.assertEqual(result['privateContent']['dataState'],'suppressed')
         self.assertNotIn('DO_NOT_DISCLOSE',str(result))
-        request={'requestId':str(uuid.uuid4()),'conversationId':str(uuid.uuid4()),'message':'Inspect activation','contextEvidenceIds':[],'modality':'text'}
+        request={'requestId':str(uuid.uuid4()),'conversationId':str(uuid.uuid4()),'message':'Inspect check failures','contextEvidenceIds':[],'modality':'text'}
         first=queries.copilot_turn(request,principal)
         second=queries.copilot_turn(request,principal)
         self.assertEqual(first['runId'],second['runId'])

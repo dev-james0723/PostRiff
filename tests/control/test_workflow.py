@@ -17,7 +17,7 @@ class WorkflowTests(unittest.TestCase):
         self.dsn=os.environ['RAFII_CONTROL_TEST_DSN']
         self.events,self.query=seed(self.dsn,'acceptance-'+uuid.uuid4().hex[:8])
         self.store=PostgresStore(connection_factory(self.dsn,'rafii_control_session','local'),connection_factory(self.dsn,'rafii_control_reader','local'),'local')
-        self.principal={'operator':{'user_id':'00000000-0000-0000-0000-000000000001','capabilities':['metrics.query','copilot.use']},'session':{'environment':'local'}}
+        self.principal={'operator':{'user_id':'00000000-0000-0000-0000-000000000001','capabilities':['metrics.query','copilot.use','engineering.read']},'session':{'environment':'local'}}
         self.service=QueryService(self.store,synthetic=True)
 
     def tearDown(self):
@@ -52,7 +52,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(run['changedEntities'],[])
         evidence=dict(execution='local_synthetic',query=self.query,response=result,receipt=receipt,copilot=run)
         from pathlib import Path
-        Path('docs/rafii-control-v2/evidence/read-workflow.json').write_text(json.dumps(evidence,indent=2))
+        target=Path('docs/rafii-control-v2/evidence/founder-home/local-rollup-workflow.json');target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(evidence,indent=2))
 
     def test_duplicate_and_conflicting_events_never_change_materialized_count(self):
         projector=Projector(connection_factory(self.dsn,'rafii_control_ingest','local'),'local')

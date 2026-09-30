@@ -1,7 +1,7 @@
 name: Rafii Control foundation
 on:
   pull_request:
-    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,7 +18,8 @@ jobs:
       POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
       NEXT_TELEMETRY_DISABLED: '1'
       RAFII_CONTROL_ENABLED: '1'
-      RAFII_CONTROL_ORIGIN: http://localhost:4449
+      RAFII_CONTROL_ORIGIN: http://localhost:4549
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.control-browsers
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -51,6 +52,11 @@ jobs:
         run: |
           cd control-web && npx playwright install --with-deps chromium && cd ..
           python scripts/rafii_control_pg.py --browser
+      - name: Exact-content separate Control function archive
+        run: |
+          python -m pip install uv==0.11.16
+          npm install --prefix .codex/consumer-ready/vercel --no-save vercel@59.23.2 ignore@7.0.5
+          CONTROL_BUILD_PYTHON=python CONTROL_ARTIFACT_RECORD=docs/rafii-control-v2/evidence/business-workspace/control-artifact.json node scripts/rafii_control_artifact.cjs
       - name: Retain source-specific synthetic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

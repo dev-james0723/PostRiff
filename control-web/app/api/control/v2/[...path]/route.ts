@@ -19,7 +19,7 @@ async function forward(request: NextRequest, context: {params:Promise<{path:stri
     // preserves the already-admitted original host without weakening the API's host guard.
     const url=new URL(localBackend(process.env)+'/api/control/v2/'+path.join('/'));
     const upstream=await new Promise<{body:string;status:number;cookie?:string}>((resolve,reject)=>{
-      const socket=connect(url,{method:request.method,headers:Object.fromEntries(headers),signal:AbortSignal.timeout(8000)},response=>{
+      const socket=connect(url,{method:request.method,headers:Object.fromEntries(headers),signal:AbortSignal.timeout(13000)},response=>{
         const chunks:Buffer[]=[];let size=0;
         response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>524288){socket.destroy(new Error('Control response exceeded bound'));return;}chunks.push(chunk);});
         response.on('end',()=>resolve({body:Buffer.concat(chunks).toString('utf8'),status:response.statusCode||503,cookie:response.headers['set-cookie']?.[0]}));
