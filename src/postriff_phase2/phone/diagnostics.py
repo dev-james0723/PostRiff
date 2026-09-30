@@ -1,6 +1,7 @@
 """Bounded phone-media diagnostics; never log exception text or provider payloads."""
 import json
 import logging
+import re
 import uuid
 
 
@@ -22,15 +23,33 @@ ERROR_PARAMS = frozenset(('delegation_id', 'content', 'model', 'session.model', 
     'session.audio.format.type', 'session.audio.format.rate', 'audio.output.voice',
     'session.audio.output.voice', 'instructions', 'session.instructions', 'input', 'session.input',
     'delegation', 'session.delegation', 'store', 'session.store'))
+COMMANDS = {'start': 'session_start', 'opening': 'greeting', 'commentary': 'delegation_result',
+            'input': 'input_audio', 'close': 'session_close'}
 
 
-def metadata(phase, error=None, *, event=None):
+def rejected_command(event, body):
+    """Classify only our bounded command IDs; the provider's echoed value is never logged."""
+    value = body.get('client_event_id') or event.get('client_event_id')
+    if not isinstance(value, str) or len(value) > 48:
+        return 'unknown'
+    if value == 'phone-opening':  # previous release's greeting identifier
+        return 'greeting'
+    match = re.fullmatch(r'phone-(start|opening|commentary|input|close)-[1-9][0-9]{0,8}', value)
+    return COMMANDS[match[1]] if match else 'unknown'
+
+
+def metadata(phase, error=None, *, event=None, live_started=None, greeting_sent=None):
     details = {'phase': phase if phase in PHASES else 'unknown'}
     if error is not None:
         name = type(error).__name__
         details['errorClass'] = name if name in ERROR_CLASSES else 'OtherError'
     body = (event or {}).get('error') if isinstance(event, dict) else None
     body = body if isinstance(body, dict) else {}
+    if isinstance(event, dict) and ('client_event_id' in event or 'client_event_id' in body or type(live_started) is bool):
+        details['rejectedCommand'] = rejected_command(event, body)
+    for key, value in (('liveStarted', live_started), ('greetingSent', greeting_sent)):
+        if type(value) is bool:
+            details[key] = value
     code = body.get('code') if event is not None else getattr(error, 'code', None)
     if code is not None:
         details['errorCode'] = code if isinstance(code, str) and code in ERROR_CODES else 'other'
@@ -52,8 +71,9 @@ class MediaFailure(Exception):
         self.diagnostic = error.diagnostic if isinstance(error, MediaFailure) else metadata(phase, error, event=event)
 
 
-def report_failure(call_id, phase, error=None, *, event=None):
-    details = dict(error.diagnostic) if isinstance(error, MediaFailure) else metadata(phase, error, event=event)
+def report_failure(call_id, phase, error=None, *, event=None, live_started=None, greeting_sent=None):
+    details = dict(error.diagnostic) if isinstance(error, MediaFailure) else metadata(
+        phase, error, event=event, live_started=live_started, greeting_sent=greeting_sent)
     try:
         details['callId'] = str(uuid.UUID(str(call_id)))
     except (ValueError, TypeError, AttributeError):

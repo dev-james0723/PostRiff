@@ -104,9 +104,35 @@ async function main() {
     check('keyboard fallback returns to a usable composer', (await panel.getByLabel('Ask Rafii', { exact: true }).isVisible()));
     await panel.getByRole('button', { name: 'Open Rafii Live' }).first().click();
     check('Live call remains connected across mode changes', (await stage.getAttribute('data-rafii-voice')) === 'live');
+    // The disposable server receives the old End, but its reply reaches the page only after the next fake call is live.
+    let releaseEnd, endStored, endDelivered, held = false;
+    const holdEnd = new Promise((resolve) => { releaseEnd = resolve; });
+    const stored = new Promise((resolve) => { endStored = resolve; });
+    const delivered = new Promise((resolve) => { endDelivered = resolve; });
+    await page.route('**/agent/voice/sessions/*/end', async (route) => {
+      if (held) return route.continue();
+      held = true;
+      const response = await route.fetch();
+      endStored();
+      await holdEnd;
+      await route.fulfill({ response });
+      endDelivered();
+    });
+    await page.evaluate(() => { window.rafiiPreviousLive = window.rafiiLiveHarness; });
     await stage.getByRole('button', { name: 'End live conversation' }).click();
-    await page.waitForFunction(() => ['ended', 'idle'].includes(document.querySelector('#rafii-panel [data-rafii-live-state]')?.getAttribute('data-rafii-live-state')), null, { timeout: 30000 });
-    check('End live conversation closes the session', true);
+    try {
+      await page.waitForFunction(() => ['ended', 'idle'].includes(document.querySelector('#rafii-panel [data-rafii-live-state]')?.getAttribute('data-rafii-live-state')), null, { timeout: 30000 });
+      check('End live conversation closes local media before its API response arrives', true);
+      await stored;
+      await stage.getByRole('button', { name: 'Start live conversation' }).click();
+      await panel.locator('[data-rafii-voice="live"]').waitFor({ timeout: 120000 });
+      check('a new fake Live call starts immediately after End', await page.evaluate(() => window.rafiiLiveHarness !== window.rafiiPreviousLive && window.rafiiLiveHarness.micEnabled()));
+    } finally { releaseEnd(); }
+    await delivered;
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    check('the old End response cannot disconnect or mute the replacement call', (await stage.getAttribute('data-rafii-voice')) === 'live' && await page.evaluate(() => window.rafiiLiveHarness.micEnabled()));
+    await stage.getByRole('button', { name: 'End live conversation' }).click();
+    await page.waitForFunction(() => document.querySelector('#rafii-panel [data-rafii-live-state]')?.getAttribute('data-rafii-live-state') === 'ended', null, { timeout: 30000 });
     await context.close();
   } finally {
     await browser.close();

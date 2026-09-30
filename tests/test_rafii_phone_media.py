@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from openai import AsyncOpenAI
+from openai.types.live.client_event_param import ClientEventParam
 from openai.types.live.instructions_append_event_param import InstructionsAppendEventParam
 from openai.types.live.commentary_append_event_param import CommentaryAppendEventParam
 from pydantic import TypeAdapter
@@ -29,6 +30,28 @@ AUDIO_OUT = base64.b64encode(b'\xfe' * 160).decode()
 
 
 class MediaDiagnosticTest(unittest.TestCase):
+    def test_rejected_commands_are_classified_without_logging_echoed_ids(self):
+        commands = {'start': 'session_start', 'opening': 'greeting', 'commentary': 'delegation_result',
+                    'input': 'input_audio', 'close': 'session_close'}
+        for prefix, expected in commands.items():
+            with self.subTest(command=expected):
+                event = {'error': {'type': 'invalid_request_error', 'code': PRIVATE,
+                                  'message': PRIVATE, 'client_event_id': 'phone-' + prefix + '-12'}}
+                result = metadata('live_event', event=event)
+                self.assertEqual(result.get('rejectedCommand'), expected)
+                self.assertNotIn(PRIVATE, json.dumps(result))
+                self.assertNotIn('client_event_id', json.dumps(result))
+        self.assertEqual(metadata('live_event', event={'client_event_id': 'phone-start-1', 'error': {}}).get('rejectedCommand'),
+                         'session_start')
+
+    def test_private_or_malformed_command_correlation_stays_unknown(self):
+        for value in (PRIVATE, 'phone-input-0', 'phone-input-12/' + PRIVATE, 'phone-start-1\n' + PRIVATE,
+                      {'secret': PRIVATE}, None):
+            with self.subTest(value_type=type(value).__name__):
+                result = metadata('live_event', event={'error': {'client_event_id': value, 'message': PRIVATE}})
+                self.assertEqual(result.get('rejectedCommand'), 'unknown')
+                self.assertNotIn(PRIVATE, json.dumps(result))
+
     def test_exception_and_event_diagnostics_drop_private_payloads(self):
         error = RuntimeError(PRIVATE)
         error.code = PRIVATE
@@ -137,9 +160,14 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(received[0]['type'], 'session.start')
         self.assertEqual(received[0]['session']['audio']['format'], {'type': 'audio/pcmu', 'rate': 8000})
         self.assertFalse(received[0]['session']['store'])
+        for event in received:
+            TypeAdapter(ClientEventParam).validate_python(event)
+            self.assertRegex(event.get('event_id', ''), r'^phone-[a-z]+-[1-9][0-9]*$')
+        self.assertEqual(len({event['event_id'] for event in received}), len(received))
         TypeAdapter(InstructionsAppendEventParam).validate_python(received[1])
         self.assertIsNone(received[1]['delegation_id'])
-        self.assertEqual(received[2], {'type': 'session.input_audio.append', 'audio': AUDIO_IN})
+        self.assertEqual(received[2]['type'], 'session.input_audio.append')
+        self.assertEqual(received[2]['audio'], AUDIO_IN)
         self.assertEqual(socket.outgoing, [{'event': 'media', 'streamSid': 'MZ-local', 'media': {'payload': AUDIO_OUT}}])
         self.assertEqual(controller.started_ids, ['local-live-session'])
         self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': 2.5, 'reason': 'completed'})])
@@ -169,6 +197,38 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(received[0]['delegation_id'])
         self.assertNotIn(PRIVATE, json.dumps(received))
 
+    async def test_sdk_validates_every_correlated_command_and_repeated_audio_has_unique_ids(self):
+        controller, socket, received = Controller(), Socket(), []
+        controller.last_input_at = 0
+        controller.delegate = lambda _: {'type': 'session.commentary.append', 'delegation_id': 'local-delegation',
+                                         'content': 'Synthetic result.'}
+        async def server(ws):
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.started', 'session': {'id': 'local-live-session'}}))
+            received.append(json.loads(await ws.recv()))
+            await socket.incoming.put({'event': 'media', 'media': {'payload': AUDIO_IN}})
+            await socket.incoming.put({'event': 'media', 'media': {'payload': AUDIO_IN}})
+            received.append(json.loads(await ws.recv()))
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.delegation.created',
+                                      'delegation': {'id': 'local-delegation', 'target': 'client'}}))
+            received.append(json.loads(await ws.recv()))
+            await socket.incoming.put({'event': 'stop'})
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.closed', 'usage': {'seconds': 2}}))
+        async with serve(server, '127.0.0.1', 0) as local:
+            port = local.sockets[0].getsockname()[1]
+            async with AsyncOpenAI(api_key='local-test', base_url=f'http://127.0.0.1:{port}/v1', max_retries=0) as client:
+                async with client.live.connect() as connection:
+                    await asyncio.wait_for(bridge(controller, TwilioMediaTransport(socket, 'MZ-local'), connection), 8)
+        self.assertEqual([event['type'] for event in received], ['session.start', 'session.instructions.append',
+            'session.input_audio.append', 'session.input_audio.append', 'session.commentary.append', 'session.close'])
+        for event in received:
+            TypeAdapter(ClientEventParam).validate_python(event)
+        self.assertEqual(len({event['event_id'] for event in received}), len(received))
+        self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': 2, 'reason': 'completed'})])
+        self.assertEqual(controller.finishes, [(CALL_ID, 'completed', {'live_seconds': 2})])
+
     async def test_sdk_admission_error_has_safe_code_and_retains_unknown_usage(self):
         controller, socket = Controller(), Socket()
         async def server(ws):
@@ -188,6 +248,46 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(socket.outgoing, [])
         self.assertEqual(controller.started_ids, [])
         self.assertEqual(controller.media_failures, [CALL_ID])
+
+    async def test_rejected_start_greeting_result_and_audio_classify_and_still_settle_failed(self):
+        for rejected in ('session_start', 'greeting', 'delegation_result', 'input_audio'):
+            with self.subTest(rejected=rejected):
+                controller, socket = Controller(), Socket()
+                controller.last_input_at = 0
+                controller.delegate = lambda _: {'type': 'session.commentary.append', 'delegation_id': 'local-delegation',
+                                                 'content': 'Synthetic result.'}
+                async def server(ws):
+                    command = json.loads(await ws.recv())
+                    if rejected != 'session_start':
+                        await ws.send(json.dumps({'type': 'session.started', 'session': {'id': 'local-live-session'}}))
+                        command = json.loads(await ws.recv())
+                    if rejected == 'delegation_result':
+                        await ws.send(json.dumps({'type': 'session.delegation.created',
+                                                  'delegation': {'id': 'local-delegation', 'target': 'client'}}))
+                        command = json.loads(await ws.recv())
+                    elif rejected == 'input_audio':
+                        await socket.incoming.put({'event': 'media', 'media': {'payload': AUDIO_IN}})
+                        command = json.loads(await ws.recv())
+                    TypeAdapter(ClientEventParam).validate_python(command)
+                    await ws.send(json.dumps({'type': 'error', 'error': {'type': 'invalid_request_error',
+                        'code': PRIVATE, 'message': PRIVATE, 'client_event_id': command.get('event_id')}}))
+                    await ws.wait_closed()
+                async with serve(server, '127.0.0.1', 0) as local:
+                    port = local.sockets[0].getsockname()[1]
+                    async with AsyncOpenAI(api_key='local-test', base_url=f'http://127.0.0.1:{port}/v1', max_retries=0) as client:
+                        async with client.live.connect() as connection:
+                            with self.assertLogs('rafii.phone.media', level='WARNING') as logs:
+                                await asyncio.wait_for(bridge(controller, TwilioMediaTransport(socket, 'MZ-local'), connection), 8)
+                failure = next(line for line in logs.output if '"phase": "live_event"' in line)
+                self.assertIn('"rejectedCommand": "' + rejected + '"', failure)
+                self.assertIn('"liveStarted": ' + ('false' if rejected == 'session_start' else 'true'), failure)
+                self.assertIn('"greetingSent": ' + ('false' if rejected == 'session_start' else 'true'), failure)
+                self.assertNotIn(PRIVATE, '\n'.join(logs.output))
+                self.assertNotIn('client_event_id', failure)
+                self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': None, 'reason': 'failed'})])
+                self.assertEqual(controller.finishes, [(CALL_ID, 'failed', {'live_seconds': None})])
+                self.assertEqual(controller.media_failures, [CALL_ID])
+                self.assertTrue(controller.closed)
 
     async def test_real_sdk_upgrade_rejection_is_reported_without_response_body(self):
         attempts = []

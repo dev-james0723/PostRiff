@@ -7,6 +7,9 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const base = process.env.RAFII_WEB_URL || 'http://localhost:3293';
 if (!['localhost','127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Local fake harness only');
+const evidenceDir = path.resolve(process.env.RAFII_PHONE_BROWSER_EVIDENCE_DIR || '/tmp');
+fs.mkdirSync(evidenceDir, { recursive: true });
+const screenshot = (name) => path.join(evidenceDir, name);
 const id = randomUUID();
 const tourIds=[...fs.readFileSync(path.resolve(__dirname,'../src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((match) => match[1]);
 const tours=JSON.stringify({completed:{},dismissed:Object.fromEntries(tourIds.map((name) => [name,1])),nudged:{}});
@@ -105,7 +108,7 @@ async function api(method,path,body) {
     await page.getByText(delegated.editedText,{exact:true}).first().waitFor({timeout:90000});
     await page.getByText('First LinkedIn draft',{exact:true}).first().waitFor();
     assert.equal(dialRequests,1,'Opening the actual edited draft never dials');
-    await page.screenshot({path:'/tmp/rafii-phone-edited-draft.png',fullPage:true});
+    await page.screenshot({path:screenshot('rafii-phone-edited-draft.png'),fullPage:true});
     await page.goto(base+'/app/account/notifications',{waitUntil:'domcontentloaded'});
     await section.getByText(/Rafii call: live/).waitFor();
     await section.getByRole('button',{name:'End call',exact:true}).click();
@@ -122,7 +125,7 @@ async function api(method,path,body) {
     assert.equal(await section.getByText(knownFailure,{exact:true}).count(),2,'Confirmed failure is shown immediately and in history');
     await page.setViewportSize({width:390,height:844});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Long call errors fit the phone viewport');
-    await section.screenshot({path:'/tmp/rafii-phone-repair-errors-mobile.png'});
+    await section.screenshot({path:screenshot('rafii-phone-repair-errors-mobile.png')});
     const callActive='A call is already in progress or its outcome is still being checked. Check recent calls.';
     const keys=[];
     await page.unroute(`**/api/workspaces/${wid}/phone/calls`);
@@ -156,7 +159,7 @@ async function api(method,path,body) {
     releaseReadiness();
     await section.getByText(/Dial’s network blocked Rafii’s API request/).waitFor();
     assert.equal(dialRequests,beforeCheck,'Setup diagnostic must never create a call');
-    await page.screenshot({path:'/tmp/dial-root-cause-diagnostic-ui.png',fullPage:true});
+    await page.screenshot({path:screenshot('dial-root-cause-diagnostic-ui.png'),fullPage:true});
     await page.unroute(`**/api/workspaces/${wid}/phone/provider-readiness`);
     await page.route(`**/api/workspaces/${wid}/phone/provider-readiness`,route=>route.fulfill({json:{ready:true,reason:'ready',maxSeconds:3600}}));
     await section.getByRole('button',{name:'Check calling setup',exact:true}).click();
@@ -180,14 +183,14 @@ async function api(method,path,body) {
     await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
     const violations=await page.evaluate(async () => (await window.axe.run('#phone-mode',{resultTypes:['violations']})).violations.filter((v) => ['serious','critical'].includes(v.impact)).map((v) => ({id:v.id,impact:v.impact,nodes:v.nodes.map((node) => node.target)})));
     assert.deepEqual(violations,[],'Phone settings have no serious or critical accessibility violations');
-    await section.screenshot({path:'/tmp/rafii-phone-settings-mobile.png'});
+    await section.screenshot({path:screenshot('rafii-phone-settings-mobile.png')});
     await section.getByRole('button',{name:'Remove briefing',exact:true}).click();
     await section.getByRole('button',{name:'Revoke and delete phone number',exact:true}).click();
     await section.getByText('No phone number saved.',{exact:true}).waitFor();
     await page.setViewportSize({width:390,height:844});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile fits viewport');
-    const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || '/tmp/rafii-phone-browser.png';
+    const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || screenshot('rafii-phone-browser.png');
     await page.screenshot({path:out,fullPage:true});
     console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','custom rule review activation edit revocation and deletion without dialing','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','immediate provider failure and history','active call error and preserved request key','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
-  } finally {if(page) await page.screenshot({path:'/tmp/rafii-phone-browser-final.png',fullPage:true}).catch(() => {});await browser.close();}
+  } finally {if(page) await page.screenshot({path:screenshot('rafii-phone-browser-final.png'),fullPage:true}).catch(() => {});await browser.close();}
 })().catch((error) => {console.error(error); process.exitCode=1;});

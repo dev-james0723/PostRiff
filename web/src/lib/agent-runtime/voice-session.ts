@@ -111,10 +111,30 @@ let lastLoudAt = 0;
 let lastOutputAt = 0;
 let nextSeq = 0;
 let lastDelegatedSeq = 0;
-let unsent: TranscriptLine[] = [];
-let flushing: Promise<void> | null = null;
-let lastFlushFailure = 0;
-let closedEarly = false;
+interface TranscriptBuffer {
+  unsent: TranscriptLine[];
+  flushing: Promise<void> | null;
+  lastFailure: number;
+}
+const newTranscriptBuffer = (): TranscriptBuffer => ({ unsent: [], flushing: null, lastFailure: 0 });
+let transcriptBuffer = newTranscriptBuffer();
+let generation = 0;
+interface EndOperation {
+  generation: number;
+  promise: Promise<void>;
+  persistence: Promise<void> | null;
+}
+let endingOperation: EndOperation | null = null;
+let progressStops = new Set<() => void>();
+
+/** Async work and queued browser callbacks belong to the call that created them, even when the host is reused. */
+function ownsCall(owner: number) {
+  return generation === owner && transport !== null;
+}
+
+function canDelegate(owner: number) {
+  return ownsCall(owner) && snapshot.state !== 'ending';
+}
 /** Set after a goodbye; the level timer ends the call when `hangUpDue` says so. */
 let hangUp: HangUp | null = null;
 /** The open user line (id and length) last checked for a goodbye, so each version of it is checked once. */
@@ -153,7 +173,7 @@ function applyLine(event: TranscriptEvent, patch: Partial<VoiceSnapshot> = {}): 
   if (step.resumed) transport?.setOutputMuted(false);
   set({ ...patch, transcript: step.state.lines, outputMuted: step.state.stopped });
   for (const line of step.closed) {
-    unsent.push(line);
+    transcriptBuffer.unsent.push(line);
     // Rafii has started answering the person's last words: if they were a goodbye, the call ends after this reply.
     if (line.role === 'user' && event.type === 'delta' && event.role === 'assistant' && isFarewell(line.text)) armHangUp();
   }
@@ -164,7 +184,7 @@ function appendTranscript(role: 'user' | 'assistant', delta: string, startMs: nu
   const heard = applyLine({ type: 'delta', role, delta, startMs, endMs }, { speaker: role === 'user' ? 'user' : 'rafii' });
   // Stored as it goes (text only), so a long call or a closed tab keeps what was said and the backend sees it (with a
   // pause after a failed upload, so a failing endpoint isn't hit on every word).
-  if (heard && unsent.length >= 20 && Date.now() - lastFlushFailure > 5000) void flushTranscript();
+  if (heard && transcriptBuffer.unsent.length >= 20 && Date.now() - transcriptBuffer.lastFailure > 5000) void flushTranscript();
   return heard;
 }
 
@@ -223,7 +243,7 @@ function userTextSinceLastDelegation(): string {
   if (taken.closed.length) {
     // Words said after this point start a new line, so they belong to the next request instead of this one.
     set({ transcript: taken.lines });
-    unsent.push(...taken.closed);
+    transcriptBuffer.unsent.push(...taken.closed);
   }
   return taken.request;
 }
@@ -240,7 +260,8 @@ function applyLiveStyle(patch: AgentStylePatch) {
 }
 
 /** Carry out a panel command here; true only when its handler exists and finished (a guide: said it started). */
-async function carryOut(command: PanelCommand): Promise<boolean> {
+async function carryOut(command: PanelCommand, owner: number): Promise<boolean> {
+  if (!canDelegate(owner)) return false;
   const actions = panelActions();
   try {
     switch (command.kind) {
@@ -257,6 +278,7 @@ async function carryOut(command: PanelCommand): Promise<boolean> {
         const save = actions.setStyle;
         if (!save) return false;
         await save(command.patch);
+        if (!canDelegate(owner)) return false;
         applyLiveStyle(command.patch);
         return true;
       }
@@ -283,9 +305,11 @@ async function carryOut(command: PanelCommand): Promise<boolean> {
 }
 
 /** The local fast lane: true when the request was handled here (no agent turn), false to send it to the agent. */
-async function runPanelCommand(id: string, request: string, command: PanelCommand): Promise<boolean> {
+async function runPanelCommand(id: string, request: string, command: PanelCommand, owner: number): Promise<boolean> {
   updateDelegation(id, { request, status: 'running' });
-  if (!(await carryOut(command))) {
+  const handled = await carryOut(command, owner);
+  if (!canDelegate(owner)) return true;
+  if (!handled) {
     // Nothing is claimed: the panel couldn't do it on this screen, so the agent takes the request as before.
     say('I can’t do that from this screen, so I’m checking another way.', id);
     return false;
@@ -299,15 +323,17 @@ async function runPanelCommand(id: string, request: string, command: PanelComman
 }
 
 /** `voice_command` blocks from the agent's answer (Contract 2); true when the answer must not be said aloud. */
-async function runVoiceCommands(commands: VoiceCommand[]): Promise<boolean> {
+async function runVoiceCommands(commands: VoiceCommand[], owner: number): Promise<boolean> {
   let quiet = false;
   for (const item of commands) {
+    if (!canDelegate(owner)) return quiet;
     if (item.command === 'style') {
       try {
         await panelActions().setStyle?.(item.style);
       } catch {
         /* the agent already saved it; this only refreshes the panel's copy */
       }
+      if (!canDelegate(owner)) return quiet;
       applyLiveStyle(item.style);
     } else if (item.command === 'mute') {
       voiceSession.setMicMuted(true);
@@ -324,16 +350,18 @@ async function runVoiceCommands(commands: VoiceCommand[]): Promise<boolean> {
 }
 
 async function onDelegation(id: string) {
+  const owner = generation;
   const current = host;
-  if (!current || !transport || snapshot.delegations.some((d) => d.id === id)) return;
+  if (!current || !canDelegate(owner) || snapshot.delegations.some((d) => d.id === id)) return;
   const pending: Delegation = { id, request: '', status: 'collecting', startedAt: Date.now() };
   set({ delegations: [...snapshot.delegations, pending].slice(-12) });
   // The delegation notice can arrive before the sentence is fully transcribed: wait for the words to settle.
   const started = Date.now();
   await new Promise<void>((resolve) => {
-    const tick = () => (Date.now() - lastInputAt >= SETTLE_MS || Date.now() - started >= SETTLE_MAX_MS ? resolve() : setTimeout(tick, 100));
+    const tick = () => (!canDelegate(owner) || Date.now() - lastInputAt >= SETTLE_MS || Date.now() - started >= SETTLE_MAX_MS ? resolve() : setTimeout(tick, 100));
     tick();
   });
+  if (!canDelegate(owner)) return;
   const request = userTextSinceLastDelegation();
   if (!request) {
     if (snapshot.delegations.some((d) => d.id !== id && (d.status === 'running' || d.status === 'collecting'))) {
@@ -348,26 +376,31 @@ async function onDelegation(id: string) {
   }
   // Panel commands never wait for a model turn.
   const command = matchPanelCommand(request);
-  if (command && (await runPanelCommand(id, request, command))) return;
+  if (command && (await runPanelCommand(id, request, command, owner))) return;
+  if (!canDelegate(owner)) return;
   updateDelegation(id, { request, status: 'running' });
   think(`Working on: ${request}. No result yet — don't state one.`, id);
   const images = snapshot.pendingImages;
   set({ pendingImages: [] });
   // The request belongs to the conversation it was sent in, even if the panel moves on while it runs.
   const sentIn = snapshot.conversationId;
-  const progress = startProgress(id, sentIn);
+  const sessionId = snapshot.voiceSessionId;
+  const locale = snapshot.locale;
+  const progress = startProgress(id, sentIn, owner, current);
   await flushTranscript(); // the backend reads what was just said (recentVoiceTranscript)
+  if (!canDelegate(owner)) { progress.stop(); return; }
   const page = current.pageContext();
   // This session carries out `voice_command` blocks, so the agent may answer with them.
   const pageContext: SiteAgentPageContext = { ...page, uiCapabilities: [...new Set([...(page.uiCapabilities ?? []), 'voice'])] };
   try {
     const response = await current.api.turn(current.workspaceId, {
       // One key per delegation: a repeated event or a retried request is the same turn on the server.
-      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext,
-      attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale: snapshot.locale, model: current.model,
-      traceId: newTraceId(), delegationId: id, voiceSessionId: snapshot.voiceSessionId ?? undefined
+      message: request, idempotencyKey: `voice:${sessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext,
+      attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale, model: current.model,
+      traceId: newTraceId(), delegationId: id, voiceSessionId: sessionId ?? undefined
     });
     progress.stop();
+    if (!canDelegate(owner)) return;
     // A request sent without a conversation started one: adopt it, unless the call has moved to another since.
     if (!sentIn && response.conversationId && snapshot.conversationId === null) {
       set({ conversationId: response.conversationId });
@@ -380,11 +413,13 @@ async function onDelegation(id: string) {
     // Only what the server returned is said; with no spoken summary, nothing is claimed beyond "it's in the panel".
     const spoken = result?.speakableSummary?.trim() || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
     // Commands in the answer run only while this call is still the one that asked.
-    const quiet = host === current && transport ? await runVoiceCommands(voiceCommandsIn(response)) : false;
+    const quiet = await runVoiceCommands(voiceCommandsIn(response), owner);
+    if (!canDelegate(owner)) return;
     if (quiet) think(`The user asked for quiet, so this result is not said aloud: ${spoken}`, id);
     else say(spoken, id);
   } catch (error) {
     progress.stop();
+    if (!canDelegate(owner)) return;
     const message = error instanceof Error ? error.message : 'The request failed.';
     updateDelegation(id, { status: 'failed', error: message, finishedAt: Date.now() });
     // Never let a failure sound like success (spec §37), and never claim "nothing changed" unless the server refused the
@@ -395,37 +430,41 @@ async function onDelegation(id: string) {
 }
 
 /** While a delegated request runs, pass real step progress to GPT-Live quietly (it can answer "how's it going?"). */
-function startProgress(delegationId: string, conversationId: string | null) {
+function startProgress(delegationId: string, conversationId: string | null, owner: number, current: VoiceHost) {
   let stopped = false;
   let seen = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
   const poll = async () => {
-    const current = host;
-    if (stopped || !current || !conversationId) return;
+    if (stopped || !canDelegate(owner) || !conversationId) return;
     try {
       const state = await current.api.conversationState(current.workspaceId, conversationId);
       const line = (state.task?.steps ?? []).map((s) => `${s.label}: ${s.state.replace('_', ' ')}`).join('; ');
-      if (!stopped && line && line !== seen) {
+      if (!stopped && canDelegate(owner) && line && line !== seen) {
         seen = line;
         think(`Progress so far (not final): ${line}`, delegationId);
       }
     } catch {
       /* progress is best effort; the result is what counts */
     }
-    if (!stopped) timer = setTimeout(() => void poll(), 1500);
+    if (!stopped && canDelegate(owner)) timer = setTimeout(() => void poll(), 1500);
   };
   timer = setTimeout(() => void poll(), 1500);
-  return {
-    stop: () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-    }
+  const stops = progressStops;
+  const stop = () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    stops.delete(stop);
   };
+  stops.add(stop);
+  return { stop };
 }
 
 function onLiveEvent(event: LiveEvent) {
+  // Queued words/delegations must not resume muted output or start another request after the person hung up.
+  if (snapshot.state === 'ending' && !['session.closed', 'session.usage.updated', 'error'].includes(event.type)) return;
   switch (event.type) {
     case 'session.started':
+      if (snapshot.state === 'ending') break;
       set({ state: 'live', error: null });
       opening?.started();
       break;
@@ -457,8 +496,8 @@ function onLiveEvent(event: LiveEvent) {
       break;
     case 'session.closed': {
       const usage = Number((event.usage as { seconds?: number })?.seconds ?? snapshot.usageSeconds ?? NaN);
-      closedEarly = snapshot.state !== 'ending';
-      void finish(String(event.reason ?? 'remote_hangup'), Number.isFinite(usage) ? usage : null);
+      const reason = String(event.reason ?? 'remote_hangup');
+      void finish(reason, Number.isFinite(usage) ? usage : null, snapshot.state !== 'ending' && reason !== 'close_requested');
       break;
     }
     case 'error': {
@@ -478,7 +517,6 @@ async function sendLines(api: AgentApi, workspaceId: string, sessionId: string, 
     try {
       await api.voiceTranscript(workspaceId, sessionId, batch.map((l) => ({ role: l.role, text: l.text, startMs: Math.round(l.startMs) })));
     } catch {
-      lastFlushFailure = Date.now();
       return lines.slice(index);
     }
   }
@@ -486,53 +524,70 @@ async function sendLines(api: AgentApi, workspaceId: string, sessionId: string, 
 }
 
 async function flushTranscript(includeOpen = false) {
-  // One flush at a time: wait for any running one (and any that started meanwhile) before taking lines.
-  for (let running = flushing; running; running = flushing) await running;
+  // Capture the destination before waiting: a new call has a different queue and session, even if this API is reused.
   const current = host;
   const sessionId = snapshot.voiceSessionId;
-  const lines = unsent.splice(0);
-  const last = snapshot.transcript.at(-1);
+  const buffer = transcriptBuffer;
+  const last = includeOpen ? snapshot.transcript.at(-1) : null;
+  // One flush at a time: wait for any running one (and any that started meanwhile) before taking lines.
+  for (let running = buffer.flushing; running; running = buffer.flushing) await running;
+  const lines = buffer.unsent.splice(0);
   if (includeOpen && last && !last.final && !lines.some((line) => line.id === last.id)) lines.push({ ...last, final: true });
   if (!current || !sessionId || !lines.length) {
-    unsent.unshift(...lines);
+    buffer.unsent.unshift(...lines);
     return;
   }
   const mine = (async () => {
     const failed = await sendLines(current.api, current.workspaceId, sessionId, lines);
-    if (failed.length && snapshot.voiceSessionId === sessionId) unsent.unshift(...failed);
+    if (failed.length) {
+      buffer.lastFailure = Date.now();
+      buffer.unsent.unshift(...failed);
+    }
   })();
-  flushing = mine;
+  buffer.flushing = mine;
   try {
     await mine;
   } finally {
-    if (flushing === mine) flushing = null;
+    if (buffer.flushing === mine) buffer.flushing = null;
   }
 }
 
-async function finish(reason: string, usageSeconds: number | null) {
-  opening?.cancel();
+function finish(reason: string, usageSeconds: number | null, unexpected = false): Promise<void> {
+  const owner = generation;
+  if (endingOperation?.generation === owner && endingOperation.persistence) return endingOperation.persistence;
+  const live = transport;
+  if (!live) return endingOperation?.generation === owner ? endingOperation.promise : Promise.resolve();
   const current = host;
   const sessionId = snapshot.voiceSessionId;
+  const operation = endingOperation?.generation === owner ? endingOperation : { generation: owner, promise: Promise.resolve(), persistence: null };
+  const flushed = flushTranscript(true);
+  const persistence = flushed.then(async () => {
+    if (current && sessionId) {
+      try {
+        await current.api.voiceEnd(current.workspaceId, sessionId, { usageSeconds, reason });
+      } catch {
+        /* the server holds the usage as unknown until reconciled */
+      }
+    }
+  });
+  operation.persistence = persistence;
+  if (endingOperation !== operation) operation.promise = persistence;
+  endingOperation = operation;
+  opening?.cancel();
+  opening = null;
   if (levelTimer) clearInterval(levelTimer);
   levelTimer = null;
   hangUp = null;
-  await flushTranscript(true);
+  for (const stop of progressStops) stop();
   for (const off of unsubscribe.splice(0)) off();
-  transport?.close();
   transport = null;
-  if (current && sessionId) {
-    try {
-      await current.api.voiceEnd(current.workspaceId, sessionId, { usageSeconds, reason });
-    } catch {
-      /* the server holds the usage as unknown until reconciled */
-    }
-  }
-  const unexpected = closedEarly && reason !== 'close_requested';
+  // Release local media now. Pending transcript/end requests retain only their captured old-call destination.
+  live.close();
   set({
     state: unexpected ? 'error' : 'ended', speaker: null, level: 0, voiceSessionId: null, transport: null, outputMuted: false, endingAfterReply: false,
     error: unexpected ? { code: reason, message: reason === 'expired' ? 'The voice session reached its time limit.' : 'Voice Mode stopped. You can keep typing, or start it again.' } : null
   });
-  closedEarly = false;
+  return persistence;
 }
 
 export const voiceSession = {
@@ -541,10 +596,13 @@ export const voiceSession = {
 
   /** Start Voice Mode in this conversation (a user gesture must call this: browsers require it for the microphone). */
   async start(next: VoiceHost, resuming = false) {
-    if (snapshot.state === 'connecting' || snapshot.state === 'live') return;
+    if (['connecting', 'live', 'reconnecting', 'ending'].includes(snapshot.state)) return;
+    const owner = ++generation;
+    endingOperation = null;
     host = next;
     lastDelegatedSeq = nextSeq;
-    unsent = [];
+    transcriptBuffer = newTranscriptBuffer();
+    progressStops = new Set();
     hangUp = null;
     farewellChecked = '';
     lastOutputAt = 0;
@@ -556,8 +614,13 @@ export const voiceSession = {
     transport = live;
     opening = voiceOpening(send, resuming);
     unsubscribe = [
-      live.onEvent(onLiveEvent),
+      live.onEvent((event) => { if (ownsCall(owner) && transport === live) onLiveEvent(event); }),
       live.onState((state) => {
+        if (!ownsCall(owner) || transport !== live) return;
+        if (state === 'closed' || ((state === 'failed' || state === 'disconnected') && (snapshot.state === 'connecting' || snapshot.state === 'ending'))) {
+          void finish(snapshot.state === 'ending' ? 'close_requested' : 'connection_lost', snapshot.usageSeconds, snapshot.state !== 'ending');
+          return;
+        }
         if ((state === 'disconnected' || state === 'failed') && snapshot.state === 'live') {
           set({ state: 'reconnecting', error: { code: 'connection_lost', message: 'The voice connection dropped. Reconnect, or keep typing.' } });
         } else if (state === 'connected' && snapshot.state === 'reconnecting') {
@@ -568,9 +631,9 @@ export const voiceSession = {
     ];
     try {
       await live.connect(async (sdp) => {
-        if (transport !== live) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
+        if (!ownsCall(owner) || transport !== live) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
         const started = await next.api.voiceStart(next.workspaceId, { sdp, conversationId: next.conversationId, locale: next.locale, voice: next.voice });
-        if (transport !== live) {
+        if (!ownsCall(owner) || transport !== live) {
           // Ended while the session was being created: end that session too, so it is neither left open nor billed to the cap.
           void next.api.voiceEnd(next.workspaceId, started.voiceSessionId, { reason: 'user_ended', usageSeconds: 0 }).catch(() => undefined);
           throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
@@ -581,14 +644,15 @@ export const voiceSession = {
         if (started.conversationId !== next.conversationId) next.onConversation(started.conversationId);
         return started.sdp;
       });
-      if (transport !== live) {
+      if (!ownsCall(owner) || transport !== live) {
         // Ended (or signed out) while connecting: this connection is not the call any more.
         live.close();
         return;
       }
       set({ transport: live.kind });
       levelTimer = setInterval(() => {
-        const level = transport?.outputLevel() ?? 0;
+        if (!ownsCall(owner) || transport !== live) return;
+        const level = live.outputLevel();
         const now = Date.now();
         if (level > 0.04) {
           lastLoudAt = now;
@@ -599,7 +663,7 @@ export const voiceSession = {
         watchFarewell(now);
       }, 120);
     } catch (error) {
-      const abandoned = transport !== live;
+      const abandoned = !ownsCall(owner) || transport !== live;
       live.close();
       if (abandoned) return; // ended on purpose while connecting: not an error (finish already reset the state)
       for (const off of unsubscribe.splice(0)) off();
@@ -611,49 +675,47 @@ export const voiceSession = {
     }
   },
 
-  async end() {
+  end(): Promise<void> {
+    const owner = generation;
+    if (endingOperation?.generation === owner) return endingOperation.promise;
     opening?.cancel();
     hangUp = null;
-    if (!transport || snapshot.state === 'ending') {
-      if (snapshot.state !== 'idle') set({ state: 'ended' });
-      return;
+    const live = transport;
+    if (!live) {
+      if (snapshot.state !== 'idle' && snapshot.state !== 'error') set({ state: 'ended' });
+      return Promise.resolve();
     }
-    if (!transport.connected() || snapshot.state === 'reconnecting') {
+    live.setMicEnabled(false);
+    live.setOutputMuted(true);
+    if (!live.connected() || snapshot.state === 'reconnecting') {
       // Nothing can hear a close request (still connecting, or the connection dropped): finish now, locally and on the server.
-      closedEarly = false;
-      await finish('close_requested', snapshot.usageSeconds);
-      return;
+      return finish('close_requested', snapshot.usageSeconds);
     }
+    const operation: EndOperation = { generation: owner, promise: Promise.resolve(), persistence: null };
+    operation.promise = Promise.resolve().then(async () => {
+      const deadline = Date.now() + 15_000;
+      const waiting = () => ownsCall(owner) && transport === live && snapshot.state === 'ending';
+      while (waiting() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+      if (waiting()) await finish('close_requested', snapshot.usageSeconds);
+      else if (operation.persistence) await operation.persistence;
+    });
+    endingOperation = operation;
     set({ state: 'ending' });
     send({ type: 'session.close' });
     // Wait for session.closed (it carries the usage); don't wait forever.
-    const deadline = Date.now() + 15_000;
-    const ending = () => voiceSession.get().state === 'ending';
-    while (ending() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
-    if (ending()) await finish('close_requested', snapshot.usageSeconds);
+    return operation.promise;
   },
 
   async reconnect() {
     const previous = host;
-    if (!previous) return;
-    if (levelTimer) clearInterval(levelTimer);
-    levelTimer = null;
+    if (!previous || ['connecting', 'live', 'ending'].includes(snapshot.state)) return;
     // The old session's words are stored in the background: nothing is awaited before the new connection, so its audio is
     // still set up inside the person's click (WebKit requires that).
-    const oldSession = snapshot.voiceSessionId;
-    const last = snapshot.transcript.at(-1);
-    const oldLines = [...unsent.splice(0), ...(last && !last.final ? [{ ...last, final: true }] : [])];
-    if (oldSession && oldLines.length) void sendLines(previous.api, previous.workspaceId, oldSession, oldLines);
-    if (transport) {
-      for (const off of unsubscribe.splice(0)) off();
-      transport.close();
-      transport = null;
-    }
-    if (snapshot.voiceSessionId) void previous.api.voiceEnd(previous.workspaceId, snapshot.voiceSessionId, { reason: 'connection_lost', usageSeconds: snapshot.usageSeconds }).catch(() => undefined);
-    set({ state: 'idle', voiceSessionId: null });
+    const next = { ...previous, conversationId: snapshot.conversationId, locale: snapshot.locale };
+    void finish('connection_lost', snapshot.usageSeconds);
     // A new Live session in the same conversation (and language): the server gives it the conversation so far;
     // approvals live on the server.
-    await voiceSession.start({ ...previous, conversationId: snapshot.conversationId, locale: snapshot.locale }, true);
+    await voiceSession.start(next, true);
   },
 
   setMicMuted(muted: boolean) {
