@@ -194,3 +194,13 @@ class HttpTests(BoundaryTests):
         for path in ['/actions/refund', '/sql', '/engineering/checks', '/accounts/delete']:
             result, _ = self.request(app, '/api/control/v2' + path, 'POST', {}, cookie='__Host-rafii-control=' + token)
             self.assertIn(result['status'], [403, 404])
+
+    def test_run_reads_have_read_budget_and_keep_copilot_permission(self):
+        token, session=self.exchange()
+        budgets=[]
+        self.store.budget=lambda purpose,actor,limit:budgets.append((purpose,limit))
+        self.boundary.authorize(token,'copilot.use')
+        self.boundary.authorize(token,'copilot.use',origin='http://localhost:4449',csrf=session['csrfToken'],unsafe=True)
+        self.assertEqual(budgets,[('copilot.read',120),('copilot.use',5)])
+        self.store.operator_row['capabilities']=['control.read']
+        with self.assertRaisesRegex(ControlError,'SCOPE_DENIED'):self.boundary.authorize(token,'copilot.use')

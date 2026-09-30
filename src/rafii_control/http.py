@@ -65,13 +65,13 @@ class ControlApplication:
             if path == '/metrics/query': result = data
             elif path == '/copilot/turns':
                 status = 202
-                result = dict(requestId=body['requestId'], jobId=data['runId'], state='blocked', statusPath='/api/control/v2/copilot/runs/'+data['runId'])
+                result = dict(requestId=body['requestId'], jobId=data['runId'], state=data.get('state','blocked'), statusPath='/api/control/v2/copilot/runs/'+data['runId'])
             else:
                 result = dict(requestId=request_id, environment=config.environment, asOf=datetime.now(timezone.utc).isoformat(),
                               dataState=data.pop('_dataState', 'measured'), receiptIds=data.pop('_receiptIds', []), data=data)
         except ControlError as error:
             if principal:
-                self.boundary._audit(capability, 'denied', principal['operator']['user_id'], principal['session']['id'], request_id)
+                self.boundary._audit(capability, 'denied', principal['operator']['user_id'], principal['session']['id'], request_id, error.code)
             status, result = error.status, {'requestId': request_id, 'code': error.code, 'message': error.code.replace('_', ' ').capitalize()}
         except (ValueError, TypeError, KeyError):
             status, result = 400, {'requestId': request_id, 'code': 'VALIDATION_FAILED', 'message': 'Invalid control request'}

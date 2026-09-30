@@ -1,7 +1,7 @@
 name: Rafii Control foundation
 on:
   pull_request:
-    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
   workflow_dispatch:
 permissions:
   contents: read

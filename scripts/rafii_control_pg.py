@@ -30,7 +30,8 @@ def main():
         subprocess.run([str(PG / 'pg_ctl'), '-D', str(data), '-l', str(log), '-o', f'-h 127.0.0.1 -p {port}', '-w', 'start'], check=True, stdout=subprocess.DEVNULL, env=env)
         try:
             migration = ROOT / 'migrations/postriff/049_rafii_control_foundation.sql'
-            files = [ROOT / 'tests/phase2/rls.sql', migration, migration]  # Reapplication must be safe.
+            workflow = ROOT / 'migrations/postriff/051_rafii_control_read_workflow.sql'
+            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow]  # Reapplication must be safe.
             for file in files:
                 subprocess.run([str(PG / 'psql'), env['RAFII_CONTROL_TEST_DSN'], '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(file)], check=True, stdout=subprocess.DEVNULL, env=env)
             result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', 'test_*.py', '-v'], cwd=ROOT, env=env)
@@ -43,7 +44,7 @@ def main():
 def browser(env):
     # Both servers are local test children and are stopped before the disposable database is removed.
     children=[]
-    out=ROOT/'docs/rafii-control-v2/evidence/raw'
+    out=ROOT/'docs/rafii-control-v2/evidence/raw/read-workflow'
     out.mkdir(parents=True,exist_ok=True)
     node=Path('/opt/homebrew/opt/node@24/bin/node')
     if not node.is_file(): node=Path('node')

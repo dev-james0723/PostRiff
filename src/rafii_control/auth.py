@@ -106,8 +106,8 @@ class Boundary:
         if not self.config.enabled: raise ControlError('SOURCE_UNAVAILABLE', 404)
         if origin is not None and origin != self.config.origin: raise ControlError('SCOPE_DENIED')
 
-    def _audit(self, action, result, user=None, session=None, request_id=None):
-        self.store.audit(action=action, result=result, actor=user, session=session, environment=self.config.environment, request_id=request_id or str(uuid.uuid4()))
+    def _audit(self, action, result, user=None, session=None, request_id=None, error_code=None):
+        self.store.audit(action=action, result=result, actor=user, session=session, environment=self.config.environment, request_id=request_id or str(uuid.uuid4()), error_code=error_code)
 
     def _operator(self, user):
         operator = self.store.operator(user, self.config.environment)
@@ -133,8 +133,8 @@ class Boundary:
             self._audit('session.exchange', 'allowed', user, row['id'], request_id)
             return token, {'csrfToken': csrf_token(token), 'assurance': 'aal2', 'expiresAt': row['expires_at'],
                            'capabilities': sorted(set(operator['capabilities']) & CAPABILITIES)}
-        except ControlError:
-            self._audit('session.exchange', 'denied', user, request_id=request_id)
+        except ControlError as error:
+            self._audit('session.exchange', 'denied', user, request_id=request_id, error_code=error.code)
             raise
 
     def authorize(self, token, capability, *, origin=None, csrf=None, unsafe=False, step_up=False, request_id=None):
@@ -156,12 +156,13 @@ class Boundary:
             if unsafe and (origin != self.config.origin or not isinstance(csrf, str) or not hmac.compare_digest(csrf_token(token), csrf)):
                 raise ControlError('SCOPE_DENIED')
             if step_up and not 0 <= now - row['mfa_at'] <= 300: raise ControlError('STEP_UP_REQUIRED')
-            self.store.budget(capability, user, 5 if capability == 'copilot.use' else 30 if capability == 'metrics.query' else 120)
+            purpose = 'copilot.read' if capability == 'copilot.use' and not unsafe else capability
+            self.store.budget(purpose, user, 5 if purpose == 'copilot.use' else 30 if capability == 'metrics.query' else 120)
             self._audit(capability, 'allowed', user, session_id, request_id)
             self.store.touch(row['token_hash'], now)
             return {'operator': operator, 'session': row, 'csrfToken': csrf_token(token)}
-        except ControlError:
-            self._audit(capability if capability in CAPABILITIES else 'prohibited', 'denied', user, session_id, request_id)
+        except ControlError as error:
+            self._audit(capability if capability in CAPABILITIES else 'prohibited', 'denied', user, session_id, request_id, error.code)
             raise
 
     def logout(self, token):

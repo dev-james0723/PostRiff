@@ -73,8 +73,8 @@ def engineering_state(rows, sha, required_count=0):
 
 
 class QueryService:
-    def __init__(self, store, catalog=None):
-        self.store, self.catalog = store, catalog or Catalog()
+    def __init__(self, store, catalog=None, *, synthetic=False):
+        self.store, self.catalog, self.synthetic = store, catalog or Catalog(), synthetic
 
     @staticmethod
     def require(principal, capability):
@@ -84,16 +84,36 @@ class QueryService:
     def metric_query(self, query, principal, request_id):
         self.require(principal, 'metrics.query')
         metrics = self.catalog.validate_query(query)
+        if self.synthetic and (principal['session']['environment'] != 'local' or self.store.environment != 'local'): raise ControlError('SCOPE_DENIED')
+        if self.synthetic and query['metricIds']==['check_failures'] and query['comparison'] != 'none': raise ControlError('VALIDATION_FAILED',400)
         receipt_id, as_of = str(uuid.uuid4()), iso_now()
         rows = [dict(metricId=metric['id'], definitionVersion=metric['version'], unit=metric['unit'], grain=metric['grain'],
                      value=None, sampleCount=None, dataState='unavailable', sourceWatermark=None, reason='definition_not_activated',
                      defaultExclusions=metric['default_exclusions'], queryTemplateRef=metric['query_template_ref']) for metric in metrics][:query['limit']]
+        execution = 'policy_unavailable'
+        if self.synthetic and query['metricIds'] == ['check_failures']:
+            projected = self.store.query_check_rollups(query,metrics[0]['version'])
+            rows = []
+            for projection in projected:
+                watermark = datetime.fromisoformat(projection['source_watermark'])
+                state = 'partial' if projection['states'] != ['measured'] else 'stale' if datetime.now(timezone.utc)-watermark > timedelta(minutes=15) else 'measured'
+                rows.append(dict(metricId='check_failures',definitionVersion=metrics[0]['version'],unit=metrics[0]['unit'],grain=metrics[0]['grain'],
+                    value=int(projection['value']) if projection['value'] is not None and state!='partial' else None,
+                    dimensions=projection['dimensions'],sampleCount=projection['sample_count'],dataState=state,sourceWatermark=projection['source_watermark'],
+                    reason='synthetic_coverage_incomplete' if state=='partial' else 'synthetic_source_stale' if state=='stale' else 'synthetic_source_receipts',
+                    sourceReceiptIds=projection['source_receipt_ids'],fixture=True,defaultExclusions=metrics[0]['default_exclusions'],queryTemplateRef=metrics[0]['query_template_ref']))
+            execution = 'local_synthetic'
+            if not rows:
+                rows=[dict(metricId='check_failures',definitionVersion=metrics[0]['version'],unit=metrics[0]['unit'],grain=metrics[0]['grain'],value=None,dimensions={},sampleCount=None,dataState='unavailable',sourceWatermark=None,reason='no_source_coverage',sourceReceiptIds=[],fixture=True)]
         watermarks = {row['source_id']: row['watermark'] for row in self.store.read('sources')}
+        watermarks.update({ref:row['sourceWatermark'] for row in rows for ref in row.get('sourceReceiptIds',[])})
+        states={row['dataState'] for row in rows}
+        state = next(iter(states)) if len(states)==1 else 'partial'
         self.store.receipt(dict(id=receipt_id, operator=principal['operator']['user_id'], requestId=identifier(request_id),
                                 queryDigest=hashlib.sha256(canonical(query).encode()).hexdigest(), metricVersions={m['id']:m['version'] for m in metrics},
-                                dataState='unavailable', sourceWatermarks=watermarks, rowCount=len(rows)))
-        return dict(requestId=request_id, queryReceiptId=receipt_id, asOf=as_of, dataState='unavailable', rows=rows,
-                    warnings=['Versioned business policy and source qualification are required. Missing data is not zero.'])
+                                dataState=state, sourceWatermarks=watermarks, rowCount=len(rows), rows=rows, executionState=execution))
+        return dict(requestId=request_id, queryReceiptId=receipt_id, asOf=as_of, dataState=state, rows=rows, executionState=execution,
+                    warnings=['Synthetic local source receipts; excluded from operational business metrics. Proposed policies remain inactive. Missing data is not zero.' if execution=='local_synthetic' else 'Versioned business policy and source qualification are required. Missing data is not zero.'])
 
     def source_health(self):
         rows = {row['source_id']: row for row in self.store.read('sources')}
@@ -160,7 +180,10 @@ class QueryService:
         self.require(principal, 'metrics.query')
         self.catalog.validate('copilot-turn', request)
         for evidence in request['contextEvidenceIds']:
-            if not self.store.read('receipt', identifier(evidence)): raise ControlError('SCOPE_DENIED')
+            rows = self.store.read('receipt', identifier(evidence))
+            if not rows: raise ControlError('SCOPE_DENIED')
+            if datetime.fromisoformat(rows[0]['expires_at']) <= datetime.now(timezone.utc): raise ControlError('STALE_PREVIEW',409)
+            if rows[0]['execution_state']=='local_synthetic' and (not self.synthetic or principal['session']['environment']!='local'): raise ControlError('SCOPE_DENIED')
         # A deterministic intelligence mode has no paid model call, autonomous schedule or effect executor.
         # Customer/user prose is not interpolated into tools, SQL, log payloads or persisted conversations.
         run_id, cached = self.store.reserve_run(request, principal, hashlib.sha256(canonical(request).encode()).hexdigest())
@@ -176,15 +199,25 @@ class QueryService:
     def _copilot_read(self, request, principal, run_id):
         # Intent chooses only a named read template. It cannot add fields, instructions, recipients or actions.
         words=request['message'].casefold()
-        metric_id='mrr' if any(word in words for word in ('mrr','revenue','recurring')) else 'refunds' if 'refund' in words else 'activation_rate'
+        metric_id='check_failures' if any(word in words for word in ('check','failure')) else 'mrr' if any(word in words for word in ('mrr','revenue','recurring')) else 'refunds' if 'refund' in words else 'activation_rate'
         metric=self.catalog.metrics[metric_id]
-        query = dict(metricIds=[metric_id], interval=dict(start=(datetime.now(timezone.utc)-timedelta(days=28)).isoformat(), end=iso_now(), timeZone='UTC'), groupBy=['currency'] if metric['currency_policy']=='native_currency_separate' else [], filters=[], comparison='none', limit=100)
-        receipt = self.metric_query(query, principal, request['requestId'])
+        query = dict(metricIds=[metric_id], interval=dict(start=(datetime.now(timezone.utc)-timedelta(days=28)).isoformat(), end=iso_now(), timeZone='UTC'), groupBy=['currency'] if metric['currency_policy']=='native_currency_separate' else ['suite','failure_class'] if metric_id=='check_failures' else [], filters=[], comparison='none', limit=100)
+        if request['contextEvidenceIds']:
+            receipts=[self.store.read('receipt',identifier(ref))[0] for ref in request['contextEvidenceIds']]
+            evidence_rows=[row for receipt in receipts for row in receipt['result_rows']]
+            receipt_ids=request['contextEvidenceIds']
+        else:
+            receipt = self.metric_query(query, principal, request['requestId'])
+            evidence_rows=receipt['rows']
+            receipt_ids=[receipt['queryReceiptId']]
+        descriptions=[f"{row['metricId']} ({canonical(row.get('dimensions',{}))}): {row['value'] if row['value'] is not None else 'unavailable'}, {row['dataState']}, samples {row['sampleCount']}." for row in evidence_rows]
+        synthetic=any(row.get('fixture') for row in evidence_rows)
+        answer=('Synthetic local evidence snapshot; proposed policies remain inactive. ' if synthetic else 'Read-only query evidence. ')+ ' '.join(descriptions)+ ' Quality states describe the receipt snapshot. Stale, partial and unavailable rows cannot support a current operational conclusion. No action was performed.'
         run = empty_result(new_trace_id(), request['modality'])
         run.update(runId=run_id, namespace='founder', mode='deterministic_read_only',
-                   answerText=f"{metric['title']} is unavailable: its versioned policy and source coverage have not been qualified. This deterministic mode selected a named read template; it performs no requested action. Review the definition and source-health evidence before drawing a business conclusion.",
-                   speakableSummary=f"{metric['title']} data is unavailable. Its policy and source coverage need qualification.",
-                   queryReceiptIds=[receipt['queryReceiptId']], recommendations=[], tools=[tool.public() for tool in FOUNDER_TOOLS if tool.permission in principal['operator']['capabilities']],
+                   answerText=answer, evidenceRows=evidence_rows,
+                   speakableSummary='Synthetic local evidence.' if synthetic else 'Read-only evidence; review quality states before conclusions.', state='completed',
+                   queryReceiptIds=receipt_ids, recommendations=[], tools=[tool.public() for tool in FOUNDER_TOOLS if tool.permission in principal['operator']['capabilities']],
                    usage={'providerCalls':0,'costState':'not_applicable'}, warnings=[{'code':'MODEL_DISABLED','message':'Model generation and scheduled investigations are disabled pending explicit budget and access approval.'}])
         self.store.save_run(run, principal, request['conversationId'])
         return run

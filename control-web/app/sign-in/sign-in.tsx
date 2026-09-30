@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { controlError } from '../../errors.mjs';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 export default function SignIn() {
   const [client,setClient]=useState<SupabaseClient|null>(null);
@@ -25,8 +26,13 @@ export default function SignIn() {
         setCode('');
         if (verified.error || !verified.data) throw new Error('Second-factor verification failed.');
         const response=await fetch('/api/control/v2/session/exchange',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+verified.data.access_token,'X-Control-Exchange':'1'},body:'{}',cache:'no-store'});
+        if (!response.ok) {
+          const safe = await response.json().catch(()=>({code:''})) as {code?:string};
+          // Keep only the in-memory MFA client for an explicit transient retry; never auto-retry.
+          if (response.status===401 || response.status===403) {setClient(null);setFactor('');}
+          throw new Error(controlError(response.status,safe.code));
+        }
         setClient(null);
-        if (!response.ok) throw new Error('Founder access was denied. Check the operator binding and MFA freshness.');
         window.location.assign('/control/command');
       }
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Sign-in failed.'); }

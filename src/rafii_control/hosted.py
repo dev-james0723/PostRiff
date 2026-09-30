@@ -3,6 +3,7 @@ import json
 import os
 import re
 import ssl
+import uuid
 from psycopg.conninfo import conninfo_to_dict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPSHandler
@@ -56,10 +57,19 @@ def create_app(values=None):
             with opener.open(request, timeout=5) as response:
                 raw = response.read(65537)
                 if len(raw)>65536: raise ControlError('SOURCE_UNAVAILABLE',503)
-                return {'status':response.status,'body':json.loads(raw)}
+                if response.status != 200:
+                    raise ControlError('RATE_LIMITED',429) if response.status == 429 else ControlError('AUTH_REQUIRED',401) if response.status in (401,403) else ControlError('SOURCE_UNAVAILABLE',503)
+                body = json.loads(raw)
+                if not isinstance(body,dict) or not isinstance(body.get('id'),str): raise ControlError('SOURCE_UNAVAILABLE',503)
+                try: uuid.UUID(body['id'])
+                except ValueError: raise ControlError('SOURCE_UNAVAILABLE',503) from None
+                return {'status':200,'body':body}
         except HTTPError as error:
-            error.close()
-            return {'status':401,'body':{}}
+            status = error.code
+            error.close()  # Do not read, retain or surface the provider body/headers.
+            if status in (401,403): raise ControlError('AUTH_REQUIRED',401) from None
+            if status == 429: raise ControlError('RATE_LIMITED',429) from None
+            raise ControlError('SOURCE_UNAVAILABLE',503) from None
         except (URLError, TimeoutError, OSError, ValueError): raise ControlError('SOURCE_UNAVAILABLE',503)
     boundary = Boundary(config,store,supabase_identity(values.get('RAFII_CONTROL_SUPABASE_URL'),get_user))
     return ControlApplication(boundary,QueryService(store))
