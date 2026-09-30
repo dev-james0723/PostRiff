@@ -37,7 +37,7 @@ function Workspace({section,mode,record}:{section:string;mode:Mode;record?:strin
  const collectionName=section==='customers'?'customers':section==='workspaces'?'workspaces':section==='support'?'tickets':section==='product'?'usage':tab;
  const listReady=!!data&&isList&&!(section==='billing'&&tab==='payments'&&data.paymentState==='not_configured');
  const listing=useQuery({queryKey:['records',mode,collectionName,settledSearch,filter,page,record||''],enabled:listReady,queryFn:async()=>{const r=await request<ListData>('/workspace/'+mode+'/query',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':session.data!.data.csrfToken},body:JSON.stringify({collection:collectionName,search:settledSearch,status:filter,page,recordId:record||''})});if(r.data.mode!==mode||!Array.isArray(r.data.rows)||!Array.isArray(r.data.workspaces)||typeof r.data.total!=='number')throw new Error('Record response could not be verified. Retry the search.');return r;}});
- const list=!listing.error&&listReady?listing.data?.data:undefined;
+ const list=!listing.error&&listReady&&search===settledSearch?listing.data?.data:undefined;
  const title=headings[section]||headings.command;
  function open(row:Row){setSelected(row);setName(String(row.name||''));setActionError('');pending.current=null;dialog.current?.showModal();}
  useEffect(()=>{if(record&&list&&openedRecord.current!==mode+record){const row=list.rows.find(r=>r.id===record);if(row){openedRecord.current=mode+record;setSelected(row);setName(String(row.name||''));dialog.current?.showModal();}}},[record,list,mode]);
