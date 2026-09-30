@@ -287,7 +287,7 @@ class HostedPhase2Commands:
             if action in ("generate", "adapt"):
                 trial = state["phase2"].get("trial")
                 if not trial:
-                    raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402)
+                    raise AlphaError("Use the dedicated managed writing endpoint with explicit managed approval. Drafts, edits and exports remain available.", 402)
                 if trial["expiresAt"] <= self.clock() or trial["writingUsed"] >= trial["writingGrant"]:
                     raise AlphaError("The trial has no writing allowance left. Drafts and exports remain available.")
                 trial["writingUsed"] += 1
@@ -391,7 +391,8 @@ class HostedWorkspaceService:
         from .privacy import DataRequests
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
-        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock, pricing_v2_enabled=pricing_v2_enabled)
+        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, ledger=self.ledger)
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,
@@ -400,7 +401,6 @@ class HostedWorkspaceService:
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
-        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock, pricing_v2_enabled=pricing_v2_enabled)
         self.ideas.ledger = self.ledger
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock, pricing_v2_enabled=pricing_v2_enabled, creator_experiment_enabled=creator_experiment_enabled, creator_experiment_cohort=creator_experiment_cohort)
         from .credit_purchases import CreditPurchases
@@ -563,16 +563,21 @@ class HostedWorkspaceService:
                 if not terms or terms[0] != "active" or not terms[1] or terms[2] in ("creator", "starter", "free") or plan_terms_id == "studio-v2":
                     raise AlphaError("This plan is not yet available for purchase.", 409)
                 price_id = terms[1]
-            cur.execute("SELECT provider_customer_id,status FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
+            cur.execute("SELECT provider_customer_id,status,provider_subscription_id,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
             existing = cur.fetchone()
             if existing and existing[1] in ("active", "past_due", "grace"):
                 raise AlphaError("This workspace already has a subscription. Change it from the billing portal.", 409)
+            # Rollback must not offer a legacy checkout that the retained Creator binding cannot fulfill.
+            if existing and existing[3] == "creator-v1" and plan_terms_id != existing[3]:
+                raise AlphaError("Reenroll with this workspace's existing Creator package and paid variant.", 409)
             customer_id = existing[0] if existing else None
+            # The ended provider subscription identifies one reenrollment generation, across retries/hours.
+            generation = {"endedSubscription": existing[2]} if existing and existing[2] else {"acquisitionHour": int(self.clock() // 3600)}
             audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id)
         customer_email = None if customer_id else self._email_for(principal)
         if not customer_id and not customer_email:
             raise AlphaError("Your account email could not be resolved for checkout.", 502)
-        key = digest({"checkout": workspace_id, "plan": plan_terms_id, **({"variant": variant_id} if variant_id else {}), "hour": int(self.clock() // 3600)})
+        key = digest({"checkout": workspace_id, "plan": plan_terms_id, **({"variant": variant_id} if variant_id else {}), "generation": generation})
         return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=price_id, **({"price_variant_id": variant_id} if variant_id else {}), success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
 
     def billing_credit_packs(self, workspace_id, token):
@@ -1050,7 +1055,7 @@ class HostedWorkspaceService:
             self.repository.assert_fresh(token, principal)
             granted = validate_grant(role, flags, actor)
             from .billing import require_plan_capacity
-            require_plan_capacity(cur, workspace_id, "members")
+            require_plan_capacity(cur, workspace_id, "members", ledger=self.ledger)
             cur.execute("SELECT count(*) FROM public.pr_invitations WHERE workspace_id=%s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now()", (workspace_id,))
             if cur.fetchone()[0] >= MAX_PENDING_INVITATIONS:
                 raise AlphaError("Revoke or wait for pending invitations before adding more.", 409)
@@ -1117,7 +1122,7 @@ class HostedWorkspaceService:
         if existing and existing[1] == "active":
             raise AlphaError("You are already a member of this workspace.", 409)
         from .billing import require_plan_capacity
-        require_plan_capacity(cur, workspace_id, "members")
+        require_plan_capacity(cur, workspace_id, "members", ledger=self.ledger)
         values = (role, granted.get("can_publish", False), granted.get("can_reply", False), granted.get("can_moderate", False), granted.get("can_manage_connections", False))
         if existing:
             cur.execute("UPDATE public.pr_memberships SET status='active',role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (*values, workspace_id, principal))

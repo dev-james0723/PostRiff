@@ -505,9 +505,9 @@ class Billing:
 
 
 
-def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
+def require_plan_capacity(cur, workspace_id, dimension, connection_id=None, *, ledger=None):
     cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
-    entitlement = Ledger().ensure_entitlement(cur, workspace_id, None)
+    entitlement = (ledger or Ledger()).ensure_entitlement(cur, workspace_id, None)
     if dimension == "members":
         cur.execute("SELECT count(*) FROM public.pr_memberships WHERE workspace_id=%s AND status='active'", (workspace_id,))
         count, limit = cur.fetchone()[0], entitlement["members"]
