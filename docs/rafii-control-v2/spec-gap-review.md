@@ -1,5 +1,26 @@
 # Spec-to-implementation review
 
+## Current continuation coverage — 2026-09-30
+
+**Local read workflow verified at `f48a1be242b36dc04664dbb91ba5257a21de5dcd`; hosted/full-v2 operational acceptance BLOCKED.** The historical table below describes foundation `be140fdbaad9e13093b3d42215b66ed0a2347a69` and is superseded where this current section states a completed local capability.
+
+| Applicable milestone | Current status | Evidence / remaining limit |
+|---|---|---|
+| HTTP error classification through verifier/API/UI/audit | passed | Hosted transport regressions, persisted restricted audit codes, fixed UI errors and browser 429/503 route preservation; no raw provider response exposed |
+| Source event -> materialized metric -> bounded query | passed locally | Existing check_failures v1; canonical synthetic check receipts, real PostgreSQL transaction and bounded fixed SQL; local fixture mode only |
+| Genuine zero / unavailable / stale / partial | passed locally | Eligible success gives 0; absent source null; skipped source partial; old source stale; measured-only chart plus all-state table |
+| Duplicate/conflicting/concurrent events | passed locally | Event identity/digest and source-receipt uniqueness; no inflated count or second materialization |
+| Chart/table -> receipt -> grounded copilot | passed locally | Real 390/1440 Next/API/DB browser, zero relevant axe violations; persisted receipt snapshot and cited deterministic answer; no model call |
+| Currency and proposed policy boundaries | passed within read-only scope | Pure native-currency kernels and DSL currency checks; MRR/financial policies remain unavailable/inactive; no financial authority claimed |
+| Staging qualification / dedicated Control Preview | blocked | Compact discovered configuration/technical/approval table in staging-qualification.md; no approved dedicated project, identity, roles, region/retention or source/fixture admission |
+| Remote source delivery | blocked | Scoped local commit exists; PR #83 evidence is updated separately. Push could trigger a consumer Preview and suppression/approval is unverified |
+
+`evidence/read-workflow-acceptance.json` maps all 96 designed cases: **16 passed, 0 failed, 25 blocked, 55 out of scope**. Each passed case names current commit/test/log digest. Broader cases with only a local invariant remain blocked; billing, notifications, account commands, support delivery, monitors, experiments and engineering writers stay outside this iteration. The package's 66 historical validation checks are not product acceptance counts.
+
+Current verification is in evidence/verification.json; the exact old aggregate is foundation-verification.json. No old broad-suite result is relabeled as acceptance of the current remote target. Safe hosted source adapters, policy activation, real MFA/role/transport/rollback qualification and full-v2 acceptance remain open. No catalog was expanded.
+
+## Historical foundation gap review (preserved)
+
 Authority: the byte-verified complete September 29 v2 spec and accompanying tech-pack. V1 is background only. Scope: the user's Phase 0 and Phase 1 boundary, read-only shell, safe metadata and analytical/intelligence foundations. Full v2 operational acceptance is not claimed.
 
 | Requested item | Implemented evidence | Operational limit / next gate |

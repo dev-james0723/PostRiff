@@ -1,5 +1,20 @@
 # Security review — Phase 0/1 read-only candidate
 
+## Current continuation review — 2026-09-30
+
+Local candidate `f48a1be242b36dc04664dbb91ba5257a21de5dcd` passed scoped regression/security checks; hosted security acceptance remains BLOCKED. The foundation findings below are historical, not a hosted certificate.
+
+- Transport classification stays fail closed: 401/403 invalid auth, 429 rate-limited, other HTTP failures/timeouts/malformed responses unavailable. No provider error body/header/message is persisted or rendered. A safe enum error code is request-bound through audit/API/UI; exchange failures never issue cookies.
+- Additive 051 preserves 049. It adds safe audit classification and query snapshots, narrows synthetic measured allowance to local fixture rows, and grants ingestion SELECT only on already content-free engineering evidence under environment RLS. Reader/session cannot ingest, alter canonical data, change operators or rewrite audit. No live operator/credential is seeded.
+- Synthetic fixture admission is never a hosted policy approval. Only local, fixture check events with canonical receipt identity, matching SHA and receipt timestamp materialize. A unique source-receipt index plus event uniqueness/transactional insertion prevent duplicate projection, including concurrent replay. Failures roll back; no external effect is mounted.
+- Fixed metric SQL limits input to 1001 sentinel rows and rejects overflow before receipt/output. It uses parameterized filters, permitted dimensions, exact metric/version/interval and read-only transactions. It never joins raw customer content. Proposed financial metrics stay unavailable and currency separation stays mandatory.
+- Query snapshots bind definition/digest/source lineage and explicit local_synthetic execution. Copilot checks capability, receipt existence/expiry and fixture-mode scope before reservation. Answer rows come from that receipt, label snapshot quality, and carry zero provider calls/changed entities. Status reads have an independent bounded read quota; copilot capability checks remain required.
+- Full workflow and Settings browser accessibility passed after repairing hidden chart focus and keyboard access to scrollable tables. Static changed-source scan: 20 files, zero findings. Fresh allowlisted archive excludes tests, credentials and the consumer effect runtime.
+
+Remaining gates: `staging-qualification.md`. Actual hosted MFA, restricted logins/TLS, data region/retention, staging isolation, source fixture qualification and rollback remain untested/unapproved. Independent audit immutability remains future work. Push is held because automatic consumer Preview suppression is not verified; no production configuration is modified to bypass this boundary.
+
+## Historical foundation review (preserved)
+
 Execution: inline source, SQL grants, contract, dependency, artifact and synthetic browser review. This is not an independent penetration test or a production security certification. Exact local results are in `evidence/verification.json`.
 
 ## Boundaries reviewed

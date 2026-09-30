@@ -1,0 +1,15 @@
+{
+  "execution": "local synthetic identity; real Next/API/restricted PostgreSQL",
+  "status": "passed",
+  "checks": [
+    "unauthenticated route/API denied",
+    "synthetic HTTP 429 preserves route and safe retry message",
+    "synthetic HTTP 503 preserves route and safe retry message",
+    "width 390: source-projected zero/one/partial/stale chart/table, receipt and grounded copilot passed",
+    "width 390: absent source displays unavailable rather than zero",
+    "width 390: navigation/User360/canary/receipts/copilot/CSRF/axe/logout passed",
+    "width 1440: source-projected zero/one/partial/stale chart/table, receipt and grounded copilot passed",
+    "width 1440: absent source displays unavailable rather than zero",
+    "width 1440: navigation/User360/canary/receipts/copilot/CSRF/axe/logout passed"
+  ]
+}

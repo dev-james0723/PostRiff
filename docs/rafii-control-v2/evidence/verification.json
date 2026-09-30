@@ -1,102 +1,64 @@
 {
-  "execution": "local/disposable synthetic checks; no production, provider/model or notification execution",
-  "baseSHA": "d91660b7936a5158b820914107306ad4a1e51c2d",
-  "consumerSourceFingerprint": "09c98474358c25ac7db6834576240fd056048836185a1feac28c60627e5624b3",
-  "python": {
-    "command": "PYTHONPATH=src:tests .control-venv/bin/python -m unittest discover -s tests -p test_*.py",
-    "status": "PASS",
-    "run": 3006,
-    "passed": 2755,
-    "skipped": 251,
-    "failed": 0,
-    "errors": 0,
-    "sourceUnchanged": true,
-    "receipt": "control-v2-stage-final-python.json"
-  },
+  "execution": "local synthetic read-only workflow; hosted operational acceptance BLOCKED",
+  "implementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+  "foundationCommit": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "sourceManifest": "read-workflow-source-manifest.json",
   "control": {
-    "command": "PLAYWRIGHT_BROWSERS_PATH=$PWD/.control-browsers .control-venv/bin/python scripts/rafii_control_pg.py --browser",
     "status": "PASS",
-    "run": 45,
-    "passed": 45,
+    "run": 61,
+    "passed": 61,
     "skipped": 0,
     "failed": 0,
-    "postgresTests": 7,
-    "migrationApplications": 2
+    "postgresTests": 14,
+    "migrationsApplied": {
+      "049": 2,
+      "051": 2
+    }
   },
-  "consumerWeb": {
-    "status": "PASS",
-    "tests": 478,
-    "failed": 0,
-    "skipped": 0,
-    "typecheck": "PASS with worktree-only missing GSAP dependency overlay; shared node_modules unchanged",
-    "lint": "0 errors; 1 existing consistent-function-scoping warning"
+  "frontend": {
+    "contracts": 4,
+    "lint": "PASS 0 errors/0 warnings",
+    "typecheck": "PASS included in successful production build",
+    "build": "PASS",
+    "browser": "PASS real Next/WSGI/restricted PostgreSQL at 390/1440; 0 page errors; 0 workflow and Settings axe violations; absent-source, auth 429/503 and receipt-linked copilot verified"
   },
-  "controlWeb": {
-    "status": "PASS",
-    "contracts": 3,
-    "typecheck": "PASS",
-    "lint": "0 errors; 0 warnings",
-    "build": "PASS Next 16.3.5 / Node 24.15.0 production build",
-    "browser": "PASS production Next -> WSGI -> restricted disposable PostgreSQL; viewports 390 and 1440; pageErrors=0; settings axe violations=0 at both widths",
-    "browserReceipt": "browser.json",
-    "cleanCandidate": "Fresh install typecheck/production build and actual PostgreSQL/browser journeys PASS",
-    "dependencyInstall": "Fresh npm ci, 86 installed packages, zero vulnerabilities; registry-only portable lockfile regression PASS",
-    "firstCI": "Failed on local-linked lockfile; repaired with regression test, final provider CI tracked on PR #83"
-  },
-  "postgresRegression": {
-    "status": "PASS",
-    "scriptExecutions": 90,
-    "receipt": "postgres-regression.json",
-    "provenanceRepair": "postgres-whitespace-repaired.json"
-  },
-  "security": {
-    "sourceScan": "PASS source unchanged; control-v2-stage-final-secrets.json",
-    "scopedScan": "PASS: original 79 scoped files plus rescan of both changed frontend files; 31 verified checksum metadata findings and one synthetic denied URL fixture, zero unexpected",
-    "npmVulnerabilities": 0,
-    "pythonVulnerabilities": 0,
-    "compileall": "PASS",
-    "diffCheck": "PASS implementation files; supplied spec hard breaks/CSV CRLF preserved byte-for-byte with original warnings",
-    "review": "../security-review.md"
-  },
-  "artifacts": {
-    "control": {
-      "status": "PASS",
-      "files": 688,
-      "bytes": 2366692,
-      "sha256": "44308f9a24b706573c2822e17c1cc815bf0740e1dbc2452c4bfaed6b384c36d6"
-    },
-    "consumer": {
-      "status": "PASS",
-      "files": 4759,
-      "bytes": 31007139,
-      "sha256": "96352785a3e50548fa9ba42ab4f0f89811a22879b40e196424b030b7b56a9366",
-      "controlExcluded": true
-    },
-    "deployment": "NOT_RUN"
-  },
-  "techPack": {
-    "status": "PASS",
-    "checksPassed": 66,
-    "checksFailed": 0,
-    "designedProductCases": 96,
-    "designedProductCasesExecutedAsSuite": false
-  },
+  "evidence": [
+    "read-workflow-checks.json",
+    "read-workflow.json",
+    "read-workflow-browser.json",
+    "read-workflow-acceptance.json",
+    "read-workflow-artifact.json",
+    "read-workflow-secret-scan.json",
+    "read-workflow-preflight.json",
+    "read-workflow-pr-state.json"
+  ],
+  "secretScan": "PASS 20 changed source files, 0 findings",
+  "archive": "PASS fresh local archive; no deployable test harness or credentials",
+  "historicalBroadRegressionEvidence": "foundation-verification.json; foundation-snapshot results, not rerun/current-target acceptance",
   "calls": {
-    "paidProviderModel": 0,
-    "email": 0,
-    "push": 0,
-    "refund": 0,
+    "applicationPaidInference": 0,
+    "livePolling": 0,
+    "notifications": 0,
+    "financialActions": 0,
+    "accountActions": 0,
+    "productEngineeringWrites": 0,
+    "hostedProvisioning": 0,
     "productionMigration": 0,
-    "productionDeployment": 0
+    "productionConfigurationChange": 0,
+    "mergeOrPromote": 0,
+    "ControlPreview": 0
   },
-  "recoverableRawLogs": "docs/rafii-control-v2/evidence/raw/ (local ignored) and docs/consumer-ready/evidence/*.log (local ignored)",
-  "preview": {
-    "status": "NOT_CREATED",
-    "reason": "Separate rafii-control project and qualified staging authority absent; current policy requires those gates"
+  "delivery": {
+    "localImplementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+    "remoteDraftPR": 83,
+    "remoteFeatureHead": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+    "push": "BLOCKED pending verified suppression or explicit approval for possible automatic consumer Preview",
+    "handoff": "../milestone-handoff.md"
   },
-  "reviews": {
-    "security": "../security-review.md",
-    "specGap": "../spec-gap-review.md",
-    "stageQualification": "Checks, deployments and errors with unqualified advanced stages retain observations but remain suspected; two regression subcases reproduced before repair"
+  "acceptanceCounts": {
+    "passed": 16,
+    "failed": 0,
+    "blocked": 25,
+    "out_of_scope": 55
   }
 }

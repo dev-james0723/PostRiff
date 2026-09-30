@@ -1,5 +1,19 @@
 # Rafii Control v2 implementation log
 
+## Current milestone — 2026-09-30
+
+**Local synthetic read-only workflow PASSED. Hosted operational acceptance BLOCKED.** Implementation commit `f48a1be242b36dc04664dbb91ba5257a21de5dcd` follows the preserved foundation `be140fdbaad9e13093b3d42215b66ed0a2347a69`. This current section supersedes earlier present-tense foundation/gap status below; all earlier verification remains historical.
+
+- Revalidated clean initial isolated worktree, branch/upstream/remote target and all physical migration claims. No reset, stash or canonical/concurrent source edits. 050 is occupied by pricing; reserved additive 051. Existing 049 remains byte-identical.
+- Reproduced HTTPError classification with failing tests; 429 now returns RATE_LIMITED, 5xx/timeout/malformed/redirect failures return SOURCE_UNAVAILABLE and invalid authentication stays AUTH_REQUIRED. Provider bodies are never read on error. Safe request-bound error codes persist in audit and render fixed UI messages. Editable isAdmin metadata cannot enroll a founder.
+- Existing `check_failures` v1: synthetic safe check receipt -> normalized event -> transactional local rollup -> fixed parameterized SQL (1000 input rows, capped grouped rows, 5s timeout) -> current measured chart and full accessible quality table -> durable digest/version/watermark/result snapshot -> deterministic copilot citing that exact receipt. Zero is counted from an eligible successful check; missing coverage stays null; skipped coverage is partial; old evidence is stale. Duplicate/conflicting/canonical/concurrent replay and native-currency/policy boundaries passed. Financial policies remain inactive; no dashboard catalog edits.
+- Final verification: **61/61 tests, 14 actual PostgreSQL tests, 049/051 each applied twice; 4 frontend contracts; lint 0 errors/warnings; production build including typecheck; real desktop/mobile Next/API/restricted PostgreSQL browser; 0 page errors and 0 workflow/Settings axe violations.** Fresh local function archive and changed-source secret scan (20 files, zero findings) passed. See `evidence/verification.json`, source manifest, check logs and screenshots.
+- Browser validation found and repaired chart hidden-focus and scroll-region focusability. It also exposed status reads consuming the five-investigation quota: reads now retain copilot permission with a separate 120/minute read budget; investigation quota stays 5/minute. Failed harness attempts remain in recoverable raw logs; they are not passing evidence.
+- Acceptance map: 16 passed local cases, 0 current failures, 25 blocked wider cases and 55 out of scope. This does not claim 96 complete product scenarios executed. `staging-qualification.md` separates observed configuration, completed technical work and exact missing approvals/credentials.
+- Scoped source commit is local. Draft PR #83 source remains the foundation until a push is authorized/suppressed; its evidence is updated separately. No dedicated Control Preview, hosted provisioning/activation, merge, promotion, production migration/configuration change, paid inference, polling, notification or financial/account/product-engineering action occurred.
+
+## Historical foundation record (preserved)
+
 Status: Phase 0 boundary and requested Phase 1 read-only foundations implemented and locally verified. Full v2 operational acceptance is not claimed. Commit/PR delivery follows this verified candidate; activation decisions below remain unresolved. Local/synthetic only; no production activation.
 
 ## Baseline — 2026-09-29

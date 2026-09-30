@@ -2,6 +2,8 @@
 
 This work adds a separate disabled-by-default founder boundary and read-only Control application from the same repository. It does not mount founder routes in the consumer deployment. The authoritative v2 design is `docs/superpowers/specs/2026-09-29-rafii-founder-control-center-v2-design.md`, SHA-256 `1ababaaff637a04be105fa41caf1eb57f071c1e57819eb39116c030fea993002`. Runtime catalogs and schemas are read directly from the supplied tech-pack; they are not reauthored elsewhere.
 
+Current local milestone: the synthetic source -> projection -> query -> chart/table -> receipt -> grounded copilot workflow is verified. Hosted operational acceptance remains blocked. See `milestone-handoff.md`, `staging-qualification.md`, the current sections in the three review documents, and `evidence/verification.json`. Older counts below belong to the foundation snapshot.
+
 ## Local verification
 
 Use Python 3.12, Node 24.15.0, PostgreSQL 17, the pinned root dev requirements and Control dependencies. No `.env` is loaded by the test runner. Provider credentials are removed from the child test environment.
@@ -16,7 +18,7 @@ PATH=/opt/homebrew/opt/node@24/bin:$PATH RAFII_CONTROL_ENABLED=1 RAFII_CONTROL_O
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.control-browsers" .control-venv/bin/python scripts/rafii_control_pg.py --browser
 ```
 
-The PostgreSQL runner creates its own cluster on an available loopback port, applies the existing RLS harness plus 049, runs the restricted-role tests, then removes only its own disposable cluster. Browser mode starts and terminates its own Next/WSGI children. Synthetic identity injection exists only under `tests/control/`; those files are excluded from the deployment candidate. The browser harness uses no paid model, email, push or financial provider.
+The PostgreSQL runner creates its own cluster on an available loopback port, applies the existing RLS harness plus 049 and 051 twice, runs the restricted-role tests, then removes only its own disposable cluster. Browser mode starts and terminates its own Next/WSGI children. Synthetic identity injection exists only under `tests/control/`; those files are excluded from the deployment candidate. The browser harness uses no paid model, email, push or financial provider.
 
 ## Separate deployment candidate
 

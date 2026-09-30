@@ -1,0 +1,36 @@
+{
+  "observedAt": "2026-09-30T04:11:46.512254+00:00",
+  "worktree": "/Users/ouxianxing/.codex/worktrees/rafii-founder-control-v2/James-Au-Studio",
+  "branch": "feat/rafii-founder-control-v2",
+  "initialHead": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "initialDirtyState": "clean (git status --porcelain=v2 showed branch headers only)",
+  "implementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+  "remoteFeatureHead": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "remoteTarget": "consumer-saas",
+  "remoteTargetHead": "1acd88a8b77c5e8a3f2b877dd927e755c2900a56",
+  "remote": "https://github.com/dev-james0723/PostRiff.git",
+  "migrationReservations": {
+    "047": "other concurrent owners; preserved",
+    "048": "pricing; preserved",
+    "049": "existing Control foundation, byte-identical",
+    "050": "pricing free lifecycle, occupied",
+    "051": "Control read workflow, sole physical worktree claim at final recheck"
+  },
+  "stagingDiscovery": {
+    "vercelTeamProjectsInspected": 20,
+    "dedicatedControlProjectFound": false,
+    "existingConsumerStagingProject": "rafii-consumer-staging",
+    "consumerStagingAuthorityForControl": "not established",
+    "supabaseConnectorCoverage": "Only bookmark-pilot visible; not evidence of global absence of Rafii staging",
+    "consumerProjectExists": "postriff-phase2-private",
+    "pushDeploymentSuppression": "unverified; CLI inspection omits Git/ignored-step fields, connector schema incompatible projectId/idOrName"
+  },
+  "externalActions": {
+    "push": false,
+    "controlPreview": false,
+    "merge": false,
+    "hostedProvisioning": false,
+    "productionMigrations": false,
+    "productionConfigurationChanges": false
+  }
+}
