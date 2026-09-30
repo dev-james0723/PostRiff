@@ -26,7 +26,7 @@ async function main(){
    const page=await context.newPage(),errors=[];const unexpected=[];
    page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>{if(r.failure()?.errorText==='net::ERR_ABORTED'&&r.url().includes('_rsc='))expectedCancellations.push(r.url());else unexpected.push(r.failure()?.errorText+' '+r.url());});
    page.on('response',r=>{if(r.status()>=400&&r.url().includes('/api/control/'))unexpected.push(r.status()+' '+r.url());});
-   const csrf=await login(context);
+   const csrf=await login(context,width===390?'synthetic-founder-mobile-aal2':'synthetic-founder-aal2');
    await page.goto(base+'/control/command?mode=demo');await page.getByRole('heading',{name:'Your founder workspace',exact:true}).waitFor();await page.getByText('A few things need your attention.',{exact:true}).waitFor();
    await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.textContent),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.evaluate(()=>document.activeElement.id),'main');
    await axe(page);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -59,10 +59,10 @@ async function main(){
    for(const route of ['evidence','engineering','founder','audit','infrastructure']){await page.goto(base+'/control/'+route);await page.getByRole('heading',{level:1}).waitFor();}
    await page.goto(base+'/control/settings');await page.getByRole('heading',{name:'Connections',exact:true}).waitFor();await axe(page);
    assert.equal((await context.request.post(base+'/api/control/v2/session/logout',{headers:{Origin:'http://sibling.localhost:4549','X-CSRF-Token':csrf},data:{}})).status(),403);
-   await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.waitForURL('**/sign-in');assert.equal((await context.request.get(base+'/api/control/v2/session')).status(),401);
+   const logoutResponse=page.waitForResponse(r=>r.url().endsWith('/api/control/v2/session/logout')&&r.request().method()==='POST');await page.getByRole('button',{name:'Sign out',exact:true}).click();const logout=await logoutResponse;const logoutBody=logout.status()===200?{}:await logout.json().catch(()=>({}));assert.equal(logout.status(),200,JSON.stringify({stage:'logout',status:logout.status(),code:logoutBody.code||null}));await page.waitForURL('**/sign-in');assert.equal((await context.request.get(base+'/api/control/v2/session')).status(),401);
    assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);const video=page.video();await context.close();if(width===1440&&video)await video.saveAs(resolve(evidence,'workflow.webm'));checks.push(width+': all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed');
   }
-  const errors=await browser.newContext();await login(errors);const page=await errors.newPage();
+  const errors=await browser.newContext();await login(errors,'synthetic-founder-error-aal2');const page=await errors.newPage();
   await page.route('**/api/control/v2/workspace/live',r=>r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({code:'SOURCE_UNAVAILABLE'})}));
   await page.goto(base+'/control/command');await page.getByRole('heading',{name:'Workspace could not be loaded'}).waitFor();assert.equal(await page.locator('.metric-grid').count(),0);
   await page.getByRole('link',{name:'Demo',exact:true}).click();await page.getByText('A few things need your attention.',{exact:true}).waitFor();await errors.close();checks.push('Explicit database failure hides Live records; Demo requires explicit selection');

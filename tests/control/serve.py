@@ -46,10 +46,14 @@ def main():
     delivery['runtimeSourceSHA256']=hashlib.sha256(json.dumps({str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in runtime_files},sort_keys=True,separators=(',',':')).encode()).hexdigest()
     delivery['nextBuildId']=(root/'control-web/.next/BUILD_ID').read_text().strip()
     store=PostgresStore(connection_factory(dsn,'rafii_control_session','local'),connection_factory(dsn,'rafii_control_reader','local'),'local')
+    founders={'synthetic-founder-aal2':'00000000-0000-0000-0000-000000000001',
+              'synthetic-founder-mobile-aal2':'00000000-0000-0000-0000-000000000010',
+              'synthetic-founder-error-aal2':'00000000-0000-0000-0000-000000000011'}
     def verify(token):
-        if token not in ('synthetic-founder-aal2','synthetic-non-founder-aal2'):raise ControlError('AUTH_REQUIRED',401)
-        user='00000000-0000-0000-0000-000000000001' if token=='synthetic-founder-aal2' else '00000000-0000-0000-0000-000000000002'
-        return VerifiedIdentity(user,'aal2','synthetic-browser-session-001',time.time())
+        user=founders.get(token)
+        if token=='synthetic-non-founder-aal2':user='00000000-0000-0000-0000-000000000002'
+        if not user:raise ControlError('AUTH_REQUIRED',401)
+        return VerifiedIdentity(user,'aal2','synthetic-browser-session-'+user,time.time())
     origin=os.environ.get('RAFII_CONTROL_TEST_ORIGIN','http://localhost:4449')
     user='00000000-0000-0000-0000-000000000001'
     from postriff_phase2.hosted import PostgresWorkspaceRepository
@@ -58,7 +62,12 @@ def main():
         owner.execute('DELETE FROM rafii_control.request_budgets')
         workspace=str(owner.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s AND status=\'active\' LIMIT 1',(user,)).fetchone()[0])
         owner.execute("UPDATE rafii_control.platform_operators SET status='active',capabilities=%s WHERE user_id=%s AND environment='local'",(list(CAPABILITIES),user))
-        owner.execute("INSERT INTO rafii_control.test_workspace_grants VALUES(%s,'local',%s,'synthetic-browser-only',now()+interval '1 hour') ON CONFLICT DO NOTHING",(user,workspace))
+        # Separate fictional identities isolate browser acceptance cases without changing production limits.
+        for actor in founders.values():
+            owner.execute('INSERT INTO auth.users(id) VALUES(%s) ON CONFLICT DO NOTHING',(actor,))
+            owner.execute('INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING',(actor,))
+            owner.execute("INSERT INTO rafii_control.platform_operators(user_id,environment,role,status,capabilities) VALUES(%s,'local','founder','active',%s) ON CONFLICT(user_id,environment) DO UPDATE SET status='active',capabilities=excluded.capabilities",(actor,list(CAPABILITIES)))
+            owner.execute("INSERT INTO rafii_control.test_workspace_grants VALUES(%s,'local',%s,'synthetic-browser-only',now()+interval '1 hour') ON CONFLICT DO NOTHING",(actor,workspace))
     snapshot=repository.get(workspace,'synthetic-owner')
     repository.command(workspace,'synthetic-owner',snapshot['revision'],lambda state,actor:{**state,'workspace':{'id':workspace,'name':'Fictional Browser Workspace'}})
     application=ControlApplication(Boundary(Config(True,'local',origin),store,verify),QueryService(store,synthetic=True,delivery=delivery))

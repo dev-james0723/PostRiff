@@ -55,7 +55,7 @@ class ControlApplication:
                     try: self.boundary.authorize(token, 'prohibited', origin=origin, unsafe=method != 'GET', request_id=request_id)
                     except ControlError: pass
                     raise
-                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename', request_id=request_id)
+                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename', ending_session=path == '/session/logout', request_id=request_id)
                 if path == '/session':
                     data = {'assurance': 'aal2', 'capabilities': sorted(set(principal['operator']['capabilities']) & CAPABILITIES), 'csrfToken': principal['csrfToken']}
                 elif path == '/session/logout':

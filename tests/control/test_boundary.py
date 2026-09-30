@@ -195,6 +195,12 @@ class HttpTests(BoundaryTests):
             result, _ = self.request(app, '/api/control/v2' + path, 'POST', {}, cookie='__Host-rafii-control=' + token)
             self.assertIn(result['status'], [403, 404])
 
+    def test_logout_budget_cannot_be_used_for_other_capabilities_or_reads(self):
+        token, session=self.exchange()
+        for capability,unsafe in [('customers.read',True),('control.read',False)]:
+            with self.assertRaisesRegex(ControlError,'SCOPE_DENIED'):
+                self.boundary.authorize(token,capability,unsafe=unsafe,origin='http://localhost:4449',csrf=session['csrfToken'],ending_session=True)
+
     def test_run_reads_have_read_budget_and_keep_copilot_permission(self):
         token, session=self.exchange()
         budgets=[]

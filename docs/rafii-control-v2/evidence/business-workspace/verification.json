@@ -2,7 +2,7 @@
   "state": "local database/browser verified; hosted release blocked",
   "execution": "Disposable PostgreSQL + actual canonical Rafii repository + real Next/Python API; synthetic founder identities",
   "database": {
-    "passed": 97,
+    "passed": 99,
     "skipped": 0,
     "migrationsReapplied": [
       49,
@@ -31,7 +31,7 @@
       "390: all destinations, search/status filters, details/keyboard, linked Demo mutations/reset, canonical UI rename/reflection/restore, privacy, axe, logout passed",
       "Explicit database failure hides Live records; Demo requires explicit selection"
     ],
-    "expectedPrefetchCancellations": 112
+    "expectedPrefetchCancellations": 111
   },
   "preservedFounderHomeBrowser": {
     "widths": [
@@ -45,8 +45,8 @@
   },
   "functionArchive": {
     "passed": true,
-    "sha256": "6af8184e3830d0a93e7662d3652ccbcf4f5de807fbe71c5836a3dde25ebc8219",
-    "bytes": 8554154,
+    "sha256": "042042845e4d50ca40de6718b5d8ba5259fb74735ef182873e3813caf50a8421",
+    "bytes": 8554247,
     "files": 933,
     "record": "control-artifact.json",
     "archiveSourceFilesVerified": 49,
@@ -71,5 +71,6 @@
     "pr": "https://github.com/dev-james0723/PostRiff/pull/85",
     "status": "pushed; draft review open"
   },
-  "searchLoading": "passed on real held/released database query; old rows hidden during debounce and response wait"
+  "searchLoading": "passed on real held/released database query; old rows hidden during debounce and response wait",
+  "logoutRegression": "before: exhausted read budget prevents logout (429); after: valid logout succeeds and revokes session, invalid CSRF rejected, terminal audit persisted"
 }

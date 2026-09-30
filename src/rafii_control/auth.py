@@ -137,7 +137,7 @@ class Boundary:
             self._audit('session.exchange', 'denied', user, request_id=request_id, error_code=error.code)
             raise
 
-    def authorize(self, token, capability, *, origin=None, csrf=None, unsafe=False, step_up=False, request_id=None):
+    def authorize(self, token, capability, *, origin=None, csrf=None, unsafe=False, step_up=False, ending_session=False, request_id=None):
         user, session_id = None, None
         try:
             self.gate(origin if unsafe else None)
@@ -156,7 +156,9 @@ class Boundary:
             if unsafe and (origin != self.config.origin or not isinstance(csrf, str) or not hmac.compare_digest(csrf_token(token), csrf)):
                 raise ControlError('SCOPE_DENIED')
             if step_up and not 0 <= now - row['mfa_at'] <= 300: raise ControlError('STEP_UP_REQUIRED')
-            purpose = 'copilot.read' if capability == 'copilot.use' and not unsafe else capability
+            if ending_session and (capability != 'control.read' or not unsafe): raise ControlError('SCOPE_DENIED')
+            # Read throttling must not prevent an authorized founder from revoking their session.
+            purpose = 'session.logout' if ending_session else 'copilot.read' if capability == 'copilot.use' and not unsafe else capability
             self.store.budget(purpose, user, 5 if purpose == 'copilot.use' else 30 if capability == 'metrics.query' else 120)
             self._audit(capability, 'allowed', user, session_id, request_id)
             self.store.touch(row['token_hash'], now)

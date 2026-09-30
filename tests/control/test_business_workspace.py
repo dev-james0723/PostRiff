@@ -51,6 +51,23 @@ class BusinessWorkspaceTests(unittest.TestCase):
         result=json.loads(b''.join(app(env,lambda status,headers:response.update(status=int(status[:3])))))
         return response['status'],result
 
+    def test_logout_remains_authorized_when_read_budget_is_exhausted(self):
+        with psycopg.connect(self.dsn,autocommit=True) as con:
+            bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
+            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),120) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=120",(bucket,))
+        self.assertEqual(self.request('/session')[0],429)
+        # Session termination still needs its ordinary founder, origin and CSRF checks.
+        csrf=self.session['csrfToken'];self.session['csrfToken']='invalid'
+        self.assertEqual(self.request('/session/logout','POST')[0],403)
+        self.session['csrfToken']=csrf
+        status,result=self.request('/session/logout','POST')
+        self.assertEqual(status,200,result.get('code'))
+        self.assertTrue(result['data']['loggedOut'])
+        self.assertEqual(self.request('/session')[0],401)
+        with psycopg.connect(self.dsn) as con:
+            audit=con.execute("SELECT result FROM rafii_control.admin_audit_log WHERE request_id=%s",(result['requestId'],)).fetchall()
+        self.assertIn(('succeeded',),audit)
+
     def test_canonical_rafii_creation_appears_and_reader_hides_private_content(self):
         status,result=self.request('/workspace/live')
         self.assertEqual(status,200)

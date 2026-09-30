@@ -47,6 +47,7 @@ test_error_contract_and_denied_dispatch_audit (test_boundary.HttpTests.test_erro
 test_exchange_cookie_flags_and_logout_csrf (test_boundary.HttpTests.test_exchange_cookie_flags_and_logout_csrf) ... ok
 test_http_request_id_binds_content_free_audit (test_boundary.HttpTests.test_http_request_id_binds_content_free_audit) ... ok
 test_idle_and_absolute_expiry_are_independent (test_boundary.HttpTests.test_idle_and_absolute_expiry_are_independent) ... ok
+test_logout_budget_cannot_be_used_for_other_capabilities_or_reads (test_boundary.HttpTests.test_logout_budget_cannot_be_used_for_other_capabilities_or_reads) ... ok
 test_opaque_session_never_stores_raw_credential (test_boundary.HttpTests.test_opaque_session_never_stores_raw_credential) ... ok
 test_preview_database_identity_and_distinct_logins_are_bound_to_staging (test_boundary.HttpTests.test_preview_database_identity_and_distinct_logins_are_bound_to_staging) ... ok
 test_revocation_and_epoch_change_take_effect_next_request (test_boundary.HttpTests.test_revocation_and_epoch_change_take_effect_next_request) ... ok
@@ -54,11 +55,12 @@ test_run_reads_have_read_budget_and_keep_copilot_permission (test_boundary.HttpT
 test_wrong_host_and_effect_routes_never_execute (test_boundary.HttpTests.test_wrong_host_and_effect_routes_never_execute) ... ok
 test_approved_rename_persists_back_to_rafii_and_restores_with_one_retry_record (test_business_workspace.BusinessWorkspaceTests.test_approved_rename_persists_back_to_rafii_and_restores_with_one_retry_record) ... ok
 test_canonical_rafii_creation_appears_and_reader_hides_private_content (test_business_workspace.BusinessWorkspaceTests.test_canonical_rafii_creation_appears_and_reader_hides_private_content) ... ok
-test_database_failure_is_an_explicit_error_not_an_empty_dataset (test_business_workspace.BusinessWorkspaceTests.test_database_failure_is_an_explicit_error_not_an_empty_dataset) ... {"action": "control.read", "code": "SOURCE_UNAVAILABLE", "event": "terminal_audit_unavailable", "requestId": "11c6379e-a5c3-4a48-8a6b-42188208ee59", "result": "denied"}
+test_database_failure_is_an_explicit_error_not_an_empty_dataset (test_business_workspace.BusinessWorkspaceTests.test_database_failure_is_an_explicit_error_not_an_empty_dataset) ... {"action": "control.read", "code": "SOURCE_UNAVAILABLE", "event": "terminal_audit_unavailable", "requestId": "0c6fe0bc-ad9d-40f9-b90e-4bc8cb6f1cc7", "result": "denied"}
 ok
 test_demo_linked_workflows_retry_reset_and_live_isolation (test_business_workspace.BusinessWorkspaceTests.test_demo_linked_workflows_retry_reset_and_live_isolation) ... ok
 test_demo_rejects_free_text_audit_targets_and_unused_action_payloads (test_business_workspace.BusinessWorkspaceTests.test_demo_rejects_free_text_audit_targets_and_unused_action_payloads) ... ok
 test_global_search_pagination_literal_inputs_and_linked_record_lookup (test_business_workspace.BusinessWorkspaceTests.test_global_search_pagination_literal_inputs_and_linked_record_lookup) ... ok
+test_logout_remains_authorized_when_read_budget_is_exhausted (test_business_workspace.BusinessWorkspaceTests.test_logout_remains_authorized_when_read_budget_is_exhausted) ... ok
 test_pending_account_deletion_and_direct_reader_mutation_are_rejected (test_business_workspace.BusinessWorkspaceTests.test_pending_account_deletion_and_direct_reader_mutation_are_rejected) ... ok
 test_unapproved_workspace_stale_mfa_revoked_operator_and_unauthorized_http_fail_closed (test_business_workspace.BusinessWorkspaceTests.test_unapproved_workspace_stale_mfa_revoked_operator_and_unauthorized_http_fail_closed) ... ok
 test_atomic_rate_budget_and_unsafe_factory_fail_closed (test_database.DatabaseTests.test_atomic_rate_budget_and_unsafe_factory_fail_closed) ... ok
@@ -127,6 +129,6 @@ test_receipt_expiry_and_hosted_synthetic_context_fail_closed (test_workflow.Work
 test_source_to_projection_query_receipt_and_grounded_copilot (test_workflow.WorkflowTests.test_source_to_projection_query_receipt_and_grounded_copilot) ... ok
 
 ----------------------------------------------------------------------
-Ran 97 tests in 3.409s
+Ran 99 tests in 5.512s
 
 OK
