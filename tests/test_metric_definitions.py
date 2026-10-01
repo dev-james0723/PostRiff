@@ -138,16 +138,38 @@ if __name__ == "__main__":
 
 
 class FounderContractTest(unittest.TestCase):
-    """The Founder Control catalog contract is generated from these definitions; it must never drift (AC31)."""
+    """The Founder Control catalog rows are generated from these definitions and must never drift (AC31, D-025)."""
 
-    def test_contract_file_matches_the_definitions(self):
+    # Vocabulary Founder Control's catalogs/metrics.json already uses (PR #88 at e787cd47); new values would be unreviewed.
+    GRAINS = {"workspace interval", "workspace snapshot", "occurrence", "ledger settlement", "provider attempt", "subscription snapshot",
+              "opening paid cohort", "payment event", "refund event", "funds movement", "period + currency", "signup cohort"}
+    UNITS = {"ratio", "count", "currency_minor", "seconds_distribution", "millicredits", "usd_micro", "seconds"}
+    DIMENSIONS = {"plan", "currency", "window", "cohort", "provider", "task_type", "model", "source", "status"}
+
+    def contract(self):
         import json
         from pathlib import Path
         path = Path(__file__).resolve().parents[1] / "docs/design/rafii-product-growth/contracts/founder-metrics-growth.json"
-        contract = {item["id"]: item for item in json.loads(path.read_text())}
-        expected = {k for k, v in m.DEFINITIONS.items() if v.get("owner") != "founder"}
-        self.assertEqual(set(contract), expected)
-        for metric_id, item in contract.items():
-            self.assertEqual(item["definition"], m.DEFINITIONS[metric_id]["definition"], metric_id)
-            self.assertEqual(item["status"], m.PROPOSED, metric_id)
-            self.assertEqual(item["zero_denominator"], "unavailable", metric_id)
+        return path.read_text(encoding="utf-8"), json.loads(path.read_text(encoding="utf-8"))
+
+    def test_contract_file_is_exactly_the_generated_rows(self):
+        import importlib.util
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location("growth_metric_contract", Path(__file__).resolve().parents[1] / "scripts/growth_metric_contract.py")
+        generator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(generator)
+        text, rows = self.contract()
+        self.assertEqual(text, generator.render(), "run scripts/growth_metric_contract.py")
+        self.assertEqual({r["id"] for r in rows}, {k for k, v in m.DEFINITIONS.items() if v.get("owner") != "founder"})
+
+    def test_rows_use_only_founder_vocabulary_and_stay_proposed(self):
+        _, rows = self.contract()
+        for row in rows:
+            self.assertEqual(row["definition"], m.DEFINITIONS[row["id"]]["definition"], row["id"])
+            self.assertEqual(row["status"], m.PROPOSED, row["id"])
+            self.assertIn(row["grain"], self.GRAINS, row["id"])
+            self.assertIn(row["unit"], self.UNITS, row["id"])
+            self.assertLessEqual(set(row["allowed_dimensions"]), self.DIMENSIONS, row["id"])
+            self.assertIn(row["currency_policy"], {"not_applicable", "native_currency_separate"}, row["id"])
+            self.assertIn(row["refresh_target"], {"hourly_or_source_cadence", "event_driven_or_15m"}, row["id"])
+            self.assertNotIn("activation", row, row["id"])   # only activated rows carry it; activation stays with James
