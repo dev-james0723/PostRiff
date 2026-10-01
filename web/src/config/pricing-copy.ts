@@ -45,6 +45,8 @@ export interface SignUpCopy {
   metaTitle: string;
   metaDescription: string;
   subtitle: string;
+  /** The sign-in page's link to sign-up ("New to Rafii? …"). */
+  switchLabel: string;
   showPlanChooser: boolean;
   /** Legacy only: the trial plan picker (Studio / Studio Assist with the price after the trial). */
   chooser: { legend: string; options: { id: 'studio' | 'assist'; label: string; note: string; price: string | null }[]; note: string } | null;
@@ -106,6 +108,7 @@ function legacyCopy(): MarketingCopy {
       metaTitle: 'Start your free trial',
       metaDescription: 'Create a Rafii workspace. 14-day trial, no card required.',
       subtitle: '14-day free trial. No card needed.',
+      switchLabel: 'Start a free trial',
       showPlanChooser: true,
       chooser: {
         legend: 'Trial plan',
@@ -273,6 +276,7 @@ function v2Copy(): MarketingCopy {
       metaTitle: 'Start free',
       metaDescription: 'Create a Rafii workspace. Free to start, no card required.',
       subtitle: 'Start free. No card needed.',
+      switchLabel: 'Start free',
       showPlanChooser: false,
       chooser: null,
       promise: ['See Rafii work on your own writing first.', 'Connect your accounts when you’re ready.', 'Choose Creator when ongoing managed AI work is worth it.']

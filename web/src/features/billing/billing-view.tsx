@@ -141,7 +141,7 @@ export function BillingView() {
           <Plans usage={data} isOwner={isOwner} redirect={redirect} />
           {data.credits && isOwner && <CreditPacks />}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
-          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
+          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} allowanceNotes={mode === 'legacy_allowances'} />}
         </div>
       )}
     </PageContainer>

@@ -12,8 +12,9 @@ import { InfoTip } from '@/components/rafii';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { keys, useMe } from '@/lib/api/hooks';
+import { keys, useMe, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
+import { billingModeOf } from '@/lib/billing/mode';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
@@ -26,8 +27,8 @@ const EMAILS = [
   { kind: 'Invitation', when: 'When someone is invited', to: 'The invitee' },
   { kind: 'Welcome', when: 'After your first workspace', to: 'You' },
   { kind: 'New device sign-in', when: 'Only if turned on above', to: 'You' },
-  { kind: 'Trial ending', when: '2–3 days before it ends', to: 'Owner' },
-  { kind: 'Trial ended', when: 'Within a day after it ends', to: 'Owner' },
+  { kind: 'Trial ending', when: '2–3 days before it ends', to: 'Owner', trial: true },
+  { kind: 'Trial ended', when: 'Within a day after it ends', to: 'Owner', trial: true },
   { kind: 'Subscription active', when: 'When a plan starts or changes', to: 'Owner' },
   { kind: 'Payment failed', when: 'When a renewal fails (7-day grace)', to: 'Owner' }
 ];
@@ -79,6 +80,9 @@ export function NotificationsView() {
   const owner = checkAccess(access, { permission: 'owner' });
   // With Rafii's notification centre on, the person chooses what reaches them; otherwise only transactional email exists.
   const centre = useCoworkerFlag('RAFII_NOTIFICATIONS_V2_ENABLED') === true;
+  // Trial emails exist only for legacy trials; a Free or Creator workspace (Pricing v2) never gets them.
+  const mode = billingModeOf(useUsage().data);
+  const emails = mode === 'free_preview' || mode === 'managed_credits' ? EMAILS.filter((item) => !item.trial) : EMAILS;
   return (
     <PageContainer
       pageTitle='Notifications'
@@ -99,7 +103,7 @@ export function NotificationsView() {
           padding='sm'
         >
           <ul className='flex flex-col gap-1'>
-            {EMAILS.map((item) => (
+            {emails.map((item) => (
               <li key={item.kind} className='flex min-h-12 items-center justify-between gap-4 rounded-[var(--rafii-radius-control)] px-2 py-2'>
                 <div className='min-w-0'>
                   <p className='text-foreground text-sm font-medium'>{item.kind}</p>

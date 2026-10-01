@@ -80,6 +80,14 @@ test('the plan summary reads Free as Free, a subscriber’s own variant price, a
   assert.match(card, /v2PlanCardModels\(usage, isOwner\)\.some\(\(card\) => card\.offer === 'checkout'\)/, '"See Creator" / "Choose a plan" only when the list offers a checkout');
 });
 
+test('the owner ledger keeps batch-era allowance notes for legacy only', () => {
+  const { ledgerCsv } = load(join(SRC, 'features/billing/billing-model.ts'));
+  const row = { kind: 'settle', dimension: 'text_model', costState: 'actual', estimatedUsdMicro: 20_000, actualUsdMicro: 13_000, at: 1_800_000_000, provider: 'gateway', model: 'm', chargeBatch: false };
+  assert.match(ledgerCsv([row]), /No allowance used/);
+  assert.doesNotMatch(ledgerCsv([row], false), /allowance used|writing batch/i, 'a managed-credit run is not "no allowance used"');
+  assert.match(read('features/billing/billing-view.tsx'), /<Ledger entries=\{data\.ledger\} canEdit=\{canEdit\} allowanceNotes=\{mode === 'legacy_allowances'\} \/>/);
+});
+
 test('the v2 plan list uses the v2 models and only shows Choose when checkout can work', () => {
   const plans = read('features/billing/plans.tsx');
   assert.match(plans, /if \(planListKind\(usage\) === 'v2'\) return <V2Plans/);

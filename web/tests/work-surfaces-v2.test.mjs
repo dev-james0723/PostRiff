@@ -125,4 +125,6 @@ test('tours, help suggestions and labels say nothing a v2 workspace cannot do', 
 
   const { CATEGORY_LABELS } = load(join(SRC, 'features/coworker/notifications/labels.ts'));
   assert.doesNotMatch(CATEGORY_LABELS.billing.hint, /trial/i);
+  const emails = read('features/account/notifications-view.tsx');
+  assert.match(emails, /mode === 'free_preview' \|\| mode === 'managed_credits' \? EMAILS\.filter\(\(item\) => !item\.trial\)/, 'trial emails are listed only where trials exist');
 });

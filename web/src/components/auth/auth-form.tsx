@@ -322,7 +322,7 @@ export function AuthForm({ intent, signUp }: { intent: 'sign-in' | 'sign-up'; si
             <>
               New to Rafii?{' '}
               <Link href={`${siteConfig.links.signUp}?next=${encodeURIComponent(next)}`} className={linkClass}>
-                Start a free trial
+                {signUp?.switchLabel ?? 'Create an account'}
               </Link>
             </>
           )}

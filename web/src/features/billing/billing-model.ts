@@ -295,8 +295,11 @@ function csvCell(value: string | number | null, text = true): string {
 
 const dollars = (micro: number | null) => (micro === null ? null : (micro / 1_000_000).toFixed(6));
 
-/** CSV of the rows the page already holds; nothing is fetched. Times are UTC ISO-8601, money in USD. */
-export function ledgerCsv(entries: readonly LedgerEntry[]): string {
+/**
+ * CSV of the rows the page already holds; nothing is fetched. Times are UTC ISO-8601, money in USD. The allowance
+ * column names legacy writing batches and media credits, so it is filled only for legacy allowances (`notes`).
+ */
+export function ledgerCsv(entries: readonly LedgerEntry[], notes = true): string {
   const header = ['time_utc', 'what', 'step', 'provider', 'model', 'estimated_usd', 'actual_usd', 'state', 'allowance'];
   const rows = entries.map((entry) =>
     [
@@ -308,7 +311,7 @@ export function ledgerCsv(entries: readonly LedgerEntry[]): string {
       csvCell(dollars(entry.estimatedUsdMicro ?? null), false),
       csvCell(dollars(entry.actualUsdMicro ?? null), false),
       csvCell(costStateOf(entry.costState).label),
-      csvCell(allowanceNote(entry) ?? (isZeroCostRun(entry) ? '$0 run' : null))
+      csvCell((notes ? allowanceNote(entry) : null) ?? (isZeroCostRun(entry) ? '$0 run' : null))
     ].join(',')
   );
   return [header.join(','), ...rows].join('\r\n') + '\r\n';

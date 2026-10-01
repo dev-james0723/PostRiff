@@ -58,7 +58,8 @@ test('legacy copy is exactly today’s, so nothing changes before activation', (
   assert.deepEqual(legacy.previewStat, ['Writing batches', '61']);
   assert.equal(legacy.terms.title, 'Trial, subscriptions and billing');
   assert.match(legacy.terms.paragraph, /^New workspaces get a 14-day trial with 2 connected accounts and 10 writing batches\. No payment method is required/);
-  assert.deepEqual([legacy.signUp.metaTitle, legacy.signUp.metaDescription, legacy.signUp.subtitle, legacy.signUp.showPlanChooser], ['Start your free trial', 'Create a Rafii workspace. 14-day trial, no card required.', '14-day free trial. No card needed.', true]);
+  assert.deepEqual([legacy.signUp.metaTitle, legacy.signUp.metaDescription, legacy.signUp.subtitle, legacy.signUp.showPlanChooser, legacy.signUp.switchLabel], ['Start your free trial', 'Create a Rafii workspace. 14-day trial, no card required.', '14-day free trial. No card needed.', true, 'Start a free trial']);
+  assert.deepEqual(legacy.signUp.chooser.options.map((o) => [o.label, o.price]), [['Studio', '$19/mo after trial'], ['Studio Assist', '$39/mo after trial']]);
   assert.equal(legacy.docs.gettingStartedCreate, 'Sign up with Google or an email code and choose a trial plan. A workspace is created for you; you are its owner.');
   assert.deepEqual(legacy.docs.usageSections.map((s) => s.heading), ['Allowances', 'Trial', 'Subscriptions']);
 });
@@ -106,6 +107,8 @@ test('v2 sign-up starts free with no card and no "after trial" price', () => {
   assert.ok(v2.signUp.promise.length >= 3);
   assert.ok(v2.signUp.promise.some((line) => /Creator/.test(line)));
   assert.doesNotMatch(JSON.stringify(v2.signUp), /trial|\/mo/i);
+  assert.equal(v2.signUp.switchLabel, 'Start free');
+  assert.equal(v2.signUp.chooser, null);
   assert.equal(v2.hero.primaryLabel, 'Start free');
   assert.equal(v2.headerCta, 'Start free');
   assert.equal(v2.ctaBand.primaryLabel, 'Start free');
@@ -152,8 +155,9 @@ test('public surfaces read pricing words from the catalog modules, not hard-code
     'components/marketing/site-header.tsx': [/>\s*Start free trial\s*</],
     'components/marketing/mobile-nav.tsx': [/>\s*Start free trial\s*</],
     'app/(marketing)/channels/[slug]/page.tsx': [/>\s*Start free trial\s*</],
-    'components/auth/auth-form.tsx': [/after trial/, /14-day free trial/],
+    'components/auth/auth-form.tsx': [/after trial/, /14-day free trial/, /Start a free trial/, /Studio Assist/],
     'app/auth/sign-up/page.tsx': [/14-day trial/],
+    'app/auth/sign-in/page.tsx': [/free trial/i],
     'app/(marketing)/terms/page.tsx': [/writing batches/],
     'content/docs.ts': [/choose a trial plan/, /Writing batches, media credits/]
   };
