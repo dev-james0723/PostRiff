@@ -388,6 +388,13 @@ def sweep(svc):
             if upload and upload["objectState"] == "present":
                 store.queue_purge(cur, upload, f"job_{job['state']}" if job else "job_finished")
     counts["finishedObjects"] = len(stale)
+    # Settled tombstones (cancelled, rejected, deleted) go entirely after the review window, file names included; never
+    # while an object deletion is still queued or a transcription reservation is still held.
+    with svc.connect() as db, db.cursor() as cur:
+        cur.execute("DELETE FROM public.pr_source_uploads WHERE id IN (SELECT u.id FROM public.pr_source_uploads u WHERE u.state IN ('rejected','cancelled','deleted') "
+                    "AND u.object_state IN ('none','deleted') AND u.updated_at < now() - make_interval(days => %s) AND NOT EXISTS (SELECT 1 FROM public.pr_source_upload_jobs j "
+                    "WHERE j.workspace_id=u.workspace_id AND j.upload_id=u.id AND j.quote_state='reserved') ORDER BY u.updated_at LIMIT %s)", (limits.REVIEW_DAYS, STEP_ROWS))
+        counts["tombstonesRemoved"] = cur.rowcount
     return counts
 
 

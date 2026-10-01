@@ -504,6 +504,13 @@ jobs.sweep(intake)
 jobs.drain(intake)
 check("R-NFR-02 an upload never finished is cancelled and its object deleted", intake.status(wid, OWNER, abandoned["id"])["reason"] == "upload_expired"
       and (wid, f"{uuid.UUID(abandoned['id']).hex}.pdf") not in storage.objects)
+sql("UPDATE public.pr_source_uploads SET updated_at=now()-interval '31 days' WHERE id IN (%s,%s)", (stopped["id"], racing["id"]))
+sql("UPDATE public.pr_source_upload_jobs SET quote_state='reserved' WHERE upload_id=%s", (racing["id"],))
+jobs.sweep(intake)
+check("R-NFR-02 a settled tombstone (file name included) is removed after the review window",
+      not sql("SELECT 1 FROM public.pr_source_uploads WHERE id=%s", (stopped["id"],)))
+check("R-NFR-02 but never while a transcription reservation is still held", sql("SELECT 1 FROM public.pr_source_uploads WHERE id=%s", (racing["id"],)))
+sql("UPDATE public.pr_source_upload_jobs SET quote_state='not_required' WHERE upload_id=%s", (racing["id"],))
 deleted = intake.delete(wid, OWNER, poisoned["id"])
 check("R-NFR-02 deleting an upload removes its text; the source made from it is kept", deleted["deleted"] and deleted["sourceKept"] == created["sourceId"] and results(poisoned["id"]) == 0
       and deleted["upload"]["state"] == "deleted")
