@@ -38,6 +38,11 @@ import { NoThreadSelected, ThreadDetail, ThreadHeading, threadHeadline } from '.
 import { ThreadList } from './thread-list';
 import { useTwoPane } from './use-two-pane';
 import { GrowthEntry } from '@/features/growth/studio-parts';
+import { followUpsOff, useRelationshipList } from '@/lib/growth-v2/relationships-hooks';
+import { canonicalId } from '@/lib/growth-v2/relationships-model';
+import type { Relationship } from '@/lib/growth-v2/relationships-types';
+import { currentCopy } from './follow-up/copy';
+import { FollowUpList, FollowUpPanel } from './follow-up/follow-up-list';
 
 const infoContent = {
   title: 'Inbox',
@@ -50,7 +55,9 @@ const infoContent = {
 
 const PARAMS = {
   filter: parseAsStringLiteral(INBOX_FILTERS).withDefault('all'),
-  thread: parseAsString
+  thread: parseAsString,
+  /** The follow-up shown with (or instead of) a conversation in the Follow-ups view. */
+  relationship: parseAsString
 };
 
 const EMPTY_COMPOSER: ComposerState = { text: '', draft: null };
@@ -61,7 +68,7 @@ const PANE_HEIGHT = 'lg:max-h-[calc(100dvh-16rem)] lg:min-h-80';
 /** Conversation list beside the open thread from `lg` up (DNA §21.5); below it the thread is a separate step. */
 const PANES = 'grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]';
 
-const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', needs_reply: 'Needs reply', review: 'Review', fyi: 'FYI', unanswered: 'Unanswered', replied: 'Replied' };
+const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', needs_reply: 'Needs reply', review: 'Review', fyi: 'FYI', unanswered: 'Unanswered', replied: 'Replied', follow_ups: 'Follow-ups' };
 
 export function InboxView() {
   const { workspaceId } = useWorkspaceApi();
@@ -71,7 +78,7 @@ export function InboxView() {
   useEffect(() => {
     if (previous.current === workspaceId) return;
     previous.current = workspaceId;
-    void setParams({ thread: null });
+    void setParams({ thread: null, relationship: null });
   }, [workspaceId, setParams]);
   // Keyed by workspace so unsaved reply text and this visit's approvals never carry across.
   return <InboxPage key={workspaceId} />;
@@ -95,6 +102,12 @@ function InboxPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   // The sheet keeps showing the comment it opened with while it slides closed.
   const [sheetThreadId, setSheetThreadId] = useState<string | null>(null);
+  const [sheetRelationshipId, setSheetRelationshipId] = useState<string | null>(null);
+  const [sheetKind, setSheetKind] = useState<'thread' | 'relationship'>('thread');
+  // Relationship follow-ups: one bounded read for the tab and its due count; 404 feature_disabled hides the tab.
+  const followUps = useRelationshipList({ state: 'open', due: 'due_now', limit: 1 });
+  const followUpsAvailable = Boolean(followUps.data);
+  const followUpCopy = currentCopy();
 
   const data = audience.data;
   useEffect(() => {
@@ -121,23 +134,32 @@ function InboxPage() {
   const triageCount = (kind: string) => triageComplete ? [...triageById.values()].filter((item) => item.priority === kind).length : null;
   const counts = data ? { ...countsFor(data, threads, reported, answered),
     needs_reply: triageCount('needs_reply'), review: triageCount('review'), fyi: triageCount('fyi') } : null;
-  const activeFilter = TRIAGE_FILTERS.includes(params.filter) && !data?.engagementEnabled ? 'all' : params.filter;
+  const activeFilter = (TRIAGE_FILTERS.includes(params.filter) && !data?.engagementEnabled) || (params.filter === 'follow_ups' && followUpsOff(followUps)) ? 'all' : params.filter;
   const filtered = threads.filter((thread) => activeFilter === 'all' ? true
     : activeFilter === 'replied' ? answered(thread)
     : activeFilter === 'unanswered' ? !thread.tombstoned && !answered(thread)
     : triageById.get(thread.threadId)?.priority === activeFilter);
   const freshReplyIds = useMemo(() => new Set(Object.values(sessionReplies).flatMap((list) => list.map((reply) => reply.draftId))), [sessionReplies]);
 
-  const selected = params.thread ? (threads.find((thread) => thread.threadId === params.thread) ?? null) : null;
+  // Notification links carry compact ids; the page works with uuids.
+  const threadParam = canonicalId(params.thread);
+  const relationshipParam = canonicalId(params.relationship);
+  const selected = threadParam ? (threads.find((thread) => thread.threadId === threadParam) ?? null) : null;
   useEffect(() => {
     if (selected && !twoPane) toast.dismiss('page-tour-inbox-tips');
   }, [selected, twoPane]);
-  const missing = Boolean(params.thread && data && !selected);
+  const missing = Boolean(threadParam && data && !selected);
+  // A follow-up whose conversation is not loaded (or that has none) opens on its own.
+  const relationshipOnly = activeFilter === 'follow_ups' && relationshipParam && !selected ? relationshipParam : null;
   if (selected && selected.threadId !== sheetThreadId) setSheetThreadId(selected.threadId);
+  if (selected && sheetKind !== 'thread') setSheetKind('thread');
+  if (relationshipOnly && relationshipOnly !== sheetRelationshipId) setSheetRelationshipId(relationshipOnly);
+  if (relationshipOnly && sheetKind !== 'relationship') setSheetKind('relationship');
   const sheetThread = sheetThreadId ? (threads.find((thread) => thread.threadId === sheetThreadId) ?? null) : null;
 
-  const select = (threadId: string) => void setParams({ thread: threadId });
-  const clear = () => void setParams({ thread: null });
+  const select = (threadId: string) => void setParams({ thread: threadId, relationship: null });
+  const clear = () => void setParams({ thread: null, relationship: null });
+  const selectFollowUp = (relationship: Relationship) => void setParams({ relationship: relationship.id, thread: relationship.threadIds[0] ?? null });
 
   const latestReply = useCallback(
     (thread: Thread) => {
@@ -169,13 +191,15 @@ function InboxPage() {
   }
 
   // WHAT: the three reply-state views. Counts the server cannot vouch for are left out, never guessed.
-  const filterOptions: SegmentOption<InboxFilter>[] = INBOX_FILTERS.filter((filter) => !TRIAGE_FILTERS.includes(filter) || data?.engagementEnabled === true).map((filter) => {
-    const count = counts?.[filter] ?? null;
+  const filterOptions: SegmentOption<InboxFilter>[] = INBOX_FILTERS.filter(
+    (filter) => (!TRIAGE_FILTERS.includes(filter) || data?.engagementEnabled === true) && (filter !== 'follow_ups' || followUpsAvailable)
+  ).map((filter) => {
+    const count = filter === 'follow_ups' ? (followUps.data?.counts.dueNow ?? null) : (counts?.[filter] ?? null);
     return {
       value: filter,
       label: (
         <>
-          {FILTER_LABELS[filter]}
+          {filter === 'follow_ups' ? followUpCopy.tab : FILTER_LABELS[filter]}
           {count !== null && <DigitSwap value={count} className='text-muted-foreground text-xs' />}
         </>
       )
@@ -199,7 +223,7 @@ function InboxPage() {
         }
       />
     );
-  } else if (threads.length === 0) {
+  } else if (threads.length === 0 && !(followUpsAvailable && ((followUps.data?.counts.open ?? 0) > 0 || activeFilter === 'follow_ups'))) {
     main = <InboxEmpty channels={channels} providers={providers} />;
   } else {
     main = (
@@ -226,8 +250,10 @@ function InboxPage() {
             />
           )}
           <Surface material='quiet' radius='card' padding='none' data-tour='inbox-threads' className={cn('p-1.5 lg:overflow-y-auto', PANE_HEIGHT)}>
-            {filtered.length > 0 ? (
-              <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} triageById={triageById} />
+            {activeFilter === 'follow_ups' ? (
+              <FollowUpList selectedId={relationshipParam} onSelect={selectFollowUp} canEdit={canEdit} />
+            ) : filtered.length > 0 ? (
+              <ThreadList threads={filtered} selectedId={threadParam} onSelect={select} channelsById={channelsById} latestReply={latestReply} triageById={triageById} />
             ) : (
               <StateMessage
                 kind='empty'
@@ -250,10 +276,10 @@ function InboxPage() {
               />
             )}
           </Surface>
-          {pageCursor && <Button variant='quiet' size='sm' disabled={loadingMore} onClick={() => void loadMore()}>
+          {pageCursor && activeFilter !== 'follow_ups' && <Button variant='quiet' size='sm' disabled={loadingMore} onClick={() => void loadMore()}>
             {loadingMore ? 'Loading…' : 'Load more comments'}
           </Button>}
-          {pageCursor && data?.engagementEnabled && <p className='text-muted-foreground text-xs'>Engagement filters cover loaded comments. Load more to see older ones.</p>}
+          {pageCursor && data?.engagementEnabled && activeFilter !== 'follow_ups' && <p className='text-muted-foreground text-xs'>Engagement filters cover loaded comments. Load more to see older ones.</p>}
         </section>
         {twoPane && (
           <Surface material='quiet' radius='card' padding='none' className={cn('flex min-w-0 flex-col overflow-y-auto', PANE_HEIGHT)}>
@@ -264,6 +290,12 @@ function InboxPage() {
                 </div>
                 <div className='px-5 py-4'>{detailFor(selected)}</div>
               </>
+            ) : relationshipOnly ? (
+              <div className='px-5 py-4'>
+                <FollowUpPanel relationshipId={relationshipOnly} canEdit={canEdit} />
+              </div>
+            ) : activeFilter === 'follow_ups' ? (
+              <p className='text-muted-foreground flex h-full min-h-48 items-center justify-center p-6 text-center text-sm'>{followUpCopy.pick}</p>
             ) : (
               <NoThreadSelected missing={missing} onClear={clear} />
             )}
@@ -338,9 +370,24 @@ function InboxPage() {
       </div>
       {/* Below `lg` the open comment is its own step: the list stays behind, Back returns to it (DNA §21.5). */}
       {!twoPane && (
-        <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && clear()}>
+        <Sheet open={Boolean(selected) || Boolean(relationshipOnly)} onOpenChange={(open) => !open && clear()}>
           <SheetContent side='right' showCloseButton={false} className={cn(SHEET_ELEVATED, 'data-[side=right]:w-full data-[side=right]:sm:max-w-lg')}>
-            {sheetThread && sheetHeadline && (
+            {sheetKind === 'relationship' && sheetRelationshipId && (
+              <>
+                <SheetHeader className='gap-3 px-4 pt-3 pb-3'>
+                  <Button variant='quiet' size='sm' className='-ml-2 h-11 w-fit gap-1 px-2.5 text-sm' onClick={clear}>
+                    <Icons.chevronLeft className='size-4' aria-hidden />
+                    {followUpCopy.tab}
+                  </Button>
+                  <SheetTitle>{followUpCopy.section}</SheetTitle>
+                  <SheetDescription className='sr-only'>{followUpCopy.remindersNote}</SheetDescription>
+                </SheetHeader>
+                <div className='min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]'>
+                  <FollowUpPanel relationshipId={sheetRelationshipId} canEdit={canEdit} />
+                </div>
+              </>
+            )}
+            {sheetKind === 'thread' && sheetThread && sheetHeadline && (
               <>
                 <SheetHeader className='gap-3 px-4 pt-3 pb-3'>
                   <Button variant='quiet' size='sm' className='-ml-2 h-11 w-fit gap-1 px-2.5 text-sm' onClick={clear}>

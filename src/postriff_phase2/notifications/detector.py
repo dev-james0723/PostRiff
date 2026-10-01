@@ -189,6 +189,13 @@ def from_database(cur, workspace_id, now=None):
         if category in ("question", "complaint", "lead"):
             out.append({"event_type": "engagement.needs_attention", "dedupe_key": f"engagement:{thread_id}", "entity_type": "audience_thread", "entity_id": thread_id,
                         "payload": {"platform": provider, "reason": category, "href": f"/app/inbox?filter=needs_reply&thread={thread_id}"}})
+    # Relationship follow-ups that are due (G2-REL): flag-gated, guarded by their own savepoint, content-free payloads.
+    try:
+        from ..relationships import service as relationships
+    except ImportError:   # the slice is not part of this build
+        relationships = None
+    if relationships is not None:
+        out.extend(relationships.detector_events(cur, workspace_id, now))
     return out
 
 

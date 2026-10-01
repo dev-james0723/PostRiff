@@ -9,6 +9,7 @@ import { isFeatureDisabled } from '@/lib/coworker/api';
 import { useCoworkerAttention } from '@/lib/coworker/hooks';
 import { safeAppHref } from '@/lib/coworker/safe-href';
 import { cn } from '@/lib/utils';
+import { FollowUpAttentionItem } from '@/features/inbox/follow-up/follow-up-attention';
 import { eventLabel } from './notifications/labels';
 
 const ACTION: Record<string, string> = {
@@ -24,6 +25,7 @@ const ACTION: Record<string, string> = {
   'budget.threshold_reached': 'See usage',
   'billing.trial_ending': 'Choose a plan',
   'engagement.needs_attention': 'Open Inbox',
+  'relationship.follow_up_due': 'Follow up',
   'learning.preference_proposed': 'Review the preference',
   'opportunity.detected': 'See the opportunity'
 };
@@ -60,7 +62,9 @@ export function CoworkerAttention({ className }: { className?: string }) {
       description={urgent > 0 ? `${urgent} urgent, then the rest in order. Rafii orders these by fixed rules, not by guesswork.` : 'In order of what matters most. Rafii orders these by fixed rules, not by guesswork.'}
     >
       <ol aria-labelledby='coworker-attention-heading' className='flex flex-col gap-2'>
-        {items.slice(0, 8).map((item) => (
+        {items.slice(0, 8).map((item) => item.type === 'relationship.follow_up_due' ? (
+          <FollowUpAttentionItem key={item.id} item={item} />
+        ) : (
           <li key={item.id} data-attention-type={item.type} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4 sm:flex-row sm:items-center sm:justify-between'>
             <div className='flex min-w-0 items-start gap-3'>
               <span aria-hidden className={cn('mt-0.5 flex shrink-0', item.urgent ? 'text-foreground' : 'text-muted-foreground')}>
