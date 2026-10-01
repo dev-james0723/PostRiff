@@ -221,7 +221,7 @@ def _schedule(data,state,payload,now,report=False):
     if type(payload['confirmed']) is not bool: raise ControlError('VALIDATION_FAILED',400)
     try: ZoneInfo(payload['timeZone'])
     except (ValueError,TypeError,ZoneInfoNotFoundError): raise ControlError('VALIDATION_FAILED',400) from None
-    due=resolve_local_time(payload['dueLocal'],payload['timeZone']) if payload['dueLocal'] else None
+    due=resolve_local_time(payload['dueLocal'],payload['timeZone']) if payload['dueLocal'] is not None else None
     if payload['confirmed'] and due is None: raise ControlError('TIME_NOT_SELECTED',400)
     if due and datetime.fromisoformat(due)<=datetime.fromisoformat(now.replace('Z','+00:00')):
         raise ControlError('STALE_PREVIEW',409)
@@ -297,7 +297,9 @@ def _apply(data,state,action,payload,now,principal):
         operation=payload['operation']
         if not isinstance(operation,str) or operation not in states: raise ControlError('VALIDATION_FAILED',400)
         voice=conversation['voice']
-        if 'generationId' in payload and payload['generationId']!=voice['generationId']: raise ControlError('STALE_PREVIEW',409)
+        if 'generationId' in payload:
+            if type(payload['generationId']) is not int: raise ControlError('VALIDATION_FAILED',400)
+            if payload['generationId']!=voice['generationId']: raise ControlError('STALE_PREVIEW',409)
         voice.update(state=states[operation],generationId=voice['generationId']+1,liveVoiceConnected=False,
                      simulation=True,externalDelivery=False,recording=False)
         if operation=='repeat': voice['speakableSummary']=conversation['turns'][-1]['speakableSummary'] if conversation['turns'] else ''

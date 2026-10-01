@@ -212,6 +212,45 @@ class FounderPreviewDeliveryTests(unittest.TestCase):
 
 
 class FounderEmailPreviewTests(unittest.TestCase):
+    def test_original_payment_evidence_preserves_minor_units_without_private_fields(self):
+        original = dict(invoiceId="invoice-demo-9", subscriptionId="subscription-demo-2", paymentId="payment-demo-7",
+                        amountMinor=1234, currency="JPY")
+        incident = dict(id="incident-payment", title="Simulated payment exception", affectedCount=1,
+                        affectedRecords=[{**original, "name": "PRIVATE-NAME", "workspaceName": "PRIVATE-WORKSPACE",
+                                          "body": "PRIVATE-BODY", "recipient": "PRIVATE-RECIPIENT", "url": "https://PRIVATE-URL.test"}],
+                        known=["PRIVATE-INSTRUCTION"], logs=["PRIVATE-LOG"])
+        preview = email_preview(incident)
+        self.assertEqual(preview["paymentEvidence"], [original])
+        self.assertIn("Original simulated evidence", preview["text"])
+        self.assertIn("Invoice: invoice-demo-9", preview["text"])
+        self.assertIn("Subscription: subscription-demo-2", preview["text"])
+        self.assertIn("Payment: payment-demo-7", preview["text"])
+        self.assertIn("Amount (minor units): 1234 JPY", preview["text"])
+        self.assertNotIn("12.34", json.dumps(preview))
+        self.assertNotIn("PRIVATE-", json.dumps(preview))
+        self.assertFalse(preview["externalDelivery"])
+        self.assertEqual(preview["providerCalls"], 0)
+
+    def test_payment_evidence_is_bounded_and_invalid_references_fail_closed(self):
+        original = dict(invoiceId="invoice-demo-9", subscriptionId="subscription-demo-2", paymentId="payment-demo-7",
+                        amountMinor=3900, currency="USD")
+        preview = email_preview(dict(id="incident-payment", affectedRecords=[original, {**original, "invoiceId": "invoice-extra"}]))
+        self.assertEqual(preview["paymentEvidence"], [original])
+        self.assertNotIn("invoice-extra", json.dumps(preview))
+        self.assertIn("1 record shown", preview["text"])
+        for change in ({"invoiceId": "https://private.test"}, {"subscriptionId": "owner@example.test"},
+                       {"paymentId": "bad/id"}, {"amountMinor": True}, {"amountMinor": -1},
+                       {"amountMinor": 10**12 + 1}, {"currency": "US"}, {"currency": "<b>USD</b>"}):
+            with self.subTest(change=change), self.assertRaises(ControlError):
+                email_preview(dict(id="incident-payment", affectedRecords=[{**original, **change}]))
+
+    def test_recovery_preview_subject_is_explicitly_recovered_and_unsent(self):
+        recovered = email_preview(dict(id="incident-recovery", state="resolved", title="Simulated outage"))
+        self.assertIn("[Recovered]", recovered["subject"])
+        self.assertIn("DEMO — simulated, not sent", recovered["subject"])
+        self.assertIn("State: resolved", recovered["text"])
+        self.assertEqual(recovered["impact"]["state"], "resolved")
+
     def test_private_fields_are_dropped_and_impact_text_is_escaped(self):
         incident = {"id": "incident-1", "title": '<script>alert("demo")</script>', "severity": "critical",
                     "affectedCount": 720, "state": "recovering", "observedAt": "2026-10-01T14:00:00Z",

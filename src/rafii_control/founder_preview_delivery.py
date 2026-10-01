@@ -255,6 +255,29 @@ def _safe_impact_text(value, limit):
     return text
 
 
+def _payment_evidence(incident):
+    """One original Demo payment record, with no private/text/log projection."""
+    records = incident.get("affectedRecords", [])
+    if not isinstance(records, list):
+        _error("INVALID", 400)
+    refs = ("invoiceId", "subscriptionId", "paymentId")
+    # Preview coverage is deliberately bounded; this is not a full incident
+    # export. Outage metadata without payment references stays out of email.
+    for record in records[:10]:
+        if not isinstance(record, dict):
+            _error("INVALID", 400)
+        if not any(key in record for key in refs):
+            continue
+        if any(not isinstance(record.get(key), str) or not _ID.fullmatch(record[key]) for key in refs):
+            _error("INVALID", 400)
+        amount, currency = record.get("amountMinor"), record.get("currency")
+        if (type(amount) is not int or not 0 <= amount <= 10**12
+                or not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency)):
+            _error("INVALID", 400)
+        return [{key: record[key] for key in (*refs, "amountMinor", "currency")}]
+    return []
+
+
 def email_preview(incident: dict, *, locale="en") -> dict:
     """Render a safe, explicitly unsent incident preview using the shared template.
 
@@ -278,11 +301,18 @@ def email_preview(incident: dict, *, locale="en") -> dict:
     observed = _timestamp(incident["observedAt"]).isoformat() if "observedAt" in incident else "unavailable"
     impact = dict(id=incident["id"], title=_safe_impact_text(incident.get("title", "Founder incident"), 120),
                   severity=severity, affectedCount=count, state=state, observedAt=observed)
+    payments = _payment_evidence(incident)
+    details = [("Execution", _MARKER), ("Incident", impact["id"]), ("Title", impact["title"]),
+               ("Severity", severity), ("Affected Demo subscribers", str(count)), ("State", state), ("Observed at", observed)]
+    if payments:
+        payment = payments[0]
+        details.extend([("Payment evidence", "Original simulated evidence; 1 record shown"),
+                        ("Invoice", payment["invoiceId"]), ("Subscription", payment["subscriptionId"]),
+                        ("Payment", payment["paymentId"]),
+                        ("Amount (minor units)", f'{payment["amountMinor"]} {payment["currency"]}')])
     preview = render("analytics_anomaly", locale=locale, base_url="https://rafii.invalid", href="/app",
-                     transactional=True, details=[("Execution", _MARKER), ("Incident", impact["id"]),
-                     ("Title", impact["title"]), ("Severity", severity), ("Affected Demo subscribers", str(count)),
-                     ("State", state), ("Observed at", observed)])
-    preview["subject"] = _MARKER + " — " + preview["subject"]
+                     transactional=True, details=details)
+    preview["subject"] = _MARKER + (" — [Recovered]" if state == "resolved" else "") + " — " + preview["subject"]
     preview["preheader"] = _MARKER + " — " + preview["preheader"]
     preview["text"] = _MARKER + "\n\n" + preview["text"]
     preview["html"] = preview["html"].replace("<body ", '<body data-execution="simulation" ').replace(
@@ -293,4 +323,5 @@ def email_preview(incident: dict, *, locale="en") -> dict:
     # separate Control actionPath. The text twin retains only the fixed origin.
     preview["html"] = re.sub(r'<img\b[^>]*>', '', preview["html"])
     preview["html"] = re.sub(r'href="https://rafii\.invalid[^"]*"', 'href="#preview-only"', preview["html"])
-    return dict(**preview, **_METADATA, impact=impact, actionPath="/control/advanced", rendererLinks="disabled_preview_only")
+    return dict(**preview, **_METADATA, impact=impact, paymentEvidence=payments,
+                actionPath="/control/advanced", rendererLinks="disabled_preview_only")

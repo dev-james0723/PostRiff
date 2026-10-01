@@ -188,6 +188,9 @@ class FounderIntelligenceTests(unittest.TestCase):
         cases=[('founder_delivery',[]),('founder_voice',{'conversationId':run['conversationId'],'operation':[]}),
                ('founder_report_schedule',{'conversationId':run['conversationId'],'kind':[],
                   'dueLocal':None,'timeZone':'UTC','confirmed':False}),
+               ('founder_report_schedule',{'conversationId':run['conversationId'],'kind':'daily',
+                  'dueLocal':[],'timeZone':'UTC','confirmed':False}),
+               ('founder_voice',{'conversationId':run['conversationId'],'operation':'start','generationId':False}),
                ('founder_turn',{'message':'Explain this chart','conversationId':None,'chartContext':{
                   'chartId':[],'viewVersion':1,'queryReceiptId':dataset.receipt(self.data)['id'],
                   'mode':'demo','environment':'local'}})]
@@ -230,6 +233,14 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.assertEqual(view['incident']['state'],'resolved')
         self.assertEqual(sum(n['kind']=='recovery' for n in view['notifications']),1)
         self.assertEqual(self.data['summary']['currentPaidSubscriptions'],10000)
+        scenario('payment_failure')
+        view=service.preview_state(self.data,self.principal)
+        self.assertEqual(view['incident']['affectedCount'],1)
+        payment=view['notifications'][-1]
+        self.assertEqual(payment['paymentEvidence'][0]['invoiceId'],'invoice-2')
+        self.assertEqual(payment['paymentEvidence'][0]['amountMinor'],5900)
+        self.assertIn('5900 USD',payment['text'])
+        self.assertFalse(payment['externalDelivery'])
 
     def test_read_snapshot_denies_intelligence_without_breaking_workspace_read(self):
         self.turn()
