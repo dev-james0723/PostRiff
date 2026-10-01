@@ -52,10 +52,17 @@ class BusinessWorkspaceTests(unittest.TestCase):
         result=json.loads(b''.join(app(env,lambda status,headers:response.update(status=int(status[:3])))))
         return response['status'],result
 
-    def test_logout_remains_authorized_when_read_budget_is_exhausted(self):
+    def exhaust_read_budget(self):
+        """Fill this minute's read budget. The window resets on the minute, so start with at least 30 s of it left:
+        otherwise a slow run crosses the boundary and the budget is fresh again before the assertions run."""
+        remaining=60-time.time()%60
+        if remaining<30: time.sleep(remaining+0.25)
+        bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
         with psycopg.connect(self.dsn,autocommit=True) as con:
-            bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
             con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),%s) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts",(bucket,READ_BUDGET))
+
+    def test_logout_remains_authorized_when_read_budget_is_exhausted(self):
+        self.exhaust_read_budget()
         self.assertEqual(self.request('/session')[0],429)
         # Session termination still needs its ordinary founder, origin and CSRF checks.
         csrf=self.session['csrfToken'];self.session['csrfToken']='invalid'
@@ -240,9 +247,7 @@ class BusinessWorkspaceTests(unittest.TestCase):
         status,response=self.request('/workspace/demo/action','POST',call)
         self.assertEqual(status,200,response)
         attempt=response['data']['intelligence']['contactAttempts'][-1]['id']
-        with psycopg.connect(self.dsn,autocommit=True) as con:
-            bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
-            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),%s) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts",(bucket,READ_BUDGET))
+        self.exhaust_read_budget()
         self.assertEqual(self.request('/session')[0],429)
         stop=self.action('founder_voice','founder',json.dumps(dict(conversationId=conversation,operation='stop')))
         csrf=self.session['csrfToken'];self.session['csrfToken']='wrong'
