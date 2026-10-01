@@ -253,11 +253,12 @@ def proof_counts(state, start, end):
     phase = state.get("phase2") or {}
     jobs = phase.get("jobs") or []
     published = [j for j in jobs if j.get("state") == "verified" and j.get("providerReference") and start <= (verified_at(j) or 0) < end]
-    reviews = [r for r in phase.get("reviews") or [] if r.get("state") == "approved" and start <= (r.get("approvedAt") or r.get("createdAt") or 0) < end]
     weeks = weekly_operator.view(state)["weeks"]
     prepared = {s["variantId"] for w in weeks for s in w.get("slots") or [] if s.get("variantId") and s.get("status") not in ("rejected", "failed") and s.get("acceptedAt") and start <= s["acceptedAt"] < end}
-    approved = {r.get("variantId") for r in reviews if r.get("variantId")}
-    approved |= {j.get("variantId") or (j.get("manifest") or {}).get("variantId") for j in jobs if j.get("approvedAt") and start <= j["approvedAt"] < end and j.get("state") not in ("failed", "cancelled")}
+    # Approving a Queue review always creates its job with approvedAt (store.py), so jobs are the one record of an
+    # approval; a review row carries `status`/`manifest`, never a separate approval time. The store spells it "canceled".
+    approved = {j.get("variantId") or (j.get("manifest") or {}).get("variantId") for j in jobs
+                if j.get("approvedAt") and start <= j["approvedAt"] < end and j.get("state") not in ("failed", "canceled", "cancelled")}
     approved.discard(None)
     planning = ((state.get("raffi") or {}).get("campaignPlanning") or {})
     campaigns = [c for c in planning.get("campaigns") or [] if start <= c.get("createdAt", 0) < end]

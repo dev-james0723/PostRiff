@@ -132,6 +132,15 @@ class GrowthLoopTests(unittest.TestCase):
         self.assertNotIn("unused", json_text(event))
         self.assertEqual(catalog.EVENTS[event["event_type"]]["email"], "digest")
 
+    def test_proof_counts_approvals_from_jobs_in_the_store_shape_and_skips_canceled(self):
+        start, end = loop.period(NOW, "weekly")
+        job = lambda job_id, state, variant: {"id": job_id, "state": state, "approvedAt": start + 10, "manifest": {"variantId": variant}}
+        state = {"phase2": {"reviews": [{"id": "r1", "status": "approved", "jobId": "j1", "manifest": {"variantId": "v1"}}],
+                            "jobs": [job("j1", "approved", "v1"), job("j2", "canceled", "v2"), job("j3", "failed", "v3"), job("j4", "scheduled", "v4")]}}
+        counts = loop.proof_counts(state, start, end)
+        self.assertEqual(counts["approvedPosts"], 2)              # v1 and v4: a canceled or failed approval is not counted
+        self.assertEqual(counts["evidence"]["variantIds"], ["v1", "v4"])
+
 
 def json_text(value):
     import json
