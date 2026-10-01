@@ -13,7 +13,8 @@ from ..notifications import detector
 # Lower is more important. Only these rules decide the order; there is no model in the loop.
 PRIORITY = {"publish.failed": 10, "publish.uncertain": 10, "channel.reconnect_required": 15, "billing.payment_failed": 15, "campaign.approval_required": 20,
             "campaign.blocked": 25, "campaign.week_ready": 30, "campaign.drafts_ready": 35, "asset.review_required": 40, "budget.threshold_reached": 45,
-            "billing.trial_ending": 45, "engagement.needs_attention": 60, "learning.preference_proposed": 70, "opportunity.detected": 80}
+            "billing.trial_ending": 45, "engagement.needs_attention": 60, "relationship.follow_up_due": 65, "learning.preference_proposed": 70,
+            "opportunity.detected": 80}
 URGENT = {"publish.failed", "publish.uncertain", "channel.reconnect_required", "billing.payment_failed"}
 WHY = {
     "publish.failed": "A post that was approved did not go out. The draft is kept; it needs a decision.",
@@ -27,6 +28,7 @@ WHY = {
     "budget.threshold_reached": "Paid work pauses at the limit.",
     "billing.trial_ending": "Publishing pauses when the trial ends unless a plan is chosen.",
     "engagement.needs_attention": "Someone asked a question or needs an answer. Not urgent unless you decide it is.",
+    "relationship.follow_up_due": "A follow-up you planned is due. Reminders never contact anyone; a reply still needs your exact approval.",
     "learning.preference_proposed": "Rafii noticed a pattern in your edits; it becomes a preference only if you accept it.",
     "opportunity.detected": "A fresh, relevant item from a source you follow.",
 }
@@ -42,7 +44,7 @@ def build(cur, workspace_id, principal, member, state, now):
                            "entity_id": opportunity["id"], "payload": {"title": opportunity.get("title"), "why": opportunity.get("why"), "href": "/app/weekly?tab=opportunities"}})
     audiences = {"campaign.approval_required": "approve", "publish.failed": "approve", "publish.uncertain": "approve", "channel.reconnect_required": "manage_connections",
                  "billing.payment_failed": "owner", "billing.trial_ending": "owner", "budget.threshold_reached": "owner", "learning.preference_proposed": "owner",
-                 "engagement.needs_attention": "reply"}
+                 "engagement.needs_attention": "reply", "relationship.follow_up_due": "reply"}
     items, seen = [], set()
     for event in events:
         kind = event["event_type"]
@@ -60,6 +62,9 @@ def build(cur, workspace_id, principal, member, state, now):
                       "evidence": {"entityType": event.get("entity_type"), "entityId": event.get("entity_id"), "platform": payload.get("platform"),
                                    "account": payload.get("account"), "count": payload.get("count")},
                       "href": payload.get("href") or "/app"})
+    if any(item["type"] == "relationship.follow_up_due" for item in items):
+        from ..relationships.service import attention_context   # the prior exchange, reason and action (never raises)
+        attention_context(cur, workspace_id, items, now)
     items.sort(key=lambda i: (i["priority"], i["title"]))
     return {"items": items[:30], "counts": {"total": len(items), "urgent": sum(1 for i in items if i["urgent"])},
             "rules": "Order comes from a fixed rule table: failed or uncertain publishing and reconnects first, then approvals, then reviews. Engagement and opportunities are never urgent on their own."}
