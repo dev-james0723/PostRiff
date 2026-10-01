@@ -18,7 +18,7 @@ import { usePreferences } from '@/lib/preferences';
 import { formatDate, formatDateTime } from '@/lib/time';
 import { errorCode, errorMessage, idempotencyKey, isFeatureDisabled } from '@/lib/growth-v2/request';
 import { useDecide, useProofs, useRefreshProof } from '@/lib/growth-v2/proof-hooks';
-import { correctionText, decisionActions, evidenceGroups, FIGURE_ORDER, figureText, proofCopy, scopeText } from '@/lib/growth-v2/proof-present';
+import { correctionText, decisionActions, evidenceGroups, FIGURE_ORDER, figureText, limitationText, proofCopy, scopeText } from '@/lib/growth-v2/proof-present';
 import type { DecisionAction, ProofView, StrategyDecision } from '@/lib/growth-v2/proof-types';
 
 type Copy = ReturnType<typeof proofCopy>;
@@ -103,7 +103,7 @@ function ProofCard({ proof, owner, copy }: { proof: ProofView; owner: boolean; c
           <summary className='rafii-focus min-h-11 cursor-pointer'>{copy.history}</summary>
           <ol className='text-muted-foreground flex flex-col gap-2 py-2 text-xs'>
             {proof.revisions.map((revision) => (
-              <li key={revision.id}>
+              <li key={revision.id} className='break-words'>
                 {copy.revision(revision.revision)} · {formatDateTime(revision.createdAt)} · {copy.reason[revision.reason] ?? revision.reason}
                 {revision.correction.length > 0 && <> — {copy.correction}: {revision.correction.map((entry) => correctionText(entry, copy)).join('; ')}</>}
               </li>
@@ -113,7 +113,7 @@ function ProofCard({ proof, owner, copy }: { proof: ProofView; owner: boolean; c
       )}
       <NextStep proposals={proof.nextStep.proposals} owner={owner} copy={copy} />
       <ul className='text-muted-foreground list-disc pl-5 text-xs'>
-        {proof.latest.counts.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
+        {proof.latest.counts.limitations.map((limitation) => <li key={limitation}>{limitationText(limitation, copy)}</li>)}
       </ul>
     </Surface>
   );

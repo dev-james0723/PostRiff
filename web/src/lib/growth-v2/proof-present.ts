@@ -14,6 +14,13 @@ function loopLocale(locale: string | null | undefined): 'en' | 'zh-Hant' {
   return value.startsWith('zh') || value.startsWith('yue') ? 'zh-Hant' : 'en';
 }
 
+// Result types as the Business results panel names them (features/growth/results/present.ts), never the raw codes.
+const EN_RESULT_TYPES: Record<string, [string, string]> = {
+  lead: ['lead', 'leads'], booking: ['booking', 'bookings'], newsletter_signup: ['newsletter sign-up', 'newsletter sign-ups'],
+  sale: ['sale', 'sales'], click: ['click', 'clicks']
+};
+const ZH_RESULT_TYPES: Record<string, string> = { lead: '潛在客戶', booking: '預約', newsletter_signup: '電子報訂閱', sale: '銷售', click: '點擊' };
+
 const EN = {
   title: 'Evidence by revision',
   intro: 'Each figure links to the records it counts. Late data creates a new revision; earlier revisions stay readable.',
@@ -73,7 +80,15 @@ const EN = {
   notApplied: 'Not applied',
   revokedSince: 'Revoked after this week was planned; drafts written now no longer use it.',
   unverified: 'The decision could not be confirmed. Refresh before trying again.',
-  conflict: 'This decision changed since you opened it. Review the current version.'
+  conflict: 'This decision changed since you opened it. Review the current version.',
+  /** A structured value the server only marks as changed (too large to keep in a correction note). */
+  changed: 'changed',
+  resultCount: (n: number, type: string) => {
+    const words = EN_RESULT_TYPES[type];
+    return words ? `${n} ${n === 1 ? words[0] : words[1]}` : `${n} ${type.replaceAll('_', ' ')}`;
+  },
+  /** The proof's fixed limitation sentences (proof/model.py LIMITATIONS) are sent in English and shown as sent. */
+  limitations: {} as Record<string, string>
 };
 
 type Copy = typeof EN;
@@ -136,7 +151,19 @@ const ZH: Copy = {
   notApplied: '未套用',
   revokedSince: '本週計劃後已撤回；之後撰寫的草稿不會再使用。',
   unverified: '未能確認這個決定。請重新整理後再試。',
-  conflict: '這個決定在你開啟後已更改，請查看最新版本。'
+  conflict: '這個決定在你開啟後已更改，請查看最新版本。',
+  changed: '已變更',
+  resultCount: (n: number, type: string) => `${ZH_RESULT_TYPES[type] ?? type.replaceAll('_', ' ')} ${n}`,
+  limitations: {
+    'Delivery is not growth: verified publications and accepted work say what was done, not what it caused.':
+      '交付不等於增長：已驗證的發佈和已採納的內容只說明做了甚麼，不代表它帶來了甚麼。',
+    'Missing analytics never erase a verified delivery; unavailable figures stay unavailable, never zero.':
+      '缺少分析數據不會抹去已驗證的交付；不可用的數字會維持不可用，不會當作零。',
+    'Assisted exports are counted apart from verified publications and are never added to them.':
+      '輔助匯出與已驗證的發佈分開計算，永遠不會加在一起。',
+    'Time Back classes (estimated, personalized, measured) are shown separately; they are not one measured figure.':
+      '節省的時間按類別（估計、個人化、實測）分開顯示，不會合併成一個實測數字。'
+  }
 };
 
 export function proofCopy(locale: string | null | undefined): Copy {
@@ -154,9 +181,29 @@ function outcomeText(value: Record<string, unknown>, copy: Copy): string {
   return Object.entries(copy.provenance).map(([key, label]) => {
     const bucket = value?.[key] as { counts?: Record<string, number> } | null | undefined;
     if (!bucket) return `${label}: ${copy.unavailable}`;
-    const counts = Object.entries(bucket.counts ?? {}).map(([type, n]) => `${n} ${type.replaceAll('_', ' ')}`);
+    const counts = Object.entries(bucket.counts ?? {}).map(([type, n]) => copy.resultCount(n, type));
     return `${label}: ${counts.length ? counts.join(', ') : '0'}`;
   }).join(' · ');
+}
+
+/** A figure's value in words, never raw data: the figure view and the correction note both read it this way. */
+function valueText(name: string, value: unknown, copy: Copy): string {
+  if (value === null || value === undefined) return copy.unavailable;
+  const record = typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  if (record && record.changed === true && Object.keys(record).length === 1) return copy.changed;
+  if (name === 'assistedExports') return copy.exports(value as Record<string, number>);
+  if (name === 'outcomes') return outcomeText(value as Record<string, unknown>, copy);
+  if (name === 'timeBack') {
+    const classes = value as TimeBackClass[];
+    return classes.length ? classes.map((c) => `${copy.minutes(Math.round(c.savedSeconds / 60))} ${copy.confidence[c.confidence] ?? c.confidence}`).join(' · ') : copy.none;
+  }
+  if (name === 'providerCost') {
+    const cost = value as ProviderCost;
+    const parts = [copy.actualCost(usd(cost.actualUsdMicro), cost.actualEntries)];
+    if (cost.unknownEntries) parts.push(copy.unknownCost(cost.unknownEntries, usd(cost.unknownReservedEstimateUsdMicro)));
+    return parts.join(' · ');
+  }
+  return typeof value === 'object' ? copy.changed : String(value);
 }
 
 /** One figure in words. Unavailable and owner-only figures say so; no figure is ever shown as a fabricated zero. */
@@ -167,19 +214,12 @@ export function figureText(name: FigureName, figure: ProofFigure | undefined, co
     const reason = figure.reason ? copy.reason[figure.reason] ?? figure.reason : null;
     return reason ? `${copy.unavailable} — ${reason}` : copy.unavailable;
   }
-  if (name === 'assistedExports') return copy.exports(figure.value as Record<string, number>);
-  if (name === 'outcomes') return outcomeText(figure.value as Record<string, unknown>, copy);
-  if (name === 'timeBack') {
-    const classes = figure.value as TimeBackClass[];
-    return classes.length ? classes.map((c) => `${copy.minutes(Math.round(c.savedSeconds / 60))} ${copy.confidence[c.confidence] ?? c.confidence}`).join(' · ') : copy.none;
-  }
-  if (name === 'providerCost') {
-    const cost = figure.value as ProviderCost;
-    const parts = [copy.actualCost(usd(cost.actualUsdMicro), cost.actualEntries)];
-    if (cost.unknownEntries) parts.push(copy.unknownCost(cost.unknownEntries, usd(cost.unknownReservedEstimateUsdMicro)));
-    return parts.join(' · ');
-  }
-  return String(figure.value);
+  return valueText(name, figure.value, copy);
+}
+
+/** A limitation sentence in the person's language (the server sends the fixed ones in English; anything new as sent). */
+export function limitationText(text: string, copy: Copy): string {
+  return copy.limitations[text] ?? text;
 }
 
 /** The ids each figure counts, grouped and labelled, for the evidence disclosure. */
@@ -190,8 +230,9 @@ export function evidenceGroups(figure: ProofFigure | undefined): { label: string
 export function correctionText(entry: CorrectionEntry, copy: Copy): string {
   const label = copy.figure[entry.figure as FigureName] ?? entry.figure;
   if (entry.restricted) return `${label}: ${copy.ownerOnly}`;
-  const show = (value: unknown) => (value === null || value === undefined ? copy.unavailable : typeof value === 'object' ? JSON.stringify(value) : String(value));
-  return entry.evidenceOnly ? `${label}: ${copy.evidence}` : `${label}: ${show(entry.before)} → ${show(entry.after)}`;
+  if (entry.evidenceOnly) return `${label}: ${copy.evidence}`;
+  // In words, like the figure itself: a provenance summary as raw JSON was unreadable and too wide for a phone.
+  return `${label}: ${valueText(entry.figure, entry.before, copy)} → ${valueText(entry.figure, entry.after, copy)}`;
 }
 
 /** The decision buttons a member may use: owners only, and only the transitions the server allows for that status. */

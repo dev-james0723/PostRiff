@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { actionTarget, briefCopy, coverageLine, coverageNote, decisionLabel, handledItems, itemStatus, loopLocale, outcomeSourceId, relevanceText, safeHref, timeLine, visibleItems } from '../src/lib/growth-v2/briefs-present.ts';
-import { appliedSummary, correctionText, decisionActions, evidenceGroups, figureText, FIGURE_ORDER, proofCopy, scopeText, usd } from '../src/lib/growth-v2/proof-present.ts';
+import { appliedSummary, correctionText, decisionActions, evidenceGroups, figureText, FIGURE_ORDER, limitationText, proofCopy, scopeText, usd } from '../src/lib/growth-v2/proof-present.ts';
 
 const item = (extra = {}) => ({ id: 'bi_1', source: 'listening', kind: 'question', title: 'How do adults keep a routine?', publishedAt: null, retrievedAt: 1_790_000_000,
   coverage: { availability: 'available', completeness: 'partial' }, decision: null, ...extra });
@@ -84,7 +84,7 @@ test('proof figures: unavailable is never zero, exports stay separate, time clas
   assert.equal(figureText('providerCost', { value: { actualUsdMicro: 1200, actualEntries: 1, unknownEntries: 1, unknownReservedEstimateUsdMicro: 5000 }, dataState: 'partial', evidence: {} }, copy),
                'US$0.0012 actual (1 entry) · 1 unknown (US$0.0050 reserved estimate, not actual)');
   assert.match(figureText('outcomes', { value: { provider_native: null, first_party_reported: { counts: { lead: 2 } }, user_declared: { counts: {} } }, dataState: 'partial', evidence: {} }, copy),
-               /^Platform-reported: Unavailable · Your site or form: 2 lead · You declared: 0$/);
+               /^Platform-reported: Unavailable · Your site or form: 2 leads · You declared: 0$/);
   assert.equal(usd(2_500_000), 'US$2.50');
   assert.deepEqual(FIGURE_ORDER.slice(0, 3), ['acceptedWork', 'verifiedPublications', 'assistedExports']);
 });
@@ -97,6 +97,29 @@ test('handled items stay reachable, bounded, each with the stored edition to act
   assert.equal(decisionLabel(shown[0], briefCopy('zh-Hant')), '已標示為不相關 · 主題不對');
   assert.deepEqual(handledItems({ edition: { items: [] } }), []);
   for (const copy of [briefCopy('en'), briefCopy('zh-Hant')]) assert.ok(copy.handled && copy.handledNote);
+});
+
+test('a correction reads in words in each language, never as raw data, and result types are named', () => {
+  const before = { provider_native: null, first_party_reported: null, user_declared: { money: {}, counts: { lead: 1 }, reversed: 0, associated: 0, unattributed: 1 } };
+  const after = { provider_native: null, first_party_reported: null,
+    user_declared: { money: { usd: { minor: 9000, events: 1 } }, counts: { lead: 1, booking: 1 }, reversed: 0, associated: 0, unattributed: 2 } };
+  const en = correctionText({ figure: 'outcomes', before, after }, proofCopy('en'));
+  assert.equal(en, 'Outcomes by source: Platform-reported: Unavailable · Your site or form: Unavailable · You declared: 1 lead → '
+    + 'Platform-reported: Unavailable · Your site or form: Unavailable · You declared: 1 lead, 1 booking');
+  const zh = correctionText({ figure: 'outcomes', before, after }, proofCopy('zh-Hant'));
+  assert.match(zh, /你自行申報: 潛在客戶 1, 預約 1$/);
+  for (const text of [en, zh]) assert.doesNotMatch(text, /[{}"]/);
+  // A value the server only marks as changed (too large for the note) says so.
+  assert.equal(correctionText({ figure: 'outcomes', before: { changed: true }, after: { changed: true } }, proofCopy('en')), 'Outcomes by source: changed → changed');
+  assert.equal(correctionText({ figure: 'outcomes', before: null, after: { changed: true } }, proofCopy('zh-Hant')), '按來源劃分的成果: 不可用 → 已變更');
+});
+
+test('the fixed proof limitations read in Traditional Chinese; anything new is shown as sent', () => {
+  const sentence = 'Assisted exports are counted apart from verified publications and are never added to them.';
+  assert.equal(limitationText(sentence, proofCopy('en')), sentence);
+  assert.equal(limitationText(sentence, proofCopy('zh-Hant')), '輔助匯出與已驗證的發佈分開計算，永遠不會加在一起。');
+  assert.equal(Object.keys(proofCopy('zh-Hant').limitations).length, 4);
+  assert.equal(limitationText('A new limitation.', proofCopy('zh-Hant')), 'A new limitation.');
 });
 
 test('a cost correction shows only that it changed to non-owners', () => {
