@@ -188,6 +188,9 @@ class AC16ProvenanceTest(Base):
         self.assertEqual(summary["coverage"]["providerNative"], "not_connected")
         self.assertEqual((summary["dataState"], summary["period"]["open"]), ("partial", True))   # the current period can still change
         self.assertFalse({"total", "roi", "revenue"} & set(summary))
+        everything = RESULTS.summary(t.wid, t.owner, start=946_684_800, end=now)      # "All time" in the UI
+        self.assertEqual(everything["classes"]["user_declared"]["counts"], {"lead": 2, "sale": 2})
+        self.assertEqual(refusal(RESULTS.summary, t.wid, t.owner, now, now - 1), (400, "invalid_request"))
         past = RESULTS.summary(t.wid, t.owner, start=now - 90 * DAY, end=now - 60 * DAY)
         self.assertEqual(past["dataState"], "available")
         self.assertEqual(past["classes"], {"provider_native": None, "first_party_reported": None, "user_declared": None})

@@ -45,6 +45,7 @@ MAX_ACTIVE_LINKS = 200
 DELIVERY_BUDGET_FACTOR = 3          # unverified deliveries allowed per minute = 3 × the verified rate
 LINK_BURST_PER_MINUTE = 300         # more counted clicks than this on one link in a minute are treated as automated
 STALE_AFTER_SECONDS = 7 * 86400
+EARLIEST, LATEST = 946_684_800, 4_102_444_800   # the instants a result may carry (model._instant)
 PAGE_DEFAULT, PAGE_MAX = 25, 50
 PRODUCERS = ("form", "booking", "newsletter", "store", "other")
 WEBHOOK_PREFIX = "/api/results/webhook/"
@@ -430,8 +431,8 @@ class ResultsService:
         now = self.clock()
         end = now if end is None else _epoch(end)
         start = end - 30 * 86400 if start is None else _epoch(start)
-        if not start < end or end - start > 3700 * 86400:
-            raise AlphaError("Choose a period of up to ten years that ends after it starts.", 400, code="invalid_request")
+        if not EARLIEST <= start < end <= LATEST:   # the database aggregates, so even "all time" is one bounded read
+            raise AlphaError("Choose a period that ends after it starts, between 2000 and 2100.", 400, code="invalid_request")
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "read")
             coverage = _coverage(cur, workspace_id)
