@@ -359,14 +359,23 @@ class OAuthService:
             connection_id = hashlib.sha256(f"{provider_id}:{identity['providerAccountId']}".encode()).hexdigest()[:32]
             from .billing import require_plan_capacity
             require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id, ledger=self.ledger)
+            cur.execute("SELECT capability,level,evidence,capability_version,extract(epoch from verified_at) FROM public.pr_channel_capabilities WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            existing = {name: {"level": level, "evidence": evidence, "capabilityVersion": version,
+                               "verifiedAt": float(verified) if verified is not None else None}
+                        for name, level, evidence, version, verified in cur.fetchall()}
             access_ct, key_id = self.vault.encrypt(grant["accessToken"])
             refresh_ct = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else None
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
-            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"], existing)
             for name, value in matrix.items():
+                if existing.get(name) == value:
+                    continue  # Preserve the original evidence and verification time for untouched capabilities.
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
+            changed = {name: {"before": existing[name]["level"] if name in existing else None, "after": value["level"]}
+                       for name, value in matrix.items() if existing.get(name) != value}
+            audit(cur, workspace_id, principal, "channel.capabilities_verified", connection_id, {"provider": provider_id, "changed": changed})
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
         # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
         horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
@@ -622,8 +631,15 @@ class OAuthService:
         return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
-    def _capabilities(adapter, requested, granted, missing, now, access_token=None):
-        matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
+    def _capabilities(adapter, requested, granted, missing, now, access_token=None, existing=None):
+        matrix = (assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()) | dict(existing or {})
+        # A reconnect replaces the credential. Retain old evidence only while the fresh grant
+        # still contains the scopes that made it valid. Missing scopes are an actual downgrade.
+        for name, old in (existing or {}).items():
+            required = set(adapter.capability_scopes(name))
+            if name not in ("identity", requested) and old["level"] == "Direct" and required and not required.issubset(granted):
+                set_level(matrix, name, "Assisted" if adapter.assisted_fallback else "Unsupported",
+                          "Fresh provider scope inspection no longer includes this permission.", now, adapter.capability_version)
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
         if requested in PUBLISH_CAPABILITIES:
             if missing:
@@ -640,6 +656,9 @@ class OAuthService:
         for name in ("analytics", "comments_read", "reply", "moderate"):
             if name == requested and not missing:
                 set_level(matrix, name, "Direct" if adapter.production_reviewed else "Unsupported", "Granted." if adapter.production_reviewed else f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
+            elif name == requested and missing:
+                set_level(matrix, name, "Assisted" if adapter.assisted_fallback else "Unsupported",
+                          "Fresh provider scope inspection did not include this permission.", now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------

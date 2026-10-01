@@ -1033,6 +1033,9 @@ class CoworkerService:
         self._require("RAFII_ENGAGEMENT_COPILOT_ENABLED")
         threads = self.hosted.audience.threads(workspace_id, token)
         result = engagement.triage(threads["threads"], self.clock())
+        result["countsComplete"] = threads.get("nextCursor") is None
+        if not result["countsComplete"]:
+            result["note"] += " Counts cover this Inbox page only."
         return {**result, "capabilities": threads.get("capabilities"), "replySendingEnabled": threads.get("replySendingEnabled"), "limits": threads.get("limits")}
 
     def engagement_draft(self, workspace_id, token, thread_id, model=None):

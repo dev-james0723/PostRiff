@@ -62,7 +62,8 @@ export function ReplyComposer({
   onChange,
   onApproved,
   canEdit,
-  canReply
+  canReply,
+  disableSuggestion = false
 }: {
   thread: Thread;
   accountLabel: string;
@@ -73,6 +74,7 @@ export function ReplyComposer({
   onApproved: (reply: ReplyRecord) => void;
   canEdit: boolean;
   canReply: boolean;
+  disableSuggestion?: boolean;
 }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
@@ -216,7 +218,7 @@ export function ReplyComposer({
           state={pending === 'starter' ? 'loading' : 'idle'}
           loadingText='Inserting…'
           icon={<Icons.text className='size-4' />}
-          disabled={!canEdit || busy}
+          disabled={!canEdit || busy || disableSuggestion}
           onClick={() => void insertStarter()}
         >
           {starterLabel}

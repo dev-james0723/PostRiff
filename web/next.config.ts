@@ -28,6 +28,12 @@ const baseConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
   },
+  webpack(config) {
+    // Local full builds can run on a constrained checkout without writing a
+    // several-hundred-MB compiler cache. This has no effect unless requested.
+    if (process.env.POSTRIFF_BUILD_NO_CACHE === '1') config.cache = false;
+    return config;
+  },
   async rewrites() {
     if (!shouldProxyApi) return [];
     return [

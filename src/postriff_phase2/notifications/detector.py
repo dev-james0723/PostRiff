@@ -181,14 +181,14 @@ def from_database(cur, workspace_id, now=None):
                         "payload": {"href": "/app/account/billing"}})
     cur.execute("""SELECT t.id::text, t.text, t.author_handle, t.provider FROM public.pr_audience_threads t
                    WHERE t.workspace_id=%s AND t.tombstoned_at IS NULL AND t.ingested_at > now() - interval '3 days'
-                   AND NOT EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified'))
+                   AND NOT EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified','uncertain'))
                    ORDER BY t.ingested_at DESC LIMIT 50""", (workspace_id,))
     from ..coworker.engagement import classify
     for thread_id, text, author, provider in cur.fetchall():
         category = classify(text)
         if category in ("question", "complaint", "lead"):
             out.append({"event_type": "engagement.needs_attention", "dedupe_key": f"engagement:{thread_id}", "entity_type": "audience_thread", "entity_id": thread_id,
-                        "payload": {"platform": provider, "reason": category, "href": "/app/inbox"}})
+                        "payload": {"platform": provider, "reason": category, "href": f"/app/inbox?filter=needs_reply&thread={thread_id}"}})
     return out
 
 

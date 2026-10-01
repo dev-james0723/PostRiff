@@ -64,8 +64,8 @@ assert calls == []
 # Reconfirmation is an explicit second approval of this exact manifest.
 assert audience.approve_reply(wid,"synthetic",draft["draftId"],preview["digest"],True)["requiresReconfirmation"] is False
 with connection() as db:
-    assert audience.send_approved(db.cursor(),wid,draft["draftId"],time.time())["state"] == "submitted"
-assert calls == ["POST","POST"]
+    assert audience.send_approved(db.cursor(),wid,draft["draftId"],time.time())["state"] == "held"
+assert calls == []  # the legacy inline entry point cannot perform provider I/O
 # Ingestion runs only for reviewed supported providers and a SQL failure cannot poison verification.
 audience.oauth.providers = {"threads":SimpleNamespace(platform="Threads",production_reviewed=True)}
 job = {"manifest":{"platform":"Threads","channelId":"test-channel"},"providerReference":"123"}
@@ -83,4 +83,4 @@ with connection() as db:
                (wid, older, ONE, json.dumps([{"state": "draft", "by": "engagement_copilot", "provenance": {"route": {"kind": "deterministic_starter", "methodApplied": False}}}])))
 older_thread = next(t for t in audience.threads(wid, "synthetic")["threads"] if t["threadId"] == older)
 assert [r["origin"] for r in older_thread["replies"]] == ["ai_fixture"], older_thread["replies"]
-print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic transport only","checks":["AI suggestions without a managed writer are refused (409 reply_writer_unavailable) and nothing is saved","a template copilot draft reads back as a starter, never AI-written","manual reply labelled 'Your reply'","reply history and counts survive reload","record approval with sender disabled","enabling sender cannot replay old approvals","explicit reconfirmation permits synthetic send","ingestion failure preserves transaction"]}))
+print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic transport only","checks":["AI suggestions without a managed writer are refused (409 reply_writer_unavailable) and nothing is saved","a template copilot draft reads back as a starter, never AI-written","manual reply labelled 'Your reply'","reply history and counts survive reload","record approval with sender disabled","enabling sender cannot replay old approvals","legacy inline send remains held after reconfirmation","ingestion failure preserves transaction"]}))
