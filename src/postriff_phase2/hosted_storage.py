@@ -22,6 +22,9 @@ from .media import decode_upload
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
+# Server-rendered Visual Pack slides only (visual_pack/render.py): `<revision id>-<sha256 of the PNG>.png`, in the private
+# media bucket under `{workspace}/visual-pack/`. Uploaded media keeps its JPEG-only rule.
+PACK_OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.png")
 MAX_BODY = 8 * 1024 * 1024
 MAX_VIDEO_BODY = 100_000_000
 LIST_PAGE = 100
@@ -79,7 +82,7 @@ class SupabaseStorage:
         return self.video_bucket if category == "video" else self.bucket
 
     def _path(self, workspace_id, category, object_name):
-        pattern = VIDEO_OBJECT if category == "video" else OBJECT if category in ("media", "artwork") else None
+        pattern = VIDEO_OBJECT if category == "video" else OBJECT if category in ("media", "artwork") else PACK_OBJECT if category == "visual-pack" else None
         if not UUID.fullmatch(str(workspace_id)) or pattern is None or not isinstance(object_name, str) or not pattern.fullmatch(object_name):
             raise AlphaError("Invalid private object location.")
         return f"{workspace_id}/{category}/{object_name}"
@@ -96,6 +99,8 @@ class SupabaseStorage:
     def put_immutable(self, workspace_id, category, object_name, raw, content_type="image/jpeg"):
         if category == "video":
             raise AlphaError("Invalid private object location.")   # videos arrive only through a signed upload
+        if (category == "visual-pack") != (content_type == "image/png"):
+            raise AlphaError("Invalid private object location.")   # PNG only for rendered pack slides, and nothing else there
         path = self._path(workspace_id, category, object_name)
         if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
             raise AlphaError("Decoded media is missing or too large.")
@@ -308,7 +313,7 @@ class SupabaseStorage:
     def list_prefix(self, prefix, bucket=None):
         """Every object name under `{workspace}/{category}/` (paginated, bounded)."""
         parts = str(prefix).strip("/").split("/")
-        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video")):
+        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video", "visual-pack")):
             raise AlphaError("Invalid private object location.")
         folder = "/".join(parts)
         name = bucket or (self.video_bucket if parts[-1] == "video" else self.bucket)
