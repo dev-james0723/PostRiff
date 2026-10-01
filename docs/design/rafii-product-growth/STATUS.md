@@ -6,7 +6,7 @@ plus `blocked` / `failed` / `not_run` with a reason. Data mode (`demo|synthetic|
 means: focused unit tests + disposable PostgreSQL 17 groups on a private port, synthetic providers, Python 3.12, on the
 integrated branch unless a row says "worker branch". Web TypeScript is checked only in CI on this machine (D-017).
 
-Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft) · integrated head `dd1870b4` (pushed: `d2469a9f`).
+Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft, base `consumer-saas`) · pushed head `76babd76`; production `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e` merged in (`2a6c13ef`).
 
 ## Program gates
 
@@ -16,9 +16,10 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 | Pricing v2 + Inbox v1 merged | local_verified | merges `8726adbd`, `575caaf9` |
 | Slices merged | 7 of 7 | results `de727483`, relationships `d16e9652`, visual pack `c5c91d90`, series `38abb86c`, intake `b6eac5e2`, pricing web `e8a68703`, briefs/proof `7e4815ce` |
 | Local unit + web node tests | passed | slice and affected modules after each merge; web node 605/605; oxlint 0 errors |
+| PR #87 CI on `6db0b877` | **release gates passed in full** (Python 3,128+ tests, every PG group, web contracts, types/lint/isolated production build, copy audit, function archive, secret scan, dependency audits, real local browser/API/DB integration — run 36937116339); preview window passed; browser scenes fail only at the growth harness start (below) |
 | PR #87 CI on `d2469a9f` | typecheck + lint + preview window: **passed**; browser scenes: Automations now passes, but the growth harness step fails because Next 16 refuses a second `next dev` in `web/` (W-BROWSER fixing via `POSTRIFF_DIST_DIR`); release gates: running | GitHub Actions runs 36934793626, 36934793633, 36934793624 |
 | Vercel preview | `dpl_2xQHeEv1XfQenwPaWepNQFN59Lr6` @ `d2469a9f` READY (staging-isolated); pricing page legacy and unchanged; `/api/growth-features` → `{"firstWeek": false}`; found and fixed `/api/plans` 500 on a pre-048 database (`c8ccf2a6`) | `vercel curl`, runtime log `UndefinedColumn` |
-| Whole-branch review | running (billing, backend security/privacy, web, briefs/proof + late endpoints) | four read-only reviewers |
+| Whole-branch review | completed: billing 2 high/5 medium/4 low; backend 3 medium/9 low; web 3 high/29 medium/~50 low; briefs/proof 3 medium/4 low | fixes in progress in three isolated workers (billing+first week, results+relationships+Inbox, series+visual+uploads+briefs/proof+agent-tool wiring); owner decisions recorded (D-008, D-026, D-027) |
 | Browser journeys for slices (AC37/AC39) | in progress (W-BROWSER) | `web/tests/growth-v2-browser.cjs` |
 
 ## Requirements
@@ -57,4 +58,8 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 | Founder P1 `pr_invoices` (057) | Paid metrics `partial` | Founder P1 session (PR #88) |
 | Transcription route for raw audio | Audio intake refused before upload | James: approve provider/model + budget |
 | Verified multi-image publisher | Carousels export only; never queued | Engineering + a provider verification run, then James's activation |
+| Creator use of the main Rafii agent | Text/browser agent turns have no credit authority under v2, so every Creator turn would be refused | Product decision (per-turn or per-conversation credit limit) + engineering, before Creator activation |
+| Tracking-link destinations (D-027) | Any workspace could front any HTTPS site from Rafii's domain | James: choose verified domains, an interstitial, or accept with abuse reporting |
+| Failed Free preview attempt (D-008) | A platform-side failure still uses up the one free check | James: keep the anti-abuse rule or release on platform failure |
+| Founder migrations 049, 051–070 | Not applied anywhere; our runner refuses unreviewed pending files | Founder owner applies first, or James approves a combined set (D-028) |
 | Image pricing in plan credits (D-026) | Creator images refused with `image_credits_unavailable` | James / Pricing owner: decide the image credit rate and quote basis before Creator activation |
