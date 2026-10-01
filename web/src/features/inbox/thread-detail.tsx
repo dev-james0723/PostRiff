@@ -13,6 +13,8 @@ import { formatDateTime, relativeTime } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { InboxLevelBadge } from './level-badge';
+import { composerAnchor } from './follow-up/copy';
+import { FollowUpSection } from './follow-up/follow-up-section';
 import { authorLabel, isAnswered, originLabel, providerName, replyStatusView, threadPermalink, threadTime, type ReplyRecord } from './model';
 import { permissionSentence, ReplyComposer, type ComposerState } from './reply-composer';
 
@@ -192,6 +194,9 @@ export function ThreadDetail({
         </div>
       </div>
 
+      {/* Relationship follow-up for this conversation (hidden when the feature is off). Never sends anything. */}
+      <FollowUpSection thread={thread} canEdit={canEdit} />
+
       {replies.length > 0 && (
         <section aria-label='Replies' className='flex flex-col gap-3' data-tour='inbox-replies'>
           {replies.map((reply) => {
@@ -230,7 +235,7 @@ export function ThreadDetail({
         </section>
       )}
 
-      {composerArea}
+      <div id={composerAnchor(thread.threadId)}>{composerArea}</div>
     </div>
   );
 }

@@ -10,8 +10,9 @@ import { STATUS } from '@/lib/status-labels';
  * when the server starts sending one, the page uses it; until then the page says it is unknown.
  */
 
-export type InboxFilter = 'all' | 'needs_reply' | 'review' | 'fyi' | 'unanswered' | 'replied';
-export const INBOX_FILTERS = ['all', 'needs_reply', 'review', 'fyi', 'unanswered', 'replied'] as const;
+export type InboxFilter = 'all' | 'needs_reply' | 'review' | 'fyi' | 'unanswered' | 'replied' | 'follow_ups';
+/** `follow_ups` lists relationship follow-ups instead of comments (shown only when that feature is on). */
+export const INBOX_FILTERS = ['all', 'needs_reply', 'review', 'fyi', 'unanswered', 'replied', 'follow_ups'] as const;
 export const TRIAGE_FILTERS: readonly InboxFilter[] = ['needs_reply', 'review', 'fyi'];
 
 import type { ReplyRecord } from '@/lib/api/types';
