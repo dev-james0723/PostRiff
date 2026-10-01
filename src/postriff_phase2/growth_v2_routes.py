@@ -25,6 +25,13 @@ RESOURCES = {
 PUBLIC = (
     "postriff_phase2.results.http",
 )
+# modules with tick(hosted, deadline) → JSON-safe summary; each step is bounded, flag-gated and never raises
+CRON = (
+    "postriff_phase2.source_uploads.jobs",
+    "postriff_phase2.relationships.jobs",
+    "postriff_phase2.briefs.jobs",
+    "postriff_phase2.proof.jobs",
+)
 
 
 def _module(name):
@@ -58,3 +65,22 @@ def handle(app, environ, start_response, hosted, token, method, parts):
     if module is None:
         raise AlphaError("This feature is not available.", 404, code="feature_disabled")
     return module.handle(app, environ, start_response, hosted, token, method, parts)
+
+
+def cron(hosted, deadline):
+    """Run each present slice's bounded background step until ``deadline`` (time.monotonic()). One slice failing never
+    stops the others; the summary carries only counts and status codes."""
+    import time
+    summary = {}
+    for name in CRON:
+        if time.monotonic() >= deadline:
+            summary[name.rsplit(".", 2)[-2]] = {"status": "deferred"}
+            continue
+        module = _module(name)
+        if module is None or not hasattr(module, "tick"):
+            continue
+        try:
+            summary[name.rsplit(".", 2)[-2]] = module.tick(hosted, deadline)
+        except Exception as error:  # noqa: BLE001 - a background step must never fail the cron response
+            summary[name.rsplit(".", 2)[-2]] = {"status": "unavailable", "reason": type(error).__name__}
+    return summary

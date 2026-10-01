@@ -650,6 +650,9 @@ class HostedApplication:
                 time_savings = getattr(service, "time_savings", None)
                 if time_savings is not None:
                     result["timeSavings"] = time_savings.maintain()
+                # RAFII Product Growth: each enabled slice's bounded background step (intake jobs, briefs, proof revisions…).
+                from . import growth_v2_routes
+                result['growthV2'] = growth_v2_routes.cron(service, time.monotonic() + 20)
                 if getattr(service, 'identity', None) is not None:
                     from .account_deletion import reconcile_identity
                     result['identityDeletion'] = reconcile_identity(service)
