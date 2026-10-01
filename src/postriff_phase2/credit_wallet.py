@@ -217,10 +217,12 @@ class CreditBook:
 
 
 NOTES_KEYS=frozenset({'assetId'})
+# Growth AI under managed credits (credit bridge): one operation per Growth request kind.
+GROWTH_OPERATIONS=('growth-check','growth-rewrite','growth-genome','growth-postmortem','growth-audience')
 
 
 def request_digest(operation, payload, conversation_id=None):
-    if operation not in ('quick-start','turn','media-notes') or not isinstance(payload,dict):
+    if operation not in ('quick-start','turn','media-notes')+GROWTH_OPERATIONS or not isinstance(payload,dict):
         raise ValueError('Unknown credit operation.')
     if any(not isinstance(key,str) or key.startswith('_') for key in payload):
         raise ValueError('Private execution fields are not accepted.')

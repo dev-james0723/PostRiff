@@ -211,7 +211,8 @@ class PreviewTests(unittest.TestCase):
         for kind in ('check', 'rewrite', 'genome', 'audience', 'postmortem'):
             self.g.env.update(POSTRIFF_AUDIENCE_MINER='1', POSTRIFF_POSTMORTEM='1')
             prepared = []
-            self.denied(lambda: self.g._begin(self.wid, 'fixture', kind, self.body(), lambda *a: (_ for _ in ()).throw(AlphaError('Preparation reached without authority', code='unexpected_preparation'))), 'growth_credit_bridge_unavailable')
+            # Credit bridge: a managed-credit request without its own quote is refused before preparation or I/O.
+            self.denied(lambda: self.g._begin(self.wid, 'fixture', kind, self.body(), lambda *a: (_ for _ in ()).throw(AlphaError('Preparation reached without authority', code='unexpected_preparation'))), 'approval_required')
             self.assertEqual(prepared, [])
         self.assertEqual(self.sent, [])
 
@@ -227,7 +228,7 @@ class PreviewTests(unittest.TestCase):
             db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,'creator-v1','active',now()+interval '1 month') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='creator-v1',status='active',current_period_end=excluded.current_period_end", (self.wid,))
         self.approve(paidBaseChecks=True)
         self.assertTrue(self.check()['dimensions'])
-        self.denied(lambda: self.g.rewrite(self.wid, 'fixture', self.body()), 'growth_credit_bridge_unavailable')
+        self.denied(lambda: self.g.rewrite(self.wid, 'fixture', self.body()), 'approval_required')
         self.assertEqual(len(self.sent), 1)
 
     def test_policy_revocation_stops_before_next_io(self):
@@ -343,5 +344,57 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(after['genome']['remaining'], 1)
         self.assertEqual(after['genome']['maxPosts'], 20)
         self.assertFalse(any(term in json.dumps(after).lower() for term in ('micro', 'usd', 'sourceid', 'text', 'policy')))
+    # --- Credit bridge (Pricing v2: Creator Growth AI pays through its own credit quote) ------------------------------
+    def creator(self, milli=600_000):
+        with connection() as db:
+            db.execute("UPDATE pr_plan_terms SET status='active' WHERE id='creator-v1'")
+            db.execute("UPDATE pr_entitlements SET plan_terms_id='creator-v1',source='subscription' WHERE workspace_id=%s", (self.wid,))
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,'creator-v1','active',now()+interval '1 month') "
+                       "ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='creator-v1',status='active',current_period_end=excluded.current_period_end", (self.wid,))
+            self.host.ledger.credits.grant(db.cursor(), self.wid, self.actor, 'bridge-grant-' + self.wid, milli, None, source='local-test-only')
+        from consumer_fixtures import approve_budgets
+        approve_budgets(connection, self.wid)   # operator-approved spending budgets, as in every paid-path test
+        bridged = GrowthService(self.host, env={**ENV, 'POSTRIFF_POST_DOCTOR_V2': '1'}, router_factory=Models().router)
+        self.host.growth = bridged
+        return bridged
+
+    def test_credit_bridge_quotes_reserves_and_settles_once(self):
+        g = self.creator()
+        body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': body})
+        self.assertEqual((quote['kind'], quote['basis']), ('check', 'growth_request_ceiling'))
+        result = g.check(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})
+        self.assertTrue(result['dimensions'])
+        self.assertEqual(self.sent, [])   # the fixture router: no provider transport was used
+        with connection() as db:
+            rows = db.execute("SELECT kind,meta->'credits'->>'op',cost_state FROM pr_usage_ledger WHERE workspace_id=%s AND provider='rafii-growth' ORDER BY at,id",
+                              (self.wid,)).fetchall()
+        self.assertEqual([r[0] for r in rows], ['reserve', 'settle'])
+        self.assertEqual(rows[0][1], 'reserve')
+        replay = g.check(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})   # same request key: replayed, not charged again
+        self.assertIn('dimensions', replay)
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND provider='rafii-growth' AND kind='reserve'", (self.wid,)).fetchone()[0], 1)
+
+    def test_credit_bridge_refuses_a_request_that_differs_from_its_quote(self):
+        g = self.creator()
+        body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': body})
+        changed = {**body, 'text': 'A different draft entirely.', 'creditQuoteId': quote['quoteId']}
+        with self.assertRaises(AlphaError) as caught:
+            g.check(self.wid, 'fixture', changed)
+        self.assertEqual(caught.exception.status, 409)
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND provider='rafii-growth'", (self.wid,)).fetchone()[0], 0)
+
+    def test_credit_bridge_needs_credits_and_is_not_for_free(self):
+        with self.assertRaises(AlphaError) as caught:   # Free: the bridge does not apply
+            self.g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': self.body()})
+        self.assertEqual(caught.exception.code, 'credit_bridge_not_applicable')
+        g = self.creator(milli=1)
+        with self.assertRaises(AlphaError) as caught:   # an empty wallet cannot hold the ceiling
+            g.credit_quote(self.wid, 'fixture', {'kind': 'rewrite', 'request': self.body()})
+        self.assertEqual(caught.exception.status, 402)
+
 
 if __name__ == '__main__': unittest.main(verbosity=2)

@@ -38,6 +38,29 @@ FLAGS = {'check':'POSTRIFF_POST_DOCTOR','rewrite':'POSTRIFF_POST_DOCTOR','genome
          'postmortem':'POSTRIFF_POSTMORTEM','audience':'POSTRIFF_AUDIENCE_MINER'}
 # Bounded input/output/work caps. Reservations are conservative protection, never reported as actual costs.
 RESERVATIONS = {'check':10_000,'rewrite':200_000,'genome':800_000,'public':10_000,'postmortem':200_000,'audience':800_000}
+CREDIT_PROVIDER='rafii-growth'
+CREDIT_KINDS=('check','rewrite','genome','postmortem','audience')
+CREDIT_REWRITE_CEILING=400_000   # the most one rewrite may reserve under the credit bridge (US$0.40 = 120 credits)
+
+
+def credit_ceiling(kind):
+    """The maximum provider cost (micro-USD) one Growth request of this kind may reserve under a credit quote."""
+    return CREDIT_REWRITE_CEILING if kind=='rewrite' else RESERVATIONS[kind]
+
+
+def credit_request(body):
+    """What a Growth credit quote binds: the request as sent, without the quote id itself."""
+    return {k:v for k,v in body.items() if k!='creditQuoteId'}
+
+
+def credit_authority(kind,body):
+    from ..credit_wallet import request_digest
+    quote=body.get('creditQuoteId')
+    if not isinstance(quote,str) or not quote:
+        raise AlphaError('Review the credit limit for this request first. Nothing was sent or charged.',402,code='approval_required')
+    try:digest_=request_digest('growth-'+kind,credit_request(body))
+    except (ValueError,TypeError) as error:raise AlphaError('Invalid Growth request.',400) from error
+    return {'quoteId':quote,'requestDigest':digest_}
 
 
 def context_fingerprint(state):
@@ -157,7 +180,7 @@ class GrowthService:
         if cur.fetchone() is None:
             raise AlphaError('Today’s growth allowance has been used. Your normal drafts still work.',429,code='growth_daily_limit')
 
-    def _router(self,sink,state=None,writer=None,guard=None,funding=None):
+    def _router(self,sink,state=None,writer=None,guard=None,funding=None,credit=None):
         if funding:
             policy=funding.policy
             runtime=self.hosted.ideas._select_runtime(policy.model)
@@ -185,7 +208,10 @@ class GrowthService:
         if workspace_id:
             with self.hosted.connection_factory() as db,db.cursor() as cur:
                 self.hosted.ledger.ensure_entitlement(cur,workspace_id,None)
-                if self.hosted.ledger.growth_mode(cur,workspace_id) != 'legacy':
+                mode=self.hosted.ledger.growth_mode(cur,workspace_id)
+                # A v2 workspace reaches a paid router only with run authority: the platform preview (`funding`) or a
+                # credit reservation made by _begin for this run (`credit`). Any other route stays closed.
+                if mode != 'legacy' and not (credit and mode == 'managed_credits'):
                     raise AlphaError('This Growth route needs a qualified credit bridge before AI use.',503,code='growth_credit_bridge_unavailable')
         if self.router_factory:
             return self._guard_router(self.router_factory(sink,writer),guard, self.env.get("POSTRIFF_POST_DOCTOR_V2")=="1")
@@ -360,6 +386,30 @@ class GrowthService:
                 if kind=='genome': values[label]['maxPosts']=20
             return values
 
+    def credit_quote(self,workspace_id,token,body):
+        """Credit bridge quote (managed credits only): the most this exact Growth request may cost, held as a task credit
+        limit bound to its request digest, model label and provider label. Issuing it sends and charges nothing."""
+        from ..credit_wallet import request_digest
+        from ..credit_meter import millicredits
+        from ..hosted import _membership
+        self.session(token)
+        kind,request=body.get('kind'),body.get('request')
+        if kind not in CREDIT_KINDS or not isinstance(request,dict):
+            raise AlphaError('Choose a Growth request to price.',400)
+        self.gate(kind)
+        try:binding=request_digest('growth-'+kind,credit_request(request))
+        except (ValueError,TypeError) as error:raise AlphaError('Invalid Growth request.',400) from error
+        with self.repository.transaction(token,workspace_id) as (cur,row,principal):
+            require(_membership(row),'edit')
+            self.hosted.ledger.ensure_entitlement(cur,workspace_id,None)
+            if self.hosted.ledger.growth_mode(cur,workspace_id)!='managed_credits':
+                raise AlphaError('This workspace does not pay for Growth with credits.',409,code='credit_bridge_not_applicable')
+            book=getattr(self.hosted.ledger,'credits',None)
+            if book is None:raise AlphaError('Credit billing is not enabled.',503)
+            maximum=millicredits(credit_ceiling(kind))
+            quote=book.issue(cur,workspace_id,principal,row[0],binding,'growth.'+kind,CREDIT_PROVIDER,maximum)
+            return {**quote,'kind':kind,'maxCredits':maximum/1000,'basis':'growth_request_ceiling'}
+
     def _begin(self,workspace_id,token,kind,body,prepare,requirement='edit'):
         from ..hosted import _membership
         self.session(token);self.gate(kind)
@@ -385,19 +435,23 @@ class GrowthService:
                 raise AlphaError('This request already started. Its result must be reconciled before trying again.',409,code='growth_request_pending')
             self.hosted.ledger.ensure_entitlement(cur,workspace_id,None)
             mode=self.hosted.ledger.growth_mode(cur,workspace_id)
-            policy=None
+            policy=None;authority=None
             if mode!='legacy':
                 if mode=='free' and kind not in ('check','genome'):
                     raise AlphaError('Free has no managed writing allowance.',402,code='free_managed_writing_unavailable')
                 policy=PreviewPolicy.from_env(self.env)
                 if mode=='managed_credits' and (kind!='check' or not policy or not policy.paidBaseChecks):
-                    raise AlphaError('This Growth route needs a qualified credit bridge before AI use.',503,code='growth_credit_bridge_unavailable')
-                if mode=='free':
+                    # Credit bridge (PRD R-COM-02): a managed-credit workspace pays for Growth AI through its own credit
+                    # quote for this exact request; without one nothing runs and nothing is charged.
+                    authority=credit_authority(kind,body)
+                    policy=None
+                elif mode=='free':
                     cur.execute('SELECT 1 FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND kind=%s LIMIT 1',(workspace_id,kind))
                     if cur.fetchone(): raise AlphaError('This lifetime preview has already started.',402,code='growth_preview_used')
-                if not policy or PREVIEW_ROUTE not in state.get('growthConsent',{}).get('routes',[]): raise preview_unavailable()
-                policy.binding(self.hosted.ideas._select_runtime(policy.model))
-                if self.env.get('POSTRIFF_AI_PAUSED')=='1': raise preview_unavailable()
+                if authority is None:
+                    if not policy or PREVIEW_ROUTE not in state.get('growthConsent',{}).get('routes',[]): raise preview_unavailable()
+                    policy.binding(self.hosted.ideas._select_runtime(policy.model))
+                    if self.env.get('POSTRIFF_AI_PAUSED')=='1': raise preview_unavailable()
             prepared=prepare(cur,state,principal)
             if kind=='check' and prepared['draft'].get('adviceVersion')==2 and prepared['draft'].get('id'):
                 variant=next(v for v in state['variants'] if v['id']==prepared['draft']['id'])
@@ -436,6 +490,13 @@ class GrowthService:
             run_id=str(uuid.uuid4());context=self._context(state)
             cur.execute('INSERT INTO public.pr_post_doctor_runs(id,workspace_id,request_key,kind,status,fingerprint,context_fingerprint,created_by) VALUES(%s,%s,%s,%s,\'running\',%s,%s,%s)',
                         (run_id,workspace_id,key,kind,fingerprint,context,principal))
+            if authority is not None:
+                if amount>credit_ceiling(kind):
+                    raise AlphaError('This request would exceed its approved credit limit. Review a new limit.',402,code='insufficient_budget')
+                reservation=self.hosted.ledger.reserve(cur,workspace_id,principal,'tool',amount,'growth-credit:'+run_id,charge_batch=False,
+                    provider=CREDIT_PROVIDER,model='growth.'+kind,run_id=run_id,credit_authority=authority)
+                cur.execute("UPDATE public.pr_post_doctor_runs SET body=body||%s::jsonb WHERE id=%s",(json.dumps({'_creditReservationId':reservation['reservationId']}),run_id))
+                return {'id':run_id,'state':state,'context':context,'prepared':prepared,'requirement':requirement,'creditReservationId':reservation['reservationId']}
             return {'id':run_id,'state':state,'context':context,'prepared':prepared,'requirement':requirement}
 
     def _finish(self,workspace_id,token,run,sink,result,error=None,store=None):
@@ -455,6 +516,14 @@ class GrowthService:
                     outcome='unknown' if unknown else 'failed' if error else 'completed'
                     self.hosted.ledger.settle(cur,workspace_id,run['reservationId'],outcome,
                         None if unknown else sum(costs),idempotency_key='platform-preview:settle:'+run['id'])
+                elif run.get('creditReservationId'):
+                    # The credit bridge settles exactly once: actual verified cost (capped by the quote), released on a known
+                    # failure, held for reconciliation when any attempt's cost is unknown.
+                    costs=[event.cost_usd_micro() for event in sink.events]
+                    unknown=any(cost is None for cost in costs)
+                    outcome='unknown' if unknown else 'failed' if error else 'completed'
+                    self.hosted.ledger.settle(cur,workspace_id,run['creditReservationId'],outcome,
+                        None if unknown else sum(costs),idempotency_key='growth-credit:settle:'+run['id'])
                 cur.execute("UPDATE public.pr_post_doctor_runs SET body=body||%s::jsonb WHERE workspace_id=%s AND id=%s",(json.dumps({"_usageRecorded":True}),workspace_id,run['id']))
         try:
             with self.repository.transaction(token,workspace_id) as (cur,row,principal):
@@ -525,7 +594,7 @@ class GrowthService:
         if 'replayed' in run:return run['replayed']
         sink=MemoryUsageSink();result=None;error=None
         try:
-            result=self._check(self._router(sink,run['state'],guard=lambda **kw:self.guard(workspace_id,token,run,**kw),funding=run.get('funding')),workspace_id,run['state'],**run['prepared'])
+            result=self._check(self._router(sink,run['state'],guard=lambda **kw:self.guard(workspace_id,token,run,**kw),funding=run.get('funding'),credit=run.get('creditReservationId')),workspace_id,run['state'],**run['prepared'])
             if run.get('funding') and result.get('status')!='complete':
                 raise AlphaError('The preview did not produce enough evidence.',503,code='growth_ai_unavailable')
         except Exception as caught:error=caught
@@ -571,7 +640,7 @@ class GrowthService:
         if 'replayed' in run:return run['replayed']
         sink=MemoryUsageSink();result=None;error=None
         try:
-            p=run['prepared'];router=self._router(sink,run['state'],p['writer'],guard=lambda:self.guard(workspace_id,token,run))
+            p=run['prepared'];router=self._router(sink,run['state'],p['writer'],guard=lambda:self.guard(workspace_id,token,run),credit=run.get('creditReservationId'))
             result=router.complete_json('postdoctor.rewrite',p['messages'],
                         validate=lambda d:rewrite.validate(d,p['draft']['text'],p['facts']),workspace_id=workspace_id,subject=subject_hash('rewrite',run['id']))
             qs=questions.get('grounding')
@@ -670,7 +739,7 @@ class GrowthService:
                 routes=[r for r in ROUTES if r in run['state']['growthConsent']['routes']
                         and voice_sources.route_granted(source,'analysis',r)]
                 sample_state=copy.deepcopy(run['state']);sample_state['growthConsent']['routes']=routes
-                sample_router=self._router(sink,sample_state,guard=lambda **kw:self.guard(workspace_id,token,run,**kw),funding=run.get('funding'))
+                sample_router=self._router(sink,sample_state,guard=lambda **kw:self.guard(workspace_id,token,run,**kw),funding=run.get('funding'),credit=run.get('creditReservationId'))
                 judgment=JudgmentService(sample_router.evaluator('genome.label')).judge(questions.get('genome'),{'draft':post['text'],'platform':post['platform'],'lang':post['language']},
                             scope='personal:'+workspace_id,subject=subject_hash('genome',post['sourceId'],post['sourceRevision']),model='typesafe-ai/jev',workspace_id=workspace_id)
                 post_result=self._doctor(sample_router,legacy=True).check(workspace_id=workspace_id,draft_text=post['text'],platform=post['platform'],lang=post['language'])

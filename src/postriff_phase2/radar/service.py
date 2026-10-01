@@ -256,7 +256,7 @@ class Radar:
                 item=next(i for i in b['items'] if i['id']==step.split(':',1)[1])
                 result=self.sources.verify(item)
             else:
-                router=self.g._router(sink,state,guard=guard)
+                router=self.g._router(sink,state,guard=guard,credit=b.get('creditReservation'))   # a credit-quoted scan carries its own reservation
                 op=next(o for o in core.opportunities(b['items'],b['query'],b['genome'],b['judgments'],self.clock()) if o['id']==step.split(':',1)[1])
                 if step.startswith('judge:'):
                     q=questions.get('radar_triage')
