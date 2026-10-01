@@ -9,7 +9,7 @@ import uuid
 import psycopg
 from psycopg.types.json import Jsonb
 from rafii_control import demo_dataset
-from rafii_control.auth import Boundary,Config,VerifiedIdentity,ControlError,CAPABILITIES
+from rafii_control.auth import Boundary,Config,VerifiedIdentity,ControlError,CAPABILITIES,READ_BUDGET
 from rafii_control.store import PostgresStore,connection_factory
 from rafii_control.workspace import WorkspaceService
 from rafii_control.http import ControlApplication
@@ -55,7 +55,7 @@ class BusinessWorkspaceTests(unittest.TestCase):
     def test_logout_remains_authorized_when_read_budget_is_exhausted(self):
         with psycopg.connect(self.dsn,autocommit=True) as con:
             bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
-            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),120) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=120",(bucket,))
+            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),%s) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts",(bucket,READ_BUDGET))
         self.assertEqual(self.request('/session')[0],429)
         # Session termination still needs its ordinary founder, origin and CSRF checks.
         csrf=self.session['csrfToken'];self.session['csrfToken']='invalid'
@@ -242,7 +242,7 @@ class BusinessWorkspaceTests(unittest.TestCase):
         attempt=response['data']['intelligence']['contactAttempts'][-1]['id']
         with psycopg.connect(self.dsn,autocommit=True) as con:
             bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
-            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),120) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=120",(bucket,))
+            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),%s) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts",(bucket,READ_BUDGET))
         self.assertEqual(self.request('/session')[0],429)
         stop=self.action('founder_voice','founder',json.dumps(dict(conversationId=conversation,operation='stop')))
         csrf=self.session['csrfToken'];self.session['csrfToken']='wrong'

@@ -114,7 +114,19 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
     await attempt(`${label}: page opens`, async () => {
       await page.goto(target, { waitUntil: 'domcontentloaded' });
       const h1 = page.getByRole('heading', { level: 1 }).first();
-      await h1.waitFor({ state: 'visible', timeout: 45000 });
+      try {
+        await h1.waitFor({ state: 'visible', timeout: 45000 });
+      } catch (error) {
+        // Record what the page shows instead, so a CI run explains itself.
+        fs.mkdirSync(outDir, { recursive: true });
+        await page.screenshot({ path: path.join(outDir, `FAIL-${width}-${mode}-${id}.png`), fullPage: true }).catch(() => {});
+        const seen = await page.evaluate(() => ({ url: location.href, title: document.title,
+          headings: [...document.querySelectorAll('h1,h2')].slice(0, 6).map((h) => ({ tag: h.tagName, text: h.textContent.trim().slice(0, 60), visible: h.getBoundingClientRect().height > 0 && getComputedStyle(h).visibility !== 'hidden', hidden: Boolean(h.closest('[aria-hidden="true"],[inert]')) })),
+          dialogs: [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.getAttribute('aria-label') || d.textContent.trim()).slice(0, 60)),
+          text: document.body.innerText.slice(0, 300) })).catch(() => null);
+        check(`${label}: page state when the heading did not appear`, false, { ...seen, api: drain(tracker) });
+        throw error;
+      }
       await settle(page, tracker);
       const title = (await h1.innerText()).trim();
       check(`${label}: heading`, heading.test(title), title);
@@ -126,17 +138,21 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
       if (overflow > 1) {
         // Name what sticks out: the widest and the narrowest elements whose right edge passes the viewport.
         culprits = await page.evaluate(() => {
+          // The rightmost elements past the viewport, with their positioning: an absolutely positioned element escapes a
+          // scroller that is not its containing block, so position matters more than the DOM ancestry here.
           const limit = window.innerWidth + 1;
           const out = [];
           for (const element of document.querySelectorAll('body *')) {
             const rect = element.getBoundingClientRect();
             if (rect.width > 0 && rect.right > limit) {
               const cls = typeof element.className === 'string' ? element.className : '';
-              out.push({ tag: element.tagName.toLowerCase(), cls: cls.slice(0, 90), role: element.getAttribute('role'), label: element.getAttribute('aria-label'), right: Math.round(rect.right), width: Math.round(rect.width) });
+              const style = getComputedStyle(element);
+              out.push({ tag: element.tagName.toLowerCase(), cls: cls.slice(0, 120), role: element.getAttribute('role'), label: element.getAttribute('aria-label'),
+                         position: style.position, right: Math.round(rect.right), width: Math.round(rect.width), text: (element.textContent || '').trim().slice(0, 40) });
             }
           }
-          out.sort((a, b) => b.width - a.width);
-          return { widest: out.slice(0, 4), narrowest: out.slice(-4) };
+          out.sort((a, b) => b.right - a.right || a.width - b.width);
+          return out.slice(0, 6);
         });
       }
       check(`${label}: no horizontal scroll`, overflow <= 1, { overflow, culprits });
