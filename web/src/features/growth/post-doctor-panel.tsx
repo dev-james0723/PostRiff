@@ -9,7 +9,8 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { SnapshotVariant } from '@/lib/api/types';
-import type { AdviceGoal, PostCheck, PostRewrite } from '@/lib/growth/types';
+import type { AdviceGoal, DraftCheckBody, PostCheck, PostRewrite } from '@/lib/growth/types';
+import { creditLimitLabel, useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
 import { CheckResult, GrowthConsent, useGrowthCatalog } from './shared';
 
 export function PostDoctorPanel({
@@ -38,11 +39,25 @@ export function PostDoctorPanel({
   // Keep the key after a lost response: another click reconciles instead of buying a duplicate run.
   const factsId = useId();
   const requests = useRef<{ check?: string; rewrite?: string }>({});
+  // Creator under Pricing v2: a Growth request is priced and confirmed before it runs (credit bridge).
+  const credits = useGrowthCreditApproval<PostCheck | PostRewrite>(workspaceId);
   useEffect(() => {
     setCheck(null); setRewritten(null); setSelected([]); requests.current = {};
   }, [variant.id, variant.revision]);
   if (!catalog.data?.postDoctor) return null;
   const enabled = checkAccess(access, { permission: 'edit' });
+
+  async function applyCheck(result: PostCheck) {
+    setCheck(result);
+    setRewritten(null);
+    requests.current = {};
+    await snapshot.refetch();
+  }
+
+  function applyRewrite(result: PostRewrite) {
+    setRewritten(result);
+    setSelected(!result.comparison || result.comparison.recommended === 'candidate' ? result.changes.map((c) => c.id) : []);
+  }
 
   async function run(kind: 'check' | 'rewrite') {
     setError('');
@@ -50,33 +65,46 @@ export function PostDoctorPanel({
     requests.current[kind] ??= crypto.randomUUID();
     try {
       if (kind === 'check') {
-        const result = await api.postDoctor(workspaceId, {
+        const body = {
           ...(catalog.data?.postDoctorV2 ? { goal } : {}),
           variantId: variant.id,
           variantRevision: variant.revision,
           requestKey: requests.current.check!,
           confirmed
-        });
-        setCheck(result);
-        setRewritten(null);
-        requests.current = {};
-        await snapshot.refetch();
+        };
+        const result = await credits.run('check', body, (b) => api.postDoctor(workspaceId, b as unknown as DraftCheckBody));
+        if (result) await applyCheck(result as PostCheck);
       } else if (check && catalog.data) {
         const entries = facts
           .split('\n')
           .map((f) => f.trim())
           .filter(Boolean);
         if (entries.length > 10) throw new Error('Use at most ten facts or real examples.');
-        const result = await api.postDoctorRewrite(workspaceId, {
+        const body = {
           checkId: check.runId,
           model: catalog.data.writer,
           facts: Object.fromEntries(entries.map((f, i) => [`fact${i + 1}`, f])),
           confirmed,
           requestKey: requests.current.rewrite!
-        });
-        setRewritten(result);
-        setSelected(!result.comparison || result.comparison.recommended === 'candidate' ? result.changes.map((c) => c.id) : []);
+        };
+        const result = await credits.run('rewrite', body, (b) => api.postDoctorRewrite(workspaceId, b as unknown as Parameters<typeof api.postDoctorRewrite>[1]));
+        if (result) applyRewrite(result as PostRewrite);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'This request could not be completed.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function confirmCredits() {
+    const kind = credits.pending?.kind;
+    setError('');
+    setBusy(kind ?? 'check');
+    try {
+      const result = await credits.confirm();
+      if (result && kind === 'check') await applyCheck(result as PostCheck);
+      if (result && kind === 'rewrite') applyRewrite(result as PostRewrite);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This request could not be completed.');
     } finally {
@@ -283,6 +311,19 @@ export function PostDoctorPanel({
             </>
           )}
         </>
+      )}
+      {credits.pending && (
+        <div role='group' aria-label='Confirm the credit limit' className='flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-3 text-sm'>
+          <p>{creditLimitLabel(credits.pending)}</p>
+          <div className='flex flex-wrap gap-2'>
+            <Button variant='action' disabled={Boolean(busy)} onClick={() => void confirmCredits()}>
+              Confirm and run
+            </Button>
+            <Button variant='ghost' disabled={Boolean(busy)} onClick={credits.cancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
       {error && (
         <p role='alert' className='text-destructive text-sm'>
