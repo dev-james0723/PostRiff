@@ -153,6 +153,7 @@ export function VisualPackSection() {
                     <input
                       type='radio'
                       name='visual-pack-draft'
+                      aria-label={draft.text.slice(0, 120)}
                       value={draft.id}
                       checked={variantId === draft.id}
                       onChange={() => {

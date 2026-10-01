@@ -338,7 +338,7 @@ export function platformName(provider: string | null | undefined): string {
 export function replyRouteView(route: ReplyRoute | null | undefined, copy: FollowUpCopy) {
   const platform = platformName(route?.provider);
   if (route?.kind === 'direct') return { kind: 'direct' as const, label: copy.reply, hint: copy.directHint, href: null };
-  const href = route?.href && /^https:\/\//.test(route.href) ? route.href : null;
+  const href = route?.href?.startsWith('https://') ? route.href : null;
   return { kind: 'assisted' as const, label: copy.assisted(platform), hint: copy.assistedHint(platform), href };
 }
 

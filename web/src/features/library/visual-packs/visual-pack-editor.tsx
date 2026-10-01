@@ -318,7 +318,7 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
       primary = (
         <>
           <label className='flex min-h-11 items-start gap-3 text-sm'>
-            <input type='checkbox' checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
+            <input type='checkbox' aria-label={copy.acceptConfirm} checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
             {copy.acceptConfirm}
           </label>
           <Button variant='action' size='control' disabled={busy || !reviewed} onClick={() => void act('accept', true)}>
@@ -346,7 +346,7 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
     primary = (
       <>
         <label className='flex min-h-11 items-start gap-3 text-sm'>
-          <input type='checkbox' checked={posted} onChange={(e) => setPosted(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
+          <input type='checkbox' aria-label={copy.confirmUsed} checked={posted} onChange={(e) => setPosted(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
           <span className='flex flex-col gap-0.5'>
             {copy.confirmUsed}
             <span className='text-muted-foreground text-xs'>{copy.confirmUsedHint}</span>
@@ -415,7 +415,7 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
           <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
             {view.options.palettes.map((option) => (
               <label key={option.id} className={cn('rafii-glass flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--rafii-radius-control)] p-2 text-sm', palette === option.id && 'rafii-glass-selected')}>
-                <input type='radio' name={`vp-palette-${packId}`} value={option.id} checked={palette === option.id} onChange={() => setPalette(option.id)} className='size-4 shrink-0' />
+                <input type='radio' name={`vp-palette-${packId}`} aria-label={option.label} value={option.id} checked={palette === option.id} onChange={() => setPalette(option.id)} className='size-4 shrink-0' />
                 <span aria-hidden className='flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold' style={{ background: option.background, color: option.text, borderColor: option.accent }}>
                   Aa
                 </span>

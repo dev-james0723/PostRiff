@@ -201,13 +201,13 @@ function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
       {view.missingContext.includes('purpose') && (
         <label className='flex flex-col gap-1 text-sm'>
           What should these posts do?
-          <input className={FIELD} required maxLength={300} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder='Fill my November workshop' />
+          <input className={FIELD} aria-label='What should these posts do?' required maxLength={300} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder='Fill my November workshop' />
         </label>
       )}
       {view.missingContext.includes('audience') && (
         <label className='flex flex-col gap-1 text-sm'>
           Who are they for?
-          <input className={FIELD} required maxLength={300} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Busy small-business owners' />
+          <input className={FIELD} aria-label='Who are they for?' required maxLength={300} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Busy small-business owners' />
         </label>
       )}
       <Button type='submit' variant='action' className='self-start' disabled={!canEdit || save.isPending}>
@@ -364,7 +364,7 @@ function WeekSlots({ view, canEdit }: { view: FirstWeekView; canEdit: boolean })
           {view.billingMode === 'managed_credits' && (
             <label className='flex flex-col gap-1 text-sm'>
               Credit limit for this week
-              <input className={FIELD} type='number' min={1} max={3500} value={credits} onChange={(e) => setCredits(Math.max(1, Math.min(3500, Number(e.target.value) || 1)))} />
+              <input className={FIELD} aria-label='Credit limit for this week' type='number' min={1} max={3500} value={credits} onChange={(e) => setCredits(Math.max(1, Math.min(3500, Number(e.target.value) || 1)))} />
             </label>
           )}
           <Button variant='action' disabled={!canEdit || draft.isPending}

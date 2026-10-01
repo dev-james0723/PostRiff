@@ -30,6 +30,7 @@ from postriff_phase2.results.http import ensure
 
 ROOT = Path(__file__).resolve().parents[2]
 DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+PSQL = Path(os.environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin")) / "psql"
 MIGRATION = ROOT / "migrations/postriff/080_customer_results.sql"
 TABLES = ("pr_result_connections", "pr_tracking_links", "pr_result_events", "pr_result_quarantine", "pr_link_clicks", "pr_result_mutations")
 DAY = 86400
@@ -141,7 +142,7 @@ class Base(unittest.TestCase):
 class AC30MigrationTest(Base):
     def test_ac30_migration_reapplies_with_forced_rls_and_no_browser_writes(self):
         for _ in range(2):    # already applied by rls.sql; two more passes must be no-ops
-            subprocess.run(["/opt/homebrew/opt/postgresql@17/bin/psql", DSN, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(MIGRATION)],
+            subprocess.run([str(PSQL), DSN, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(MIGRATION)],
                            check=True, stdout=subprocess.DEVNULL, env={**os.environ, "PGOPTIONS": "-c client_min_messages=warning"})
         with connection() as db:
             for table in TABLES:

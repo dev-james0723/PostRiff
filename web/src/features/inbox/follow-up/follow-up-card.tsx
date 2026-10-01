@@ -490,7 +490,7 @@ export function DueFields({
           <p>{copy.repeatedTime}</p>
           {([0, 1] as const).map((value) => (
             <label key={value} className='flex min-h-9 items-center gap-2'>
-              <input type='radio' name={`${id}-fold`} checked={fold === value} onChange={() => onFold(value)} />
+              <input type='radio' name={`${id}-fold`} aria-label={value === 0 ? copy.firstOccurrence : copy.secondOccurrence} checked={fold === value} onChange={() => onFold(value)} />
               {value === 0 ? copy.firstOccurrence : copy.secondOccurrence}
             </label>
           ))}

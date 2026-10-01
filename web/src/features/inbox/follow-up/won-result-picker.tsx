@@ -93,7 +93,7 @@ export function WonResultPicker({ busy, onConfirm, onCancel }: { busy: boolean; 
         {ledger.isSuccess && items.length === 0 && <p className='text-muted-foreground text-sm'>{copy.wonNone}</p>}
         {items.map((item) => (
           <label key={item.id} className='flex min-h-9 items-start gap-2 text-sm'>
-            <input type='radio' name={`${id}-won`} value={item.id} checked={picked === item.id} onChange={() => setPicked(item.id)} className='mt-1' />
+            <input type='radio' name={`${id}-won`} aria-label={describe(item)} value={item.id} checked={picked === item.id} onChange={() => setPicked(item.id)} className='mt-1' />
             <span>{describe(item)}</span>
           </label>
         ))}

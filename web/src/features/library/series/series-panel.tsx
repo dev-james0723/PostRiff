@@ -87,7 +87,7 @@ export function SeriesSection() {
       ) : items.length === 0 ? (
         <StateMessage kind='empty' layout='inline' title={copy.emptyTitle} description={copy.emptyBody} />
       ) : (
-        <ul role='list' aria-labelledby='series-heading' className='flex flex-col gap-2'>
+        <ul aria-labelledby='series-heading' className='flex flex-col gap-2'>
           {items.map((item) => (
             <li key={item.id}>
               <SeriesRow item={item} copy={copy} onOpen={() => setOpenId(item.id)} />

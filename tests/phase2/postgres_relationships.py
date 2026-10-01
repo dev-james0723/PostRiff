@@ -242,7 +242,7 @@ assert tick == {"status": "ok", "scanned": 2, "emitted": 2}, tick
 assert jobs.tick(hosted, time.monotonic() + 15) == {"status": "ok", "scanned": 0, "emitted": 0}
 events = follow_up_events()
 assert {key for key, _ in events} == {item["dedupeKey"] for item in due.values()}
-assert all(set(payload) == {"title", "reason", "href"} and payload["href"].startswith("/app/inbox?filter=follow_ups&relationship=") for _, payload in events)
+assert all(set(payload) == {"reason", "href"} and payload["href"].startswith("/app/inbox?filter=follow_ups&relationship=") for _, payload in events)   # no English title: the digest localizes
 stored_links = {payload["href"] for _, payload in events}   # as stored by the outbox (after its phone-number redaction)
 assert stored_links == {f"/app/inbox?filter=follow_ups&relationship={rel.link_id(rid)}" + (f"&thread={rel.link_id(item['threadId'])}" if item["threadId"] else "")
                         for rid, item in due.items()}, stored_links

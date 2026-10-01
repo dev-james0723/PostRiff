@@ -1,4 +1,5 @@
 """Migration 047 on a disposable pre-047 shape, then replay with RLS checks."""
+import os
 import json
 import subprocess
 import sys
@@ -17,7 +18,7 @@ with psycopg.connect(DSN) as db:
     db.execute("ALTER TABLE public.pr_reply_drafts ADD CONSTRAINT pr_reply_drafts_status_check CHECK (status IN ('draft','approved','submitting','submitted','verified','failed','uncertain','cancelled'))")
 
 for _ in range(2):
-    subprocess.run(["/opt/homebrew/opt/postgresql@17/bin/psql", DSN, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(MIGRATION)],
+    subprocess.run([str(Path(os.environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin")) / "psql"), DSN, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(MIGRATION)],
                    check=True, stdout=subprocess.DEVNULL)
 
 with psycopg.connect(DSN) as db:

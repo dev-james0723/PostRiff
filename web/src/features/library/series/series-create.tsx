@@ -79,11 +79,11 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
               ) : items.length === 0 ? (
                 <StateMessage kind='empty' layout='inline' title={kind === 'post' ? copy.noPosts : copy.noSources} />
               ) : (
-                <ul role='list' className='flex max-h-72 flex-col gap-1.5 overflow-y-auto'>
+                <ul className='flex max-h-72 flex-col gap-1.5 overflow-y-auto'>
                   {items.map((item) => (
                     <li key={item.id}>
-                      <label className={cn('rafii-glass rafii-focus flex min-h-12 cursor-pointer gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2.5', origin === item.id && 'rafii-glass-selected')}>
-                        <input type='radio' name={`${ids}-origin`} value={item.id} checked={origin === item.id} onChange={() => { setOrigin(item.id); setIntent(null); }} className='mt-1' />
+                      <label aria-label={item.excerpt} className={cn('rafii-glass rafii-focus flex min-h-12 cursor-pointer gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2.5', origin === item.id && 'rafii-glass-selected')}>
+                        <input type='radio' name={`${ids}-origin`} aria-label={item.excerpt} value={item.id} checked={origin === item.id} onChange={() => { setOrigin(item.id); setIntent(null); }} className='mt-1' />
                         <span className='flex min-w-0 flex-col gap-0.5 text-sm'>
                           <span className='line-clamp-2'>{item.excerpt}</span>
                           <span className='text-muted-foreground text-xs'>

@@ -16,7 +16,7 @@ import psycopg
 
 DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
 MIGRATION = Path(__file__).resolve().parents[2] / "migrations/postriff/081_relationships.sql"
-PSQL = "/opt/homebrew/opt/postgresql@17/bin/psql"
+PSQL = str(Path(os.environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin")) / "psql")
 
 
 def apply():
