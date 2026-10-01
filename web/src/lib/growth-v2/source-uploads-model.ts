@@ -153,6 +153,7 @@ const AUDIO_TYPES: Record<string, string> = {
 };
 const AUDIO_ALIASES = new Set(['audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/vnd.wave', 'audio/ogg', 'audio/opus']);
 const TRANSCRIPTS = new Set(['srt', 'vtt', 'txt']);
+export const TRANSCRIPT_FILE_MAX_BYTES = 600_000;
 
 export type FileChoice =
   | { ok: true; kind: 'pdf'; mime: 'application/pdf' }
@@ -172,6 +173,8 @@ export function classifyFile(file: { name: string; type?: string; size: number }
   }
   if (TRANSCRIPTS.has(extension) || type === 'text/vtt' || type === 'application/x-subrip') {
     const format = (TRANSCRIPTS.has(extension) ? extension : type === 'text/vtt' ? 'vtt' : 'srt') as 'srt' | 'vtt' | 'txt';
+    // 150,000 characters is the server's ceiling for a transcript file; this bounds what the browser reads first.
+    if (file.size > TRANSCRIPT_FILE_MAX_BYTES) return { ok: false, code: 'over_limit', message: overLimit(file.size, TRANSCRIPT_FILE_MAX_BYTES, lang) };
     return { ok: true, kind: 'transcript', format };
   }
   if (extension === 'webm' || type.includes('webm')) {
@@ -258,7 +261,8 @@ export function errorText(code: string | undefined, fallback: string, lang: Lang
     no_usable_statements: { en: 'No complete statements were found. Edit the text into full sentences.', 'zh-Hant': '找不到完整陳述。請把文字修改成完整句子。' },
     source_duplicate: { en: 'This text is already a source in this workspace.', 'zh-Hant': '這段文字已是這個工作區的來源。' }
   };
-  const said = code ? (mapped[code] ?? REASONS[code]) : undefined;
+  // A limit refusal carries the measured size or length in the server's sentence: never replace it with a generic line.
+  const said = code && code !== 'over_limit' ? (mapped[code] ?? REASONS[code]) : undefined;
   return said ? said[lang] : fallback;
 }
 

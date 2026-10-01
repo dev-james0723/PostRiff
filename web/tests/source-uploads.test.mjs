@@ -51,6 +51,7 @@ test('AC11 files are classified and checked against the published limits', () =>
   assert.equal(big.ok, false);
   assert.equal(big.code, 'over_limit');
   assert.equal(big.message, 'This file is 24 MB; the limit is 20 MB.');
+  assert.equal(classifyFile({ name: 'huge.srt', type: '', size: 5_000_000 }, LIMITS).code, 'over_limit');
   assert.equal(classifyFile({ name: 'rec.webm', type: 'audio/webm', size: 10 }, LIMITS).code, 'webm');
   assert.equal(classifyFile({ name: 'clip.mov', type: 'video/quicktime', size: 10 }, LIMITS).code, 'unsupported_format');
   assert.equal(classifyFile({ name: 'page.html', type: 'text/html', size: 10 }, LIMITS).code, 'unsupported_format');
@@ -107,6 +108,8 @@ test('known error codes are said in the person’s language; others keep the ser
   assert.equal(errorText('review_required', 'Review the text first: nothing becomes a source until a person has read it.', 'zh-Hant'), '請先檢查文字。');
   assert.equal(errorText('insufficient_budget', 'This transcription can use up to 1.2 credits.', 'en'), 'This transcription can use up to 1.2 credits.');
   assert.equal(errorText('something_else', 'Server words.', 'zh-Hant'), 'Server words.');
+  // AC11: a limit refusal keeps the measured value from the server in every language.
+  assert.equal(errorText('over_limit', 'This recording is 10:01 long; the limit is 10:00.', 'zh-Hant'), 'This recording is 10:01 long; the limit is 10:00.');
   assert.equal(errorText(undefined, 'Fallback.', 'en'), 'Fallback.');
 });
 
