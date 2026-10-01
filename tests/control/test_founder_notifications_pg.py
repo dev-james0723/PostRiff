@@ -165,6 +165,9 @@ class FounderNoticesMigrationTests(unittest.TestCase):
         warning = {**subject, 'id': str(uuid.uuid4()), 'severity': 'warning'}
         fn.notifier(service, [self.user], now, fstore, {})('founder.incident_opened', warning)
         at = ten_am_after(now)
+        # The shared test database keeps founders from earlier modules and the stage takes at most MAX_OPERATORS of them in
+        # id order, so the stage is pointed at this test's founder (the listing itself is covered by the contact tests).
+        fstore.founder_operators = lambda: [self.user]
         result = fn.digest_stage(fstore, service, {}, at)
         self.assertEqual((result['status'], result['operators'][self.user]), ('ok', 'in_app'))
         local_date = datetime.fromtimestamp(at, ZoneInfo(fn.TIME_ZONE)).date().isoformat()
