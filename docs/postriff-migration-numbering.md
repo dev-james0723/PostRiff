@@ -26,6 +26,12 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 048, 050 | `048_pricing_credit_catalog_v2`, `050_free_lifecycle_bootstrap` | Pricing + Credits v2 | Local branch `feat/rafii-pricing-credits-v2`; merged into `claude/rafii-product-growth-v2`. Not applied to production. |
 | 049, 051–068 | `049_rafii_control_foundation` … `068_founder_actions_views` (061 unused) | Founder Control / Founder Admin | `claude/founder-admin-v2` (PR #86) and its worktree; 057–068 were uncommitted there on 2026-10-01. Treat 061 as Founder's. |
 | 080–089 | RAFII Product Growth v2 (`docs/design/rafii-product-growth/`) | `claude/rafii-product-growth-v2` | Reserved 2026-10-01 after scanning all refs and worktrees (highest in flight: 068). |
+| 080 | Product Growth v2: customer results (`080_customer_results.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 081 | Product Growth v2: relationships (`081_relationships.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 082 | Product Growth v2: unused (series need no DDL; DECISIONS D-021) | — | Do not reassign. |
+| 083 | Product Growth v2: visual packs (`083_visual_packs.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 084 | Product Growth v2: briefs/proof (pending) | `claude/rafii-product-growth-v2` | Reserved. |
+| 087 | Product Growth v2: raw source uploads (`087_source_uploads.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 069–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
