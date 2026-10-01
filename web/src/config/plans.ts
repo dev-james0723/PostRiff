@@ -328,5 +328,5 @@ export function jsonLdOffers(catalog: PricingCatalogId = PRICING_CATALOG, v2: Pu
     catalog === 'v2'
       ? v2.plans.filter((plan) => plan.checkout === 'available').map((plan) => ({ name: plan.label, priceCents: plan.priceCents, currency: plan.currency }))
       : plans.filter((plan) => plan.status === 'active').map((plan) => ({ name: plan.name, priceCents: plan.priceCents, currency: plan.currency }));
-  return sellable.map((plan) => ({ '@type': 'Offer', name: plan.name, price: (plan.priceCents / 100).toFixed(2), priceCurrency: plan.currency, category: 'subscription' }));
+  return sellable.map((plan): JsonLdOffer => ({ '@type': 'Offer', name: plan.name, price: (plan.priceCents / 100).toFixed(2), priceCurrency: plan.currency, category: 'subscription' }));
 }

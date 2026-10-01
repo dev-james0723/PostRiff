@@ -1,7 +1,10 @@
-import { plans } from '@/config/plans';
+import { jsonLdOffers } from '@/config/plans';
 import { siteConfig } from '@/config/site';
 
-/** Organization + SoftwareApplication structured data for the public site. */
+/**
+ * Organization + SoftwareApplication structured data for the public site. Offers list only plans a customer
+ * can buy right now in the active catalog (legacy: active terms; Pricing v2: Creator once checkout opens).
+ */
 export function JsonLd() {
   const data = [
     {
@@ -19,13 +22,7 @@ export function JsonLd() {
       operatingSystem: 'Web',
       url: siteConfig.url,
       description: siteConfig.description,
-      offers: plans.filter((plan) => plan.status === 'active').map((plan) => ({
-        '@type': 'Offer',
-        name: plan.name,
-        price: (plan.priceCents / 100).toFixed(2),
-        priceCurrency: plan.currency,
-        category: 'subscription'
-      }))
+      offers: jsonLdOffers()
     }
   ];
   return <script type='application/ld+json' dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />;

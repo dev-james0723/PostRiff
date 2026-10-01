@@ -7,8 +7,13 @@ import { ChromaticTextReveal } from '@/components/motion/chromatic-text-reveal';
 import { Magnetic } from '@/components/motion/magnetic';
 import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
+
+/** The entry action and its promise follow the catalog the site sells from (the trial today, Free under Pricing v2). */
+const ENTRY = marketingCopy(PRICING_CATALOG).hero;
 
 /** Platforms cycled in the connector line; each one is a channel in `@/config/channels` (B站 is Bilibili). */
 const REWRITE_TARGETS = ['LinkedIn', 'Instagram', '小紅書', 'Threads', 'B站', 'YouTube'];
@@ -71,14 +76,14 @@ export function Hero() {
           <div style={line(3)} className='t-stagger-line flex flex-wrap items-center gap-3'>
             <Magnetic strength={0.2} className='flex'>
               <Link href={siteConfig.links.signUp} className={buttonVariants({ variant: 'action', size: 'hero' })}>
-                Start free trial
+                {ENTRY.primaryLabel}
               </Link>
             </Magnetic>
             <Link href='#how-it-works' className={buttonVariants({ variant: 'glass', size: 'hero' })}>
               See how it works
             </Link>
           </div>
-          <p style={line(4)} className='t-stagger-line text-muted-foreground text-sm'>No credit card · 14-day trial · Export everything, any time</p>
+          <p style={line(4)} className='t-stagger-line text-muted-foreground text-sm'>{ENTRY.note}</p>
         </div>
 
         <div role='group' aria-label='One source becoming three platform-native drafts' className='relative'>
