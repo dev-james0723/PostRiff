@@ -618,7 +618,7 @@ class ResultsService:
                            "extract(epoch from last_error_at),extract(epoch from created_at),extract(epoch from updated_at),"
                            "extract(epoch from removed_at),revision")
 
-    def _connection_views(self, cur, workspace_id, rows, now, owner=True):
+    def _connection_views(self, cur, workspace_id, rows, now):
         ids = [r[0] for r in rows]
         counts, quarantine = {}, {}
         if ids:
@@ -642,7 +642,7 @@ class ResultsService:
                           "fingerprint": fingerprint if status != "removed" else None,
                           "previousFingerprint": previous if grace else None, "previousExpiresAt": float(previous_until) if grace else None,
                           "ratePerMinute": per_minute, "ratePerDay": per_day, "createdAt": float(created), "updatedAt": float(updated),
-                          "removedAt": _num(removed), "endpoint": self._endpoint(ident) if owner and status != "removed" else None, "health": health})
+                          "removedAt": _num(removed), "endpoint": self._endpoint(ident) if status != "removed" else None, "health": health})
         return views
 
     def _connection(self, cur, workspace_id, connection_id, now):
@@ -654,13 +654,11 @@ class ResultsService:
         require_enabled()
         now = self.clock()
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
-            member = self._member(row)
-            require(member, "read")
+            require(self._member(row), "owner")      # connections, their endpoints and health are the owner's
             cur.execute(f"SELECT {self._CONNECTION_COLUMNS} FROM public.pr_result_connections WHERE workspace_id=%s "
                         "ORDER BY (status='removed'),created_at DESC,id DESC LIMIT 50", (workspace_id,))
-            views = self._connection_views(cur, workspace_id, cur.fetchall(), now, owner=member.allows("owner"))
-        return {"connections": views, "canManage": member.allows("owner"), "limit": MAX_CONNECTIONS, "asOf": now,
-                "rotationGraceSeconds": ROTATION_GRACE_SECONDS}
+            views = self._connection_views(cur, workspace_id, cur.fetchall(), now)
+        return {"connections": views, "canManage": True, "limit": MAX_CONNECTIONS, "asOf": now, "rotationGraceSeconds": ROTATION_GRACE_SECONDS}
 
     def create_connection(self, workspace_id, token, payload):
         require_enabled()

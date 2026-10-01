@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Band, FIELD_CLASS, SelectField, StatusChip } from '@/features/workspace/rafii-parts';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
 import { useConnectionAction, useCreateConnection, useResultConnections } from '@/lib/growth-v2/results-hooks';
 import type { ConnectionSecret, ResultConnection, ResultProducer } from '@/lib/growth-v2/results-types';
@@ -31,6 +32,13 @@ function endpointUrl(connection: ResultConnection): string {
 
 /** Signed first-party connections (owner only): create shows the secret once; rotate keeps the old key for 24 hours. */
 export function ResultConnectionsView() {
+  const { copy } = useResultsCopy();
+  const owner = checkAccess(useWorkspaceAccess(), { permission: 'owner' });
+  if (!owner) return <StateMessage kind='permission' layout='inline' title={copy.connections.ownerOnly} />;
+  return <OwnerConnections />;
+}
+
+function OwnerConnections() {
   const { copy } = useResultsCopy();
   const query = useResultConnections();
   const [creating, setCreating] = useState(false);

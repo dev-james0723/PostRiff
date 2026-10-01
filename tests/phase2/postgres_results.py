@@ -594,10 +594,10 @@ class AC36SecurityTest(Base):
         link = RESULTS.create_link(t.wid, t.editor, {"destination": "https://example.org/", "idempotencyKey": key()})["link"]
         self.assertEqual(refusal(RESULTS.create_connection, t.wid, t.editor, {"label": "Form", "producer": "form", "idempotencyKey": key()})[0], 403)
         conn, _ = connect(t)
-        listed = RESULTS.connections(t.wid, t.viewer)
-        self.assertFalse(listed["canManage"])
-        self.assertIsNone(listed["connections"][0]["endpoint"])          # members see health, not the delivery address
+        for member in (t.viewer, t.editor):          # connections, their endpoints and health are the owner's
+            self.assertEqual(refusal(RESULTS.connections, t.wid, member), (403, "permission_denied"))
         self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["endpoint"]["path"], "/api/results/webhook/" + conn["id"])
+        self.assertEqual(RESULTS.summary(t.wid, t.viewer)["coverage"]["connections"]["active"], 1)   # members still see coverage counts
         self.assertEqual(refusal(RESULTS.connection_action, t.wid, t.editor, conn["id"], "rotate", {"idempotencyKey": key(), "expectedRevision": 1})[0], 403)
         self.assertTrue(RESULTS.events(t.wid, t.editor)["canEdit"])
         self.assertFalse(RESULTS.events(t.wid, t.viewer)["canEdit"])
