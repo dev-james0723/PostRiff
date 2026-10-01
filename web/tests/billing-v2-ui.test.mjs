@@ -1,5 +1,5 @@
 /**
- * Usage & plan wiring under Pricing v2 (Task 8; spec §13.3). The pure rules live in billing-mode.ts (billing-mode.test.mjs);
+ * Usage & plan wiring under Pricing v2 (Task 8; spec §13.3). The pure rules live in lib/billing/mode.ts (billing-mode.test.mjs);
  * these checks pin how the page uses them: one branch per billing mode, the credit meter and Free preview in place of
  * legacy meters, Free + Creator plan cards at the workspace's own price, and info copy that matches the mode.
  */

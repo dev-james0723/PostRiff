@@ -6,7 +6,7 @@ import type { Usage } from '@/lib/api/types';
 import { formatDate, formatNumber } from '@/lib/time';
 import { Bar } from './allowances';
 import { allowanceTotal, currentTerms } from './billing-model';
-import { creditMeter } from './billing-mode';
+import { creditMeter } from '@/lib/billing/mode';
 import { useBillingCopy } from './use-copy-locale';
 
 /**

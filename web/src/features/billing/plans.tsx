@@ -13,7 +13,7 @@ import { EASE_OUT } from '@/lib/ease';
 import { formatNumber } from '@/lib/time';
 import { CONFIRM, PLAN_ALLOWANCES, PRICE_STATUS, checkoutNote } from './billing-copy';
 import { allowanceTotal, humanize, latestTermsPerPlan, planOffer, type PlanOffer } from './billing-model';
-import { planListKind, v2PlanCardModels } from './billing-mode';
+import { planListKind, v2PlanCardModels } from '@/lib/billing/mode';
 import { ACTION_STATEFUL } from './lifecycle-alert';
 import { useBillingCopy } from './use-copy-locale';
 import type { BillingRedirect } from './use-billing-redirect';

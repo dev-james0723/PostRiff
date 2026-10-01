@@ -18,8 +18,8 @@ import {
   planListKind,
   v2PlanCardModels,
   writingAllowance
-} from '../src/features/billing/billing-mode.ts';
-import { BILLING_COPY, copyLocale, billingCopy } from '../src/features/billing/billing-mode-copy.ts';
+} from '../src/lib/billing/mode.ts';
+import { BILLING_COPY, copyLocale, billingCopy } from '../src/lib/billing/mode-copy.ts';
 
 const NOW = 1_800_000_000;
 const DAY = 86400;

@@ -1,5 +1,7 @@
 import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import type { AgentInfo, ModelOption } from '@/lib/api/types';
+import { costClassKey, type WritingAllowance } from '@/lib/billing/mode';
+import { billingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 import { ROUTE_LABELS } from '@/features/agent/use-model';
 
 /**
@@ -99,27 +101,37 @@ export interface CostCopy {
   line: string;
 }
 
-/** Billing copy generated from the `costClass` the API reports for a route. */
-export function costCopy(costClass: string | undefined): CostCopy {
-  switch (costClass) {
+/**
+ * Billing copy generated from the `costClass` the API reports for a route, read against what this workspace
+ * spends (`writingAllowance`): a paid writer uses legacy writing batches, Creator's managed credits, or is not
+ * included on Free (Pricing v2). Before usage is known, a paid writer is described without naming either unit.
+ */
+export function costCopy(costClass: string | undefined, allowance: WritingAllowance = { kind: 'loading' }, locale: CopyLocale = 'en'): CostCopy {
+  const v2 = billingCopy(locale).costClass;
+  switch (costClassKey(costClass, allowance)) {
     case 'none':
       return { badge: 'Free', line: 'Free. No AI model is used.' };
     case 'subscription':
       return { badge: 'Your CLI subscription', line: 'Paid by the CLI’s own subscription. $0 here.' };
-    case 'paid':
+    case 'batches':
       return { badge: 'Writing batches', line: 'Uses one writing batch from your plan per finished run. Failed runs don’t count.' };
-    case undefined:
-    case '':
+    case 'credits':
+      return { badge: v2.creditsBadge, line: v2.creditsLine };
+    case 'free_plan':
+      return { badge: v2.freeBadge, line: v2.freeLine };
+    case 'paid':
+      return { badge: v2.paidBadge, line: v2.paidLine };
+    case 'unreported':
       return { badge: 'Not reported', line: 'Cost not reported.' };
     default:
-      return { badge: costClass, line: `Cost: ${costClass}.` };
+      return { badge: costClass ?? 'Not reported', line: `Cost: ${costClass}.` };
   }
 }
 
 /**
  * Distinct cost classes of the writers someone can actually pick, in catalog order. Unavailable
  * options are left out: the preview runtime always lists a "PostRiff managed model" placeholder
- * marked not qualified, which would otherwise add "Writing batches" to every deployment.
+ * marked not qualified, which would otherwise add a paid-writer cost line to every deployment.
  */
 export function distinctCostClasses(options: ModelOption[]) {
   return Array.from(new Set(options.filter((option) => option.qualified).map((option) => option.costClass ?? '')));

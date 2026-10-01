@@ -11,7 +11,7 @@ import { formatDate } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { planSummary, type PlanSummary } from './billing-copy';
 import { currentTerms, isTrial, lifecycleTone, planTimeline } from './billing-model';
-import { billingModeOf, isLegacyPlanUnderV2, planListKind, v2PlanCardModels } from './billing-mode';
+import { billingModeOf, isLegacyPlanUnderV2, planListKind, v2PlanCardModels } from '@/lib/billing/mode';
 import { ACTION_STATEFUL } from './lifecycle-alert';
 import { useBillingCopy } from './use-copy-locale';
 import { PORTAL, type BillingRedirect } from './use-billing-redirect';

@@ -1,7 +1,7 @@
 'use client';
 
 import { usePreferences } from '@/lib/preferences';
-import { billingCopy, copyLocale, type BillingCopy, type CopyLocale } from './billing-mode-copy';
+import { billingCopy, copyLocale, type BillingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 
 /**
  * The language for Pricing v2 billing copy: Traditional Chinese only when the person saved a Traditional Chinese

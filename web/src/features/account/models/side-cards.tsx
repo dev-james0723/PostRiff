@@ -8,8 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUsage } from '@/lib/api/hooks';
 import type { LearningSummary, MemoryEgress, ModelOption, ResearchEgress } from '@/lib/api/types';
+import { writingAllowance } from '@/lib/billing/mode';
 import { cn } from '@/lib/utils';
+import { useCopyLocale } from '@/features/billing/use-copy-locale';
 import { SettingsSection } from '../settings-section';
 import { costCopy, distinctCostClasses } from './catalog';
 
@@ -25,6 +28,9 @@ function PageLink({ href, children }: { href: string; children: ReactNode }) {
 
 /** How each writer someone can pick here is paid for, generated from the cost classes of available options. */
 export function BillingCard({ options, owner }: { options: ModelOption[]; owner: boolean }) {
+  // A paid writer's unit follows the billing mode: legacy batches, Creator's credits, or not on Free.
+  const allowance = writingAllowance(useUsage());
+  const locale = useCopyLocale();
   const classes = distinctCostClasses(options);
   if (classes.length === 0) return null;
 
@@ -32,7 +38,7 @@ export function BillingCard({ options, owner }: { options: ModelOption[]; owner:
     <SettingsSection id='models-billing' title='Costs' data-tour='models-billing'>
       <div className='flex flex-col gap-3 text-sm'>
         {classes.map((costClass) => {
-          const copy = costCopy(costClass || undefined);
+          const copy = costCopy(costClass || undefined, allowance, locale);
           return (
             <div key={costClass || 'unreported'} className='flex flex-col items-start gap-1'>
               <Badge variant='secondary'>{copy.badge}</Badge>

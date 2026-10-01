@@ -15,7 +15,7 @@ import { CreditBalance } from './credit-balance';
 import { CreditMeterCard } from './credit-meter';
 import { CreditPacks } from './credit-packs';
 import { PAGE, infoContentFor } from './billing-copy';
-import { billingModeOf } from './billing-mode';
+import { billingModeOf } from '@/lib/billing/mode';
 import { FreePreviewCard } from './free-preview';
 import { Ledger } from './ledger';
 import { GLASS_STATEFUL } from './lifecycle-alert';
