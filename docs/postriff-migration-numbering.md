@@ -21,7 +21,12 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 037–040 | `037_growth_phase1`, `038_growth_closed_loop`, `039_radar`, `040_social_trend_intelligence` | active Rafii release worktrees | Reserved to avoid colliding with in-flight Growth / Radar / Social Trend Intelligence work. They are not implied applied merely by this reservation; re-check before release. |
 | 041 | `041_context_navigation` | Rafii Context Navigation | Additive search indexes and workspace-scoped Moments; apply before the corresponding API release. |
 | 042 | `042_phone_inbound` | Shared inbound Rafii phone v1 | Reserved on `codex/rafii-inbound-v1`; additive, apply before releasing the direction-column reader. |
-| 043 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 043–046 | `043_phone_duration`, `044_social_provider_webhooks`, `045_phone_caller_identity`, `046_phone_passkey_identity` | phone / social webhooks | In the production source (`dcb5bcdc`). |
+| 047 | `047_inbox_operational_sync` | Inbox v1 | Local branch `codex/rafii-inbox-v1-20260928`; merged into `claude/rafii-product-growth-v2`. Not applied to production. |
+| 048, 050 | `048_pricing_credit_catalog_v2`, `050_free_lifecycle_bootstrap` | Pricing + Credits v2 | Local branch `feat/rafii-pricing-credits-v2`; merged into `claude/rafii-product-growth-v2`. Not applied to production. |
+| 049, 051–068 | `049_rafii_control_foundation` … `068_founder_actions_views` (061 unused) | Founder Control / Founder Admin | `claude/founder-admin-v2` (PR #86) and its worktree; 057–068 were uncommitted there on 2026-10-01. Treat 061 as Founder's. |
+| 080–089 | RAFII Product Growth v2 (`docs/design/rafii-product-growth/`) | `claude/rafii-product-growth-v2` | Reserved 2026-10-01 after scanning all refs and worktrees (highest in flight: 068). |
+| 069–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
