@@ -122,15 +122,40 @@ def narrow(scope, edits, state):
     return result
 
 
-def next_week_start(now, zone_name):
-    """The Monday 00:00 (local) after `now`: an adopted decision applies from the next planned week on."""
+def _tz(zone_name):
     try:
-        tz = ZoneInfo(zone_name or "UTC")
+        return ZoneInfo(zone_name or "UTC")
     except (ZoneInfoNotFoundError, ValueError):
-        tz = ZoneInfo("UTC")
+        return ZoneInfo("UTC")
+
+
+def next_week_start(now, zone_name):
+    """The Monday 00:00 (local) after `now`."""
+    tz = _tz(zone_name)
     local = datetime.fromtimestamp(now, tz).date()
     monday = local - timedelta(days=local.weekday()) + timedelta(days=7)
     return datetime.combine(monday, dtime(0), tzinfo=tz).timestamp(), monday.isoformat()
+
+
+def planned_weeks(state):
+    """The local Mondays (weekOf) that already have a stored weekly plan. A stored week is never planned again, so a
+    decision adopted after it was planned cannot reach it."""
+    weeks = ((state.get("coworker") or {}).get("weekly") or {}).get("weeks") or []
+    return {w.get("weekOf") for w in weeks if isinstance(w, dict) and isinstance(w.get("weekOf"), str)}
+
+
+def first_unplanned_week(state, now, zone_name, limit=60):
+    """(epoch, local date, already planned dates): the first Monday from next week on whose plan is not stored yet —
+    the first week an adopted decision can actually apply to — and the weeks before it that were already planned (and
+    so do not get it)."""
+    tz = _tz(zone_name)
+    _epoch, first = next_week_start(now, zone_name)
+    monday = datetime.fromisoformat(first).date()
+    planned, skipped = planned_weeks(state), []
+    while monday.isoformat() in planned and len(skipped) < limit:
+        skipped.append(monday.isoformat())
+        monday += timedelta(days=7)
+    return datetime.combine(monday, dtime(0), tzinfo=tz).timestamp(), monday.isoformat(), skipped
 
 
 # --- the in-effect projection ------------------------------------------------------------------------------------------
@@ -172,14 +197,30 @@ def matches(scope, slot):
     return True
 
 
+def _context(state):
+    """What a decision depends on right now: the active goal, the workspace's accounts and its active sources."""
+    from ..coworker import growth_loop
+    return (growth_loop.active_goal(state), {c.get("id"): c for c in ((state.get("phase2") or {}).get("channels") or [])},
+            {s.get("id") for s in state.get("sources") or [] if s.get("active")})
+
+
+def unavailable_reason(decision, goal, channels, sources):
+    """Why an in-effect decision cannot apply at its current version (source, account or goal gone), or None."""
+    scope = decision.get("scope") or {}
+    if decision.get("kind") == "brief_topic" and (decision.get("basis") or {}).get("sourceId") not in sources:
+        return "source_unavailable"
+    if scope.get("channelId") and (scope["channelId"] not in channels or channels[scope["channelId"]].get("revoked")):
+        return "account_unavailable"
+    if scope.get("goalId") and (goal is None or goal.get("id") != scope["goalId"]):
+        return "goal_not_active"
+    return None
+
+
 def apply_to_week(state, slots, week_of):
     """Which in-effect decisions this week applies, to which slots, and why any other cannot apply. An experiment
     preference applies to every matching slot of every week while it is in effect; a brief topic is one post, on the
     first matching slot of the first week planned after it was adopted."""
-    from ..coworker import growth_loop
-    goal = growth_loop.active_goal(state)
-    channels = {c.get("id"): c for c in ((state.get("phase2") or {}).get("channels") or [])}
-    sources = {s.get("id") for s in state.get("sources") or [] if s.get("active")}
+    goal, channels, sources = _context(state)
     weeks = ((state.get("coworker") or {}).get("weekly") or {}).get("weeks") or []
     planned_before = {d.get("id") for w in weeks if w.get("weekOf") != week_of for d in w.get("appliedDecisions") or []}
     applied, not_applied, by_slot = [], [], {}
@@ -191,12 +232,8 @@ def apply_to_week(state, slots, week_of):
             reason = "applies_from_later"
         elif decision.get("kind") == "brief_topic" and decision["id"] in planned_before:
             reason = "already_applied"
-        elif decision.get("kind") == "brief_topic" and (decision.get("basis") or {}).get("sourceId") not in sources:
-            reason = "source_unavailable"
-        elif scope.get("channelId") and (scope["channelId"] not in channels or channels[scope["channelId"]].get("revoked")):
-            reason = "account_unavailable"
-        elif scope.get("goalId") and (goal is None or goal.get("id") != scope["goalId"]):
-            reason = "goal_not_active"
+        else:
+            reason = unavailable_reason(decision, goal, channels, sources)
         eligible = [] if reason else [s for s in ordered if s.get("status") != "channel_unavailable" and matches(scope, s)]
         if not reason and not eligible:
             reason = "no_matching_slot"
@@ -212,11 +249,16 @@ def apply_to_week(state, slots, week_of):
 
 def for_slot(state, slot, skip_experiments=()):
     """The decisions a slot's writer receives: those planned onto the slot and still in effect now (a revoked
-    decision stops at once), at their current version. Data for the writer, never instructions."""
+    decision stops at once), at their current version — and only while that version still fits the slot: an edit
+    may have narrowed the scope since the week was planned, and its source, account or goal may be gone. Data for the
+    writer, never instructions."""
     planned = {d.get("id") for d in slot.get("strategyDecisions") or [] if isinstance(d, dict)}
+    goal, channels, sources = _context(state)
     out = []
     for decision in active(state):
         if decision["id"] not in planned or (decision.get("basis") or {}).get("experimentId") in skip_experiments:
+            continue
+        if not matches(decision.get("scope"), slot) or unavailable_reason(decision, goal, channels, sources):
             continue
         out.append({"decisionId": decision["id"], "revision": decision["revision"], "kind": decision["kind"], "statement": decision["statement"],
                     "scope": {k: v for k, v in (decision.get("scope") or {}).items() if v}, "causal": False})

@@ -179,6 +179,63 @@ class StrategyTest(unittest.TestCase):
         self.assertEqual(iso, "2026-10-05")
         self.assertEqual(start, at("Asia/Hong_Kong", 2026, 10, 5))
 
+    def test_adoption_starts_at_the_first_week_not_planned_yet(self):
+        """A stored week is never planned again, so a decision adopted after next week was planned starts the week
+        after (and says which weeks it skips) instead of claiming a week it can't reach."""
+        now = at("Asia/Hong_Kong", 2026, 10, 10, 18, 0)   # Saturday: the 12 October plan may already exist
+        state = workspace()
+        start, first, skipped = strategy.first_unplanned_week(state, now, "Asia/Hong_Kong")
+        self.assertEqual((first, skipped), ("2026-10-12", []))
+        self.assertEqual(start, at("Asia/Hong_Kong", 2026, 10, 12))
+        state["coworker"]["weekly"] = {"weeks": [{"id": "wk_a", "weekOf": "2026-10-12"}, {"id": "wk_b", "weekOf": "2026-10-19"},
+                                                 {"id": "wk_old", "weekOf": "2026-10-05"}, {"id": "wk_later", "weekOf": "2026-11-02"}]}
+        start, first, skipped = strategy.first_unplanned_week(state, now, "Asia/Hong_Kong")
+        self.assertEqual((first, skipped), ("2026-10-26", ["2026-10-12", "2026-10-19"]))
+        self.assertEqual(start, at("Asia/Hong_Kong", 2026, 10, 26))
+        # The first unplanned week then applies it; the skipped planned weeks were never going to.
+        exp = strategy.proposals(state, "w1", [], now)[0]
+        strategy.project(state, {**exp, "revision": 2, "status": "accepted", "appliesFrom": start, "appliesFromDate": first, "decidedAt": now})
+        slots = [{"id": "s1", "channelId": "ch1", "language": "en", "contentType": "tutorial_how_to", "localTime": "2026-10-27T09:00", "status": "planned"}]
+        self.assertEqual(strategy.apply_to_week(state, slots, "2026-10-26")["appliedDecisions"][0]["id"], exp["id"])
+
+    def test_the_planning_note_states_the_weeks_truthfully(self):
+        from postriff_phase2.proof.service import planning_note
+        note = planning_note("accepted", "2026-10-19", ["2026-10-12"])
+        self.assertIn("from the week of 2026-10-19 on", note)
+        self.assertIn("The week of 2026-10-12 was already planned, so it does not use this decision.", note)
+        many = planning_note("edited", "2026-10-26", ["2026-10-12", "2026-10-19"])
+        self.assertIn("The weeks of 2026-10-12 and 2026-10-19 were already planned, so they do not use this decision.", many)
+        self.assertNotIn("already planned", planning_note("accepted", "2026-10-12", []))
+        self.assertIn("stop using it now", planning_note("revoked", None))
+        self.assertIn("not proposed again", planning_note("rejected", None))
+
+    def test_a_slot_gets_a_decision_only_while_its_current_version_still_fits(self):
+        """for_slot re-checks the latest version: an edit that narrowed the scope away from the slot, a disconnected
+        account, a goal that is no longer active or a withdrawn source keeps the decision out of the writer brief."""
+        state = workspace()
+        exp, topic = strategy.proposals(state, "w1", [{"id": "act1", "action": "save_idea", "outcomeRefs": [{"type": "source", "id": "src1"}]}], NOW)
+        exp = {**exp, "scope": {**exp["scope"], "contentType": None, "language": None}}   # planned while format and language were open
+        self._accept(state, exp)
+        self._accept(state, topic)
+        slot = {"id": "s1", "channelId": "ch1", "language": "en", "contentType": "tutorial_how_to",
+                "strategyDecisions": [{"id": exp["id"], "revision": 2}, {"id": topic["id"], "revision": 2}]}
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {exp["id"], topic["id"]})
+        self._accept(state, {**exp, "scope": {**exp["scope"], "contentType": "deep_point_of_view"}}, revision=3, status="edited")   # narrowed after planning
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {topic["id"]})
+        self._accept(state, {**exp, "scope": {**exp["scope"], "language": "zh-Hant"}}, revision=4, status="edited")
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {topic["id"]})
+        self._accept(state, exp, revision=5, status="edited")
+        state["phase2"]["channels"][0]["revoked"] = True                                   # the account it is scoped to was disconnected
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {topic["id"]})   # the topic names no account
+        state["phase2"]["channels"][0]["revoked"] = False
+        state["coworker"]["growthLoop"]["goals"][0]["status"] = "paused"                    # its goal is no longer active
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, set())
+        state["coworker"]["growthLoop"]["goals"][0]["status"] = "active"
+        state["sources"][0]["active"] = False                                             # the saved idea was withdrawn
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {exp["id"]})
+        state["sources"][0]["active"] = True
+        self.assertEqual({d["decisionId"] for d in strategy.for_slot(state, slot)}, {exp["id"], topic["id"]})
+
     def _accept(self, state, proposal, revision=2, status="accepted", applies="2026-10-12"):
         strategy.project(state, {**proposal, "revision": revision, "status": status, "appliesFrom": None, "appliesFromDate": applies, "decidedAt": NOW})
 
