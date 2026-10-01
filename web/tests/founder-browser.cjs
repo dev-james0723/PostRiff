@@ -268,7 +268,7 @@ async function main() {
         check(`${width}px revenue ?tab=payments selects its tab`, true);
         await page.goto(base + '/founder/operations?mode=demo&tab=connections');
         await page.locator('[data-tab="connections"]').waitFor({ timeout: 30000 });
-        await page.waitForTimeout(600);
+        await settle(page, tracker);   // panels above load after the first scroll; the page keeps the target in place
         const inView = await page.locator('[data-tab="connections"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
         check(`${width}px operations ?tab=connections scrolls to its panel`, inView);
         await page.goto(base + '/founder/settings?tab=reports');
