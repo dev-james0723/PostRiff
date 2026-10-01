@@ -290,7 +290,10 @@ def public_catalog(cur, pricing_v2_enabled):
                 'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
                 'notes': ['Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis.',
                           'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
-    cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
+    # Migration 048 may not be applied where legacy pricing runs (it adds new_checkout_enabled): read it only if present.
+    cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+    checkout_column = "new_checkout_enabled" if cur.fetchone()[0] else "false"
+    cur.execute(f"SELECT id,plan,label,price_cents,currency,status,{checkout_column},entitlements,provider_price_id FROM public.pr_plan_terms "
                 "WHERE id IN ('trial-v1','studio-v1','assist-v1') ORDER BY price_cents,id")
     return {'catalogVersion': CATALOG_VERSION_LEGACY, 'pricing': 'legacy', 'plans': [_plan_view(r, v2=False) for r in cur.fetchall()],
             'topUps': {'available': False, 'reason': 'not_offered'}}
