@@ -1,5 +1,5 @@
 """Visual Pack agent tools (AC28): typed effects and permissions, idempotent registration, voice parity, keys stable per
-turn, and an export path that never publishes or queues and never accepts without the person's explicit request."""
+turn, and an export path that never publishes or queues and never accepts a revision (the person accepts in the editor)."""
 import sys
 import unittest
 from pathlib import Path
@@ -97,15 +97,34 @@ class Tools(unittest.TestCase):
         bad = tool_adapter.REGISTRY["visual_pack_edit"].executor(Ctx(Service()), {"packId": "p", "order": [1, 1, 2, 3, 4, 5]})
         self.assertEqual(bad["code"], "unsupported_input")
 
-    def test_export_renders_but_never_accepts_unless_asked_and_never_publishes(self):
+    def test_export_renders_but_never_accepts_and_never_publishes(self):
+        """Accepting a revision records the person as the one who accepted it, so only the person does it (in the
+        editor). The tool renders, stops at approval_required with the editor link, and exports only what the person
+        already accepted — even when a caller slips an `accept` flag past the schema."""
+        export = tool_adapter.REGISTRY["visual_pack_export"]
+        self.assertNotIn("accept", export.schema["properties"])
+        self.assertFalse(export.schema["additionalProperties"])   # the gate refuses an `accept` argument from the model
         service = Service()
-        held = tool_adapter.REGISTRY["visual_pack_export"].executor(Ctx(service), {"packId": "p"})
-        self.assertEqual((held["ok"], held["code"]), (False, "approval_required"))
+        held = export.executor(Ctx(service), {"packId": "p"})
+        self.assertEqual((held["ok"], held["code"], held["needsUser"]), (False, "approval_required", True))
+        self.assertEqual(held["href"], "/app/library#visual-packs")
         self.assertEqual([c for c in service.calls if c != "get"], ["render"])
-        done = tool_adapter.REGISTRY["visual_pack_export"].executor(Ctx(service), {"packId": "p", "accept": True})
+        again = export.executor(Ctx(service), {"packId": "p", "accept": True})
+        self.assertEqual((again["ok"], again["code"]), (False, "approval_required"))
+        self.assertNotIn("accept", service.calls)
+        accepted = Service("accepted")   # the person accepted it in the editor
+        done = export.executor(Ctx(accepted), {"packId": "p"})
         self.assertTrue(done["ok"])
-        self.assertEqual([c for c in service.calls if c != "get"], ["render", "accept", "export"])
+        self.assertEqual([c for c in accepted.calls if c != "get"], ["export"])
         self.assertIn("not published", done["note"])
+
+    def test_no_visual_pack_tool_records_acceptance(self):
+        class Recording(Service):
+            def accept(self, *_):
+                raise AssertionError("an agent tool must never accept a revision")
+        service = Recording("rendered")
+        for name, args in (("visual_pack_export", {"packId": "p"}), ("visual_pack_edit", {"packId": "p", "weight": "bold"})):
+            tool_adapter.REGISTRY[name].executor(Ctx(service), args)
 
     def test_service_refusals_come_back_as_typed_results(self):
         class Refusing(Service):
