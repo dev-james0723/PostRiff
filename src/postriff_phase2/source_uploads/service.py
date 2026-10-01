@@ -409,8 +409,9 @@ class SourceUploads:
         with self._tx(workspace_id, token, "edit") as (cur, _row, principal):
             upload, job = self._load(cur, workspace_id, upload_id, lock=True)
             if upload["state"] == "pending":
+                # Unfinished work is bounded by the job's review window; `retain_until` starts once a source exists.
                 store.update_upload(cur, workspace_id, upload_id, state="committed", objectState="present", bytes=size, sha256=sha, etag=(info.get("etag") or "")[:200] or None,
-                                    sniffedType=found["type"], durationSeconds=seconds, committedAt=NOW, retainUntil=Later(limits.REVIEW_DAYS * 86400))
+                                    sniffedType=found["type"], durationSeconds=seconds, committedAt=NOW)
                 audio = upload["kind"] == "audio"
                 # The route was switched off after this upload began: say so now, and don't keep audio nobody can use.
                 unsupported = audio and route is None
@@ -467,7 +468,7 @@ class SourceUploads:
                                           "displayName": name, "mime": "text/plain", "sniffedType": fmt, "declaredBytes": max(1, len(raw.encode("utf-8"))),
                                           "bytes": len(raw.encode("utf-8")), "sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
                                           "limits": self.policy.effective()["transcript"], "beginKey": key, "beginDigest": request, "createdBy": principal,
-                                          "committed": True, "retainSeconds": limits.REVIEW_DAYS * 86400})
+                                          "committed": True})
                 job_id = store.insert_job(cur, {"workspaceId": workspace_id, "uploadId": upload_id, "kind": "transcript_text", "state": "needs_review",
                                                 "reasonCode": "text_review", "idempotencyKey": f"commit:{upload_id}", "createdBy": principal,
                                                 "progress": {"stage": "review", **({"seconds": round(seconds, 3)} if seconds else {})},

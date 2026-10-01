@@ -204,7 +204,9 @@ refused("flag off: admission answers feature_disabled", lambda: off.begin(wid, O
 
 # --- AC11: one text PDF through the genuine adapter to a source -------------------------------------------------------------
 pdf = upload("pdf", pdf_bytes([PARAGRAPH, "Rehearsals run from 9:30 to 12:00 every Saturday.\nParents may watch the final rehearsal of each term."]), name="Season brief.pdf")
-check("AC11 PDF commit verifies and queues a durable job", pdf["state"] == "committed" and pdf["job"]["state"] == "queued" and pdf["format"] == "pdf", pdf)
+check("AC11 PDF commit verifies and queues a durable job (bounded by its review window, not yet by file retention)",
+      pdf["state"] == "committed" and pdf["job"]["state"] == "queued" and pdf["format"] == "pdf" and pdf["retainUntil"] is None
+      and 29 * 86400 < pdf["job"]["reviewExpiresAt"] - time.time() <= 30 * 86400 + 60, pdf)
 again = intake.commit(wid, OWNER, pdf["id"])
 check("AC29 a repeated commit returns the same job (one row)", again["job"]["id"] == pdf["job"]["id"]
       and sql("SELECT count(*) FROM public.pr_source_upload_jobs WHERE upload_id=%s", (pdf["id"],))[0][0] == 1)
