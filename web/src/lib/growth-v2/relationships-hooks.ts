@@ -7,7 +7,7 @@
  * unless the server returned it.
  */
 import { useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/session';
 import { coworkerKeys } from '@/lib/coworker/hooks';
 import { useWorkspace } from '@/lib/workspace/provider';
@@ -29,7 +29,7 @@ export function useRelationshipsApi() {
 }
 
 /** True when the query failed only because this deployment has follow-ups switched off. */
-export function followUpsOff(query: Pick<UseQueryResult, 'error'>): boolean {
+export function followUpsOff(query: { error: unknown }): boolean {
   return isFeatureDisabled(query.error);
 }
 

@@ -7,7 +7,7 @@
  * is minted per intent and reused if the same intent is retried.
  */
 import { useMemo } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { idempotencyKey, isFeatureDisabled, shouldRetry } from './request';
@@ -31,7 +31,7 @@ export function useSeriesApi(): { api: SeriesApi; w: string; enabled: boolean } 
 }
 
 /** True when the query failed only because this deployment has Signature Series switched off. */
-export function seriesOff(query: Pick<UseQueryResult, 'error'>): boolean {
+export function seriesOff(query: { error: unknown }): boolean {
   return isFeatureDisabled(query.error);
 }
 
