@@ -38,6 +38,7 @@ import { NoThreadSelected, ThreadDetail, ThreadHeading, threadHeadline } from '.
 import { ThreadList } from './thread-list';
 import { useTwoPane } from './use-two-pane';
 import { GrowthEntry } from '@/features/growth/studio-parts';
+import { useGrowthFeature } from '@/lib/growth-v2/features';
 import { followUpsOff, useRelationshipList } from '@/lib/growth-v2/relationships-hooks';
 import { canonicalId } from '@/lib/growth-v2/relationships-model';
 import type { Relationship } from '@/lib/growth-v2/relationships-types';
@@ -105,7 +106,8 @@ function InboxPage() {
   const [sheetRelationshipId, setSheetRelationshipId] = useState<string | null>(null);
   const [sheetKind, setSheetKind] = useState<'thread' | 'relationship'>('thread');
   // Relationship follow-ups: one bounded read for the tab and its due count; 404 feature_disabled hides the tab.
-  const followUps = useRelationshipList({ state: 'open', due: 'due_now', limit: 1 });
+  const followUpsOn = useGrowthFeature('relationships');
+  const followUps = useRelationshipList({ state: 'open', due: 'due_now', limit: 1 }, { enabled: followUpsOn });
   const followUpsAvailable = Boolean(followUps.data);
   const followUpCopy = currentCopy();
 
@@ -134,7 +136,7 @@ function InboxPage() {
   const triageCount = (kind: string) => triageComplete ? [...triageById.values()].filter((item) => item.priority === kind).length : null;
   const counts = data ? { ...countsFor(data, threads, reported, answered),
     needs_reply: triageCount('needs_reply'), review: triageCount('review'), fyi: triageCount('fyi') } : null;
-  const activeFilter = (TRIAGE_FILTERS.includes(params.filter) && !data?.engagementEnabled) || (params.filter === 'follow_ups' && followUpsOff(followUps)) ? 'all' : params.filter;
+  const activeFilter = (TRIAGE_FILTERS.includes(params.filter) && !data?.engagementEnabled) || (params.filter === 'follow_ups' && (!followUpsOn || followUpsOff(followUps))) ? 'all' : params.filter;
   const filtered = threads.filter((thread) => activeFilter === 'all' ? true
     : activeFilter === 'replied' ? answered(thread)
     : activeFilter === 'unanswered' ? !thread.tombstoned && !answered(thread)

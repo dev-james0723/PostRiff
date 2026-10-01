@@ -14,6 +14,7 @@ import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { InboxLevelBadge } from './level-badge';
 import { composerAnchor } from './follow-up/copy';
+import { GrowthFeatureGate } from '@/lib/growth-v2/features';
 import { FollowUpSection } from './follow-up/follow-up-section';
 import { authorLabel, isAnswered, originLabel, providerName, replyStatusView, threadPermalink, threadTime, type ReplyRecord } from './model';
 import { permissionSentence, ReplyComposer, type ComposerState } from './reply-composer';
@@ -195,7 +196,9 @@ export function ThreadDetail({
       </div>
 
       {/* Relationship follow-up for this conversation (hidden when the feature is off). Never sends anything. */}
-      <FollowUpSection thread={thread} canEdit={canEdit} />
+      <GrowthFeatureGate feature='relationships'>
+        <FollowUpSection thread={thread} canEdit={canEdit} />
+      </GrowthFeatureGate>
 
       {replies.length > 0 && (
         <section aria-label='Replies' className='flex flex-col gap-3' data-tour='inbox-replies'>

@@ -19,6 +19,7 @@ import { dayLabel, nextAction, summarizeSlots, weekStateLabel, type NextAction }
 import { QueryProblem, ToneChip, WhyRafiiExplainer } from '../parts';
 import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
 import { OpportunitiesPanel } from './opportunities-panel';
+import { GrowthFeatureGate } from '@/lib/growth-v2/features';
 import { FirstWeekPanel } from './first-week-panel';
 import { RecipeForm, RecipeSummary } from './recipe-form';
 import { SlotCard } from './slot-card';
@@ -130,7 +131,9 @@ export function WeeklyView() {
           Rafii is planning and drafting next week. This can take a minute; you can leave this page.
         </p>
       )}
-      <FirstWeekPanel canEdit={canEdit} />
+      <GrowthFeatureGate feature='firstWeek'>
+        <FirstWeekPanel canEdit={canEdit} />
+      </GrowthFeatureGate>
       {weekly.isPending ? (
         <StateMessage kind='loading' title='Loading your week…' />
       ) : weekly.isError ? (

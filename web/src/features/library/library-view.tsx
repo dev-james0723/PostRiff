@@ -34,6 +34,7 @@ import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetDetail } from './asset-detail';
+import { GrowthFeatureGate } from '@/lib/growth-v2/features';
 import { SeriesSection } from './series/series-panel';
 import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
@@ -452,9 +453,13 @@ export function LibraryView() {
       </div>
 
       {/* Six-slide carousels made from drafts (RAFII_VISUAL_PACK_ENABLED); renders nothing while the feature is off. */}
-      <VisualPackSection />
+      <GrowthFeatureGate feature='visualPacks'>
+        <VisualPackSection />
+      </GrowthFeatureGate>
       {/* Signature Series: reusable posts and sources become a maintained series (hidden when the feature is off). */}
-      <SeriesSection />
+      <GrowthFeatureGate feature='series'>
+        <SeriesSection />
+      </GrowthFeatureGate>
 
       <AssetDetail
         asset={current}

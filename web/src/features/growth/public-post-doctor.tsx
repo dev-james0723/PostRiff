@@ -39,6 +39,18 @@ export function PublicPostDoctor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<PostCheck | null>(null);
+  // The first-week continuation is offered only where this deployment has it switched on (unknown or failed: not offered).
+  const features = useQuery({
+    queryKey: ['growth-v2', 'public-features'],
+    queryFn: async () => {
+      const response = await fetch('/api/growth-features', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Feature state unavailable.');
+      return ((await response.json()) as { features?: { firstWeek?: boolean } }).features ?? {};
+    },
+    staleTime: 5 * 60_000,
+    retry: 1
+  });
+  const continuationOffered = features.data?.firstWeek === true;
   const [continuing, setContinuing] = useState(false);
   const [keep, setKeep] = useState({ original: true, edited: true });
   const [keepError, setKeepError] = useState('');
@@ -157,7 +169,7 @@ export function PublicPostDoctor() {
         </p>
       )}
       {result && <CheckResult result={result} />}
-      {result && (
+      {result && continuationOffered && (
         <div className='flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-4'>
           <p className='text-sm font-medium'>Turn this draft into your first week</p>
           <p className='text-muted-foreground text-sm'>

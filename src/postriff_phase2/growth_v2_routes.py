@@ -48,6 +48,9 @@ def _module(name):
 def public(app, environ, start_response, method, path):
     if path == "/api/plans" and method == "GET":
         return plans(app, start_response)
+    if path == "/api/growth-features" and method == "GET":
+        # Public pages may only learn whether the first-week continuation exists (the anonymous Post Doctor offers it).
+        return app._json(start_response, 200, {"features": {"firstWeek": feature_state()["firstWeek"]}})
     if not path.startswith(("/api/results/", "/api/l/")):
         return None
     for name in PUBLIC:

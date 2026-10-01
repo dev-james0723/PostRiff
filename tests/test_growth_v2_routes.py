@@ -24,6 +24,47 @@ class RoutesTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "feature_disabled")
         self.assertEqual(caught.exception.status, 404)
 
+    def test_feature_state_is_off_unless_each_slice_says_on(self):
+        keys = set(routes.FEATURES)
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(routes.feature_state(), dict.fromkeys(keys, False))
+        on = {"RAFII_SERIES_ENABLED": "1", "RAFII_FIRST_WEEK_ENABLED": "1"}
+        with mock.patch.dict("os.environ", on, clear=True):
+            state = routes.feature_state()
+        self.assertTrue(state["series"])
+        self.assertFalse(state["firstWeek"], "the first week needs the Weekly Operator too")
+        with mock.patch.dict(routes.FEATURES, {"series": ("postriff_phase2.series_that_does_not_exist.model", "enabled")}), \
+                mock.patch.dict("os.environ", on, clear=True):
+            self.assertFalse(routes.feature_state()["series"], "a missing slice is off, never guessed on")
+
+    def test_workspace_feature_state_needs_membership_and_public_shows_only_first_week(self):
+        self.assertTrue(routes.handles(["api", "workspaces", "w1", "growth-features"]))
+        self.assertFalse(routes.handles(["api", "workspaces", "w1", "growth-features", "x"]))
+        sent = []
+        app = types.SimpleNamespace(_json=lambda start, status, body: sent.append((status, body)) or body)
+        member = types.SimpleNamespace(allows=lambda level: True)
+
+        class Repo:
+            def transaction(self, token, workspace_id):
+                class Tx:
+                    def __enter__(self_inner):
+                        return (None, ("rev", "state"), "principal")
+                    def __exit__(self_inner, *exc):
+                        return False
+                return Tx()
+        hosted = types.SimpleNamespace(repository=Repo())
+        with mock.patch("postriff_phase2.hosted._membership", return_value=member) as membership, \
+                mock.patch("postriff_phase2.permissions.require") as require:
+            routes.handle(app, {}, None, hosted, "t", "GET", ["api", "workspaces", "w1", "growth-features"])
+        membership.assert_called_once()
+        require.assert_called_once_with(member, "read")
+        self.assertEqual(sent[-1][0], 200)
+        self.assertEqual(set(sent[-1][1]["features"]), set(routes.FEATURES))
+        with self.assertRaises(AlphaError):
+            routes.handle(app, {}, None, hosted, "t", "POST", ["api", "workspaces", "w1", "growth-features"])
+        routes.public(app, {}, None, "GET", "/api/growth-features")
+        self.assertEqual(set(sent[-1][1]["features"]), {"firstWeek"})
+
     def test_public_ignores_unrelated_paths_without_importing(self):
         with mock.patch.object(routes, "_module", side_effect=AssertionError("must not import")):
             self.assertIsNone(routes.public(None, {}, None, "GET", "/api/catalog"))
