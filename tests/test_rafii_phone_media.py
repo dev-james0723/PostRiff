@@ -203,7 +203,7 @@ class MediaDiagnosticTest(unittest.TestCase):
         async def inspect():
             with patch.dict(os.environ, {}, clear=True), patch.object(socket.socket, 'connect', side_effect=AssertionError('network forbidden')), \
                     patch.object(_websocket, '_WebSocketConnect', connect):
-                async with AsyncOpenAI(api_key='offline-fixture', max_retries=0) as client:
+                async with AsyncOpenAI(api_key='sk-offline-private-placeholder', max_retries=0) as client:  # pragma: allowlist secret -- synthetic key; WebSocket mocked and socket.connect blocked
                     async with client.live.connect() as connection:
                         self.assertEqual(handshake_request_id(connection), request_id)
                         result = metadata('live_event', event={'error': {'type': 'invalid_request_error'}},
