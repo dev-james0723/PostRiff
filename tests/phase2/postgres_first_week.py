@@ -270,6 +270,106 @@ class FirstWeekTests(unittest.TestCase):
         self.assertEqual(statuses[0], "ready")
         self.assertTrue(all(s in ("ready", "needs_revision", "needs_input") for s in statuses), statuses)
 
+    def spend(self, service, wid):
+        """Everything later weeks could consume: writer runs, usage-ledger rows, Weekly weeks and legacy batches."""
+        with connection() as db:
+            runs = db.execute("SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s", (wid,)).fetchone()[0]
+            ledger = db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s", (wid,)).fetchone()[0]
+            quotes = db.execute("SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s", (wid,)).fetchone()[0]
+            batches = db.execute("SELECT writing_batches_remaining FROM pr_entitlements WHERE workspace_id=%s", (wid,)).fetchone()
+        weeks = len(service.get(wid, self.owner)["state"]["coworker"]["weekly"]["weeks"])
+        return {"runs": runs, "ledger": ledger, "quotes": quotes, "weeks": weeks, "batches": batches[0] if batches else None}
+
+    def test_first_week_limit_drafts_that_week_once_and_never_the_following_weeks(self):
+        service, fw = self.make()
+        wid = self.workspace(service, self.owner)
+        self.continuation(fw, wid, self.owner)
+        view = self.plan(service, fw, wid)
+        view = fw.approve_scope(wid, self.owner, {"slotIds": [s["id"] for s in view["slots"]], "expectedRevision": view["revision"]})
+        drafted = fw.draft_week(wid, self.owner, {"confirmed": True, "expectedRevision": view["revision"]})["journey"]
+        self.assertEqual(drafted["weeklyDrafting"], "first_week_only")
+        first = drafted["week"]["id"]
+        state = service.get(wid, self.owner)["state"]
+        recipe = next(r for r in state["coworker"]["weekly"]["recipes"] if r["id"] == state["coworker"]["firstWeek"]["recipeId"])
+        self.assertEqual((recipe["firstWeek"], recipe["firstWeekId"], recipe["maxCostUsdMicroPerWeek"]), (True, first, 2_000_000))
+        before = self.spend(service, wid)
+        self.assertGreater(before["runs"], 0, "the first week itself was drafted")
+        start = self.clock[0]
+        for weeks_later in (1, 2, 3):
+            # Friday 10:00 in the recipe's zone: past its planning moment, so an ordinary recipe would plan and draft.
+            self.clock[0] = start + weeks_later * 7 * 86400 + 86400
+            service.coworker.weekly_cron(max_workspaces=1000)
+            with self.assertRaises(AlphaError) as caught:   # the Weekly "prepare" route and the agent tool share this path
+                service.coworker.weekly_prepare(wid, self.owner, recipe["id"])
+            self.assertEqual((caught.exception.status, caught.exception.code), (409, "weekly_drafting_not_enabled"))
+        self.assertEqual(self.spend(service, wid), before)   # no week planned, no run, reservation, quote or batch used
+        weeks = service.get(wid, self.owner)["state"]["coworker"]["weekly"]["weeks"]
+        self.assertEqual([w["id"] for w in weeks if w["recipeId"] == recipe["id"]], [first])
+        # The committed first week itself stays reachable after the calendar moved on (its own Monday, never "next week").
+        view = fw.view(wid, self.owner)
+        again = fw.draft_week(wid, self.owner, {"confirmed": True, "expectedRevision": view["revision"]})["journey"]
+        self.assertEqual(again["week"]["id"], first)
+        self.assertEqual(self.spend(service, wid)["weeks"], before["weeks"])
+
+    def test_creator_week_credit_limit_is_one_time(self):
+        service, fw = self.make(pricing_v2=True)
+        wid = self.workspace(service, self.owner)
+        with connection() as db:
+            db.execute("UPDATE pr_plan_terms SET status='active' WHERE id='creator-v1'")
+            db.execute("UPDATE pr_entitlements SET plan_terms_id='creator-v1',source='subscription' WHERE workspace_id=%s", (wid,))
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,'creator-v1','active',now()+interval '1 month') "
+                       "ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='creator-v1',status='active',current_period_end=excluded.current_period_end", (wid,))
+        self.continuation(fw, wid, self.owner)
+        view = self.plan(service, fw, wid)
+        self.assertEqual(view["billingMode"], "managed_credits")
+        view = fw.approve_scope(wid, self.owner, {"slotIds": [s["id"] for s in view["slots"]], "expectedRevision": view["revision"]})
+        fw.draft_week(wid, self.owner, {"confirmed": True, "maxCredits": 300, "expectedRevision": view["revision"]})
+        state = service.get(wid, self.owner)["state"]
+        recipe = next(r for r in state["coworker"]["weekly"]["recipes"] if r["id"] == state["coworker"]["firstWeek"]["recipeId"])
+        self.assertEqual((recipe["firstWeek"], recipe["maxCostUsdMicroPerWeek"]), (True, 1_000_000))   # 300 credits = US$1, this week only
+        before = self.spend(service, wid)
+        self.clock[0] += 8 * 86400
+        service.coworker.weekly_cron(max_workspaces=1000)
+        with self.assertRaises(AlphaError) as caught:
+            service.coworker.weekly_prepare(wid, self.owner, recipe["id"])
+        self.assertEqual(caught.exception.code, "weekly_drafting_not_enabled")
+        self.assertEqual(self.spend(service, wid), before)
+
+    def test_replanning_a_committed_week_is_refused(self):
+        service, fw = self.make()
+        wid = self.workspace(service, self.owner)
+        self.continuation(fw, wid, self.owner)
+        view = self.plan(service, fw, wid)
+        view = fw.approve_scope(wid, self.owner, {"slotIds": [view["slots"][0]["id"]], "expectedRevision": view["revision"]})
+        with self.assertRaises(AlphaError) as caught:
+            fw.plan(wid, self.owner, {"platform": "Threads", "timeZone": HK, "expectedRevision": view["revision"]})
+        self.assertEqual(caught.exception.code, "approval_required")
+
+    def test_continuation_claims_are_counted_per_workspace(self):
+        service, fw = self.make()
+        mine, theirs = self.workspace(service, self.owner), self.workspace(service, self.other)
+        key = uuid.uuid4().hex
+        self.continuation(fw, mine, self.owner, key=key)
+        self.continuation(fw, mine, self.owner, key=key)   # a replay in the same workspace is the same claim
+        self.continuation(fw, theirs, self.other, key=key)
+        with connection() as db:
+            claims = db.execute("SELECT workspace_id::text,count(*) FROM pr_product_events WHERE event='continuation.claimed' AND workspace_id IN (%s,%s) GROUP BY 1",
+                                (mine, theirs)).fetchall()
+        self.assertEqual(dict(claims), {mine: 1, theirs: 1})
+
+    def test_subject_is_asked_for_when_the_brand_mode_needs_it(self):
+        service, fw = self.make()
+        wid = self.workspace(service, self.owner)
+        self.continuation(fw, wid, self.owner)
+        state = service.get(wid, self.owner)
+        service.mutate(wid, self.owner, state["revision"], "mode", {"mode": "business"})
+        view = self.journey(fw, wid, self.owner)
+        self.assertIn("subject", view["missingContext"])
+        self.assertEqual(view["step"], "context")
+        view = fw.set_context(wid, self.owner, {"purpose": "Fill the cohort", "audience": "Adult beginners", "subject": "Piano lessons for adults",
+                                                "expectedRevision": view["revision"]})
+        self.assertEqual((view["missingContext"], view["context"]["subject"]), ([], "Piano lessons for adults"))
+
     def test_feature_flag_off_is_feature_disabled(self):
         service, _ = self.make()
         wid = self.workspace(service, self.owner)

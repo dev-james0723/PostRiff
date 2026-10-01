@@ -115,6 +115,11 @@ def save_recipe(state, payload, actor, now, recipe_id=None):
         recipe = next((r for r in weekly["recipes"] if r["id"] == recipe_id), None)
         if recipe is None:
             raise AlphaError("Recipe unavailable.", 404)
+        if not values.get("firstWeek"):
+            # Saving the recipe through the Weekly plan controls (which never send `firstWeek`) is the owner's explicit
+            # choice to draft every week; only then does a first-week recipe become a recurring one.
+            recipe.pop("firstWeek", None)
+            recipe.pop("firstWeekId", None)
         recipe.update(values)
         recipe["version"] += 1
         recipe["updatedAt"] = now
@@ -151,8 +156,24 @@ def iso_week(monday):
     return f"{year}-W{week:02d}"
 
 
+def first_week_only(recipe):
+    """A recipe made by First Week Ready: its owner approved drafting one frozen week, not a weekly habit."""
+    return recipe.get("firstWeek") is True
+
+
+def first_week_id(state, recipe):
+    """The one week a first-week recipe may plan and draft: the week the first-week journey planned."""
+    if recipe.get("firstWeekId"):
+        return recipe["firstWeekId"]
+    journey = (state.get("coworker") or {}).get("firstWeek") or {}
+    return journey.get("weekId") if journey.get("recipeId") == recipe.get("id") else None
+
+
 def due(recipe, now):
-    """True when the recipe's planning moment for next week has passed (planning day/hour in its time zone)."""
+    """True when the recipe's planning moment for next week has passed (planning day/hour in its time zone).
+    A first-week recipe is never due: recurring planning starts only after the owner turns it on in Weekly plan."""
+    if first_week_only(recipe):
+        return False
     zone = ZoneInfo(recipe["timeZone"])
     local = datetime.fromtimestamp(now, zone)
     monday = local.date() - timedelta(days=local.weekday())
