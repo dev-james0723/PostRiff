@@ -99,7 +99,7 @@ checkout's). Full builds, typecheck, lint and browser suites run in PR CI.
 
 ### G0-PRICING (coordinator; UI by W-PRICING-WEB after the API contract lands)
 Merged: Tasks 1–4 (`feat/rafii-pricing-credits-v2`), Task 5 ported (`825e54b7`). Remaining:
-1. Task 5 fixes: a known-failed preview attempt releases the lifetime entitlement (unknown stays pending); fix the
+1. Task 5 fixes (a known-failed preview attempt still consumes the preview — kept, decision for James, see D-008); fix the
    vacuous assertion; Radar quote/start refuse paid sources for Free before I/O; Growth AI for `managed_credits`
    goes through `CreditRequests`/`Ledger.reserve` (quote → reserve → settle at 300 credits/USD) instead of failing
    closed; designated base checks stay platform-funded only under the approved policy.

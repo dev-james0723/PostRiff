@@ -8,11 +8,11 @@ needs his specific approval for that exact action (DECISIONS D-007). Preparing c
 | Field | Value |
 |---|---|
 | Repository / branch | `dev-james0723/PostRiff` / `claude/rafii-product-growth-v2` |
-| Pull request | #87 (base `fix/rafii-call-lifecycle-20260930` = production `dcb5bcdc`) |
+| Pull request | #87 (production branch `consumer-saas`; merged in at `2a6c13ef`) |
 | Candidate SHA | _pending_ |
 | CI run (local-gates, scenes) | _pending_ |
 | Vercel preview deployment | _pending_ |
-| Production before release | `dpl_HSmKDFfjkd8UCaoo2QfgerZUVwLL` @ `dcb5bcdc` (rollback target) |
+| Production before release | `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e` (`consumer-saas`, Founder Admin dark; rollback target). Earlier: `dpl_HSmKDFfjkd8UCaoo2QfgerZUVwLL` @ `dcb5bcdc` |
 
 ## 2. Migration order (additive; each needs approval; apply before the code that reads it)
 
@@ -36,6 +36,10 @@ refuses any other pending file (`tests/test_product_growth_release.py`).
 
 Full SHA-256 values are recorded in `DECISIONS.md` and must match the files byte for byte at runner time.
 
+Founder Admin's 049 and 051–070 (shipped as files with `047d024e`) are not applied in any database yet. The runner
+refuses any pending file it has not reviewed, so production order is: Founder's migrations by their owner first, then
+this set — or one combined allowed set approved by James.
+
 Rules: never edit an applied file; never reorder; staging first; snapshot before and after; verify forced RLS and grants
 after each; the previous deployment must keep working with the new schema (all changes additive).
 
@@ -44,6 +48,7 @@ after each; the previous deployment must keep working with the new schema (all c
 | Flag | Scope | Turns on | Rollback effect |
 |---|---|---|---|
 | `POSTRIFF_PRICING_V2_ENABLED` | server | v2 catalog, Free bootstrap, managed-credit modes | new workspaces get trials again; existing v2 rows untouched |
+| `POSTRIFF_CREDITS_ENABLED` | server | the credit book (quotes, reservations, settlement); Creator cannot work without it | paid tasks refuse before I/O; grants and history kept |
 | `NEXT_PUBLIC_PRICING_CATALOG` | web build | public pages show the v2 catalog (`v2`) | `legacy` |
 | `POSTRIFF_CREATOR_PRICE_EXPERIMENT_ENABLED` + `_COHORT` | server | 49/59/79 assignment for an explicit cohort | assignments stay immutable; no new ones |
 | `POSTRIFF_GROWTH_PLATFORM_PREVIEW` | server (JSON policy) | Free first-value runs, platform-funded | Free first-value refuses before paid I/O |
@@ -70,7 +75,9 @@ is active until its row has an approval reference.
 | Capability | Environment | Workspace allowlist | Provider / budget | Approval ref | State |
 |---|---|---|---|---|---|
 | Pricing v2 catalog (Free + Creator view) | production | all new workspaces | none (no paid I/O) | — | not_started |
-| Creator checkout (live Stripe Prices 49/59/79) | production | experiment cohort | Stripe live | — | blocked (James) |
+| Creator checkout (live Stripe Prices 49/59/79) | production | experiment cohort | Stripe live; needs `POSTRIFF_CREDITS_ENABLED`; the public pages are static, so `web/src/config/plans.ts` `V2_CATALOG` and `contracts/pricing-catalog-v2.json` must be updated to the activated rows and redeployed in the same release | — | blocked (James) |
+| Creator image generation | production | — | image pricing in credits (D-026) | — | blocked (James) |
+| Creator use of the main Rafii agent | production | — | verified 2026-10-01: text/browser agent turns reserve with no credit authority (only phone supplies one, `agent_runtime_v2/service.py` `_reservation_approval`), so under v2 `CreditBook.prepare` answers 402 "Confirm this task credit limit before generating" on every Creator turn; needs a per-turn or per-conversation credit-limit design | — | blocked (product decision + engineering) |
 | Free first-value preview | production | all Free | platform budget policy | — | blocked (James) |
 | First Week Ready | production | internal workspace first | managed credits | — | not_started |
 | Raw audio transcription | production | — | provider + budget | — | blocked (James) |
