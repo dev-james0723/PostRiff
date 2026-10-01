@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { founderHref } from '@/config/founder-nav';
@@ -33,6 +34,47 @@ function prepareFollowUp() {
   founderPanelStore.ask('Prepare a follow-up for tomorrow at 9 AM about the item I am looking at.', { section: 'overview' });
 }
 
+/**
+ * The state moves a person may make on one follow-up (the server's TRANSITIONS decide; this only offers them):
+ * a draft with a time is confirmed into `scheduled`; a scheduled or due one is completed or cancelled. Each write
+ * carries the row's revision, so a stale tab gets a conflict instead of overwriting.
+ */
+function followUpMoves(item: FounderFollowUp): Array<{ state: 'scheduled' | 'completed' | 'cancelled'; label: string }> {
+  if (item.state === 'draft') return item.dueAt ? [{ state: 'scheduled', label: 'Confirm' }, { state: 'cancelled', label: 'Discard' }] : [{ state: 'cancelled', label: 'Discard' }];
+  if (item.state === 'scheduled' || item.state === 'due') return [{ state: 'completed', label: 'Done' }, { state: 'cancelled', label: 'Cancel' }];
+  return [];
+}
+
+function FollowUpActions({ item }: { item: FounderFollowUp }) {
+  const { api, environment } = useFounderSession();
+  const client = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: (state: 'scheduled' | 'completed' | 'cancelled') => api.updateFollowUp(item.id, { state, revision: item.revision }),
+    onSuccess: () => {
+      setError(null);
+      void client.invalidateQueries({ queryKey: founderKeys.followUps(environment ?? 'unknown') });
+    },
+    onError: (failure: unknown) => setError(failure instanceof Error ? failure.message : 'The follow-up was not changed.')
+  });
+  const moves = followUpMoves(item);
+  if (moves.length === 0) return null;
+  return (
+    <span className='flex shrink-0 items-center gap-1'>
+      {moves.map((move) => (
+        <Button key={move.state} type='button' variant={move.state === 'cancelled' ? 'ghost' : 'glass'} size='sm' disabled={mutation.isPending} onClick={() => mutation.mutate(move.state)} aria-label={`${move.label}: ${item.title}`}>
+          {move.label}
+        </Button>
+      ))}
+      {error && (
+        <span role='alert' className='text-destructive text-xs'>
+          {error}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function FollowUpsPanel() {
   const { api, environment } = useFounderSession();
   const query = useQuery({ queryKey: founderKeys.followUps(environment ?? 'unknown'), queryFn: ({ signal }) => api.followUps({ signal }), retry: false });
@@ -40,7 +82,7 @@ export function FollowUpsPanel() {
     <Panel
       title='Follow-ups'
       titleId='founder-follow-ups-heading'
-      description='Reminders Rafii prepared and you confirmed. Nothing is scheduled without your confirmation.'
+      description='Reminders Rafii prepared. Nothing is scheduled until you confirm it here; nothing is ever sent or dialled from a follow-up.'
       actions={
         <Button type='button' variant='glass' size='sm' onClick={prepareFollowUp} className='gap-1.5'>
           <Icons.sparkles className='size-3.5' aria-hidden /> Prepare with Rafii
@@ -58,9 +100,12 @@ export function FollowUpsPanel() {
                     {item.dueAt ? `Due ${formatDateTime(item.dueAt)} (${item.timeZone})` : 'No time yet'} · {humanize(item.sourceType)}
                   </span>
                 </span>
-                <StatusChip status={STATE_STATUS[item.state] ?? 'neutral'} className='h-6 shrink-0 px-2 text-[11px]'>
-                  {humanize(item.state)}
-                </StatusChip>
+                <span className='flex shrink-0 items-center gap-2'>
+                  <StatusChip status={STATE_STATUS[item.state] ?? 'neutral'} className='h-6 shrink-0 px-2 text-[11px]'>
+                    {humanize(item.state)}
+                  </StatusChip>
+                  <FollowUpActions item={item} />
+                </span>
               </li>
             ))}
           </ul>

@@ -565,6 +565,17 @@ def _money(row):
     return f"{row['value']:,}"
 
 
+def _delta_text(tile):
+    """The comparison clause of one brief sentence, in the tile's own unit (money as money, ratios as points)."""
+    delta = tile.get('delta')
+    if delta is None: return ''
+    sign = '+' if delta >= 0 else '-'
+    if tile['unit'] == 'ratio': return f" ({sign}{abs(delta) * 100:.1f} pts vs previous)"
+    if tile['unit'] in ('usd_micro', 'currency_minor'):
+        return f" ({sign}{_money(dict(value=abs(delta), unit=tile['unit'], currency=tile.get('currency')))} vs previous)"
+    return f" ({sign}{abs(delta):,} vs previous)"
+
+
 def _brief(tiles, attention, sources, mode, period):
     sentences = [('Demo dataset' if mode == 'demo' else 'Live') + f' overview for the last {PERIODS[period]} days; every number carries a receipt and a data state.']
     for tile in tiles:
@@ -572,8 +583,7 @@ def _brief(tiles, attention, sources, mode, period):
             sentences.append(f"{tile['label']}: not yet collected ({tile.get('reason') or 'definition not activated'}).")
             continue
         value = f"{tile['value'] * 100:.1f}%" if tile['unit'] == 'ratio' else _money(dict(value=tile['value'], unit=tile['unit'], currency=tile['currency']))
-        delta = '' if tile['delta'] is None else f" ({'+' if tile['delta'] >= 0 else ''}{tile['delta'] * 100:.1f} pts vs previous)" if tile['unit'] == 'ratio' else f" ({'+' if tile['delta'] >= 0 else ''}{tile['delta']:,} vs previous)"
-        sentences.append(f"{tile['label']}: {value}{delta}, {tile['dataState']}.")
+        sentences.append(f"{tile['label']}: {value}{_delta_text(tile)}, {tile['dataState']}.")
     sentences.append('Nothing needs a decision right now.' if not attention else f"{len(attention)} item{'s' if len(attention) != 1 else ''} need attention: " + '; '.join(item['title'] for item in attention) + '.')
     degraded = [row['sourceId'] for row in sources if row['state'] in ('stale', 'unavailable')]
     sentences.append('All probed sources are current.' if not degraded else 'Sources not current: ' + ', '.join(degraded) + '. Treat affected metrics as incomplete, not as zero.')
