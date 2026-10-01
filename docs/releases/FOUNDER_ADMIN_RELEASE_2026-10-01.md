@@ -27,6 +27,12 @@ Every metric that needs history says when collection started and how many days e
 8. **Optional channels**, each its own decision: `RAFII_FOUNDER_VOICE_ENABLED`, `RAFII_FOUNDER_EMAIL_ENABLED`, `RAFII_FOUNDER_PUSH_ENABLED`, `RAFII_FOUNDER_CALLS_ENABLED` plus live delivery in the contact policy, and the watchdog's read-only login as the repository secret `RAFII_WATCHDOG_DSN`.
 9. **Business decisions** the pages already name as blockers: refund policy, credits activation, the plan catalog (D1), the support ticket source (D7) and the SLO targets, which are shown as proposed.
 
+## Known limits
+
+- The Demo dataset is one row of about 66 MB of JSON per founder. The first Demo open writes it and can take several seconds against a hosted database; Demo statements get up to 30 s within the request deadline. Storing only the founder's changes over the deterministic dataset would remove this cost.
+- Engineering evidence reads "suspected" in production: the trusted required-check manifest is only recorded locally, so production never claims "checks passed".
+- The watchdog workflow runs every 10 minutes and reports "not configured" until its read-only login exists.
+
 ## Verification
 
 - CI on each PR: release gates (Python contracts, disposable database migrations with restore, web contracts, typecheck, lint, production build, copy audit, offline secret scan), Rafii browser scenes, the Control PostgreSQL suite with every founder migration applied twice, and the founder browser gate. The gate runs every section in Live and Demo at 1440, 768 and 390 px, every tab at 1440 and 390 px, axe, and the sign-in, Ask Rafii, voice, contact policy, follow-up and sign-out journeys.
