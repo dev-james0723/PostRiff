@@ -236,7 +236,11 @@ refused(lambda: briefs.action(wid, "owner", R2["id"], {"action": "dismiss", "rea
         409, "idempotency_conflict")
 refused(lambda: briefs.action(wid, "owner", R2["id"], {"action": "dismiss", "reasonCode": "other", "idempotencyKey": "dismiss-r2-0003", "editionId": edition_id}),
         409, "restore_first")
-saved = briefs.action(wid, "owner", L1["id"], {"action": "save_idea", "idempotencyKey": "save-l1-00001", "editionId": edition_id})
+# A second card opened from the same page still carries the digest it was shown. The first action stored that version
+# (and changed the composition), so the server acts on the stored version instead of answering a spurious 409.
+assert briefs.current(wid, "owner")["edition"]["materialDigest"] != digest
+saved = briefs.action(wid, "owner", L1["id"], {"action": "save_idea", "idempotencyKey": "save-l1-00001", "materialDigest": digest})
+assert saved["edition"]["id"] == edition_id, saved["edition"]
 source_id = saved["outcome"]["sourceId"]
 state = raw_state(wid)
 source = next(s for s in state["sources"] if s["id"] == source_id)
@@ -418,6 +422,46 @@ assert {"figure": "providerCost", "restricted": True} in editor_revision["correc
 assert "actualUsdMicro" not in json.dumps(editor_view) and "actualUsdMicro" not in json.dumps(editor_revision)
 passed("reconciled unknown cost moves to actual in its own period without double counting; cost corrections and watermarks stay owner-only")
 
+# The real visual-pack and results readers return counts and summaries only (no ids): the proof reads its own scoped
+# evidence, so the assisted-export and outcome figures link to exactly the records they count (R-PROOF-01).
+import importlib  # noqa: E402
+real_packs, real_results = importlib.import_module("postriff_phase2.visual_pack.service"), importlib.import_module("postriff_phase2.results.service")
+pack_id = str(uuid.uuid4())
+with connection() as db:                       # one transaction: the pack's current-revision key is checked at commit
+    db.execute("INSERT INTO public.pr_visual_packs(id,workspace_id,idempotency_key,request_digest,created_by) VALUES(%s,%s,'proof-evidence-0001',%s,%s)",
+               (pack_id, wid, "a" * 64, USERS["owner"]))
+    db.execute("INSERT INTO public.pr_visual_pack_revisions(workspace_id,pack_id,revision_no,slides,settings,content_digest,created_by) VALUES(%s,%s,1,%s::jsonb,'{}'::jsonb,%s,%s)",
+               (wid, pack_id, json.dumps([{}] * 6), "b" * 64, USERS["owner"]))
+    for kind, offset in (("rendered", DAY), ("export_ready", DAY), ("downloaded", 2 * DAY)):
+        db.execute("INSERT INTO public.pr_visual_pack_events(workspace_id,pack_id,revision_no,kind,occurred_at) VALUES(%s,%s,1,%s,to_timestamp(%s))",
+                   (wid, pack_id, kind, week_start + offset))
+
+
+def declared(event_id, occurred, *, test=False, corrects=None):
+    return sql("""INSERT INTO public.pr_result_events(workspace_id,provenance,result_type,provider_event_id,kind,corrects_id,occurred_at,payload_digest,declared_by,test)
+                  VALUES(%s,'user_declared','booking',%s,%s,%s,to_timestamp(%s),%s,%s,%s) RETURNING id::text""",
+               wid, event_id, "amendment" if corrects else "event", corrects, occurred, "c" * 64, USERS["owner"], test)[0][0]
+
+
+inside = declared("decl-inside", week_start + DAY)
+moved = declared("decl-moved", week_start + 2 * DAY)
+declared("decl-moved-amend", week_start + 9 * DAY, corrects=moved)        # its current version moved out of the period
+declared("decl-test", week_start + DAY, test=True)
+declared("decl-outside", week_start + 8 * DAY)
+with connection() as db, db.cursor() as cur:
+    assert not {"packIds", "evidenceIds"} & set(real_packs.handoff_counts(cur, wid, week_start, at(NY, 2026, 10, 12)))
+    assert not {"resultIds", "evidenceIds"} & set(real_results.period_summary(cur, wid, week_start, at(NY, 2026, 10, 12)))
+proofs._modules.update({"postriff_phase2.visual_pack.service": real_packs, "postriff_phase2.results.service": real_results})
+real = proofs.refresh(wid, "owner", {"frequency": "weekly"})
+figures = real["proof"]["latest"]["counts"]["figures"]
+assert figures["assistedExports"]["value"] == {"exportReady": 1, "downloaded": 1, "userConfirmedUsed": 0}, figures["assistedExports"]
+assert figures["assistedExports"]["evidence"] == {"packIds": [pack_id]} and figures["assistedExports"]["evidenceQuery"]["resource"] == "visual-packs"
+assert figures["outcomes"]["value"]["user_declared"]["counts"] == {"booking": 1}, figures["outcomes"]["value"]
+assert figures["outcomes"]["evidence"] == {"resultIds": [inside]}, figures["outcomes"]["evidence"]
+assert figures["outcomes"]["evidenceQuery"] == {"resource": "results", "from": week_start, "to": at(NY, 2026, 10, 12)}
+assert not figures["outcomes"]["evidenceTruncated"] and real["proof"]["latest"]["definitionVersion"] == model.DEFINITION_VERSION
+passed("with the real readers, assisted-export and outcome figures carry the ids of exactly the packs and results they count")
+
 # === AC27: proposals, versioned decisions, applied in the next plan, rejected/revoked never recur ======================
 listing = proofs.strategy(wid, "owner")
 proposals = {d["kind"] + ":" + (d["basis"].get("sourceId") or d["basis"].get("experimentId")): d for d in listing["decisions"]}
@@ -487,6 +531,20 @@ assert sql("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s 
 assert identity(raw_state(wid)) == identity_before
 passed("AC27 revoked and rejected decisions never recur; a brief topic is one post; every version is kept")
 
+# A decision adopted after next week's plan is already stored can't reach that week (a stored week is never planned
+# again): it applies from the first week not planned yet, and the answer names the week it skips.
+[late_id] = fresh_ids
+late_accept = proofs.decide(wid, "owner", late_id, {"action": "accept", "expectedRevision": 1, "idempotencyKey": "accept-late-0001"})
+assert late_accept["planning"]["appliesFromDate"] == "2026-11-02" and late_accept["planning"]["alreadyPlanned"] == ["2026-10-26"], late_accept["planning"]
+assert "from the week of 2026-11-02 on" in late_accept["planning"]["note"] and "The week of 2026-10-26 was already planned" in late_accept["planning"]["note"]
+assert late_accept["decision"]["appliesFromDate"] == "2026-11-02" and late_accept["decision"]["appliesFrom"] == at(NY, 2026, 11, 2)
+assert next(d for d in proofs.strategy(wid, "owner")["decisions"] if d["id"] == late_id)["appliesFromDate"] == "2026-11-02"
+assert next(d for d in strategy.active(raw_state(wid)) if d["id"] == late_id)["appliesFromDate"] == "2026-11-02"
+assert proofs.decide(wid, "owner", late_id, {"action": "accept", "expectedRevision": 1, "idempotencyKey": "accept-late-0001"})["decision"]["appliesFromDate"] == "2026-11-02"
+stored_late = next(w for w in raw_state(wid)["coworker"]["weekly"]["weeks"] if w["weekOf"] == "2026-10-26")
+assert late_id not in {d["id"] for d in stored_late.get("appliedDecisions") or []}                    # the planned week is untouched
+passed("a decision accepted after its first week was planned applies from the first unplanned week, and says which week it skips")
+
 # === AC25: delivery through the existing outbox — quiet hours over DST, weekly cadence, daily cap across workspaces =====
 service.notifications.set_preference(wid, "owner", {"scope": "all", "category": "*", "time_zone": "America/New_York", "quiet_start": 22 * 60, "quiet_end": 7 * 60})
 service.notifications.set_preference(wid, "owner", {"scope": "all", "category": "opportunities", "email_mode": "immediate"})
@@ -545,6 +603,36 @@ assert {d["channel"]: (d["status"], d.get("reason")) for d in unsubscribed["deli
 assert all(d["userId"] in (USERS["editor"], USERS["viewer"]) for d in muted["deliveries"] + unsubscribed["deliveries"])   # actor-scoped: nobody else
 assert not PAID.called
 passed("AC25 mute and unsubscribe hold for brief alerts, which reach only their recipient")
+
+# The daily cap under concurrency: each cron run holds only its own workspace's row lock, so two workspaces' runs for
+# the same person are serialized by a per-recipient transaction lock; the second one sees the first one's delivery.
+import threading  # noqa: E402
+from postriff_phase2.briefs import sources as brief_sources  # noqa: E402
+saved_clock = clock[0]
+clock[0] = at(NY, 2026, 11, 9, 9, 0)          # a new local day and ISO week (2026-W46): nothing delivered to anyone yet
+listening(wid2, [op("M2", "Ear training for adult learners", clock[0])])
+day_start, day_end = composer.local_day(clock[0], "America/New_York")
+holder = psycopg.connect(DSN)                 # another workspace's run for the same person, mid-delivery
+holder.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("brief-recipient-day:" + USERS["owner"],))
+outcome = {}
+worker = threading.Thread(target=lambda: outcome.update(briefs.run_recipient(wid2, USERS["owner"], ([], brief_sources.coverage("trends", "unavailable", "trends_not_enabled")),
+                                                                                clock[0])))
+worker.start()
+worker.join(1.5)
+assert worker.is_alive(), outcome                                                                      # waits for the other delivery to settle
+race_item = {"id": "bi_" + "7" * 20, "source": "listening", "sourceRef": "L-race", "sourceRevision": None, "kind": "question", "title": "Race fixture",
+             "evidence": [], "effort": "quick", "action": {"kind": "save_idea"}, "angle": {"id": None, "text": "A race fixture angle."}}
+holder.execute("""INSERT INTO public.pr_brief_editions(workspace_id,recipient_user_id,edition_key,revision,period_start,period_end,time_zone,material_digest,data_state,
+                  items,delivered_at) VALUES(%s,%s,'2026-W46',1,to_timestamp(%s),to_timestamp(%s),'America/New_York',%s,'available',%s::jsonb,to_timestamp(%s))""",
+               (wid, USERS["owner"], day_start, day_start + 7 * DAY, "d" * 64, json.dumps([race_item]), clock[0]))
+holder.commit()
+holder.close()
+worker.join(30)
+assert not worker.is_alive() and outcome.get("delivered") is False and outcome.get("reason") == "daily_cap", outcome
+assert sql("SELECT count(*) FROM public.pr_brief_editions WHERE recipient_user_id=%s AND delivered_at>=to_timestamp(%s) AND delivered_at<to_timestamp(%s)",
+           USERS["owner"], day_start, day_end)[0][0] == 1
+clock[0] = saved_clock
+passed("AC25 the one-alert-per-day cap holds when two workspaces deliver to the same person at the same time")
 
 # A dismissal lapses after the cooldown: the item may be offered again, and then every action is available
 # (no "restore first"), while the dismissal itself stays in the action history.
