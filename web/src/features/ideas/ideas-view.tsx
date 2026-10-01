@@ -16,6 +16,7 @@ import { formatDate } from '@/lib/time';
 import { CaptureCard, type CaptureCardHandle } from './capture-card';
 import { SourceInspector } from './source-inspector';
 import { SourceList } from './source-list';
+import { SourceUploadPanel } from './source-upload-panel';
 import { ideaSources, useMedia, useUseApprovals } from './use-sources';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
@@ -198,6 +199,8 @@ export function IdeasView() {
               </Surface>
             )}
             {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='Only editors can add sources.' />}
+            {/* PDF / recording / transcript intake (RAFII_SOURCE_UPLOADS_ENABLED); hidden when the deployment has it off. */}
+            <SourceUploadPanel canEdit={canEdit} onSourceCreated={select} />
             <SourceList selectedId={sourceId} onSelect={select} useApprovals={useApprovals} />
           </div>
 
