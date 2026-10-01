@@ -611,7 +611,9 @@ def proposal_apply(ctx: RafiiRunContext, args: dict) -> dict:
 
 
 # Optional packages that extend the runtime (their `register()` registers tools, scopes and hooks; idempotent).
-EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools",)
+# growth_v2_agent_tools registers the RAFII Product Growth slices (first week, source uploads, relationships, results,
+# series, visual packs, briefs, proof) and their specialist scopes, so text and voice reach them (AC28).
+EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools", "postriff_phase2.growth_v2_agent_tools")
 
 
 def ensure_registered() -> None:
