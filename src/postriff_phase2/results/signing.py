@@ -76,14 +76,17 @@ def parse_header(value):
 
 def verify(header, body, secrets_, now, *, window=REPLAY_WINDOW_SECONDS):
     """Authenticate one delivery. ``secrets_`` are the connection's currently accepted secrets (current first).
-    Returns ``{"timestamp": t, "keyIndex": i}`` naming which secret matched (0 = current). Raises SignatureError."""
+    Returns ``{"timestamp": t, "keyIndex": i}`` naming which secret matched (0 = current). Raises SignatureError.
+
+    The signature is checked before the freshness window: ``timestamp_outside_window`` therefore always means a delivery
+    really signed with one of the secrets (a producer's clock, or a replay of a real delivery), never an unsigned guess.
+    Anything not signed with an accepted secret is ``signature_mismatch`` whatever its ``t``. The work stays bounded (a
+    16 KiB body, at most four digests, at most two secrets)."""
     if not isinstance(body, (bytes, bytearray)):
         raise SignatureError("body_unavailable")
     if len(body) > MAX_BODY_BYTES:
         raise SignatureError("body_too_large")
     timestamp, digests = parse_header(header)
-    if abs(float(now) - timestamp) > window:
-        raise SignatureError("timestamp_outside_window")
     message = str(timestamp).encode() + b"." + bytes(body)
     usable = [s for s in secrets_ or () if isinstance(s, str) and s]
     if not usable:
@@ -95,6 +98,8 @@ def verify(header, body, secrets_, now, *, window=REPLAY_WINDOW_SECONDS):
         for digest in digests:
             matched = hmac.compare_digest(expected, digest) or matched
         if matched:
+            if abs(float(now) - timestamp) > window:
+                raise SignatureError("timestamp_outside_window")
             return {"timestamp": timestamp, "keyIndex": index}
     raise SignatureError("signature_mismatch")
 

@@ -232,23 +232,39 @@ class AC17ReceiverTest(Base):
         conn, secret = connect(t)
         event = ev("sig-1")
         raw = json.dumps(event).encode()
-        cases = [(signing.sign(signing.new_secret(), CLOCK[0], raw), raw, "result_signature_invalid", "signature_mismatch"),
-                 (signing.sign(secret, CLOCK[0] - signing.REPLAY_WINDOW_SECONDS - 1, raw), raw, "result_timestamp_stale", "timestamp_outside_window"),
-                 (signing.sign(secret, CLOCK[0] + signing.REPLAY_WINDOW_SECONDS + 1, raw), raw, "result_timestamp_stale", "timestamp_outside_window"),
-                 ("", raw, "result_signature_invalid", "signature_missing"),
-                 (None, raw, "result_signature_invalid", "signature_missing"),
-                 (signing.sign(secret, CLOCK[0], raw), raw.replace(b"lead", b"sale"), "result_signature_invalid", "signature_mismatch")]
-        for header, body, code, health in cases:
+        stale = int(CLOCK[0]) - signing.REPLAY_WINDOW_SECONDS - 60
+        unverified = [(signing.sign(signing.new_secret(), CLOCK[0], raw), raw),           # another secret
+                      ("", raw), (None, raw), ("t=1;v1=garbage", raw),                    # missing or malformed
+                      (f"t={stale},v1=" + "a" * 64, raw),                                 # an old timestamp, but no real signature
+                      (signing.sign(secret, CLOCK[0], raw), raw.replace(b"lead", b"sale"))]   # signed bytes changed in transit
+        for header, body in unverified:
             out = RESULTS.ingest(conn["id"], header, body)
-            self.assertEqual((out.status, out.body["code"]), (401, code), health)
-            view = RESULTS.connections(t.wid, t.owner)["connections"][0]
-            self.assertEqual(view["health"]["lastErrorCode"], health)
-        self.assertEqual(view["health"]["dataState"], "unavailable")
+            self.assertEqual((out.status, out.body["code"]), (401, "result_signature_invalid"), header)
+        health = RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]
+        # Anyone who knows the address can send these: they never become the connection's health, only a labelled count.
+        self.assertEqual((health["lastErrorCode"], health["lastErrorAt"], health["dataState"], health["reason"]), (None, None, "unavailable", "no_events_yet"))
+        self.assertEqual(health["unverified"]["refused"], len(unverified))
+        self.assertFalse(health["unverified"]["capped"])
+        self.assertEqual(RESULTS.summary(t.wid, t.owner)["coverage"]["connections"]["errored"], 0)
+        # Really signed with the secret but outside the window: the producer's clock (or a replay of a real delivery). That
+        # is about this connection, so it is recorded.
+        for at in (CLOCK[0] - signing.REPLAY_WINDOW_SECONDS - 1, CLOCK[0] + signing.REPLAY_WINDOW_SECONDS + 1):
+            out = RESULTS.ingest(conn["id"], signing.sign(secret, at, raw), raw)
+            self.assertEqual((out.status, out.body["code"]), (401, "result_timestamp_stale"))
+        view = RESULTS.connections(t.wid, t.owner)["connections"][0]
+        self.assertEqual((view["health"]["lastErrorCode"], view["health"]["dataState"]), ("timestamp_outside_window", "unavailable"))
+        self.assertEqual(view["health"]["unverified"]["refused"], len(unverified))
         with connection() as db:
             self.assertEqual(db.execute("SELECT count(*) FROM public.pr_result_events WHERE connection_id=%s", (conn["id"],)).fetchone()[0], 0)
         CLOCK[0] += 1
         self.assertEqual(deliver(conn["id"], secret, event)[0], 200)
         self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]["dataState"], "available")
+        # The counter is bounded for display: past UNVERIFIED_SHOWN_MAX it reads as capped, never as a growing error.
+        from postriff_phase2.hosted import bucket
+        with connection() as db:
+            db.execute("UPDATE public.pr_auth_throttle SET count=5000 WHERE bucket=%s", (bucket(results_service._unverified_scope(conn["id"])),))
+        shown = RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]
+        self.assertEqual((shown["unverified"]["refused"], shown["unverified"]["capped"], shown["dataState"]), (results_service.UNVERIFIED_SHOWN_MAX, True, "available"))
 
     def test_ac17_body_cap_and_unknown_connections(self):
         t = tenant()
@@ -265,10 +281,12 @@ class AC17ReceiverTest(Base):
             out = RESULTS.ingest(unknown, "t=1,v1=" + "a" * 64, b"{}")
             self.assertEqual((out.status, out.body), (404, {"error": "Not found.", "code": "not_found"}))
 
-    def test_ac17_rate_budget_is_spent_before_any_signature_work(self):
+    def test_ac17_unverified_floods_have_their_own_budget_and_never_starve_the_real_producer(self):
         t = tenant()
         conn, secret = connect(t, ratePerMinute=2)
-        self.assertEqual([deliver(conn["id"], secret, ev(f"rate-{i}"))[0] for i in range(3)], [200, 200, 429])
+        self.assertEqual([deliver(conn["id"], secret, ev(f"rate-{i}"))[0] for i in range(3)], [200, 200, 429])   # the verified budget
+        self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]["lastErrorCode"], "rate_limited")
+        target, target_secret = connect(t, ratePerMinute=2)
         real, calls = signing.verify, []
 
         def counting(*args, **kwargs):
@@ -276,10 +294,17 @@ class AC17ReceiverTest(Base):
             return real(*args, **kwargs)
 
         with patch.object(results_service.signing, "verify", counting):
-            statuses = [RESULTS.ingest(conn["id"], "t=1,v1=" + "a" * 64, b'{"eventId":"flood"}').status for _ in range(4)]
-        self.assertEqual(statuses, [401, 401, 401, 429])
-        self.assertEqual(len(calls), 3)          # the over-budget delivery was refused before any signature work
-        self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]["lastErrorCode"], "rate_limited")
+            flood = [RESULTS.ingest(target["id"], "t=1,v1=" + "a" * 64, b'{"eventId":"flood"}') for _ in range(8)]
+        # Its own abuse budget (3 × the per-minute rate), then 429; each attempt is verified (bounded work), none is applied.
+        self.assertEqual([out.status for out in flood], [401] * 6 + [429] * 2)
+        self.assertEqual(dict(flood[-1].headers)["Retry-After"], "60")
+        self.assertEqual(len(calls), 8)
+        health = next(c for c in RESULTS.connections(t.wid, t.owner)["connections"] if c["id"] == target["id"])["health"]
+        self.assertEqual((health["lastErrorCode"], health["unverified"]["refused"]), (None, 8))
+        # The real producer is served in full straight after the flood: unverified traffic never spends its budget.
+        self.assertEqual([deliver(target["id"], target_secret, ev(f"real-{i}"))[0] for i in range(3)], [200, 200, 429])
+        health = next(c for c in RESULTS.connections(t.wid, t.owner)["connections"] if c["id"] == target["id"])["health"]
+        self.assertEqual((health["accepted24h"], health["lastErrorCode"]), (2, "rate_limited"))   # only its own over-budget delivery
         daily, daily_secret = connect(t, ratePerMinute=5, ratePerDay=1)
         self.assertEqual(deliver(daily["id"], daily_secret, ev("day-1"))[0], 200)
         out = RESULTS.ingest(daily["id"], *(lambda raw: (signing.sign(daily_secret, CLOCK[0], raw), raw))(json.dumps(ev("day-2")).encode()))
@@ -396,6 +421,57 @@ class AC18IntegrityTest(Base):
             self.assertEqual(db.execute("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s AND event='result.reversed'", (t.wid,)).fetchone()[0], 1)
             with self.assertRaises(psycopg.errors.RestrictViolation):
                 db.execute("UPDATE public.pr_result_events SET amount_minor=0 WHERE connection_id=%s", (conn["id"],))
+
+    def test_ac18_test_reversals_never_withdraw_real_results(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("results_test_producer", ROOT / "scripts/results_test_producer.py")
+        producer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(producer)
+        t = tenant()
+        conn, secret = connect(t)
+        link = RESULTS.create_link(t.wid, t.owner, {"destination": "https://example.org/book", "idempotencyKey": key()})["link"]
+        live = {"eventId": "live-1", "type": "sale", "occurredAt": iso(CLOCK[0] - 60), "amount": {"minor": 5000, "currency": "usd"},
+                "rafii_ref": model.make_ref(link["slug"], CLOCK[0] - 60)}
+        status, body = deliver(conn["id"], secret, live)
+        self.assertEqual((status, body["attribution"]), (200, "associated"))
+        live_id = body["receiptId"]
+
+        def unchanged():
+            reported = RESULTS.summary(t.wid, t.owner)["classes"]["first_party_reported"]
+            self.assertEqual((reported["counts"], reported["reversed"], reported["money"]), ({"sale": 1}, 0, {"usd": {"minor": 5000, "events": 1}}))
+            item = next(i for i in RESULTS.events(t.wid, t.owner)["items"] if i["id"] == live_id)
+            self.assertEqual((item["status"], item["reversalId"]), ("active", None))
+            self.assertNotIn(live_id, {i["id"] for i in RESULTS.events(t.wid, t.owner, {"status": "reversed"})["items"]})
+            self.assertEqual(RESULTS.links(t.wid, t.owner)["items"][0]["associatedResults"], {"first_party_reported": 1})
+            with connection() as db:
+                with db.cursor() as cur:
+                    cross = results_service.period_summary(cur, t.wid, CLOCK[0] - DAY, CLOCK[0] + 1, now=CLOCK[0])["first_party_reported"]
+            self.assertEqual((cross["counts"], cross["reversed"]), ({"sale": 1}, 0))
+
+        # The documented test producer, aimed at the real event: refused, nothing changes.
+        args = producer.argparse.Namespace(event_id="test-rev-1", type="sale", occurred_at=None, amount=None, currency=None, ref=None, campaign=None,
+                                           reversal_of="live-1")
+        url, headers, body = producer.build_request("http://127.0.0.1:4331", conn["id"], secret, producer.build_event(args, CLOCK[0]), CLOCK[0])
+        status, _, answer = app_call("POST", url.split("4331", 1)[1], body, {"HTTP_X_RAFII_SIGNATURE": headers["X-Rafii-Signature"]})
+        self.assertEqual((status, json.loads(answer)["code"]), (409, "result_reversal_test_mismatch"))
+        unchanged()
+        self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]["lastErrorCode"], "reversal_test_mismatch")
+        # Nor can a real reversal withdraw a test event; a test reversal of a test event stays test-only.
+        self.assertEqual(deliver(conn["id"], secret, ev("t-1", type="sale", test=True))[0], 200)
+        status, body = deliver(conn["id"], secret, {"eventId": "real-rev", "type": "sale", "occurredAt": iso(CLOCK[0]), "reversalOf": "t-1"})
+        self.assertEqual((status, body["code"]), (409, "result_reversal_test_mismatch"))
+        status, body = deliver(conn["id"], secret, {"eventId": "test-rev-2", "type": "sale", "occurredAt": iso(CLOCK[0]), "reversalOf": "t-1", "test": True})
+        self.assertEqual((status, body["status"]), (200, "accepted"))
+        self.assertEqual([i["status"] for i in RESULTS.events(t.wid, t.owner)["items"] if i["test"]], ["reversed"])
+        unchanged()
+        # A mismatched row written before this rule (straight into the table) stays inert in every read.
+        with connection() as db:
+            db.execute("INSERT INTO public.pr_result_events(workspace_id,provenance,result_type,connection_id,provider_event_id,kind,corrects_id,occurred_at,"
+                       "payload_digest,test) VALUES(%s,'first_party_reported','sale',%s,'legacy-test-rev','reversal',%s,now(),%s,true)",
+                       (t.wid, conn["id"], live_id, "c" * 64))
+        unchanged()
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s AND event='result.reversed'", (t.wid,)).fetchone()[0], 0)
 
     def test_ac18_declarations_are_amended_and_reversed_by_new_rows(self):
         t = tenant("editor")
