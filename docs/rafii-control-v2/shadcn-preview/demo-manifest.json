@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "rafii-admin-demo-v1",
+  "seed": "rafii-admin-10000-20261001-v1",
+  "fictional": true,
+  "subscriberCount": 10000,
+  "currentPaidSubscriptionCount": 10000,
+  "billingCycles": [
+    "monthly"
+  ],
+  "normalScenario": "normal",
+  "asOf": "2026-10-01T12:00:00Z",
+  "catalogState": "implemented_v2_candidate",
+  "productionVerified": false,
+  "pricingActivation": "proposed_activation_pending",
+  "catalogSource": {
+    "repository": "dev-james0723/PostRiff",
+    "commit": "b862cf1f",
+    "migration": "migrations/postriff/048_pricing_credit_catalog_v2.sql",
+    "migrationCommit": "0d4334cb7d5b85e2ae73969becfb1babed95b3e7",
+    "migrationSha256": "a36357deb034fa32faac10ac9c893d5b09087f01c9689e072e8764adef792ba0"
+  },
+  "distribution": [
+    {
+      "planId": "starter-v1",
+      "plan": "Starter",
+      "priceId": null,
+      "count": 4500,
+      "amountMinor": 2900,
+      "currency": "USD",
+      "billingCycle": "monthly",
+      "credits": 1000
+    },
+    {
+      "planId": "creator-v1",
+      "plan": "Creator",
+      "priceId": "creator-59-v1",
+      "count": 4000,
+      "amountMinor": 5900,
+      "currency": "USD",
+      "billingCycle": "monthly",
+      "credits": 3500
+    },
+    {
+      "planId": "studio-v2",
+      "plan": "Studio",
+      "priceId": null,
+      "count": 1500,
+      "amountMinor": 14900,
+      "currency": "USD",
+      "billingCycle": "monthly",
+      "credits": 8000
+    }
+  ],
+  "note": "All customers and operational amounts are fictional Demo assumptions. Monthly catalog candidate only; annual billing is not implemented. No login accounts, provider customers, charges or messages are created."
+}

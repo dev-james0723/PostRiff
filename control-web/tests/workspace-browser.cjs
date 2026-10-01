@@ -35,6 +35,7 @@ async function main(){
     await page.goto(base+'/control/'+route+'?mode=demo');await page.getByRole('heading',{name:heading,exact:true,level:1}).waitFor();await page.getByText('Demo workspace',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    }
+   await page.goto(base+'/control/product?mode=demo');await page.getByRole('button',{name:'Open text model',exact:true}).first().click();await page.getByRole('dialog').getByText('Recorded cost (USD)',{exact:true}).waitFor();assert.equal(await page.getByRole('dialog').getByText('$0.018',{exact:true}).count(),1);await page.keyboard.press('Escape');
    if(width===390){await page.locator('.fc-mobile-nav summary').click();await page.getByRole('navigation',{name:'Mobile founder navigation'}).getByRole('link',{name:'Customers',exact:true}).click();await page.getByLabel('Search customers').waitFor();}
    else await page.goto(base+'/control/customers?mode=demo');
    await page.getByLabel('Search customers').fill('Maya');await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1);

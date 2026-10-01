@@ -131,10 +131,10 @@ class BusinessWorkspaceTests(unittest.TestCase):
         response=self.service.demo(self.principal,renamed)
         self.assertEqual(response,self.service.demo(self.principal,renamed))
         self.assertEqual(self.service.demo(self.principal)['workspaces'][0]['name'],'Demo only')
-        self.service.demo(self.principal,self.action('simulate_payment','payment-2'))
-        self.assertEqual(self.service.demo(self.principal)['subscriptions'][1]['status'],'active')
+        self.assertEqual(demo['summary']['currentPaidSubscriptions'],10000)
+        self.assertEqual(len(demo['invoices']),30000)
         self.service.demo(self.principal,self.action('resolve_ticket','ticket-1'))
-        self.assertEqual(self.service.demo(self.principal)['summary']['openRequests'],1)
+        self.assertEqual(self.service.demo(self.principal)['summary']['openRequests'],demo['summary']['openRequests']-1)
         self.service.demo(self.principal,self.action('reset','all'))
         self.assertEqual(self.service.demo(self.principal)['workspaces'][0]['name'],'Fern Studio')
         self.assertEqual(self.repository.get(self.workspace,'synthetic-owner'),before)
@@ -182,8 +182,70 @@ class BusinessWorkspaceTests(unittest.TestCase):
         self.assertEqual(self.request('/workspace/live/query','POST',{**query,'page':True})[0],400)
         _,demo=self.request('/workspace/demo/query','POST',{**query,'collection':'payments','search':'Northline'})
         self.assertEqual(demo['data']['mode'],'demo')
-        self.assertEqual(demo['data']['total'],1)
+        self.assertEqual(demo['data']['total'],3)
         self.assertNotIn('DO_NOT_DISCLOSE',json.dumps(linked))
+
+    def test_founder_action_replay_requires_current_capabilities(self):
+        before=self.repository.get(self.workspace,'synthetic-owner')
+        for revoked in ('copilot.use','metrics.query'):
+            snapshot=self.service.demo(self.principal)
+            payload=self.action('founder_turn','founder',json.dumps(dict(
+                message='Which plan has the most subscribers?',conversationId=None,
+                chartContext=dict(chartId='plan-distribution',viewVersion=1,
+                                  queryReceiptId=snapshot['receipt']['id'],mode='demo',environment='local'))))
+            status,first=self.request('/workspace/demo/action','POST',payload)
+            self.assertEqual(status,200,first)
+            self.assertEqual(self.request('/workspace/demo/action','POST',payload)[1]['data'],first['data'])
+            ordinary=self.action('rename_workspace','workspace-1','Demo replay permission check')
+            self.assertEqual(self.request('/workspace/demo/action','POST',ordinary)[0],200)
+            with psycopg.connect(self.dsn,autocommit=True) as con:
+                con.execute('UPDATE rafii_control.platform_operators SET capabilities=%s WHERE user_id=%s',
+                            ([cap for cap in CAPABILITIES if cap!=revoked],self.user))
+            status,denied=self.request('/workspace/demo/action','POST',payload)
+            self.assertEqual(status,403,denied)
+            self.assertNotIn('data',denied)
+            status,redacted=self.request('/workspace/demo/action','POST',ordinary)
+            self.assertEqual(status,200,redacted)
+            self.assertNotIn('messages',redacted['data']['intelligence'])
+            with psycopg.connect(self.dsn,autocommit=True) as con:
+                con.execute('UPDATE rafii_control.platform_operators SET capabilities=%s WHERE user_id=%s',(list(CAPABILITIES),self.user))
+        self.assertEqual(self.repository.get(self.workspace,'synthetic-owner'),before)
+
+    def test_demo_stop_remains_authorized_after_read_throttling(self):
+        snapshot=self.service.demo(self.principal)
+        turn=self.action('founder_turn','founder',json.dumps(dict(
+            message='Explain the plan chart',conversationId=None,
+            chartContext=dict(chartId='plan-distribution',viewVersion=1,
+                              queryReceiptId=snapshot['receipt']['id'],mode='demo',environment='local'))))
+        status,response=self.request('/workspace/demo/action','POST',turn)
+        self.assertEqual(status,200,response)
+        conversation=response['data']['intelligence']['conversations'][-1]['id']
+        start=self.action('founder_voice','founder',json.dumps(dict(conversationId=conversation,operation='start')))
+        self.assertEqual(self.request('/workspace/demo/action','POST',start)[0],200)
+        report=self.action('founder_report_schedule','founder',json.dumps(dict(
+            conversationId=conversation,kind='daily',dueLocal='2027-01-02T09:00:00',
+            timeZone='America/Indiana/Indianapolis',confirmed=True)))
+        status,response=self.request('/workspace/demo/action','POST',report)
+        self.assertEqual(status,200,response)
+        source=response['data']['intelligence']['reports'][-1]['id']
+        call=self.action('founder_delivery','founder',json.dumps(dict(operation='start',channel='call',sourceId=source)))
+        status,response=self.request('/workspace/demo/action','POST',call)
+        self.assertEqual(status,200,response)
+        attempt=response['data']['intelligence']['contactAttempts'][-1]['id']
+        with psycopg.connect(self.dsn,autocommit=True) as con:
+            bucket=hashlib.sha256(('control.read:'+self.user).encode()).hexdigest()
+            con.execute("INSERT INTO rafii_control.request_budgets(bucket,environment,window_start,attempts) VALUES(%s,'local',floor(extract(epoch from now())/60),120) ON CONFLICT(bucket,environment) DO UPDATE SET window_start=excluded.window_start,attempts=120",(bucket,))
+        self.assertEqual(self.request('/session')[0],429)
+        stop=self.action('founder_voice','founder',json.dumps(dict(conversationId=conversation,operation='stop')))
+        csrf=self.session['csrfToken'];self.session['csrfToken']='wrong'
+        self.assertEqual(self.request('/workspace/demo/action','POST',stop)[0],403)
+        self.session['csrfToken']=csrf
+        self.assertEqual(self.request('/workspace/demo/action','POST',stop)[0],200)
+        cancel=self.action('founder_delivery','founder',json.dumps(dict(operation='cancel',channel='call',sourceId=source,attemptId=attempt)))
+        status,response=self.request('/workspace/demo/action','POST',cancel)
+        self.assertEqual(status,200,response)
+        self.assertEqual(response['data']['intelligence']['contactAttempts'][-1]['state'],'cancelled')
+        self.assertEqual(self.request('/workspace/demo/action','POST',start)[0],429)
 
     def test_demo_rejects_free_text_audit_targets_and_unused_action_payloads(self):
         for changes in ({'targetId':'private message text'},{'targetId':'customer-1'},{'value':'unused private text'}):

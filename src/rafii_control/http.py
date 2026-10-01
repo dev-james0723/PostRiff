@@ -55,7 +55,7 @@ class ControlApplication:
                     try: self.boundary.authorize(token, 'prohibited', origin=origin, unsafe=method != 'GET', request_id=request_id)
                     except ControlError: pass
                     raise
-                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename', ending_session=path == '/session/logout', request_id=request_id)
+                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename', ending_session=path == '/session/logout', ending_preview=self.preview_cleanup(path,body), request_id=request_id)
                 if path == '/session':
                     data = {'assurance': 'aal2', 'capabilities': sorted(set(principal['operator']['capabilities']) & CAPABILITIES), 'csrfToken': principal['csrfToken']}
                 elif path == '/session/logout':
@@ -112,6 +112,24 @@ class ControlApplication:
             return False
         finally:
             deadline.reset(token)
+
+    @staticmethod
+    def preview_cleanup(path, body):
+        """Only terminal Demo operations have a budget independent of dashboard reads.
+
+        This changes throttling only. Auth, capability, CSRF and the strict reducer
+        still validate the complete action before any persisted effect.
+        """
+        if path!='/workspace/demo/action' or body.get('action') not in ('founder_voice','founder_delivery'):
+            return False
+        value=body.get('value')
+        if not isinstance(value,str) or len(value.encode())>4000: return False
+        try: payload=json.loads(value)
+        except (ValueError,TypeError): return False
+        if not isinstance(payload,dict): return False
+        if body['action']=='founder_voice': return payload.get('operation') in ('stop','interrupt','text')
+        return payload.get('channel')=='call' and (payload.get('operation')=='cancel' or
+               payload.get('operation')=='advance' and payload.get('outcome') in ('ending','completed','cancelled'))
 
     @staticmethod
     def _capability(path, method):
