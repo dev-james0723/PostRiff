@@ -602,6 +602,23 @@ class AC36SecurityTest(Base):
         self.assertTrue(RESULTS.events(t.wid, t.editor)["canEdit"])
         self.assertFalse(RESULTS.events(t.wid, t.viewer)["canEdit"])
         self.assertEqual(refusal(RESULTS.link_action, t.wid, t.viewer, link["id"], "disable", {"idempotencyKey": key(), "expectedRevision": 1})[0], 403)
+        with connection() as db:   # a member whose access was revoked can't change anything any more
+            db.execute("UPDATE public.pr_memberships SET status='revoked' WHERE workspace_id=%s AND user_id=%s", (t.wid, USERS[t.editor]))
+        self.assertEqual(refusal(RESULTS.declare, t.wid, t.editor, {**declaration, "idempotencyKey": key()}), (403, "permission_denied"))
+        self.assertEqual(refusal(RESULTS.events, t.wid, t.editor)[0], 403)
+
+    def test_ac36_pending_account_deletion_stops_ingestion_and_click_counting(self):
+        t = tenant()
+        conn, secret = connect(t)
+        link = RESULTS.create_link(t.wid, t.owner, {"destination": "https://example.org/", "idempotencyKey": key()})["link"]
+        self.assertEqual(deliver(conn["id"], secret, ev("before-deletion"))[0], 200)
+        with connection() as db:
+            db.execute("UPDATE public.pr_workspaces SET state=jsonb_set(state,'{accountDeletion}','{\"requestedAt\":1}'::jsonb) WHERE id=%s", (t.wid,))
+        self.assertEqual(deliver(conn["id"], secret, ev("during-deletion")), (404, {"error": "Not found.", "code": "not_found"}))
+        self.assertIsNone(RESULTS.redirect(link["slug"], "GET", BROWSER))
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM public.pr_result_events WHERE workspace_id=%s", (t.wid,)).fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT coalesce(sum(clicks+likely_bot),0) FROM public.pr_link_clicks WHERE workspace_id=%s", (t.wid,)).fetchone()[0], 0)
 
     def test_ac36_removed_connection_refuses_ingest_and_destroys_its_secret(self):
         t = tenant()

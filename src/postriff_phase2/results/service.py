@@ -243,6 +243,8 @@ _VERSION = ("CROSS JOIN LATERAL (SELECT x.result_type,x.occurred_at,x.amount_min
             "x.attribution,x.attribution_definition,x.note FROM public.pr_result_events x WHERE x.workspace_id=e.workspace_id AND "
             "(x.id=e.id OR (x.corrects_id=e.id AND x.kind='amendment')) ORDER BY (x.kind='amendment') DESC,x.created_at DESC,x.id DESC LIMIT 1) v")
 _REVERSAL = "LEFT JOIN public.pr_result_events r ON r.workspace_id=e.workspace_id AND r.corrects_id=e.id AND r.kind='reversal'"
+# A workspace whose account deletion is pending admits no new results or counted clicks (PRD R-NFR-02).
+_NOT_DELETING = "coalesce(w.state->>'accountDeletion','') IN ('','null','false')"
 _EVENT_COLUMNS = ("e.id::text,e.provenance,e.connection_id::text,extract(epoch from e.received_at),e.test,v.result_type,"
                   "extract(epoch from v.occurred_at),v.amount_minor,v.currency,v.quantity,v.link_id::text,v.campaign_ref,v.attribution,"
                   "v.attribution_definition,v.note,(SELECT count(*) FROM public.pr_result_events c WHERE c.workspace_id=e.workspace_id "
@@ -877,7 +879,8 @@ class ResultsService:
         bot = likely_bot(user_agent, method, purpose)
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT id::text,workspace_id::text,destination FROM public.pr_tracking_links WHERE slug=%s AND status='active'", (slug,))
+                cur.execute(f"SELECT l.id::text,l.workspace_id::text,l.destination FROM public.pr_tracking_links l JOIN public.pr_workspaces w ON w.id=l.workspace_id "
+                            f"WHERE l.slug=%s AND l.status='active' AND {_NOT_DELETING}", (slug,))
                 row = cur.fetchone()
                 if row is None:
                     return None
@@ -905,9 +908,9 @@ class ResultsService:
             return Delivery(404, {"error": "Not found.", "code": "not_found"})
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT workspace_id::text,status,secret_ciphertext,secret_key_id,previous_ciphertext,previous_key_id,"
-                            "extract(epoch from previous_expires_at),rate_per_minute,rate_per_day FROM public.pr_result_connections WHERE id=%s FOR UPDATE",
-                            (ident,))
+                cur.execute("SELECT c.workspace_id::text,c.status,c.secret_ciphertext,c.secret_key_id,c.previous_ciphertext,c.previous_key_id,"
+                            "extract(epoch from c.previous_expires_at),c.rate_per_minute,c.rate_per_day FROM public.pr_result_connections c "
+                            f"JOIN public.pr_workspaces w ON w.id=c.workspace_id WHERE c.id=%s AND {_NOT_DELETING} FOR UPDATE OF c", (ident,))
                 row = cur.fetchone()
                 if row is None or row[1] != "active":
                     return Delivery(404, {"error": "Not found.", "code": "not_found"})
