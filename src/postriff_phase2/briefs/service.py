@@ -24,6 +24,7 @@ import os
 import re
 import time
 from collections import Counter
+from datetime import datetime
 
 from postriff_alpha.domain import AlphaError
 
@@ -67,19 +68,22 @@ def _json(value):
 
 
 def encode_cursor(at, ident):
-    return base64.urlsafe_b64encode(json.dumps([float(at), ident]).encode()).decode().rstrip("=")
+    """[exact timestamp, id]: PostgreSQL's own timestamp in ISO form, so no float rounding skips or repeats a row."""
+    return base64.urlsafe_b64encode(json.dumps([at.isoformat(), ident]).encode()).decode().rstrip("=")
 
 
 def decode_cursor(cursor):
     if cursor is None:
         return None
     try:
-        if not isinstance(cursor, str) or len(cursor) > 200:
+        if not isinstance(cursor, str) or len(cursor) > 300:
             raise ValueError()
         value = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
-        if not isinstance(value, list) or len(value) != 2 or not UUID.match(str(value[1])):
+        if not isinstance(value, list) or len(value) != 2 or not isinstance(value[0], str) or not UUID.match(str(value[1])):
             raise ValueError()
-        return float(value[0]), str(value[1])
+        if datetime.fromisoformat(value[0]).tzinfo is None:
+            raise ValueError()
+        return value[0], str(value[1])
     except (ValueError, TypeError, UnicodeDecodeError, base64.binascii.Error):
         raise AlphaError("This page cursor is invalid.", 400, code="invalid_cursor") from None
 
@@ -219,13 +223,14 @@ class BriefService:
         size, before = page_limit(limit), decode_cursor(cursor)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_member(row), "read")
-            sql = f"SELECT {EDITION_COLUMNS} FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s"
+            sql = f"SELECT {EDITION_COLUMNS}, created_at FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s"
             params = [workspace_id, principal]
             if before:
-                sql += " AND (created_at, id) < (to_timestamp(%s), %s::uuid)"
+                sql += " AND (created_at, id) < (%s::timestamptz, %s::uuid)"
                 params += list(before)
             cur.execute(sql + " ORDER BY created_at DESC, id DESC LIMIT %s", params + [size + 1])
-            rows = [_edition(r) for r in cur.fetchall()]
+            found = cur.fetchall()
+            rows = [_edition(r) for r in found]
             page, more = rows[:size], len(rows) > size
             ids = [e["id"] for e in page]
             counts = {}
@@ -237,7 +242,7 @@ class BriefService:
             return {"editions": [{**{k: e[k] for k in ("id", "editionKey", "revision", "cadence", "periodStart", "periodEnd", "timeZone", "dataState",
                                                           "deliveredAt", "createdAt", "materialDigest")},
                                   "items": len(e["items"]), "sources": sorted({i["source"] for i in e["items"]}), "actions": counts.get(e["id"], {})} for e in page],
-                    "nextCursor": encode_cursor(page[-1]["createdAt"], page[-1]["id"]) if more and page else None}
+                    "nextCursor": encode_cursor(found[len(page) - 1][14], page[-1]["id"]) if more and page else None}
 
     def edition(self, workspace_id, token, edition_id):
         require_enabled()

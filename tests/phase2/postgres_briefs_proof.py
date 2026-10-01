@@ -496,7 +496,8 @@ with connection() as db:
         db.execute("""INSERT INTO public.pr_brief_editions(workspace_id,recipient_user_id,edition_key,revision,period_start,period_end,time_zone,material_digest,
                                      data_state,coverage,items,created_at)
                       VALUES(%s,%s,%s,1,to_timestamp(%s),to_timestamp(%s),'UTC',%s,'available','[]','[]',to_timestamp(%s))""",
-                   (wid, USERS["owner"], f"2025-W{n + 1:02d}", 1.7e9 + n * 7 * DAY, 1.7e9 + (n + 1) * 7 * DAY, hashlib.sha256(str(n).encode()).hexdigest(), 1.7e9 + n * 7 * DAY))
+                   (wid, USERS["owner"], f"2025-W{n + 1:02d}", 1.7e9 + n * 7 * DAY, 1.7e9 + (n + 1) * 7 * DAY, hashlib.sha256(str(n).encode()).hexdigest(),
+                    1.7e9 + (n // 2) * 7 * DAY + 0.1234567))   # fractional and pairwise-equal instants: the cursor must be exact
 page = briefs.history(wid, "owner")
 total = sql("SELECT count(*) FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s", wid, USERS["owner"])[0][0]
 assert len(page["editions"]) == 25 and page["nextCursor"]

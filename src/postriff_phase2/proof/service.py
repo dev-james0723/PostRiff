@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import time
+from datetime import datetime
 
 from postriff_alpha.domain import AlphaError
 
@@ -70,19 +71,23 @@ def _decision(r):
 
 
 def encode_cursor(at, ident):
-    return base64.urlsafe_b64encode(json.dumps([float(at), ident]).encode()).decode().rstrip("=")
+    """[exact timestamp, id]: PostgreSQL's own timestamp in ISO form, so no float rounding can skip or repeat a row
+    at a page boundary."""
+    return base64.urlsafe_b64encode(json.dumps([at.isoformat(), ident]).encode()).decode().rstrip("=")
 
 
 def decode_cursor(cursor, pattern):
     if cursor is None:
         return None
     try:
-        if not isinstance(cursor, str) or len(cursor) > 200:
+        if not isinstance(cursor, str) or len(cursor) > 300:
             raise ValueError()
         value = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
-        if not isinstance(value, list) or len(value) != 2 or not pattern.match(str(value[1])):
+        if not isinstance(value, list) or len(value) != 2 or not isinstance(value[0], str) or not pattern.match(str(value[1])):
             raise ValueError()
-        return float(value[0]), str(value[1])
+        if datetime.fromisoformat(value[0]).tzinfo is None:
+            raise ValueError()
+        return value[0], str(value[1])
     except (ValueError, TypeError, UnicodeDecodeError, base64.binascii.Error):
         raise AlphaError("This page cursor is invalid.", 400, code="invalid_cursor") from None
 
@@ -167,7 +172,8 @@ class ProofService:
             if not value:
                 return model.unavailable(definition, "visual_pack_no_counts")
             evidence = {"packIds": raw.get("packIds") or raw.get("evidenceIds") or []}
-            return model.figure(value, definition=definition, evidence=evidence, data_state=raw.get("dataState") if raw.get("dataState") in ("available", "partial") else "available")
+            return model.figure(value, definition=definition, evidence=evidence, data_state=raw.get("dataState") if raw.get("dataState") in ("available", "partial") else "available",
+                                evidenceQuery={"resource": "visual-packs", "from": start, "to": end})
         return self._savepoint(cur, "proof_assisted", read, model.unavailable(definition, "visual_pack_unreadable"))
 
     def _outcomes(self, cur, workspace_id, start, end):
@@ -182,26 +188,26 @@ class ProofService:
             state = raw.get("dataState") if raw.get("dataState") in ("available", "partial", "unavailable") else "partial"
             return model.figure(value, definition=raw.get("definition") and f"{definition} Association: {raw['definition']}." or definition,
                                 evidence={"resultIds": raw.get("evidenceIds") or raw.get("resultIds") or []}, data_state=state,
-                                asOf=model.jsonable(raw.get("asOf")))
+                                asOf=model.jsonable(raw.get("asOf")), evidenceQuery={"resource": "results", "from": start, "to": end})
         return self._savepoint(cur, "proof_outcomes", read, model.unavailable(definition, "results_unreadable"))
 
     def _time_back(self, cur, workspace_id, start, end):
         definition = "Time Back by its existing confidence classes; estimated, personalized and measured are never added into one measured figure."
 
+        window = "workspace_id=%s AND occurred_at>=to_timestamp(%s) AND occurred_at<to_timestamp(%s)"
+
         def read():
-            cur.execute("""SELECT id::text, confidence, saved_seconds, extract(epoch from created_at) FROM public.pr_time_savings_ledger
-                           WHERE workspace_id=%s AND occurred_at>=to_timestamp(%s) AND occurred_at<to_timestamp(%s) ORDER BY occurred_at, id LIMIT 5000""",
-                        (workspace_id, start, end))
-            classes, evidence, latest = {}, {}, None
-            for ident, confidence, seconds, created in cur.fetchall():
-                entry = classes.setdefault(confidence, {"confidence": confidence, "outcomes": 0, "savedSeconds": 0})
-                entry["outcomes"] += 1
-                entry["savedSeconds"] += int(seconds)
-                evidence.setdefault(confidence, []).append(ident)
-                latest = max(latest or 0, float(created))
-            value = [classes[c] for c in ("estimated", "personalized", "measured") if c in classes]
-            out = model.figure(value, definition=definition, evidence={f"{c}LedgerIds": v for c, v in evidence.items()})
-            out["watermark"] = latest
+            cur.execute(f"""SELECT confidence, count(*), coalesce(sum(saved_seconds),0), extract(epoch from max(created_at)) FROM public.pr_time_savings_ledger
+                            WHERE {window} GROUP BY confidence""", (workspace_id, start, end))
+            rows = cur.fetchall()
+            classes = {c: {"confidence": c, "outcomes": int(n), "savedSeconds": int(seconds)} for c, n, seconds, _latest in rows}
+            evidence = {}
+            for confidence in classes:   # totals are exact; the evidence ids shown are bounded and flagged when truncated
+                cur.execute(f"SELECT id::text FROM public.pr_time_savings_ledger WHERE {window} AND confidence=%s ORDER BY occurred_at, id LIMIT %s",
+                            (workspace_id, start, end, confidence, model.EVIDENCE_LIMIT + 1))
+                evidence[f"{confidence}LedgerIds"] = [r[0] for r in cur.fetchall()]
+            out = model.figure([classes[c] for c in ("estimated", "personalized", "measured") if c in classes], definition=definition, evidence=evidence)
+            out["watermark"] = max((float(r[3]) for r in rows if r[3] is not None), default=None)
             return out
         return self._savepoint(cur, "proof_time_back", read, model.unavailable(definition, "time_back_unreadable"))
 
@@ -209,24 +215,23 @@ class ProofService:
         definition = ("What AI and data services cost for this period: the actual amount where the charge is settled; charges whose amount is "
                       "unknown are listed separately at their reserved estimate and never counted as zero. Owners only.")
 
+        window = "workspace_id=%s AND at>=to_timestamp(%s) AND at<to_timestamp(%s) AND cost_state IN ('actual','estimated_unknown')"
+        kind = "CASE WHEN cost_state='actual' AND actual_usd_micro IS NOT NULL THEN 'actual' ELSE 'unknown' END"
+
         def read():
-            cur.execute("""SELECT id::text, cost_state, actual_usd_micro, estimated_usd_micro, extract(epoch from at) FROM public.pr_usage_ledger
-                           WHERE workspace_id=%s AND at>=to_timestamp(%s) AND at<to_timestamp(%s) AND cost_state IN ('actual','estimated_unknown')
-                           ORDER BY at, id LIMIT 5000""", (workspace_id, start, end))
-            actual, unknown, actual_ids, unknown_ids, latest = 0, 0, [], [], None
-            for ident, state, actual_micro, estimated_micro, at in cur.fetchall():
-                latest = max(latest or 0, float(at))
-                if state == "actual" and actual_micro is not None:
-                    actual += int(actual_micro)
-                    actual_ids.append(ident)
-                else:
-                    unknown += int(estimated_micro or 0)
-                    unknown_ids.append(ident)
-            value = {"actualUsdMicro": actual, "actualEntries": len(actual_ids), "unknownEntries": len(unknown_ids),
-                     "unknownReservedEstimateUsdMicro": unknown if unknown_ids else 0}
-            out = model.figure(value, definition=definition, evidence={"actualLedgerIds": actual_ids, "unknownLedgerIds": unknown_ids},
-                               data_state="partial" if unknown_ids else "available", visibility="owner")
-            out["watermark"] = latest
+            cur.execute(f"""SELECT {kind}, count(*), coalesce(sum(actual_usd_micro),0), coalesce(sum(estimated_usd_micro),0), extract(epoch from max(at))
+                            FROM public.pr_usage_ledger WHERE {window} GROUP BY 1""", (workspace_id, start, end))
+            totals = {r[0]: r for r in cur.fetchall()}
+            evidence = {}
+            for name in ("actual", "unknown"):   # exact totals; bounded, flagged evidence ids
+                cur.execute(f"SELECT id::text FROM public.pr_usage_ledger WHERE {window} AND {kind}=%s ORDER BY at, id LIMIT %s",
+                            (workspace_id, start, end, name, model.EVIDENCE_LIMIT + 1))
+                evidence[f"{name}LedgerIds"] = [r[0] for r in cur.fetchall()]
+            actual, unknown = totals.get("actual"), totals.get("unknown")
+            value = {"actualUsdMicro": int(actual[2]) if actual else 0, "actualEntries": int(actual[1]) if actual else 0,
+                     "unknownEntries": int(unknown[1]) if unknown else 0, "unknownReservedEstimateUsdMicro": int(unknown[3]) if unknown else 0}
+            out = model.figure(value, definition=definition, evidence=evidence, data_state="partial" if unknown else "available", visibility="owner")
+            out["watermark"] = max((float(r[4]) for r in totals.values() if r[4] is not None), default=None)
             return out
         return self._savepoint(cur, "proof_cost", read, model.unavailable(definition, "usage_ledger_unreadable"))
 
@@ -364,11 +369,11 @@ class ProofService:
         with self.repository.transaction(token, workspace_id) as (cur, row, _principal):
             member = _member(row)
             require(member, "read")
-            sql = """SELECT proof_id, extract(epoch from period_start) FROM (SELECT DISTINCT ON (proof_id) proof_id, period_start, frequency
+            sql = """SELECT proof_id, period_start FROM (SELECT DISTINCT ON (proof_id) proof_id, period_start, frequency
                      FROM public.pr_proof_revisions WHERE workspace_id=%s ORDER BY proof_id, revision DESC) latest WHERE (%s::text IS NULL OR frequency=%s)"""
             params = [workspace_id, frequency or None, frequency or None]
             if before:
-                sql += " AND (period_start, proof_id) < (to_timestamp(%s), %s)"
+                sql += " AND (period_start, proof_id) < (%s::timestamptz, %s)"
                 params += list(before)
             cur.execute(sql + " ORDER BY period_start DESC, proof_id DESC LIMIT %s", params + [size + 1])
             found = cur.fetchall()
@@ -460,11 +465,13 @@ class ProofService:
                       WHERE workspace_id=%s ORDER BY decision_id, revision DESC) latest WHERE (%s::text IS NULL OR status=%s)"""
             params = [workspace_id, status or None, status or None]
             if before:
-                sql += " AND (latest_at, decision_id) < (to_timestamp(%s), %s)"
+                sql += " AND (latest_at, decision_id) < (%s::timestamptz, %s)"
                 params += list(before)
             cur.execute(sql + " ORDER BY latest_at DESC, decision_id DESC LIMIT %s", params + [size + 1])
-            rows = [_decision(r[:14]) for r in cur.fetchall()]
+            found = cur.fetchall()
+            rows = [_decision(r[:14]) for r in found]
             page, more = rows[:size], len(rows) > size
+            last_at = found[len(page) - 1][14] if page else None
             history = {}
             if page:
                 cur.execute("""SELECT decision_id, revision, status, decided_by::text, extract(epoch from created_at) FROM public.pr_strategy_decisions
@@ -475,7 +482,7 @@ class ProofService:
             return {"decisions": [{**self._decision_view(d), "versions": history.get(d["id"], [])[-20:]} for d in page],
                     "inEffect": [{k: d.get(k) for k in ("id", "revision", "kind", "statement", "scope", "appliesFromDate")} for d in projection],
                     "canDecide": member.role == "owner",
-                    "nextCursor": encode_cursor(page[-1]["createdAt"], page[-1]["id"]) if more and page else None}
+                    "nextCursor": encode_cursor(last_at, page[-1]["id"]) if more and page else None}
 
     @staticmethod
     def _decide_request(decision_id, payload):

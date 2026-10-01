@@ -13,6 +13,8 @@ export interface ProofFigure {
   byReason?: Record<string, number>;
   approved?: number;
   visibility?: 'owner';
+  /** When a sibling feature reports counts without ids, the scoped records the figure counts (resource + period). */
+  evidenceQuery?: { resource: string; from: number; to: number };
 }
 
 export interface TimeBackClass {
