@@ -118,6 +118,12 @@ def _delete(service, workspace_id, principal):
                 uploads.purge_workspace(cur, workspace_id)
         except Exception as error:
             raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
+    # Rendered Visual Pack slides are derivative private objects (their rows cascade with the workspace below).
+    try:
+        from .visual_pack.service import purge_workspace as purge_visual_packs
+        purge_visual_packs(service, workspace_id)
+    except Exception as error:
+        raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
     # Disconnect grants where supported. Never retain plaintext tokens in receipts or logs.
     revocation_pending = revoke_remote_grants(service, workspace_id)
     connector_service = getattr(service, 'productivity_connectors', None)

@@ -36,6 +36,7 @@ import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetDetail } from './asset-detail';
 import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
+import { VisualPackSection } from './visual-packs/visual-pack-section';
 
 const infoContent = {
   title: 'Library',
@@ -448,6 +449,9 @@ export function LibraryView() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Six-slide carousels made from drafts (RAFII_VISUAL_PACK_ENABLED); renders nothing while the feature is off. */}
+      <VisualPackSection />
 
       <AssetDetail
         asset={current}
