@@ -101,6 +101,8 @@ const EN = {
   unlink: 'Unlink',
   assisted: (platform: string) => `Open on ${platform} · assisted`,
   assistedHint: (platform: string) => `Rafii can't reply on ${platform}. Reply there; nothing is sent from Rafii.`,
+  noConversation: 'No linked conversation',
+  noConversationHint: 'No conversation is linked to this follow-up. Contact them the way you usually do; nothing is sent from Rafii.',
   directHint: 'Replies use the Inbox composer below and need your exact approval.',
   dueNow: 'Follow-up due',
   dueSince: (when: string) => `Due since ${when}`,
@@ -202,6 +204,8 @@ const ZH: FollowUpCopy = {
   unlink: '取消連結',
   assisted: (platform: string) => `在 ${platform} 開啟 · 協助`,
   assistedHint: (platform: string) => `Rafii 無法在 ${platform} 回覆。請在該平台回覆；Rafii 不會發出任何內容。`,
+  noConversation: '沒有連結的對話',
+  noConversationHint: '這個跟進事項沒有連結任何對話。請用你平常的方式聯絡對方；Rafii 不會發出任何內容。',
   directHint: '回覆會使用下方的收件匣編輯器，並需要你確認完全相同的內容。',
   dueNow: '需要跟進',
   dueSince: (when: string) => `自 ${when} 起需要跟進`,
@@ -336,9 +340,11 @@ export function platformName(provider: string | null | undefined): string {
 
 /** How a reply can happen, in words. Assisted routes are never presented as a direct, successful reply. */
 export function replyRouteView(route: ReplyRoute | null | undefined, copy: FollowUpCopy) {
-  const platform = platformName(route?.provider);
   if (route?.kind === 'direct') return { kind: 'direct' as const, label: copy.reply, hint: copy.directHint, href: null };
-  const href = route?.href?.startsWith('https://') ? route.href : null;
+  // A follow-up started on its own (no conversation, no contact platform) has no platform to name or to open.
+  if (!route?.provider) return { kind: 'assisted' as const, label: copy.noConversation, hint: copy.noConversationHint, href: null };
+  const platform = platformName(route.provider);
+  const href = route.href?.startsWith('https://') ? route.href : null;
   return { kind: 'assisted' as const, label: copy.assisted(platform), hint: copy.assistedHint(platform), href };
 }
 
