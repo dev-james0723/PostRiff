@@ -37,7 +37,7 @@ EVENTS = {
     "channel.reconnect_required": {"category": "channels", "severity": "critical", "audience": "manage_connections", "email": "immediate", "push": "immediate", "template": "channel_reconnect"},
     "engagement.needs_attention": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "engagement"},
     # A relationship follow-up the person scheduled is due (G2-REL). An internal reminder: it never contacts the lead.
-    "relationship.follow_up_due": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "engagement"},
+    "relationship.follow_up_due": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "follow_up_due"},
     "opportunity.detected": {"category": "opportunities", "severity": "info", "audience": "edit", "email": "digest", "push": "off", "template": "opportunity"},
     "analytics.weekly_ready": {"category": "analytics", "severity": "info", "audience": "edit", "email": "immediate", "push": "off", "template": "weekly_performance"},
     "analytics.anomaly_detected": {"category": "analytics", "severity": "warning", "audience": "edit", "email": "digest", "push": "off", "template": "analytics_anomaly"},

@@ -36,7 +36,7 @@ _SAFE_PATH = re.compile(r"^/app(?:/[A-Za-z0-9._~\-]*)*(?:\?[A-Za-z0-9._~\-=&%]*)
 TEMPLATES = ("weekly_ready", "drafts_ready", "approval_required", "campaign_blocked", "needs_input", "asset_review", "publish_scheduled",
              "publish_verified", "publish_failed", "publish_uncertain", "channel_reconnect", "automation_completed", "automation_failed", "engagement",
              "opportunity", "weekly_performance", "analytics_anomaly", "preference_proposed", "budget_threshold", "payment_failed", "trial_ending",
-             "subscription_active", "security_alert", "digest", "phone_call_failed", "phone_call_verify")
+             "subscription_active", "security_alert", "digest", "phone_call_failed", "phone_call_verify", "follow_up_due")
 
 
 @lru_cache(maxsize=1)

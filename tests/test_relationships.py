@@ -296,6 +296,12 @@ class NotificationWiringTest(unittest.TestCase):
         self.assertEqual((spec["category"], spec["severity"], spec["audience"], spec["email"], spec["push"], spec["sms"]),
                          ("engagement", "action", "reply", "digest", "off", "off"))
         self.assertIn(spec["template"], email_render.TEMPLATES)
+        # Its own words in every email locale (never the comments template), so a digest never claims comments need a reply.
+        locales = email_render.catalogue()["locales"]
+        self.assertEqual(spec["template"], "follow_up_due")
+        for locale in ("en", "zh-Hant", "zh-Hant-HK", "zh-Hans"):
+            self.assertIn("follow_up_due", locales[locale]["templates"], locale)
+        self.assertEqual(locales["zh-Hant"]["templates"]["follow_up_due"]["headline"], "跟進事項到期")
         self.assertFalse(catalog.transactional("relationship.follow_up_due"))
         self.assertNotEqual(catalog.CATALOG_VERSION, "2026-09-26.2")
         self.assertIn("relationship.follow_up_due", catalog.public()["events"])
@@ -324,7 +330,8 @@ class NotificationWiringTest(unittest.TestCase):
         event = events[0]
         self.assertEqual(event["event_type"], "relationship.follow_up_due")
         self.assertEqual(event["dedupe_key"], f"relationship.follow_up_due:{RID}:2:{int(NOW - 60)}")
-        self.assertEqual(event["payload"], {"title": "A follow-up is due", "reason": "Follow-up due",
+        # No English title in the payload: the email digest uses the recipient's localized template headline.
+        self.assertEqual(event["payload"], {"reason": "Follow-up due",
                                             "href": f"/app/inbox?filter=follow_ups&relationship=u{RID.replace('-', '')}&thread=u{TID.replace('-', '')}"})
         self.assertIn("SAVEPOINT relationship_followups", cursor.sql[0])
         self.assertTrue(any(s.startswith("RELEASE SAVEPOINT") for s in cursor.sql))

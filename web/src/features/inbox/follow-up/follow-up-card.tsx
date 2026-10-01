@@ -32,6 +32,7 @@ import type { RelationshipDetail, RelationshipEditInput, RelationshipState, Rela
 import { relativeTime, timeDefaults } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { currentCopy, focusComposer, when } from './copy';
+import { WonResultPicker } from './won-result-picker';
 
 type Run = (api: RelationshipsApi, w: string) => Promise<RelationshipWrite>;
 
@@ -67,7 +68,6 @@ export function FollowUpCard({
   const [editing, setEditing] = useState(false);
   const [snoozing, setSnoozing] = useState(false);
   const [winning, setWinning] = useState(false);
-  const [resultId, setResultId] = useState('');
   const [note, setNote] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef(false);
@@ -275,21 +275,11 @@ export function FollowUpCard({
         </div>
       )}
       {winning && (
-        <form
-          className='flex flex-col gap-2'
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run('won', (api, w) => api.transition(w, rel.id, rel.revision, 'won', { wonResultId: resultId.trim() }), () => setWinning(false));
-          }}
-        >
-          <p className='text-muted-foreground text-xs leading-relaxed'>{copy.wonHint}</p>
-          <Label htmlFor={`${headingId}-won`}>{copy.wonReference}</Label>
-          <Input id={`${headingId}-won`} value={resultId} onChange={(event) => setResultId(event.target.value)} maxLength={40} autoComplete='off' />
-          <div className='flex gap-2'>
-            <Button type='submit' variant='glass' size='sm' className='h-9' disabled={busy || !resultId.trim()}>{copy.confirm}</Button>
-            <Button type='button' variant='quiet' size='sm' className='h-9' onClick={() => setWinning(false)}>{copy.cancel}</Button>
-          </div>
-        </form>
+        <WonResultPicker
+          busy={busy}
+          onCancel={() => setWinning(false)}
+          onConfirm={(resultId) => void run('won', (api, w) => api.transition(w, rel.id, rel.revision, 'won', { wonResultId: resultId }), () => setWinning(false))}
+        />
       )}
       {rel.won && <p className='text-muted-foreground text-xs'>{copy.states.won} · {copy.provenance[rel.won.provenance ?? ''] ?? copy.provenance.unknown}</p>}
 

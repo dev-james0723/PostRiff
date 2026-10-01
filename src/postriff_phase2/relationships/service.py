@@ -451,7 +451,8 @@ def followup_event(item):
     """The notification/attention event for one due follow-up. Content-free: no name, note, interest or message text."""
     href = f"/app/inbox?filter=follow_ups&relationship={link_id(item['id'])}" + (f"&thread={link_id(item['threadId'])}" if item.get("threadId") else "")
     return {"event_type": EVENT, "dedupe_key": item["dedupeKey"], "entity_type": "relationship", "entity_id": item["id"],
-            "payload": {"title": "A follow-up is due", "reason": "Follow-up due", "href": href}}
+            # No English title: the bell shows the event label and the email digest the recipient's localized headline.
+            "payload": {"reason": "Follow-up due", "href": href}}
 
 
 def detector_events(cur, workspace_id, now):
