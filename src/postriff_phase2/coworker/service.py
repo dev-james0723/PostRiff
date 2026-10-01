@@ -296,12 +296,18 @@ class CoworkerService:
         `deadline` (monotonic), the turn's own time budget ends WRITER_SAVE_SECONDS before it."""
         started = {} if deadline is None else {"_started": deadline - WRITER_SAVE_SECONDS - REQUEST_SECONDS}
         try:
+            payload = {
+                "text": "Write one post for this week's plan from the material.", "material": weekly_operator.slot_brief(recipe, slot, state),
+                "idempotencyKey": key, "model": recipe.get("model"), "reasoning": "quick", "sourceIds": slot["sourceIds"],
+                "destinations": [{"platform": slot["platform"], "language": slot["language"], "channelId": slot["channelId"]}], "research": False,
+                "voiceMode": recipe.get("voiceMode", "neutral"), "timeZone": recipe["timeZone"]}
+            quote = self._slot_credit_quote(ideas, workspace_id, token, recipe, week, payload)
+            if quote.get("blocked"):
+                return {"status": "needs_input", "reason": quote["blocked"], "costState": quote.get("costState")}
+            if quote.get("quoteId"):
+                payload["creditQuoteId"] = quote["quoteId"]
             with skill_compiler.workflow_context("rafii-weekly-operator"):
-                ideas.turn(workspace_id, token, week["conversationId"], {
-                    "text": "Write one post for this week's plan from the material.", "material": weekly_operator.slot_brief(recipe, slot, state),
-                    "idempotencyKey": key, "model": recipe.get("model"), "reasoning": "quick", "sourceIds": slot["sourceIds"],
-                    "destinations": [{"platform": slot["platform"], "language": slot["language"], "channelId": slot["channelId"]}], "research": False,
-                    "voiceMode": recipe.get("voiceMode", "neutral"), "timeZone": recipe["timeZone"]}, **started)
+                ideas.turn(workspace_id, token, week["conversationId"], payload, **started)
             with self.hosted.connection_factory() as db, db.cursor() as cur:
                 cur.execute("SELECT id::text,status,artifact_hash FROM pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
                 run = cur.fetchone()
@@ -319,6 +325,43 @@ class CoworkerService:
         except AlphaError as error:
             return {"status": "failed", "reason": str(error)[:200]}
 
+    def _slot_credit_quote(self, ideas, workspace_id, token, recipe, week, payload):
+        """Managed-credit workspaces pay for every drafted slot through a credit quote (PRD R-COM-02, one cost authority).
+        The server issues it for this exact writer request at the current revision, never above what remains of the
+        week's owner-approved limit; a Free workspace has no managed writing at all. Legacy and free (non-paid) writers
+        need no quote. Returns {} (no quote needed), {"quoteId"}, or {"blocked": reason, "costState"}."""
+        ledger = getattr(ideas, "ledger", None)
+        if ledger is None or getattr(ideas, "repository", None) is None:
+            return {}   # a host without billing machinery drafts exactly as before
+        book = getattr(ledger, "credits", None)
+        mode = None
+        with ideas.repository.transaction(token, workspace_id) as (cur, _row, _actor):
+            ideas.ledger.ensure_entitlement(cur, workspace_id, None)
+            if hasattr(ideas.ledger, "growth_mode"):
+                mode = ideas.ledger.growth_mode(cur, workspace_id)
+            policy = book.policy(cur, workspace_id) if book is not None else None
+        if mode == "free":
+            return {"blocked": "Free plans don't include AI drafting. Write this post yourself, or upgrade to Creator to draft it.", "costState": "requires_upgrade"}
+        if not policy:
+            return {}
+        runtime = ideas._select_runtime(payload.get("model"))
+        if getattr(runtime, "cost_class", None) != "paid":
+            return {}
+        from ..credit_meter import millicredits
+        spent, limit = self._week_spend(workspace_id, week["id"]), int(recipe.get("maxCostUsdMicroPerWeek") or 0)
+        remaining = millicredits(max(0, limit - spent))
+        request = {k: v for k, v in payload.items() if k != "idempotencyKey"}
+        estimate = ideas.credit_requests.estimate(workspace_id, token, {"request": request, "operation": "turn", "conversationId": week["conversationId"]})
+        ceiling = int(estimate["ceilingMilliCredits"])
+        if ceiling > remaining:
+            return {"blocked": f"This post can use up to {ceiling/1000:.1f} credits and this week's limit has {remaining/1000:.1f} left. Raise the weekly credit limit or skip it.",
+                    "costState": "over_limit"}
+        if ceiling > int(estimate.get("availableMilliCredits") or 0):
+            return {"blocked": "Not enough credits for this post. Nothing was drafted or charged.", "costState": "insufficient_credits"}
+        quote = ideas.credit_requests.issue(workspace_id, token, {"request": payload, "operation": "turn", "conversationId": week["conversationId"],
+                                                                 "maxMilliCredits": ceiling, "expectedRevision": estimate["stateRevision"]})
+        return {"quoteId": quote["quoteId"], "maxMilliCredits": quote["maxMilliCredits"]}
+
     def _record_slot(self, repository, workspace_id, token, week_id, slot_id, result):
         def record(state_, _p):
             target = next(s for s in self._find_week(state_, week_id)["slots"] if s["id"] == slot_id)
@@ -330,6 +373,8 @@ class CoworkerService:
                 target["reason"] = result["reason"]
                 if result["status"] == "failed":
                     target["question"] = "Rafii couldn't draft this post. Try again, change the angle, or skip it."
+            if result.get("costState"):
+                target["costState"] = result["costState"]
             weekly_operator.root(state_)["revision"] += 1
         self._command_as(repository, workspace_id, token, record, "edit", "weekly.slot_drafted", week_id, {"status": result["status"]})
 

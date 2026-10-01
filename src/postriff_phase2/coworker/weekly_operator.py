@@ -29,6 +29,7 @@ MAX_SLOTS = 28
 DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 DEFAULT_HOURS = {"LinkedIn": 9, "X": 12, "Threads": 12, "Instagram": 18, "Facebook": 13, "TikTok": 19, "YouTube": 17, "Pinterest": 20, "Bluesky": 12}
 PERSONAL_TYPES = ("personal_reflection", "behind_the_scenes", "music_performance_teaching")
+FIRST_WEEK_PLATFORMS = ("Threads", "Instagram", "LinkedIn", "X", "Bluesky", "Mastodon", "Facebook")
 _ID = re.compile(r"^[a-z0-9_-]{4,64}$")
 
 
@@ -57,13 +58,22 @@ def validate_recipe(payload, state, zone_default="UTC"):
     if not goals:
         raise AlphaError("Give the week at least one goal.", 400)
     destinations = []
+    first_week = payload.get("firstWeek") is True
     for item in (payload.get("destinations") or [])[:8]:
-        channel = channels.get(item.get("channelId"))
-        if channel is None or channel.get("revoked"):
-            raise AlphaError("Choose connected accounts from this workspace.", 400)
         per_week = item.get("postsPerWeek", 3)
         if not isinstance(per_week, int) or isinstance(per_week, bool) or not 0 <= per_week <= 7:
             raise AlphaError("Posts per week are 0–7 per account.", 400)
+        if first_week and item.get("channelId") is None:
+            # A first week can be planned and drafted before any account is connected (PRD R-FWR-02): the slots
+            # stay draftable and say plainly that publishing waits for a connection. One platform, never a guess.
+            if item.get("platform") not in FIRST_WEEK_PLATFORMS or len(payload.get("destinations") or []) != 1:
+                raise AlphaError("Choose one supported platform for your first week.", 400)
+            destinations.append({"channelId": None, "platform": item["platform"], "account": None,
+                                 "language": _clean(item.get("language") or "en", 20), "postsPerWeek": per_week})
+            continue
+        channel = channels.get(item.get("channelId"))
+        if channel is None or channel.get("revoked"):
+            raise AlphaError("Choose connected accounts from this workspace.", 400)
         destinations.append({"channelId": channel["id"], "platform": channel.get("platform"), "account": channel.get("account"),
                              "language": _clean(item.get("language") or channel.get("language") or "en", 20), "postsPerWeek": per_week})
     if not destinations or sum(d["postsPerWeek"] for d in destinations) == 0:
@@ -94,7 +104,8 @@ def validate_recipe(payload, state, zone_default="UTC"):
             "campaignIds": campaign_ids, "sourceIds": source_ids, "planningDay": day, "planningHour": hour, "timeZone": zone,
             "voiceMode": "personalized" if payload.get("voiceMode") == "personalized" else "neutral", "reviewPolicy": "review",
             "expectImages": bool(payload.get("expectImages")), "useResearch": bool(payload.get("useResearch")),
-            "maxCostUsdMicroPerWeek": budget, "model": _clean(payload.get("model"), 80) or None}
+            "maxCostUsdMicroPerWeek": budget, "model": _clean(payload.get("model"), 80) or None,
+            **({"firstWeek": True} if first_week else {})}
 
 
 def save_recipe(state, payload, actor, now, recipe_id=None):
@@ -177,7 +188,8 @@ def plan_week(state, recipe, now, monday=None):
     for destination in recipe["destinations"]:
         count = destination["postsPerWeek"]
         days = [round(i * 7 / count) % 7 for i in range(count)] if count else []
-        ready, reason = _channel_ready(state, destination["channelId"], now)
+        unconnected = destination["channelId"] is None
+        ready, reason = (True, "") if unconnected else _channel_ready(state, destination["channelId"], now)
         for n, day in enumerate(days):
             # Weighted round-robin over the content mix, offset per platform so the week does not repeat itself.
             cursor = (index + _stable(destination["platform"], len(mix))) % max(1, len(mix))
@@ -190,7 +202,8 @@ def plan_week(state, recipe, now, monday=None):
                     "day": (monday + timedelta(days=day)).isoformat(), "localTime": when.strftime("%Y-%m-%dT%H:%M"), "timeZone": recipe["timeZone"],
                     "platform": destination["platform"], "language": destination["language"], "channelId": destination["channelId"], "account": destination.get("account"),
                     "contentType": content_type, "goal": goal, "angle": f"{goal} — {content_type.replace('_', ' ')}", "sourceIds": [source["id"]] if source else [],
-                    "status": "planned", "reason": None, "question": None, "variantId": None, "runId": None, "quality": None, "creative": None}
+                    "status": "planned", "reason": None, "question": None, "variantId": None, "runId": None, "quality": None, "creative": None,
+                    **({"publishBlocker": "channel_not_connected"} if unconnected else {})}
             if not ready:
                 slot["status"], slot["reason"] = "channel_unavailable", reason
             elif content_type in PERSONAL_TYPES:

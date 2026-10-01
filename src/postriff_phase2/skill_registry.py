@@ -119,6 +119,8 @@ def registered_tools():
     domain_tools.ensure_registered()
     from .coworker import agent_tools
     agent_tools.register()
+    from . import growth_v2_agent_tools   # RAFII Product Growth slices (first week, results, series, …)
+    growth_v2_agent_tools.register()
     return tool_adapter.REGISTRY
 
 
