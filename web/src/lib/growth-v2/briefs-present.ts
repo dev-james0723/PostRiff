@@ -5,7 +5,7 @@
  * Honesty rules the wording keeps: stored results are labelled stored (never "today's research"), unknown times say
  * unknown, an empty brief says so without inventing an opportunity, and nothing claims to be published or scheduled.
  */
-import type { BriefActionKind, BriefCurrent, BriefEffort, BriefItem, BriefReasonAction, BriefSource, SourceCoverage } from './briefs-types';
+import type { BriefActionKind, BriefCurrent, BriefEffort, BriefHandledItem, BriefItem, BriefReasonAction, BriefSource, SourceCoverage } from './briefs-types';
 
 export type LoopLocale = 'en' | 'zh-Hant';
 
@@ -62,6 +62,8 @@ const EN = {
   unverified: 'The change could not be confirmed. Refresh before trying again.',
   changed: 'The brief changed since you opened it. Review the current version.',
   viewOnly: 'You can read this brief; an editor acts on it.',
+  handled: 'Already handled',
+  handledNote: 'What you decided this week, and anything you marked not relevant recently. Restore brings an item back.',
   reasons: {
     not_now: 'Not now', already_covered: 'Already covered', too_much_effort: 'Too much effort', other: 'Other reason',
     wrong_topic: 'Wrong topic', wrong_audience: 'Wrong audience', wrong_platform: 'Wrong platform', low_quality_source: 'Low-quality source'
@@ -130,6 +132,8 @@ const ZH: Copy = {
   unverified: '未能確認這項變更。請重新整理後再試。',
   changed: '簡報在你開啟後已更新，請查看最新版本。',
   viewOnly: '你可以閱讀這份簡報；由編輯者處理。',
+  handled: '已處理',
+  handledNote: '你本週作出的決定，以及最近標示為不相關的項目。按「還原」可讓項目重新出現。',
   reasons: {
     not_now: '暫時不需要', already_covered: '已經談過', too_much_effort: '太費工夫', other: '其他原因',
     wrong_topic: '主題不對', wrong_audience: '受眾不對', wrong_platform: '平台不對', low_quality_source: '來源質素不佳'
@@ -219,4 +223,9 @@ export function outcomeSourceId(item: Pick<BriefItem, 'decision'>): string | nul
 /** The action body the server expects for the version the person saw: a stored edition by id, else its material digest. */
 export function actionTarget(edition: Pick<BriefCurrent['edition'], 'id' | 'materialDigest'>): { editionId?: string; materialDigest?: string } {
   return edition.id ? { editionId: edition.id } : { materialDigest: edition.materialDigest };
+}
+
+/** Already-handled items, bounded, newest decision first (the server orders them; the cap holds even if it did not). */
+export function handledItems(brief: Pick<BriefCurrent, 'edition'>): BriefHandledItem[] {
+  return (brief.edition?.handled ?? []).slice(0, 10);
 }

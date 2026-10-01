@@ -189,6 +189,7 @@ export function evidenceGroups(figure: ProofFigure | undefined): { label: string
 
 export function correctionText(entry: CorrectionEntry, copy: Copy): string {
   const label = copy.figure[entry.figure as FigureName] ?? entry.figure;
+  if (entry.restricted) return `${label}: ${copy.ownerOnly}`;
   const show = (value: unknown) => (value === null || value === undefined ? copy.unavailable : typeof value === 'object' ? JSON.stringify(value) : String(value));
   return entry.evidenceOnly ? `${label}: ${copy.evidence}` : `${label}: ${show(entry.before)} → ${show(entry.after)}`;
 }

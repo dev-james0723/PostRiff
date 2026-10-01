@@ -19,7 +19,7 @@ import { usePreferences } from '@/lib/preferences';
 import { formatDate } from '@/lib/time';
 import { errorCode, errorMessage, idempotencyKey, isFeatureDisabled } from '@/lib/growth-v2/request';
 import { useBrief, useBriefAction } from '@/lib/growth-v2/briefs-hooks';
-import { actionTarget, briefCopy, coverageLine, coverageNote, decisionLabel, itemStatus, outcomeSourceId, reasonCodes, relevanceText, safeHref, timeLine, visibleItems } from '@/lib/growth-v2/briefs-present';
+import { actionTarget, briefCopy, coverageLine, coverageNote, decisionLabel, handledItems, itemStatus, outcomeSourceId, reasonCodes, relevanceText, safeHref, timeLine, visibleItems } from '@/lib/growth-v2/briefs-present';
 import type { BriefActionInput, BriefCurrent, BriefItem, BriefReasonAction } from '@/lib/growth-v2/briefs-types';
 
 type Copy = ReturnType<typeof briefCopy>;
@@ -35,6 +35,7 @@ export function OpportunityBrief({ canEdit }: { canEdit: boolean }) {
   }
   const data = brief.data;
   const items = visibleItems(data);
+  const handled = handledItems(data);
   return (
     <Panel id='opportunity-brief' material='glass' title={copy.title} titleId='opportunity-brief-title' eyebrow={copy.items(items.length)} description={copy.description}>
       <ul className='flex flex-wrap gap-2' aria-label={copy.coverage}>
@@ -51,15 +52,28 @@ export function OpportunityBrief({ canEdit }: { canEdit: boolean }) {
                       description={data.dataState === 'unavailable' ? copy.emptyUnavailable : copy.emptyAvailable} />
       ) : (
         <ol className='flex flex-col gap-3'>
-          {items.map((item) => <li key={item.id}><BriefItemCard item={item} brief={data} canEdit={canEdit && data.canAct} copy={copy} /></li>)}
+          {items.map((item) => (
+            <li key={item.id}><BriefItemCard item={item} brief={data} target={actionTarget(data.edition)} canEdit={canEdit && data.canAct} copy={copy} /></li>
+          ))}
         </ol>
+      )}
+      {handled.length > 0 && (
+        <details className='text-sm'>
+          <summary className='rafii-focus min-h-11 cursor-pointer'>{copy.handled} ({handled.length})</summary>
+          <p className='text-muted-foreground py-2 text-xs'>{copy.handledNote}</p>
+          <ul className='flex flex-col gap-3'>
+            {handled.map((item) => (
+              <li key={item.id}><BriefItemCard item={item} brief={data} target={{ editionId: item.editionId }} canEdit={canEdit && data.canAct} copy={copy} /></li>
+            ))}
+          </ul>
+        </details>
       )}
       <p className='text-muted-foreground text-xs'>{copy.storedNote}{!data.canAct && ` ${copy.viewOnly}`}</p>
     </Panel>
   );
 }
 
-function BriefItemCard({ item, brief, canEdit, copy }: { item: BriefItem; brief: BriefCurrent; canEdit: boolean; copy: Copy }) {
+function BriefItemCard({ item, brief, target, canEdit, copy }: { item: BriefItem; brief: BriefCurrent; target: { editionId?: string; materialDigest?: string }; canEdit: boolean; copy: Copy }) {
   const action = useBriefAction();
   const [mode, setMode] = useState<'idle' | BriefReasonAction | 'accept'>('idle');
   const [failure, setFailure] = useState<string | null>(null);
@@ -93,7 +107,7 @@ function BriefItemCard({ item, brief, canEdit, copy }: { item: BriefItem; brief:
   async function run(body: Omit<BriefActionInput, 'idempotencyKey' | 'editionId' | 'materialDigest'>, intent: string) {
     setFailure(null);
     try {
-      const result = await action.mutateAsync({ itemId: item.id, body: { ...body, ...actionTarget(brief.edition), idempotencyKey: keyFor(intent) } });
+      const result = await action.mutateAsync({ itemId: item.id, body: { ...body, ...target, idempotencyKey: keyFor(intent) } });
       if (!result.verified) throw new Error(copy.unverified);
       keys.current.delete(intent);
       setMode('idle');

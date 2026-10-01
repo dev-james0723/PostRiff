@@ -74,6 +74,9 @@ export interface SourceCoverage {
   selected: number;
 }
 
+/** An item the person already decided on (this week, or marked not relevant recently), with the stored edition it is in. */
+export type BriefHandledItem = BriefItem & { editionId: string };
+
 export interface BriefEdition {
   id: string | null;
   persisted: boolean;
@@ -86,6 +89,7 @@ export interface BriefEdition {
   materialDigest: string;
   deliveredAt: number | null;
   items: BriefItem[];
+  handled?: BriefHandledItem[];
 }
 
 export interface BriefCurrent {

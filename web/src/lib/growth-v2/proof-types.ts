@@ -50,6 +50,8 @@ export interface CorrectionEntry {
   dataStateBefore?: string;
   dataStateAfter?: string;
   evidenceOnly?: boolean;
+  /** Cost corrections are owners-only: other members see that the figure changed, not the amounts. */
+  restricted?: boolean;
 }
 
 export interface ProofRevisionSummary {

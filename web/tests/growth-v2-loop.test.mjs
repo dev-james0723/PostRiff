@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionTarget, briefCopy, coverageLine, coverageNote, decisionLabel, itemStatus, loopLocale, outcomeSourceId, relevanceText, safeHref, timeLine, visibleItems } from '../src/lib/growth-v2/briefs-present.ts';
+import { actionTarget, briefCopy, coverageLine, coverageNote, decisionLabel, handledItems, itemStatus, loopLocale, outcomeSourceId, relevanceText, safeHref, timeLine, visibleItems } from '../src/lib/growth-v2/briefs-present.ts';
 import { appliedSummary, correctionText, decisionActions, evidenceGroups, figureText, FIGURE_ORDER, proofCopy, scopeText, usd } from '../src/lib/growth-v2/proof-present.ts';
 
 const item = (extra = {}) => ({ id: 'bi_1', source: 'listening', kind: 'question', title: 'How do adults keep a routine?', publishedAt: null, retrievedAt: 1_790_000_000,
@@ -87,6 +87,21 @@ test('proof figures: unavailable is never zero, exports stay separate, time clas
                /^Platform-reported: Unavailable · Your site or form: 2 lead · You declared: 0$/);
   assert.equal(usd(2_500_000), 'US$2.50');
   assert.deepEqual(FIGURE_ORDER.slice(0, 3), ['acceptedWork', 'verifiedPublications', 'assistedExports']);
+});
+
+test('handled items stay reachable, bounded, each with the stored edition to act on', () => {
+  const handled = Array.from({ length: 12 }, (_, n) => item({ id: `bi_h${n}`, editionId: `e${n}`, decision: { action: 'not_relevant', reasonCode: 'wrong_topic', outcomeRefs: [], createdAt: n } }));
+  const shown = handledItems({ edition: { items: [], handled } });
+  assert.equal(shown.length, 10);
+  assert.equal(itemStatus(shown[0]), 'set_aside');
+  assert.equal(decisionLabel(shown[0], briefCopy('zh-Hant')), '已標示為不相關 · 主題不對');
+  assert.deepEqual(handledItems({ edition: { items: [] } }), []);
+  for (const copy of [briefCopy('en'), briefCopy('zh-Hant')]) assert.ok(copy.handled && copy.handledNote);
+});
+
+test('a cost correction shows only that it changed to non-owners', () => {
+  assert.equal(correctionText({ figure: 'providerCost', restricted: true }, proofCopy('en')), 'AI and data service cost: Owners only');
+  assert.equal(correctionText({ figure: 'providerCost', restricted: true }, proofCopy('zh-Hant')), 'AI 及資料服務費用: 只限擁有者');
 });
 
 test('evidence groups, corrections and decisions', () => {
