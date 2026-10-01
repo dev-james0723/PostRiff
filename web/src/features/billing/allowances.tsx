@@ -25,6 +25,7 @@ import {
   type MeterMode,
   type MeterState
 } from './billing-model';
+import { useBillingCopy } from './use-copy-locale';
 
 /**
  * Motion budget (docs/postriff-motion-system.md §5.4): 40ms stagger (`--duration-stagger`) and the
@@ -36,7 +37,8 @@ const SEQUENCE_S = 0.3;
 const METER_BARS = 4;
 const BAR_S = Math.round((SEQUENCE_S - (METER_BARS - 1) * STAGGER_S) * 1000) / 1000;
 
-function Bar({ fill, warn, index, label, valueText }: { fill: number; warn: boolean; index: number; label: string; valueText: string }) {
+/** One meter bar; the credit meter (Pricing v2) draws with the same recipe. */
+export function Bar({ fill, warn, index, label, valueText }: { fill: number; warn: boolean; index: number; label: string; valueText: string }) {
   const reduce = useReducedMotion();
   // Only the first draw is staggered; a refetch that changes a value moves the bar at once.
   const [entered, setEntered] = useState(false);
@@ -167,33 +169,63 @@ function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
   );
 }
 
+/**
+ * Owner-only provider cost against the workspace's safety limit, in its own panel under Pricing v2 so US$ cost is
+ * never read as credits (spec §13.3: owner-only diagnostics stay separate from customer credit balances).
+ */
+export function CostGuardSection({ budget }: { budget: NonNullable<Usage['budget']> }) {
+  const copy = useBillingCopy();
+  return (
+    <section className='flex flex-col gap-3' aria-labelledby='cost-guard-heading'>
+      <div className='flex flex-wrap items-baseline gap-x-2 px-1'>
+        <h2 id='cost-guard-heading' className='text-foreground text-lg font-medium tracking-tight'>
+          {copy.costGuard.title}
+        </h2>
+        <span className='text-muted-foreground text-sm'>{copy.costGuard.ownerOnly}</span>
+      </div>
+      <Surface material='quiet' radius='card' padding='md' className='grid gap-3 sm:grid-cols-2'>
+        <CostGuard budget={budget} />
+        <p className='text-muted-foreground text-xs leading-relaxed sm:col-span-2'>{copy.costGuard.hint}</p>
+      </Surface>
+    </section>
+  );
+}
+
 export function Allowances({
   usage,
   channels,
   members,
   isOwner,
-  now
+  now,
+  only
 }: {
   usage: Usage;
   channels: UseQueryResult<{ channels: ChannelView[]; providers: ProviderView[] }>;
   members: UseQueryResult<{ members: Member[]; membership: Membership }>;
   isOwner: boolean;
   now: number;
+  /** Pricing v2 (Free, managed credits): only the plan's limits; usage is the credit meter or the Free preview. */
+  only?: 'capacity';
 }) {
   const terms = currentTerms(usage);
   const ent = usage.entitlement;
+  const capacityOnly = only === 'capacity';
 
   const meters: { label: string; mode: MeterMode; state: MeterState; onRetry?: () => void; over?: ReactNode }[] = [
-    {
-      label: 'AI writing batches',
-      mode: 'remaining',
-      state: meterState({ mode: 'remaining', value: ent.writingBatchesRemaining, total: allowanceTotal(terms, 'writingBatches') })
-    },
-    {
-      label: 'Media credits',
-      mode: 'remaining',
-      state: meterState({ mode: 'remaining', value: ent.mediaCreditsRemaining, total: allowanceTotal(terms, 'mediaCredits') })
-    },
+    ...(capacityOnly
+      ? []
+      : [
+          {
+            label: 'AI writing batches',
+            mode: 'remaining' as const,
+            state: meterState({ mode: 'remaining', value: ent.writingBatchesRemaining, total: allowanceTotal(terms, 'writingBatches') })
+          },
+          {
+            label: 'Media credits',
+            mode: 'remaining' as const,
+            state: meterState({ mode: 'remaining', value: ent.mediaCreditsRemaining, total: allowanceTotal(terms, 'mediaCredits') })
+          }
+        ]),
     {
       label: 'Connected accounts',
       mode: 'used',
@@ -229,15 +261,15 @@ export function Allowances({
     }
   ];
 
-  const reset = resetText(planTimeline(usage, now), ent.resetsAt);
+  const reset = capacityOnly ? null : resetText(planTimeline(usage, now), ent.resetsAt);
 
   return (
-    <section className='flex flex-col gap-3' aria-labelledby='usage-heading' data-tour='billing-allowances'>
+    <section className='flex flex-col gap-3' aria-labelledby='usage-heading' data-tour={capacityOnly ? 'billing-limits' : 'billing-allowances'}>
       <div className='flex items-center gap-1 px-1'>
         <h2 id='usage-heading' className='text-foreground text-lg font-medium tracking-tight'>
-          Usage
+          {capacityOnly ? 'Plan limits' : 'Usage'}
         </h2>
-        {usage.overage === 'stop' && (
+        {!capacityOnly && usage.overage === 'stop' && (
           <InfoTip label='About running out' description='When an allowance runs out, drafting pauses. You are never charged for going over.' />
         )}
         {reset && <span className='text-muted-foreground ml-auto text-sm'>{reset}</span>}
@@ -250,7 +282,7 @@ export function Allowances({
           <span className='text-foreground'>Storage</span>
           <span className='text-muted-foreground tabular-nums'>{ent.storageMb.toLocaleString()} MB</span>
         </div>
-        {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
+        {!capacityOnly && isOwner && usage.budget && <CostGuard budget={usage.budget} />}
       </Surface>
     </section>
   );
