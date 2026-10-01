@@ -25,7 +25,14 @@ apply the same plan). This program's runner follows the same pattern with the al
 | 1 | `047_inbox_operational_sync.sql` | Inbox v1 | `bcb9be5b…a369553` | 044 | this release |
 | 2 | `048_pricing_credit_catalog_v2.sql` | Pricing v2 | `a36357de…792ba0` | 020–022 | this release (guarded readers tolerate its absence) |
 | 3 | `050_free_lifecycle_bootstrap.sql` | Pricing v2 | `f9aad0a0…b1e7d` | 048 | this release |
-| 4–10 | `080_*` … `087_*` | this program | _filled per slice_ | 047/048 where stated | this release |
+| 4 | `080_customer_results.sql` | this program (results) | `846d2be4…53958e0ed1f` | 001–047 | this release |
+| 5 | `081_relationships.sql` | this program (relationships) | `0d2b181d…d76f73a33` | 047 (Inbox threads), 080 (won FK; idempotent re-apply adds it if 080 came later) | this release |
+| 6 | `083_visual_packs.sql` | this program (visual pack) | `3aedc1a4…d137955c` | 001–047 | this release |
+| 7 | `087_source_uploads.sql` | this program (intake) | `0acc1a3f…b5647b65` | 001–047 | this release |
+| — | 082 | not used: series live in workspace planning state (D-021) | — | — | — |
+| — | 084 | briefs/proof (W-LOOP), pending | _pending_ | — | — |
+
+Full SHA-256 values are recorded in `DECISIONS.md` and must match the files byte for byte at runner time.
 
 Rules: never edit an applied file; never reorder; staging first; snapshot before and after; verify forced RLS and grants
 after each; the previous deployment must keep working with the new schema (all changes additive).
@@ -47,6 +54,11 @@ after each; the previous deployment must keep working with the new schema (all c
 | `RAFII_VISUAL_PACK_ENABLED` | server | visual packs | packs/exports kept |
 | `RAFII_OPPORTUNITY_BRIEF_ENABLED`, `RAFII_PROOF_V2_ENABLED` | server | briefs, proof revisions, strategy decisions | no new editions/revisions |
 
+Other release prerequisites (no flag): the private Supabase Storage bucket `rafii-source-uploads` (size limit
+≤ 30,000,000 bytes; `application/pdf`, `audio/wav`, `audio/mpeg`, `audio/mp4`, `audio/ogg`) must exist before
+`RAFII_SOURCE_UPLOADS_ENABLED`; the Python functions need `pypdf==6.19.0` (in `requirements.txt`); the bundled Noto Sans
+TC fonts (~11.5 MB, SIL OFL) ship in both Python functions so voice can render carousels too.
+
 ## 4. Activation manifest (to be completed per approval)
 
 For each capability: project/environment, migration filenames + checksums, source SHA, flags, workspace allowlist,
@@ -61,6 +73,11 @@ is active until its row has an approval reference.
 | First Week Ready | production | internal workspace first | managed credits | — | not_started |
 | Raw audio transcription | production | — | provider + budget | — | blocked (James) |
 | First-party results receiver | production | one customer-like workspace | none | — | not_started |
+| Raw PDF/caption intake | production | internal workspace first | none (local parsing) | — | not_started (bucket needed) |
+| Relationships & follow-ups | production | internal workspace first | none (reminders through the existing outbox) | — | not_started |
+| Signature Series | production | internal workspace first | managed credits for Rafii drafting only | — | not_started |
+| Visual packs (export only) | production | internal workspace first | none (server rendering) | — | not_started |
+| Carousel queueing | production | — | a verified multi-image publisher | — | blocked (no verified provider) |
 
 ## 5. Rollback
 
