@@ -207,7 +207,7 @@ function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
       {view.missingContext.includes('audience') && (
         <label className='flex flex-col gap-1 text-sm'>
           Who are they for?
-          <input className={FIELD} required maxLength={300} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Adult piano beginners' />
+          <input className={FIELD} required maxLength={300} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Busy small-business owners' />
         </label>
       )}
       <Button type='submit' variant='action' className='self-start' disabled={!canEdit || save.isPending}>
