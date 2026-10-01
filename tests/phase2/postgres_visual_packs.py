@@ -373,20 +373,26 @@ refused(lambda: packs.list(wid, "one", cursor="not-a-cursor"), 400)
 check("an emoji draft prepares with its glyph finding instead of tofu", any(f["code"] == "missing_glyphs" for s in packs.get(wid, "one", seen[0])["revision"]["checks"]["slides"]
                                                                             for f in s["findings"]))
 
-# --- the bounded background step purges renders nobody opens ---------------------------------------------------------------
+# --- opening a pack purges its stale renders and reads back; the cron step covers packs nobody opens -----------------------
 idle = vp_jobs.tick(service, time.monotonic() + 10)
-tick_pack = packs.prepare(wid, "one", {"idempotencyKey": "prep-tick-0001", "variantId": V_EN})
-tick_id, tick_slides = tick_pack["pack"]["id"], tick_pack["revision"]["slides"]
-packs.edit(wid, "one", tick_id, {"idempotencyKey": "edit-tick-0001", "expectedRevision": 1,
-                                 "slides": [{"key": tick_slides[0]["key"], "imageAssetId": PHOTO2}]
-                                 + [{"key": s["key"], "text": s["text"] or "Written by the person."} for s in tick_slides[1:]]})
-packs.render(wid, "one", tick_id, {"expectedRevision": 2})
+photo_packs = []
+for name in ("open", "tick"):
+    made = packs.prepare(wid, "one", {"idempotencyKey": f"prep-{name}-0001", "variantId": V_EN})
+    made_slides = made["revision"]["slides"]
+    packs.edit(wid, "one", made["pack"]["id"], {"idempotencyKey": f"edit-{name}-0001", "expectedRevision": 1,
+                                                "slides": [{"key": made_slides[0]["key"], "imageAssetId": PHOTO2}]
+                                                + [{"key": s["key"], "text": s["text"] or "Written by the person."} for s in made_slides[1:]]})
+    packs.render(wid, "one", made["pack"]["id"], {"expectedRevision": 2})
+    photo_packs.append(made["pack"]["id"])
 rendered_objects = len(objects.under(wid))
 service.delete_media(wid, "one", service.repository.get(wid, "one")["revision"], PHOTO2)
+opened = packs.get(wid, "one", photo_packs[0])
+check("opening a pack purges its renders of a deleted image and reads back", rendered_objects == 12 and opened["revision"]["render"]["available"] is False
+      and opened["revision"]["facts"]["purgedAt"] and len(objects.under(wid)) == 6 and opened["handoff"]["assistedExport"]["available"] is False)
 swept = vp_jobs.tick(service, time.monotonic() + 10)
 again = vp_jobs.tick(service, time.monotonic() + 10)
-check("cron step purges a deleted image's renders once, and idles otherwise", idle == {"status": "ok", "workspaces": 0, "purged": 0}
-      and rendered_objects == 6 and swept == {"status": "ok", "workspaces": 1, "purged": 1} and objects.under(wid) == []
+check("cron step purges the unopened pack once, and idles otherwise", idle == {"status": "ok", "workspaces": 0, "purged": 0}
+      and swept == {"status": "ok", "workspaces": 1, "purged": 1} and objects.under(wid) == []
       and again == {"status": "ok", "workspaces": 0, "purged": 0}, (idle, swept, again))
 
 # --- account deletion helper removes every rendered object (rows cascade with the workspace) ------------------------------
@@ -394,7 +400,7 @@ second_pack = packs.prepare(wid, "one", {"idempotencyKey": "prep-final-0001", "v
 packs.edit(wid, "one", second_pack["pack"]["id"], {"idempotencyKey": "edit-final-0001", "expectedRevision": 1, "caption": "Final caption.",
                                                    "slides": [{"key": s["key"], "text": s["text"] or "Written by the person."} for s in second_pack["revision"]["slides"]]})
 packs.render(wid, "one", second_pack["pack"]["id"], {"expectedRevision": 2})
-check("purge_workspace removes every rendered object", len(objects.under(wid)) == 6 and vp_service.purge_workspace(service, wid) == 24 and objects.under(wid) == [])
+check("purge_workspace removes every rendered object", len(objects.under(wid)) == 6 and vp_service.purge_workspace(service, wid) == 30 and objects.under(wid) == [])
 
 print(json.dumps({"status": "pass", "execution": "disposable PostgreSQL; in-memory storage endpoint behind the real SupabaseStorage adapter (synthetic)",
                   "acceptance": ["AC22", "AC23", "AC29", "AC30"], "checks": passed}, ensure_ascii=False))

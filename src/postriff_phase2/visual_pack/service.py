@@ -356,8 +356,9 @@ class VisualPackService:
         with self._tx(token, workspace_id, "read") as (cur, _principal, state):
             view = self._view(cur, workspace_id, state, pack_id)
             stale = self._stale_renders(cur, workspace_id, state, view["pack"]["id"])
-        if stale:
-            self._purge(workspace_id, token, stale)
+        if stale and self._purge(workspace_id, token, stale):
+            with self._tx(token, workspace_id, "read") as (cur, _principal, state):   # read back what is left
+                view = self._view(cur, workspace_id, state, pack_id)
         return view
 
     def _view(self, cur, workspace_id, state, pack_id, revision=None):
