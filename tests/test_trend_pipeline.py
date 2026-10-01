@@ -177,8 +177,9 @@ class DurablePipeline(unittest.TestCase):
 
     def test_event_window_anchor_handles_hour_rollover(self):
         seed = contracts.instant(self.cutoff)
-        self.assertEqual(self._completed_hour(seed + timedelta(minutes=59)), seed)
-        self.assertEqual(self._completed_hour(seed + timedelta(hours=1, minutes=1)), seed + timedelta(hours=1))
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(minutes=59))), seed)
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(hours=1, minutes=1))),
+                         seed + timedelta(hours=1))
 
     def test_a_atomic_ingest_to_receipt_projection_retry_and_future_cutoff(self):
         with self.store.transaction() as cur:
