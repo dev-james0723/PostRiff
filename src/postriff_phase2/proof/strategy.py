@@ -44,9 +44,10 @@ def _label(value):
 
 # --- proposals ---------------------------------------------------------------------------------------------------------
 def proposals(state, workspace_id, brief_actions, now):
-    """At most three proposals, deterministic for the same records: a measured experiment result that was never
+    """Every candidate proposal, deterministic for the same records: measured experiment results that were never
     decided, then ideas the person saved from a brief. Each has a stable id, so a rejected or revoked proposal is
-    recognised and never offered again."""
+    recognised and never offered again; the caller skips decided ids before applying the MAX_PROPOSALS cap, so old
+    decisions never crowd out new candidates."""
     from ..coworker import growth_loop
     goal = growth_loop.active_goal(state)
     goal_id = goal["id"] if goal else None
@@ -75,7 +76,7 @@ def proposals(state, workspace_id, brief_actions, now):
                     "statement": _clean(f"Plan one post next week from the saved idea “{_clean(source.get('title'), 80)}”.", 240),
                     "scope": {"goalId": goal_id, "channelId": action.get("channelId"), "language": None, "contentType": None},
                     "basis": {"briefActionId": action["id"], "sourceId": source_id, "itemId": action.get("itemId")}})
-    return out[:MAX_PROPOSALS]
+    return out
 
 
 # --- the decision state machine ----------------------------------------------------------------------------------------

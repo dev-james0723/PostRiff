@@ -54,6 +54,8 @@ def register():
                 "edition": {k: edition[k] for k in ("id", "persisted", "editionKey", "revision", "materialDigest")},
                 "items": untrusted("EXTERNAL_SOURCE", [{k: i.get(k) for k in ("id", "source", "kind", "title", "evidence", "publishedAt", "retrievedAt", "coverage",
                                                                                "relevance", "angle", "effort", "action", "decision")} for i in edition["items"]]),
+                # Decided items (this week, or "not relevant" recently) with the edition to act on, e.g. to restore one.
+                "handled": untrusted("EXTERNAL_SOURCE", [{k: i.get(k) for k in ("id", "editionId", "source", "title", "decision")} for i in edition.get("handled") or []]),
                 "note": "Stored results only; nothing here is today's research or a prediction of results."}
 
     @tool_adapter.register(contracts.ToolSpec("brief_action", contracts.MUTATE_REVERSIBLE, "edit",

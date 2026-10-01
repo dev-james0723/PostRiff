@@ -232,6 +232,56 @@ class StrategyTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "too_many_active_decisions")
 
 
+class ReviewFixesTest(unittest.TestCase):
+    def test_proposals_are_not_capped_before_known_ids_are_skipped(self):
+        state = workspace()
+        state["coworker"]["growthLoop"]["experiments"] = [experiment(id=f"ge_{n}", updatedAt=NOW - n) for n in range(4)]
+        actions = [{"id": f"act{n}", "action": "save_idea", "outcomeRefs": [{"type": "source", "id": "src1"}]} for n in range(2)]
+        candidates = strategy.proposals(state, "w1", actions, NOW)
+        self.assertEqual(len(candidates), 6)                                  # the service applies the cap after skipping decided ids
+        self.assertEqual(len({p["id"] for p in candidates}), 6)
+
+    def test_oversized_counts_keep_exact_totals_and_short_flagged_evidence(self):
+        many = [f"{n:036d}" for n in range(model.EVIDENCE_LIMIT)]
+        figures = {name: model.figure(len(many), definition="d", evidence={"a": many, "b": many, "c": many}) for name in model.FIGURES}
+        counts = {"definitionVersion": model.DEFINITION_VERSION, "frequency": "weekly", "figures": figures, "padding": "x" * model.MAX_COUNTS_BYTES}
+        bounded = model.bounded(counts)
+        self.assertTrue(all(len(ids) == 10 for f in bounded["figures"].values() for ids in f["evidence"].values()))
+        self.assertTrue(all(f["evidenceTruncated"] and f["value"] == model.EVIDENCE_LIMIT for f in bounded["figures"].values()))
+        small = {"definitionVersion": "v", "frequency": "weekly", "figures": {"acceptedWork": model.figure(1, definition="d", evidence={"a": ["x"]})}}
+        self.assertEqual(model.bounded(copy.deepcopy(small)), small)          # under the bound nothing changes
+
+    def test_corrections_record_large_values_as_changed(self):
+        big = {"provider_native": None, "user_declared": {"counts": {f"type_{n}": n for n in range(60)}}}
+        before = counts(outcomes=model.figure(None, definition="d", data_state="unavailable"))
+        after = counts(outcomes=model.figure(big, definition="d", evidence={"resultIds": ["r1"]}))
+        [entry] = [e for e in model.corrections(before, after) if e["figure"] == "outcomes"]
+        self.assertEqual(entry["after"], {"changed": True})
+        self.assertIsNone(entry["before"])
+
+    def test_proof_service_exposes_enabled_with_the_flag_semantics(self):
+        from postriff_phase2.proof import service as proof_service
+        self.assertTrue(proof_service.enabled({"RAFII_PROOF_V2_ENABLED": "on"}))
+        self.assertFalse(proof_service.enabled({"RAFII_PROOF_V2_ENABLED": "off"}))
+        with mock.patch.object(flags, "_values", {"RAFII_PROOF_V2_ENABLED": "1"}):
+            self.assertTrue(proof_service.enabled())
+        with mock.patch.object(flags, "_values", {}):
+            self.assertFalse(proof_service.enabled())
+
+    def test_non_owners_never_see_cost_in_corrections_or_watermarks(self):
+        from postriff_phase2.proof.service import ProofService
+        correction = [{"figure": "providerCost", "before": {"actualUsdMicro": 1}, "after": {"actualUsdMicro": 9}},
+                      {"figure": "verifiedPublications", "before": 1, "after": 2}]
+        watermark = {"queue": 1.0, "usage": 2.0}
+        hidden, mark = ProofService._redact_meta(correction, watermark, owner=False)
+        self.assertEqual(hidden, [{"figure": "providerCost", "restricted": True}, correction[1]])
+        self.assertEqual(mark, {"queue": 1.0})
+        self.assertEqual(ProofService._redact_meta(correction, watermark, owner=True), (correction, watermark))
+        redacted = ProofService._redact({"figures": {"providerCost": {"value": {"actualUsdMicro": 9}}}, "sourceWatermark": {"usage": 2.0, "queue": 1.0}}, False)
+        self.assertEqual(redacted["figures"]["providerCost"]["dataState"], "restricted")
+        self.assertEqual(redacted["sourceWatermark"], {"queue": 1.0})
+
+
 class PlanningIntegrationTest(unittest.TestCase):
     """planning_context and plan_week consume decisions only with RAFII_PROOF_V2_ENABLED; identity and voice never change."""
 

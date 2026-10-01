@@ -261,8 +261,25 @@ assert {a["outcomeRefs"][0]["id"] for a in history["actions"] if a["outcomeRefs"
 assert sql("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s AND event='brief.action'", wid)[0][0] == 4
 assert sql("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind='brief.item_action'", wid)[0][0] == 4
 refused(lambda: briefs.edition(wid, "editor", edition_id), 404)          # a brief belongs to its recipient
+# Decided items stay reachable after they leave the open list: the saved ideas keep their outcome link, and a
+# "not relevant" item can be restored from the stored edition it came from.
+handled = {i["sourceRef"]: i for i in after["edition"]["handled"]}
+assert set(handled) == {"L1", f"{radar_run}:R1"}, after["edition"]["handled"]
+assert handled["L1"]["editionId"] == edition_id and handled["L1"]["decision"]["action"] == "save_idea"
+assert handled["L1"]["decision"]["outcomeRefs"] == [{"type": "source", "id": source_id}]
+assert handled[f"{radar_run}:R1"]["decision"]["outcomeRefs"] == [{"type": "source", "id": radar_source}]
+L2 = next(i for i in after["edition"]["items"] if i["sourceRef"] == "L2")
+briefs.action(wid, "owner", L2["id"], {"action": "not_relevant", "reasonCode": "wrong_topic", "idempotencyKey": "nr-l2-0000001", "materialDigest": after["edition"]["materialDigest"]})
+hidden = briefs.current(wid, "owner")
+assert "L2" not in {i["sourceRef"] for i in hidden["edition"]["items"]}
+l2 = next(i for i in hidden["edition"]["handled"] if i["sourceRef"] == "L2")
+assert (l2["decision"]["action"], l2["decision"]["reasonCode"]) == ("not_relevant", "wrong_topic") and l2["editionId"] != edition_id
+briefs.action(wid, "owner", l2["id"], {"action": "restore", "idempotencyKey": "restore-l2-0001", "editionId": l2["editionId"]})
+back = briefs.current(wid, "owner")
+assert "L2" in {i["sourceRef"] for i in back["edition"]["items"]} and all(i["sourceRef"] != "L2" for i in back["edition"]["handled"])
+assert sql("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s AND event='brief.action'", wid)[0][0] == 6
 assert not PAID.called
-passed("actions keep reason codes and outcome sources; replay, key conflict, version conflict, recipient-only reads, viewer and cross-tenant refusals")
+passed("actions keep reason codes and outcome sources; decided items stay reachable (outcome link, restore); replay, key and version conflicts, recipient-only reads, viewer and cross-tenant refusals")
 
 # === AC26 / AC34: proof revisions reconcile to evidence; late data appends; prior kept; immature and in-progress =======
 clock[0] = at(NY, 2026, 10, 14, 12, 0)   # Wednesday; the latest completed NY week is Mon 5 – Mon 12 October
@@ -278,7 +295,9 @@ def fixtures(state):
          "verification": {"at": week_start + DAY + 600}, "manifest": {"channelId": "ch1", "variantId": "v-job"}},
         {"id": "job-failed", "state": "failed", "providerReference": None, "approvedAt": week_start + DAY, "manifest": {"channelId": "ch1", "variantId": "v-failed"}},
         {"id": "job-next-week", "state": "verified", "providerReference": "p3", "verification": {"at": week_start + 8 * DAY}, "manifest": {"channelId": "ch1"}}]
-    state["phase2"]["reviews"] = [{"id": "rev1", "state": "approved", "approvedAt": week_start + 2 * DAY, "variantId": "v-review"}]
+    # A Queue review as Phase2Store writes it (status, manifest); its approval is counted through the job it created.
+    state["phase2"]["reviews"] = [{"id": "rev1", "status": "approved", "manifest": {"variantId": "v-job", "channelId": "ch1"}, "digest": "d" * 64,
+                                   "createdAt": week_start + DAY}]
     state["coworker"]["weekly"]["weeks"] = [{"id": "wk_fixture", "recipeId": recipe["id"], "weekOf": "2026-10-05", "state": "ready_for_review", "slots": [
         {"id": "sl_accepted", "status": "accepted", "variantId": "v-slot", "acceptedAt": week_start + DAY, "localTime": "2026-10-06T09:00", "timeZone": "America/New_York"},
         {"id": "sl_blocked", "status": "needs_source", "localTime": "2026-10-08T09:00", "timeZone": "America/New_York"},
@@ -299,11 +318,18 @@ with connection() as db:
                                      VALUES(%s,%s,'draft','accepted_draft',%s,%s,480,%s,%s,'raffi_default','raffi-default-v1',%s,'time-back-v1',to_timestamp(%s)) RETURNING id::text""",
                                   (wid, USERS["owner"], "ref-" + name, hashlib.sha256(name.encode()).hexdigest(), active_seconds, saved_seconds, confidence,
                                    week_start + 2 * DAY)).fetchone()[0]
-    cost = {}
-    for name, state_name, actual, estimated in (("actual", "actual", 1200, 1500), ("unknown", "estimated_unknown", None, 5000)):
-        cost[name] = db.execute("""INSERT INTO public.pr_usage_ledger(workspace_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,idempotency_key,at)
-                                   VALUES(%s,'settle','text_model','fixture','fixture-model',%s,%s,%s,%s,to_timestamp(%s)) RETURNING id::text""",
-                                (wid, estimated, actual, state_name, "settle-" + name, week_start + 3 * DAY)).fetchone()[0]
+    # The usage ledger as billing.settle writes it: a reservation, then `actual` (completed), `released` (failed, the
+    # provider cost still booked) or `estimated_unknown` (outcome unknown until reconciled).
+    reservations, cost = {}, {}
+    for name in ("completed", "failed", "unknown"):
+        reservations[name] = db.execute("""INSERT INTO public.pr_usage_ledger(workspace_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,idempotency_key,at)
+                                           VALUES(%s,'reserve','text_model','fixture','fixture-model',5000,'estimated',%s,to_timestamp(%s)) RETURNING id::text""",
+                                        (wid, "reserve-" + name, week_start + 3 * DAY - 60)).fetchone()[0]
+    for name, reservation, kind, state_name, actual in (("actual", "completed", "settle", "actual", 1200), ("released", "failed", "release", "released", 300),
+                                                        ("unknown", "unknown", "settle", "estimated_unknown", None)):
+        cost[name] = db.execute("""INSERT INTO public.pr_usage_ledger(workspace_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,
+                                   idempotency_key,at) VALUES(%s,%s,%s,'text_model','fixture','fixture-model',5000,%s,%s,%s,to_timestamp(%s)) RETURNING id::text""",
+                                (wid, reservations[reservation], kind, actual, state_name, "settle-" + name, week_start + 3 * DAY)).fetchone()[0]
 proofs._modules.update({"postriff_phase2.visual_pack.service": None, "postriff_phase2.results.service": None})   # slices not present: unavailable, never zero
 first = proofs.refresh(wid, "owner", {"frequency": "weekly"})
 assert first["appended"] and first["revision"] == 1 and first["verified"], first
@@ -311,15 +337,16 @@ proof = first["proof"]
 figures = proof["latest"]["counts"]["figures"]
 assert proof["proofId"] == model.proof_id(wid, "weekly", week_start) and proof["timeZone"] == "America/New_York" and proof["timeZoneSource"] == "recipe"
 assert (proof["periodStart"], proof["periodEnd"]) == (week_start, at(NY, 2026, 10, 12))
-assert figures["acceptedWork"]["value"] == 3 and figures["acceptedWork"]["evidence"]["variantIds"] == ["v-job", "v-review", "v-slot"], figures["acceptedWork"]
+assert figures["acceptedWork"]["value"] == 2 and figures["acceptedWork"]["evidence"]["variantIds"] == ["v-job", "v-slot"], figures["acceptedWork"]
+assert figures["acceptedWork"]["approved"] == 1                                                         # the approved job; unused or failed drafts excluded
 assert figures["verifiedPublications"]["value"] == 1 and figures["verifiedPublications"]["evidence"]["jobIds"] == ["job-verified"]
 assert figures["unresolvedSlots"]["value"] == 1 and figures["unresolvedSlots"]["evidence"]["slotIds"] == ["sl_blocked"]
 assert figures["assistedExports"] == {**figures["assistedExports"], "value": None, "dataState": "unavailable", "reason": "visual_pack_unavailable"}
 assert figures["outcomes"]["value"] is None and figures["outcomes"]["reason"] == "results_unavailable"
 assert figures["timeBack"]["value"] == [{"confidence": "estimated", "outcomes": 1, "savedSeconds": 480}, {"confidence": "measured", "outcomes": 1, "savedSeconds": 360}]
 assert figures["timeBack"]["evidence"] == {"estimatedLedgerIds": [ledger["estimated"]], "measuredLedgerIds": [ledger["measured"]]}
-assert figures["providerCost"]["value"] == {"actualUsdMicro": 1200, "actualEntries": 1, "unknownEntries": 1, "unknownReservedEstimateUsdMicro": 5000}
-assert figures["providerCost"]["evidence"] == {"actualLedgerIds": [cost["actual"]], "unknownLedgerIds": [cost["unknown"]]}
+assert figures["providerCost"]["value"] == {"actualUsdMicro": 1500, "actualEntries": 2, "unknownEntries": 1, "unknownReservedEstimateUsdMicro": 5000}
+assert figures["providerCost"]["evidence"] == {"actualLedgerIds": sorted([cost["actual"], cost["released"]]), "unknownLedgerIds": [cost["unknown"]]}
 assert proof["latest"]["dataState"] == "partial" and not proof["maturity"]["mature"]                     # AC34: not matured yet
 assert proof["latest"]["counts"]["sourceWatermark"]["queue"] == week_start + DAY + 600
 again = proofs.refresh(wid, "owner", {"frequency": "weekly"})
@@ -367,10 +394,29 @@ refused(lambda: proofs.refresh(wid, "owner", {"frequency": "weekly", "periodStar
 refused(lambda: proofs.refresh(wid, "editor", {"frequency": "weekly"}), 403)
 editor_view = proofs.get(wid, "editor", proof["proofId"])["proof"]
 assert editor_view["latest"]["counts"]["figures"]["providerCost"] == {**editor_view["latest"]["counts"]["figures"]["providerCost"], "value": None, "dataState": "restricted"}
-assert proofs.get(wid, "owner", proof["proofId"])["proof"]["latest"]["counts"]["figures"]["providerCost"]["value"]["actualUsdMicro"] == 1200
+assert proofs.get(wid, "owner", proof["proofId"])["proof"]["latest"]["counts"]["figures"]["providerCost"]["value"]["actualUsdMicro"] == 1500
 refused(lambda: proofs.get(wid, "other", proof["proofId"]), 403)
 refused(lambda: proofs.get(wid2, "other", proof["proofId"]), 404)
 passed("AC34 in-progress periods are unavailable, immature ones partial; assisted exports and outcomes stay separate; cost is owner-only")
+
+# A later reconciliation finalizes the unknown cost: it belongs to the period of the settlement it replaces (late data, a
+# new revision there), the unknown entry stops counting, nothing is counted twice; non-owners never see the amounts.
+with connection() as db:
+    db.execute("""INSERT INTO public.pr_usage_ledger(workspace_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,idempotency_key,at)
+                  VALUES(%s,%s,'settle','text_model','fixture','fixture-model',5000,4200,'actual','reconcile-fixture',to_timestamp(%s))""",
+               (wid, reservations["unknown"], clock[0]))
+reconciled = proofs.refresh(wid, "owner", {"frequency": "weekly"})
+cost_figure = reconciled["proof"]["latest"]["counts"]["figures"]["providerCost"]
+assert reconciled["appended"] and reconciled["revision"] == 4 and reconciled["proof"]["latest"]["reason"] == "late_data"
+assert cost_figure["value"] == {"actualUsdMicro": 5700, "actualEntries": 3, "unknownEntries": 0, "unknownReservedEstimateUsdMicro": 0} and cost_figure["dataState"] == "available"
+assert [e for e in reconciled["proof"]["latest"]["correction"] if e["figure"] == "providerCost"][0]["after"]["actualUsdMicro"] == 5700
+editor_view = proofs.get(wid, "editor", proof["proofId"])["proof"]
+assert {"figure": "providerCost", "restricted": True} in editor_view["latest"]["correction"] and "usage" not in editor_view["latest"]["sourceWatermark"]
+assert all(e.get("restricted") or e["figure"] != "providerCost" for r in editor_view["revisions"] for e in r["correction"])
+editor_revision = proofs.revision(wid, "editor", proof["proofId"], "4")["revision"]
+assert {"figure": "providerCost", "restricted": True} in editor_revision["correction"] and "usage" not in editor_revision["sourceWatermark"]
+assert "actualUsdMicro" not in json.dumps(editor_view) and "actualUsdMicro" not in json.dumps(editor_revision)
+passed("reconciled unknown cost moves to actual in its own period without double counting; cost corrections and watermarks stay owner-only")
 
 # === AC27: proposals, versioned decisions, applied in the next plan, rejected/revoked never recur ======================
 listing = proofs.strategy(wid, "owner")
@@ -416,6 +462,16 @@ passed("AC27 accepted and edited decisions are versioned, scoped and recorded as
 before_rows = sql("SELECT count(*) FROM public.pr_strategy_decisions WHERE workspace_id=%s", wid)[0][0]
 proofs.refresh(wid, "owner", {"frequency": "weekly", "periodStart": "2026-10-05"})
 assert sql("SELECT count(*) FROM public.pr_strategy_decisions WHERE workspace_id=%s", wid)[0][0] == before_rows   # rejected/accepted never re-proposed
+# Decided proposals never crowd out a new one: a fourth candidate (ordered after the three decided ones) is offered.
+patch_state(wid, lambda s: s["sources"].append({"id": "src-new-idea", "kind": "idea", "title": "Duets for adult students", "text": "Idea.", "fingerprint": "e" * 64,
+                                                "visibility": "private-local", "active": True, "createdAt": week_start, "facts": []}))
+sql("""INSERT INTO public.pr_brief_actions(workspace_id,edition_id,item_id,source,source_ref,action,outcome_refs,actor_user_id,idempotency_key,request_digest,created_at)
+       VALUES(%s,%s,'bi_11111111111111111111','listening','L-new','save_idea',%s::jsonb,%s,'fixture-new-idea',%s,to_timestamp(%s))""",
+    wid, edition_id, json.dumps([{"type": "source", "id": "src-new-idea"}]), USERS["owner"], "f" * 64, week_start + 4 * DAY)
+proofs.refresh(wid, "owner", {"frequency": "weekly", "periodStart": "2026-10-05"})
+fresh_ids = {d["id"] for d in proofs.strategy(wid, "owner", status="proposed")["decisions"]}
+assert fresh_ids == {strategy.decision_id(wid, "brief_topic", sql("SELECT id::text FROM public.pr_brief_actions WHERE idempotency_key='fixture-new-idea'")[0][0])}, fresh_ids
+before_rows += 1
 revoked = proofs.decide(wid, "owner", exp["id"], {"action": "revoke", "expectedRevision": 2, "idempotencyKey": "revoke-exp-0001"})
 assert revoked["decision"]["status"] == "revoked" and revoked["planning"]["inEffect"] is False
 context = growth_loop.planning_context(raw_state(wid), first_slot, clock[0])
@@ -490,6 +546,22 @@ assert all(d["userId"] in (USERS["editor"], USERS["viewer"]) for d in muted["del
 assert not PAID.called
 passed("AC25 mute and unsubscribe hold for brief alerts, which reach only their recipient")
 
+# A dismissal lapses after the cooldown: the item may be offered again, and then every action is available
+# (no "restore first"), while the dismissal itself stays in the action history.
+current = briefs.current(wid, "owner")
+n1 = next(i for i in current["edition"]["items"] if i["sourceRef"] == "N1")
+briefs.action(wid, "owner", n1["id"], {"action": "dismiss", "reasonCode": "already_covered", "idempotencyKey": "dismiss-n1-0001",
+                                       **({"editionId": current["edition"]["id"]} if current["edition"]["id"] else {"materialDigest": current["edition"]["materialDigest"]})})
+assert "N1" not in {i["sourceRef"] for i in briefs.current(wid, "owner")["edition"]["items"]}
+clock[0] += 8 * DAY
+listening(wid, [op("N1", "Practice journals for adult learners", clock[0])])          # the same lead, retrieved again
+again = briefs.current(wid, "owner")
+n1 = next(i for i in again["edition"]["items"] if i["sourceRef"] == "N1")
+assert n1["decision"] is None
+assert briefs.action(wid, "owner", n1["id"], {"action": "save_idea", "idempotencyKey": "save-n1-00001", "materialDigest": again["edition"]["materialDigest"]})["outcome"]
+assert [a for (a,) in sql("SELECT action FROM public.pr_brief_actions WHERE workspace_id=%s AND source_ref='N1' ORDER BY seq", wid)] == ["dismiss", "save_idea"]
+passed("a lapsed dismissal offers the item again with every action available")
+
 # === Pagination, migration replay, forced RLS, composite foreign keys, append-only rows ================================
 with connection() as db:
     for n in range(30):
@@ -525,7 +597,7 @@ while True:
     cursor = result["nextCursor"]
     if not cursor:
         break
-assert len(decisions) == len(set(decisions)) == 3
+assert len(decisions) == len(set(decisions)) == 4
 passed("bounded cursor pagination (25 default, 50 maximum, deterministic order, no duplicates) for editions, proofs and decisions")
 
 with connection() as db:
@@ -582,4 +654,16 @@ assert proof_run["status"] == "ok" and proof_run["workspaces"] >= 1, proof_run
 assert proofs.cron(time.monotonic() + 60)["workspaces"] == 0                                            # bounded re-check interval
 assert not PAID.called
 passed("proof cron recomputes recent periods for Growth Loop workspaces, bounded and without paid I/O")
+
+clock[0] += 7 * 3600                           # everyone is due again; every run now fails
+with mock.patch.object(type(proofs), "recompute_workspace", side_effect=RuntimeError("fixture failure")):
+    failed = proofs.cron(time.monotonic() + 60)
+assert failed["workspaces"] == 0 and failed["skipped"].get("RuntimeError", 0) >= 1, failed
+assert float(sql("SELECT extract(epoch from checked_at) FROM public.pr_proof_schedule WHERE workspace_id=%s", wid)[0][0]) == clock[0]
+assert proofs.cron(time.monotonic() + 60)["workspaces"] == 0                    # a failure waits the normal interval, never heads the queue
+with mock.patch.object(type(briefs), "run_recipient", side_effect=RuntimeError("fixture failure")):
+    failed = briefs.cron(time.monotonic() + 60)
+assert failed["recipients"] == 0 and failed["skipped"].get("RuntimeError", 0) >= 4, failed
+assert briefs.cron(time.monotonic() + 60)["recipients"] == 0
+passed("failed cron runs are spaced like successful ones, so a persistent failure never starves other workspaces or recipients")
 print(json.dumps({"execution": "disposable PostgreSQL; stored fixtures; trends not allow-listed; paid paths patched to fail", "result": "PASS"}), flush=True)

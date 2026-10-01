@@ -137,6 +137,41 @@ class ComposeTest(unittest.TestCase):
         self.assertTrue(composer.is_question("如何幫助成人學生建立練琴習慣"))
 
 
+class DecisionLifecycleTest(unittest.TestCase):
+    def test_restore_clears_and_a_dismissal_lapses_after_the_cooldown(self):
+        self.assertIsNone(composer.active_decision(None, NOW))
+        self.assertIsNone(composer.active_decision({"action": "restore", "at": NOW}, NOW))
+        fresh = {"action": "dismiss", "at": NOW - DAY}
+        self.assertIs(composer.active_decision(fresh, NOW), fresh)
+        self.assertIsNone(composer.active_decision({"action": "dismiss", "createdAt": NOW - composer.DISMISS_COOLDOWN}, NOW))   # service rows use createdAt
+        for action in ("not_relevant", "save_idea", "accept"):
+            row = {"action": action, "at": NOW - 300 * DAY}
+            self.assertIs(composer.active_decision(row, NOW), row)                 # these never lapse on their own
+
+    def test_a_lapsed_dismissal_offers_the_item_again(self):
+        history = [{"id": "1", "source": "listening", "sourceRef": "a", "action": "dismiss", "at": NOW - 8 * DAY, "seq": 1}]
+        self.assertEqual([i["sourceRef"] for i in composer.compose([candidate("a")], CONTEXT, history, NOW)["items"]], ["a"])
+
+    def test_same_instant_actions_keep_their_recorded_order(self):
+        rows = [{"id": "z", "source": "listening", "sourceRef": "a", "action": "dismiss", "at": NOW, "seq": 1},
+                {"id": "a", "source": "listening", "sourceRef": "a", "action": "restore", "at": NOW, "seq": 2}]
+        self.assertEqual(composer.latest_actions(rows)[("listening", "a")]["action"], "restore")
+        self.assertEqual(composer.latest_actions(list(reversed(rows)))[("listening", "a")]["action"], "restore")
+
+
+class ServiceFlagTest(unittest.TestCase):
+    def test_each_service_exposes_enabled_with_the_flag_semantics(self):
+        from postriff_phase2.briefs import service as brief_service
+        from postriff_phase2.coworker import flags
+        for value, expected in (("1", True), ("true", True), ("on", True), ("yes", True), ("0", False), ("", False), ("enabled", False)):
+            self.assertIs(brief_service.enabled({"RAFII_OPPORTUNITY_BRIEF_ENABLED": value}), expected, value)
+        self.assertFalse(brief_service.enabled({}))
+        with mock.patch.object(flags, "_values", {"RAFII_OPPORTUNITY_BRIEF_ENABLED": "1"}):
+            self.assertTrue(brief_service.enabled())                           # defaults to the environment the app attached
+        with mock.patch.object(flags, "_values", None), mock.patch.dict("os.environ", {"RAFII_OPPORTUNITY_BRIEF_ENABLED": "1"}, clear=False):
+            self.assertTrue(brief_service.enabled())                           # or the process environment itself
+
+
 class DeliveryRulesTest(unittest.TestCase):
     def test_ac25_edition_window_is_the_local_iso_week(self):
         key, start, end = composer.edition_window(at("Asia/Hong_Kong", 2026, 10, 5, 0, 30), "Asia/Hong_Kong")

@@ -146,15 +146,22 @@ def latest_actions(rows):
     return latest
 
 
-def _history_reason(candidate, latest, now):
-    row = latest.get((candidate["source"], candidate["sourceRef"]))
-    if not row or row["action"] == "restore":
+def active_decision(row, now):
+    """The decision still in force from a person's latest action on an item, or None: a restore clears it and a
+    dismissal lapses after the cooldown (the item may then be offered again, with every action available)."""
+    if not row or row.get("action") == "restore":
         return None
-    if row["action"] == "not_relevant":
-        return "not_relevant"
-    if row["action"] == "dismiss":
-        return "dismissed" if now - (row.get("at") or 0) < DISMISS_COOLDOWN else None
-    return "acted"
+    at = row.get("at") if row.get("at") is not None else row.get("createdAt")
+    if row.get("action") == "dismiss" and now - (at or 0) >= DISMISS_COOLDOWN:
+        return None
+    return row
+
+
+def _history_reason(candidate, latest, now):
+    row = active_decision(latest.get((candidate["source"], candidate["sourceRef"])), now)
+    if not row:
+        return None
+    return {"not_relevant": "not_relevant", "dismiss": "dismissed"}.get(row["action"], "acted")
 
 
 def _disqualified(candidate, latest, now):

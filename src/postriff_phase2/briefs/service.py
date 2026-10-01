@@ -30,7 +30,7 @@ from postriff_alpha.domain import AlphaError
 
 from .. import growth_events
 from ..permissions import Membership, require
-from . import composer, require as require_enabled, sources
+from . import composer, enabled as _flag_enabled, require as require_enabled, sources
 
 KEY = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -49,6 +49,13 @@ EDITION_COLUMNS = ("id::text, edition_key, revision, cadence, extract(epoch from
 ACTION_COLUMNS = ("id::text, edition_id::text, item_id, source, source_ref, action, reason_code, effort, outcome_refs, actor_user_id::text, "
                   "request_digest, extract(epoch from created_at)")
 log = logging.getLogger("postriff.briefs")
+
+
+def enabled(values=None):
+    """Whether the opportunity brief is on (RAFII_OPPORTUNITY_BRIEF_ENABLED, default off; true only for
+    1/true/yes/on). `values` when given; otherwise the process environment as the hosted app sees it (its isolated
+    environment once attached), exactly as every route and the cron step read it."""
+    return _flag_enabled(values)
 
 
 def _member(row):
@@ -188,12 +195,35 @@ class BriefService:
                         ORDER BY source, source_ref, created_at DESC, seq DESC""", (workspace_id, user_id, sorted({r for _s, r in refs})))
         return {(a["source"], a["sourceRef"]): a for a in map(_action, cur.fetchall())}
 
+    @staticmethod
+    def _decision_view(row):
+        return {k: row[k] for k in ("action", "reasonCode", "outcomeRefs", "createdAt")} if row else None
+
+    def _handled(self, cur, workspace_id, user_id, edition_key, shown, now):
+        """Items the person already decided on, outside the open list: this week's (any decision still in force) and
+        recent "not relevant" ones, each with the stored edition it came from, so the outcome link and Restore stay
+        reachable after the item leaves the composition. Bounded; never part of the material digest."""
+        cur.execute("""SELECT id::text, edition_key, items FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s
+                       AND created_at>to_timestamp(%s) ORDER BY created_at DESC, revision DESC LIMIT 50""", (workspace_id, user_id, now - 28 * 86400))
+        seen = {}
+        for edition_id, key, raw in cur.fetchall():
+            for item in _json(raw) or []:
+                if item.get("id") not in shown and item.get("id") not in seen:
+                    seen[item["id"]] = (edition_id, key, item)
+        decisions = self._decisions(cur, workspace_id, user_id, [(i["source"], i["sourceRef"]) for _e, _k, i in seen.values()])
+        handled = []
+        for edition_id, key, item in seen.values():
+            active = composer.active_decision(decisions.get((item["source"], item["sourceRef"])), now)
+            if active and (key == edition_key or active["action"] == "not_relevant"):
+                handled.append({**item, "editionId": edition_id, "decision": self._decision_view(active)})
+        return sorted(handled, key=lambda i: -i["decision"]["createdAt"])[:10]
+
     def _present(self, cur, workspace_id, user_id, composed, stored, member, now):
         items = copy.deepcopy(stored["items"] if stored else composed["items"])
         decisions = self._decisions(cur, workspace_id, user_id, [(i["source"], i["sourceRef"]) for i in items])
         for item in items:
-            latest = decisions.get((item["source"], item["sourceRef"]))
-            item["decision"] = {k: latest[k] for k in ("action", "reasonCode", "outcomeRefs", "createdAt")} if latest else None
+            item["decision"] = self._decision_view(composer.active_decision(decisions.get((item["source"], item["sourceRef"])), now))
+        handled = self._handled(cur, workspace_id, user_id, composed["editionKey"], {i["id"] for i in items}, now)
         limitations = ["Stored results only: nothing here is today's research, and absence from a source is not absence everywhere.",
                        "Relevance comes from your goals, your own material and what you asked Rafii to watch; it is not a prediction of results."]
         return {"definitionVersion": composer.DEFINITION_VERSION, "asOf": now, "dataMode": "stored", "dataState": composer.data_state(composed["coverage"]),
@@ -201,7 +231,7 @@ class BriefService:
                 "edition": {"id": stored["id"] if stored else None, "persisted": stored is not None, "editionKey": composed["editionKey"],
                             "revision": stored["revision"] if stored else None, "periodStart": composed["periodStart"], "periodEnd": composed["periodEnd"],
                             "timeZone": composed["timeZone"], "cadence": composed["cadence"], "materialDigest": composed["materialDigest"],
-                            "deliveredAt": stored["deliveredAt"] if stored else None, "items": items},
+                            "deliveredAt": stored["deliveredAt"] if stored else None, "items": items, "handled": handled},
                 "canAct": member.allows("edit"), "limitations": limitations, "reasons": composer.REASONS}
 
     def current(self, workspace_id, token):
@@ -350,7 +380,8 @@ class BriefService:
         item = next((i for i in edition["items"] if i["id"] == request["itemId"]), None)
         if item is None:
             raise AlphaError("Brief item unavailable.", 404)
-        latest = self._decisions(cur, workspace_id, principal, [(item["source"], item["sourceRef"])]).get((item["source"], item["sourceRef"]))
+        # The decision still in force: a restore clears it and a lapsed dismissal no longer blocks anything.
+        latest = composer.active_decision(self._decisions(cur, workspace_id, principal, [(item["source"], item["sourceRef"])]).get((item["source"], item["sourceRef"])), now)
         action = request["action"]
         if latest and latest["action"] in composer.OPEN_ACTIONS:
             raise AlphaError("This opportunity was already acted on.", 409, code="already_acted")
@@ -431,7 +462,10 @@ class BriefService:
             raise AlphaError("This item supports a different action.", 409, code="unsupported_action")
         if not source_id:
             raise AlphaError("The opportunity could not be saved. Nothing was recorded.", 409, code="delivery_uncertain")
-        return [{"type": "source", "id": str(source_id)}]
+        refs = [{"type": "source", "id": str(source_id)}]
+        if item["source"] == "trends":   # the account the person chose scopes any next-week proposal built on it
+            refs.append({"type": "channel", "id": request["channelId"]})
+        return refs
 
     def action(self, workspace_id, token, item_id, payload):
         require_enabled()
@@ -514,20 +548,36 @@ class BriefService:
             cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
             found = cur.fetchone()
             state = _json(found[0]) if found else None
-            if not isinstance(state, dict) or state.get("accountDeletion") or (state.get("workspace") or {}).get("sample"):
-                return {"skipped": "workspace_unavailable"}
             cur.execute("""SELECT m.role FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id
                            WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL""", (workspace_id, user_id))
             role = cur.fetchone()
-            if not role or role[0] not in RECIPIENT_ROLES:
-                return {"skipped": "not_a_recipient"}
-            composed = self._compose(cur, workspace_id, user_id, state, trends, now)
-            edition, created = self._persist(cur, workspace_id, user_id, composed, now)
-            outcome = self._deliver(cur, workspace_id, user_id, edition, now)
-            cur.execute("""INSERT INTO public.pr_brief_schedule(workspace_id,recipient_user_id,checked_at) VALUES(%s,%s,to_timestamp(%s))
-                           ON CONFLICT (workspace_id,recipient_user_id) DO UPDATE SET checked_at=excluded.checked_at""", (workspace_id, user_id, now))
+            if not isinstance(state, dict) or state.get("accountDeletion") or (state.get("workspace") or {}).get("sample"):
+                outcome = {"skipped": "workspace_unavailable"}
+            elif not role or role[0] not in RECIPIENT_ROLES:
+                outcome = {"skipped": "not_a_recipient"}
+            else:
+                composed = self._compose(cur, workspace_id, user_id, state, trends, now)
+                edition, created = self._persist(cur, workspace_id, user_id, composed, now)
+                outcome = {"persisted": created, "items": len(edition["items"]), **self._deliver(cur, workspace_id, user_id, edition, now)}
+            if found and role:   # without either, `due` no longer selects this pair, so there is nothing to space out
+                self._checked(cur, workspace_id, user_id, now)
             db.commit()
-        return {"persisted": created, "items": len(edition["items"]), **outcome}
+        return outcome
+
+    @staticmethod
+    def _checked(cur, workspace_id, user_id, now):
+        cur.execute("""INSERT INTO public.pr_brief_schedule(workspace_id,recipient_user_id,checked_at) VALUES(%s,%s,to_timestamp(%s))
+                       ON CONFLICT (workspace_id,recipient_user_id) DO UPDATE SET checked_at=excluded.checked_at""", (workspace_id, user_id, now))
+
+    def _mark_failed(self, workspace_id, user_id, now):
+        """A recipient whose run failed waits the normal re-check interval like everyone else (no retry storm at the
+        head of the queue). Best effort, in its own transaction."""
+        try:
+            with self.hosted.connection_factory() as db, db.cursor() as cur:
+                self._checked(cur, workspace_id, user_id, now)
+                db.commit()
+        except Exception as error:  # noqa: BLE001 - bookkeeping never breaks the cron step
+            log.warning(json.dumps({"event": "briefs.schedule_unwritable", "reason": type(error).__name__}))
 
     def due(self, now, limit):
         from ..growth.trends import config
@@ -572,6 +622,7 @@ class BriefService:
                 reason = getattr(error, "code", None) or type(error).__name__
                 summary["skipped"][reason] = summary["skipped"].get(reason, 0) + 1
                 log.warning(json.dumps({"event": "briefs.recipient_failed", "reason": str(reason)[:60]}))
+                self._mark_failed(workspace_id, user_id, now)
                 continue
             summary["recipients"] += 1
             summary["persisted"] += int(bool(outcome.get("persisted")))

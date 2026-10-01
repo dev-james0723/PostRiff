@@ -21,7 +21,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 DEFINITION_VERSION = "rafii.proof.v2.2026-10-01"
 MATURITY_SECONDS = 72 * 3600           # late Queue read-backs, provider metrics and cost settlements usually land by then
 FREQUENCIES = ("weekly", "monthly")
-EVIDENCE_LIMIT = 200
+EVIDENCE_LIMIT = 100                   # ids shown per evidence list (totals stay exact; truncation is flagged)
+MAX_COUNTS_BYTES = 240_000             # below the 256 KiB column check in 084, so a busy period can never fail to store
+CORRECTION_VALUE_BYTES = 400           # a larger before/after value is recorded as changed, not copied
 FIGURES = ("acceptedWork", "verifiedPublications", "assistedExports", "unresolvedSlots", "outcomes", "timeBack", "providerCost")
 RESOLVED_SLOTS = {"accepted", "in_queue", "approved", "scheduled", "published", "rejected"}
 LIMITATIONS = (
@@ -190,6 +192,24 @@ def digest(counts):
     return hashlib.sha256(json.dumps(material(counts), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def bounded(counts):
+    """Keep a proof storable however busy the period: if the serialized counts exceed MAX_COUNTS_BYTES, every evidence
+    list is cut to a short sample and flagged truncated (totals are unaffected). Deterministic, so the digest is too."""
+    if len(json.dumps(counts, separators=(",", ":"))) <= MAX_COUNTS_BYTES:
+        return counts
+    for figure_value in counts["figures"].values():
+        evidence = figure_value.get("evidence") or {}
+        if any(len(ids_) > 10 for ids_ in evidence.values()):
+            figure_value["evidence"] = {name: ids_[:10] for name, ids_ in evidence.items()}
+            figure_value["evidenceTruncated"] = True
+    return counts
+
+
+def _compact(value):
+    """A correction keeps small values as they were; a large one (a provenance summary, say) is recorded as changed."""
+    return value if len(json.dumps(value, separators=(",", ":"), default=str)) <= CORRECTION_VALUE_BYTES else {"changed": True}
+
+
 def corrections(previous, current, limit=20):
     """The material-correction note: per figure, what changed (value and/or data state), in a bounded list."""
     before, after = (previous or {}).get("figures") or {}, current.get("figures") or {}
@@ -200,7 +220,7 @@ def corrections(previous, current, limit=20):
         changed_state = old.get("dataState") != new.get("dataState")
         changed_evidence = old.get("evidence") != new.get("evidence")
         if changed_value or changed_state or changed_evidence:
-            entry = {"figure": name, "before": old.get("value"), "after": new.get("value")}
+            entry = {"figure": name, "before": _compact(old.get("value")), "after": _compact(new.get("value"))}
             if changed_state:
                 entry.update(dataStateBefore=old.get("dataState"), dataStateAfter=new.get("dataState"))
             if changed_evidence and not changed_value:

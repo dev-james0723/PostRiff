@@ -27,7 +27,7 @@ from postriff_alpha.domain import AlphaError
 
 from .. import growth_events
 from ..permissions import Membership, require
-from . import model, require as require_enabled, strategy
+from . import enabled as _flag_enabled, model, require as require_enabled, strategy
 
 KEY = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 PROOF_ID = re.compile(r"^gp_[0-9a-f]{20}$")
@@ -41,6 +41,13 @@ REVISION_COLUMNS = ("id::text, proof_id, revision, frequency, extract(epoch from
 DECISION_COLUMNS = ("id::text, decision_id, revision, status, kind, statement, scope, basis, proof_revision_id::text, extract(epoch from applies_from), "
                     "decided_by::text, idempotency_key, request_digest, extract(epoch from created_at)")
 log = logging.getLogger("postriff.proof")
+
+
+def enabled(values=None):
+    """Whether proof v2 and the strategy loop are on (RAFII_PROOF_V2_ENABLED, default off; true only for
+    1/true/yes/on). `values` when given; otherwise the process environment as the hosted app sees it (its isolated
+    environment once attached), exactly as every route, the cron step and Weekly planning read it."""
+    return _flag_enabled(values)
 
 
 def _member(row):
@@ -215,23 +222,34 @@ class ProofService:
         definition = ("What AI and data services cost for this period: the actual amount where the charge is settled; charges whose amount is "
                       "unknown are listed separately at their reserved estimate and never counted as zero. Owners only.")
 
-        window = "workspace_id=%s AND at>=to_timestamp(%s) AND at<to_timestamp(%s) AND cost_state IN ('actual','estimated_unknown')"
-        kind = "CASE WHEN cost_state='actual' AND actual_usd_micro IS NOT NULL THEN 'actual' ELSE 'unknown' END"
+        # The usage ledger's own semantics (billing.settle / reconcile_unknown): a completed settlement is `actual`, a failed
+        # one is `released` and still carries the provider cost it booked, and an unknown outcome is `estimated_unknown`
+        # until a later `actual`/`released` row for the same reservation finalizes it. A finalized cost belongs to the
+        # period of the settlement it replaces (so a reconciliation is late data for that period, not new cost in the
+        # next one), and an unknown row stops counting once it is finalized: nothing is counted twice.
+        reconciled_from = ("(SELECT min(x.at) FROM public.pr_usage_ledger x WHERE x.workspace_id=l.workspace_id AND x.reservation_id=l.reservation_id "
+                           "AND x.cost_state='estimated_unknown')")
+        final = (f"l.workspace_id=%s AND l.cost_state IN ('actual','released') AND l.at>=to_timestamp(%s) "
+                 f"AND coalesce({reconciled_from}, l.at)>=to_timestamp(%s) AND coalesce({reconciled_from}, l.at)<to_timestamp(%s)")
+        open_unknown = ("l.workspace_id=%s AND l.cost_state='estimated_unknown' AND l.at>=to_timestamp(%s) AND l.at<to_timestamp(%s) "
+                        "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=l.workspace_id AND t.reservation_id=l.reservation_id "
+                        "AND t.cost_state IN ('actual','released'))")
 
         def read():
-            cur.execute(f"""SELECT {kind}, count(*), coalesce(sum(actual_usd_micro),0), coalesce(sum(estimated_usd_micro),0), extract(epoch from max(at))
-                            FROM public.pr_usage_ledger WHERE {window} GROUP BY 1""", (workspace_id, start, end))
-            totals = {r[0]: r for r in cur.fetchall()}
+            cur.execute(f"""SELECT count(*), coalesce(sum(l.actual_usd_micro),0), extract(epoch from max(l.at)) FROM public.pr_usage_ledger l WHERE {final}""",
+                        (workspace_id, start, start, end))
+            actual = cur.fetchone()
+            cur.execute(f"""SELECT count(*), coalesce(sum(l.estimated_usd_micro),0), extract(epoch from max(l.at)) FROM public.pr_usage_ledger l WHERE {open_unknown}""",
+                        (workspace_id, start, end))
+            unknown = cur.fetchone()
             evidence = {}
-            for name in ("actual", "unknown"):   # exact totals; bounded, flagged evidence ids
-                cur.execute(f"SELECT id::text FROM public.pr_usage_ledger WHERE {window} AND {kind}=%s ORDER BY at, id LIMIT %s",
-                            (workspace_id, start, end, name, model.EVIDENCE_LIMIT + 1))
-                evidence[f"{name}LedgerIds"] = [r[0] for r in cur.fetchall()]
-            actual, unknown = totals.get("actual"), totals.get("unknown")
-            value = {"actualUsdMicro": int(actual[2]) if actual else 0, "actualEntries": int(actual[1]) if actual else 0,
-                     "unknownEntries": int(unknown[1]) if unknown else 0, "unknownReservedEstimateUsdMicro": int(unknown[3]) if unknown else 0}
-            out = model.figure(value, definition=definition, evidence=evidence, data_state="partial" if unknown else "available", visibility="owner")
-            out["watermark"] = max((float(r[4]) for r in totals.values() if r[4] is not None), default=None)
+            for name, where, params in (("actualLedgerIds", final, (workspace_id, start, start, end)), ("unknownLedgerIds", open_unknown, (workspace_id, start, end))):
+                cur.execute(f"SELECT l.id::text FROM public.pr_usage_ledger l WHERE {where} ORDER BY l.at, l.id LIMIT %s", (*params, model.EVIDENCE_LIMIT + 1))
+                evidence[name] = [r[0] for r in cur.fetchall()]   # exact totals above; the ids shown are bounded and flagged
+            value = {"actualUsdMicro": int(actual[1]), "actualEntries": int(actual[0]), "unknownEntries": int(unknown[0]),
+                     "unknownReservedEstimateUsdMicro": int(unknown[1])}
+            out = model.figure(value, definition=definition, evidence=evidence, data_state="partial" if unknown[0] else "available", visibility="owner")
+            out["watermark"] = max((float(v) for v in (actual[2], unknown[2]) if v is not None), default=None)
             return out
         return self._savepoint(cur, "proof_cost", read, model.unavailable(definition, "usage_ledger_unreadable"))
 
@@ -254,12 +272,12 @@ class ProofService:
         watermark = {"queue": max(verified_times) if verified_times else None, "timeBack": figures["timeBack"].pop("watermark", None),
                      "usage": figures["providerCost"].pop("watermark", None), "results": figures["outcomes"].get("asOf")}
         mature = model.maturity(end, now)
-        return {"definitionVersion": model.DEFINITION_VERSION, "frequency": frequency,
-                "period": {"start": start, "end": end, "timeZone": zone_name, "timeZoneSource": zone_source,
-                           "label": f"{model.local_date(start, zone_name)}/{model.local_date(end - 1, zone_name)}"},
-                "asOf": now, "sourceWatermark": watermark, "maturity": mature, "dataState": model.overall_state(figures, mature["mature"]),
-                "figures": figures, "coverage": [{"figure": name, "dataState": f["dataState"], "reason": f.get("reason")} for name, f in figures.items()],
-                "limitations": list(model.LIMITATIONS)}
+        return model.bounded({"definitionVersion": model.DEFINITION_VERSION, "frequency": frequency,
+                              "period": {"start": start, "end": end, "timeZone": zone_name, "timeZoneSource": zone_source,
+                                         "label": f"{model.local_date(start, zone_name)}/{model.local_date(end - 1, zone_name)}"},
+                              "asOf": now, "sourceWatermark": watermark, "maturity": mature, "dataState": model.overall_state(figures, mature["mature"]),
+                              "figures": figures, "coverage": [{"figure": name, "dataState": f["dataState"], "reason": f.get("reason")} for name, f in figures.items()],
+                              "limitations": list(model.LIMITATIONS)})
 
     # --- revisions ----------------------------------------------------------------------------------------------------
     def _revisions(self, cur, workspace_id, proof_id, limit=50):
@@ -300,17 +318,30 @@ class ProofService:
         return out
 
     def ensure_proposals(self, cur, workspace_id, state, revision, now):
-        """Store this proof's proposals as `proposed` version 1 rows; an id that already exists (in any status — a
-        rejected or revoked one included) is never offered again."""
+        """Store new proposals as `proposed` version 1 rows while fewer than MAX_PROPOSALS are open. An id that already
+        exists (in any status, a rejected or revoked one included) is skipped before the cap applies, so it is never
+        offered again and never crowds out a new candidate."""
         actions = self._savepoint(cur, "proof_brief_actions", lambda: self._brief_actions(cur, workspace_id, revision["periodStart"], revision["periodEnd"]), [])
+        candidates = strategy.proposals(state, workspace_id, actions, now)
+        if not candidates:
+            return []
+        cur.execute("SELECT DISTINCT decision_id FROM public.pr_strategy_decisions WHERE workspace_id=%s AND decision_id = ANY(%s)",
+                    (workspace_id, [p["id"] for p in candidates]))
+        known = {r[0] for r in cur.fetchall()}
+        cur.execute("""SELECT count(*) FROM (SELECT DISTINCT ON (decision_id) status FROM public.pr_strategy_decisions WHERE workspace_id=%s
+                       ORDER BY decision_id, revision DESC) latest WHERE status='proposed'""", (workspace_id,))
+        room = strategy.MAX_PROPOSALS - cur.fetchone()[0]
         created = []
-        for proposal in strategy.proposals(state, workspace_id, actions, now):
+        for proposal in candidates:
+            if len(created) >= room:
+                break
+            if proposal["id"] in known:
+                continue
             cur.execute("""INSERT INTO public.pr_strategy_decisions(workspace_id,decision_id,revision,status,kind,statement,scope,basis,proof_revision_id,created_at)
-                           SELECT %s,%s,1,'proposed',%s,%s,%s::jsonb,%s::jsonb,%s,to_timestamp(%s)
-                           WHERE NOT EXISTS (SELECT 1 FROM public.pr_strategy_decisions WHERE workspace_id=%s AND decision_id=%s)
+                           VALUES(%s,%s,1,'proposed',%s,%s,%s::jsonb,%s::jsonb,%s,to_timestamp(%s))
                            ON CONFLICT (workspace_id,decision_id,revision) DO NOTHING RETURNING decision_id""",
                         (workspace_id, proposal["id"], proposal["kind"], proposal["statement"], json.dumps(proposal["scope"]),
-                         json.dumps({**proposal["basis"], "proofId": revision["proofId"]}), revision["id"], now, workspace_id, proposal["id"]))
+                         json.dumps({**proposal["basis"], "proofId": revision["proofId"]}), revision["id"], now))
             if cur.fetchone():
                 created.append(proposal["id"])
         return created
@@ -333,8 +364,17 @@ class ProofService:
         counts = copy.deepcopy(counts)
         if not owner and "providerCost" in counts.get("figures", {}):
             counts["figures"]["providerCost"] = {"value": None, "dataState": "restricted", "reason": "owner_only",
-                                                 "definition": "Provider cost is visible to workspace owners.", "evidence": {}, "evidenceTruncated": False}
+                                                 "definition": "AI and data service cost is visible to workspace owners.", "evidence": {}, "evidenceTruncated": False}
+            counts.get("sourceWatermark", {}).pop("usage", None)
         return counts
+
+    @staticmethod
+    def _redact_meta(correction, watermark, owner):
+        """Cost appears in a revision's correction note and usage watermark too: owners only, like the figure itself."""
+        if owner:
+            return correction, watermark
+        return ([{"figure": "providerCost", "restricted": True} if entry.get("figure") == "providerCost" else entry for entry in correction or []],
+                {k: v for k, v in (watermark or {}).items() if k != "usage"})
 
     def _decision_view(self, decision):
         return {k: decision[k] for k in ("id", "revision", "status", "kind", "statement", "scope", "appliesFrom", "createdAt")} | {
@@ -346,12 +386,14 @@ class ProofService:
         latest = revisions[0]
         owner = member.role == "owner"
         decisions = self._latest_decisions(cur, workspace_id, proof_revision_ids=[r["id"] for r in revisions])
+        correction, watermark = self._redact_meta(latest["correction"], latest["sourceWatermark"], owner)
         return {"proofId": latest["proofId"], "frequency": latest["frequency"], "periodStart": latest["periodStart"], "periodEnd": latest["periodEnd"],
                 "timeZone": latest["timeZone"], "timeZoneSource": latest["timeZoneSource"], "legacyRecap": latest["proofId"] in legacy_ids,
                 "maturity": model.maturity(latest["periodEnd"], now), "href": f"/app/analytics?proof={latest['proofId']}#proof-history",
-                "latest": {**{k: latest[k] for k in ("id", "revision", "definitionVersion", "asOf", "sourceWatermark", "dataState", "reason", "correction", "createdAt")},
-                           "counts": self._redact(latest["counts"], owner)},
-                "revisions": [{k: r[k] for k in ("id", "revision", "asOf", "dataState", "reason", "correction", "createdAt", "definitionVersion")} for r in revisions],
+                "latest": {**{k: latest[k] for k in ("id", "revision", "definitionVersion", "asOf", "dataState", "reason", "createdAt")},
+                           "correction": correction, "sourceWatermark": watermark, "counts": self._redact(latest["counts"], owner)},
+                "revisions": [{**{k: r[k] for k in ("id", "revision", "asOf", "dataState", "reason", "createdAt", "definitionVersion")},
+                               "correction": self._redact_meta(r["correction"], {}, owner)[0]} for r in revisions],
                 "nextStep": {"proposals": [self._decision_view(d) for d in sorted(decisions, key=lambda d: (d["createdAt"], d["id"]))],
                              "rule": "Deterministic proposals from measured experiments and ideas saved from your brief; no model call. Rejected or revoked proposals do not return."}}
 
@@ -410,7 +452,10 @@ class ProofService:
             if not found:
                 raise AlphaError("Proof revision unavailable.", 404)
             revision = _revision(found)
-            return {"revision": {**{k: v for k, v in revision.items() if k not in ("counts", "digest")}, "counts": self._redact(revision["counts"], member.role == "owner")}}
+            owner = member.role == "owner"
+            correction, watermark = self._redact_meta(revision["correction"], revision["sourceWatermark"], owner)
+            return {"revision": {**{k: v for k, v in revision.items() if k not in ("counts", "digest", "correction", "sourceWatermark")},
+                                 "correction": correction, "sourceWatermark": watermark, "counts": self._redact(revision["counts"], owner)}}
 
     def refresh(self, workspace_id, token, payload):
         """Owner: recompute one completed period (the latest by default) from stored records; append a revision only
@@ -588,11 +633,29 @@ class ProofService:
                 reason = getattr(error, "code", None) or type(error).__name__
                 summary["skipped"][reason] = summary["skipped"].get(reason, 0) + 1
                 log.warning(json.dumps({"event": "proof.workspace_failed", "reason": str(reason)[:60]}))
+                self._mark_failed(workspace_id, now)
                 continue
             summary["workspaces"] += 1
             summary["appended"] += outcome["appended"]
             summary["proposals"] += outcome["proposals"]
         return summary
+
+    @staticmethod
+    def _checked(cur, workspace_id, now):
+        cur.execute("""INSERT INTO public.pr_proof_schedule(workspace_id,checked_at) VALUES(%s,to_timestamp(%s))
+                       ON CONFLICT (workspace_id) DO UPDATE SET checked_at=excluded.checked_at""", (workspace_id, now))
+
+    def _mark_failed(self, workspace_id, now):
+        """A workspace whose recomputation failed waits the normal re-check interval like the others, so a persistent
+        failure never holds the head of the queue. Best effort, in its own transaction."""
+        try:
+            with self.hosted.connection_factory() as db, db.cursor() as cur:
+                cur.execute("SELECT 1 FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
+                if cur.fetchone():
+                    self._checked(cur, workspace_id, now)
+                db.commit()
+        except Exception as error:  # noqa: BLE001 - bookkeeping never breaks the cron step
+            log.warning(json.dumps({"event": "proof.schedule_unwritable", "reason": type(error).__name__}))
 
     def recompute_workspace(self, workspace_id, now):
         appended = proposals = 0
@@ -620,7 +683,7 @@ class ProofService:
                     appended += int(added)
                     if frequency == "weekly" and (start, end) == week:
                         proposals += len(self.ensure_proposals(cur, workspace_id, state, revision, now))
-            cur.execute("""INSERT INTO public.pr_proof_schedule(workspace_id,checked_at) VALUES(%s,to_timestamp(%s))
-                           ON CONFLICT (workspace_id) DO UPDATE SET checked_at=excluded.checked_at""", (workspace_id, now))
+            if found:
+                self._checked(cur, workspace_id, now)
             db.commit()
         return {"appended": appended, "proposals": proposals}
