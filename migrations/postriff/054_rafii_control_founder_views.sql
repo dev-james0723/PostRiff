@@ -25,11 +25,17 @@ create or replace view rafii_control.business_subscriptions_v2 with(security_bar
  from public.pr_subscriptions s join public.pr_plan_terms t on t.id=s.plan_terms_id;
 -- feature is a bounded label derived from the idempotency_key prefix; the raw key is never projected. reservationId lets the
 -- metrics skip an estimated_unknown row once a later settle/release row reconciled the same reservation (billing.Ledger).
+create index if not exists pr_usage_ledger_reservation_idx on public.pr_usage_ledger(workspace_id,reservation_id);
 create or replace view rafii_control.business_usage_v2 with(security_barrier=true) as
  select u.id::text as id,u.workspace_id::text as "workspaceId",u.member_id::text as "memberId",u.run_id::text as "runId",u.reservation_id::text as "reservationId",u.kind,u.dimension,u.provider,u.model,
  u.quantity,u.unit,u.estimated_usd_micro as "estimatedUsdMicro",u.actual_usd_micro as "actualUsdMicro",u.cost_state as "costState",
  case when jsonb_typeof(u.meta->'aiUsageExempt')='boolean' then (u.meta->>'aiUsageExempt')::boolean else false end as "aiUsageExempt",
- case split_part(u.idempotency_key,':',1)
+ -- Feature comes from the reservation: settle/reconcile/release rows carry generic keys (billing.Ledger: settle:<reservation>:<outcome>,
+ -- reconcile:<reservation>), so read the first key of the same reservation (the reserve row itself, id = reservation_id, or a sibling)
+ -- that still carries the caller prefix (run:, image:, voice:, ...). Rows without a reservation classify by their own key.
+ case split_part(coalesce((select o.idempotency_key from public.pr_usage_ledger o
+   where u.reservation_id is not null and o.workspace_id=u.workspace_id and (o.id=u.reservation_id or o.reservation_id=u.reservation_id)
+     and split_part(o.idempotency_key,':',1) not in ('settle','reconcile','release') order by o.at,o.id limit 1), u.idempotency_key),':',1)
   when 'run' then 'writer' when 'image' then 'image' when 'understanding' then 'understanding' when 'learning' then 'learning'
   when 'voice' then 'voice' when 'reply' then 'reply' when 'notes' then 'notes'
   when 'agent' then 'agent' when 'agent-follow-ups' then 'agent' when 'agent-resume' then 'agent'

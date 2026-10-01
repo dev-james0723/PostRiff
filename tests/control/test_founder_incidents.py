@@ -261,7 +261,9 @@ class NotificationTests(unittest.TestCase):
         for name, spec in before.items():
             self.assertIs(catalog.EVENTS[name], spec, 'existing catalogue entries are untouched')
         founder_incidents.register_notification_events()
-        self.assertEqual(set(catalog.EVENTS), set(before) | set(founder_incidents.NOTIFICATION_EVENTS), 'registration is idempotent')
+        self.assertEqual(set(catalog.EVENTS), set(before), 'the shipped catalogue (hashed by the locked notification-planning policy) never changes')
+        self.assertTrue(set(founder_incidents.NOTIFICATION_EVENTS) <= set(catalog.EXTENSION_EVENTS), 'registration is idempotent')
+        self.assertNotIn('founder.incident_opened', catalog.public()['events'], 'customers never see founder events')
 
     def test_cron_notifier_emits_person_level_events_per_operator(self):
         notifications = FakeNotifications()

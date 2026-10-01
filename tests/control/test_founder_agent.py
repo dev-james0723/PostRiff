@@ -14,8 +14,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agents import RunConfig, Runner
-from agents.testing import ScriptedModel, function_call
+try:
+    from agents import RunConfig, Runner
+    from agents.testing import ScriptedModel, function_call
+except ModuleNotFoundError as exc:  # the separate Control job installs no model SDK (requirements-control.txt); the consumer job runs these
+    raise unittest.SkipTest(f"Founder Rafii tests need the consumer requirements ({exc.name} missing)") from exc
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_runtime_v2 import answer_policy, config, contracts, context as rt_context, domain_tools, tool_adapter

@@ -30,8 +30,8 @@ THRESHOLDS = {
     'cost_anomaly': {'version': 1, 'multiplier': 3.0, 'min_today_usd_micro': 5_000_000, 'median_days': 7},
     'payment_failure_spike': {'version': 1, 'window_hours': 24, 'warning_count': 3, 'critical_count': 10},
 }
-# PRD §8.7 founder events. The shared catalogue (notifications/catalog.py) is not owned by this slice, so the entries are
-# registered idempotently at emit time and never override an existing definition.
+# PRD §8.7 founder events. They are registered at emit time as catalogue extensions (catalog.EXTENSION_EVENTS), never
+# written into catalog.EVENTS: that dict is hashed by the locked notification-planning policy and shown to customers.
 NOTIFICATION_EVENTS = {
     'founder.incident_opened': {'category': 'founder', 'severity': 'critical', 'audience': 'actor', 'email': 'immediate', 'push': 'immediate', 'template': 'analytics_anomaly'},
     'founder.incident_recovered': {'category': 'founder', 'severity': 'info', 'audience': 'actor', 'email': 'digest', 'push': 'off', 'template': 'analytics_anomaly'},
@@ -42,8 +42,7 @@ NOTIFICATION_EVENTS = {
 
 def register_notification_events():
     from postriff_phase2.notifications import catalog
-    for name, spec in NOTIFICATION_EVENTS.items():
-        catalog.EVENTS.setdefault(name, {**spec, 'sms': 'off'})
+    catalog.register_extension_events({name: {**spec, 'sms': 'off'} for name, spec in NOTIFICATION_EVENTS.items()})
 
 
 # --- detectors (pure) ----------------------------------------------------------------------------------------------------

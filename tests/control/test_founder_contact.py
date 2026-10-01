@@ -5,6 +5,7 @@ No PostgreSQL: `MemoryFounderStore` mirrors the founder store protocol and `Fake
 `phone.runtime.FounderPhoneConfig` produces, so the FOUNDER_CALL_EVENTS branch is exercised end to end. No network.
 """
 import copy
+import importlib.util
 import os
 import time
 import types
@@ -411,6 +412,7 @@ class FounderCallEventsTests(unittest.TestCase):
             contracts.preferences({'eventAllowlist': ['founder.incident']})
         self.assertTrue(contracts.FOUNDER_CALL_EVENTS.isdisjoint(contracts.CALL_EVENTS))
 
+    @unittest.skipUnless(importlib.util.find_spec("cryptography"), "cryptography (consumer requirements) required for the phone credential vault")
     def test_principal_phone_passthrough_attaches_scope_only_on_request(self):
         key = 'founder:briefing:' + str(uuid.uuid4())
         values = {'RAFII_PHONE_ENABLED': '1', 'RAFII_PHONE_ENCRYPTION_KEY': CredentialVault.generate_key(), 'RAFII_FOUNDER_OPS_WORKSPACE_ID': OPS}
