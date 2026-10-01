@@ -166,7 +166,7 @@ class LiveMetricTests(unittest.TestCase):
         self.assertEqual(result['sourceVersions']['adapter'], 'live_metrics/v1')
         self.assertEqual(result['mode'], 'live')
         with self.assertRaises(ControlError): self.run_query({**query('paid_customers'), 'metricIds': ['paid_customers', 'mrr']})
-        proposed = self.run_query(query('mrr', ['currency']))
+        proposed = self.run_query(query('cac', ['currency']))   # PRD §7.1: CAC stays a proposed definition
         self.assertEqual(proposed['executionState'], 'policy_unavailable')
         self.assertIsNone(proposed['rows'][0]['value'])
         with self.assertRaises(ControlError): self.run_query(query('paid_customers'), mode='staging')
@@ -226,7 +226,8 @@ class LiveMetricTests(unittest.TestCase):
         self.assertEqual(rows[0]['comparison']['value'], 5000)
         self.assertEqual(rows[0]['comparison']['interval']['start'], '2026-08-02T00:00:00Z')
         self.assertEqual(rows[0]['dataState'], 'partial')
-        self.assertEqual(rows[0]['reason'], 'legacy_plan_invoices_not_recorded')
+        self.assertEqual(rows[0]['reason'], 'invoices_before_instrumentation_not_recorded')   # cash_collected v2 (slice-revenue, metrics.d/revenue.json)
+        self.assertEqual(rows[0]['definitionVersion'], 'v2')
         self.store.rows['paid_workspaces'] = [aggregate(9, known=9)]
         self.store.instrumented = {'business_subscriptions_v2', 'business_subscription_snapshots'}
         rows = self.run_query(query('paid_workspaces', comparison='previous_equal_elapsed'))['rows']

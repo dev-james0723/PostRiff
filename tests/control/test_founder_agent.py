@@ -220,12 +220,13 @@ class FounderToolTests(unittest.TestCase):
         store = ReadStore()
         control = Control(Scenarios.outage, QueryService(store, Catalog()))
         ctx = founder_ctx("live", control)
-        found = run_tool(ctx, "founder_metric_query", {"metricIds": ["mrr"], "period": "mtd", "groupBy": ["plan"]})
+        # CAC stays a proposed, native-currency definition (PRD §7.1), so it exercises both the currency grouping and "unavailable, never zero".
+        found = run_tool(ctx, "founder_metric_query", {"metricIds": ["cac"], "period": "mtd", "groupBy": ["source"]})
         self.assertTrue(found["ok"])
         self.assertEqual(found["source"], "live")
         self.assertEqual(len(store.receipts), 1)
         self.assertEqual(found["receiptId"], store.receipts[0]["id"])
-        self.assertEqual(store.receipts[0]["normalizedQuery"]["groupBy"], ["plan", "currency"], "native-currency metrics are grouped by currency")
+        self.assertEqual(store.receipts[0]["normalizedQuery"]["groupBy"], ["source", "currency"], "native-currency metrics are grouped by currency")
         self.assertIsNone(found["rows"][0]["value"], "a definition that is not activated is unavailable, never zero")
         self.assertEqual(found["dataState"], "unavailable")
         self.assertIn(found["receiptId"].lower(), ctx.ledger.known_ids)
@@ -271,6 +272,20 @@ class FounderToolTests(unittest.TestCase):
         self.assertEqual(ctx.ledger.client_blocks()[0]["type"], "navigation_card")
         with self.assertRaises(AlphaError):
             founder_tools.console_href("admin")
+
+    def test_entity_links_use_the_parameters_each_page_reads(self):
+        wid, cid = "11111111-2222-4333-8444-555555555555", "cus_demo_1"
+        self.assertEqual(founder_tools.entity_href("customers", cid, "demo"), f"/founder/customers?record={cid}&mode=demo")
+        self.assertEqual(founder_tools.entity_href("workspaces", wid), f"/founder/customers?tab=workspaces&q={wid}")
+        self.assertEqual(founder_tools.entity_href("incidents", "inc-1"), "/founder/operations?tab=incidents&incident=inc-1")
+        self.assertEqual(founder_tools.entity_href("invoices", "in_1"), "/founder/revenue?tab=payments")
+        self.assertEqual(founder_tools.entity_href("tickets", "t1"), "/founder/support?tab=inbox")
+        self.assertEqual(founder_tools.entity_href("unknown", "x"), "/founder")
+        ctx = self.demo_ctx(text="open that workspace")
+        found = run_tool(ctx, "founder_navigate", {"section": "overview", "entityCollection": "workspaces", "entityId": wid})
+        self.assertEqual(found["href"], f"/founder/customers?tab=workspaces&q={wid}&mode=demo", "an entity opens on its own page")
+        found = run_tool(ctx, "founder_navigate", {"section": "overview", "incidentId": "inc-2"})
+        self.assertEqual(found["href"], "/founder/operations?tab=incidents&incident=inc-2&mode=demo")
 
 
 class HarnessManagerTests(unittest.TestCase):

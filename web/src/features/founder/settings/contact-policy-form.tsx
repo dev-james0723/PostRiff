@@ -14,6 +14,7 @@ import { failureOf, useCapability, useContactPolicy, useSaveContactPolicy, useTe
 import { clockToMinutes, minutesToClock, usdMicro, whenDateTime } from '../customers/kit/format';
 import { QueryState } from '../customers/kit/page-frame';
 import type { ContactPolicy } from '../customers/kit/types';
+import { channelListed } from './comms';
 
 /**
  * Contact & calls policy (CONTRACTS §5, PRD §6.6–§6.7). Every switch that would cause a real call, email or push
@@ -22,7 +23,12 @@ import type { ContactPolicy } from '../customers/kit/types';
  * revision; a stale revision is refused by the server. The test call always comes back 409 POLICY_DISABLED and
  * the page shows that refusal as the result.
  */
-const CHANNELS = ['phone', 'email', 'push'] as const;
+/** The policy's channel ids (`founder_contact.CHANNELS`) and their labels. */
+const CHANNELS = [
+  { id: 'call', label: 'Phone' },
+  { id: 'email', label: 'Email' },
+  { id: 'push', label: 'Push' }
+] as const;
 const EVENTS = ['founder.incident', 'founder.briefing'] as const;
 const LIVE_DELIVERY_REASON = 'Real calls, email and push stay off in this release (liveDeliveryEnabled = false; provider flags default to 0). Enabling them needs a configured provider and a separate enablement, not this form.';
 
@@ -187,7 +193,7 @@ export function ContactPolicyForm() {
               {policy.liveDeliveryBlockers && policy.liveDeliveryBlockers.length > 0 && <p className='text-muted-foreground text-xs'>Blockers reported by the server: {policy.liveDeliveryBlockers.join(', ')}.</p>}
               <div className='grid gap-3 sm:grid-cols-3'>
                 {CHANNELS.map((channel) => (
-                  <LockedSwitch key={channel} label={channel === 'phone' ? 'Phone' : channel === 'email' ? 'Email' : 'Push'} checked={Boolean(policy.channels?.[channel])} reason='Follows live delivery; stays off while it is off.' />
+                  <LockedSwitch key={channel.id} label={channel.label} checked={channelListed(policy.channels, channel.id)} reason='Listed in the policy; used only while live delivery is on.' />
                 ))}
               </div>
             </Band>
@@ -205,10 +211,10 @@ export function ContactPolicyForm() {
               <Field label='Quiet hours end'>
                 <Input type='time' value={draft.quietEnd} onChange={(event) => setDraft({ ...draft, quietEnd: event.target.value })} className={FIELD_CLASS} />
               </Field>
-              <Field label='Daily cap' hint='Contact attempts per day, 0–10.'>
+              <Field label='Daily cap' hint='Contact attempts per day, 0–2.'>
                 <Input type='number' inputMode='numeric' min={0} max={2} value={draft.dailyCap} onChange={(event) => setDraft({ ...draft, dailyCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
-              <Field label='Concurrent cap' hint='Calls in flight at once, 1–3.'>
+              <Field label='Concurrent cap' hint='Calls in flight at once, 0 or 1.'>
                 <Input type='number' inputMode='numeric' min={0} max={1} value={draft.concurrentCap} onChange={(event) => setDraft({ ...draft, concurrentCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
               <Field label='Daily budget (USD)' hint={`Stored as USD micro; currently ${usdMicro(policy.budgetUsdMicroDaily)} per day.`}>

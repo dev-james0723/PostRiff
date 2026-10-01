@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { CustomerActions } from '../actions';
 import { useFounderMode, useRecords } from './kit/api';
 import { useAsk } from './kit/ask';
 import { ReceiptChip, useEvidenceDrawer } from './kit/evidence';
@@ -17,12 +18,17 @@ import { count, minor, recordLabel, stateLabel, usdMicro, whenDate, whenDateTime
 import { DataStateChip, QueryState } from './kit/page-frame';
 import { SimpleTable, type SimpleColumn } from './kit/simple-table';
 import type { RecordRow } from './kit/types';
-import { linkedWorkspaces, riskFlags, type RiskFlag } from './risk-flags';
+import { flagIndex, joinFlags } from './customer-risk';
+import { FlagCell, FlagCoverage } from './risk-views';
+import { useCustomerRisk } from './use-customer-risk';
 
 /**
  * Customer 360 (PRD §5.4): a summary band of server fields and the tabs Summary · Billing · Usage & AI cost ·
  * Connections · Support · Activity · Advanced. Linked records come with the detail query (`linkedRecords`, Demo
- * today; Live says so per tab). "Ask Rafii about this account" carries the opaque customer id only.
+ * today; Live says so per tab). "Ask Rafii about this account" carries the opaque customer id only. Risk flags are the
+ * server's (`GET /customers/risk?view=flagged`, the list's own cached answer), joined onto this customer's workspaces,
+ * so the sheet and the list never disagree. Founder actions (block, credits, refund intent; CONTRACTS §8.F) sit under
+ * the summary band and run only through their confirm dialog.
  */
 const TABS = ['summary', 'billing', 'usage', 'connections', 'support', 'activity', 'advanced'] as const;
 type TabId = (typeof TABS)[number];
@@ -46,18 +52,11 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function RiskFlagChips({ flags, className }: { flags: RiskFlag[]; className?: string }) {
-  if (flags.length === 0) return <span className='text-muted-foreground text-xs'>No flags</span>;
-  return (
-    <span className={cn('flex flex-wrap gap-1', className)}>
-      {flags.map((flag) => (
-        <StatusChip key={flag.id} status={flag.kind === 'hypothesis' ? 'info' : 'warning'} title={`${flag.evidence} · rule ${flag.rule}`}>
-          {flag.label}
-          {flag.kind === 'hypothesis' && <span className='text-muted-foreground ml-1 font-normal'>(hypothesis)</span>}
-        </StatusChip>
-      ))}
-    </span>
-  );
+/** The customer's workspaces from the detail query's `workspaces` list, in the order of the row's `workspaceIds` (a join only). */
+function linkedWorkspaces(customer: RecordRow, workspaces: readonly RecordRow[]): RecordRow[] {
+  const ids = Array.isArray(customer.workspaceIds) ? (customer.workspaceIds as unknown[]).filter((id): id is string => typeof id === 'string') : [];
+  const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  return ids.map((id) => byId.get(id)).filter((workspace): workspace is RecordRow => workspace !== undefined);
 }
 
 function LinkedUnavailable({ what }: { what: string }) {
@@ -135,6 +134,9 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
   const evidence = useEvidenceDrawer();
   const [tab, setTab] = useState<TabId>('summary');
   const detail = useRecords(recordId ? { collection: 'customers', search: '', status: 'all', page: 1, recordId } : null);
+  // The list's flagged-workspace answer (same key, so no extra request), asked only when the operator may read it.
+  const risk = useCustomerRisk('flagged');
+  const index = useMemo(() => flagIndex(risk.query.data?.data.rows), [risk.query.data]);
   useEffect(() => {
     setTab('summary');
   }, [recordId]);
@@ -143,7 +145,7 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
   const customer = data?.rows[0] ?? null;
   const linked = data?.linkedRecords;
   const workspaces = customer ? linkedWorkspaces(customer, data?.workspaces ?? []) : [];
-  const flags = customer ? riskFlags(customer, data?.workspaces ?? []) : [];
+  const flags = customer ? joinFlags(customer.workspaceIds, index) : [];
   const subscription = linked?.subscriptions?.[0] ?? null;
   const workspace = workspaces[0] ?? null;
 
@@ -185,10 +187,15 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                   <Fact label='Credits'>{workspace && typeof workspace.creditsUsed === 'number' && typeof workspace.creditsQuota === 'number' ? `${count(workspace.creditsUsed)} of ${count(workspace.creditsQuota)}` : 'Not recorded'}</Fact>
                   <Fact label='Customer since'>{whenDate(customer.createdAt)}</Fact>
                 </dl>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <span className='text-muted-foreground text-xs'>Risk flags (observed rules v1)</span>
-                  <RiskFlagChips flags={flags} />
+                <div className='flex flex-col gap-1.5'>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <span className='text-muted-foreground text-xs'>Risk flags</span>
+                    <FlagCell risk={risk} flags={flags} />
+                  </div>
+                  <FlagCoverage risk={risk} />
                 </div>
+
+                <CustomerActions key={customer.id} customerId={customer.id} workspaces={workspaces.map((row) => ({ id: row.id, label: recordLabel(row) }))} />
 
                 <Tabs value={tab} onValueChange={(value) => setTab(value as TabId)}>
                   <div className='scrollbar-hide -mx-1 overflow-x-auto px-1'>

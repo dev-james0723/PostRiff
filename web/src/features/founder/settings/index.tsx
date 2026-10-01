@@ -4,7 +4,7 @@ import { FounderAskProvider } from '../customers/kit/ask';
 import type { FounderSectionProps } from '../sections';
 import { SettingsView } from './settings-view';
 
-/** `/founder/settings` — Contact & calls policy, briefing schedules and the notifications readiness note. */
+/** `/founder/settings` — Contact & calls with the founder workspace, briefing versions and schedules, notifications, budgets and security. */
 export default function SettingsSection({ onAsk }: FounderSectionProps) {
   return (
     <FounderAskProvider section='settings' onAsk={onAsk}>

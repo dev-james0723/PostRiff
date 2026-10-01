@@ -255,9 +255,11 @@ export function useSourceHealth() {
 
 export function useAudit() {
   const scope = useFounderScope();
+  // `GET /audit` needs audit.read; without it the tab says so instead of sending a request that can only be refused.
+  const allowed = useCapability('audit.read');
   return useQuery({
     queryKey: scope.key('audit'),
-    enabled: scope.ready,
+    enabled: scope.ready && allowed,
     queryFn: async ({ signal }) => {
       const result = await founderFetch<Envelope<{ events?: AuditEvent[]; limit?: number }>>('/audit', { signal });
       return { ...result, events: result.data.events ?? [], limit: result.data.limit ?? null };

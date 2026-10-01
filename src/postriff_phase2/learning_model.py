@@ -11,10 +11,11 @@ and a candidate that changes content rather than form is dropped.
 from __future__ import annotations
 
 import json
+import time
 
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
-from . import learning_signals as signals, locales, source_policy
+from . import ai_call_events, learning_signals as signals, locales, source_policy
 
 MAX_PAIRS_PER_SCOPE = 8
 MIN_PAIRS_PER_SCOPE = 2
@@ -174,6 +175,18 @@ class GatewayCall:
         self.drafting = drafting
 
     def __call__(self, system, user, schema):
+        # A request that reached the provider is one pr_ai_call_events attempt (Founder Admin §8.B), noted in the caller's
+        # active ai_call_events scope whatever the outcome (outside a scope nothing is noted).
+        meter = {}
+        try:
+            return self._answer(system, user, schema, meter)
+        finally:
+            if meter:
+                began = meter.pop("began")
+                ai_call_events.attempt(provider="vercel-ai-gateway", model=self.model, workload="drafting" if self.drafting else "structured",
+                                       latency_ms=round((time.monotonic() - began) * 1000), **meter)
+
+    def _answer(self, system, user, schema, meter):
         cost_usd_micro = None
         from . import gateway_catalog
         from .model_runtime import NO_TEMPERATURE
@@ -194,27 +207,41 @@ class GatewayCall:
             body["reasoning"] = reasoning
         if self.model not in NO_TEMPERATURE and gateway_catalog.supports(self.model, "temperature") and not reasons:
             body["temperature"] = 0.2
+        meter.update(began=time.monotonic(), started_at=time.time(), status="unknown")
         response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
         data = response.get("body") or {}
+        http_status = response.get("status") if type(response.get("status")) is int else None
+        meter["http_status"] = http_status
         if response.get("status") != 200 or not isinstance(data, dict):
+            if http_status == 429 or (http_status is not None and 400 <= http_status < 500):
+                # Refused before any work: nothing was billed.
+                meter.update(status="rate_limited" if http_status == 429 else "failed", cost_usd_micro=0, cost_source="provider",
+                             input_tokens=0, output_tokens=0, cached_input_tokens=0, reasoning_tokens=0)
+            elif http_status == 200:
+                meter["status"] = "failed"
             raise AlphaError("The extraction model call failed.", 502)
-        from .model_runtime import gateway_routing
+        from .model_runtime import gateway_generation, gateway_routing
         final_provider, gateway_cost = gateway_routing(data)
+        usage = data.get('usage') if isinstance(data.get('usage'), dict) else {}
+        meter.update(status="ok", provider_request_id=gateway_generation(data), input_tokens=usage.get('prompt_tokens'), output_tokens=usage.get('completion_tokens'),
+                     cached_input_tokens=(usage.get('prompt_tokens_details') or {}).get('cached_tokens') if isinstance(usage.get('prompt_tokens_details'), dict) else None,
+                     reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens') if isinstance(usage.get('completion_tokens_details'), dict) else None)
         if final_provider and final_provider not in self.allowed_providers:
             raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
-        usage = data.get('usage') or {}
         cost = usage.get('cost')
         if not (isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0):
             cost = gateway_cost
         if cost is not None:
             from decimal import ROUND_CEILING, Decimal
             cost_usd_micro = int((Decimal(str(cost)) * 1_000_000).to_integral_value(rounding=ROUND_CEILING))
+            meter.update(cost_usd_micro=cost_usd_micro, cost_source="gateway")
         else:
-            from .model_runtime import DEFAULT_PRICES
+            from .model_runtime import DEFAULT_PRICES, DEFAULT_PRICES_VERSION
             prompt, completion = usage.get('prompt_tokens'), usage.get('completion_tokens')
             if type(prompt) is int and type(completion) is int and min(prompt, completion) >= 0 and prompt + completion > 0 and self.model in DEFAULT_PRICES:
                 ip, op = DEFAULT_PRICES[self.model]
                 cost_usd_micro = __import__('math').ceil(prompt * ip + completion * op)
+                meter.update(cost_usd_micro=cost_usd_micro, cost_source="table:" + DEFAULT_PRICES_VERSION)
         try:
             value = json.loads(data["choices"][0]["message"]["content"])
             if not isinstance(value, dict):

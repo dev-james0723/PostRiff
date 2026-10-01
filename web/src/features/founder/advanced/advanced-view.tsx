@@ -8,24 +8,35 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FounderActionsLog } from '@/features/founder/actions';
 import { FIELD_CLASS, StatusChip } from '@/features/workspace/rafii-parts';
 import { useFounderPageContext } from '@/lib/founder/page-context';
-import { useAudit, useReceipt, useSourceHealth } from '../customers/kit/api';
+import { useAudit, useCapability, useReceipt } from '../customers/kit/api';
 import { useAsk } from '../customers/kit/ask';
 import { useEvidenceDrawer } from '../customers/kit/evidence';
 import { count, stateLabel, whenDateTime } from '../customers/kit/format';
 import { DataStateChip, FounderPage, Panel, QueryState } from '../customers/kit/page-frame';
 import { SimpleTable } from '../customers/kit/simple-table';
 import { useTabState } from '../customers/kit/tabs';
-import type { AuditEvent, SourceHealthRow } from '../customers/kit/types';
-import { SourceHealthList, sourceId } from '../operations/operations-view';
+import type { AuditEvent } from '../customers/kit/types';
+import { DataHealth } from './data-health';
+import { EngineeringChecks } from './engineering';
 
 /**
  * Advanced (PRD §5.1): the operator audit log (`GET /audit`, content-free), receipt lookup by id
- * (`GET /metrics/receipts/{id}` → EvidenceDrawer) and source health in full. Nothing here acts; it shows what
- * was recorded, for whom, and when. The tab ids are the nav's (`audit` · `receipts` · `data-health`); older
- * spellings (`sources`, `evidence`, the `/control/*` redirects) resolve through `customers/kit/tabs.ts`.
+ * (`GET /metrics/receipts/{id}` → EvidenceDrawer), source health in full, the founder action log (`GET /actions`)
+ * and attested exact-SHA engineering evidence (`GET /engineering`). Nothing here acts; it shows what was recorded,
+ * for whom, and when. The tab ids are the nav's (`audit` · `receipts` · `data-health` · `actions` · `engineering`);
+ * older spellings (`sources`, `evidence`, the `/control/*` redirects) resolve through `customers/kit/tab-ids.ts`.
  */
+const TABS = [
+  ['audit', 'Audit'],
+  ['receipts', 'Receipts'],
+  ['data-health', 'Data health'],
+  ['actions', 'Actions'],
+  ['engineering', 'Engineering']
+] as const;
+
 const RECEIPT_ID = /^[A-Za-z0-9-]{8,80}$/;
 
 function ReceiptLookup() {
@@ -95,12 +106,15 @@ function ReceiptLookup() {
 
 function AuditTable() {
   const audit = useAudit();
+  const allowed = useCapability('audit.read');
+  if (!allowed) return <StateMessage kind='permission' title='The audit log needs audit.read' description='This operator was not granted the audit capability, so no audit request is sent.' />;
   return (
     <QueryState query={audit} label='audit log' isEmpty={(result) => result.events.length === 0} emptyTitle='No audit entries' emptyDescription='Every authorised control request writes one row; none have been recorded in this environment.'>
       {(result) => (
         <div className='flex flex-col gap-2'>
           <p className='text-muted-foreground text-xs'>Latest {count(result.events.length)}{result.limit ? ` of at most ${count(result.limit)}` : ''} entries. Content-free: actions and results only, never bodies.</p>
           <SimpleTable<AuditEvent>
+            className='relative'
             rows={result.events}
             rowKey={(row) => row.id}
             caption='Operator audit log'
@@ -112,35 +126,6 @@ function AuditTable() {
               { key: 'actor', label: 'Actor', render: (row) => <span className='font-mono text-xs'>{row.actor ? `…${row.actor.slice(-8)}` : 'Not recorded'}</span> },
               { key: 'request', label: 'Request', render: (row) => <span className='font-mono text-xs'>{row.request_id ? `…${row.request_id.slice(-8)}` : '—'}</span> },
               { key: 'env', label: 'Environment', render: (row) => stateLabel(row.environment) }
-            ]}
-          />
-        </div>
-      )}
-    </QueryState>
-  );
-}
-
-function SourceDetail() {
-  const sources = useSourceHealth();
-  return (
-    <QueryState query={sources} label='source health' isEmpty={(result) => result.sources.length === 0} emptyTitle='No sources reported'>
-      {(result) => (
-        <div className='flex flex-col gap-4'>
-          <SourceHealthList rows={result.sources} />
-          <SimpleTable<SourceHealthRow>
-            rows={result.sources}
-            rowKey={(row) => sourceId(row)}
-            caption='Source health detail'
-            columns={[
-              { key: 'source', label: 'Source', render: (row) => stateLabel(sourceId(row)) },
-              { key: 'state', label: 'State', render: (row) => stateLabel(row.state) },
-              { key: 'watermark', label: 'Watermark', render: (row) => whenDateTime(row.watermark ?? row.lastGoodAt) },
-              { key: 'checked', label: 'Checked', render: (row) => whenDateTime(row.checked_at) },
-              { key: 'qualified', label: 'Qualified', render: (row) => (row.qualified === undefined ? '—' : row.qualified ? 'Yes' : 'No') },
-              { key: 'coverage', label: 'Coverage complete', render: (row) => (row.coverage_complete === undefined ? '—' : row.coverage_complete ? 'Yes' : 'No') },
-              { key: 'provenance', label: 'Provenance', render: (row) => stateLabel(row.provenance) },
-              { key: 'version', label: 'Adapter', render: (row) => <span className='font-mono text-xs'>{row.source_version ?? '—'}</span> },
-              { key: 'reason', label: 'Reason', render: (row) => stateLabel(row.reasonCode ?? row.reason) }
             ]}
           />
         </div>
@@ -165,11 +150,15 @@ export function AdvancedView() {
       }
     >
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
-        <TabsList variant='line' className='w-max'>
-          <TabsTrigger value='audit'>Audit</TabsTrigger>
-          <TabsTrigger value='receipts'>Receipts</TabsTrigger>
-          <TabsTrigger value='data-health'>Data health</TabsTrigger>
-        </TabsList>
+        <div className='scrollbar-hide relative -mx-1 overflow-x-auto px-1'>
+          <TabsList variant='line' className='w-max'>
+            {TABS.map(([id, label]) => (
+              <TabsTrigger key={id} value={id}>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
         <TabsContent value='audit' className='pt-4'>
           <Panel title='Audit log' description='Every control request this operator made, with its result.'>
             <AuditTable />
@@ -181,8 +170,18 @@ export function AdvancedView() {
           </Panel>
         </TabsContent>
         <TabsContent value='data-health' className='pt-4'>
-          <Panel title='Data health' description='Per source: state, watermark, qualification and adapter version.'>
-            <SourceDetail />
+          <Panel title='Data health' description='Every probed source: state, last good read, age and reason.'>
+            <DataHealth />
+          </Panel>
+        </TabsContent>
+        <TabsContent value='actions' className='pt-4'>
+          <Panel title='Founder actions' description='Every founder action request, newest first, with what the preview showed and what happened, and the account blocks in force.'>
+            <FounderActionsLog />
+          </Panel>
+        </TabsContent>
+        <TabsContent value='engineering' className='pt-4'>
+          <Panel title='Engineering checks' description='Attested exact-SHA evidence from CI, deployments and error trackers, and the overall state it supports. Read-only.'>
+            <EngineeringChecks />
           </Panel>
         </TabsContent>
       </Tabs>

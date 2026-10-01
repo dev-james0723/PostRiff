@@ -50,9 +50,14 @@ class Catalog:
                 raise ValueError('metrics.d entries must be activated_v1 rows: ' + extension.name)
             rows.extend(extra)
         for row in rows:
-            # An activated_v1 entry appended to the catalog governs its id; the proposed text stays untouched.
+            # An activated_v1 entry appended to the catalog governs its id; the proposed text stays untouched. A later
+            # activated row (a slice's metrics.d) may supersede an earlier one only with a strictly higher version, so a
+            # receipt never pairs new numbers with an old definition and a definition never silently moves backwards.
             current = self.metrics.get(row['id'])
-            if current is not None and current.get('status') == ACTIVATED and row.get('status') == ACTIVATED: raise ValueError('duplicate activated metric ' + row['id'])
+            if current is not None and current.get('status') == ACTIVATED and row.get('status') == ACTIVATED:
+                if int(row['version']) <= int(current['version']): raise ValueError('duplicate activated metric ' + row['id'])
+                self.metrics[row['id']] = row
+                continue
             if current is None or current.get('status') != ACTIVATED: self.metrics[row['id']] = row
         self.dashboards = json.loads((path / 'catalogs/dashboards.json').read_text())
         self.detectors = json.loads((path / 'catalogs/detectors.json').read_text())

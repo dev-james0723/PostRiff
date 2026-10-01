@@ -112,6 +112,10 @@ class ApiTokens:
             raise AlphaError("API token expired or revoked.", 401, code="api_token_invalid")
         if workspace_id is not None and str(workspace_id) != row[1]:
             raise AlphaError("Workspace unavailable.", 403, code="token_scope_denied")
+        # A founder block on the token's creator or workspace (operator_actions, migration 062); skipped while not installed.
+        from .operator_actions import account_blocked, blocked_error
+        if account_blocked(cur, user_id=row[2], workspace_id=row[1]):
+            raise blocked_error()
         return {"tokenId": row[0], "workspaceId": row[1], "createdBy": row[2], "scopes": row[3], "membership": Membership.from_row(*row[4:9])}
 
     def resolve(self, raw, workspace_id=None):

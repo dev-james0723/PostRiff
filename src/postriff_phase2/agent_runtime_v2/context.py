@@ -36,6 +36,9 @@ class EffectLedger:
     voice_commands: list[dict] = field(default_factory=list)   # voice_command blocks from ui.voice (Contract 2)
     known_ids: set = field(default_factory=set)
     spans: list[dict] = field(default_factory=list)
+    # Provider attempts that are not priced token spans (failed generations, images), kept only for pr_ai_call_events
+    # (manager.record_calls); the turn's spend never reads them.
+    calls: list[dict] = field(default_factory=list)
     specialists: list[str] = field(default_factory=list)
     model_requests: int = 0
     guardrail_trips: list[dict] = field(default_factory=list)

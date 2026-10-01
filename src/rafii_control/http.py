@@ -223,7 +223,10 @@ class ControlApplication:
     def phone_calls(self, principal):
         """Live phone adapter for a founder test call, or None (which founder_contact answers 409 POLICY_DISABLED) unless the
         embedded consumer runtime, its phone product and the ops workspace flag all exist. Never raises."""
-        ops = self.flags.get('RAFII_FOUNDER_OPS_WORKSPACE_ID')
+        try:
+            ops, _source = founder_module('founder_ops').resolve(self.flags, getattr(self.queries, 'store', None), principal['operator']['user_id'])
+        except ControlError:
+            ops = self.flags.get('RAFII_FOUNDER_OPS_WORKSPACE_ID')
         if self.runtime is None or not ops: return None
         try: phone = getattr(self.runtime(), 'phone', None)
         except Exception: return None
@@ -271,9 +274,9 @@ class ControlApplication:
             body['idempotencyKey'] = key
             # control=self: the turn reuses this app's QueryService/WorkspaceService instead of opening a second control store.
             return founder_module('founder_agent').turn(self.consumer(), principal, body, request_id, control=self)
-        if match := re.fullmatch(f'/agent/runs/({ID})', path): return founder_module('founder_agent').run(self.consumer(), principal, match[1], request_id)
-        if match := re.fullmatch(f'/agent/runs/({ID})/cancel', path): return founder_module('founder_agent').cancel(self.consumer(), principal, match[1], request_id)
-        if match := re.fullmatch(f'/agent/conversations/({ID})/state', path): return founder_module('founder_agent').conversation_state(self.consumer(), principal, match[1], request_id)
+        if match := re.fullmatch(f'/agent/runs/({ID})', path): return founder_module('founder_agent').run(self.consumer(), principal, match[1], request_id, control=self)
+        if match := re.fullmatch(f'/agent/runs/({ID})/cancel', path): return founder_module('founder_agent').cancel(self.consumer(), principal, match[1], request_id, control=self)
+        if match := re.fullmatch(f'/agent/conversations/({ID})/state', path): return founder_module('founder_agent').conversation_state(self.consumer(), principal, match[1], request_id, control=self)
         raise ControlError('SCOPE_DENIED', 404)
 
     def terminal_audit(self, action, result, principal, request_id, code=None):

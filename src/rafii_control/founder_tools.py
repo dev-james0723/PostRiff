@@ -120,6 +120,29 @@ def entity_section(collection: str) -> str:
             "tickets": "support", "incidents": "operations"}.get(collection, "overview")
 
 
+# How each page opens one record: the URL parameters it reads (customers: `record`, its workspaces tab: `q`; operations:
+# `incident`). Collections a page cannot select by id open the tab that lists them.
+_ENTITY_QUERY = {
+    "customers": lambda ident: {"record": ident},
+    "workspaces": lambda ident: {"tab": "workspaces", "q": ident},
+    "subscriptions": lambda ident: {"tab": "subscriptions"},
+    "payments": lambda ident: {"tab": "payments"},
+    "invoices": lambda ident: {"tab": "payments"},
+    "usage": lambda ident: {"tab": "reconcile"},
+    "tickets": lambda ident: {"tab": "inbox"},
+    "incidents": lambda ident: {"tab": "incidents", "incident": ident},
+}
+
+
+def entity_query(collection: str, ident) -> dict:
+    return _ENTITY_QUERY.get(collection, lambda _ident: {})(str(ident))
+
+
+def entity_href(collection: str, ident, mode: str | None = None) -> str:
+    """The founder page link that opens one record (or the tab listing it), in Demo when the answer came from Demo."""
+    return console_href(entity_section(collection), **entity_query(collection, ident), **({"mode": "demo"} if mode == "demo" else {}))
+
+
 def adapter(module_name: str, function: str, arity: int):
     """A function of an optional sibling module (live_metrics, demo_metrics, founder_incidents) when it exists and accepts
     `arity` positional arguments; None otherwise, so a missing or differently shaped adapter is reported, never guessed at."""
@@ -360,7 +383,7 @@ def founder_metric_query(ctx: RafiiRunContext, args: dict) -> dict:
     for row in found["rows"]:
         workspace = (row.get("dimensions") or {}).get("workspace")
         if workspace:
-            note_link(ctx, founder, "workspace", workspace, console_href("customers", entity=f"workspaces:{workspace}"))
+            note_link(ctx, founder, "workspace", workspace, entity_href("workspaces", workspace))
     return {"ok": True, "verified": True, "source": "application", "mode": mode_of(founder), **found,
             "note": "Values are as the receipt reports them; a null value is unavailable, not zero."}
 
@@ -448,7 +471,7 @@ def founder_entity_lookup(ctx: RafiiRunContext, args: dict) -> dict:
     if not rows:
         return {"ok": False, "code": "not_found", "error": "No such record in this data mode."}
     record = safe_record(rows[0])
-    href = console_href(entity_section(collection), entity=f"{collection}:{ident}", **({"mode": "demo"} if mode == "demo" else {}))
+    href = entity_href(collection, ident, mode)
     note_link(ctx, founder, collection[:-1] if collection.endswith("s") else collection, ident, href, record.get("name") or record.get("title"))
     receipt_id = (found.get("receipt") or {}).get("id")
     if receipt_id:
@@ -493,7 +516,7 @@ def _incident(ctx: RafiiRunContext, founder: dict, ident: str) -> dict:
 def _link_affected(ctx: RafiiRunContext, founder: dict, workspace_ids, *, mode: str) -> None:
     for workspace in (workspace_ids or [])[:20]:
         if isinstance(workspace, str) and _QUERY_VALUE.match(workspace):
-            note_link(ctx, founder, "workspace", workspace, console_href("customers", entity=f"workspaces:{workspace}", **({"mode": "demo"} if mode == "demo" else {})))
+            note_link(ctx, founder, "workspace", workspace, entity_href("workspaces", workspace, mode))
 
 
 @register(contracts.ToolSpec("founder_entity_search", contracts.READ, "read", "Bounded search over customers, workspaces, subscriptions, payments, usage or requests "
@@ -519,7 +542,7 @@ def founder_entity_search(ctx: RafiiRunContext, args: dict) -> dict:
     rows = [safe_record(r) for r in (found.get("rows") or [])[:MAX_ROWS]]
     for row in rows:
         if row.get("id"):
-            note_link(ctx, founder, collection[:-1], row["id"], console_href(entity_section(collection), entity=f"{collection}:{row['id']}", **({"mode": "demo"} if mode == "demo" else {})),
+            note_link(ctx, founder, collection[:-1], row["id"], entity_href(collection, row["id"], mode),
                       row.get("name") or row.get("title"))
     receipt_id = (found.get("receipt") or {}).get("id")
     if receipt_id:
@@ -539,7 +562,7 @@ def _quota_view(ctx: RafiiRunContext, founder: dict) -> dict:
     near.sort(key=lambda r: (-r["quotaUsedPercent"], r["id"]))
     rows = near[:MAX_ROWS]
     for row in rows:
-        note_link(ctx, founder, "workspace", row["id"], console_href("customers", entity=f"workspaces:{row['id']}", mode="demo"), row.get("name"))
+        note_link(ctx, founder, "workspace", row["id"], entity_href("workspaces", row["id"], "demo"), row.get("name"))
     return {"ok": True, "verified": True, "source": "application", "mode": "demo", "collection": "workspaces", "view": "quota_80", "rows": rows, "total": len(near),
             "page": 1, "pageSize": MAX_ROWS, "receiptId": receipt["id"], "definition": "creditsUsed / creditsQuota >= 0.8 in the Demo dataset's usage settlement."}
 
@@ -628,7 +651,7 @@ def founder_cost_breakdown(ctx: RafiiRunContext, args: dict) -> dict:
     for row in current.get("rows", []):
         workspace = (row.get("dimensions") or {}).get("workspace")
         if workspace:
-            note_link(ctx, founder, "workspace", workspace, console_href("customers", entity=f"workspaces:{workspace}"))
+            note_link(ctx, founder, "workspace", workspace, entity_href("workspaces", workspace))
     return {"ok": True, "verified": True, "source": "application", "mode": mode_of(founder), "dimension": args["dimension"], "current": current, "previous": previous,
             "note": "Costs are native USD micro-units per row; never add rows across currencies or periods yourself. A null value is unavailable."}
 
@@ -720,7 +743,7 @@ def _recipient_facts(ctx: RafiiRunContext, founder: dict, customer_id, workspace
         subscription = next((s for s in data.get("subscriptions", []) if s.get("customerId") == customer["id"]), None) or {}
         invoice = next((i for i in data.get("invoices", []) if i.get("id") == subscription.get("currentInvoiceId")), None) or {}
         workspace = next((w for w in data.get("workspaces", []) if w.get("customerId") == customer["id"]), None) or {}
-        note_link(ctx, founder, "customer", customer["id"], console_href("customers", entity=f"customers:{customer['id']}", mode="demo"), customer.get("name"))
+        note_link(ctx, founder, "customer", customer["id"], entity_href("customers", customer["id"], "demo"), customer.get("name"))
         return {"receiptId": receipt["id"], "mode": "demo", "customerId": customer["id"], "name": customer.get("name"), "company": customer.get("company"), "plan": customer.get("plan"),
                 "workspaceId": workspace.get("id"), "subscriptionStatus": subscription.get("status"), "invoiceNumber": invoice.get("number"), "invoiceStatus": invoice.get("status"),
                 "amountMinor": invoice.get("amountMinor"), "currency": invoice.get("currency"), "dueAt": invoice.get("dueAt"),
@@ -736,7 +759,7 @@ def _recipient_facts(ctx: RafiiRunContext, founder: dict, customer_id, workspace
     if not rows:
         return {"mode": "live"}
     record = safe_record(rows[0])
-    note_link(ctx, founder, collection[:-1], ident, console_href("customers", entity=f"{collection}:{ident}"), record.get("name"))
+    note_link(ctx, founder, collection[:-1], ident, entity_href(collection, ident), record.get("name"))
     return {"mode": "live", "customerId": record.get("id") if collection == "customers" else None, "workspaceId": record.get("id") if collection == "workspaces" else None,
             "name": record.get("name"), "plan": record.get("plan"), "subscriptionStatus": record.get("status")}
 
@@ -870,7 +893,7 @@ def founder_incident_ack(ctx: RafiiRunContext, args: dict) -> dict:
     verified = incident.get("acknowledgedAt") is not None
     ctx.ledger.changed.append({"type": "incident", "id": args["incidentId"], "change": "acknowledged", "verified": verified, "expected": "acknowledged",
                                "actual": incident.get("state")})
-    note_link(ctx, founder, "incident", args["incidentId"], incident.get("href") or console_href("operations", incident=args["incidentId"]))
+    note_link(ctx, founder, "incident", args["incidentId"], incident.get("href") or entity_href("incidents", args["incidentId"]))
     return {"ok": True, "verified": verified, "source": "application", "incident": incident, "replayed": bool(outcome.get("replayed")),
             "cancelledAttempts": outcome.get("cancelledAttempts"), "note": "Acknowledged is not resolved: the incident stays open until its detector sees recovery."}
 
@@ -883,12 +906,17 @@ def founder_incident_ack(ctx: RafiiRunContext, args: dict) -> dict:
 def founder_navigate(ctx: RafiiRunContext, args: dict) -> dict:
     from postriff_phase2.site_agent import contracts as site_contracts
     founder = scope_of(ctx)
-    entity = f"{args['entityCollection']}:{args['entityId']}" if args.get("entityCollection") and args.get("entityId") else None
-    href = console_href(args["section"], entity=entity, incident=args.get("incidentId"), **({"mode": "demo"} if mode_of(founder) == "demo" else {}))
-    title = {"overview": "Overview", "ai-cost": "AI cost"}.get(args["section"], args["section"].capitalize())
+    # An incident or entity opens on its own page with the parameters that page reads; otherwise the section itself.
+    section, query = args["section"], {}
+    if args.get("incidentId"):
+        section, query = "operations", entity_query("incidents", args["incidentId"])
+    elif args.get("entityCollection") and args.get("entityId"):
+        section, query = entity_section(args["entityCollection"]), entity_query(args["entityCollection"], args["entityId"])
+    href = console_href(section, **query, **({"mode": "demo"} if mode_of(founder) == "demo" else {}))
+    title = {"overview": "Overview", "ai-cost": "AI cost"}.get(section, section.capitalize())
     auto = args.get("auto") is True and wants_to_go(ctx.request_text)
-    ctx.ledger.navigation.append(site_contracts.navigation(f"Open {title}", href, "founder_" + args["section"].replace("-", "_"), auto=auto))
-    note_link(ctx, founder, "section", args["section"], href, title)
+    ctx.ledger.navigation.append(site_contracts.navigation(f"Open {title}", href, "founder_" + section.replace("-", "_"), auto=auto))
+    note_link(ctx, founder, "section", section, href, title)
     return {"ok": True, "verified": True, "source": "application", "href": href, "title": title, "opensNow": auto, "canOpen": True}
 
 

@@ -20,7 +20,7 @@ import re
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
-from .. import automation_edit, intent as writing_intent, request_model, turn_references
+from .. import ai_call_events, automation_edit, intent as writing_intent, request_model, turn_references
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import Membership, require
@@ -928,7 +928,10 @@ class SiteAgentService:
         # strong), so the answer names the model that actually wrote it.
         phrased_by = getattr(call, "model", None) or (f"claude-code:{call.alias}" if getattr(call, "alias", None) else None) or pending["model"]
         try:
-            result = call(prompts.SYSTEM_PROMPT, user, prompts.SCHEMA)
+            # The provider attempt becomes one pr_ai_call_events row (Founder Admin §8.B), written when the call returns.
+            with ai_call_events.scope(feature="site_agent", workspace_id=workspace_id, user_id=principal, run_id=run_id,
+                                      reservation_id=(reservation or {}).get("reservationId"), connect=getattr(self.repository, "connection_factory", None)):
+                result = call(prompts.SYSTEM_PROMPT, user, prompts.SCHEMA)
             actual = getattr(result, "cost_usd_micro", None)
             help_refs = {p["ref"] for p in pending["passages"]}
             fact_refs = {f["ref"] for f in pending["facts"]}

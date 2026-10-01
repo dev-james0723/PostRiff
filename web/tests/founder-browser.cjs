@@ -171,6 +171,47 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
   }
 }
 
+/**
+ * Every tab of every section, clicked in turn: pages load a tab's queries only when it opens, so the default view alone
+ * does not prove a tab is free of failed requests, errors, "NaN" or sideways scroll. The page's own tabs are the first
+ * tablist in the main landmark; panels may hold nested tablists, which their own tab exercises.
+ */
+async function tabSweep(page, tracker, width, mode) {
+  for (const [id, url] of SECTIONS) {
+    const label = `${width}px ${mode} ${id}`;
+    let count = 0;
+    await attempt(`${label}: tabs listed`, async () => {
+      await page.goto(base + url + (mode === 'demo' ? '?mode=demo' : ''), { waitUntil: 'domcontentloaded' });
+      await page.getByRole('heading', { level: 1 }).first().waitFor({ state: 'visible', timeout: 45000 });
+      await settle(page, tracker);
+      drain(tracker);   // the default view was checked by sectionPass
+      count = await page.locator('#main-content [role="tablist"]').first().locator('[role="tab"]').count();
+    });
+    for (let index = 0; index < count; index += 1) {
+      const tab = page.locator('#main-content [role="tablist"]').first().locator('[role="tab"]').nth(index);
+      const name = ((await tab.innerText().catch(() => '')) || `#${index}`).trim().replace(/\s+/g, ' ');
+      const where = `${label} tab "${name}"`;
+      await attempt(`${where}: opens`, async () => {
+        if ((await tab.getAttribute('aria-disabled')) === 'true' || (await tab.isDisabled())) return;
+        if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+        await settle(page, tracker);
+        const body = await page.locator('#main-content').innerText();
+        check(`${where}: no fallback state`, !/is on its way|could not be drawn|Section failed/i.test(body), body.match(/[^.\n]*(is on its way|could not be drawn|Section failed)[^.\n]*/i)?.[0]);
+        check(`${where}: never renders NaN or undefined`, !/\bNaN\b|\bundefined\b/.test(body), body.match(/[^\n]{0,60}\b(NaN|undefined)\b[^\n]{0,60}/)?.[0]);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        check(`${where}: no horizontal scroll`, overflow <= 1, overflow);
+        const seen = drain(tracker);
+        if (seen.apiFailures.length || seen.pageErrors.length || seen.consoleErrors.length || overflow > 1) {
+          await page.screenshot({ path: path.join(outDir, `FAIL-tab-${width}-${mode}-${id}-${index}.png`), fullPage: true }).catch(() => {});
+        }
+        check(`${where}: no failed control request`, seen.apiFailures.length === 0, seen.apiFailures);
+        check(`${where}: no page error`, seen.pageErrors.length === 0, seen.pageErrors);
+        check(`${where}: no console error`, seen.consoleErrors.length === 0, seen.consoleErrors);
+      });
+    }
+  }
+}
+
 async function main() {
   fs.mkdirSync(outDir, { recursive: true });
   // One founder cron tick, so Live source health has its first probe (the deployed cron runs every minute).
@@ -217,14 +258,19 @@ async function main() {
         continue;
       }
       for (const mode of ['live', 'demo']) await sectionPass(page, tracker, width, mode, width === 1440 || (width === 390 && mode === 'live'));
+      if (width !== 768) for (const mode of ['live', 'demo']) await tabSweep(page, tracker, width, mode);
 
       // Deep links land on their panel or tab.
       await attempt(`${width}px ?tab= deep links`, async () => {
+        // Pages with real tabs select the named tab; pages with anchored panels scroll to the panel.
         await page.goto(base + '/founder/revenue?mode=demo&tab=payments');
-        await page.locator('[data-tab="payments"]').waitFor({ timeout: 30000 });
-        await page.waitForTimeout(600);
-        const inView = await page.locator('[data-tab="payments"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
-        check(`${width}px revenue ?tab=payments scrolls to its panel`, inView);
+        await page.getByRole('tab', { name: 'Payments', selected: true }).waitFor({ timeout: 30000 });
+        check(`${width}px revenue ?tab=payments selects its tab`, true);
+        await page.goto(base + '/founder/operations?mode=demo&tab=connections');
+        await page.locator('[data-tab="connections"]').waitFor({ timeout: 30000 });
+        await settle(page, tracker);   // panels above load after the first scroll; the page keeps the target in place
+        const inView = await page.locator('[data-tab="connections"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
+        check(`${width}px operations ?tab=connections scrolls to its panel`, inView);
         await page.goto(base + '/founder/settings?tab=reports');
         await page.getByRole('tab', { name: 'Reports', selected: true }).waitFor({ timeout: 30000 });
         check(`${width}px settings ?tab=reports selects its tab`, true);
@@ -272,6 +318,26 @@ async function main() {
           await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
           const seen = drain(tracker);
           check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+        });
+
+        // Founder voice: the strip opens from the panel. Voice is off in this harness, so "Talk to Rafii" is disabled and
+        // says why; its status request answers 200 with blockers, never an error.
+        await attempt('founder voice strip explains why voice is off', async () => {
+          const toggle = page.getByRole('button', { name: 'Voice', exact: true });
+          await toggle.click();
+          const strip = page.getByRole('region', { name: 'Voice' });
+          await strip.waitFor({ timeout: 15000 });
+          await settle(page, tracker);
+          const talk = strip.getByRole('button', { name: /Talk to Rafii/ });
+          check('voice: Talk to Rafii is disabled while voice is off', (await talk.count()) > 0 && (await talk.first().isDisabled()), await talk.count());
+          const text = await strip.innerText();
+          check('voice: the strip names a reason', /[a-z]+_[a-z_]+|not enabled|turned off|off/i.test(text), text.slice(0, 200));
+          await page.screenshot({ path: path.join(outDir, '1440-demo-voice.png') });
+          await toggle.click();
+          const seen = drain(tracker);
+          check('voice: no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
+          check('voice: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          check('voice: no console error', seen.consoleErrors.length === 0, seen.consoleErrors);
         });
 
         // Settings: the contact policy saves through control.settings with a fresh second factor. Delivery stays off.
