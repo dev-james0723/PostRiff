@@ -265,6 +265,10 @@ class Ledger:
             return {"reservationId": reservation_id, "state": "estimated_unknown", "note": "Reservation retained until provider usage is reconciled; cost is not recorded as zero."}
         actual = int(actual_usd_micro or 0)
         credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
+        if credit and credit.get("absorbed"):
+            # Actual cost above the approved maximum is platform-absorbed, never debited (PRD R-COM-02); operators review it.
+            cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,NULL,'usage.absorbed_over_max',%s,%s::jsonb)",
+                        (workspace_id, str(reservation_id)[:200], json.dumps({"absorbedMilliCredits": credit["absorbed"], "usedMilliCredits": credit["used"]})))
         kind = "settle" if outcome == "completed" else "release"
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
         # Exactly the budgets this reservation held (older reservations predate the record: workspace and global).

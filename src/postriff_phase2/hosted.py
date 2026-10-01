@@ -590,7 +590,9 @@ class HostedWorkspaceService:
             customer_id = existing[0] if existing else None
             # The ended provider subscription identifies one reenrollment generation, across retries/hours.
             generation = {"endedSubscription": existing[2]} if existing and existing[2] else {"acquisitionHour": int(self.clock() // 3600)}
-            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id)
+            # Variant attribution for the beta read-out (ids only); the amount and Price id stay server-side.
+            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id,
+                  {"priceVariantId": variant_id, "catalog": "pricing-v2" if self.billing.pricing_v2_enabled else "legacy"})
         customer_email = None if customer_id else self._email_for(principal)
         if not customer_id and not customer_email:
             raise AlphaError("Your account email could not be resolved for checkout.", 502)

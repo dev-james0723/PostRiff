@@ -148,6 +148,9 @@ class CreditPolicyV2PostgresTests(unittest.TestCase):
         self.assertEqual(len(credits), 1)
         self.assertEqual((credits[0][0]['used'], credits[0][0]['absorbed'], credits[0][0]['released']), (3_000, 12_000, 0))
         self.assertEqual((self.view()['availableMilliCredits'], self.view()['usedMilliCredits']), (27_000, 3_000))
+        with connection() as db:   # Task 11: one operator review signal per absorbed settlement, never a customer debit
+            signals = db.execute("SELECT meta FROM pr_audit_events WHERE kind='usage.absorbed_over_max' AND subject=%s", (run['reservationId'],)).fetchall()
+        self.assertEqual([m[0]['absorbedMilliCredits'] for m in signals], [12_000])
 
     def test_parallel_holds_cannot_overspend(self):
         self.grant()
