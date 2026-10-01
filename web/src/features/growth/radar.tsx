@@ -61,7 +61,28 @@ function Opportunity({ op, scanId, index }: { op: RadarOpportunity; scanId: stri
   </article>;
 }
 
-function Permissions({ catalog, refresh }: { catalog: RadarCatalog; refresh: () => void }) {
+/** The server's reason a daily watch cannot run here (`radar/service.py recurring_unavailable`); null when it can. */
+type MonitoringCatalog = RadarCatalog & { monitoringBlocked?: string | null };
+
+/**
+ * What the daily-watch panel may truthfully say. On a credit plan every scan needs its own confirmed credit limit,
+ * and no recurring credit authorization exists yet, so the cron never runs (or charges) a watch there.
+ */
+export function monitorNotice(catalog: MonitoringCatalog): { canEnable: boolean; text: string } {
+  if (catalog.monitoringBlocked === 'recurring_credit_authorization_unavailable') {
+    return {
+      canEnable: false,
+      text: catalog.monitor.enabled
+        ? 'Paused: on a credit plan each scan needs your confirmation, so the daily watch does not run and nothing is charged. Run scans yourself, or turn the watch off.'
+        : 'Not available on credit plans yet: a daily watch would spend credits without asking you each time. Run scans yourself; each one shows its credit limit first.'
+    };
+  }
+  if (!catalog.monitoringAvailable) return { canEnable: false, text: 'Daily monitoring is not enabled yet.' };
+  if (!catalog.paidMonitoring) return { canEnable: false, text: 'Available with an active paid plan.' };
+  return { canEnable: true, text: `One Quick scan daily, between 8am and 10pm in your time zone, within your plan’s included Radar allowance: up to ${money(catalog.monitorMaximumUsdMicro)} of provider cost per scan. Results appear here.` };
+}
+
+function Permissions({ catalog, refresh }: { catalog: MonitoringCatalog; refresh: () => void }) {
   const growth = useGrowthCatalog();
   const access = useWorkspaceAccess();
   const action = useGrowthAction();
@@ -70,18 +91,18 @@ function Permissions({ catalog, refresh }: { catalog: RadarCatalog; refresh: () 
   const [topic, setTopic] = useState(catalog.monitor.query ?? '');
   const [timezone, setTimezone] = useState(catalog.monitor.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
   async function save(name: string, payload: Record<string, unknown>) { if (await action.run(name, payload)) refresh(); }
+  const monitor = monitorNotice(catalog);
   return <details className='radar-permissions'><summary>Sources, AI permissions & monitoring</summary>
     <div className='radar-permission-grid'><section><h3>Your public sources</h3><p>Only the selected public sources are used. Short evidence excerpts expire after 30 days.</p>
       {catalog.sources.map((s) => <label key={s.id} className='radar-source-option'><input aria-label={s.name} type='checkbox' checked={sources.includes(s.id)} disabled={access.role !== 'owner' || s.status !== 'ready'} onChange={(e) => setSources(e.target.checked ? [...sources, s.id] : sources.filter((v) => v !== s.id))} /><span>{s.name}<small>{s.status === 'ready' ? s.note : words(s.status)}</small></span></label>)}
       <label className='radar-source-option'><input aria-label='Allow Radar AI' type='checkbox' checked={ai} disabled={access.role !== 'owner'} onChange={(e) => setAi(e.target.checked)} /><span>Allow AI to review public evidence with my approved Genome lessons.</span></label>
       <Button variant='glass' disabled={access.role !== 'owner' || action.busy} onClick={() => void save('radar_consent', { sources, ai, confirmed: true })}>Save Radar permissions</Button>
     </section><section><h3>Your AI choices</h3>{growth.data && <GrowthConsent catalog={{ ...growth.data, audienceMiner: false }} onChange={() => { void growth.refetch(); refresh(); }} />}
-      <div className='radar-monitor'><h3>A light daily watch</h3><p>Optional on paid plans. One Quick scan daily, between 8am and 10pm in your time zone. Results appear here. Allowance: up to {money(catalog.monitorMaximumUsdMicro)} per scan.</p>
-        {catalog.monitor.enabled ? <><p>Watching “{catalog.monitor.query}” · {catalog.monitor.timezone}</p><Button variant='glass' disabled={access.role !== 'owner' || action.busy} onClick={() => void save('radar_watch', { enabled: false })}>Pause daily watch</Button></> : <>
-          <label>Watch topic<input aria-label='Watch topic' className='radar-input' value={topic} maxLength={200} onChange={(e) => setTopic(e.target.value)} /></label>
-          <label>Time zone<input aria-label='Time zone' className='radar-input' value={timezone} onChange={(e) => setTimezone(e.target.value)} /></label>
-          <Button variant='glass' disabled={access.role !== 'owner' || !catalog.monitoringAvailable || !catalog.paidMonitoring || topic.trim().length < 3 || action.busy} onClick={() => void save('radar_watch', { enabled: true, query: topic, timezone, maximumUsdMicro: catalog.monitorMaximumUsdMicro, confirmed: true })}>Enable daily watch</Button>
-          {!catalog.monitoringAvailable ? <p>Daily monitoring is not enabled yet.</p> : !catalog.paidMonitoring && <p>Available with an active paid plan.</p>}
+      <div className='radar-monitor'><h3>A light daily watch</h3><p id='radar-monitor-note'>{monitor.text}</p>
+        {catalog.monitor.enabled ? <><p>Watching “{catalog.monitor.query}” · {catalog.monitor.timezone}</p><Button variant='glass' disabled={access.role !== 'owner' || action.busy} onClick={() => void save('radar_watch', { enabled: false })}>{catalog.monitoringBlocked ? 'Turn off daily watch' : 'Pause daily watch'}</Button></> : <>
+          <label>Watch topic<input aria-label='Watch topic' className='radar-input' value={topic} maxLength={200} disabled={!monitor.canEnable} onChange={(e) => setTopic(e.target.value)} /></label>
+          <label>Time zone<input aria-label='Time zone' className='radar-input' value={timezone} disabled={!monitor.canEnable} onChange={(e) => setTimezone(e.target.value)} /></label>
+          <Button variant='glass' aria-describedby='radar-monitor-note' disabled={access.role !== 'owner' || !monitor.canEnable || topic.trim().length < 3 || action.busy} onClick={() => void save('radar_watch', { enabled: true, query: topic, timezone, maximumUsdMicro: catalog.monitorMaximumUsdMicro, confirmed: true })}>Enable daily watch</Button>
         </>}
       </div>
     </section></div>{action.error && <p role='alert'>{action.error}</p>}

@@ -24,6 +24,9 @@ from . import core
 from .sources import Sources
 
 ACTIONS=('radar_consent','radar_save_idea','radar_dismiss','radar_watch','radar_stop','radar_forget')
+# OPERATIONS.md: recurring credit-wallet spend is unavailable until a specific recurring authorization exists. A scan
+# billed through a credit quote needs the person's confirmation each time, so cron may never start one.
+RECURRING_UNAVAILABLE='recurring_credit_authorization_unavailable'
 
 
 @dataclass(frozen=True)
@@ -80,7 +83,16 @@ class Radar:
             consent=row[1].get('radarConsent',{})
             return {'sources':self.sources.catalog(),'consent':consent,'monitor':row[1].get('radarWatch',{'enabled':False}),
                     'monitoringAvailable':self.g.env.get('POSTRIFF_RADAR_MONITORING')=='1','paidMonitoring':self.paid(cur,wid),'modes':core.MODES,'enabled':True,
-                    'monitorMaximumUsdMicro':self.maximum('quick')}
+                    'monitorMaximumUsdMicro':self.maximum('quick'),'monitoringBlocked':self.recurring_unavailable(cur,wid)}
+
+    def recurring_unavailable(self,cur,wid):
+        """The refusal code when a scheduled scan would be billed through the credit wallet (a managed-credit plan, or
+        credit billing switched on), else None. Each such scan needs its own confirmed quote; cron has none."""
+        if self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1':return RECURRING_UNAVAILABLE
+        ledger=getattr(self.g.hosted,'ledger',None)
+        if ledger is None or not hasattr(ledger,'growth_mode'):return None
+        ledger.ensure_entitlement(cur,wid,None)
+        return RECURRING_UNAVAILABLE if ledger.growth_mode(cur,wid)=='managed_credits' else None
 
     def load(self,cur,wid,rid):
         cur.execute('SELECT id::text,status,context_digest,body,lease_token,extract(epoch from lease_until),created_by::text FROM public.pr_radar_runs WHERE workspace_id=%s AND id::text=%s AND expires_at>to_timestamp(%s) FOR UPDATE',(wid,rid,self.clock()))
@@ -357,6 +369,10 @@ class Radar:
                 enabled=payload.get('enabled') is True
                 if enabled:
                     if self.g.env.get('POSTRIFF_RADAR_MONITORING')!='1':raise AlphaError('Daily monitoring is not enabled.',409)
+                    # No automated customer-credit spend until a specific recurring wallet authorization exists.
+                    if self.recurring_unavailable(cur,wid):
+                        raise AlphaError('A daily watch would spend credits without asking you each time, so it isn’t available on credit plans yet. '
+                                         'Run scans yourself; each one shows its credit limit first.',409,code=RECURRING_UNAVAILABLE)
                     if payload.get('confirmed') is not True or not self.paid(cur,wid):raise AlphaError('Monitoring requires an active paid plan and owner confirmation.',403)
                     try:ZoneInfo(payload.get('timezone',''))
                     except (ZoneInfoNotFoundError,TypeError,ValueError):raise AlphaError('Choose a valid time zone.') from None
@@ -365,8 +381,6 @@ class Radar:
                     ready={s['id'] for s in self.sources.catalog() if s['status']=='ready'}
                     selected=state.get('radarConsent',{}).get('sources',[])
                     if not selected or not set(selected)<=ready:raise AlphaError('Allow ready sources before monitoring.')
-                    # No automated customer-credit spend until a specific recurring wallet allowance exists.
-                    if self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1':raise AlphaError('Recurring credit authorization is not configured; use manual scans.',409)
                     maximum=self.maximum('quick')
                     if payload.get('maximumUsdMicro')!=maximum:raise AlphaError('Review the current monitoring allowance.',409)
                     state['radarWatch']={'enabled':True,'query':query,'timezone':payload['timezone'],'sources':selected,'useAi':state['radarConsent'].get('ai',False),'maximumUsdMicro':maximum,'actor':actor,'at':self.clock()}
@@ -437,8 +451,12 @@ class Radar:
                 token=Scheduled(watch['actor'])
                 # Paid-plan and active-owner checks are repeated on every batch.
                 with self.tx(wid,token) as (cur,_,_):
+                    # A credit-billed scan needs a confirmed quote per scan: cron never quotes, starts or spends one.
+                    blocked=self.recurring_unavailable(cur,wid)
                     cur.execute("SELECT id::text FROM public.pr_radar_runs WHERE workspace_id=%s AND request_key=%s",(wid,'watch:'+local.date().isoformat()))
                     current=cur.fetchone()
+                if blocked:
+                    results.append({'workspaceId':wid,'status':'skipped','reason':blocked});continue
                 if current:rid=current[0]
                 else:
                     q=self.quote(wid,token,{'mode':'quick','query':watch['query'],'sources':watch['sources'],'useAi':watch['useAi'],'requestKey':'watch:'+local.date().isoformat()})
