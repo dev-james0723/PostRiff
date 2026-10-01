@@ -204,6 +204,14 @@ def plan_week(state, recipe, now, monday=None):
             "weekOf": monday.isoformat(), "isoWeek": iso_week(monday), "state": "planned", "blockedReason": None, "slots": slots,
             "createdAt": now, "updatedAt": now, "readyAt": None, "history": [{"at": now, "state": "planned", "note": f"{len(slots)} posts planned"}],
             "conversationId": None, "costBudgetUsdMicro": recipe["maxCostUsdMicroPerWeek"]}
+    from .. import proof
+    if proof.enabled():   # RAFII Product Growth R-PROOF-02: record which accepted next-week decisions this plan applies, or why not
+        from ..proof import strategy
+        application = strategy.apply_to_week(state, slots, week["weekOf"])
+        for slot in slots:
+            if application["slotDecisions"].get(slot["id"]):
+                slot["strategyDecisions"] = application["slotDecisions"][slot["id"]]
+        week["appliedDecisions"], week["notApplied"] = application["appliedDecisions"], application["notApplied"]
     return week
 
 
