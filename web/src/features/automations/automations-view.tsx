@@ -30,6 +30,7 @@ import { ceilingMicro, ceilingText, isTrigger, runLabel, runText, scheduleSummar
 import { finished, monthStart, spentSince, unseen, useAutomations, type Automation } from './use-automations';
 import { policyText, researchRule, stageRules } from './workflow';
 import { AUTOMATION_CHANGED, usePanel } from '@/features/site-agent/store';
+import { seriesEpisodeOf } from '@/features/library/series/series-copy';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 const infoContent = {
@@ -718,7 +719,9 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
                     <span className='text-muted-foreground min-w-0 flex-[1_1_12rem] text-xs'>
                       {run.event?.kind === 'new_source' && `From “${run.event.title ?? 'a new item'}”. `}
                       {run.event?.kind === 'strong_post' && `After a strong ${run.event.platform ?? ''} post: ${run.event.value ?? '?'} ${run.event.metric ?? ''} vs ${run.event.typical ?? '?'} typical. `}
-                      {run.evergreen?.jobId && `Refreshed a ${run.evergreen.platform ?? ''} post from ${run.evergreen.publishedAt ?? 'earlier'}. `}
+                      {seriesEpisodeOf(run.evergreen)
+                        ? `Drafted episode ${seriesEpisodeOf(run.evergreen)?.index} of a series. `
+                        : run.evergreen?.jobId && `Refreshed a ${run.evergreen.platform ?? ''} post from ${run.evergreen.publishedAt ?? 'earlier'}. `}
                       {text.detail}
                       {run.state === 'completed' && `${run.draftCount ? `${run.draftCount} draft${run.draftCount === 1 ? '' : 's'}` : 'Drafts'} · ${usd(run.costUsdMicro ?? 0)}${run.seenAt ? '' : ' · new'}`}
                       {skipped.length > 0 && ` Skipped ${skipped.map((s) => s.account || s.platform).join(', ')}: disconnected.`}
