@@ -115,9 +115,13 @@ begin
   raise exception 'pr_result_events is append-only; record a correction instead' using errcode = 'restrict_violation';
 end $$;
 revoke all on function postriff_private.pr_result_events_append_only() from public, anon, authenticated;
-drop trigger if exists pr_result_events_append_only on public.pr_result_events;
-create trigger pr_result_events_append_only before update on public.pr_result_events
-  for each row execute function postriff_private.pr_result_events_append_only();
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgrelid = 'public.pr_result_events'::regclass and tgname = 'pr_result_events_append_only') then
+    create trigger pr_result_events_append_only before update on public.pr_result_events
+      for each row execute function postriff_private.pr_result_events_append_only();
+  end if;
+end $$;
 
 -- A conflicting payload for an event id that already exists. It never replaces the original.
 create table if not exists public.pr_result_quarantine (
@@ -167,14 +171,16 @@ begin
     execute format('alter table public.%I force row level security', t);
     execute format('revoke all on public.%I from public, anon, authenticated', t);
     execute format('grant all on public.%I to service_role', t);
-    execute format('drop policy if exists trusted_write on public.%I', t);
-    execute format('create policy trusted_write on public.%I for all to service_role using (true) with check (true)', t);
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'trusted_write') then
+      execute format('create policy trusted_write on public.%I for all to service_role using (true) with check (true)', t);
+    end if;
   end loop;
   -- Members read their own workspace's results, links and clicks. Connection secrets and the idempotency ledger stay
   -- service-only (connections expose their non-secret columns only).
   foreach t in array array['pr_result_connections','pr_tracking_links','pr_result_events','pr_result_quarantine','pr_link_clicks'] loop
-    execute format('drop policy if exists tenant_read on public.%I', t);
-    execute format('create policy tenant_read on public.%I for select to authenticated using (postriff_private.member(workspace_id))', t);
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'tenant_read') then
+      execute format('create policy tenant_read on public.%I for select to authenticated using (postriff_private.member(workspace_id))', t);
+    end if;
   end loop;
   foreach t in array array['pr_tracking_links','pr_result_events','pr_result_quarantine','pr_link_clicks'] loop
     execute format('grant select on public.%I to authenticated', t);
