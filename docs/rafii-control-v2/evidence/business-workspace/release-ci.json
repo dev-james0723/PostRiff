@@ -1,0 +1,28 @@
+{
+  "execution": "GitHub Actions workflow metadata and safe local reproduction; no hosted Control invocation",
+  "qualifiedHead": "b42d2e86c353b3d57a045758f549446ca947614c",
+  "control": {
+    "status": "passed",
+    "url": "https://github.com/dev-james0723/PostRiff/actions/runs/36778541822"
+  },
+  "consumer": {
+    "status": "failed",
+    "url": "https://github.com/dev-james0723/PostRiff/actions/runs/36778541427",
+    "failedStep": "Offline source secret scan",
+    "findings": [
+      "public Git commit identifier",
+      "recomputed public workflow metadata SHA-256 checksum"
+    ],
+    "subsequentChecks": "dependency audits and browser/performance skipped after failure"
+  },
+  "correction": "Two exact path/hash entries; scanner unchanged; new-head CI required",
+  "controlHosted": false,
+  "consumerPreviewIsControl": false,
+  "correctionHead": "42988f1170d12148cfd2f1ef83c75cd62a06ac50",
+  "correctionControl": {
+    "status": "failed",
+    "url": "https://github.com/dev-james0723/PostRiff/actions/runs/36782097159",
+    "failedStep": "Browser logout navigation timeout"
+  },
+  "logoutRepair": "Separate authorized logout rate bucket; normal read limits, AAL2, capability, CSRF, origin, revocation and audit retained. Isolated browser fixture actors; 99 DB tests and real desktop/mobile flows pass. Latest-head CI required."
+}

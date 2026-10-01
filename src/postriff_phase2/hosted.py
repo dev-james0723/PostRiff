@@ -124,6 +124,10 @@ class PostgresWorkspaceRepository:
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
                     raise AlphaError('Account deletion is pending. Only deletion can continue.', 409, code='account_deletion_pending')
+                if state.get('accountBlock'):
+                    # A founder account block froze this workspace (operator_actions): every request and background run stops here.
+                    from .operator_actions import blocked_error
+                    raise blocked_error()
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
                 yield cur, row, principal
@@ -423,6 +427,10 @@ class HostedWorkspaceService:
         # Time Back: a draft accepted for use or an automation activated is recorded in the command that completed it.
         self.time_savings = TimeSavingsService(self.repository, clock)
         self.repository.effects.append(self.time_savings.capture)
+        from . import product_events
+        # Product taxonomy (PRD §8.6): the journey and adoption events a command implies, ids/enums only, each batch behind
+        # its own savepoint; it never fails the command.
+        self.repository.effects.append(product_events.capture)
         self.ideas.learning = self.learning
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
@@ -789,6 +797,9 @@ class HostedWorkspaceService:
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
                     audit(cur, workspace_id, principal, "workspace.created", "", {"plan": saved_plan})
+                    from . import product_events
+                    # Product taxonomy (PRD §8.6): the signup milestone, ids/enums only, behind its own savepoint.
+                    product_events.record(cur, workspace_id, principal, "workspace.created", workspace_id, 1, {"plan": saved_plan})
                     created = True
                 self.billing.lifecycle(cur, workspace_id, self.clock())
                 self._touch_session(cur, principal, self._session_id(token, principal), client_label)

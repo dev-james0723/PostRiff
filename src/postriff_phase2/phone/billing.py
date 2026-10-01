@@ -98,7 +98,7 @@ def lock_workspace(cur, call_id):
                 'WHERE c.id::text=%s FOR UPDATE OF w', (call_id,))
 
 
-def settle(phone, cur, value, component, outcome, actual):
+def settle(phone, cur, value, component, outcome, actual, *, audio_seconds=None):
     """Allocate cumulative usage exactly once over immutable minute holds, including old calls."""
     initial = value['live_reservation_id' if component == 'live' else 'telephony_reservation_id']
     cur.execute("SELECT id::text,estimated_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='reserve' "
@@ -111,6 +111,31 @@ def settle(phone, cur, value, component, outcome, actual):
         phone.hosted.ledger.settle(cur, value['workspace_id'], reservation, outcome, cost)
         if actual is not None:
             remaining -= cost
+    if component == 'live':
+        record_live_audio(phone, cur, value, actual, audio_seconds)
+
+
+def record_live_audio(phone, cur, value, actual, audio_seconds):
+    """The call's GPT-Live audio as one public.pr_ai_call_events row (Founder Admin §8.B), inside the settle's transaction under
+    a savepoint. Cost and seconds exactly as the settle books them (or unknown); a later settle of the same call with its known
+    cost adds a pr_ai_call_settlements row instead of changing the first. No audio (cost 0) is no attempt. Never raises."""
+    try:
+        if actual == 0:
+            return
+        from .. import ai_call_events
+        from ..agent_runtime_v2.config import DEFAULT_LIVE_USD_MICRO_PER_MINUTE
+        cfg = phone.agent().cfg
+        version = ai_call_events.MEDIA_CONSTANTS if cfg.live_usd_micro_per_minute == DEFAULT_LIVE_USD_MICRO_PER_MINUTE else ai_call_events.CONFIGURED
+        cost, source, _ = ai_call_events.table_cost(actual, version)
+        answered = value.get('answered_at')
+        attempt = {'workload': 'voice_front_end', 'provider': 'openai', 'model': cfg.route('voice_front_end', reason='usage record').model,
+                   'status': 'ok' if cost is not None else 'unknown', 'audio_seconds': audio_seconds if cost is not None else None,
+                   'cost_usd_micro': cost, 'cost_source': source, 'started_at': float(answered) if answered else None,
+                   'physical_attempt_id': f"phone-live:{value['id']}"}
+        ai_call_events.write_attempts({'workspace_id': value['workspace_id'], 'user_id': value.get('user_id'), 'feature': 'phone',
+                                       'run_id': value.get('voice_run_id'), 'reservation_id': value.get('live_reservation_id')}, [attempt], cursor=cur)
+    except Exception:  # noqa: BLE001 - recording never fails a phone settle
+        pass
 
 
 def renew(phone, call_id):

@@ -443,6 +443,9 @@ class CoworkerService:
 
         def emit(cur, state_, principal):
             target_week = self._find_week(state_, week_id)
+            from .. import product_events
+            # Product taxonomy (PRD §8.6): humanizer.applied per checked draft, ids/enums only, behind its own savepoint.
+            product_events.humanizer_applied(cur, workspace_id, principal, state_, [(check.get("variantId"), check.get("status")) for check in checks.values()], "weekly")
             notifications = getattr(self.hosted, "notifications", None)
             if notifications is None:
                 return
@@ -580,6 +583,11 @@ class CoworkerService:
             require(self.hosted.ideas._member(row), "edit")
             evidence_ids = [self._store_evidence(cur, workspace_id, key, item["provenance"], item["snippet"]) for item in outcome["items"]]
             _event(cur, workspace_id, principal, "research.search", {"status": outcome["status"], "results": len(outcome["items"])})
+            if outcome["status"] == "ok":
+                from .. import product_events
+                # Product taxonomy (PRD §8.6): an opaque request id (never the query) and the UTC day as the version.
+                product_events.record(cur, workspace_id, principal, "research.completed", product_events.request_entity(workspace_id, key),
+                                      time.strftime("%Y%m%d", time.gmtime(self.clock())), {"source": "broker", "outcome": "found" if outcome["items"] else "empty"})
         return {"status": outcome["status"], "provider": outcome["provider"], "errors": outcome["errors"],
                 "items": [{**i, "evidenceId": e, "usableForDraft": False, "note": "A search result is a lead, not a verified fact."} for i, e in zip(outcome["items"], evidence_ids)]}
 
@@ -732,6 +740,9 @@ class CoworkerService:
                 notifications.emit(cur, workspace_id=workspace_id, event_type="campaign.drafts_ready", dedupe_key=f"source_campaign:{record_id}", entity_type="source_campaign",
                                    entity_id=record_id, payload={"count": len(drafts), "recipeName": artifact["title"][:80], "href": "/app/queue?view=drafts"}, actor=principal)
             _event(cur, workspace_id, principal, "research.campaign_created", {"sourceCampaignId": record_id, "drafts": len(drafts)}, f"source_campaign:{record_id}")
+            from .. import product_events
+            # Product taxonomy (PRD §8.6): humanizer.applied per checked draft, ids/enums only, behind its own savepoint.
+            product_events.humanizer_applied(cur, workspace_id, principal, state_, [(d.get("variantId"), d.get("status")) for d in drafts if d.get("quality")], "source_campaign")
 
         self._command(workspace_id, token, finish, "edit", "source_campaign.drafted", record_id, {"drafts": len(drafts)}, after=emit)
         stored = next(x for x in (self._state(workspace_id, token).get("coworker") or {}).get("sourceCampaigns") or [] if x["id"] == record_id)

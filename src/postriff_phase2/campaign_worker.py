@@ -41,8 +41,9 @@ class CampaignWorker:
     def _claim(self):
         now = self.clock()
         with self.connection_factory() as db, db.cursor() as cur:
-            # The JSON predicate also discovers legacy schedules that predate the relational projection.
-            cur.execute("SELECT id::text,state FROM pr_workspaces WHERE NOT state ? 'accountDeletion' AND (EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,recurringTasks}','[]'::jsonb)) t WHERE t->>'status'='active' AND (t#>>'{nextOccurrence,scheduledFor}')::double precision<=%s) OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,occurrences}','[]'::jsonb)) o WHERE o->>'state'='running' AND coalesce((o->>'leaseUntil')::double precision,0)<=%s)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED", (now, now))
+            # The JSON predicate also discovers legacy schedules that predate the relational projection. A founder account
+            # block freezes the workspace like a pending deletion (its runs stay due and resume once it is lifted).
+            cur.execute("SELECT id::text,state FROM pr_workspaces WHERE NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock' AND (EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,recurringTasks}','[]'::jsonb)) t WHERE t->>'status'='active' AND (t#>>'{nextOccurrence,scheduledFor}')::double precision<=%s) OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,occurrences}','[]'::jsonb)) o WHERE o->>'state'='running' AND coalesce((o->>'leaseUntil')::double precision,0)<=%s)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED", (now, now))
             row = cur.fetchone()
             if not row: return None
             workspace_id, state = row

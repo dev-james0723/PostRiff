@@ -21,10 +21,18 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 037–040 | `037_growth_phase1`, `038_growth_closed_loop`, `039_radar`, `040_social_trend_intelligence` | active Rafii release worktrees | Reserved to avoid colliding with in-flight Growth / Radar / Social Trend Intelligence work. They are not implied applied merely by this reservation; re-check before release. |
 | 041 | `041_context_navigation` | Rafii Context Navigation | Additive search indexes and workspace-scoped Moments; apply before the corresponding API release. |
 | 042 | `042_phone_inbound` | Shared inbound Rafii phone v1 | Reserved on `codex/rafii-inbound-v1`; additive, apply before releasing the direction-column reader. |
-| 043–046 | `043_phone_duration`, `044_social_provider_webhooks`, `045_phone_caller_identity`, `046_phone_passkey_identity` | phone / social webhooks | In the production source (`dcb5bcdc`). |
-| 047 | `047_inbox_operational_sync` | Inbox v1 | Local branch `codex/rafii-inbox-v1-20260928`; merged into `claude/rafii-product-growth-v2`. Not applied to production. |
-| 048, 050 | `048_pricing_credit_catalog_v2`, `050_free_lifecycle_bootstrap` | Pricing + Credits v2 | Local branch `feat/rafii-pricing-credits-v2`; merged into `claude/rafii-product-growth-v2`. Not applied to production. |
-| 049, 051–068 | `049_rafii_control_foundation` … `068_founder_actions_views` (061 unused) | Founder Control / Founder Admin | `claude/founder-admin-v2` (PR #86) and its worktree; 057–068 were uncommitted there on 2026-10-01. Treat 061 as Founder's. |
+| 043–046 | `043_phone_duration`, `044_social_provider_webhooks`, `045_phone_caller_identity`, `046_phone_passkey_identity` | released consumer work | Occupied on verified `consumer-saas` base `d91660b` (2026-09-29). |
+| 047 | Inbox operational sync / Universal Library in active worktrees | concurrent owners | Occupied; competing in-flight uses were observed. Control does not rename or absorb either. |
+| 048 | `048_pricing_credit_catalog_v2` | pricing owner | Occupied in an active ref/worktree. |
+| 049 | `049_rafii_control_foundation` | `feat/rafii-founder-control-v2` | Additive private Control schema and restricted roles; disposable-only verification. No production apply. |
+| 050 | `050_free_lifecycle_bootstrap` | pricing owner | Occupied in active pricing ref/worktree; preserved. |
+| 051 | `051_rafii_control_read_workflow` | `feat/rafii-founder-control-v2` | Additive safe audit/query snapshots and local synthetic materialization; disposable only. |
+| 052–053 | `052_rafii_control_investigations`, `053_rafii_control_business_workspace` | Founder Control (PR #85 → #86) | Additive private Control schema and business projections. |
+| 054–055 | `054_rafii_control_founder_views`, `055_rafii_control_founder_contact` | Founder Admin v2 P0 (`claude/founder-admin-v2`, PR #86) | Founder projections, follow-ups, snapshots; contact policy, briefings, incidents. |
+| 056 | `056_rafii_control_founder_capabilities` | Founder Admin v2 (PR #86) | Declares the P1/P2 founder capabilities; changes no operator. |
+| 057–062 | `057_founder_billing_events`, `058_founder_ai_usage`, `059_founder_product`, `060_founder_reliability`, `061_founder_notifications`, `062_founder_admin_actions` | Founder Admin v2 P1/P2 slices (`docs/design/founder-admin/CONTRACTS.md` §8) | Reserved 2026-10-01 after a scan of every ref and worktree (047, 048, 050 held by other owners; nothing at 056+). 061 stayed unused. |
+| 063–068 | `063_founder_revenue_views`, `064_founder_ai_views`, `065_founder_product_views`, `066_founder_ops_views`, `067_founder_comms_views`, `068_founder_actions_views` | Founder Admin v2 P1/P2 slices | The `rafii_control` half of each slice; 057–062 hold only public-schema instrumentation so it can ship before the Control schema. |
+| 069–070 | `069_founder_ops_bootstrap`, `070_founder_ops_settings` | Founder Admin v2 P1/P2 (`claude/founder-admin-p1p2`) | 069 makes `pr_bootstrap` prefer a customer workspace over the founder's internal ops workspace; 070 stores each founder's ops workspace (`rafii_control.founder_settings`). Scanned every remote branch and worktree on 2026-10-01: no other 069–079. 061 stayed unused. |
 | 080–089 | RAFII Product Growth v2 (`docs/design/rafii-product-growth/`) | `claude/rafii-product-growth-v2` | Reserved 2026-10-01 after scanning all refs and worktrees (highest in flight: 068). |
 | 080 | Product Growth v2: customer results (`080_customer_results.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 081 | Product Growth v2: relationships (`081_relationships.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
@@ -32,7 +40,7 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 083 | Product Growth v2: visual packs (`083_visual_packs.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 084 | Product Growth v2: briefs, proof revisions, strategy decisions (`084_briefs_proof_strategy.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 087 | Product Growth v2: raw source uploads (`087_source_uploads.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
-| 069–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 071–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

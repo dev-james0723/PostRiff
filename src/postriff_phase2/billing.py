@@ -10,7 +10,9 @@ import hmac
 import json
 import math
 import os
+import re
 import time
+import uuid
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
@@ -398,6 +400,123 @@ class DisabledPaymentProvider:
         raise AlphaError(self.reason, 503)
 
 
+# --- Founder billing instrumentation (migration 057; CONTRACTS §8.A, PRD §8.5) -------------------------------------------
+# pr_subscription_events and pr_invoices are written inside the webhook's own transaction, each in a savepoint: events with
+# ON CONFLICT DO NOTHING, invoices with a monotonic upsert (newest event wins; a paid or void invoice never moves back).
+# Production may run this code before 057 is applied: a missing table, column or privilege skips that table for
+# RECORD_RETRY_SECONDS and never fails the webhook or its subscription upsert; any other failure is rolled back to the
+# savepoint and logged once per process by exception class only. Ids, enums, amounts and times only; no payload.
+RECORDED_ONLY_SUBSCRIPTION_EVENTS = frozenset({"subscription.trial_will_end"})
+RECORD_RETRY_SECONDS = 600
+_NOT_INSTALLED = ("42P01", "42703", "42501")  # undefined_table, undefined_column, insufficient_privilege
+_RECORDING = {"off_until": {}, "logged": set()}
+_REASON = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+_EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_.]{0,79}$")
+
+
+def _uuid(value):
+    try:
+        return str(uuid.UUID(str(value))) if value else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _lower_currency(value):
+    return value.lower() if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{3}", value) else None
+
+
+def _not_installed(error):
+    return getattr(error, "sqlstate", None) in _NOT_INSTALLED or type(error).__name__ in ("UndefinedTable", "UndefinedColumn", "InsufficientPrivilege")
+
+
+def _founder_record(cur, table, write, clock=time.monotonic):
+    """Run one founder write in a savepoint of the caller's transaction; True when it was written."""
+    now = clock()
+    if _RECORDING["off_until"].get(table, 0) > now:
+        return False
+    try:
+        cur.execute("SAVEPOINT founder_billing_record")
+    except Exception as error:  # noqa: BLE001 - no transaction (an autocommit caller): record nothing, change nothing
+        _log_skip(table, "no_transaction", error)
+        return False
+    try:
+        write()
+    except Exception as error:  # noqa: BLE001 - founder instrumentation never fails the billing webhook
+        cur.execute("ROLLBACK TO SAVEPOINT founder_billing_record")
+        cur.execute("RELEASE SAVEPOINT founder_billing_record")
+        missing = _not_installed(error)
+        if missing:
+            _RECORDING["off_until"][table] = now + RECORD_RETRY_SECONDS
+        _log_skip(table, "not_installed" if missing else "write_failed", error)
+        return False
+    cur.execute("RELEASE SAVEPOINT founder_billing_record")
+    return True
+
+
+def _log_skip(table, reason, error):
+    """Once per process per table and exception class; the class name only, never the message."""
+    key = (table, type(error).__name__)
+    if key not in _RECORDING["logged"]:
+        _RECORDING["logged"].add(key)
+        print(json.dumps({"event": "founder_billing_record_skipped", "table": table, "reason": reason, "error": type(error).__name__}), flush=True)
+
+
+def record_subscription_event(cur, provider, event, status, *, applied):
+    """One pr_subscription_events row: the subscription state the event reports at its own time. `applied` events are written
+    just before the pr_subscriptions upsert (prior = the row being replaced); stale events keep their reported status with no
+    prior; recorded-only events (status None, e.g. trial_will_end) repeat the current status and change nothing."""
+    workspace = _uuid(event.get("workspaceId"))
+    kind = event.get("stripeType") or event.get("type")
+    if workspace is None or not isinstance(kind, str) or not _EVENT_TYPE.match(kind):
+        return False
+
+    def write():
+        prior_status = prior_terms = None
+        if applied or status is None:
+            cur.execute("SELECT status,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace,))
+            row = cur.fetchone()
+            if row:
+                prior_status, prior_terms = row[0], row[1]
+        terms = event.get("planTermsId")
+        if applied:
+            new_status, new_terms = status, terms or "trial-v1"   # exactly what the upsert below writes
+        elif status is None:
+            new_status, new_terms = prior_status, terms or prior_terms
+        else:
+            new_status, new_terms = status, terms
+        cur.execute('INSERT INTO public.pr_subscription_events(provider,event_id,event_type,workspace_id,provider_subscription_id,event_at,applied,prior_status,new_status,'
+                    'prior_terms,new_terms,"interval",interval_count,unit_amount_minor,quantity,usage_type,currency,discount_minor,discount_end,cancel_at,trial_end) '
+                    'VALUES(%s,%s,%s,(SELECT w.id FROM public.pr_workspaces w WHERE w.id=%s::uuid),%s,to_timestamp(%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'
+                    'to_timestamp(%s),to_timestamp(%s),to_timestamp(%s)) ON CONFLICT (provider,event_id) DO NOTHING',
+                    (provider.id, event["id"], kind, workspace, event.get("subscriptionId"), float(event["createdAt"]), bool(applied), prior_status, new_status,
+                     prior_terms, new_terms, event.get("interval"), event.get("intervalCount"), event.get("unitAmount"), event.get("quantity"), event.get("usageType"),
+                     _lower_currency(event.get("currency")), event.get("discountMinor"), event.get("discountEnd"), event.get("cancelAt"), event.get("trialEnd")))
+    return _founder_record(cur, "pr_subscription_events", write)
+
+
+def record_invoice(cur, provider, event):
+    """One pr_invoices row per invoice (every plan, attributed or not), latest event first; a paid or void invoice is final."""
+    invoice = event.get("invoiceId")
+    if not isinstance(invoice, str) or not invoice:
+        return False
+    status = event.get("invoiceStatus") or ("paid" if event.get("invoicePaid") else "open")
+    reason = event.get("billingReason") if isinstance(event.get("billingReason"), str) and _REASON.match(event["billingReason"]) else None
+
+    def write():
+        cur.execute("INSERT INTO public.pr_invoices(invoice_id,provider,workspace_id,subscription_id,billing_reason,period_start,period_end,amount_due,amount_paid,currency,status,"
+                    "payment_intent_id,livemode,event_id,event_at) VALUES(%s,%s,(SELECT w.id FROM public.pr_workspaces w WHERE w.id=%s::uuid),%s,%s,to_timestamp(%s),to_timestamp(%s),"
+                    "%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT (invoice_id) DO UPDATE SET workspace_id=coalesce(excluded.workspace_id,public.pr_invoices.workspace_id),"
+                    "subscription_id=coalesce(excluded.subscription_id,public.pr_invoices.subscription_id),billing_reason=coalesce(excluded.billing_reason,public.pr_invoices.billing_reason),"
+                    "period_start=coalesce(excluded.period_start,public.pr_invoices.period_start),period_end=coalesce(excluded.period_end,public.pr_invoices.period_end),"
+                    "amount_due=coalesce(excluded.amount_due,public.pr_invoices.amount_due),amount_paid=coalesce(excluded.amount_paid,public.pr_invoices.amount_paid),"
+                    "currency=coalesce(excluded.currency,public.pr_invoices.currency),status=excluded.status,payment_intent_id=coalesce(excluded.payment_intent_id,public.pr_invoices.payment_intent_id),"
+                    "livemode=excluded.livemode,event_id=excluded.event_id,event_at=excluded.event_at,updated_at=now() "
+                    "WHERE public.pr_invoices.status NOT IN ('paid','void') AND (excluded.status IN ('paid','void') OR excluded.event_at>=public.pr_invoices.event_at)",
+                    (invoice, provider.id, _uuid(event.get("workspaceId")), event.get("subscriptionId"), reason, event.get("periodStart"), event.get("currentPeriodEnd"),
+                     event.get("amountDue"), event.get("amountPaid"), _lower_currency(event.get("currency")), status, event.get("paymentIntentId"),
+                     bool(getattr(provider, "live", False)), event["id"], float(event["createdAt"])))
+    return _founder_record(cur, "pr_invoices", write)
+
 
 class Billing:
     TRANSITIONS = {
@@ -458,6 +577,8 @@ class Billing:
             row = cur.fetchone()
             if row and row[0] and float(row[0]) > float(event["createdAt"]):
                 outcome = "stale"
+                # An out-of-order event still reports the state at its own time; history is replayed by event time.
+                record_subscription_event(cur, self.provider, event, status, applied=False)
                 if versioned and event.get("priceVariantId"):
                     # Fill a missing historical paid identity without touching newer lifecycle state.
                     cur.execute("UPDATE public.pr_subscriptions SET price_variant_id=%s WHERE workspace_id=%s AND provider=%s AND provider_subscription_id=%s AND plan_terms_id=%s AND price_variant_id IS NULL",
@@ -470,6 +591,7 @@ class Billing:
                     if not terms:
                         outcome = "rejected"  # unknown plan id from the client side never creates entitlement
                 if outcome == "applied":
+                    record_subscription_event(cur, self.provider, event, status, applied=True)
                     grace = float(event["createdAt"]) + 7 * 86400 if status == "past_due" else None
                     variant_columns = ",price_variant_id" if versioned else ""
                     variant_values = ",%s" if versioned else ""
@@ -477,6 +599,10 @@ class Billing:
                     cur.execute(f"INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at{variant_columns}) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s){variant_values}) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now(){variant_update}", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"]), *((event.get("priceVariantId"),) if versioned else ())))
                     if terms_id and status == "active":
                         self._reconcile_entitlement(cur, event["workspaceId"], terms_id, terms[0], event.get("currentPeriodEnd"))
+        elif kind in RECORDED_ONLY_SUBSCRIPTION_EVENTS and event.get("workspaceId"):
+            record_subscription_event(cur, self.provider, event, None, applied=False)  # e.g. trial_will_end: no state change
+        if str(event.get("stripeType") or kind).startswith("invoice.") and event.get("invoiceId"):
+            record_invoice(cur, self.provider, event)  # every plan's invoices, before the credit-grant early returns
         # A verified paid plan invoice grants its period's credits even when its status update is stale.
         if event.get("stripeType") == "invoice.paid" and event.get("workspaceId") and outcome in ("applied", "stale"):
             self._grant_period_credits(cur, event)

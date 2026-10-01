@@ -14,7 +14,7 @@ import uuid
 
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
-from . import learning_signals as signals
+from . import ai_call_events, learning_signals as signals
 
 # One cent per sweep for a cloud model reading at most three scopes of redacted before/after pairs (Haiku-class prices);
 # booked against the workspace's monthly and the global daily stop-lines like any other text-model call.
@@ -435,7 +435,10 @@ class HostedLearning:
             actual = None
             if model is not None:
                 try:
-                    observations = model.observe(state, events, now)
+                    # Each extraction call becomes one pr_ai_call_events row (Founder Admin §8.B), written when extraction returns.
+                    with ai_call_events.scope(feature="learning", workspace_id=workspace_id, reservation_id=(reservation or {}).get("reservationId"),
+                                              connect=self.connection_factory):
+                        observations = model.observe(state, events, now)
                     actual = getattr(observations, 'cost_usd_micro', None)
                     stats['modelRuns'] += 1
                 except Exception:

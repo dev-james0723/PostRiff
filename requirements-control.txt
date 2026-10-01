@@ -1,0 +1,3 @@
+# Install only in the separate Control Python service. No model or financial executor SDK.
+psycopg[binary]==3.3.5
+jsonschema==4.26.0

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "2.0.0",
+  "requestId": "10000000-0000-4000-8000-000000000001",
+  "repository": "dev-james0723/PostRiff",
+  "candidateSha": "0000000000000000000000000000000000000000",
+  "baseSha": "1111111111111111111111111111111111111111",
+  "workflowDefinitionSha": "2222222222222222222222222222222222222222",
+  "trustedWorkflowId": "control-checks.yml",
+  "suiteId": "source-fast",
+  "manifestVersion": 1,
+  "environment": "disposable",
+  "networkProfile": "deny_all",
+  "maxWallSeconds": 900,
+  "maxSpendMinor": 0,
+  "currency": "USD",
+  "approvalRef": "10000000-0000-4000-8000-000000000002",
+  "artifactPolicy": "private_redacted_digest_bound",
+  "fixture": true
+}

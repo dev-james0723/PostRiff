@@ -25,7 +25,7 @@ from .cli_runtime import ClaudeCliRuntime
 from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
+from . import ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -1119,6 +1119,10 @@ class IdeasService:
         def save_record(cur, state, actor):
             record['sourceIds'] = added
             cur.execute("UPDATE public.pr_research_requests SET status='completed',result=%s::jsonb WHERE workspace_id=%s AND idempotency_key=%s AND status='pending'", (json.dumps(record),workspace_id,key))
+            from . import product_events
+            # Product taxonomy (PRD §8.6): an opaque request id, never the key or the query; behind its own savepoint.
+            product_events.record(cur, workspace_id, actor, "research.completed", product_events.request_entity(workspace_id, key), 1,
+                                  {"source": "web", "outcome": "found" if added else "empty"})
 
         try:
             self.repository.command(workspace_id, token, snapshot["revision"], command, after=save_record)
@@ -1226,7 +1230,10 @@ class IdeasService:
         result = None
         queued_events = []
         try:
-            result = self.image_runtime.generate(prompt, count=1, emit=queued_events.append)
+            # The provider attempt becomes one pr_ai_call_events row (Founder Admin §8.B), written when the call returns.
+            with ai_call_events.scope(feature="image", workspace_id=workspace_id, user_id=principal, run_id=run_id, reservation_id=reservation["reservationId"],
+                                      connect=getattr(self.repository, "connection_factory", None)):
+                result = self.image_runtime.generate(prompt, count=1, emit=queued_events.append)
             raw = result["images"][0]
             staged = self.assets.stage_upload(workspace_id, {"data": base64.b64encode(raw).decode()})
             public_asset = {key: staged.get(key) for key in ("id", "hash", "mime", "width", "height", "bytes")}

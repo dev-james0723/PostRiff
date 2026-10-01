@@ -670,6 +670,9 @@ class AgentRuntimeService:
             # Its own transaction: the chips' spend is booked even if storing the answer fails afterwards.
             with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
                 self.service.ledger.settle(cur, workspace_id, settle["reservation"]["reservationId"], "completed" if settle["cost"] is not None else "unknown", settle["cost"])
+                # The chips call as one pr_ai_call_events row (Founder Admin §8.B), under a savepoint: it never touches the settle.
+                from .manager import record_span
+                record_span(cur, self.cfg, chips.get("span"), workspace_id=workspace_id, user_id=_principal, run_id=run_id, reservation=settle["reservation"], trace_id=trace_id)
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             self._persist(cur, workspace_id, conversation_id, run_id, result, blocks, [], [], trace={"traceId": trace_id, "composedBy": result["composedBy"], **(trace_extra or {}),
                           "followUps": {"skipped": chips.get("skipped"), "count": len(chips.get("followUps") or [])}}, pending=pending,
@@ -818,6 +821,9 @@ class AgentRuntimeService:
             final_status = "cancelled" if status == "cancelled" else "completed"
             if reservation is not None:
                 self.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
+            # This turn's provider attempts as pr_ai_call_events rows (Founder Admin §8.B), under a savepoint: never fails the settle.
+            from .manager import record_calls
+            record_calls(cur, ctx, reservation)
             if ctx.task is not None and ctx.task.changes:
                 task_state.save(cur, self.service.ideas, ctx.workspace_id, ctx.task, trace_id=ctx.trace_id)
             if state_json is not None:
@@ -917,6 +923,9 @@ class AgentRuntimeService:
                     self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                 else:
                     self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+            if ctx is not None:
+                from .manager import record_calls
+                record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             if self._run_status(cur, workspace_id, run_id) == "running":
                 self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "internal_error")], [], [],
                               trace={"traceId": trace_id, "composedBy": "deterministic", "fallback": "internal_error", "errorClass": type(error).__name__},
@@ -1057,6 +1066,8 @@ class AgentRuntimeService:
                         self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                     else:
                         self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                    from .manager import record_calls
+                    record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             return None
 
 

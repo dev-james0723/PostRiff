@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "2.0.0",
+  "recommendationId": "10000000-0000-4000-8000-000000000001",
+  "investigationId": "10000000-0000-4000-8000-000000000002",
+  "environment": "staging",
+  "title": "SYNTHETIC: investigate activation errors in a test cohort",
+  "facts": [
+    {
+      "statement": "Synthetic fixture: 12 of 200 eligible tasks failed. These are not Rafii production measurements.",
+      "kind": "deterministic_derived",
+      "evidenceRefs": [
+        "10000000-0000-4000-8000-000000000003"
+      ]
+    }
+  ],
+  "hypotheses": [
+    {
+      "statement": "The fixture release may have affected the simulated activation step; causality is not established.",
+      "supportingEvidenceRefs": [
+        "10000000-0000-4000-8000-000000000003"
+      ],
+      "status": "unconfirmed"
+    }
+  ],
+  "proposedAction": {
+    "operation": "engineering.check",
+    "targetRefs": [
+      "fixture-repository-snapshot"
+    ],
+    "riskTier": "R2",
+    "parametersDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "requiresHumanApproval": true,
+    "environment": "staging"
+  },
+  "impact": {
+    "basis": "unknown",
+    "currency": null,
+    "lowMinor": null,
+    "baseMinor": null,
+    "highMinor": null,
+    "assumptions": [
+      "No real income or production impact estimated."
+    ]
+  },
+  "measurementPlan": {
+    "primaryMetric": "activation_rate",
+    "guardrailMetrics": [
+      "api_errors",
+      "task_success"
+    ],
+    "windowDays": 14,
+    "method": "functional_verification",
+    "successCriterion": "Reproduce the fixture failure and pass the targeted regression without weakening required checks."
+  },
+  "state": "proposed",
+  "expiresAt": "2026-09-30T00:00:00Z",
+  "fixture": true
+}

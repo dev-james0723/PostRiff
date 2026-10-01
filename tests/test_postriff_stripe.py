@@ -85,7 +85,9 @@ class EventMapping(unittest.TestCase):
         return provider().parse_webhook(f"t={int(NOW)},v1={sign(body)}", body)
 
     def test_mapping_table_is_explicit(self):
-        self.assertEqual(set(EVENT_TYPES), {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.payment_failed", "invoice.paid"})
+        # charge.refunded and customer.subscription.trial_will_end are recorded for the founder billing events (057) and change no state.
+        self.assertEqual(set(EVENT_TYPES), {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.payment_failed", "invoice.paid",
+                                            "charge.refunded", "customer.subscription.trial_will_end"})
         self.assertEqual(set(SUBSCRIPTION_STATUS_EVENTS), {"active", "trialing", "past_due", "unpaid", "canceled", "incomplete_expired"})
 
     def test_checkout_session_completed(self):
@@ -131,8 +133,8 @@ class EventMapping(unittest.TestCase):
         self.assertEqual((event["type"], event["workspaceId"], event["currentPeriodEnd"]), ("subscription.updated", "ws-6", 1_800_300_000.0))
 
     def test_unknown_event_keeps_raw_type_and_blank_workspace(self):
-        event = self.parse("charge.refunded", {"id": "ch_1", "metadata": {"workspace_id": "ws-7"}}, event_id="evt_x")
-        self.assertEqual(event, {"id": "evt_x", "type": "charge.refunded", "createdAt": float(int(NOW) - 5), "workspaceId": ""})
+        event = self.parse("charge.succeeded", {"id": "ch_1", "metadata": {"workspace_id": "ws-7"}}, event_id="evt_x")
+        self.assertEqual(event, {"id": "evt_x", "type": "charge.succeeded", "createdAt": float(int(NOW) - 5), "workspaceId": ""})
         self.assertIsNone(Billing.TRANSITIONS.get(event["type"]))
 
     def test_missing_created_falls_back_to_clock(self):

@@ -327,7 +327,7 @@ class PhoneService:
                 if live_seconds is not None and value['media_claimed_at']:
                     seconds = min(value['max_seconds'],max(0,float(value['ended_at'] or self.clock())-float(value['answered_at'] or self.clock())))
                     cost = math.ceil(max(seconds+15,live_seconds)*live_rate/60)
-                    billing.settle(self,cur,value,'live','completed',cost)
+                    billing.settle(self,cur,value,'live','completed',cost,audio_seconds=max(seconds+15,live_seconds))
                     cur.execute('UPDATE public.pr_phone_calls SET live_cost_usd_micro=%s,live_usage_seconds=%s WHERE id=%s',(cost,live_seconds,call_id))
                 db.commit()
                 return
@@ -342,7 +342,7 @@ class PhoneService:
             billable_live = max(seconds + 15, live_seconds or 0) if value['media_claimed_at'] else 0
             voice_cost = math.ceil(billable_live * live_rate / 60)
             unknown = bool(value['media_claimed_at'] and live_seconds is None)
-            billing.settle(self, cur, value, 'live', 'unknown' if unknown else 'completed', None if unknown else voice_cost)
+            billing.settle(self, cur, value, 'live', 'unknown' if unknown else 'completed', None if unknown else voice_cost, audio_seconds=None if unknown else billable_live)
             billing.settle(self, cur, value, 'telephony', 'unknown' if tel_unknown else 'completed', None if tel_unknown else tel_cost)
             cur.execute('UPDATE public.pr_phone_calls SET live_cost_usd_micro=%s,telephony_cost_usd_micro=%s,live_usage_seconds=%s,billing_basis=%s WHERE id=%s',
                         (None if unknown else voice_cost, None if tel_unknown else tel_cost, live_seconds, 'bounded estimate; provider duration rounded to whole minutes at configured rate ceiling, Live server clock', call_id))

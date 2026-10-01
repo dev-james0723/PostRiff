@@ -146,7 +146,12 @@ with connection() as db:
 with connection() as db:
     events = db.execute("SELECT event,properties FROM public.pr_product_events WHERE workspace_id=%s", (wid,)).fetchall()
     assert any(name == 'growth_experiment.completed' for name, _ in events)
-    assert all(set(properties) == {'recordId'} for _, properties in events)
+    # Content-free either way: the product taxonomy's events carry only their allowlisted enum properties, and the
+    # growth loop's (and other record) events carry only the record id.
+    from postriff_phase2 import product_events
+    for name, properties in events:
+        allowed = product_events.TAXONOMY.get(name)
+        assert (set(properties) <= allowed) if allowed is not None else (set(properties) == {'recordId'}), (name, sorted(properties))
 passed('authoritative/idempotent proof, notification failure isolation, missing Time Back history, monthly honesty, RLS and content-free events')
 
 # Missing Time Back table is handled with a savepoint and truthful coverage.

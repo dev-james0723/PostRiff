@@ -173,6 +173,35 @@ def _known_admission_refusal(status) -> bool:
     return type(status) is int and 400 <= status <= 499
 
 
+# A session that never went live, by start-failure reason: refused (rate limited or failed) or outcome unknown.
+SESSION_FAILURES = {"live_busy": "rate_limited", "live_quota": "failed", "live_auth": "failed", "live_forbidden": "failed", "live_rejected": "failed"}
+
+
+def record_session(cur, cfg, workspace_id, user_id, voice_session_id, voice, *, status, seconds, cost, http_status=None) -> None:
+    """One GPT-Live session as one public.pr_ai_call_events row (Founder Admin §8.B), inside the settle's transaction under a
+    savepoint: audio seconds and cost exactly as the settle books them (server clock × the per-minute rate, labelled with its
+    price table), the Live session id as the provider request id. Recorded again (a reap after a close), it is the same row.
+    Never raises."""
+    try:
+        from .. import ai_call_events
+        from .config import DEFAULT_LIVE_USD_MICRO_PER_MINUTE
+        voice = voice if isinstance(voice, dict) else {}
+        refused = status in ("rate_limited", "failed") and cost == 0
+        if refused:
+            cost, source = 0, "provider"
+        else:
+            version = ai_call_events.MEDIA_CONSTANTS if cfg.live_usd_micro_per_minute == DEFAULT_LIVE_USD_MICRO_PER_MINUTE else ai_call_events.CONFIGURED
+            cost, source, _ = ai_call_events.table_cost(cost, version)
+        attempt = {"workload": "voice_front_end", "provider": "openai", "model": cfg.route("voice_front_end", reason="usage record").model, "status": status,
+                   "http_status": http_status, "audio_seconds": seconds, "cost_usd_micro": cost, "cost_source": source,
+                   "started_at": voice.get("connectedAt") or voice.get("startedAt"), "provider_request_id": voice.get("liveSessionId"),
+                   "physical_attempt_id": f"voice:{voice_session_id}"}
+        ai_call_events.write_attempts({"workspace_id": workspace_id, "user_id": user_id, "feature": "voice", "run_id": voice_session_id,
+                                       "reservation_id": voice.get("reservationId")}, [attempt], cursor=cur)
+    except Exception:  # noqa: BLE001 - recording never fails a voice settle
+        pass
+
+
 def live_transport(method, url, headers=None, body=None, timeout=20):
     """Server-to-OpenAI JSON call for Live session creation (the key stays on the server)."""
     import ssl
@@ -340,6 +369,7 @@ class VoiceSessions:
             cost = int(math.ceil(seconds * self.cfg.live_usd_micro_per_minute / 60))
             if voice.get("reservationId"):
                 self.service.ledger.settle(cur, workspace_id, voice["reservationId"], "completed", cost)
+            record_session(cur, self.cfg, workspace_id, None, run_id, voice, status="ok", seconds=seconds, cost=cost)
             voice.update({"state": "ended", "reason": "not_ended_by_client", "endedAt": self._now(), "usageSeconds": seconds, "costUsdMicro": cost,
                           "billingBasis": "estimated: start to last activity plus a minute, at most the cap (the client never ended it)"})
             self._save(cur, workspace_id, run_id, artifact, status="completed")
@@ -416,6 +446,9 @@ class VoiceSessions:
             cost = None if billed is None else int(math.ceil(billed * self.cfg.live_usd_micro_per_minute / 60))
             if reservation and reservation.get("reservationId"):
                 self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
+            record_session(cur, self.cfg, workspace_id, _principal, voice_session_id, {**voice, "reservationId": (reservation or {}).get("reservationId")},
+                           status="ok" if state == "ended" else SESSION_FAILURES.get(reason, "unknown"), seconds=billed, cost=cost,
+                           http_status=(failure_diagnostic or {}).get("upstreamStatus"))
             voice.update({"state": state, "endedAt": self._now(), "reason": reason, "usageSeconds": billed, "costUsdMicro": cost,
                           "clientReportedSeconds": seconds, "billingBasis": ("server clock" if state == "ended" else "Live refused the session") if cost is not None else "unknown until reconciled"})
             if failure_diagnostic is not None:
