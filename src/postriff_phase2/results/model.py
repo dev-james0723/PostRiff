@@ -162,31 +162,41 @@ def associate(ref, occurred_at, links_by_slug, *, window_days=ASSOCIATION_WINDOW
 
 
 def summarize(rows):
-    """Counts and money per provenance and type, with reversals netted only against their own originals.
+    """Counts and money per provenance and type, with corrections applied only to their own originals.
 
-    ``rows``: dicts with provenance, type, kind ('event'|'reversal'), correctsId, id, quantity, amount, attribution.
+    ``rows``: dicts with provenance, type, kind ('event'|'amendment'|'reversal'), correctsId, id, quantity, amount,
+    attribution, in the order they were received. An amendment is a complete new version of the event it corrects (the
+    latest one wins, so an amended result still counts once); a reversal withdraws its original, whichever version is
+    current. A row may also stand for a group of results the database already aggregated: ``reversed: True`` marks the
+    group as withdrawn and ``events`` says how many of its results carried an amount.
     Returns per-class counts (never one blended number), per-currency totals, and the reversed/unattributed counts that
     must stay visible. A class with no rows is reported as ``None`` (unavailable), not zero."""
     reversed_ids = {r["correctsId"] for r in rows if r.get("kind") == "reversal" and r.get("correctsId")}
-    out = {cls: None for cls in PROVENANCE}
+    current = {}
     for row in rows:
-        if row.get("kind") == "reversal":
+        if row.get("kind") == "amendment" and row.get("correctsId"):
+            current[row["correctsId"]] = row
+    out = {cls: None for cls in PROVENANCE}
+    for original in rows:
+        if original.get("kind") in ("reversal", "amendment"):
             continue
-        bucket = out[row["provenance"]] or {"counts": {}, "money": {}, "reversed": 0, "unattributed": 0, "associated": 0}
-        out[row["provenance"]] = bucket
-        if row["id"] in reversed_ids:
-            bucket["reversed"] += row.get("quantity", 1)
+        row = current.get(original["id"], original)
+        bucket = out[original["provenance"]] or {"counts": {}, "money": {}, "reversed": 0, "unattributed": 0, "associated": 0}
+        out[original["provenance"]] = bucket
+        quantity = row.get("quantity", 1)
+        if original["id"] in reversed_ids or original.get("reversed"):
+            bucket["reversed"] += quantity
             continue
-        bucket["counts"][row["type"]] = bucket["counts"].get(row["type"], 0) + row.get("quantity", 1)
+        bucket["counts"][row["type"]] = bucket["counts"].get(row["type"], 0) + quantity
         if row.get("attribution") == "associated":
-            bucket["associated"] += row.get("quantity", 1)
+            bucket["associated"] += quantity
         else:
-            bucket["unattributed"] += row.get("quantity", 1)
+            bucket["unattributed"] += quantity
         amount = row.get("amount")
         if amount:
             per = bucket["money"].setdefault(amount["currency"], {"minor": 0, "events": 0})
             per["minor"] += amount["minor"]
-            per["events"] += 1
+            per["events"] += row.get("events", 1)
     return out
 
 
