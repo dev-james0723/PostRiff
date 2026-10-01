@@ -1,5 +1,6 @@
 """Preview services consume the coordinator's one Demo seed, never a second fixture."""
 import copy
+import importlib
 import importlib.util
 import json
 import os
@@ -12,8 +13,9 @@ from unittest.mock import patch
 from rafii_control.auth import ControlError
 
 try:
-    from rafii_control import founder_intelligence as service
-except ImportError:
+    service = importlib.import_module('rafii_control.founder_intelligence')
+except ModuleNotFoundError as error:
+    if error.name != 'rafii_control.founder_intelligence': raise
     service = None
 
 try:
@@ -43,7 +45,7 @@ class FounderIntelligenceTests(unittest.TestCase):
                                            revoked_at=None, expires_at=4102444800))
 
     def action(self, kind, payload=None, target='new'):
-        request = dict(action=kind, targetId=target, value=json.dumps(payload or {}),
+        request = dict(action=kind, targetId=target, value=json.dumps({} if payload is None else payload),
                        revision=self.data['revision'], requestId=str(uuid.uuid4()))
         return service.reduce_action(self.data, request, self.principal, now='2026-10-01T12:00:00Z')
 
@@ -176,6 +178,85 @@ class FounderIntelligenceTests(unittest.TestCase):
             self.action('founder_report_schedule',dict(conversationId=run['conversationId'],kind='daily',
                         dueLocal=None,timeZone='America/Indiana/Indianapolis',confirmed=True))
         self.assertEqual(service.preview_state(self.data,self.principal)['schedules'],[])
+
+    def test_malformed_payloads_are_safe_validation_failures_without_partial_writes(self):
+        run=self.turn()
+        cases=[('founder_delivery',[]),('founder_voice',{'conversationId':run['conversationId'],'operation':[]}),
+               ('founder_report_schedule',{'conversationId':run['conversationId'],'kind':[],
+                  'dueLocal':None,'timeZone':'UTC','confirmed':False}),
+               ('founder_turn',{'message':'Explain this chart','conversationId':None,'chartContext':{
+                  'chartId':[],'viewVersion':1,'queryReceiptId':dataset.receipt(self.data)['id'],
+                  'mode':'demo','environment':'local'}})]
+        before=copy.deepcopy(self.data['founderIntelligence'])
+        for kind,payload in cases:
+            with self.subTest(kind=kind), self.assertRaises(ControlError): self.action(kind,payload)
+        self.assertEqual(self.data['founderIntelligence'],before)
+
+    def test_old_scenario_report_cannot_be_spoken_as_current_evidence(self):
+        run=self.turn()
+        schedule=self.action('founder_report_schedule',dict(conversationId=run['conversationId'],kind='daily',
+                     dueLocal='2026-10-02T09:00:00',timeZone='America/Indiana/Indianapolis',confirmed=True))
+        report=service.preview_state(self.data,self.principal)['reports'][0]
+        call=self.action('founder_delivery',dict(operation='start',channel='call',sourceId=report['id']))
+        self.action('founder_delivery',dict(operation='advance',channel='call',sourceId=report['id'],attemptId=call['id'],outcome='live'))
+        self.data['scenario']='payment_failure'
+        follow=self.action('founder_follow_up',dict(attemptId=call['id'],message='Explain this chart'))
+        self.assertTrue(follow['historicalContext'])
+        self.assertIn('historical',follow['answerText'].lower())
+        self.assertEqual(follow['queryReceiptIds'],run['queryReceiptIds'])
+
+    def test_scenario_outbox_preview_retry_recovery_share_one_incident(self):
+        def scenario(value):
+            action=dict(action='set_scenario',targetId='scenario',value=value,
+                        revision=self.data['revision'],requestId=str(uuid.uuid4()))
+            service.reduce_action(self.data,action,self.principal,now='2026-10-01T12:00:00Z')
+        scenario('outage')
+        view=service.preview_state(self.data,self.principal)
+        self.assertEqual(view['incident']['affectedCount'],3)
+        self.assertIn('DEMO',view['notifications'][0]['subject'])
+        self.assertIn('simulated',view['notifications'][0]['html'].lower())
+        self.assertNotIn('<img',view['notifications'][0]['html'])
+        incident_id=view['incident']['id']
+        scenario('notification_failure')
+        view=service.preview_state(self.data,self.principal)
+        self.assertEqual(view['notifications'][0]['state'],'failed')
+        scenario('recovery')
+        view=service.preview_state(self.data,self.principal)
+        self.assertEqual(view['incident']['id'],incident_id)
+        self.assertEqual(view['incident']['state'],'resolved')
+        self.assertEqual(sum(n['kind']=='recovery' for n in view['notifications']),1)
+        self.assertEqual(self.data['summary']['currentPaidSubscriptions'],10000)
+
+    def test_read_snapshot_denies_intelligence_without_breaking_workspace_read(self):
+        self.turn()
+        principal=copy.deepcopy(self.principal)
+        principal['operator']['capabilities'].remove('copilot.use')
+        denied=service.demo_snapshot(self.data,principal)['intelligence']
+        self.assertEqual(denied['code'],'SCOPE_DENIED')
+        self.assertNotIn('conversations',denied)
+        self.assertNotIn('messages',denied)
+
+    def test_public_history_is_bounded_while_durable_history_is_preserved(self):
+        conversation=None
+        for i in range(60):
+            if i==50: conversation=None
+            run=self.turn('Explain this chart. '+'x'*1500,conversation)
+            conversation=run['conversationId']
+        raw=self.data['founderIntelligence']
+        self.assertEqual(sum(len(c['turns']) for c in raw['conversations']),60)
+        view=service.demo_snapshot(self.data,self.principal)
+        combined={**dataset.bounded_snapshot(self.data),**view}
+        self.assertLess(len(json.dumps(combined).encode()),480*1024)
+        self.assertTrue(view['intelligence']['historyTruncated'])
+        self.assertEqual(sum(len(c['turns']) for c in raw['conversations']),60)
+
+    def test_replay_authorization_rechecks_current_grants_before_cached_output(self):
+        run=self.turn()
+        action=dict(action='founder_turn',targetId='founder',value='{}',revision=1,requestId=run['runId'])
+        self.assertTrue(service.authorize_demo_action(self.data,action,self.principal))
+        principal=copy.deepcopy(self.principal)
+        principal['operator']['capabilities'].remove('copilot.use')
+        with self.assertRaises(ControlError):service.authorize_demo_action(self.data,action,principal)
 
 
 if __name__ == '__main__': unittest.main()

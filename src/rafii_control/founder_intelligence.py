@@ -19,7 +19,7 @@ from .intelligence import QueryService, canonical
 
 ACTIONS = frozenset({'founder_turn', 'founder_reminder', 'founder_report_schedule',
                      'founder_delivery', 'founder_follow_up', 'founder_voice', 'founder_summary',
-                     'founder_follow_up_update', 'founder_schedule_tick'})
+                     'founder_follow_up_update', 'founder_schedule_tick', 'set_scenario'})
 CHARTS = {'plan-distribution':'planDistribution', 'revenue-trend':'revenueTrend',
           'usage-distribution':'usageDistribution', 'support-distribution':'supportDistribution'}
 TIME_ZONE = 'America/Indiana/Indianapolis'
@@ -72,7 +72,7 @@ def _receipt(data):
 
 def _context(data, payload, environment):
     _fields(payload,('chartId','viewVersion','queryReceiptId','mode','environment'),('selectedSeries',))
-    if (payload['chartId'] not in CHARTS or type(payload['viewVersion']) is not int or payload['viewVersion']!=1 or
+    if (not isinstance(payload['chartId'],str) or payload['chartId'] not in CHARTS or type(payload['viewVersion']) is not int or payload['viewVersion']!=1 or
         payload['mode']!='demo' or payload['environment']!=environment): raise ControlError('SCOPE_DENIED')
     if payload['queryReceiptId']!=_receipt(data)['id']: raise ControlError('STALE_PREVIEW',409)
     series=payload.get('selectedSeries',[])
@@ -91,7 +91,8 @@ def _find(state, collection, ref):
 
 def _incidents(data):
     # Only safe server-owned scenario observations enter conversation/email context.
-    allowed=('id','title','severity','state','affectedCount','affectedWorkspaceIds','observedAt','known','unknown','episodeId')
+    allowed=('id','title','severity','state','affectedCount','affectedWorkspaceIds','affectedSourceIds',
+             'affectedRecords','observedAt','known','unknown','episodeId','timeline','acknowledged','notificationState')
     out=[]
     for incident in data.get('incidents',[])[:20]:
         safe={key:copy.deepcopy(incident[key]) for key in allowed if key in incident}
@@ -111,7 +112,7 @@ def _explain(data, message, rows, chart):
             if 'subscribers' in row:
                 descriptions.append(f"{row.get('plan',row.get('label','Selected series'))}: {row['subscribers']:,} subscribers")
             elif 'revenueMinor' in row:
-                descriptions.append(f"{row['period']}: recurring/invoice trend {row['revenueMinor']} minor units; cash {row['cashMinor']} minor units ({row['currency']})")
+                descriptions.append(f"{row['period']}: invoiced amount {row['revenueMinor']} minor units; cash {row['cashMinor']} minor units ({row['currency']})")
             elif 'count' in row: descriptions.append(f"{row.get('status','Selected series')}: {row['count']:,}")
         if descriptions:
             return 'Demo simulation; fictional data, not live AI. '+ '; '.join(descriptions)+'. Values use the selected chart receipt.',True,[]
@@ -149,12 +150,16 @@ def _turn(data, state, payload, request_id, now, *, evidence=None):
         state['conversations'].append(conversation)
     else: conversation=_find(state,'conversations',_id(conversation_id))
     if len(conversation['turns'])>=50: raise ControlError('BUDGET_EXCEEDED',400)
-    answer,supported,links=_explain(data,message,rows,context['chartId'])
+    historical=receipt.get('scenario','normal')!=data.get('scenario','normal')
+    read_data=data if not evidence else dict(scenario=receipt.get('scenario','normal'),asOf=receipt.get('asOf'),
+                                             summary={},incidents=[],analytics={})
+    answer,supported,links=_explain(read_data,message,rows,context['chartId'])
+    if historical: answer='Historical Demo snapshot as of '+str(receipt.get('asOf'))+'. '+answer
     result=empty_result(new_trace_id(),modality)
     result.update(runId=request_id,conversationId=conversation['id'],namespace='founder',mode='demo_simulation',
                   state='completed' if supported else 'blocked',answerText=answer,speakableSummary=answer,
                   evidenceRows=rows,queryReceiptIds=[receipt['id']],chartContext=context,receipt=receipt,
-                  scenario=data.get('scenario','normal'),createdAt=now,links=links,externalDelivery=False,
+                  scenario=receipt.get('scenario','normal'),historicalContext=historical,createdAt=now,links=links,externalDelivery=False,
                   usage=dict(providerCalls=0,costState='not_applicable',costCenter='founder_operations'),
                   warnings=[dict(code='DEMO_SIMULATION',message='Deterministic simulation; no live model or voice connected.')])
     conversation['turns'].append({**copy.deepcopy(result),'question':message})
@@ -240,7 +245,7 @@ def _apply(data,state,action,payload,now):
     if kind=='founder_delivery':
         from .founder_preview_delivery import delivery_action
         source=payload.get('sourceId')
-        if not any(r['id']==source for name in ('reports','followUps') for r in state[name]) and not any(r['id']==source for r in _incidents(data)):
+        if not any(r['id']==source for name in ('reports','followUps') for r in state[name]) and not any(r['id']==source for r in _incidents(data)+data.get('notificationEvents',[])):
             raise ControlError('SCOPE_DENIED')
         result=delivery_action(state,payload,request_id=request_id,now=now)
         return result['attempt']
@@ -257,7 +262,7 @@ def _apply(data,state,action,payload,now):
         conversation=_find(state,'conversations',_id(payload['conversationId']))
         states={'start':'listening','stop':'stopped','interrupt':'interrupted','repeat':'playing','text':'text'}
         operation=payload['operation']
-        if operation not in states: raise ControlError('VALIDATION_FAILED',400)
+        if not isinstance(operation,str) or operation not in states: raise ControlError('VALIDATION_FAILED',400)
         voice=conversation['voice']
         if 'generationId' in payload and payload['generationId']!=voice['generationId']: raise ControlError('STALE_PREVIEW',409)
         voice.update(state=states[operation],generationId=voice['generationId']+1,liveVoiceConnected=False,
@@ -295,8 +300,18 @@ def reduce_action(data, action, principal, *, now=None):
     if not isinstance(action['targetId'],str) or not re.fullmatch('[A-Za-z0-9-]{1,80}',action['targetId']): raise ControlError('VALIDATION_FAILED',400)
     request_id=_id(action['requestId'])
     if not isinstance(action['value'],str) or len(action['value'].encode())>4000: raise ControlError('BUDGET_EXCEEDED',400)
+    if action['action']=='set_scenario':
+        from .founder_preview_scenarios import apply_scenario
+        if action['targetId']!='scenario': raise ControlError('VALIDATION_FAILED',400)
+        # The scenario service validates linked sources before mutation. Outer
+        # WorkspaceService holds the actor/environment row and owns its commit.
+        result=apply_scenario(data,action['value'],now=now or datetime.now(timezone.utc).isoformat())
+        if 'founderIntelligence' not in data: data['founderIntelligence']=_empty(actor,environment)
+        data['founderIntelligence']['lastActionResult']=copy.deepcopy(result)
+        return result
     try: payload=json.loads(action['value'])
     except (ValueError,TypeError): raise ControlError('VALIDATION_FAILED',400) from None
+    if not isinstance(payload,dict): raise ControlError('VALIDATION_FAILED',400)
     state=copy.deepcopy(data.get('founderIntelligence') or _empty(actor,environment))
     # Transactional copy: an invalid action never leaves partial state in caller memory.
     result=_apply(data,state,{**action,'requestId':request_id},payload,now or datetime.now(timezone.utc).isoformat())
@@ -308,6 +323,15 @@ def preview_state(data, principal):
     """Bounded presentation; retrieval still requires the current Founder grant."""
     actor,environment=_require(data,principal)
     state=copy.deepcopy(data.get('founderIntelligence') or _empty(actor,environment))
+    full_count=sum(len(c['turns']) for c in state['conversations'])
+    state['conversations']=state['conversations'][-3:]
+    for conversation in state['conversations']: conversation['turns']=conversation['turns'][-4:]
+    state['historyTruncated']=full_count>sum(len(c['turns']) for c in state['conversations'])
+    state['totalTurnCount']=full_count
+    for collection,limit in (('reports',5),('schedules',10),('followUps',10),('summaries',10),('contactAttempts',10)):
+        state[collection]=state[collection][-limit:]
+    for attempt in state['contactAttempts']: attempt.pop('operationRequests',None)
+    if isinstance(state.get('lastActionResult'),dict):state['lastActionResult'].pop('operationRequests',None)
     for conversation in state['conversations']:
         for turn in conversation['turns']:
             turn['historicalContext']=turn['scenario']!=data.get('scenario','normal')
@@ -320,7 +344,28 @@ def preview_state(data, principal):
                         conversationId=conversation['id'],historicalContext=turn['historicalContext'])
             messages.extend([dict(id=turn['runId']+'-question',role='user',text=turn['question'],**common),
                              dict(id=turn['runId'],role='assistant',text=turn['answerText'],**common)])
-    state['messages']=messages[-40:]
+    state['messages']=messages[-16:]
+    incidents=_incidents(data)
+    state['incident']=incidents[-1] if incidents else None
+    state['notifications']=[]
+    if incidents:
+        from .founder_preview_delivery import email_preview
+        for event in data.get('notificationEvents',[])[-3:]:
+            incident=next((r for r in incidents if r['id']==event['incidentId']),None)
+            if not incident: continue
+            # Recovery preview is pinned to the resolved event; the earlier
+            # outage notice remains an immutable historical notification.
+            observed={**incident,'state':'resolved' if event['kind']=='recovery' else 'open'}
+            rendered=email_preview(observed)
+            latest=next((a for a in reversed(state['contactAttempts']) if a['sourceId'] in (event['id'],incident['id']) and a['channel']=='email'),None)
+            state['notifications'].append(dict(**rendered,id=event['id'],incidentId=incident['id'],kind=event['kind'],
+                       state=latest['state'] if latest else event['state'],attemptId=latest['id'] if latest else None,
+                       sourceId=event['id'],acknowledged=latest['acknowledged'] if latest else False,
+                       recipientLabel='Founder sandbox; no destination selected',receiptId=_receipt(data)['id']))
+    for collection in ('reports','followUps'):
+        for item in state[collection]:
+            item['title']=item.get('intent',item.get('kind','Report').title()+' briefing')
+            item['summary']=item.get('text','Saved in the sandbox. No real delivery is enabled.')
     state.update(simulation=True,externalDelivery=False,
                  modelReadiness=dict(live=False,mode='demo_simulation',code='MODEL_PERMISSION_UNVERIFIED'),
                  voiceReadiness=dict(live=False,mode='demo_simulation',recording=False,
@@ -332,7 +377,19 @@ def preview_state(data, principal):
 
 
 def demo_snapshot(data, principal):
-    return {'intelligence':preview_state(data,principal)}
+    try: return {'intelligence':preview_state(data,principal)}
+    except ControlError as error:
+        # Optional conversation access must not broaden ordinary workspace read
+        # authority or break its existing read-only dashboard.
+        return {'intelligence':dict(code=error.code,simulation=True,externalDelivery=False,
+                                    modelReadiness=dict(live=False),voiceReadiness=dict(live=False))}
+
+
+def authorize_demo_action(data, action, principal):
+    """Call BEFORE returning an action replay from the enclosing Demo store."""
+    if action.get('action') not in ACTIONS: return False
+    _require(data,principal)
+    return True
 
 
 def apply_demo_action(data, action, principal):

@@ -51,6 +51,15 @@ class FounderPreviewDeliveryTests(unittest.TestCase):
         self.fails("CONFLICT", lambda: self.action(source="other", request="same-request"))
         self.fails("CONFLICT", lambda: self.action("cancel", attempt=started, request="same-request"))
 
+    def test_replay_capacity_cannot_prevent_terminal_call_cleanup(self):
+        first=self.action()
+        for i in range(255): self.action('advance',attempt=first,outcome='live')
+        ended=self.action('advance',attempt=first,outcome='completed')
+        self.assertEqual(ended['state'],'completed')
+        self.assertFalse(ended['acknowledged'])
+        acknowledged=self.action('acknowledge',attempt=ended)
+        self.assertTrue(acknowledged['acknowledged'])
+
     def test_duplicate_start_cannot_bypass_explicit_retry(self):
         first = self.action()
         self.action("advance", attempt=first, outcome="failed")

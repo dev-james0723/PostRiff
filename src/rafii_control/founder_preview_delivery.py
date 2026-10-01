@@ -103,10 +103,15 @@ def _result(attempt, attempts, *, replayed=False):
                 contactAttempts=copy.deepcopy(attempts), replayed=replayed)
 
 
-def _remember(attempt, request_id, digest):
+def _remember(attempt, request_id, digest, *, cleanup=False):
     operations = attempt.setdefault("operationRequests", {})
     if len(operations) >= 256 and request_id not in operations:
-        _error("REPLAY_CAPACITY", 429)
+        if not cleanup: _error("REPLAY_CAPACITY", 429)
+        # Safe terminal/end-call cleanup cannot be starved by read/event replay
+        # bookkeeping. State remains terminal; enclosing action replay/audit is
+        # still durable. Retain the newest operation and the initial claim.
+        keys=list(operations)
+        operations.pop(keys[1] if len(keys)>1 else keys[0])
     operations[request_id] = digest
 
 
@@ -234,7 +239,8 @@ def delivery_action(state: dict, payload: dict, *, request_id: str, now: str) ->
                 attempt["state"] = incoming
         if attempt["state"] != current or operation == "acknowledge":
             attempt["updatedAt"] = stamp.isoformat()
-    _remember(attempt, request_id, digest)
+    terminal = TERMINAL if channel == "call" else _EMAIL_TERMINAL
+    _remember(attempt, request_id, digest, cleanup=attempt['state'] in terminal or operation=='acknowledge')
     _receipt(attempt)
     state["contactAttempts"] = attempts
     return _result(attempt, attempts)
