@@ -466,6 +466,15 @@ class HostedApplication:
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
         try:
+            if path.startswith("/api/control/v2/"):
+                # Founder Control answers its own prefix through its cookie + CSRF + capability boundary: the consumer
+                # bearer, application guard and runtime never apply to it. Built once, lazily, from the process
+                # environment; rafii_control.hosted.embedded_app never raises (misconfiguration answers 503 there).
+                control = getattr(self, "control_app", None)
+                if control is None:
+                    from rafii_control.hosted import embedded_app
+                    control = self.control_app = embedded_app(os.environ, self._runtime)
+                return control(environ, start_response)
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
@@ -647,6 +656,13 @@ class HostedApplication:
                     result['operations'] = operational_snapshot(service.repository.connection_factory)
                 except Exception:
                     result['operations'] = {'status':'unavailable', 'notificationDelivery':'not_configured'}
+                try:
+                    # Founder Control cron (CONTRACTS §1): gated on RAFII_CONTROL_ENABLED inside founder_tick; any failure
+                    # (including an unfinished rafii_control.founder_cron) reports 'unavailable' and never breaks the tick.
+                    from rafii_control.hosted import founder_tick
+                    result['founder'] = founder_tick(service, os.environ)
+                except Exception:
+                    result['founder'] = {'status': 'unavailable'}
                 try:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:

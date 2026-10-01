@@ -8,6 +8,7 @@ import unittest
 import uuid
 import psycopg
 from psycopg.types.json import Jsonb
+from rafii_control import demo_dataset
 from rafii_control.auth import Boundary,Config,VerifiedIdentity,ControlError,CAPABILITIES
 from rafii_control.store import PostgresStore,connection_factory
 from rafii_control.workspace import WorkspaceService
@@ -182,7 +183,14 @@ class BusinessWorkspaceTests(unittest.TestCase):
         self.assertEqual(self.request('/workspace/live/query','POST',{**query,'page':True})[0],400)
         _,demo=self.request('/workspace/demo/query','POST',{**query,'collection':'payments','search':'Northline'})
         self.assertEqual(demo['data']['mode'],'demo')
-        self.assertEqual(demo['data']['total'],3)
+        # The Demo dataset is generated (10,000 subscribers); the expected count comes from the same fictional records, not a literal.
+        dataset=demo_dataset.sample_data()
+        customers={c['id']:c for c in dataset['customers']}; workspaces={w['id']:w for w in dataset['workspaces']}
+        owner=lambda p: p.get('customerId') or workspaces.get(p.get('workspaceId'),{}).get('ownerId')
+        expected=sum('northline' in str(customers.get(owner(p),{}).get('company','')).casefold() for p in dataset['payments'])
+        self.assertGreater(expected,0)
+        self.assertEqual(demo['data']['total'],expected)
+        self.assertEqual(len(demo['data']['rows']),min(expected,50))
         self.assertNotIn('DO_NOT_DISCLOSE',json.dumps(linked))
 
     def test_founder_action_replay_requires_current_capabilities(self):

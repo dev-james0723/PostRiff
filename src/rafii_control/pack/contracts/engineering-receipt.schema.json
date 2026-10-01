@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:engineering-receipt",
+  "title": "engineering-receipt",
+  "type": "object",
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "checkedSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "workflowDefinitionSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "partial",
+        "infrastructure_failed",
+        "canceled",
+        "outcome_unknown"
+      ]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "skipped",
+              "blocked",
+              "not_run"
+            ]
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "evidenceDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "name",
+          "required",
+          "status",
+          "exitCode",
+          "evidenceDigest"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 200,
+      "uniqueItems": true
+    },
+    "attestationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "fixture": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "jobId",
+    "requestId",
+    "checkedSha",
+    "workflowDefinitionSha",
+    "state",
+    "startedAt",
+    "finishedAt",
+    "checks",
+    "attestationRef",
+    "fixture"
+  ],
+  "additionalProperties": false,
+  "description": "Schema does not establish authenticity. Broker must verify attestation and exact source metadata; a required non-pass prohibits state=passed."
+}

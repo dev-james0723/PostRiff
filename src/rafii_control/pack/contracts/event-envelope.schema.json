@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:event-envelope",
+  "title": "event-envelope",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "type": "string",
+      "enum": [
+        "control.source.stale",
+        "control.signal.detected",
+        "control.investigation.completed",
+        "control.recommendation.proposed",
+        "control.action.verified",
+        "control.engineering.check_completed",
+        "control.heartbeat.missed"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "sourceEventId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "production",
+        "staging",
+        "local"
+      ]
+    },
+    "eventTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "receivedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "source",
+            "workspace",
+            "incident",
+            "investigation",
+            "recommendation",
+            "action",
+            "engineering_job",
+            "worker"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal_metadata",
+        "customer_metadata",
+        "private_support",
+        "restricted_security"
+      ]
+    },
+    "dedupeKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 250
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 20
+    },
+    "fixture": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "eventType",
+    "source",
+    "sourceEventId",
+    "environment",
+    "eventTime",
+    "receivedAt",
+    "subject",
+    "classification",
+    "dedupeKey",
+    "payload",
+    "fixture"
+  ],
+  "additionalProperties": false,
+  "description": "Envelope contract only. Each eventType needs its own allowlisted payload validator before ingestion. Do not use a generic payload object to bypass privacy validation."
+}

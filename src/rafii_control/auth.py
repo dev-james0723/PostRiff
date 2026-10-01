@@ -14,7 +14,12 @@ from postriff_phase2.hosted_identity import _verified_payload
 from postriff_alpha.domain import AlphaError
 
 COOKIE = '__Host-rafii-control'
-CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'workspaces.read', 'engineering.read', 'audit.read', 'copilot.use', 'workspaces.test.rename'})
+CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'workspaces.read', 'engineering.read', 'audit.read', 'copilot.use', 'workspaces.test.rename',
+                          # Founder Admin v2 (CONTRACTS §3). The last two are also the audit action names the agent/contact slices record.
+                          'incidents.ack', 'followups.write', 'control.settings', 'founder.agent.turn', 'founder.call.request'})
+# Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget of 120/min.
+BUDGETS = {'copilot.use': 5, 'metrics.query': 30, 'founder.agent.turn': 20, 'founder.call.request': 5}
+MOUNTS = ('separate', 'embedded')
 
 
 class ControlError(Exception):
@@ -31,14 +36,31 @@ def boolean(value):
 
 @dataclass(frozen=True)
 class Config:
+    """Deployment shape of Control.
+
+    ``mount='separate'`` is the original dedicated Vercel project (one exact origin, no consumer credentials in
+    the process). ``mount='embedded'`` serves the same `/api/control/v2` prefix from inside the consumer API, so
+    the browser origin is the consumer app's own origin(s) and consumer credentials legitimately share the
+    process; Control tolerates their presence there but never reads them.
+    """
     enabled: bool = False
     environment: str = 'local'
     origin: str = 'http://localhost:4449'
+    mount: str = 'separate'
+    origins: tuple = ()
+
+    @property
+    def allowed_origins(self):
+        """Every browser origin Control answers; ``origin`` stays the first one for callers that need a single value."""
+        return self.origins or (self.origin,)
 
     @classmethod
     def from_environment(cls, values):
         enabled = boolean(values.get('RAFII_CONTROL_ENABLED'))
         environment = values.get('RAFII_CONTROL_ENVIRONMENT', 'local')
+        mount = values.get('RAFII_CONTROL_MOUNT', 'separate')
+        if mount not in MOUNTS: raise ValueError('Invalid control mount')
+        if mount == 'embedded': return cls._embedded(values, enabled, environment)
         origin = values.get('RAFII_CONTROL_ORIGIN', 'http://localhost:4449')
         parsed = urlsplit(origin)
         if environment not in ('local', 'staging', 'production'): raise ValueError('Invalid control environment')
@@ -51,11 +73,40 @@ class Config:
             if values.get('RAFII_CONTROL_HARNESS'): raise ValueError('Harness forbidden on Vercel')
             if values['VERCEL_ENV'] == 'preview' and environment == 'production': raise ValueError('Preview cannot use production authority')
             if values['VERCEL_ENV'] == 'preview' and (enabled or values.get('RAFII_CONTROL_SUPABASE_URL')):
-                stage, prod = values.get('RAFII_CONTROL_STAGING_PROJECT_REF'), values.get('RAFII_CONTROL_PRODUCTION_PROJECT_REF')
-                if not stage or not prod or stage == prod: raise ValueError('Verified distinct staging identity required')
-                if values.get('RAFII_CONTROL_SUPABASE_URL') != f'https://{stage}.supabase.co': raise ValueError('Preview identity mismatch')
+                cls._staging_identity(values)
                 if values.get('POSTRIFF_DATABASE_URL') or values.get('SUPABASE_SERVICE_ROLE_KEY'): raise ValueError('Consumer/privileged credentials forbidden')
-        return cls(enabled, environment, origin)
+        return cls(enabled, environment, origin, 'separate', (origin,))
+
+    @staticmethod
+    def _staging_identity(values):
+        stage, prod = values.get('RAFII_CONTROL_STAGING_PROJECT_REF'), values.get('RAFII_CONTROL_PRODUCTION_PROJECT_REF')
+        if not stage or not prod or stage == prod: raise ValueError('Verified distinct staging identity required')
+        if values.get('RAFII_CONTROL_SUPABASE_URL') != f'https://{stage}.supabase.co': raise ValueError('Preview identity mismatch')
+
+    @classmethod
+    def _embedded(cls, values, enabled, environment):
+        """Embedded mount. Origins come only from RAFII_CONTROL_ORIGINS (comma list) plus, on a Vercel preview, the
+        deployment's own https://VERCEL_URL and https://VERCEL_BRANCH_URL. Production never infers an origin.
+        The consumer-credential checks of the separate mount do not apply: those variables are never read here."""
+        if environment not in ('local', 'staging', 'production'): raise ValueError('Invalid control environment')
+        vercel = values.get('VERCEL_ENV')
+        listed = [item.strip() for item in values.get('RAFII_CONTROL_ORIGINS', '').split(',') if item.strip()]
+        if vercel == 'preview':
+            listed.extend(f'https://{values[key]}' for key in ('VERCEL_URL', 'VERCEL_BRANCH_URL') if values.get(key))
+        if not listed: raise ValueError('Explicit control origins required')
+        for origin in listed:
+            parsed = urlsplit(origin)
+            if not parsed.netloc or parsed.path or parsed.query or parsed.fragment or parsed.username: raise ValueError('Exact origin required')
+            if parsed.scheme != 'https' and not (environment == 'local' and parsed.scheme == 'http' and parsed.hostname == 'localhost'):
+                raise ValueError('HTTPS control origin required')
+        if vercel:
+            if values.get('RAFII_CONTROL_HARNESS'): raise ValueError('Harness forbidden on Vercel')
+            if environment == 'local' and enabled: raise ValueError('Local control cannot run on Vercel')
+            if vercel == 'preview' and environment == 'production': raise ValueError('Preview cannot use production authority')
+            if vercel == 'preview' and enabled and environment != 'staging': raise ValueError('Preview control must run as staging')
+            if vercel == 'preview' and (enabled or values.get('RAFII_CONTROL_SUPABASE_URL')): cls._staging_identity(values)
+        origins = tuple(dict.fromkeys(listed))
+        return cls(enabled, environment, origins[0], 'embedded', origins)
 
 
 @dataclass(frozen=True)
@@ -104,7 +155,7 @@ class Boundary:
 
     def gate(self, origin=None):
         if not self.config.enabled: raise ControlError('SOURCE_UNAVAILABLE', 404)
-        if origin is not None and origin != self.config.origin: raise ControlError('SCOPE_DENIED')
+        if origin is not None and origin not in self.config.allowed_origins: raise ControlError('SCOPE_DENIED')
 
     def _audit(self, action, result, user=None, session=None, request_id=None, error_code=None):
         self.store.audit(action=action, result=result, actor=user, session=session, environment=self.config.environment, request_id=request_id or str(uuid.uuid4()), error_code=error_code)
@@ -137,7 +188,8 @@ class Boundary:
             self._audit('session.exchange', 'denied', user, request_id=request_id, error_code=error.code)
             raise
 
-    def authorize(self, token, capability, *, origin=None, csrf=None, unsafe=False, step_up=False, ending_session=False, ending_preview=False, request_id=None):
+    def authorize(self, token, capability, *, origin=None, csrf=None, unsafe=False, step_up=False, ending_session=False, ending_preview=False, request_id=None, purpose=None):
+        """``purpose`` only selects the per-minute budget bucket (see BUDGETS); the audit action is always the capability."""
         user, session_id = None, None
         try:
             self.gate(origin if unsafe else None)
@@ -153,14 +205,14 @@ class Boundary:
             if row['assurance'] != 'aal2': raise ControlError('STEP_UP_REQUIRED')
             if not self.store.identity_active(user, row['upstream_session']): raise ControlError('AUTH_REQUIRED', 401)
             if capability not in CAPABILITIES or capability not in operator['capabilities']: raise ControlError('SCOPE_DENIED')
-            if unsafe and (origin != self.config.origin or not isinstance(csrf, str) or not hmac.compare_digest(csrf_token(token), csrf)):
+            if unsafe and (origin not in self.config.allowed_origins or not isinstance(csrf, str) or not hmac.compare_digest(csrf_token(token), csrf)):
                 raise ControlError('SCOPE_DENIED')
             if step_up and not 0 <= now - row['mfa_at'] <= 300: raise ControlError('STEP_UP_REQUIRED')
             if ending_session and (capability != 'control.read' or not unsafe): raise ControlError('SCOPE_DENIED')
             if ending_preview and (capability != 'control.read' or not unsafe): raise ControlError('SCOPE_DENIED')
             # Read throttling must not prevent an authorized founder from revoking their session.
-            purpose = 'session.logout' if ending_session else 'preview.stop' if ending_preview else 'copilot.read' if capability == 'copilot.use' and not unsafe else capability
-            self.store.budget(purpose, user, 5 if purpose == 'copilot.use' else 30 if capability == 'metrics.query' else 120)
+            purpose = 'session.logout' if ending_session else 'preview.stop' if ending_preview else 'copilot.read' if capability == 'copilot.use' and not unsafe else purpose or capability
+            self.store.budget(purpose, user, BUDGETS.get(purpose, 120))
             self._audit(capability, 'allowed', user, session_id, request_id)
             self.store.touch(row['token_hash'], now)
             return {'operator': operator, 'session': row, 'csrfToken': csrf_token(token)}

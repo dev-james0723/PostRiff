@@ -63,11 +63,11 @@ web/tests/
 web/plans/
 requirements-dev.txt
 
-# Rafii Control v2 ships only through its separate allowlisted deployment candidate.
+# Rafii Control v2 runtime (src/rafii_control/, with its catalog pack) ships embedded in the consumer API
+# (RAFII_CONTROL_MOUNT=embedded). Its separate-project web app, entrypoint and deployment files never do.
 /.control-venv/
 /.control-browsers/
 /control-web/
-/src/rafii_control/
 /api/control.py
 /requirements-control.txt
 /vercel.control.json

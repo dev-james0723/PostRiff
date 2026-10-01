@@ -1,0 +1,137 @@
+[
+  {
+    "id": "supabase",
+    "decision": "Reuse",
+    "purpose": "Private analytical views and canonical domain integration",
+    "authority": "Dedicated read role; privileged command adapter only",
+    "interface": "Event outbox + bounded SQL projections",
+    "source_refs": "S10",
+    "activation_gates": "Actual role grants/RLS/view definitions; backup and data region"
+  },
+  {
+    "id": "posthog",
+    "decision": "Recommended addition",
+    "purpose": "Explicit-event product analytics and experiments",
+    "authority": "Server-held project-scoped read/query token; separate capture credentials",
+    "interface": "POST /api/projects/{project_id}/query/",
+    "source_refs": "S01,S02",
+    "activation_gates": "Hosted region, query scopes, pricing/entitlements, privacy redaction"
+  },
+  {
+    "id": "sentry",
+    "decision": "Reuse",
+    "purpose": "Issue/trace/release correlation",
+    "authority": "Organization/project read scopes only for ingestion",
+    "interface": "GET /api/0/organizations/{organization_slug}/issues/ with project filter",
+    "source_refs": "S03",
+    "activation_gates": "SDK config and retention/sampling; old project listing deprecated"
+  },
+  {
+    "id": "sentry_seer",
+    "decision": "Optional later",
+    "purpose": "Root-cause and patch proposals",
+    "authority": "Separate approval-bound access to selected repo/issues",
+    "interface": "Qualified documented Seer API, behind adapter",
+    "source_refs": "S04",
+    "activation_gates": "Account eligibility/cost/data access; never auto merge"
+  },
+  {
+    "id": "vercel",
+    "decision": "Reuse; Drains conditional",
+    "purpose": "Deployment metadata, error/trace ingestion",
+    "authority": "Server-held scoped project read; signed drain ingestion",
+    "interface": "Documented deployment/log APIs and Drains",
+    "source_refs": "S05",
+    "activation_gates": "Plan/retention/coverage/rate/cost; no account entitlement assumed"
+  },
+  {
+    "id": "github",
+    "decision": "Core",
+    "purpose": "Source/checks/PRs and trusted engineering dispatch",
+    "authority": "GitHub App selected repo; read vs write broker separation",
+    "interface": "GET commit check-runs; workflow_dispatch on trusted definition",
+    "source_refs": "S11,S12",
+    "activation_gates": "Installed permissions, exact SHA, trusted workflow, untrusted code sandbox"
+  },
+  {
+    "id": "stripe",
+    "decision": "Reuse",
+    "purpose": "Payments, recovery, refunds/disputes",
+    "authority": "Read adapter; existing write/reconciliation domain separately authorized",
+    "interface": "Documented invoices/refunds API + existing verified webhook path",
+    "source_refs": "S07,S08",
+    "activation_gates": "Test/live mode, pinned API version, financial policy and safe retries"
+  },
+  {
+    "id": "resend",
+    "decision": "Reuse",
+    "purpose": "Support replies and notifications/delivery",
+    "authority": "Existing transport; server-held sending credential; signed webhook ingress",
+    "interface": "Existing send path and verified delivery/inbound adapters",
+    "source_refs": "S09",
+    "activation_gates": "Sender/inbound domains, recipient validation, suppression and retention"
+  },
+  {
+    "id": "checkly",
+    "decision": "Optional recommended",
+    "purpose": "Independent synthetic monitoring",
+    "authority": "Scoped monitor API read; configuration changes approved",
+    "interface": "Documented REST API/browser/API checks",
+    "source_refs": "S13",
+    "activation_gates": "Plan/cadence/locations, benign test accounts, independent alert channel"
+  },
+  {
+    "id": "langfuse",
+    "decision": "Conditional",
+    "purpose": "Richer AI trace/evaluation workflows",
+    "authority": "Metadata-only telemetry; scoped read/write project keys",
+    "interface": "Documented ingestion and score/evaluation APIs",
+    "source_refs": "S15",
+    "activation_gates": "Choose instead of duplicate supplemental AI traces; privacy/retention/cost"
+  },
+  {
+    "id": "search_console",
+    "decision": "Optional growth",
+    "purpose": "Organic search acquisition analysis",
+    "authority": "Verified property read-only OAuth",
+    "interface": "POST webmasters/v3/sites/{siteUrl}/searchAnalytics/query",
+    "source_refs": "S14",
+    "activation_gates": "Verified property, aggregation limits and source coverage"
+  },
+  {
+    "id": "react_flow",
+    "decision": "Optional library",
+    "purpose": "Relationship/service navigation",
+    "authority": "No credentials; server-authorized datasets only",
+    "interface": "Version-pinned library adapter",
+    "source_refs": "S16",
+    "activation_gates": "License/dependency review and performance test"
+  },
+  {
+    "id": "echarts",
+    "decision": "Optional library",
+    "purpose": "Specialist charts beyond current library",
+    "authority": "No credentials; server-authorized data only",
+    "interface": "Version-pinned renderer adapter",
+    "source_refs": "S17",
+    "activation_gates": "Justify need over installed Recharts; accessibility/table fallback"
+  },
+  {
+    "id": "security_scanners",
+    "decision": "Recommended CI candidates",
+    "purpose": "Static and dependency scanning",
+    "authority": "Disposable runners, no production secrets",
+    "interface": "Pinned Semgrep rules and pip-audit, existing JS advisory workflow",
+    "source_refs": "S18,S19",
+    "activation_gates": "Dependency resolution risks; no blanket security guarantee"
+  },
+  {
+    "id": "lighthouse_ci",
+    "decision": "Recommended CI candidate",
+    "purpose": "Repeatable frontend performance checks",
+    "authority": "Controlled synthetic environment",
+    "interface": "Pinned Lighthouse CI workflow",
+    "source_refs": "S20",
+    "activation_gates": "Comparable baseline and no production-side effects"
+  }
+]

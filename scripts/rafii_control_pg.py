@@ -31,7 +31,9 @@ def main():
         try:
             migration = ROOT / 'migrations/postriff/049_rafii_control_foundation.sql'
             workflow = ROOT / 'migrations/postriff/051_rafii_control_read_workflow.sql'
-            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql']  # Reapplication must be safe.
+            founder_views = ROOT / 'migrations/postriff/054_rafii_control_founder_views.sql'
+            founder_contact = ROOT / 'migrations/postriff/055_rafii_control_founder_contact.sql'
+            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', founder_views, founder_views, founder_contact, founder_contact]  # Reapplication must be safe.
             for file in files:
                 subprocess.run([str(PG / 'psql'), env['RAFII_CONTROL_TEST_DSN'], '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(file)], check=True, stdout=subprocess.DEVNULL, env=env)
             result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', 'test_*.py', '-v'], cwd=ROOT, env=env) if '--browser-only' not in sys.argv else None

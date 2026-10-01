@@ -1,4 +1,5 @@
 """Explicit SQL projections; no generic table/SQL interface or production superuser fallback."""
+from collections import namedtuple
 from contextlib import contextmanager
 from .deadlines import remaining
 from datetime import datetime
@@ -7,6 +8,10 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from .auth import ControlError
+
+# A metric statement is composed only by live_metrics from its fixed per-metric registry
+# (server-chosen views, columns, joins and aggregates). Browser input reaches it as parameters.
+MetricStatement = namedtuple('MetricStatement', 'metric_id sql')
 
 
 def serial(value):
@@ -87,6 +92,19 @@ class PostgresStore:
         if kind not in templates: raise ControlError('VALIDATION_FAILED', 400)
         with self.transaction(read=True) as con:
             return serial(con.execute(templates[kind], (identifier,) if identifier else ()).fetchall())
+
+    def metric_rows(self, statement, params, limit=1000):
+        """Reader-role execution of one fixed activated-metric statement (054 views only).
+
+        The caller supplies a MetricStatement built by live_metrics plus bound parameters
+        (interval bounds, timezone, filter values, limit); never SQL text, identifiers or joins.
+        The reader transaction is read-only, environment-scoped and deadline-bounded.
+        """
+        if not isinstance(statement, MetricStatement) or not isinstance(statement.sql, str): raise ControlError('VALIDATION_FAILED', 400)
+        with self.transaction(read=True) as con:
+            rows = con.execute(statement.sql, tuple(params)).fetchall()
+        if len(rows) > limit: raise ControlError('BUDGET_EXCEEDED', 400)
+        return serial(rows)
 
     def audit_read(self):
         with self.transaction() as con:

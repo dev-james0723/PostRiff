@@ -15,7 +15,12 @@ from postriff_phase2.agent_runtime_v2.contracts import ToolSpec, READ, CREATE_DR
 from .auth import CAPABILITIES, ControlError
 from .investigations import effective_quality, evaluate_checks, plan_intent, ADAPTER_VERSION
 
-PACK = Path(__file__).resolve().parents[2] / 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/rafii-control-v2'
+# The runtime pack ships inside the package; the tech-pack docs copy remains the fallback for older checkouts.
+PACK_CANDIDATES = (Path(__file__).resolve().parent / 'pack',
+                   Path(__file__).resolve().parents[2] / 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/rafii-control-v2')
+PACK = next((candidate for candidate in PACK_CANDIDATES if (candidate / 'catalogs/metrics.json').is_file()), PACK_CANDIDATES[0])
+ACTIVATED = 'activated_v1'
+MODES = ('live', 'demo')
 FOUNDER_TOOLS = (
     ToolSpec('founder.metrics.query', READ, 'metrics.query', 'Named metrics with receipts and quality states', tenant='founder', audit='metrics.query'),
     ToolSpec('founder.customers.metadata', READ, 'customers.read', 'Safe account metadata; no customer messages or private content', tenant='founder', audit='customers.read'),
@@ -35,12 +40,29 @@ def identifier(value):
 class Catalog:
     def __init__(self, path=PACK):
         path = Path(path)
-        self.metrics = {row['id']: row for row in json.loads((path / 'catalogs/metrics.json').read_text())}
+        self.metrics = {}
+        for row in json.loads((path / 'catalogs/metrics.json').read_text()):
+            # An activated_v1 entry appended to the catalog governs its id; the proposed text stays untouched.
+            current = self.metrics.get(row['id'])
+            if current is not None and current.get('status') == ACTIVATED and row.get('status') == ACTIVATED: raise ValueError('duplicate activated metric ' + row['id'])
+            if current is None or current.get('status') != ACTIVATED: self.metrics[row['id']] = row
         self.dashboards = json.loads((path / 'catalogs/dashboards.json').read_text())
         self.detectors = json.loads((path / 'catalogs/detectors.json').read_text())
         self.integrations = json.loads((path / 'catalogs/integrations.json').read_text())
-        self.schemas = {name: Draft202012Validator(json.loads((path / f'contracts/{name}.schema.json').read_text()), format_checker=FormatChecker())
-                        for name in ('metric-query', 'copilot-turn', 'recommendation', 'event-envelope', 'chart-spec')}
+        schemas = {name: json.loads((path / f'contracts/{name}.schema.json').read_text()) for name in ('metric-query', 'copilot-turn', 'recommendation', 'event-envelope', 'chart-spec')}
+        self._extend_query_schema(schemas['metric-query'])
+        self.schemas = {name: Draft202012Validator(schema, format_checker=FormatChecker()) for name, schema in schemas.items()}
+
+    def _extend_query_schema(self, schema):
+        """The structural schema admits exactly the catalog's ids and dimensions; the two cannot drift."""
+        properties = schema['properties']
+        properties['metricIds']['items']['enum'] = sorted(self.metrics)
+        dimensions = set(properties['groupBy']['items']['enum'])
+        for metric in self.metrics.values(): dimensions.update(metric['allowed_dimensions'])
+        properties['groupBy']['items']['enum'] = sorted(dimensions)
+        properties['filters']['items']['properties']['dimension']['enum'] = sorted(dimensions)
+
+    def activated(self, metric_id): return self.metrics.get(metric_id, {}).get('status') == ACTIVATED
 
     def validate(self, name, value):
         if not self.schemas[name].is_valid(value): raise ControlError('VALIDATION_FAILED', 400)
@@ -84,17 +106,48 @@ class QueryService:
         if principal.get('session', {}).get('environment') not in ('local','staging','production') or capability not in CAPABILITIES or capability not in principal.get('operator', {}).get('capabilities', []):
             raise ControlError('SCOPE_DENIED')
 
-    def metric_query(self, query, principal, request_id, snapshot_id=None):
+    def demo_data(self, principal):
+        """The founder's own persisted Demo dataset (RLS-isolated); never a Live fallback."""
+        from .workspace import WorkspaceService
+        return WorkspaceService(self.store).demo(principal)
+
+    def metric_query(self, query, principal, request_id, snapshot_id=None, mode='live', demo_data=None):
         self.require(principal, 'metrics.query')
+        if mode not in MODES: raise ControlError('VALIDATION_FAILED', 400)
         metrics = self.catalog.validate_query(query)
         if 'check_failures' in query['metricIds']:self.require(principal,'engineering.read')
         if self.synthetic and (principal['session']['environment'] != 'local' or self.store.environment != 'local'): raise ControlError('SCOPE_DENIED')
         if self.synthetic and query['metricIds']==['check_failures'] and query['comparison'] != 'none': raise ControlError('VALIDATION_FAILED',400)
+        activated = [metric for metric in metrics if metric.get('status') == ACTIVATED]
+        # Activated and proposed definitions never share one receipt; a Demo query of proposed ids is still proposed.
+        if activated and len(activated) != len(metrics): raise ControlError('VALIDATION_FAILED', 400)
+        if snapshot_id is not None and (activated or mode != 'live'): raise ControlError('VALIDATION_FAILED', 400)
         receipt_id, as_of = str(uuid.uuid4()), self.clock().isoformat()
         rows = [dict(metricId=metric['id'], definitionVersion=metric['version'], unit=metric['unit'], grain=metric['grain'],
                      value=None, sampleCount=None, dataState='unavailable', sourceWatermark=None, reason='definition_not_activated',
                      defaultExclusions=metric['default_exclusions'], queryTemplateRef=metric['query_template_ref']) for metric in metrics][:query['limit']]
         execution = 'policy_unavailable'
+        if activated:
+            if mode == 'demo':
+                from . import demo_metrics
+                data = demo_data if demo_data is not None else self.demo_data(principal)
+                rows, coverage, source_versions = demo_metrics.compute(data, query, metrics)
+                execution = 'demo_dataset'
+            else:
+                from . import live_metrics
+                rows, coverage, source_versions = live_metrics.compute(self, query, metrics)
+                execution = 'admitted_operational'
+            if len(rows) > query['limit']: raise ControlError('BUDGET_EXCEEDED', 400)
+            watermarks = {row['source_id']: row['watermark'] for row in self.store.read('sources')}
+            states = {row['dataState'] for row in rows}
+            # Zero grouped rows from an instrumented source is a measured empty period, never a missing source.
+            state = next(iter(states)) if len(states) == 1 else 'partial' if states else 'measured'
+            self.store.receipt(dict(id=receipt_id, operator=principal['operator']['user_id'], requestId=identifier(request_id),
+                                    queryDigest=hashlib.sha256(canonical(query).encode()).hexdigest(), metricVersions={m['id']:m['version'] for m in metrics},
+                                    dataState=state, sourceWatermarks=watermarks, rowCount=len(rows), rows=rows, executionState=execution, normalizedQuery=json.loads(canonical(query)), calculatedAt=as_of, coverage=coverage, sourceVersions=source_versions))
+            warning = ('Demo dataset: fictional records computed with the activated v1 definitions; never a Live fallback.' if mode == 'demo'
+                       else 'Activated v1 definitions over restricted projections. Coverage and data states qualify every value; missing data is not zero.')
+            return dict(requestId=request_id, queryReceiptId=receipt_id, asOf=as_of, dataState=state, mode=mode, rows=rows, executionState=execution, normalizedQuery=json.loads(canonical(query)), coverage=coverage, sourceVersions=source_versions, warnings=[warning])
         if self.synthetic and query['metricIds'] == ['check_failures']:
             projected = self.store.query_check_rollups(query,metrics[0]['version'])
             rows = []
@@ -165,8 +218,12 @@ class QueryService:
         versions=dict(ageSeconds=quality['age_seconds'],adapter=capture['adapterVersion'],manifestVersion=capture['requiredManifest']['version'],exactSha=capture['exactSha'],snapshotId=snapshot_id,sourceRequestId=capture['requestId'],resourceUrl=capture['resourceUrl'],providerBodyDigest=capture['providerBodyDigest'],observedAt=capture['observedAt'],requiredManifest=capture['requiredManifest'])
         return rows,'local_synthetic' if synthetic else capture['provenance'],coverage,versions
 
-    def dispatch(self, path, body, principal, request_id):
-        if path == '/metrics/query': return self.metric_query(body, principal, request_id)
+    def dispatch(self, path, body, principal, request_id, mode=None):
+        if path == '/metrics/query':
+            # Data mode travels beside the query (body.mode or the caller's ?mode=); the schema never sees it.
+            selected = body.get('mode', mode) if isinstance(body, dict) else mode
+            query = {key: value for key, value in body.items() if key != 'mode'} if isinstance(body, dict) else body
+            return self.metric_query(query, principal, request_id, mode=selected or 'live')
         if path == '/engineering/checks/query':
             if set(body)!= {'snapshotId','query'}:raise ControlError('VALIDATION_FAILED',400)
             return self.metric_query(body['query'],principal,request_id,body['snapshotId'])

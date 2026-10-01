@@ -1,5 +1,15 @@
-"""Separate Control entrypoint; imports no consumer worker, executor, payment or provider runtime."""
+"""Control entrypoints; imports no consumer worker, executor, payment or provider runtime.
+
+Two mounts share this module (``rafii_control.auth.Config.mount``):
+
+* separate — the dedicated Vercel project (``api/control.py``) builds ``app`` eagerly at import so misconfiguration
+  fails at cold start, exactly as before the embedded mount existed.
+* embedded — the consumer API (``postriff_phase2.hosted_app``) delegates ``/api/control/v2/*`` to
+  ``embedded_app()`` and its cron tick to ``founder_tick()``. Both are built lazily and never raise into the
+  consumer process; a misconfigured Control answers 503 on its own prefix and leaves every consumer route alone.
+"""
 import json
+import logging
 import os
 import re
 import ssl
@@ -8,10 +18,14 @@ from psycopg.conninfo import conninfo_to_dict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPSHandler
 from postriff_phase2.hosted_identity import _NoAuthRedirect
-from .auth import Boundary, Config, ControlError, supabase_identity
-from .http import ControlApplication
+from .auth import Boundary, Config, ControlError, boolean, supabase_identity
+from .http import ControlApplication, founder_module
 from .intelligence import QueryService
 from .store import PostgresStore, connection_factory
+
+# Consumer/privileged variables the separate mount refuses to coexist with. The embedded mount shares a process
+# with them by design and therefore skips this list entirely: nothing below ever reads these names.
+PROHIBITED = ('POSTRIFF_DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENAI_API_KEY', 'STRIPE_SECRET_KEY')
 
 
 def admit_databases(session_dsn, reader_dsn, values, config):
@@ -36,14 +50,22 @@ def admit_databases(session_dsn, reader_dsn, values, config):
         raise ValueError('Distinct restricted database logins required')
 
 
-def create_app(values=None):
+def create_app(values=None, runtime=None):
+    """Build the Control WSGI app from ``values`` (defaults to the process environment).
+
+    ``runtime`` is only meaningful for the embedded mount: a zero-argument callable returning the consumer
+    ``HostedWorkspaceService`` (``HostedApplication._runtime``), which the founder agent and test-call routes
+    reach through ``ControlApplication.runtime``. Control's own data access still uses only the restricted
+    ``RAFII_CONTROL_*`` logins and identity project.
+    """
     values = values if values is not None else os.environ
     config = Config.from_environment(values)
     # Disabled deployments are safe to build without any identity/database credentials.
     if not config.enabled:
-        return ControlApplication(Boundary(config, None, None))
-    for prohibited in ('POSTRIFF_DATABASE_URL','SUPABASE_SERVICE_ROLE_KEY','OPENAI_API_KEY','STRIPE_SECRET_KEY'):
-        if values.get(prohibited): raise ValueError('Consumer/privileged credentials forbidden in Control')
+        return ControlApplication(Boundary(config, None, None), runtime=runtime)
+    if config.mount == 'separate':
+        for prohibited in PROHIBITED:
+            if values.get(prohibited): raise ValueError('Consumer/privileged credentials forbidden in Control')
     session_dsn, reader_dsn = values.get('RAFII_CONTROL_SESSION_DSN'), values.get('RAFII_CONTROL_READER_DSN')
     if not session_dsn or not reader_dsn or session_dsn == reader_dsn: raise ValueError('Separate restricted database logins required')
     admit_databases(session_dsn, reader_dsn, values, config)
@@ -72,7 +94,58 @@ def create_app(values=None):
             raise ControlError('SOURCE_UNAVAILABLE',503) from None
         except (URLError, TimeoutError, OSError, ValueError): raise ControlError('SOURCE_UNAVAILABLE',503)
     boundary = Boundary(config,store,supabase_identity(values.get('RAFII_CONTROL_SUPABASE_URL'),get_user))
-    return ControlApplication(boundary,QueryService(store))
+    # Founder deployment flags (RAFII_FOUNDER_CALLS_ENABLED, RAFII_FOUNDER_OPS_WORKSPACE_ID, ...) are the only other
+    # variables Control hands to its routes; no consumer credential is ever selected here.
+    flags = {key: values[key] for key in values if key.startswith('RAFII_FOUNDER_')}
+    return ControlApplication(boundary,QueryService(store),runtime=runtime,flags=flags)
 
 
-app = create_app()
+def _closed_app(status, code, message):
+    """A WSGI app that answers every request with one fixed Control error envelope (fail closed, content free)."""
+    reason = {404: 'Not Found', 503: 'Unavailable'}[status]
+    def respond(environ, start_response):
+        start_response(f'{status} {reason}', [('Content-Type', 'application/json'), ('Cache-Control', 'private, no-store'), ('Vary', 'Cookie, Origin'),
+                                              ('X-Content-Type-Options', 'nosniff'), ('Referrer-Policy', 'no-referrer')])
+        return [json.dumps({'requestId': str(uuid.uuid4()), 'code': code, 'message': message}).encode()]
+    return respond
+
+
+def embedded_app(values=None, runtime=None):
+    """Build Control for mounting inside the consumer API process. Never raises.
+
+    Only ``RAFII_CONTROL_MOUNT=embedded`` activates Control here; any other mount keeps the prefix dark (404) so
+    a consumer deployment cannot enable Control by copying the separate project's variables. A build failure
+    (misconfiguration, missing pack, missing module) answers 503 SOURCE_UNAVAILABLE on every control request and
+    logs only the exception class, never its text, so no DSN, key or path fragment can leak into logs.
+    """
+    values = values if values is not None else os.environ
+    try:
+        if values.get('RAFII_CONTROL_MOUNT', 'separate') != 'embedded':
+            return _closed_app(404, 'SOURCE_UNAVAILABLE', 'Control is not mounted here')
+        return create_app(values, runtime)
+    except Exception as error:
+        logging.getLogger('rafii_control.mount').error(json.dumps({'event': 'control_mount_unavailable', 'reason': type(error).__name__}, sort_keys=True))
+        return _closed_app(503, 'SOURCE_UNAVAILABLE', 'Control source unavailable')
+
+
+def founder_tick(service, values=None):
+    """Founder cron step for the consumer worker tick (CONTRACTS §1). Never raises and never breaks the tick.
+
+    Runs ``rafii_control.founder_cron.tick(service, values)`` only when Control is enabled and embedded; the module
+    is imported lazily so an unfinished or failing founder slice reports ``{'status': 'unavailable'}`` instead of
+    failing the consumer cron. The outcome must be JSON-serialisable because the cron response embeds it.
+    """
+    values = values if values is not None else os.environ
+    try:
+        if not boolean(values.get('RAFII_CONTROL_ENABLED')) or values.get('RAFII_CONTROL_MOUNT', 'separate') != 'embedded':
+            return {'status': 'disabled'}
+        outcome = founder_module('founder_cron').tick(service, values)
+        json.dumps(outcome, allow_nan=False)
+        return outcome
+    except Exception:
+        return {'status': 'unavailable'}
+
+
+# The separate project builds eagerly so misconfiguration fails at cold start; the embedded mount builds lazily
+# through embedded_app() on the first control request instead (api/control.py never ships in that deployment).
+app = create_app() if os.environ.get('RAFII_CONTROL_MOUNT', 'separate') != 'embedded' else None
