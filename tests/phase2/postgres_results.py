@@ -305,6 +305,22 @@ class AC17ReceiverTest(Base):
         self.assertNotIn(new, stored)
         self.assertNotIn(old, stored)
 
+    def test_ac17_documented_test_producer_request_is_accepted_and_kept_out_of_results(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("results_test_producer", ROOT / "scripts/results_test_producer.py")
+        producer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(producer)
+        t = tenant()
+        conn, secret = connect(t)
+        args = producer.argparse.Namespace(event_id=None, type="booking", occurred_at=None, amount=4500, currency="usd", ref=None, campaign=None, reversal_of=None)
+        event = producer.build_event(args, CLOCK[0])
+        url, headers, body = producer.build_request("http://127.0.0.1:4331", conn["id"], secret, event, CLOCK[0])
+        status, _, answer = app_call("POST", url.split("4331", 1)[1], body, {"HTTP_X_RAFII_SIGNATURE": headers["X-Rafii-Signature"]})
+        self.assertEqual((status, json.loads(answer)["status"]), (200, "accepted"))
+        summary = RESULTS.summary(t.wid, t.owner)
+        self.assertEqual((summary["testEvents"], summary["classes"]["first_party_reported"]), (1, None))
+        self.assertEqual(RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]["testEvents24h"], 1)
+
     def test_ac17_another_workspaces_link_reference_never_associates(self):
         a, b = tenant(), tenant()
         foreign = RESULTS.create_link(b.wid, b.owner, {"destination": "https://example.org/b", "idempotencyKey": key()})["link"]
