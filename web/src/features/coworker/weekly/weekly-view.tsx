@@ -18,6 +18,8 @@ import { cn } from '@/lib/utils';
 import { dayLabel, nextAction, summarizeSlots, weekStateLabel, type NextAction } from '../present';
 import { QueryProblem, ToneChip, WhyRafiiExplainer } from '../parts';
 import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
+import { OpportunityBrief } from '@/features/growth/opportunity-brief';
+import { AppliedDecisions } from './applied-decisions';
 import { OpportunitiesPanel } from './opportunities-panel';
 import { RecipeForm, RecipeSummary } from './recipe-form';
 import { SlotCard } from './slot-card';
@@ -194,6 +196,8 @@ export function WeeklyView() {
                   focusSlot={focusSlot}
                 />
               )}
+              {week && <AppliedDecisions week={week} />}
+              <OpportunityBrief canEdit={canEdit} />
               <WorkspaceOpportunityPreview pool='weekly' />
               <WhyRafiiExplainer />
               <p className='text-muted-foreground text-xs'>
