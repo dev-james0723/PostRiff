@@ -8,13 +8,15 @@ status is 'proposed' until an explicit commercial decision.
 import hashlib
 import hmac
 import json
+import math
 import os
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import POLICY_VERSION
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
 from .developer_usage import ai_usage_exempt
+from .plan_pricing import PlanPricing
 
 USD = 1_000_000  # micro-dollars
 
@@ -94,7 +96,8 @@ def _window_start_sql(kind):
 class Ledger:
     """All methods take an open cursor inside the caller's transaction (workspace row locked)."""
 
-    def __init__(self, credits_enabled=False, clock=time.time):
+    def __init__(self, credits_enabled=False, clock=time.time, pricing_v2_enabled=False):
+        self.clock, self.pricing_v2_enabled = clock, pricing_v2_enabled
         self._credit_book = CreditBook(clock)
         self.credits = self._credit_book if credits_enabled else None
 
@@ -123,6 +126,8 @@ class Ledger:
         return int(cur.fetchone()[0])
 
     def ensure_entitlement(self, cur, workspace_id, plan):
+        from .free_lifecycle import lifecycle
+        lifecycle(cur, workspace_id, self.clock(), pricing_v2_enabled=self.pricing_v2_enabled)
         cur.execute("SELECT plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,extract(epoch from resets_at),source,version FROM public.pr_entitlements WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
         if row:
@@ -144,6 +149,10 @@ class Ledger:
             raise AlphaError("Invalid usage reservation.", 400)
         if self.credits:
             cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+        entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        exempt = ai_usage_exempt(member_id)
+        if not exempt and entitlement["planTermsId"] == "free-v1" and (charge_batch or estimated_usd_micro > 0):
+            raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
         fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model})
         cur.execute("SELECT id::text,reservation_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, idempotency_key))
         existing = cur.fetchone()
@@ -154,11 +163,9 @@ class Ledger:
         policy = active_budget_policy() if estimated_usd_micro > 0 else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
-        exempt = ai_usage_exempt(member_id)
         if policy and not exempt and estimated_usd_micro > policy["requestMax"]:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
-        entitlement = self.ensure_entitlement(cur, workspace_id, None)
         if not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
@@ -350,18 +357,41 @@ class Billing:
         "subscription.grace": "grace", "subscription.cancelled": "cancelled", "subscription.expired": "expired",
     }
 
-    def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None):
+    def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None, pricing_v2_enabled=False, creator_experiment_enabled=False, creator_experiment_cohort=()):
         """`on_applied(event, status)` runs only for outcome 'applied' (e.g. notifications); its failures never break the webhook."""
-        self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(), clock, on_applied
+        self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(clock=clock, pricing_v2_enabled=pricing_v2_enabled), clock, on_applied
+
+        self.pricing_v2_enabled = pricing_v2_enabled
+        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort)
+
+    def assign_creator_price(self, cur, workspace_id):
+        return self.pricing.assign(cur, workspace_id)
 
     def process_webhook(self, cur, signature, body):
         """Signature-verified, replay-safe (unique provider+event id), out-of-order safe (event_at vs last_event_at)."""
         event = self.provider.parse_webhook(signature, body)
         payload_digest = hashlib.sha256(body).hexdigest()
+        # Serialize same-event deliveries before the replay lookup; the workspace lock alone
+        # cannot prevent two deliveries from both observing an absent event row.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (self.provider.id + ":" + event["id"],))
         cur.execute("SELECT outcome FROM public.pr_billing_events WHERE provider=%s AND event_id=%s", (self.provider.id, event["id"]))
         if cur.fetchone():
             return {"eventId": event["id"], "outcome": "duplicate"}
-        if not event.get("planTermsId") and event.get("priceId"):
+        versioned = False
+        valid = not event.get("metadataConflict", False)
+        if self.provider.id == "stripe" and self.TRANSITIONS.get(event["type"]):
+            # Old default-off deployments may not have 048. Existing v2 subscriptions
+            # still reconcile after the acquisition flag is disabled.
+            cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+            schema = cur.fetchone()
+            versioned = bool(schema and schema[0])
+            if versioned:
+                valid = valid and self.pricing.resolve_event(cur, event)
+            elif event.get("priceVariantId"):
+                valid = False
+        if not versioned and not event.get("planTermsId") and event.get("invoicePriceLines"):
+            valid = valid and self.pricing.invoice_price(cur, event, versioned=False)
+        if not versioned and not event.get("planTermsId") and event.get("priceId"):
             # Live providers carry their price id; only an 'active' terms row (D3) may be bound to it.
             cur.execute("SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s AND status='active'", (event["priceId"],))
             resolved = cur.fetchone()
@@ -370,6 +400,8 @@ class Billing:
         kind = event["type"]
         status = self.TRANSITIONS.get(kind)
         outcome = "ignored" if status is None else "applied"
+        if status is not None and not valid:
+            outcome, status = "rejected", None
         if status is not None and not event.get("workspaceId"):
             outcome, status = "ignored", None  # no PostRiff workspace on the event: recorded, never applied
         if status is not None:
@@ -378,6 +410,10 @@ class Billing:
             row = cur.fetchone()
             if row and row[0] and float(row[0]) > float(event["createdAt"]):
                 outcome = "stale"
+                if versioned and event.get("priceVariantId"):
+                    # Fill a missing historical paid identity without touching newer lifecycle state.
+                    cur.execute("UPDATE public.pr_subscriptions SET price_variant_id=%s WHERE workspace_id=%s AND provider=%s AND provider_subscription_id=%s AND plan_terms_id=%s AND price_variant_id IS NULL",
+                                (event["priceVariantId"], event["workspaceId"], self.provider.id, event.get("subscriptionId"), event.get("planTermsId")))
             else:
                 terms_id = event.get("planTermsId")
                 if terms_id:
@@ -387,7 +423,10 @@ class Billing:
                         outcome = "rejected"  # unknown plan id from the client side never creates entitlement
                 if outcome == "applied":
                     grace = float(event["createdAt"]) + 7 * 86400 if status == "past_due" else None
-                    cur.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s)) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now()", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"])))
+                    variant_columns = ",price_variant_id" if versioned else ""
+                    variant_values = ",%s" if versioned else ""
+                    variant_update = ",price_variant_id=excluded.price_variant_id" if versioned else ""
+                    cur.execute(f"INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at{variant_columns}) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s){variant_values}) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now(){variant_update}", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"]), *((event.get("priceVariantId"),) if versioned else ())))
                     if terms_id and status == "active":
                         self._reconcile_entitlement(cur, event["workspaceId"], terms_id, terms[0], event.get("currentPeriodEnd"))
         # A verified paid plan invoice grants its period's credits even when its status update is stale.
@@ -402,7 +441,7 @@ class Billing:
         return {"eventId": event["id"], "outcome": outcome, "status": status, "type": kind, "workspaceId": event.get("workspaceId") or None}
 
     def _grant_period_credits(self, cur, event):
-        """Candidate monthly-credit policy (FINAL-07): subscription_create and subscription_cycle invoices grant
+        """Versioned monthly-credit policy: subscription_create and subscription_cycle invoices grant
         the plan's monthlyCredits once per invoice id, expiring at the period end. Other invoices are recorded
         with a note and grant nothing. Legacy plans without a credit policy are untouched."""
         cur.execute("SELECT to_regclass('public.pr_credit_subscription_grants') IS NOT NULL")
@@ -414,17 +453,23 @@ class Billing:
         cur.execute("SELECT entitlements FROM public.pr_plan_terms WHERE id=%s", (terms_id,))
         row = cur.fetchone()
         ent = row[0] if row and isinstance(row[0], dict) else {}
-        if ent.get("creditPolicy") != POLICY_VERSION or type(ent.get("monthlyCredits")) is not int or ent["monthlyCredits"] <= 0:
+        if not isinstance(ent.get("creditPolicy"), str) or ent["creditPolicy"] not in SUPPORTED_POLICY_VERSIONS or type(ent.get("monthlyCredits")) is not int or ent["monthlyCredits"] <= 0:
             return None
         reason = event.get("billingReason") or ""
         grants = reason in ("subscription_create", "subscription_cycle")
         note = "" if grants else f"{reason or 'unknown'} invoice: no automatic credits (policy pending)"[:200]
+        if grants and ent["creditPolicy"] == V2_POLICY_VERSION:
+            start, end = event.get("periodStart"), event.get("currentPeriodEnd")
+            if (type(start) not in (int, float) or type(end) not in (int, float)
+                    or not math.isfinite(start) or not math.isfinite(end) or end <= start):
+                grants = False
+                note = "Incomplete paid period: no automatic credits."
         cur.execute("INSERT INTO public.pr_credit_subscription_grants(invoice_id,workspace_id,subscription_id,plan_terms_id,billing_reason,period_start,period_end,amount_cents,currency,payment_intent_id,millicredits,livemode,note) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(invoice_id) DO NOTHING RETURNING invoice_id",
                     (invoice_id, event["workspaceId"], event.get("subscriptionId"), terms_id, reason, event.get("periodStart"), event.get("currentPeriodEnd"), event["amountPaid"], event["currency"], event.get("paymentIntentId"), ent["monthlyCredits"] * 1000 if grants else 0, bool(getattr(self.provider, "live", False)), note))
         if not cur.fetchone() or not grants:
             return None
         try:
-            granted = self.ledger._credit_book.grant(cur, event["workspaceId"], None, "subscription-invoice:" + invoice_id, ent["monthlyCredits"] * 1000, event.get("currentPeriodEnd"), source="verified-stripe-invoice")
+            granted = self.ledger._credit_book.grant(cur, event["workspaceId"], None, "subscription-invoice:" + invoice_id, ent["monthlyCredits"] * 1000, event.get("currentPeriodEnd"), source="verified-stripe-invoice", policy_version=ent["creditPolicy"])
         except AlphaError as error:
             # The workspace is not on active credit terms: keep the paid invoice on record for review.
             cur.execute("UPDATE public.pr_credit_subscription_grants SET note=%s WHERE invoice_id=%s", (f"not granted: {error}"[:200], invoice_id))
@@ -436,8 +481,15 @@ class Billing:
         """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.
         Checkout needs the live provider plus at least one 'active' terms row bound to a provider price (D3)."""
         live = self.provider.id == "stripe"
-        cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' LIMIT 1")
-        purchasable = cur.fetchone() is not None
+        if self.pricing_v2_enabled:
+            try:
+                self.pricing.checkout(cur, workspace_id, "creator-v1")
+                purchasable = True
+            except AlphaError:
+                purchasable = False
+        else:
+            cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' LIMIT 1")
+            purchasable = cur.fetchone() is not None
         cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
         row = cur.fetchone()
         return {"provider": self.provider.id, "checkoutAvailable": live and purchasable, "portalAvailable": live and bool(row and row[0])}
@@ -447,28 +499,15 @@ class Billing:
         cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'subscription') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=excluded.plan_terms_id,writing_batches_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.writing_batches_remaining ELSE least(public.pr_entitlements.writing_batches_remaining,excluded.writing_batches_remaining) END,media_credits_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.media_credits_remaining ELSE least(public.pr_entitlements.media_credits_remaining,excluded.media_credits_remaining) END,connected_accounts=excluded.connected_accounts,members=excluded.members,storage_mb=excluded.storage_mb,resets_at=greatest(excluded.resets_at,public.pr_entitlements.resets_at),source='subscription',version=public.pr_entitlements.version+1,updated_at=now()", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], period_end))
 
     def lifecycle(self, cur, workspace_id, now):
-        """Consistent state derivation: grace expiry → cancelled; cancelled keeps export; deletion is separate."""
-        cur.execute("SELECT status,extract(epoch from grace_until),cancel_at_period_end,extract(epoch from current_period_end) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
-        row = cur.fetchone()
-        if not row:
-            cur.execute("SELECT extract(epoch from expires_at) FROM public.pr_trials WHERE workspace_id=%s", (workspace_id,))
-            trial = cur.fetchone()
-            active = bool(trial and trial[0] is not None and now < float(trial[0]))
-            return {"status": "trial" if active else "expired", "exportAvailable": True, "draftsRetained": True, "canPublish": active}
-        status, grace_until, cancel_at_end, period_end = row
-        if status == "trial" and (period_end is None or now >= float(period_end)):
-            status = "expired"
-        elif status in ("past_due", "grace") and grace_until and now >= float(grace_until):
-            status = "cancelled"
-        elif status == "active" and cancel_at_end and period_end and now >= float(period_end):
-            status = "cancelled"
-        cur.execute("UPDATE public.pr_subscriptions SET status=%s,updated_at=now() WHERE workspace_id=%s", (status, workspace_id))
-        return {"status": status, "exportAvailable": True, "draftsRetained": True, "canPublish": status in ("trial", "active", "grace", "past_due")}
+        """Lifecycle derivation shared with the before-I/O entitlement boundary."""
+        from .free_lifecycle import lifecycle
+        return lifecycle(cur, workspace_id, now, pricing_v2_enabled=self.pricing_v2_enabled)
 
 
-def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
+
+def require_plan_capacity(cur, workspace_id, dimension, connection_id=None, *, ledger=None):
     cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
-    entitlement = Ledger().ensure_entitlement(cur, workspace_id, None)
+    entitlement = (ledger or Ledger()).ensure_entitlement(cur, workspace_id, None)
     if dimension == "members":
         cur.execute("SELECT count(*) FROM public.pr_memberships WHERE workspace_id=%s AND status='active'", (workspace_id,))
         count, limit = cur.fetchone()[0], entitlement["members"]

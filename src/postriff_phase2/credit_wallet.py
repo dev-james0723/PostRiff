@@ -7,7 +7,7 @@ import json
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import POLICY_VERSION, millicredits
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits
 
 
 def amount(value):
@@ -70,7 +70,7 @@ class CreditBook:
         cur.execute("SELECT p.entitlements->>'creditPolicy',p.status FROM public.pr_entitlements e JOIN public.pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace_id,))
         row = cur.fetchone()
         if not row or not row[0]: return None
-        if row[0] != POLICY_VERSION or row[1] != 'active':
+        if row[0] not in SUPPORTED_POLICY_VERSIONS or row[1] != 'active':
             raise AlphaError('This credit policy is not active. No charge was made.',409)
         return row[0]
 
@@ -81,7 +81,37 @@ class CreditBook:
         return [{'id':r[0],'reservationId':r[1],'credits':r[2]} for r in rows]
 
     def view(self, cur, workspace_id):
-        return project_credit_wallet(self.rows(cur,workspace_id),self.clock())
+        rows, now = self.rows(cur, workspace_id), self.clock()
+        wallet = project_credit_wallet(rows, now)
+        # These are gross, actually granted period credits, not the advertised plan
+        # allowance or lifetime usage. Refunds/debt remain in the wallet projection.
+        wallet.update(currentPeriodGrantMilliCredits=None, currentPeriodExpiresAt=None)
+        cur.execute("SELECT to_regclass('public.pr_credit_subscription_grants') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            return wallet
+        cur.execute(
+            "SELECT g.grant_id::text,g.millicredits,g.period_end,p.entitlements->>'creditPolicy' "
+            "FROM public.pr_credit_subscription_grants g "
+            "JOIN public.pr_subscriptions s ON s.workspace_id=g.workspace_id "
+            "AND s.plan_terms_id=g.plan_terms_id AND s.provider_subscription_id=g.subscription_id "
+            "JOIN public.pr_plan_terms p ON p.id=g.plan_terms_id "
+            "WHERE g.workspace_id=%s AND g.grant_id IS NOT NULL AND g.millicredits>0 "
+            "AND g.billing_reason IN ('subscription_create','subscription_cycle') "
+            "AND g.period_start<=%s AND g.period_end>%s "
+            "AND g.period_end=extract(epoch from s.current_period_end) "
+            "AND p.status='active' AND p.entitlements->>'creditPolicy'=ANY(%s)",
+            (workspace_id, now, now, sorted(SUPPORTED_POLICY_VERSIONS)))
+        ledger_grants = {row['id']: row['credits'] for row in rows if row['credits']['op'] == 'grant'}
+        seen = set()
+        for grant_id, milli, end, policy in cur.fetchall():
+            credit = ledger_grants.get(grant_id)
+            if (grant_id in seen or not credit or credit.get('source') != 'verified-stripe-invoice'
+                    or credit.get('policy') != policy or credit['milli'] != milli or credit.get('expiresAt') != end):
+                continue
+            seen.add(grant_id)
+            wallet['currentPeriodGrantMilliCredits'] = (wallet['currentPeriodGrantMilliCredits'] or 0) + milli
+            wallet['currentPeriodExpiresAt'] = end
+        return wallet
 
     def _adjust(self, cur, workspace_id, actor, key, credit):
         fingerprint=digest(credit)
@@ -93,10 +123,19 @@ class CreditBook:
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,kind,dimension,unit,cost_state,idempotency_key,meta) VALUES(%s,%s,'adjust','action','credit','actual',%s,%s::jsonb) RETURNING id::text",(workspace_id,actor,key,json.dumps({'credits':credit,'creditFingerprint':fingerprint})))
         return {'entryId':cur.fetchone()[0],'duplicate':False}
 
-    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test'):
+    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test', *, policy_version=None):
+        """Append funding under the workspace lock. Verified server funding consumers
+        may bind policy_version from stored invoice terms/order, never client input.
+        The current active credit-plan gate still applies, including on replay.
+        """
         import math
         policy=self.policy(cur,workspace_id)
         if policy is None: raise AlphaError('This workspace uses its existing allowance plan.',409)
+        if policy_version is not None:
+            if (not isinstance(policy_version, str) or policy_version not in SUPPORTED_POLICY_VERSIONS
+                    or source not in ('verified-stripe-invoice', 'verified-stripe-checkout')):
+                raise AlphaError('Credit policy binding requires supported verified funding.',409)
+            policy = policy_version
         amount(milli)
         if not isinstance(key,str) or not key or len(key)>100: raise AlphaError('Invalid credit event key.',400)
         if expires_at is not None and (type(expires_at) not in (float,int) or not math.isfinite(expires_at)):
