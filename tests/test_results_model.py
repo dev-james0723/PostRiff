@@ -115,6 +115,56 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(out["user_declared"]["counts"], {"lead": 3})
         self.assertIsNone(out["provider_native"])        # unavailable, not zero
 
+    def test_amendment_replaces_its_original_and_the_latest_amendment_wins(self):
+        rows = [
+            {"id": "o", "provenance": "user_declared", "type": "sale", "kind": "event", "quantity": 1,
+             "amount": {"minor": 1000, "currency": "usd"}, "attribution": "unattributed"},
+            {"id": "a1", "provenance": "user_declared", "type": "sale", "kind": "amendment", "correctsId": "o", "quantity": 2,
+             "amount": {"minor": 2000, "currency": "usd"}, "attribution": "unattributed"},
+            {"id": "a2", "provenance": "user_declared", "type": "booking", "kind": "amendment", "correctsId": "o", "quantity": 1,
+             "amount": {"minor": 3000, "currency": "eur"}, "attribution": "associated"},
+        ]
+        out = model.summarize(rows)["user_declared"]
+        self.assertEqual(out["counts"], {"booking": 1})                 # one result, never three
+        self.assertEqual(out["money"], {"eur": {"minor": 3000, "events": 1}})
+        self.assertEqual(out["associated"], 1)
+        self.assertEqual(out["unattributed"], 0)
+
+    def test_reversal_of_an_amended_result_withdraws_the_current_version(self):
+        rows = [
+            {"id": "o", "provenance": "user_declared", "type": "lead", "kind": "event", "quantity": 1, "amount": None, "attribution": "unattributed"},
+            {"id": "a", "provenance": "user_declared", "type": "lead", "kind": "amendment", "correctsId": "o", "quantity": 4, "amount": None, "attribution": "unattributed"},
+            {"id": "r", "provenance": "user_declared", "type": "lead", "kind": "reversal", "correctsId": "o", "quantity": 1},
+        ]
+        out = model.summarize(rows)["user_declared"]
+        self.assertEqual(out["counts"], {})
+        self.assertEqual(out["reversed"], 4)
+
+    def test_grouped_rows_carry_their_own_reversed_flag_and_event_counts(self):
+        """Aggregated rows (one per group, as the database returns them) summarize like the rows they stand for."""
+        rows = [
+            {"id": "g1", "provenance": "first_party_reported", "type": "booking", "kind": "event", "quantity": 5,
+             "amount": {"minor": 25000, "currency": "usd"}, "events": 4, "attribution": "associated"},
+            {"id": "g2", "provenance": "first_party_reported", "type": "booking", "kind": "event", "quantity": 2,
+             "amount": None, "attribution": "unattributed"},
+            {"id": "g3", "provenance": "first_party_reported", "type": "booking", "kind": "event", "quantity": 3,
+             "amount": {"minor": 900, "currency": "usd"}, "events": 3, "attribution": "associated", "reversed": True},
+        ]
+        out = model.summarize(rows)["first_party_reported"]
+        self.assertEqual(out["counts"], {"booking": 7})
+        self.assertEqual(out["money"], {"usd": {"minor": 25000, "events": 4}})
+        self.assertEqual(out["reversed"], 3)
+        self.assertEqual((out["associated"], out["unattributed"]), (5, 2))
+
+    def test_zero_is_not_unavailable(self):
+        # A class whose only results were reversed is measured (all withdrawn), not unavailable.
+        rows = [{"id": "o", "provenance": "user_declared", "type": "lead", "kind": "event", "quantity": 1, "amount": None, "attribution": "unattributed"},
+                {"id": "r", "provenance": "user_declared", "type": "lead", "kind": "reversal", "correctsId": "o"}]
+        out = model.summarize(rows)
+        self.assertEqual(out["user_declared"]["counts"], {})
+        self.assertEqual(out["user_declared"]["reversed"], 1)
+        self.assertIsNone(out["first_party_reported"])
+
 
 if __name__ == "__main__":
     unittest.main()
