@@ -31,8 +31,10 @@ class DemoStore:
     def execute(self, statement, values=()):
         statement=str(statement)
         self.statements.append(statement)
-        if 'set_config' in statement:
+        if "set_config('rafii_control.operator'" in statement:
             self.actor=values[0]
+        elif "set_config('statement_timeout'" in statement:
+            assert 1 <= int(values[0]) <= 30_000, values   # the Demo row's statements stay deadline-bounded
         elif statement.startswith('SELECT payload,replays'):
             assert values[0]==self.actor
             return Cursor(self.rows.get(tuple(values)))

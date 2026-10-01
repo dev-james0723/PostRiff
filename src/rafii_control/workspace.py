@@ -12,6 +12,7 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 from .auth import ControlError
 from .store import serial
+from .deadlines import remaining
 from .demo_dataset import (sample_data, SCHEMA_VERSION, COLLECTIONS, PAGE_SIZE,
                            bounded_snapshot, linked_records, refresh_summary, receipt)
 
@@ -20,6 +21,8 @@ from .demo_dataset import (sample_data, SCHEMA_VERSION, COLLECTIONS, PAGE_SIZE,
 # parsed payload per process, keyed by operator, environment and the row's version (xmin changes on every write), so a
 # Demo action or reset is seen on the next read. Only the latest version per operator is kept. Callers get a shallow copy.
 _DEMO_CACHE = {}
+# Per-statement budget for the large Demo row (creation, first read, rewrite after an action), within the request deadline.
+DEMO_STATEMENT_SECONDS = 30.0
 
 
 class WorkspaceService:
@@ -95,6 +98,10 @@ class WorkspaceService:
             if action is None:
                 cached = self._cached_demo(con, actor)
                 if cached is not None: return cached
+            # The Demo row holds the whole 10,000-record dataset (tens of MB of JSON). Creating it, reading it once per process
+            # and rewriting it after an action each take longer than the 5 s per-statement default on a slower database, so
+            # these statements get the rest of the request deadline, at most DEMO_STATEMENT_SECONDS.
+            con.execute("SELECT set_config('statement_timeout',%s,true)", (str(max(1, int(remaining(DEMO_STATEMENT_SECONDS) * 1000))),))
             # Reads take no row lock: a page fires several Demo reads at once, and a FOR UPDATE on this one large row made them
             # queue behind each other until the 10 s Control deadline answered 503. Actions and the one-time upgrade still lock.
             read = action is None
