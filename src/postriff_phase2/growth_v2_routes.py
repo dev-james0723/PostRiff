@@ -44,6 +44,8 @@ def _module(name):
 
 
 def public(app, environ, start_response, method, path):
+    if path == "/api/plans" and method == "GET":
+        return plans(app, start_response)
     if not path.startswith(("/api/results/", "/api/l/")):
         return None
     for name in PUBLIC:
@@ -84,3 +86,13 @@ def cron(hosted, deadline):
         except Exception as error:  # noqa: BLE001 - a background step must never fail the cron response
             summary[name.rsplit(".", 2)[-2]] = {"status": "unavailable", "reason": type(error).__name__}
     return summary
+
+
+def plans(app, start_response):
+    """Public, read-only plan catalog for the active pricing version (R-COM-04): the one source public pages, in-app
+    plan cards and checkout agree on. No identity, no write, no client-supplied price."""
+    from .plan_pricing import public_catalog
+    service = app._runtime()
+    with service.connection_factory() as db, db.cursor() as cur:
+        catalog = public_catalog(cur, service.billing.pricing_v2_enabled)
+    return app._json(start_response, 200, catalog)

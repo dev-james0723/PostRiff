@@ -315,18 +315,38 @@ class Ledger:
             wallet = self.credits.view(cur, workspace_id)
             credits = {k:v for k,v in wallet.items() if k != "lots"}
             credits.update(mode="credits", quoteType="spending_limit", textOnly=True)
-        cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
+        # Migration 048 (Pricing v2 catalog) may not be applied yet where this code runs: read the variant price and
+        # catalog columns only when they exist, so this view keeps working on the preceding schema (R-ENG-03).
+        cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+        catalog_v2 = bool(cur.fetchone()[0])
+        if catalog_v2:
+            cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,coalesce(v.amount_cents,p.price_cents),coalesce(v.currency,p.currency),p.status,p.version,s.price_variant_id FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id LEFT JOIN public.pr_plan_price_variants v ON v.id=s.price_variant_id WHERE s.workspace_id=%s", (workspace_id,))
+        else:
+            cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version,NULL FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
         sub = cur.fetchone()
         cur.execute("SELECT kind,dimension,cost_state,estimated_usd_micro,actual_usd_micro,extract(epoch from at),provider,model,charge_batch,reservation_id::text,run_id::text,job_id::text FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at DESC LIMIT 100", (workspace_id,))
         ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7], "chargeBatch": r[8], "reservationId": r[9], "runId": r[10], "jobId": r[11]} for r in cur.fetchall()]
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
-        cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements FROM public.pr_plan_terms ORDER BY plan,version")
-        terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": plan_display_label(r[3]), "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
+        # Only the active catalog's terms plus whatever this workspace already holds: hidden v2 packages (Starter,
+        # Studio v2) and, under v2, legacy packages are never offered as new sales (R-COM-01/04).
+        current = {sub[0]} if sub else set()
+        cur.execute("SELECT plan_terms_id FROM public.pr_entitlements WHERE workspace_id=%s", (workspace_id,))
+        current |= {r[0] for r in cur.fetchall()}
+        if catalog_v2:
+            offered = "catalog_state='public' AND status IN ('active','proposed')" if self.pricing_v2_enabled else "catalog_state='legacy'"
+            cur.execute(f"SELECT id,plan,version,label,price_cents,currency,status,entitlements,catalog_state,new_checkout_enabled FROM public.pr_plan_terms WHERE {offered} OR id = ANY(%s) ORDER BY plan,version", (sorted(current),))
+        else:   # pre-048 schema: every row is a legacy package
+            cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,'legacy',false FROM public.pr_plan_terms ORDER BY plan,version")
+        terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": plan_display_label(r[3]), "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7],
+                  "priceLabel": "proposed" if r[6] != "active" else "active", "catalogState": r[8], "newCheckoutEnabled": r[9], "current": r[0] in current} for r in cur.fetchall()]
+        from .plan_pricing import billing_mode, CATALOG_VERSION_V2, CATALOG_VERSION_LEGACY
         return {
+            "billingMode": billing_mode(self.growth_mode(cur, workspace_id)),
+            "catalogVersion": CATALOG_VERSION_V2 if self.pricing_v2_enabled else CATALOG_VERSION_LEGACY,
             "entitlement": entitlement,
             "credits": credits,
             "aiUsageExempt": ai_usage_exempt(member_id),
-            "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
+            "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "priceVariantId": sub[12], "live": sub[1] != "fixture"},
             "budget": {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
             "ledger": ledger,

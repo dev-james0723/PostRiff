@@ -487,6 +487,15 @@ class HostedWorkspaceService:
             view["lifecycle"] = lifecycle
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
+            view["creatorOffer"] = None
+            if self.billing.pricing_v2_enabled and view["billingMode"] == "free_preview" and _membership(row).allows("owner"):
+                # The offer is the workspace's stable server assignment (49/59/79 share one entitlement); never a
+                # client value. Existing subscribers and unmapped prices simply get no offer.
+                try:
+                    offer = self.billing.assign_creator_price(cur, workspace_id)
+                    view["creatorOffer"] = {k: offer[k] for k in ("planTermsId", "priceVariantId", "amountCents", "currency")}
+                except AlphaError:
+                    view["creatorOffer"] = None
             if not _membership(row).allows("owner"):
                 view["budget"] = None
                 for entry in view["ledger"]:
@@ -494,7 +503,15 @@ class HostedWorkspaceService:
                     entry.pop("actualUsdMicro", None)
                 view["billing"]["checkoutAvailable"] = False
                 view["billing"]["portalAvailable"] = False
-            return view
+        # Free preview eligibility opens its own workspace transaction, so it is read after this one closes.
+        view["freePreview"] = None
+        growth = getattr(self, "growth", None)
+        if view["billingMode"] == "free_preview" and growth is not None:
+            try:
+                view["freePreview"] = growth.preview_status(workspace_id, token)
+            except AlphaError:
+                view["freePreview"] = None
+        return view
 
     def billing_webhook(self, signature, body):
         notice = None

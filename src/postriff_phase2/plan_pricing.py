@@ -240,3 +240,62 @@ class PlanPricing:
         if variant_id:
             event['priceVariantId'] = variant_id
         return True
+
+
+# --- One catalog projection for every customer-visible surface (R-COM-04) -----------------------------------------
+CATALOG_VERSION_V2 = 'pricing-v2-2026-09-28'
+CATALOG_VERSION_LEGACY = 'legacy-2026-09'
+CREDITS_PER_USD = 300
+FREE_FIRST_VALUE = {'postDoctorRuns': 1, 'genomeAnalyses': 1, 'genomeMaxPosts': 20}
+_PUBLIC_ENTITLEMENTS = ('members', 'connectedAccounts', 'brands', 'storageMb', 'monthlyCredits', 'writingBatches', 'mediaCredits', 'overage')
+
+
+def _plan_view(row, *, v2, variant=None):
+    terms_id, plan, label, price_cents, currency, status, checkout_enabled, entitlements, provider_price = row
+    entitlements = entitlements or {}
+    view = {'id': terms_id, 'plan': plan, 'label': label, 'priceCents': variant['amountCents'] if variant else price_cents,
+            'currency': (variant['currency'] if variant else currency) or 'USD', 'interval': None if plan in ('free', 'trial') else 'month',
+            'entitlements': {k: entitlements[k] for k in _PUBLIC_ENTITLEMENTS if k in entitlements}}
+    if v2:
+        view['monthlyCredits'] = int(entitlements.get('monthlyCredits') or 0)
+        if plan == 'free':
+            view['firstValue'] = dict(FREE_FIRST_VALUE)
+            view['checkout'] = 'not_applicable'
+        else:
+            purchasable = (status == 'active' and checkout_enabled and variant is not None and variant['status'] == 'active'
+                           and bool((variant['priceId'] or '').strip()))
+            view['checkout'] = 'available' if purchasable else 'not_yet_available'
+            view['priceVariantId'] = variant['priceVariantId'] if variant else None
+    else:
+        view['checkout'] = 'legacy_flow' if status == 'active' and (provider_price or '').strip() else 'not_yet_available'
+    return view
+
+
+def public_catalog(cur, pricing_v2_enabled):
+    """The plans a new customer may see for sale, projected from the server catalog rows.
+
+    Under v2 only `catalog_state='public'` terms appear (Free + Creator); hidden (Starter, Studio v2) and legacy
+    packages never do, and Creator shows the default variant's amount. Under legacy the existing new-sale packages
+    appear exactly as the current checkout sells them. No client value can change an amount or a Price id."""
+    if pricing_v2_enabled:
+        cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+        if not cur.fetchone()[0]:   # flag on before migration 048: say so rather than show a wrong catalog
+            raise AlphaError('The pricing catalog is not available yet.', 503, code='catalog_unavailable')
+        cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
+                    "WHERE catalog_state='public' AND status IN ('active','proposed') ORDER BY price_cents,id")
+        rows = cur.fetchall()
+        default = PlanPricing.variant(cur, DEFAULT_VARIANT)
+        plans = [_plan_view(r, v2=True, variant=default if r[1] == 'creator' else None) for r in rows]
+        return {'catalogVersion': CATALOG_VERSION_V2, 'pricing': 'v2', 'creditsPerUsd': CREDITS_PER_USD,
+                'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
+                'notes': ['Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis.',
+                          'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
+    cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
+                "WHERE id IN ('trial-v1','studio-v1','assist-v1') ORDER BY price_cents,id")
+    return {'catalogVersion': CATALOG_VERSION_LEGACY, 'pricing': 'legacy', 'plans': [_plan_view(r, v2=False) for r in cur.fetchall()],
+            'topUps': {'available': False, 'reason': 'not_offered'}}
+
+
+def billing_mode(growth_mode):
+    """Ledger.growth_mode → the explicit mode every surface branches on (never inferred from a price or a batch count)."""
+    return {'free': 'free_preview', 'managed_credits': 'managed_credits'}.get(growth_mode, 'legacy_allowances')
