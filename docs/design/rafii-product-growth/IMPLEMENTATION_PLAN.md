@@ -80,9 +80,9 @@ checkout's). Full builds, typecheck, lint and browser suites run in PR CI.
 | G0-METRICS | R-MET-01..03 · AC31–AC35 | coordinator | 086 if needed · — · 55871 | Founder P1 057 (proposed) |
 | G1-CONTINUE | R-FWR-01 · AC06–AC07 | coordinator | 085 · `RAFII_FIRST_WEEK_ENABLED` · 55871 | `variant_import` |
 | G1-WEEK | R-FWR-02/03 · AC08–AC10 | coordinator | 085 · `RAFII_FIRST_WEEK_ENABLED` | Weekly Operator, credit quotes |
-| G1-INTAKE | R-FWR-04 · AC11–AC12 | W-INTAKE | 087 · `RAFII_SOURCE_UPLOADS_ENABLED` · 55887 | storage, durable job |
-| G2-REL | R-REL-01/02 · AC13–AC15 | W-REL | 080 · `RAFII_RELATIONSHIPS_ENABLED` · 55881 | Inbox v1 |
-| G2-OUT | R-OUT-01..03 · AC16–AC19 | W-OUT | 081 · `RAFII_RESULTS_ENABLED` · 55882 | `results/signing.py`, `results/model.py` |
+| G1-INTAKE | R-FWR-04 · AC11–AC12 | W-INTAKE (`src/postriff_phase2/source_uploads/`) | 087 · `RAFII_SOURCE_UPLOADS_ENABLED` · 55887 | storage, durable job |
+| G2-REL | R-REL-01/02 · AC13–AC15 | W-REL | 081 · `RAFII_RELATIONSHIPS_ENABLED` · 55881 | Inbox v1, result events (080) |
+| G2-OUT | R-OUT-01..03 · AC16–AC19 | W-OUT | 080 · `RAFII_RESULTS_ENABLED` · 55882 | `results/signing.py`, `results/model.py` |
 | G3-SER | R-SER-01/02 · AC20–AC21 | W-SER | 082 · `RAFII_SERIES_ENABLED` · 55883 | Evergreen, overlays |
 | G3-VIS | R-VIS-01..03 · AC22–AC23 | W-VIS | 083 · `RAFII_VISUAL_PACK_ENABLED` · 55884 | creative plan, storage, Queue manifest |
 | G4-LOOP | R-BRF-01/02, R-PROOF-01/02 · AC24–AC27 | W-LOOP | 084 · `RAFII_OPPORTUNITY_BRIEF_ENABLED`, `RAFII_PROOF_V2_ENABLED` · 55885 | results summary, pack exports (interfaces below) |

@@ -13,7 +13,7 @@ import importlib
 # resource segment (parts[3]) → module with handle(app, environ, start_response, hosted, token, method, parts)
 RESOURCES = {
     "first-week": "postriff_phase2.first_week.http",
-    "source-uploads": "postriff_phase2.first_week.intake_http",
+    "source-uploads": "postriff_phase2.source_uploads.http",
     "relationships": "postriff_phase2.relationships.http",
     "results": "postriff_phase2.results.http",
     "series": "postriff_phase2.series.http",
