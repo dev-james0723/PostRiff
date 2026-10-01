@@ -6,8 +6,8 @@ due times, due detection with the reminder identity, dismissal until the due rev
 and audited, notifications through the existing outbox/planner (reply audience only), Attention with the prior
 exchange, and no relationship text in product events, audit, history or notification payloads.
 
-Synthetic only: no provider, model or email traffic. ``pr_result_events`` here is a minimal stand-in for the results
-slice's migration 080 (not part of this branch) and the results service is a labelled test stub."""
+Synthetic only: no provider, model or email traffic. Results are rows of the integrated results slice (migration 080),
+read through its real ``results.service.get_declared``."""
 import json
 import os
 import subprocess
@@ -190,21 +190,18 @@ checks.append("snooze/unsnooze and close/reopen reversible, each in history + au
 
 # --- won needs a declared result (results slice stand-in) ------------------------------------------------------------------
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": str(uuid.uuid4()), "expectedRevision": waiting["revision"]}), 400, "result_required")
-stub = types.ModuleType("postriff_phase2.results.service")   # labelled stub for the results slice's interface
+# The real results slice (migration 080 + results.service.get_declared) is integrated: declare results as rows of it.
 
 
-def get_declared(cur, workspace_id, result_id):
-    cur.execute("SELECT 1 FROM public.pr_result_events WHERE workspace_id=%s AND id=%s", (workspace_id, result_id))
-    return {"id": result_id, "provenance": "user_declared"} if cur.fetchone() else None
+def declared(workspace):
+    return sql("INSERT INTO public.pr_result_events(workspace_id,provenance,result_type,provider_event_id,occurred_at,payload_digest,declared_by) "
+               "VALUES(%s,'user_declared','lead',%s,now(),%s,(SELECT user_id FROM public.pr_memberships WHERE workspace_id=%s AND role='owner' LIMIT 1)) RETURNING id::text",
+               workspace, "decl_" + uuid.uuid4().hex, "a" * 64, workspace)[0][0]
 
 
-stub.get_declared = get_declared
-sys.modules["postriff_phase2.results.service"] = stub
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": str(uuid.uuid4()), "expectedRevision": waiting["revision"]}), 400, "result_required")
-sql("CREATE TABLE public.pr_result_events (id uuid primary key default gen_random_uuid(), workspace_id uuid not null references public.pr_workspaces(id) on delete cascade)")
-subprocess.run(["/opt/homebrew/opt/postgresql@17/bin/psql", DSN, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(MIGRATION)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-mine = sql("INSERT INTO public.pr_result_events(workspace_id) VALUES(%s) RETURNING id::text", W)[0][0]
-theirs = sql("INSERT INTO public.pr_result_events(workspace_id) VALUES(%s) RETURNING id::text", X)[0][0]
+mine = declared(W)
+theirs = declared(X)
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": theirs, "expectedRevision": waiting["revision"]}), 400, "result_required")
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "expectedRevision": waiting["revision"]}), 400, "result_required")
 won = service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": mine, "expectedRevision": waiting["revision"]})["relationship"]
@@ -373,4 +370,4 @@ assert not [i for i in hosted.coworker.attention(W, OWNER)["items"] if i["type"]
 assert sql("SELECT count(*) FROM public.pr_relationships WHERE workspace_id=%s", W)[0][0] == 32   # records are kept
 checks.append("flag off: routes 404 feature_disabled, no reminders or Attention items, records kept")
 
-print(json.dumps({"status": "pass", "execution": "disposable PostgreSQL; synthetic threads; results stand-in; no provider/model/email traffic", "checks": checks}))
+print(json.dumps({"status": "pass", "execution": "disposable PostgreSQL; synthetic threads; integrated results slice; no provider/model/email traffic", "checks": checks}))

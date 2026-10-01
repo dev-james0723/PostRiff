@@ -104,19 +104,20 @@ with psycopg.connect(DSN, autocommit=True) as db:
     db.execute("RESET ROLE")
     checks += ["member-only reads and no browser writes", "revoked/foreign member sees nothing", "anon denied", "history immutable for the service role"]
 
-    # Results present (synthetic stand-in for 080): re-applying 081 adds the composite key and the won foreign key.
-    assert db.execute("SELECT count(*) FROM pg_constraint WHERE conname='pr_relationships_won_result_fk'").fetchone()[0] == 0
-    db.execute("CREATE TABLE public.pr_result_events (id uuid primary key default gen_random_uuid(), workspace_id uuid not null references public.pr_workspaces(id) on delete cascade)")
+    # Results (080) precede 081 in the integrated chain: the won foreign key exists, and re-applying 081 keeps it once.
+    assert db.execute("SELECT count(*) FROM pg_constraint WHERE conname='pr_relationships_won_result_fk'").fetchone()[0] == 1
     apply()
     apply()
     assert db.execute("SELECT count(*) FROM pg_constraint WHERE conname='pr_relationships_won_result_fk'").fetchone()[0] == 1
-    assert db.execute("SELECT count(*) FROM pg_constraint WHERE conname='pr_result_events_workspace_id_id_key'").fetchone()[0] == 1
-    mine = str(db.execute("INSERT INTO public.pr_result_events(workspace_id) VALUES(%s) RETURNING id", (w1,)).fetchone()[0])
-    theirs = str(db.execute("INSERT INTO public.pr_result_events(workspace_id) VALUES(%s) RETURNING id", (w2,)).fetchone()[0])
+
+    def declared(workspace):
+        return str(db.execute("INSERT INTO public.pr_result_events(workspace_id,provenance,result_type,provider_event_id,occurred_at,payload_digest,declared_by) "
+                              "VALUES(%s,'user_declared','lead',%s,now(),%s,%s) RETURNING id", (workspace, "decl_" + uuid.uuid4().hex, "a" * 64, str(uuid.uuid4()))).fetchone()[0])
+    mine, theirs = declared(w1), declared(w2)
     assert refused(db, "UPDATE public.pr_relationships SET state='won',won_result_id=%s WHERE id=%s", (theirs, r1), psycopg.errors.ForeignKeyViolation)
     db.execute("UPDATE public.pr_relationships SET state='won',won_result_id=%s,won_provenance='user_declared' WHERE id=%s", (mine, r1))
     assert refused(db, "UPDATE public.pr_relationships SET won_result_id=%s WHERE id=%s", (str(uuid.uuid4()), r1), psycopg.errors.ForeignKeyViolation)
-    checks.append("won references a same-workspace result once results exist (synthetic stand-in table)")
+    checks.append("won references a same-workspace result of the integrated results table")
 
     # Workspace deletion cascades through records, links and history.
     # A declared result referenced by a won follow-up cannot disappear on its own (NO ACTION); the workspace takes both.
@@ -127,4 +128,4 @@ with psycopg.connect(DSN, autocommit=True) as db:
                       "+(SELECT count(*) FROM public.pr_relationship_events WHERE workspace_id=%s)", (w1, w1, w1)).fetchone()[0] == 0
     checks.append("workspace deletion cascades")
 
-print(json.dumps({"status": "pass", "execution": "disposable PostgreSQL; migration 081; synthetic 080 stand-in", "checks": checks}))
+print(json.dumps({"status": "pass", "execution": "disposable PostgreSQL; migrations 080 + 081", "checks": checks}))
