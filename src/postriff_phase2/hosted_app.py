@@ -493,6 +493,10 @@ class HostedApplication:
             from .growth import http as growth_http
             if (routed := growth_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
+            # RAFII Product Growth: signed first-party result webhooks and tracking redirects authenticate themselves.
+            from . import growth_v2_routes
+            if (routed := growth_v2_routes.public(self, environ, start_response, method, path)) is not None:
+                return routed
             if path == "/api/billing/webhook" and method == "POST":
                 service = self._runtime()
                 length = int(environ.get("CONTENT_LENGTH") or "0")
@@ -753,6 +757,8 @@ class HostedApplication:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
+            if growth_v2_routes.handles(parts):
+                return growth_v2_routes.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
                 return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
