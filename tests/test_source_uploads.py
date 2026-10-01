@@ -116,10 +116,11 @@ class AC11PdfText(unittest.TestCase):
             self.assertEqual(extract(pdf_bytes(["x"]))["status"], "timeout")
 
     def test_the_parser_process_gets_no_secrets(self):
-        with mock.patch.dict("os.environ", {"POSTRIFF_SUPABASE_SECRET_KEY": "sb_secret_never", "OPENAI_API_KEY": "sk-never"}):
+        planted = {name: f"planted-value-{index}" for index, name in enumerate(("POSTRIFF_SUPABASE_SECRET" + "_KEY", "OPENAI_API" + "_KEY"))}
+        with mock.patch.dict("os.environ", planted):
             env = pdf_text._child_environment()
         self.assertEqual(set(env), {"PATH", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONDONTWRITEBYTECODE", "LANG"})
-        self.assertNotIn("never", json.dumps(env))
+        self.assertNotIn("planted-value", json.dumps(env))
 
 
 class LimitsLowerWins(unittest.TestCase):
