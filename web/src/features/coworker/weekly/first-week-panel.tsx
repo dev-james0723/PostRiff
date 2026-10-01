@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/auth/session';
 import { queueDraftHref } from '@/lib/coworker/safe-href';
 import { clearContinuation, importBody, readContinuation, type ReadOutcome } from '@/lib/growth-v2/continuation';
 import { firstWeekKey, useFirstWeek, useFirstWeekAction, useFirstWeekApi } from '@/lib/growth-v2/first-week-hooks';
+import { canWriteYourself } from '@/lib/growth-v2/first-week-slots';
 import type { FirstWeekSlot, FirstWeekView } from '@/lib/growth-v2/first-week-types';
 import { errorCode, errorMessage, idempotencyKey, isFeatureDisabled } from '@/lib/growth-v2/request';
 import { useWorkspace } from '@/lib/workspace/provider';
@@ -413,8 +414,7 @@ function SlotBody({ slot, view, canEdit }: { slot: FirstWeekSlot; view: FirstWee
           {slot.draft.text}
         </blockquote>
       ) : (
-        slot.status === 'planned' &&
-        slot.committed && (
+        canWriteYourself(slot) && (
           <div className='flex flex-col gap-2'>
             <Label htmlFor={`fw-write-${slot.id}`} className='text-sm'>
               Write it yourself
