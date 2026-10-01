@@ -51,6 +51,11 @@ class FounderViewsMigrationTests(unittest.TestCase):
         import hashlib
         with psycopg.connect(self.dsn, autocommit=True) as con:
             con.execute('DELETE FROM rafii_control.request_budgets WHERE bucket=%s', (hashlib.sha256(b'exchange:global').hexdigest(),))
+            # Each test seeds its own workspaces and the Live metrics aggregate every workspace, so the seed rows leave with the test.
+            for workspace in (getattr(self, 'workspace', None), getattr(self, 'internal', None)):
+                if workspace:
+                    con.execute('DELETE FROM public.pr_usage_ledger WHERE workspace_id=%s', (workspace,))
+                    con.execute('DELETE FROM rafii_control.workspace_classifications WHERE workspace_id=%s', (workspace,))
 
     def test_views_are_projection_owned_reader_readable_and_column_bounded(self):
         owner = self.connect()
