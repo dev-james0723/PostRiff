@@ -1,0 +1,1111 @@
+[
+  {
+    "id": "command-kpis",
+    "workbench": "Command",
+    "question": "What is the current state of the business?",
+    "visual_type": "metric_strip",
+    "metric_ids": [
+      "paid_workspaces",
+      "mrr",
+      "net_collections",
+      "useful_outcomes",
+      "contribution",
+      "affected_workspaces"
+    ],
+    "drilldown": "Open definition and query receipt; separate currencies and quality states.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "business-change-timeline",
+    "workbench": "Command",
+    "question": "What changed before the business metric moved?",
+    "visual_type": "annotated_timeline",
+    "metric_ids": [
+      "mrr",
+      "activation_rate",
+      "task_success"
+    ],
+    "drilldown": "Link releases/incidents/campaigns; association is not causation.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "business-relationship-map",
+    "workbench": "Command",
+    "question": "How do customers, runs and systems connect?",
+    "visual_type": "entity_graph",
+    "metric_ids": [
+      "affected_workspaces",
+      "source_lag"
+    ],
+    "drilldown": "Verified typed ID edges; dotted inferred links; authorized resources only.",
+    "refresh": "source_watermark_driven",
+    "renderer": "optional_react_flow_with_table_fallback",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "source-quality-matrix",
+    "workbench": "Command",
+    "question": "Which numbers can I trust right now?",
+    "visual_type": "status_matrix",
+    "metric_ids": [
+      "source_lag",
+      "cost_coverage",
+      "attribution_coverage"
+    ],
+    "drilldown": "Open source watermarks, sampling and missing streams.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "mrr-bridge",
+    "workbench": "Revenue",
+    "question": "Why did recurring value change?",
+    "visual_type": "waterfall",
+    "metric_ids": [
+      "mrr",
+      "mrr_new",
+      "mrr_expansion",
+      "mrr_contraction",
+      "mrr_churn",
+      "mrr_reactivation"
+    ],
+    "drilldown": "Opening/new/expansion/contraction/churn/reactivation reconciliation; no mixing cash.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "cash-waterfall",
+    "workbench": "Revenue",
+    "question": "Where did collected cash go?",
+    "visual_type": "waterfall",
+    "metric_ids": [
+      "collections",
+      "refunds",
+      "dispute_net",
+      "net_collections"
+    ],
+    "drilldown": "Native currency; fees/taxes/payout transfers separately classified.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "recovery-funnel",
+    "workbench": "Revenue",
+    "question": "Which failed invoices remain recoverable?",
+    "visual_type": "funnel",
+    "metric_ids": [
+      "recovery_rate",
+      "collections"
+    ],
+    "drilldown": "Invoice cohorts: eligible, scheduled, action-needed, recovered; source provider state.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "revenue-retention",
+    "workbench": "Revenue",
+    "question": "Is the opening paid cohort retaining value?",
+    "visual_type": "line",
+    "metric_ids": [
+      "nrr",
+      "grr"
+    ],
+    "drilldown": "Fixed cohort, currency and policy; show base MRR.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "revenue-cohort-grid",
+    "workbench": "Revenue",
+    "question": "Which paying cohorts mature well?",
+    "visual_type": "heatmap",
+    "metric_ids": [
+      "mrr",
+      "nrr",
+      "logo_churn"
+    ],
+    "drilldown": "Cohort-age alignment; immature cells blank.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "customer-concentration",
+    "workbench": "Revenue",
+    "question": "How concentrated is recurring value?",
+    "visual_type": "pareto",
+    "metric_ids": [
+      "mrr"
+    ],
+    "drilldown": "Founder-only workspace contributions and cumulative share; no customer content.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "plan-economics",
+    "workbench": "Revenue",
+    "question": "Which plans cover their delivery costs?",
+    "visual_type": "matrix",
+    "metric_ids": [
+      "contribution",
+      "ai_actual_cost",
+      "cost_coverage"
+    ],
+    "drilldown": "Per-plan compatible cost/revenue basis, incomplete coverage flagged.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "credit-lot-states",
+    "workbench": "Revenue",
+    "question": "What is available, held or owed?",
+    "visual_type": "stacked_bar",
+    "metric_ids": [
+      "credit_available",
+      "credit_held",
+      "credit_debt"
+    ],
+    "drilldown": "Separate debt axis/state; existing wallet projection; not cash value.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "credit-flow",
+    "workbench": "Revenue",
+    "question": "How are credits granted and consumed?",
+    "visual_type": "flow",
+    "metric_ids": [
+      "credit_grants",
+      "credit_consumption"
+    ],
+    "drilldown": "Source/expiry/settlement states; no assumption grants equal revenue.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "activation-funnel",
+    "workbench": "Product",
+    "question": "Where do users fail to reach first value?",
+    "visual_type": "funnel",
+    "metric_ids": [
+      "activation_rate",
+      "active_workspaces"
+    ],
+    "drilldown": "Step-specific eligibility and maturity; open compatible cohort.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "time-to-value",
+    "workbench": "Product",
+    "question": "How long does first value take?",
+    "visual_type": "histogram",
+    "metric_ids": [
+      "time_to_value"
+    ],
+    "drilldown": "Noncompleters/censoring alongside completer distribution.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "return-cohort-heatmap",
+    "workbench": "Product",
+    "question": "Do users return after first value?",
+    "visual_type": "heatmap",
+    "metric_ids": [
+      "retention_d7",
+      "retention_d28"
+    ],
+    "drilldown": "Mature denominators, cohort counts and definition version.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "retention-survival",
+    "workbench": "Product",
+    "question": "How does continued use change over time?",
+    "visual_type": "survival_curve",
+    "metric_ids": [
+      "retention_d7",
+      "retention_d28"
+    ],
+    "drilldown": "Requires approved event/censoring estimator, not interpolation of D7/D28 alone.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "feature-adoption-grid",
+    "workbench": "Product",
+    "question": "Which eligible features get used?",
+    "visual_type": "heatmap",
+    "metric_ids": [
+      "feature_adoption"
+    ],
+    "drilldown": "Eligibility, plan and cohort; no causality claims.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "feature-retention-scatter",
+    "workbench": "Product",
+    "question": "Which behavior correlates with return?",
+    "visual_type": "scatter",
+    "metric_ids": [
+      "feature_adoption",
+      "retention_d7"
+    ],
+    "drilldown": "Compare like cohorts; explicitly correlation; minimum sample.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "automation-health",
+    "workbench": "Product",
+    "question": "Which recurring workflows are succeeding?",
+    "visual_type": "stacked_bar",
+    "metric_ids": [
+      "automation_success",
+      "task_success"
+    ],
+    "drilldown": "Paused/held/skipped/succeeded/failed distinct; drill to occurrence.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "acquisition-funnel",
+    "workbench": "Acquisition",
+    "question": "Which sources lead to paid value?",
+    "visual_type": "funnel",
+    "metric_ids": [
+      "source_paid_conversion",
+      "activation_rate"
+    ],
+    "drilldown": "Tagged first-party cohorts with fixed windows and unknown source retained.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "organic-page-matrix",
+    "workbench": "Acquisition",
+    "question": "Which search pages bring visibility and clicks?",
+    "visual_type": "matrix",
+    "metric_ids": [
+      "gsc_clicks",
+      "gsc_ctr"
+    ],
+    "drilldown": "Authorized Search Console aggregates; no individual identification.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "cac-payback-scenarios",
+    "workbench": "Acquisition",
+    "question": "What would acquisition economics need to improve?",
+    "visual_type": "scenario_table",
+    "metric_ids": [
+      "cac",
+      "contribution"
+    ],
+    "drilldown": "Scenario, not forecast; contribution assumptions and uncertainty visible.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "customer-health-evidence",
+    "workbench": "Customers",
+    "question": "Who is blocked and why?",
+    "visual_type": "evidence_table",
+    "metric_ids": [
+      "open_tickets",
+      "affected_workspaces",
+      "credit_debt"
+    ],
+    "drilldown": "Observed reasons, no opaque health score; safe metadata only.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "customer-event-timeline",
+    "workbench": "Customers",
+    "question": "What happened to this account?",
+    "visual_type": "timeline",
+    "metric_ids": [
+      "task_success",
+      "open_tickets"
+    ],
+    "drilldown": "Linked events ordered by event/received time; permission rechecked.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "ai-cost-quality",
+    "workbench": "AI",
+    "question": "Which routes balance cost and useful output?",
+    "visual_type": "scatter",
+    "metric_ids": [
+      "cost_per_useful",
+      "ai_quality"
+    ],
+    "drilldown": "Comparable evaluation/task mix; latency marker; exact sample and rubric.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "ai-latency-distribution",
+    "workbench": "AI",
+    "question": "Where is generation slow?",
+    "visual_type": "histogram",
+    "metric_ids": [
+      "ai_latency",
+      "task_latency"
+    ],
+    "drilldown": "First token versus total; raw/mergeable distributions, no averaging p95.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "ai-cost-stack",
+    "workbench": "AI",
+    "question": "What consumes the model budget?",
+    "visual_type": "stacked_area",
+    "metric_ids": [
+      "ai_actual_cost",
+      "ai_failed_cost"
+    ],
+    "drilldown": "Actual/estimated/unknown separate; excluded provider metadata visible.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "ai-quality-regression",
+    "workbench": "AI",
+    "question": "Did a prompt/model change worsen output?",
+    "visual_type": "paired_comparison",
+    "metric_ids": [
+      "ai_quality"
+    ],
+    "drilldown": "Same dataset/rubric; blind human review where appropriate.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "agent-trace",
+    "workbench": "AI",
+    "question": "Which step caused delay or failure?",
+    "visual_type": "trace_waterfall",
+    "metric_ids": [
+      "ai_latency",
+      "task_latency"
+    ],
+    "drilldown": "Metadata spans linked by trace ID; no raw prompts by default.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "service-dependency-map",
+    "workbench": "Reliability",
+    "question": "Which failing component affects which journeys?",
+    "visual_type": "service_graph",
+    "metric_ids": [
+      "api_errors",
+      "affected_workspaces"
+    ],
+    "drilldown": "Derived topology with evidence; stale edges marked.",
+    "refresh": "source_watermark_driven",
+    "renderer": "optional_react_flow_with_table_fallback",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "error-pareto",
+    "workbench": "Reliability",
+    "question": "Which failures deserve attention first?",
+    "visual_type": "pareto",
+    "metric_ids": [
+      "api_errors",
+      "affected_workspaces"
+    ],
+    "drilldown": "Counts plus denominators; fingerprints and first/last seen.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "slo-burn",
+    "workbench": "Reliability",
+    "question": "Are we consuming the error budget too quickly?",
+    "visual_type": "line",
+    "metric_ids": [
+      "slo_burn"
+    ],
+    "drilldown": "Approved SLO required; multiple windows and source coverage.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "queue-age-grid",
+    "workbench": "Reliability",
+    "question": "Which work has been waiting too long?",
+    "visual_type": "heatmap",
+    "metric_ids": [
+      "queue_age"
+    ],
+    "drilldown": "Scheduled-future and paused jobs separate; safe reconciliation links.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "release-impact",
+    "workbench": "Reliability",
+    "question": "Did a release coincide with a regression?",
+    "visual_type": "annotated_line",
+    "metric_ids": [
+      "api_errors",
+      "api_latency",
+      "task_success"
+    ],
+    "drilldown": "Exact source/deployment mapping; hypothesis, not proof of cause.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "sha-check-matrix",
+    "workbench": "Engineering",
+    "question": "What has actually been checked on this commit?",
+    "visual_type": "status_matrix",
+    "metric_ids": [
+      "required_checks",
+      "check_failures"
+    ],
+    "drilldown": "Show SHA, workflow SHA, required/pass/fail/skipped/not-run receipts.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "test-instability",
+    "workbench": "Engineering",
+    "question": "Which tests or runners are unreliable?",
+    "visual_type": "line",
+    "metric_ids": [
+      "flake_rate",
+      "check_failures"
+    ],
+    "drilldown": "Code/environment fixed; infrastructure versus functional failures.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "security-aging",
+    "workbench": "Engineering",
+    "question": "Which findings are unresolved or waived?",
+    "visual_type": "aging_table",
+    "metric_ids": [
+      "security_open"
+    ],
+    "drilldown": "Rule/scanner/version/expiry; unknown coverage not green.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "support-backlog",
+    "workbench": "Support",
+    "question": "What needs a reply or escalation?",
+    "visual_type": "aging_histogram",
+    "metric_ids": [
+      "open_tickets"
+    ],
+    "drilldown": "Priority/state/business calendar; censored unanswered tickets.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "support-service",
+    "workbench": "Support",
+    "question": "Are response and resolution improving?",
+    "visual_type": "distribution",
+    "metric_ids": [
+      "first_response",
+      "resolution_time",
+      "csat"
+    ],
+    "drilldown": "Different units use separate aligned panels; CSAT response denominator.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "support-causes",
+    "workbench": "Support",
+    "question": "Which problems repeatedly bring users back?",
+    "visual_type": "pareto",
+    "metric_ids": [
+      "repeat_tickets",
+      "open_tickets"
+    ],
+    "drilldown": "Human-correctable topic clusters; private bodies not broadly exposed.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "decision-outcomes",
+    "workbench": "Decisions",
+    "question": "Which actions produced verified value?",
+    "visual_type": "outcome_table",
+    "metric_ids": [
+      "decision_recovered_cash",
+      "experiment_effect"
+    ],
+    "drilldown": "Technical success and business result separate; no double credit.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "opportunity-portfolio",
+    "workbench": "Decisions",
+    "question": "What should I do next?",
+    "visual_type": "priority_scatter",
+    "metric_ids": [
+      "contribution",
+      "affected_workspaces"
+    ],
+    "drilldown": "Impact scenarios/effort/risk/evidence shown; security/accounting issues prioritized.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  },
+  {
+    "id": "time-back-evidence",
+    "workbench": "Product",
+    "question": "How much effort does Rafii plausibly save?",
+    "visual_type": "interval_bar",
+    "metric_ids": [
+      "time_back"
+    ],
+    "drilldown": "Approved baseline and uncertainty; cannot fabricate historical hours.",
+    "refresh": "source_watermark_driven",
+    "renderer": "recharts_and_table",
+    "access_class": "founder_metadata",
+    "empty_state": "Show unavailable reason, last complete interval and required connection. Never sample data in production.",
+    "required_annotations": [
+      "asOf",
+      "sourceWatermark",
+      "definitionVersion",
+      "dataState",
+      "unit",
+      "grain",
+      "sampleCount"
+    ],
+    "status": "proposed"
+  }
+]

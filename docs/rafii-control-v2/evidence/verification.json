@@ -1,0 +1,64 @@
+{
+  "execution": "local synthetic read-only workflow; hosted operational acceptance BLOCKED",
+  "implementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+  "foundationCommit": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "sourceManifest": "read-workflow-source-manifest.json",
+  "control": {
+    "status": "PASS",
+    "run": 61,
+    "passed": 61,
+    "skipped": 0,
+    "failed": 0,
+    "postgresTests": 14,
+    "migrationsApplied": {
+      "049": 2,
+      "051": 2
+    }
+  },
+  "frontend": {
+    "contracts": 4,
+    "lint": "PASS 0 errors/0 warnings",
+    "typecheck": "PASS included in successful production build",
+    "build": "PASS",
+    "browser": "PASS real Next/WSGI/restricted PostgreSQL at 390/1440; 0 page errors; 0 workflow and Settings axe violations; absent-source, auth 429/503 and receipt-linked copilot verified"
+  },
+  "evidence": [
+    "read-workflow-checks.json",
+    "read-workflow.json",
+    "read-workflow-browser.json",
+    "read-workflow-acceptance.json",
+    "read-workflow-artifact.json",
+    "read-workflow-secret-scan.json",
+    "read-workflow-preflight.json",
+    "read-workflow-pr-state.json"
+  ],
+  "secretScan": "PASS 20 changed source files, 0 findings",
+  "archive": "PASS fresh local archive; no deployable test harness or credentials",
+  "historicalBroadRegressionEvidence": "foundation-verification.json; foundation-snapshot results, not rerun/current-target acceptance",
+  "calls": {
+    "applicationPaidInference": 0,
+    "livePolling": 0,
+    "notifications": 0,
+    "financialActions": 0,
+    "accountActions": 0,
+    "productEngineeringWrites": 0,
+    "hostedProvisioning": 0,
+    "productionMigration": 0,
+    "productionConfigurationChange": 0,
+    "mergeOrPromote": 0,
+    "ControlPreview": 0
+  },
+  "delivery": {
+    "localImplementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+    "remoteDraftPR": 83,
+    "remoteFeatureHead": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+    "push": "BLOCKED pending verified suppression or explicit approval for possible automatic consumer Preview",
+    "handoff": "../milestone-handoff.md"
+  },
+  "acceptanceCounts": {
+    "passed": 16,
+    "failed": 0,
+    "blocked": 25,
+    "out_of_scope": 55
+  }
+}

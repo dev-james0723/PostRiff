@@ -1,0 +1,56 @@
+{
+  "execution": "reviewable candidate; not provisioned, enabled or deployed",
+  "branch": "codex/rafii-founder-completion-20260930",
+  "baseCommit": "c16747efcaa298a05477d1fda680d23cb9108dad",
+  "integratedFounderHomeCommit": "861e20d1f2b5da519d6b21810b4a7642ca55ac93",
+  "releaseTargetBranch": "consumer-saas",
+  "observedTargetCommit": "1acd88a8b77c5e8a3f2b877dd927e755c2900a56",
+  "controlProject": null,
+  "origin": null,
+  "stagingProjectRef": null,
+  "productionProjectRef": null,
+  "environment": "staging",
+  "secureEnvironmentNames": [
+    "RAFII_CONTROL_ENABLED",
+    "RAFII_CONTROL_ENVIRONMENT",
+    "RAFII_CONTROL_ORIGIN",
+    "RAFII_CONTROL_SESSION_DSN",
+    "RAFII_CONTROL_READER_DSN",
+    "RAFII_CONTROL_SUPABASE_URL",
+    "RAFII_CONTROL_SUPABASE_PUBLISHABLE_KEY",
+    "RAFII_CONTROL_STAGING_PROJECT_REF",
+    "RAFII_CONTROL_PRODUCTION_PROJECT_REF",
+    "NEXT_PUBLIC_CONTROL_SUPABASE_URL",
+    "NEXT_PUBLIC_CONTROL_SUPABASE_PUBLISHABLE_KEY"
+  ],
+  "databaseRequirements": [
+    "Existing canonical Rafii schema; no parallel business database",
+    "Read hosted migration history before any apply",
+    "Pinned 049/051/052/053 only after explicit migration approval",
+    "Distinct restricted session/reader logins; no superuser or BYPASSRLS login",
+    "TLS verify-full; port 5432 session mode; declared database/identity binding",
+    "Production origin must be an approved ops. hostname"
+  ],
+  "founderTest": {
+    "designatedEmail": "jamesau0723@gmail.com",
+    "userUuid": null,
+    "workspaceUuid": null,
+    "permittedAction": "workspace name change then restore original name",
+    "requires": [
+      "Existing verified AAL2 founder enrollment",
+      "Explicit workspaces.test.rename capability",
+      "Expiring exact operator/workspace grant",
+      "No account pending deletion",
+      "Record original name and revision; confirm restore in Rafii"
+    ]
+  },
+  "enabledEffects": [],
+  "requiredLiveBlockers": [
+    "Dedicated Control project/origin and qualified restricted database/identity settings",
+    "Hosted migration history and scoped apply/enrollment approval",
+    "Payment receipt schema and credit-policy/balance qualification",
+    "Approved Live support record source/scope",
+    "Authenticated deployed login and real account rename/restore acceptance"
+  ],
+  "unrelatedConsumerReleaseModified": false
+}

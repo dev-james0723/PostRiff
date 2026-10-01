@@ -1,0 +1,280 @@
+{
+  "scope": "Artifact/contract consistency validation only. No Rafii product test, production scan, vendor integration or engineering execution was performed.",
+  "generated_at": "2026-09-29T23:11:37.376721+00:00",
+  "counts": {
+    "metrics": 63,
+    "visualizations": 44,
+    "detectors": 14,
+    "acceptance_cases_designed_not_run": 96,
+    "json_schemas": 9,
+    "openapi_paths": 16
+  },
+  "checks": [
+    {
+      "name": "parse:catalogs/acceptance-cases.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:catalogs/action-policy.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:catalogs/dashboards.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:catalogs/detectors.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:catalogs/integrations.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:catalogs/metrics.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/approval-request.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/chart-spec.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/copilot-turn.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/engineering-check.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/engineering-receipt.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/error.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/event-envelope.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/metric-query.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:contracts/recommendation.schema.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:examples/engineering-check.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:examples/engineering-receipt.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:examples/event-envelope.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:examples/metric-query.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:examples/recommendation.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:reader-qa.json",
+      "status": "pass"
+    },
+    {
+      "name": "parse:research/sources.json",
+      "status": "pass"
+    },
+    {
+      "name": "schema:error",
+      "status": "pass"
+    },
+    {
+      "name": "schema:engineering-receipt",
+      "status": "pass"
+    },
+    {
+      "name": "schema:approval-request",
+      "status": "pass"
+    },
+    {
+      "name": "schema:metric-query",
+      "status": "pass"
+    },
+    {
+      "name": "schema:engineering-check",
+      "status": "pass"
+    },
+    {
+      "name": "schema:event-envelope",
+      "status": "pass"
+    },
+    {
+      "name": "schema:recommendation",
+      "status": "pass"
+    },
+    {
+      "name": "schema:copilot-turn",
+      "status": "pass"
+    },
+    {
+      "name": "schema:chart-spec",
+      "status": "pass"
+    },
+    {
+      "name": "example:engineering-check",
+      "status": "pass"
+    },
+    {
+      "name": "example:engineering-receipt",
+      "status": "pass"
+    },
+    {
+      "name": "example:event-envelope",
+      "status": "pass"
+    },
+    {
+      "name": "example:metric-query",
+      "status": "pass"
+    },
+    {
+      "name": "example:recommendation",
+      "status": "pass"
+    },
+    {
+      "name": "metric IDs unique",
+      "status": "pass"
+    },
+    {
+      "name": "chart IDs unique",
+      "status": "pass"
+    },
+    {
+      "name": "every chart metric exists",
+      "status": "pass"
+    },
+    {
+      "name": "MRR bridge includes reactivation",
+      "status": "pass"
+    },
+    {
+      "name": "sources unique",
+      "status": "pass"
+    },
+    {
+      "name": "all detector rules disabled",
+      "status": "pass"
+    },
+    {
+      "name": "all product cases remain not-run",
+      "status": "pass"
+    },
+    {
+      "name": "all synthetic execution fixtures labeled",
+      "status": "pass"
+    },
+    {
+      "name": "reject raw SQL property",
+      "status": "pass"
+    },
+    {
+      "name": "reject unknown private-content metric",
+      "status": "pass"
+    },
+    {
+      "name": "reject unbounded query output",
+      "status": "pass"
+    },
+    {
+      "name": "reject mutable branch as check SHA",
+      "status": "pass"
+    },
+    {
+      "name": "reject arbitrary runner command",
+      "status": "pass"
+    },
+    {
+      "name": "reject production environment for disposable check",
+      "status": "pass"
+    },
+    {
+      "name": "fixture query semantic consistency",
+      "status": "pass"
+    },
+    {
+      "name": "reject invalid per-metric dimension",
+      "status": "pass"
+    },
+    {
+      "name": "reject empty interval",
+      "status": "pass"
+    },
+    {
+      "name": "partial receipt remains honest",
+      "status": "pass"
+    },
+    {
+      "name": "reject false all-passed receipt",
+      "status": "pass"
+    },
+    {
+      "name": "OpenAPI version",
+      "status": "pass"
+    },
+    {
+      "name": "OpenAPI refs resolve",
+      "status": "pass"
+    },
+    {
+      "name": "OpenAPI default founder auth",
+      "status": "pass"
+    },
+    {
+      "name": "no execute-anything route",
+      "status": "pass"
+    },
+    {
+      "name": "main sections 0 to 23 present",
+      "status": "pass"
+    },
+    {
+      "name": "four detailed appendices present",
+      "status": "pass"
+    },
+    {
+      "name": "design-only boundary present",
+      "status": "pass"
+    },
+    {
+      "name": "no TODO or TBD placeholders",
+      "status": "pass"
+    },
+    {
+      "name": "no leaked tool citation markup",
+      "status": "pass"
+    },
+    {
+      "name": "basic secret-shape scan",
+      "status": "pass"
+    },
+    {
+      "name": "integration source refs exist",
+      "status": "pass"
+    }
+  ],
+  "passed": 66,
+  "failed": 0
+}

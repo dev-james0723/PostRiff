@@ -1,0 +1,422 @@
+{
+  "execution": "local_synthetic",
+  "query": {
+    "metricIds": [
+      "check_failures"
+    ],
+    "interval": {
+      "start": "2026-09-02T03:58:59.865343+00:00",
+      "end": "2026-09-30T03:59:04.865343+00:00",
+      "timeZone": "UTC"
+    },
+    "groupBy": [
+      "suite",
+      "failure_class"
+    ],
+    "filters": [
+      {
+        "dimension": "suite",
+        "operator": "in",
+        "values": [
+          "acceptance-718c8ba4-zero",
+          "acceptance-718c8ba4-one",
+          "acceptance-718c8ba4-partial",
+          "acceptance-718c8ba4-stale"
+        ]
+      }
+    ],
+    "comparison": "none",
+    "limit": 100
+  },
+  "response": {
+    "requestId": "d5900053-4854-452f-8c3f-8e3e63c9f302",
+    "queryReceiptId": "8317711e-8ea1-4da6-b810-e42dd2f7641a",
+    "asOf": "2026-09-30T03:58:59.898231+00:00",
+    "dataState": "partial",
+    "rows": [
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-one",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "dataState": "measured",
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "reason": "synthetic_source_receipts",
+        "sourceReceiptIds": [
+          "bbe7b3fb-b78e-40fa-b482-eee58d75edf9"
+        ],
+        "fixture": true,
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "queryTemplateRef": "metrics/check_failures/v1"
+      },
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "runner check",
+        "value": null,
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-partial",
+          "failure_class": "test"
+        },
+        "sampleCount": 0,
+        "dataState": "partial",
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "reason": "synthetic_coverage_incomplete",
+        "sourceReceiptIds": [
+          "8662d587-3844-4a93-9d6e-79779b176816"
+        ],
+        "fixture": true,
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "queryTemplateRef": "metrics/check_failures/v1"
+      },
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-stale",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "dataState": "stale",
+        "sourceWatermark": "2026-09-29T21:58:59.865343-04:00",
+        "reason": "synthetic_source_stale",
+        "sourceReceiptIds": [
+          "01d73642-5746-4527-8f86-eb8e76e08542"
+        ],
+        "fixture": true,
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "queryTemplateRef": "metrics/check_failures/v1"
+      },
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "runner check",
+        "value": 0,
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-zero",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "dataState": "measured",
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "reason": "synthetic_source_receipts",
+        "sourceReceiptIds": [
+          "6616b446-e657-48b6-81aa-1c8dc001de44"
+        ],
+        "fixture": true,
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "queryTemplateRef": "metrics/check_failures/v1"
+      }
+    ],
+    "executionState": "local_synthetic",
+    "warnings": [
+      "Synthetic local source receipts; excluded from operational business metrics. Proposed policies remain inactive. Missing data is not zero."
+    ]
+  },
+  "receipt": {
+    "id": "8317711e-8ea1-4da6-b810-e42dd2f7641a",
+    "query_digest": "173c32b0254adaa1e17d3c286423d55fd15426b4967d87a62d1b04063ba964af",
+    "metric_versions": {
+      "check_failures": 1
+    },
+    "data_state": "partial",
+    "source_watermarks": {
+      "01d73642-5746-4527-8f86-eb8e76e08542": "2026-09-29T21:58:59.865343-04:00",
+      "6616b446-e657-48b6-81aa-1c8dc001de44": "2026-09-29T23:58:49.865343-04:00",
+      "8662d587-3844-4a93-9d6e-79779b176816": "2026-09-29T23:58:49.865343-04:00",
+      "bbe7b3fb-b78e-40fa-b482-eee58d75edf9": "2026-09-29T23:58:49.865343-04:00"
+    },
+    "row_count": 4,
+    "created_at": "2026-09-29T23:58:59.909766-04:00",
+    "expires_at": "2026-12-28T23:58:59.909766-05:00",
+    "result_rows": [
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "reason": "synthetic_source_receipts",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-one",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "bbe7b3fb-b78e-40fa-b482-eee58d75edf9"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": null,
+        "reason": "synthetic_coverage_incomplete",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "partial",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-partial",
+          "failure_class": "test"
+        },
+        "sampleCount": 0,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "8662d587-3844-4a93-9d6e-79779b176816"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "reason": "synthetic_source_stale",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "stale",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-stale",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T21:58:59.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "01d73642-5746-4527-8f86-eb8e76e08542"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 0,
+        "reason": "synthetic_source_receipts",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-zero",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "6616b446-e657-48b6-81aa-1c8dc001de44"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      }
+    ],
+    "execution_state": "local_synthetic"
+  },
+  "copilot": {
+    "version": 1,
+    "traceId": "trace_8735b0be2759b0e766e7cce408f2f166",
+    "modality": "text",
+    "answerText": "Synthetic local evidence snapshot; proposed policies remain inactive. check_failures ({\"failure_class\":\"test\",\"suite\":\"acceptance-718c8ba4-one\"}): 1, measured, samples 1. check_failures ({\"failure_class\":\"test\",\"suite\":\"acceptance-718c8ba4-partial\"}): unavailable, partial, samples 0. check_failures ({\"failure_class\":\"test\",\"suite\":\"acceptance-718c8ba4-stale\"}): 1, stale, samples 1. check_failures ({\"failure_class\":\"test\",\"suite\":\"acceptance-718c8ba4-zero\"}): 0, measured, samples 1. Quality states describe the receipt snapshot. Stale, partial and unavailable rows cannot support a current operational conclusion. No action was performed.",
+    "speakableSummary": "Synthetic local evidence.",
+    "references": [],
+    "citations": [],
+    "facts": [],
+    "toolActivity": [],
+    "task": null,
+    "changedEntities": [],
+    "pendingApprovals": [],
+    "generatedAssets": [],
+    "warnings": [
+      {
+        "code": "MODEL_DISABLED",
+        "message": "Model generation and scheduled investigations are disabled pending explicit budget and access approval."
+      }
+    ],
+    "errors": [],
+    "usage": {
+      "providerCalls": 0,
+      "costState": "not_applicable"
+    },
+    "routes": [],
+    "blocks": [],
+    "composedBy": "grounded",
+    "runId": "7e686288-75a9-4b30-aba2-2ad77215bc42",
+    "namespace": "founder",
+    "mode": "deterministic_read_only",
+    "evidenceRows": [
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "reason": "synthetic_source_receipts",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-one",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "bbe7b3fb-b78e-40fa-b482-eee58d75edf9"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": null,
+        "reason": "synthetic_coverage_incomplete",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "partial",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-partial",
+          "failure_class": "test"
+        },
+        "sampleCount": 0,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "8662d587-3844-4a93-9d6e-79779b176816"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 1,
+        "reason": "synthetic_source_stale",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "stale",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-stale",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T21:58:59.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "01d73642-5746-4527-8f86-eb8e76e08542"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "runner check",
+        "value": 0,
+        "reason": "synthetic_source_receipts",
+        "fixture": true,
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "acceptance-718c8ba4-zero",
+          "failure_class": "test"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-29T23:58:49.865343-04:00",
+        "queryTemplateRef": "metrics/check_failures/v1",
+        "sourceReceiptIds": [
+          "6616b446-e657-48b6-81aa-1c8dc001de44"
+        ],
+        "defaultExclusions": [
+          "synthetic",
+          "test",
+          "internal_founder_activity"
+        ],
+        "definitionVersion": 1
+      }
+    ],
+    "state": "completed",
+    "queryReceiptIds": [
+      "8317711e-8ea1-4da6-b810-e42dd2f7641a"
+    ],
+    "recommendations": [],
+    "tools": [
+      {
+        "name": "founder.metrics.query",
+        "effect": "READ",
+        "permission": "metrics.query",
+        "approval": false,
+        "voice": true,
+        "idempotent": true,
+        "audit": "metrics.query"
+      },
+      {
+        "name": "founder.recommendation.prepare",
+        "effect": "CREATE_DRAFT",
+        "permission": "copilot.use",
+        "approval": true,
+        "voice": true,
+        "idempotent": true,
+        "audit": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,1247 @@
+diff --git a/control-web/app/control/founder-workspace.tsx b/control-web/app/control/founder-workspace.tsx
+index d7b447a2..f67c0981 100644
+--- a/control-web/app/control/founder-workspace.tsx
++++ b/control-web/app/control/founder-workspace.tsx
+@@ -18,8 +18,10 @@ async function request<T>(path:string,options:RequestInit={}):Promise<Envelope<T
+  return response.json();
+ }
+ function href(section:string,mode:Mode,record?:string){return '/control/'+section+'?mode='+mode+(record?'&record='+encodeURIComponent(record):'');}
+-function label(row:Row){return String(row.name||row.title||row.plan||row.label||row.dimension||'Unnamed record');}
++function label(row:Row){return String(row.name||row.title||row.plan||row.label||(row.dimension?state(row.dimension):'Unnamed record'));}
+ function money(amount:unknown,currency:unknown){return typeof amount==='number'||typeof amount==='string'?new Intl.NumberFormat('en',{style:'currency',currency:String(currency||'USD')}).format(Number(amount)/100):'Terms not approved';}
++const detailLabels:Record<string,string>={ownerId:'Owner reference',workspaceId:'Workspace reference',memberCount:'Members',amountMinor:'Amount',actualUsdMicro:'Recorded cost (USD)',costState:'Cost status',termsStatus:'Price approval',createdAt:'Created',renewsAt:'Renewal date',at:'Recorded'};
++function recordedCost(value:unknown){const amount=Number(value);return Number.isFinite(amount)?new Intl.NumberFormat('en',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:6}).format(amount/1000000):'Not recorded';}
+ function when(value:unknown){return typeof value==='string'?new Date(value).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}):'Not recorded';}
+ function state(value:unknown){return String(value||'Not recorded').replaceAll('_',' ');}
+ export default function FounderWorkspace({section,mode,record}:{section:string;mode:Mode;record?:string}){
+@@ -66,21 +68,21 @@ function Workspace({section,mode,record}:{section:string;mode:Mode;record?:strin
+  {!data&&!session.error&&!result.error&&<div className="loading" role="status">{session.data?'Loading workspace records…':'Verifying your founder session…'}</div>}
+  {data&&<>
+  {section==='command'&&<><section className="welcome"><div><span className="badge live-badge">{mode==='demo'?'Demo is ready to explore':'Database connected'}</span><h2>{billingReviews||data.summary.openRequests?'A few things need your attention.':'Your workspace is up to date.'}</h2><p>{mode==='demo'?'Follow a customer through their workspace, payment and support request.':'Customer and workspace records are connected. Review outstanding requests and billing status below.'}</p><Link className="primary-action" href={href('customers',mode)}>Explore customers <span>→</span></Link></div><div className="welcome-note"><span className="eyebrow">Next step</span><h3>{billingReviews?'Review payment attention':data.summary.openRequests?'Review customer requests':'Review recent usage'}</h3><p>{billingReviews?`${billingReviews} workspace${billingReviews===1?'':'s'} needs a billing review.`:data.summary.openRequests?`${data.summary.openRequests} request${data.summary.openRequests===1?'':'s'} is waiting.`:'See what customers are doing in Product.'}</p><Link href={href(billingReviews?'billing':data.summary.openRequests?'support':'product',mode)}>Open {billingReviews?'billing':data.summary.openRequests?'support':'product'} →</Link></div></section>
+- <div className="grid metric-grid">{[['Customers',data.summary.customers,'customers'],['Workspaces',data.summary.workspaces,'workspaces'],['Active subscriptions',data.summary.activeSubscriptions,'billing']].map(([text,value,to])=><Link className="card metric-link" key={String(text)} href={href(String(to),mode)}><span>{text}</span><strong>{value}</strong><span className="small muted">{mode==='demo'?'Sample':'Canonical total'} · View records →</span></Link>)}</div>
++ <div className="grid metric-grid">{[['Customers',data.summary.customers,'customers'],['Workspaces',data.summary.workspaces,'workspaces'],['Active subscriptions',data.summary.activeSubscriptions,'billing']].map(([text,value,to])=><Link className="card metric-link" key={String(text)} href={href(String(to),mode)}><span>{text}</span><strong>{value}</strong><span className="small muted">{mode==='demo'?'Sample':'Live total'} · View records →</span></Link>)}</div>
+  <div className="home-columns"><section className="panel"><div className="panel-heading"><h2>Needs attention</h2><Link href={href('support',mode)}>View support →</Link></div>{needs.slice(0,5).map(w=><Link className="attention-row" key={w.id} href={href('workspaces',mode,w.id)}><span><strong>{label(w)}</strong><small>Review billing status</small></span><span className="badge">{state(w.status)}</span></Link>)}{data.tickets.filter(t=>['open','requested'].includes(String(t.status))).slice(0,3).map(t=><div className="attention-row" key={t.id}><span><strong>{label(t)}</strong><small>{workspaceName(t.workspaceId)}</small></span><Link href={href('support',mode)}>Review →</Link></div>)}{!billingReviews&&!data.summary.openRequests&&<p className="empty">No outstanding requests or past-due subscriptions.</p>}</section><section className="panel"><h2>Recent activity</h2>{data.activity.slice(0,5).map(r=><div className="activity-row" key={r.id}><span>{state(r.label)}</span><small>{when(r.at)}</small></div>)}{!data.activity.length&&<p className="empty">No Founder Control actions have been recorded.</p>}<Link href={href('product',mode)}>Review usage →</Link></section></div>
+  <p className="small muted">{mode==='demo'?'Sample prices and dates are fictional.':`Records refreshed ${new Date(result.data!.asOf).toLocaleString()}. Revenue metrics require separately approved definitions.`}</p></>}
+  {['customers','workspaces','billing','support','product'].includes(section)&&<>
+  {section==='billing'&&<div className="tabs" role="group" aria-label="Billing view">{['subscriptions','payments','usage'].map(t=><button className="quiet" key={t} aria-pressed={tab===t} onClick={()=>{setTab(t);setSearch('');setSettledSearch('');setFilter('all');setPage(1);}}>{t==='subscriptions'?'Subscriptions':t==='payments'?'Payments':'Credit & usage activity'}</button>)}</div>}
+- {section==='billing'&&tab==='payments'&&data.paymentState==='not_configured'&&<div className="connection-note"><h2>Payment receipts are not connected</h2><p>The canonical purchase schema is missing. This is different from zero payments.</p><Link href={href('settings',mode)}>Review Connections →</Link></div>}
+- {section==='support'&&mode==='live'&&<p className="connection-note">Showing canonical data-request metadata. Customer conversations and outbound replies require approved support access.</p>}
+- {section==='billing'&&tab==='usage'&&mode==='live'&&<p className="connection-note">Showing canonical usage-ledger entries. These are not a credit balance; reserves, releases and settlements remain separate. Credit-policy qualification is still required.</p>}
++ {section==='billing'&&tab==='payments'&&data.paymentState==='not_configured'&&<div className="connection-note"><h2>Payment receipts are not connected</h2><p>The payment records connection needs setup. No payments have been counted yet.</p><Link href={href('settings',mode)}>Review Connections →</Link></div>}
++ {section==='support'&&mode==='live'&&<p className="connection-note">Showing account requests. Customer conversations and replies need the approved support connection.</p>}
++ {section==='billing'&&tab==='usage'&&mode==='live'&&<p className="connection-note">Showing recorded usage. Available credits cannot be shown until the credit terms and balance calculation are approved.</p>}
+  <section className="panel records">{record&&<p><Link href={href(section,mode)}>View all {section} →</Link></p>}<div className="toolbar"><label>Search {section==='billing'?tab:section}<input type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}} placeholder="Search names or record IDs"/></label>{!['product'].includes(section)&&<label>Status<select aria-label="Status" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);}}><option value="all">All statuses</option>{(list?.statuses||[]).map(s=><option key={s} value={s}>{state(s)}</option>)}</select></label>}<span className="small muted">{list?`${collection.length} of ${list.total} records`:'Loading records…'}</span></div>
+  {listing.error&&<div className="error" role="alert"><h2>Records could not be loaded</h2><p>{listing.error.message}</p><button onClick={()=>listing.refetch()}>Retry search</button></div>}{listReady&&!list&&!listing.error&&<p role="status">Searching records…</p>}
+- {list&&<><div className="table-scroll" role="region" tabIndex={0} aria-label={title[0]+' records'}><table><caption className="sr-only">{title[0]} · {mode==='demo'?'fictional sample data':'canonical metadata'}</caption><thead><tr><th scope="col">{section==='customers'?'Customer':section==='workspaces'?'Workspace':section==='support'?'Request':section==='product'||tab==='usage'?'Activity':'Workspace'}</th><th scope="col">{section==='customers'?'Workspaces':section==='workspaces'?'Plan':section==='support'?'Workspace':section==='product'||tab==='usage'?'Usage':'Amount'}</th><th scope="col">{section==='product'||tab==='usage'?'Cost quality':'Status'}</th><th scope="col">Details</th></tr></thead><tbody>{collection.map(r=><tr key={r.id}><td><strong>{section==='billing'?workspaceName(r.workspaceId):label(r)}</strong><small className="record-id">{r.id}</small></td><td>{section==='customers'?((r.workspaceIds as string[])||[]).map(id=><Link className="inline-link" key={id} href={href('workspaces',mode,id)}>{workspaceName(id)}</Link>):section==='workspaces'?String(r.plan||'No subscription'):section==='support'?workspaceName(r.workspaceId):section==='product'||tab==='usage'?`${r.quantity} ${r.unit} · ${workspaceName(r.workspaceId)}`:money(r.amountMinor,r.currency)}</td><td><span className="badge">{state(r.status||r.costState)}</span></td><td><button className="quiet" onClick={()=>open(r)} aria-label={'Open '+label(r)}>Open →</button></td></tr>)}</tbody></table></div>{!collection.length&&<div className="empty"><h3>{search||filter!=='all'?'No matching records':'No records yet'}</h3><p>{search||filter!=='all'?'Try a different search or status.':'This connected view returned no records.'}</p>{(search||filter!=='all')&&<button className="quiet" onClick={()=>{setSearch('');setSettledSearch('');setFilter('all');setPage(1);}}>Clear filters</button>}</div>}<div className="pagination" aria-label="Record pages"><button className="quiet" disabled={page===1||listing.isFetching} onClick={()=>setPage(p=>p-1)}>Previous page</button><span className="small muted">Page {page} of {Math.max(1,Math.ceil(list.total/list.pageSize))}</span><button className="quiet" disabled={page*list.pageSize>=list.total||listing.isFetching} onClick={()=>setPage(p=>p+1)}>Next page</button></div></>}</section></>}
+- {section==='settings'&&<section className="panel"><h2>Connection readiness</h2>{data.connections.map(c=><div className="connection-row" key={c.id}><div><h3>{c.label}{c.required?' · Required':''}</h3><p>{c.detail}</p></div><span className="badge">{state(c.state)}</span></div>)}<div className="connection-row"><div><h3>Founder identity · Required</h3><p>Your session passed founder authorization and second-factor verification.</p></div><span className="badge live-badge">Verified</span></div><p className="small muted">Secrets and operator enrollment use the existing secure configuration process. No integrations are enabled by visiting this page.</p><Link href="/control/audit">View access policies and audit →</Link></section>}
++ {list&&<><div className="table-scroll" role="region" tabIndex={0} aria-label={title[0]+' records'}><table><caption className="sr-only">{title[0]} · {mode==='demo'?'fictional sample data':'Live records'}</caption><thead><tr><th scope="col">{section==='customers'?'Customer':section==='workspaces'?'Workspace':section==='support'?'Request':section==='product'||tab==='usage'?'Activity':'Workspace'}</th><th scope="col">{section==='customers'?'Workspaces':section==='workspaces'?'Plan':section==='support'?'Workspace':section==='product'||tab==='usage'?'Usage':'Amount'}</th><th scope="col">{section==='product'||tab==='usage'?'Cost quality':'Status'}</th><th scope="col">Details</th></tr></thead><tbody>{collection.map(r=><tr key={r.id}><td><strong>{section==='billing'?workspaceName(r.workspaceId):label(r)}</strong><small className="record-id">{r.id}</small></td><td>{section==='customers'?((r.workspaceIds as string[])||[]).map(id=><Link className="inline-link" key={id} href={href('workspaces',mode,id)}>{workspaceName(id)}</Link>):section==='workspaces'?String(r.plan||'No subscription'):section==='support'?workspaceName(r.workspaceId):section==='product'||tab==='usage'?`${r.quantity} ${r.unit} · ${workspaceName(r.workspaceId)}`:money(r.amountMinor,r.currency)}</td><td><span className="badge">{state(r.status||r.costState)}</span></td><td><button className="quiet" onClick={()=>open(r)} aria-label={'Open '+label(r)}>Open →</button></td></tr>)}</tbody></table></div>{!collection.length&&<div className="empty"><h3>{search||filter!=='all'?'No matching records':'No records yet'}</h3><p>{search||filter!=='all'?'Try a different search or status.':'This connected view returned no records.'}</p>{(search||filter!=='all')&&<button className="quiet" onClick={()=>{setSearch('');setSettledSearch('');setFilter('all');setPage(1);}}>Clear filters</button>}</div>}<div className="pagination" aria-label="Record pages"><button className="quiet" disabled={page===1||listing.isFetching} onClick={()=>setPage(p=>p-1)}>Previous page</button><span className="small muted">Page {page} of {Math.max(1,Math.ceil(list.total/list.pageSize))}</span><button className="quiet" disabled={page*list.pageSize>=list.total||listing.isFetching} onClick={()=>setPage(p=>p+1)}>Next page</button></div></>}</section></>}
++ {section==='settings'&&<section className="panel"><h2>Connection readiness</h2>{data.connections.map(c=><div className="connection-row" key={c.id}><div><h3>{c.label}{c.required?' · Required':''}</h3><p>{c.detail}</p></div><span className="badge">{['not_qualified','not_configured'].includes(c.state)?'Setup required':c.state==='metadata_only'?'Account requests only':state(c.state)}</span></div>)}<div className="connection-row"><div><h3>Founder identity · Required</h3><p>Your session passed founder authorization and second-factor verification.</p></div><span className="badge live-badge">Verified</span></div><p className="small muted">Secrets and operator enrollment use the existing secure configuration process. No integrations are enabled by visiting this page.</p><Link href="/control/audit">View access policies and audit →</Link></section>}
+  {section==='advanced'&&<section className="panel"><h2>Evidence & operations</h2><p>These tools query Live engineering evidence. Demo business actions remain isolated.</p><div className="advanced-links">{[['evidence','Delivery overview'],['engineering','GitHub checks & receipts'],['founder','Founder investigation'],['audit','Access & audit'],['infrastructure','Infrastructure definitions']].map(([id,text])=><Link key={id} href={'/control/'+id}>{text} →</Link>)}</div></section>}
+  </>}
+- <dialog ref={dialog} className="detail-dialog" onClose={()=>{setSelected(null);setActionError('');pending.current=null;}}><div className="panel-heading"><h2>{selected?label(selected):'Record details'}</h2><button className="quiet" onClick={()=>dialog.current?.close()} aria-label="Close details">Close</button></div>{selected&&<><p className="small muted">{mode==='demo'?'Demo · Fictional record':'Live · Canonical metadata'} · {selected.id}</p><dl>{Object.entries(selected).filter(([k,v])=>!['id','renameAllowed','workspaceIds'].includes(k)&&v!==null&&typeof v!=='object').map(([k,v])=><div key={k}><dt>{k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase())}</dt><dd>{state(v)}</dd></div>)}</dl>{!!selected.workspaceId&&<Link className="primary-action" href={href('workspaces',mode,String(selected.workspaceId))}>Open workspace →</Link>}
++ <dialog ref={dialog} className="detail-dialog" onClose={()=>{setSelected(null);setActionError('');pending.current=null;}}><div className="panel-heading"><h2>{selected?label(selected):'Record details'}</h2><button className="quiet" onClick={()=>dialog.current?.close()} aria-label="Close details">Close</button></div>{selected&&<><p className="small muted">{mode==='demo'?'Demo · Fictional record':'Live record'} · {selected.id}</p><dl>{Object.entries(selected).filter(([k,v])=>!['id','renameAllowed','workspaceIds','sourceId','revision','currency'].includes(k)&&v!==null&&typeof v!=='object').map(([k,v])=><div key={k}><dt>{detailLabels[k]||k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase())}</dt><dd>{k==='amountMinor'?money(v,selected.currency):k==='actualUsdMicro'?recordedCost(v):['createdAt','renewsAt','at'].includes(k)?when(v):state(v)}</dd></div>)}</dl>{!!selected.workspaceId&&<Link className="primary-action" href={href('workspaces',mode,String(selected.workspaceId))}>Open workspace →</Link>}
+  {section==='workspaces'&&!!selected.renameAllowed&&<form onSubmit={e=>{e.preventDefault();void mutate('rename_workspace',selected.id,name);}}><label htmlFor="workspace-name">Workspace name<input id="workspace-name" value={name} maxLength={80} required onChange={e=>setName(e.target.value)}/></label><p className="small muted">{mode==='demo'?'Changes only this sample workspace.':'Approved test workspace only. This changes the name in Rafii; restore its original name after verification.'}</p><button type="submit" disabled={busy}>{busy?'Saving…':pending.current?'Retry save':'Save name'}</button></form>}
+  {mode==='demo'&&section==='support'&&<button onClick={()=>mutate(selected.status==='completed'?'reopen_ticket':'resolve_ticket',selected.id)} disabled={busy}>{selected.status==='completed'?'Reopen sample request':'Resolve sample request'}</button>}
+  {mode==='demo'&&section==='billing'&&tab==='payments'&&selected.status==='pending'&&<button onClick={()=>mutate('simulate_payment',selected.id)} disabled={busy}>Simulate successful payment</button>}
+diff --git a/control-web/package-lock.json b/control-web/package-lock.json
+index 4a1bf63f..48845d33 100644
+--- a/control-web/package-lock.json
++++ b/control-web/package-lock.json
+@@ -10,7 +10,7 @@
+       "dependencies": {
+         "@supabase/supabase-js": "2.116.0",
+         "@tanstack/react-query": "5.102.8",
+-        "next": "16.3.5",
++        "next": "16.3.8",
+         "react": "19.2.4",
+         "react-dom": "19.2.4",
+         "recharts": "3.8.0"
+@@ -588,15 +588,15 @@
+       }
+     },
+     "node_modules/@next/env": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.3.5.tgz",
+-      "integrity": "sha512-NWEXVDMqoEo0ktmU6u0sE2Vg0LOcsD7NnOTJNo3/fEaTfsg+F1bMIxuDmQbda4e3yTIQwVdUREF2yIuMOusKtg==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.3.8.tgz",
++      "integrity": "sha512-Al9zqHVV7TJv0eFuOU4U7Lvv74PTih4Ch63sk2xCIpSTkE3udFnaOcnzP2lQVymiL7yS9Cj2iClUXlR3EQ5sEw==",
+       "license": "MIT"
+     },
+     "node_modules/@next/swc-darwin-arm64": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.3.5.tgz",
+-      "integrity": "sha512-pMmGgETfKvElucLHtVaeiMRbp2zUbvKx7b1yGko0liBz3cw1mKSggWN/Rp/wPz8z+E1O82u3r4L1Co+ZS5hokQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.3.8.tgz",
++      "integrity": "sha512-2JPRMh2nmQG5CiL7cXGL9AGwnPWJQ//cTtAUCT+w511QHk79SYz3LGv/pc5X643B/WEO0rvu3Yww0hqwt3kgeA==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -610,9 +610,9 @@
+       }
+     },
+     "node_modules/@next/swc-darwin-x64": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.3.5.tgz",
+-      "integrity": "sha512-76VaGYvf6HPa5/w12yLkE3dXTn9AfdEviI79oEL3aZoAmRLc9rWitjWqyjViVysK/ht/y9YKzFkBrUdi/wGkow==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.3.8.tgz",
++      "integrity": "sha512-GZtCCOBKJ4leVIT/Th0llWKhD1ca92lzbQiS5R5ON9QkoiFnilFsebDae1JU2a3HWoKMEmEZWGs1AGLavVM72Q==",
+       "cpu": [
+         "x64"
+       ],
+@@ -626,9 +626,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-arm64-gnu": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.3.5.tgz",
+-      "integrity": "sha512-zKDELJ5jSQMHeO/hmXUQsAzagX4bQD4OiMi3pQ5FbUj+yK506oLVHnKA2YXMlbg1EHHqJYtyePOgByIDXD1lqw==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.3.8.tgz",
++      "integrity": "sha512-O659ygeQYqneJ1fBKMpFxIFqYkYswu8IAS1OCKK/4f3ZgJJm1dRz4fVJZRi/kLLWjnBKnebOePA4WNv+sV1pVA==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -645,9 +645,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-arm64-musl": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.3.5.tgz",
+-      "integrity": "sha512-7Vql0pgzCoHagv6+FNOZoqmJqA52c6zeVbhtS/47qFozO1MSx4ms7x7GHiciY8R5CDsSMKMQjJEryoJLcsBIbA==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.3.8.tgz",
++      "integrity": "sha512-dSjKSyWpzxoO1d3DIZZcP4XJcNaKeLmxQMFOiYl5vuBRMmweIqnAhty8tAmRsvTss779cK1FtYnDMj40e4TQlg==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -664,9 +664,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-x64-gnu": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.3.5.tgz",
+-      "integrity": "sha512-NH/xzehyHEFWE2nlcZon7TB/0+H4shfWCi7S1zka815XCOhJDYZhoeJtOYy0dh0WVRWACVXSyGNFFytoMxUhRg==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.3.8.tgz",
++      "integrity": "sha512-lbqOuz3RPRcv+o9msNsJw5x4+Y1ZwPTs6vmL6DCf7i0fZfvng/F59wyeDwqHIvV0mK//RBy/jJkZ+nCKsSMXjQ==",
+       "cpu": [
+         "x64"
+       ],
+@@ -683,9 +683,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-x64-musl": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.3.5.tgz",
+-      "integrity": "sha512-lV4+EhWMfS8jcC+EH2nn/Cm5cn6XsgbE07bU9tMH8fCo0tNAqhyzi1b5wQ/Tn6NGFTvKDY65w3ZH95EjwBRAnQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.3.8.tgz",
++      "integrity": "sha512-+316WswI8ScVgZeUd+1KGaXkHhaYQzCjvH/05TZSpJ8zBizb1a4G7DtO7F12jcBIqMOtsz9ji1t48fmKtzqsGA==",
+       "cpu": [
+         "x64"
+       ],
+@@ -702,9 +702,9 @@
+       }
+     },
+     "node_modules/@next/swc-win32-arm64-msvc": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.3.5.tgz",
+-      "integrity": "sha512-/wKzAREX2RF++MhicjDbg8tGn2AiBIM0+EFeTFKoUEUbW5D6amCJehd5Z5G1H5/gxNdgnwoXMcHz24H/c2tGkQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.3.8.tgz",
++      "integrity": "sha512-ji0gd4kMYUxO+1fJBIbiBVRCjzG/lloiyCccnlebvb1ZJ5qXCPZqYg4Jl1DrrixnWNMKylzgpmMWx0yNDYXlzw==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -718,9 +718,9 @@
+       }
+     },
+     "node_modules/@next/swc-win32-x64-msvc": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.3.5.tgz",
+-      "integrity": "sha512-LNdCHzgLFc+UeqMS84LzXPaeBRKyqDN9OMyFAr1OrB0XrNw78IRrEVtZvvA7245W/HsaoeVOQX9jPjPk8jojwA==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.3.8.tgz",
++      "integrity": "sha512-WcTlaKt/TWkh5kUjdJcUmB1XgZ+1c6fz4Y9fDHL73YNSdGaUWjceeWrrlwF0nv19iABYWC4iAq1oX1w4Bn0vfg==",
+       "cpu": [
+         "x64"
+       ],
+@@ -1635,12 +1635,12 @@
+       }
+     },
+     "node_modules/next": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/next/-/next-16.3.5.tgz",
+-      "integrity": "sha512-MdtsTgzyfCPRLC6uJ1mN8ao7lyJ4BB0U6Inhnx3gta1UcCIdHK3yxLG0E8OWQteWD8/Q0qb8A5o7wJaL8M9y2w==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/next/-/next-16.3.8.tgz",
++      "integrity": "sha512-U7QEZaTini6wKrb8A8hqLLqYQyCetegKjCpJOyxk642vWoMoU1x5PyZCJFvgYgiptA8xc5j/9xYlZFO7w9Sjmw==",
+       "license": "MIT",
+       "dependencies": {
+-        "@next/env": "16.3.5",
++        "@next/env": "16.3.8",
+         "@swc/helpers": "0.5.23",
+         "baseline-browser-mapping": "^2.9.19",
+         "caniuse-lite": "^1.0.30001579",
+@@ -1654,14 +1654,14 @@
+         "node": ">=20.9.0"
+       },
+       "optionalDependencies": {
+-        "@next/swc-darwin-arm64": "16.3.5",
+-        "@next/swc-darwin-x64": "16.3.5",
+-        "@next/swc-linux-arm64-gnu": "16.3.5",
+-        "@next/swc-linux-arm64-musl": "16.3.5",
+-        "@next/swc-linux-x64-gnu": "16.3.5",
+-        "@next/swc-linux-x64-musl": "16.3.5",
+-        "@next/swc-win32-arm64-msvc": "16.3.5",
+-        "@next/swc-win32-x64-msvc": "16.3.5",
++        "@next/swc-darwin-arm64": "16.3.8",
++        "@next/swc-darwin-x64": "16.3.8",
++        "@next/swc-linux-arm64-gnu": "16.3.8",
++        "@next/swc-linux-arm64-musl": "16.3.8",
++        "@next/swc-linux-x64-gnu": "16.3.8",
++        "@next/swc-linux-x64-musl": "16.3.8",
++        "@next/swc-win32-arm64-msvc": "16.3.8",
++        "@next/swc-win32-x64-msvc": "16.3.8",
+         "sharp": "^0.35.4"
+       },
+       "peerDependencies": {
+diff --git a/control-web/package.json b/control-web/package.json
+index 66406192..500bc384 100644
+--- a/control-web/package.json
++++ b/control-web/package.json
+@@ -1,7 +1,34 @@
+ {
+-  "name":"rafii-control-web", "private":true, "version":"0.1.0",
+-  "scripts":{"dev":"next dev -p 4449","build":"next build --webpack","start":"next start -p 4449","typecheck":"tsc --noEmit","lint":"oxlint app proxy.ts","test":"node --test tests/*.test.mjs"},
+-  "dependencies":{"next":"16.3.5","react":"19.2.4","react-dom":"19.2.4","@supabase/supabase-js":"2.116.0","@tanstack/react-query":"5.102.8","recharts":"3.8.0"},
+-  "devDependencies":{"@types/node":"22.10.2","@types/react":"19.2.14","@types/react-dom":"19.2.3","typescript":"5.7.2","oxlint":"1.65.0","playwright":"1.62.1","axe-core":"4.13.0"},
+-  "engines":{"node":"24.x"},"packageManager":"npm@11.12.1"
++  "name": "rafii-control-web",
++  "private": true,
++  "version": "0.1.0",
++  "scripts": {
++    "dev": "next dev -p 4449",
++    "build": "next build --webpack",
++    "start": "next start -p 4449",
++    "typecheck": "tsc --noEmit",
++    "lint": "oxlint app proxy.ts",
++    "test": "node --test tests/*.test.mjs"
++  },
++  "dependencies": {
++    "@supabase/supabase-js": "2.116.0",
++    "@tanstack/react-query": "5.102.8",
++    "next": "16.3.8",
++    "react": "19.2.4",
++    "react-dom": "19.2.4",
++    "recharts": "3.8.0"
++  },
++  "devDependencies": {
++    "@types/node": "22.10.2",
++    "@types/react": "19.2.14",
++    "@types/react-dom": "19.2.3",
++    "axe-core": "4.13.0",
++    "oxlint": "1.65.0",
++    "playwright": "1.62.1",
++    "typescript": "5.7.2"
++  },
++  "engines": {
++    "node": "24.x"
++  },
++  "packageManager": "npm@11.12.1"
+ }
+diff --git a/control-web/tests/workspace-browser.cjs b/control-web/tests/workspace-browser.cjs
+index 3771bd55..d3240798 100644
+--- a/control-web/tests/workspace-browser.cjs
++++ b/control-web/tests/workspace-browser.cjs
+@@ -35,6 +35,7 @@ async function main(){
+     await page.goto(base+'/control/'+route+'?mode=demo');await page.getByRole('heading',{name:heading,exact:true,level:1}).waitFor();await page.getByText('Demo workspace',{exact:true}).waitFor();
+     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    }
++   await page.goto(base+'/control/product?mode=demo');await page.getByRole('button',{name:'Open text model',exact:true}).first().click();await page.getByRole('dialog').getByText('Recorded cost (USD)',{exact:true}).waitFor();assert.equal(await page.getByRole('dialog').getByText('$0.018',{exact:true}).count(),1);await page.keyboard.press('Escape');
+    if(width===390){await page.locator('.fc-mobile-nav summary').click();await page.getByRole('navigation',{name:'Mobile founder navigation'}).getByRole('link',{name:'Customers',exact:true}).click();await page.getByLabel('Search customers').waitFor();}
+    else await page.goto(base+'/control/customers?mode=demo');
+    await page.getByLabel('Search customers').fill('Maya');await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1);
+diff --git a/src/rafii_control/workspace.py b/src/rafii_control/workspace.py
+index 4658729f..940bcff3 100644
+--- a/src/rafii_control/workspace.py
++++ b/src/rafii_control/workspace.py
+@@ -198,10 +198,10 @@ class WorkspaceService:
+         result = dict(mode='live',revision=0,customers=customers[:200],workspaces=workspaces[:200],subscriptions=subscriptions[:200],payments=payments[:200],usage=usage[:200],tickets=requests[:200],activity=activity,
+                       summary=dict(counts),limits=dict(pageSize=200,truncated=any(len(r)>200 for r in (customers,workspaces,subscriptions,usage,requests,payments))),
+                       paymentState='connected' if payments_ready else 'not_configured',supportState='metadata_only',usageState='connected')
+-        result['connections']=[dict(id='database',label='Rafii database',state='connected',required=True,detail='Canonical customer, workspace, subscription and usage metadata.'),
++        result['connections']=[dict(id='database',label='Rafii database',state='connected',required=True,detail='Customer, workspace, subscription and usage records from Rafii.'),
+                                dict(id='payments',label='Payment records',state=result['paymentState'],required=True,detail='Stored credit-purchase receipts. Required billing connection; no charges or refunds from Control.'),
+-                               dict(id='credits',label='Credit balance',state='not_qualified',required=True,detail='Usage metadata is connected. Approved credit definitions and a balance projection are required before Live billing is qualified.'),
+-                               dict(id='support',label='Support',state='metadata_only',required=True,detail='Canonical data-request status is connected. Approved ticket access is required before the Live support workflow is qualified.')]
++                               dict(id='credits',label='Credit balance',state='not_qualified',required=True,detail='Usage records are connected. Credit balances need approved credit terms and a verified calculation before they can be shown.'),
++                               dict(id='support',label='Support',state='metadata_only',required=True,detail='Account requests are connected. Customer conversations and replies need an approved support connection.')]
+         return result
+ 
+     def rename(self, principal, body):
+diff --git a/web/package-lock.json b/web/package-lock.json
+index 369428c7..cabacf3a 100644
+--- a/web/package-lock.json
++++ b/web/package-lock.json
+@@ -39,7 +39,7 @@
+         "kbar": "^0.1.0-beta.48",
+         "match-sorter": "^8.2.0",
+         "motion": "^11.18.2",
+-        "next": "16.3.5",
++        "next": "16.3.8",
+         "next-themes": "^0.4.6",
+         "nextjs-toploader": "^3.9.17",
+         "nuqs": "^2.8.9",
+@@ -1181,6 +1181,17 @@
+         "node": ">=6.0.0"
+       }
+     },
++    "node_modules/@jridgewell/source-map": {
++      "version": "0.3.11",
++      "resolved": "https://registry.npmjs.org/@jridgewell/source-map/-/source-map-0.3.11.tgz",
++      "integrity": "sha512-ZMp1V8ZFcPG5dIWnQLr3NSI1MiCU7UETdS/A0G8V/XWHvJv3ZsFqutJn1Y5RPmAPX6F3BiE397OqveU/9NCuIA==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@jridgewell/gen-mapping": "^0.3.5",
++        "@jridgewell/trace-mapping": "^0.3.25"
++      }
++    },
+     "node_modules/@jridgewell/sourcemap-codec": {
+       "version": "1.6.0",
+       "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.6.0.tgz",
+@@ -1217,15 +1228,15 @@
+       }
+     },
+     "node_modules/@next/env": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.3.5.tgz",
+-      "integrity": "sha512-NWEXVDMqoEo0ktmU6u0sE2Vg0LOcsD7NnOTJNo3/fEaTfsg+F1bMIxuDmQbda4e3yTIQwVdUREF2yIuMOusKtg==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.3.8.tgz",
++      "integrity": "sha512-Al9zqHVV7TJv0eFuOU4U7Lvv74PTih4Ch63sk2xCIpSTkE3udFnaOcnzP2lQVymiL7yS9Cj2iClUXlR3EQ5sEw==",
+       "license": "MIT"
+     },
+     "node_modules/@next/swc-darwin-arm64": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.3.5.tgz",
+-      "integrity": "sha512-pMmGgETfKvElucLHtVaeiMRbp2zUbvKx7b1yGko0liBz3cw1mKSggWN/Rp/wPz8z+E1O82u3r4L1Co+ZS5hokQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.3.8.tgz",
++      "integrity": "sha512-2JPRMh2nmQG5CiL7cXGL9AGwnPWJQ//cTtAUCT+w511QHk79SYz3LGv/pc5X643B/WEO0rvu3Yww0hqwt3kgeA==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -1239,9 +1250,9 @@
+       }
+     },
+     "node_modules/@next/swc-darwin-x64": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.3.5.tgz",
+-      "integrity": "sha512-76VaGYvf6HPa5/w12yLkE3dXTn9AfdEviI79oEL3aZoAmRLc9rWitjWqyjViVysK/ht/y9YKzFkBrUdi/wGkow==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.3.8.tgz",
++      "integrity": "sha512-GZtCCOBKJ4leVIT/Th0llWKhD1ca92lzbQiS5R5ON9QkoiFnilFsebDae1JU2a3HWoKMEmEZWGs1AGLavVM72Q==",
+       "cpu": [
+         "x64"
+       ],
+@@ -1255,9 +1266,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-arm64-gnu": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.3.5.tgz",
+-      "integrity": "sha512-zKDELJ5jSQMHeO/hmXUQsAzagX4bQD4OiMi3pQ5FbUj+yK506oLVHnKA2YXMlbg1EHHqJYtyePOgByIDXD1lqw==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.3.8.tgz",
++      "integrity": "sha512-O659ygeQYqneJ1fBKMpFxIFqYkYswu8IAS1OCKK/4f3ZgJJm1dRz4fVJZRi/kLLWjnBKnebOePA4WNv+sV1pVA==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -1274,9 +1285,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-arm64-musl": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.3.5.tgz",
+-      "integrity": "sha512-7Vql0pgzCoHagv6+FNOZoqmJqA52c6zeVbhtS/47qFozO1MSx4ms7x7GHiciY8R5CDsSMKMQjJEryoJLcsBIbA==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.3.8.tgz",
++      "integrity": "sha512-dSjKSyWpzxoO1d3DIZZcP4XJcNaKeLmxQMFOiYl5vuBRMmweIqnAhty8tAmRsvTss779cK1FtYnDMj40e4TQlg==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -1293,9 +1304,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-x64-gnu": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.3.5.tgz",
+-      "integrity": "sha512-NH/xzehyHEFWE2nlcZon7TB/0+H4shfWCi7S1zka815XCOhJDYZhoeJtOYy0dh0WVRWACVXSyGNFFytoMxUhRg==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.3.8.tgz",
++      "integrity": "sha512-lbqOuz3RPRcv+o9msNsJw5x4+Y1ZwPTs6vmL6DCf7i0fZfvng/F59wyeDwqHIvV0mK//RBy/jJkZ+nCKsSMXjQ==",
+       "cpu": [
+         "x64"
+       ],
+@@ -1312,9 +1323,9 @@
+       }
+     },
+     "node_modules/@next/swc-linux-x64-musl": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.3.5.tgz",
+-      "integrity": "sha512-lV4+EhWMfS8jcC+EH2nn/Cm5cn6XsgbE07bU9tMH8fCo0tNAqhyzi1b5wQ/Tn6NGFTvKDY65w3ZH95EjwBRAnQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.3.8.tgz",
++      "integrity": "sha512-+316WswI8ScVgZeUd+1KGaXkHhaYQzCjvH/05TZSpJ8zBizb1a4G7DtO7F12jcBIqMOtsz9ji1t48fmKtzqsGA==",
+       "cpu": [
+         "x64"
+       ],
+@@ -1331,9 +1342,9 @@
+       }
+     },
+     "node_modules/@next/swc-win32-arm64-msvc": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.3.5.tgz",
+-      "integrity": "sha512-/wKzAREX2RF++MhicjDbg8tGn2AiBIM0+EFeTFKoUEUbW5D6amCJehd5Z5G1H5/gxNdgnwoXMcHz24H/c2tGkQ==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.3.8.tgz",
++      "integrity": "sha512-ji0gd4kMYUxO+1fJBIbiBVRCjzG/lloiyCccnlebvb1ZJ5qXCPZqYg4Jl1DrrixnWNMKylzgpmMWx0yNDYXlzw==",
+       "cpu": [
+         "arm64"
+       ],
+@@ -1347,9 +1358,9 @@
+       }
+     },
+     "node_modules/@next/swc-win32-x64-msvc": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.3.5.tgz",
+-      "integrity": "sha512-LNdCHzgLFc+UeqMS84LzXPaeBRKyqDN9OMyFAr1OrB0XrNw78IRrEVtZvvA7245W/HsaoeVOQX9jPjPk8jojwA==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.3.8.tgz",
++      "integrity": "sha512-WcTlaKt/TWkh5kUjdJcUmB1XgZ+1c6fz4Y9fDHL73YNSdGaUWjceeWrrlwF0nv19iABYWC4iAq1oX1w4Bn0vfg==",
+       "cpu": [
+         "x64"
+       ],
+@@ -4195,11 +4206,17 @@
+       "integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==",
+       "license": "MIT"
+     },
++    "node_modules/@types/json-schema": {
++      "version": "7.0.15",
++      "resolved": "https://registry.npmjs.org/@types/json-schema/-/json-schema-7.0.15.tgz",
++      "integrity": "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/@types/node": {
+       "version": "22.10.2",
+       "resolved": "https://registry.npmjs.org/@types/node/-/node-22.10.2.tgz",
+       "integrity": "sha512-Xxr6BBRCAOQixvonOye19wnzyDiUtTeqldOOmj3CkeblonbccA12PFwlufvRdrpjXxqnmUaeiU5EOA+7s5diUQ==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "undici-types": "~6.20.0"
+@@ -4209,7 +4226,7 @@
+       "version": "19.2.14",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz",
+       "integrity": "sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "dependencies": {
+         "csstype": "^3.2.2"
+@@ -4219,7 +4236,7 @@
+       "version": "19.2.3",
+       "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.3.tgz",
+       "integrity": "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "peerDependencies": {
+         "@types/react": "^19.2.0"
+@@ -4276,6 +4293,194 @@
+         }
+       }
+     },
++    "node_modules/@webassemblyjs/ast": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/ast/-/ast-1.14.1.tgz",
++      "integrity": "sha512-nuBEDgQfm1ccRp/8bCQrx1frohyufl4JlbMMZ4P1wpeOfDhF6FQkxZJ1b/e+PLwr6X1Nhw6OLme5usuBWYBvuQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/helper-numbers": "1.13.2",
++        "@webassemblyjs/helper-wasm-bytecode": "1.13.2"
++      }
++    },
++    "node_modules/@webassemblyjs/floating-point-hex-parser": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/floating-point-hex-parser/-/floating-point-hex-parser-1.13.2.tgz",
++      "integrity": "sha512-6oXyTOzbKxGH4steLbLNOu71Oj+C8Lg34n6CqRvqfS2O71BxY6ByfMDRhBytzknj9yGUPVJ1qIKhRlAwO1AovA==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/@webassemblyjs/helper-api-error": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/helper-api-error/-/helper-api-error-1.13.2.tgz",
++      "integrity": "sha512-U56GMYxy4ZQCbDZd6JuvvNV/WFildOjsaWD3Tzzvmw/mas3cXzRJPMjP83JqEsgSbyrmaGjBfDtV7KDXV9UzFQ==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/@webassemblyjs/helper-buffer": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/helper-buffer/-/helper-buffer-1.14.1.tgz",
++      "integrity": "sha512-jyH7wtcHiKssDtFPRB+iQdxlDf96m0E39yb0k5uJVhFGleZFoNw1c4aeIcVUPPbXUVJ94wwnMOAqUHyzoEPVMA==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/@webassemblyjs/helper-numbers": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/helper-numbers/-/helper-numbers-1.13.2.tgz",
++      "integrity": "sha512-FE8aCmS5Q6eQYcV3gI35O4J789wlQA+7JrqTTpJqn5emA4U2hvwJmvFRC0HODS+3Ye6WioDklgd6scJ3+PLnEA==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/floating-point-hex-parser": "1.13.2",
++        "@webassemblyjs/helper-api-error": "1.13.2",
++        "@xtuc/long": "4.2.2"
++      }
++    },
++    "node_modules/@webassemblyjs/helper-wasm-bytecode": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/helper-wasm-bytecode/-/helper-wasm-bytecode-1.13.2.tgz",
++      "integrity": "sha512-3QbLKy93F0EAIXLh0ogEVR6rOubA9AoZ+WRYhNbFyuB70j3dRdwH9g+qXhLAO0kiYGlg3TxDV+I4rQTr/YNXkA==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/@webassemblyjs/helper-wasm-section": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/helper-wasm-section/-/helper-wasm-section-1.14.1.tgz",
++      "integrity": "sha512-ds5mXEqTJ6oxRoqjhWDU83OgzAYjwsCV8Lo/N+oRsNDmx/ZDpqalmrtgOMkHwxsG0iI//3BwWAErYRHtgn0dZw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@webassemblyjs/helper-buffer": "1.14.1",
++        "@webassemblyjs/helper-wasm-bytecode": "1.13.2",
++        "@webassemblyjs/wasm-gen": "1.14.1"
++      }
++    },
++    "node_modules/@webassemblyjs/ieee754": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/ieee754/-/ieee754-1.13.2.tgz",
++      "integrity": "sha512-4LtOzh58S/5lX4ITKxnAK2USuNEvpdVV9AlgGQb8rJDHaLeHciwG4zlGr0j/SNWlr7x3vO1lDEsuePvtcDNCkw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@xtuc/ieee754": "^1.2.0"
++      }
++    },
++    "node_modules/@webassemblyjs/leb128": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/leb128/-/leb128-1.13.2.tgz",
++      "integrity": "sha512-Lde1oNoIdzVzdkNEAWZ1dZ5orIbff80YPdHx20mrHwHrVNNTjNr8E3xz9BdpcGqRQbAEa+fkrCb+fRFTl/6sQw==",
++      "license": "Apache-2.0",
++      "peer": true,
++      "dependencies": {
++        "@xtuc/long": "4.2.2"
++      }
++    },
++    "node_modules/@webassemblyjs/utf8": {
++      "version": "1.13.2",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/utf8/-/utf8-1.13.2.tgz",
++      "integrity": "sha512-3NQWGjKTASY1xV5m7Hr0iPeXD9+RDobLll3T9d2AO+g3my8xy5peVyjSag4I50mR1bBSN/Ct12lo+R9tJk0NZQ==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/@webassemblyjs/wasm-edit": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/wasm-edit/-/wasm-edit-1.14.1.tgz",
++      "integrity": "sha512-RNJUIQH/J8iA/1NzlE4N7KtyZNHi3w7at7hDjvRNm5rcUXa00z1vRz3glZoULfJ5mpvYhLybmVcwcjGrC1pRrQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@webassemblyjs/helper-buffer": "1.14.1",
++        "@webassemblyjs/helper-wasm-bytecode": "1.13.2",
++        "@webassemblyjs/helper-wasm-section": "1.14.1",
++        "@webassemblyjs/wasm-gen": "1.14.1",
++        "@webassemblyjs/wasm-opt": "1.14.1",
++        "@webassemblyjs/wasm-parser": "1.14.1",
++        "@webassemblyjs/wast-printer": "1.14.1"
++      }
++    },
++    "node_modules/@webassemblyjs/wasm-gen": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/wasm-gen/-/wasm-gen-1.14.1.tgz",
++      "integrity": "sha512-AmomSIjP8ZbfGQhumkNvgC33AY7qtMCXnN6bL2u2Js4gVCg8fp735aEiMSBbDR7UQIj90n4wKAFUSEd0QN2Ukg==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@webassemblyjs/helper-wasm-bytecode": "1.13.2",
++        "@webassemblyjs/ieee754": "1.13.2",
++        "@webassemblyjs/leb128": "1.13.2",
++        "@webassemblyjs/utf8": "1.13.2"
++      }
++    },
++    "node_modules/@webassemblyjs/wasm-opt": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/wasm-opt/-/wasm-opt-1.14.1.tgz",
++      "integrity": "sha512-PTcKLUNvBqnY2U6E5bdOQcSM+oVP/PmrDY9NzowJjislEjwP/C4an2303MCVS2Mg9d3AJpIGdUFIQQWbPds0Sw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@webassemblyjs/helper-buffer": "1.14.1",
++        "@webassemblyjs/wasm-gen": "1.14.1",
++        "@webassemblyjs/wasm-parser": "1.14.1"
++      }
++    },
++    "node_modules/@webassemblyjs/wasm-parser": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/wasm-parser/-/wasm-parser-1.14.1.tgz",
++      "integrity": "sha512-JLBl+KZ0R5qB7mCnud/yyX08jWFw5MsoalJ1pQ4EdFlgj9VdXKGuENGsiCIjegI1W7p91rUlcB/LB5yRJKNTcQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@webassemblyjs/helper-api-error": "1.13.2",
++        "@webassemblyjs/helper-wasm-bytecode": "1.13.2",
++        "@webassemblyjs/ieee754": "1.13.2",
++        "@webassemblyjs/leb128": "1.13.2",
++        "@webassemblyjs/utf8": "1.13.2"
++      }
++    },
++    "node_modules/@webassemblyjs/wast-printer": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/@webassemblyjs/wast-printer/-/wast-printer-1.14.1.tgz",
++      "integrity": "sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@webassemblyjs/ast": "1.14.1",
++        "@xtuc/long": "4.2.2"
++      }
++    },
++    "node_modules/@xtuc/ieee754": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/@xtuc/ieee754/-/ieee754-1.2.0.tgz",
++      "integrity": "sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==",
++      "license": "BSD-3-Clause",
++      "peer": true
++    },
++    "node_modules/@xtuc/long": {
++      "version": "4.2.2",
++      "resolved": "https://registry.npmjs.org/@xtuc/long/-/long-4.2.2.tgz",
++      "integrity": "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==",
++      "license": "Apache-2.0",
++      "peer": true
++    },
++    "node_modules/acorn": {
++      "version": "8.18.0",
++      "resolved": "https://registry.npmjs.org/acorn/-/acorn-8.18.0.tgz",
++      "integrity": "sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==",
++      "license": "MIT",
++      "peer": true,
++      "bin": {
++        "acorn": "bin/acorn"
++      },
++      "engines": {
++        "node": ">=0.4.0"
++      }
++    },
+     "node_modules/agent-base": {
+       "version": "6.0.2",
+       "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz",
+@@ -4288,6 +4493,54 @@
+         "node": ">= 6.0.0"
+       }
+     },
++    "node_modules/ajv": {
++      "version": "8.20.0",
++      "resolved": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz",
++      "integrity": "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "fast-deep-equal": "^3.1.3",
++        "fast-uri": "^3.0.1",
++        "json-schema-traverse": "^1.0.0",
++        "require-from-string": "^2.0.2"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/epoberezkin"
++      }
++    },
++    "node_modules/ajv-formats": {
++      "version": "3.0.1",
++      "resolved": "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz",
++      "integrity": "sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "ajv": "^8.0.0"
++      },
++      "peerDependencies": {
++        "ajv": "^8.0.0"
++      },
++      "peerDependenciesMeta": {
++        "ajv": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/ajv-keywords": {
++      "version": "5.1.0",
++      "resolved": "https://registry.npmjs.org/ajv-keywords/-/ajv-keywords-5.1.0.tgz",
++      "integrity": "sha512-YCS/JNFAUyr5vAuhk1DWm1CBxRHW9LbJ2ozWeemrIqpbsqKjHVxYPyi5GC0rjZIT5JxJ3virVTS8wk4i/Z+krw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "fast-deep-equal": "^3.1.3"
++      },
++      "peerDependencies": {
++        "ajv": "^8.8.2"
++      }
++    },
+     "node_modules/aria-hidden": {
+       "version": "1.2.6",
+       "resolved": "https://registry.npmjs.org/aria-hidden/-/aria-hidden-1.2.6.tgz",
+@@ -4385,6 +4638,13 @@
+         "node": "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7"
+       }
+     },
++    "node_modules/buffer-from": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
++      "integrity": "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/caniuse-lite": {
+       "version": "1.0.30001810",
+       "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001810.tgz",
+@@ -4405,6 +4665,16 @@
+       ],
+       "license": "CC-BY-4.0"
+     },
++    "node_modules/chrome-trace-event": {
++      "version": "1.0.4",
++      "resolved": "https://registry.npmjs.org/chrome-trace-event/-/chrome-trace-event-1.0.4.tgz",
++      "integrity": "sha512-rNjApaLzuwaOTjCiT8lSDdGN1APCiqkChLMJxJPWLunPAt5fy8xgU9/jNOchV84wfIxrA0lRQB7oCT8jrn/wrQ==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">=6.0"
++      }
++    },
+     "node_modules/cjs-module-lexer": {
+       "version": "2.2.1",
+       "resolved": "https://registry.npmjs.org/cjs-module-lexer/-/cjs-module-lexer-2.2.1.tgz",
+@@ -4454,6 +4724,13 @@
+         "react-dom": "^18 || ^19 || ^19.0.0-rc"
+       }
+     },
++    "node_modules/commander": {
++      "version": "2.20.3",
++      "resolved": "https://registry.npmjs.org/commander/-/commander-2.20.3.tgz",
++      "integrity": "sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/commondir": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/commondir/-/commondir-1.0.1.tgz",
+@@ -4489,7 +4766,7 @@
+       "version": "3.2.3",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+       "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT"
+     },
+     "node_modules/d3-array": {
+@@ -4765,12 +5042,46 @@
+       "integrity": "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==",
+       "license": "MIT"
+     },
++    "node_modules/events": {
++      "version": "3.3.0",
++      "resolved": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
++      "integrity": "sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">=0.8.x"
++      }
++    },
++    "node_modules/fast-deep-equal": {
++      "version": "3.1.3",
++      "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
++      "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/fast-equals": {
+       "version": "2.0.4",
+       "resolved": "https://registry.npmjs.org/fast-equals/-/fast-equals-2.0.4.tgz",
+       "integrity": "sha512-caj/ZmjHljPrZtbzJ3kfH5ia/k4mTJe/qSiXAGzxZWRZgsgDV0cvNaQULqUX8t0/JVlzzEdYOwCN5DmzTxoD4w==",
+       "license": "MIT"
+     },
++    "node_modules/fast-uri": {
++      "version": "3.1.8",
++      "resolved": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.8.tgz",
++      "integrity": "sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/fastify"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/fastify"
++        }
++      ],
++      "license": "BSD-3-Clause",
++      "peer": true
++    },
+     "node_modules/fdir": {
+       "version": "6.5.0",
+       "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+@@ -4913,6 +5224,16 @@
+       "integrity": "sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==",
+       "license": "Standard 'no charge' license: https://gsap.com/standard-license."
+     },
++    "node_modules/has-flag": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz",
++      "integrity": "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/html-to-image": {
+       "version": "1.11.13",
+       "resolved": "https://registry.npmjs.org/html-to-image/-/html-to-image-1.11.13.tgz",
+@@ -5028,6 +5349,21 @@
+       "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
+       "license": "ISC"
+     },
++    "node_modules/jest-worker": {
++      "version": "27.5.1",
++      "resolved": "https://registry.npmjs.org/jest-worker/-/jest-worker-27.5.1.tgz",
++      "integrity": "sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@types/node": "*",
++        "merge-stream": "^2.0.0",
++        "supports-color": "^8.0.0"
++      },
++      "engines": {
++        "node": ">= 10.13.0"
++      }
++    },
+     "node_modules/jiti": {
+       "version": "2.7.0",
+       "resolved": "https://registry.npmjs.org/jiti/-/jiti-2.7.0.tgz",
+@@ -5055,6 +5391,13 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/json-schema-traverse": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
++      "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/json5": {
+       "version": "2.2.3",
+       "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+@@ -5409,6 +5752,23 @@
+         "css-mediaquery": "^0.1.2"
+       }
+     },
++    "node_modules/merge-stream": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/merge-stream/-/merge-stream-2.0.0.tgz",
++      "integrity": "sha512-abv/qOcuPfk3URPfDzmZU1LKmuw8kT+0nIHvKrKgFrwifol/doWcdA4ZqsWQ8ENrFKkd67Mfpo/LovbIUsbt3w==",
++      "license": "MIT",
++      "peer": true
++    },
++    "node_modules/mime-db": {
++      "version": "1.54.0",
++      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz",
++      "integrity": "sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/minimatch": {
+       "version": "10.2.6",
+       "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.6.tgz",
+@@ -5424,6 +5784,79 @@
+         "url": "https://github.com/sponsors/isaacs"
+       }
+     },
++    "node_modules/minimizer-webpack-plugin": {
++      "version": "5.12.0",
++      "resolved": "https://registry.npmjs.org/minimizer-webpack-plugin/-/minimizer-webpack-plugin-5.12.0.tgz",
++      "integrity": "sha512-PCN1x1OzFeFB2GlP91s46q7Gz8Jf16Z7M45bzpoqrYZlh12QeY6tYVM5h299wbwy1DxnQ69VFmmh8Hb2Ff8mbw==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@jridgewell/trace-mapping": "^0.3.31",
++        "jest-worker": "^27.4.5",
++        "schema-utils": "^4.3.3",
++        "terser": "^5.51.0"
++      },
++      "engines": {
++        "node": ">= 10.13.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/webpack"
++      },
++      "peerDependencies": {
++        "webpack": "^5.1.0"
++      },
++      "peerDependenciesMeta": {
++        "@minify-html/node": {
++          "optional": true
++        },
++        "@napi-rs/image": {
++          "optional": true
++        },
++        "@swc/core": {
++          "optional": true
++        },
++        "@swc/css": {
++          "optional": true
++        },
++        "@swc/html": {
++          "optional": true
++        },
++        "clean-css": {
++          "optional": true
++        },
++        "cssnano": {
++          "optional": true
++        },
++        "csso": {
++          "optional": true
++        },
++        "esbuild": {
++          "optional": true
++        },
++        "html-minifier-terser": {
++          "optional": true
++        },
++        "imagemin": {
++          "optional": true
++        },
++        "lightningcss": {
++          "optional": true
++        },
++        "postcss": {
++          "optional": true
++        },
++        "sharp": {
++          "optional": true
++        },
++        "svgo": {
++          "optional": true
++        },
++        "uglify-js": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/minipass": {
+       "version": "7.1.3",
+       "resolved": "https://registry.npmjs.org/minipass/-/minipass-7.1.3.tgz",
+@@ -5505,12 +5938,12 @@
+       }
+     },
+     "node_modules/next": {
+-      "version": "16.3.5",
+-      "resolved": "https://registry.npmjs.org/next/-/next-16.3.5.tgz",
+-      "integrity": "sha512-MdtsTgzyfCPRLC6uJ1mN8ao7lyJ4BB0U6Inhnx3gta1UcCIdHK3yxLG0E8OWQteWD8/Q0qb8A5o7wJaL8M9y2w==",
++      "version": "16.3.8",
++      "resolved": "https://registry.npmjs.org/next/-/next-16.3.8.tgz",
++      "integrity": "sha512-U7QEZaTini6wKrb8A8hqLLqYQyCetegKjCpJOyxk642vWoMoU1x5PyZCJFvgYgiptA8xc5j/9xYlZFO7w9Sjmw==",
+       "license": "MIT",
+       "dependencies": {
+-        "@next/env": "16.3.5",
++        "@next/env": "16.3.8",
+         "@swc/helpers": "0.5.23",
+         "baseline-browser-mapping": "^2.9.19",
+         "caniuse-lite": "^1.0.30001579",
+@@ -5524,14 +5957,14 @@
+         "node": ">=20.9.0"
+       },
+       "optionalDependencies": {
+-        "@next/swc-darwin-arm64": "16.3.5",
+-        "@next/swc-darwin-x64": "16.3.5",
+-        "@next/swc-linux-arm64-gnu": "16.3.5",
+-        "@next/swc-linux-arm64-musl": "16.3.5",
+-        "@next/swc-linux-x64-gnu": "16.3.5",
+-        "@next/swc-linux-x64-musl": "16.3.5",
+-        "@next/swc-win32-arm64-msvc": "16.3.5",
+-        "@next/swc-win32-x64-msvc": "16.3.5",
++        "@next/swc-darwin-arm64": "16.3.8",
++        "@next/swc-darwin-x64": "16.3.8",
++        "@next/swc-linux-arm64-gnu": "16.3.8",
++        "@next/swc-linux-arm64-musl": "16.3.8",
++        "@next/swc-linux-x64-gnu": "16.3.8",
++        "@next/swc-linux-x64-musl": "16.3.8",
++        "@next/swc-win32-arm64-msvc": "16.3.8",
++        "@next/swc-win32-x64-msvc": "16.3.8",
+         "sharp": "^0.35.4"
+       },
+       "peerDependencies": {
+@@ -6253,6 +6686,16 @@
+       "integrity": "sha512-8g3/Otx1eJaVD12e31UbJj1YzdtVvzH85HV7t+9MJYk/u3XmkOUJ5Ys9wQrf9PCPK8+xn4ymzqYCiZl6QWKn+A==",
+       "license": "MIT"
+     },
++    "node_modules/require-from-string": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
++      "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/require-in-the-middle": {
+       "version": "8.0.1",
+       "resolved": "https://registry.npmjs.org/require-in-the-middle/-/require-in-the-middle-8.0.1.tgz",
+@@ -6323,6 +6766,26 @@
+       "integrity": "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==",
+       "license": "MIT"
+     },
++    "node_modules/schema-utils": {
++      "version": "4.5.0",
++      "resolved": "https://registry.npmjs.org/schema-utils/-/schema-utils-4.5.0.tgz",
++      "integrity": "sha512-zJlMCZ0cAR5p/Y4oVpRoqioDMJcGxaXRrQ/4rP4WyR84vc5z/DolXdbvXeDpTwbtocDFr2rhPqHPErDCUtz2kA==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@types/json-schema": "^7.0.15",
++        "ajv": "^8.20.0",
++        "ajv-formats": "^3.0.1",
++        "ajv-keywords": "^5.1.0"
++      },
++      "engines": {
++        "node": ">= 10.13.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/webpack"
++      }
++    },
+     "node_modules/semver": {
+       "version": "6.3.1",
+       "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+@@ -6428,6 +6891,16 @@
+         "react-dom": "^18.0.0 || ^19.0.0 || ^19.0.0-rc"
+       }
+     },
++    "node_modules/source-map": {
++      "version": "0.6.1",
++      "resolved": "https://registry.npmjs.org/source-map/-/source-map-0.6.1.tgz",
++      "integrity": "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==",
++      "license": "BSD-3-Clause",
++      "peer": true,
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/source-map-js": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+@@ -6437,6 +6910,17 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/source-map-support": {
++      "version": "0.5.21",
++      "resolved": "https://registry.npmjs.org/source-map-support/-/source-map-support-0.5.21.tgz",
++      "integrity": "sha512-uBHU3L3czsIyYXKX88fdrGovxdSCoTGDRZ6SYXtSRxLZUzHg5P/66Ht6uoUlHu9EZod+inXhKo3qQgwXUT/y1w==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "buffer-from": "^1.0.0",
++        "source-map": "^0.6.0"
++      }
++    },
+     "node_modules/stacktrace-parser": {
+       "version": "0.1.11",
+       "resolved": "https://registry.npmjs.org/stacktrace-parser/-/stacktrace-parser-0.1.11.tgz",
+@@ -6472,6 +6956,22 @@
+         }
+       }
+     },
++    "node_modules/supports-color": {
++      "version": "8.1.1",
++      "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-8.1.1.tgz",
++      "integrity": "sha512-MpUEN2OodtUzxvKQl72cUF7RQ5EiHsGvSsVG0ia9c5RbWGL2CI4C7EpPS8UTBIplnlzZiNuV56w+FuNxy3ty2Q==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "has-flag": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=10"
++      },
++      "funding": {
++        "url": "https://github.com/chalk/supports-color?sponsor=1"
++      }
++    },
+     "node_modules/tailwind-merge": {
+       "version": "3.7.0",
+       "resolved": "https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-3.7.0.tgz",
+@@ -6510,6 +7010,25 @@
+         "url": "https://opencollective.com/webpack"
+       }
+     },
++    "node_modules/terser": {
++      "version": "5.51.2",
++      "resolved": "https://registry.npmjs.org/terser/-/terser-5.51.2.tgz",
++      "integrity": "sha512-bWnjSNscmuI+GJze6ZupnHP8G/cTcsJF+bXCeQknk2SHQsgbNJnLrqiH9jZ2W4STPVXH2mDKKRX3iwPhc9Cn/Q==",
++      "license": "BSD-2-Clause",
++      "peer": true,
++      "dependencies": {
++        "@jridgewell/source-map": "^0.3.3",
++        "acorn": "^8.15.0",
++        "commander": "^2.20.0",
++        "source-map-support": "~0.5.20"
++      },
++      "bin": {
++        "terser": "bin/terser"
++      },
++      "engines": {
++        "node": ">=10"
++      }
++    },
+     "node_modules/three": {
+       "version": "0.186.0",
+       "resolved": "https://registry.npmjs.org/three/-/three-0.186.0.tgz",
+@@ -6580,7 +7099,6 @@
+       "version": "6.20.0",
+       "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.20.0.tgz",
+       "integrity": "sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/update-browserslist-db": {
+@@ -6713,12 +7231,83 @@
+         "d3-timer": "^3.0.1"
+       }
+     },
++    "node_modules/watchpack": {
++      "version": "2.5.2",
++      "resolved": "https://registry.npmjs.org/watchpack/-/watchpack-2.5.2.tgz",
++      "integrity": "sha512-6i/00NBjP4yGPs+caKSyRfpTF/8Torsu0MOW3mMzIbhgISFder8i7xbqgHlLMwJrdiN8ndBV3UA1/AfzPSr+jg==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "graceful-fs": "^4.1.2"
++      },
++      "engines": {
++        "node": ">=10.13.0"
++      }
++    },
+     "node_modules/webidl-conversions": {
+       "version": "3.0.1",
+       "resolved": "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-3.0.1.tgz",
+       "integrity": "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==",
+       "license": "BSD-2-Clause"
+     },
++    "node_modules/webpack": {
++      "version": "5.111.1",
++      "resolved": "https://registry.npmjs.org/webpack/-/webpack-5.111.1.tgz",
++      "integrity": "sha512-cNypaz0RP+S4cvQVi1M/3bRUkvNP0xZpL0TjFx+c6jg64VbxD+2weWDgY9UnjRI6dhZgtaj8DU76GGFcJ79xPQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "@types/estree": "^1.0.8",
++        "@types/json-schema": "^7.0.15",
++        "@webassemblyjs/ast": "^1.14.1",
++        "@webassemblyjs/wasm-edit": "^1.14.1",
++        "@webassemblyjs/wasm-parser": "^1.14.1",
++        "browserslist": "^4.28.1",
++        "chrome-trace-event": "^1.0.2",
++        "enhanced-resolve": "^5.25.0",
++        "es-module-lexer": "^2.1.0",
++        "events": "^3.2.0",
++        "graceful-fs": "^4.2.11",
++        "mime-db": "^1.54.0",
++        "minimizer-webpack-plugin": "^5.7.0",
++        "schema-utils": "^4.5.0",
++        "tapable": "^2.3.0",
++        "watchpack": "^2.5.2",
++        "webpack-sources": "^3.5.1"
++      },
++      "bin": {
++        "webpack": "bin/webpack.js"
++      },
++      "engines": {
++        "node": ">=10.13.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/webpack"
++      },
++      "peerDependenciesMeta": {
++        "webpack-cli": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/webpack-sources": {
++      "version": "3.6.0",
++      "resolved": "https://registry.npmjs.org/webpack-sources/-/webpack-sources-3.6.0.tgz",
++      "integrity": "sha512-EIMmPVvNI0CYXyRPp34F2Qk7W37/BZVZIofS6LAUnrNjCVahS+hO4mxwFJDjQjODTGZDtVzLYoN2+1dYkhk9qA==",
++      "license": "MIT",
++      "peer": true,
++      "engines": {
++        "node": ">=10.13.0"
++      }
++    },
++    "node_modules/webpack/node_modules/es-module-lexer": {
++      "version": "2.3.2",
++      "resolved": "https://registry.npmjs.org/es-module-lexer/-/es-module-lexer-2.3.2.tgz",
++      "integrity": "sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==",
++      "license": "MIT",
++      "peer": true
++    },
+     "node_modules/whatwg-url": {
+       "version": "5.0.0",
+       "resolved": "https://registry.npmjs.org/whatwg-url/-/whatwg-url-5.0.0.tgz",
+diff --git a/web/package.json b/web/package.json
+index 739bd178..07d91c1f 100644
+--- a/web/package.json
++++ b/web/package.json
+@@ -46,7 +46,7 @@
+     "kbar": "^0.1.0-beta.48",
+     "match-sorter": "^8.2.0",
+     "motion": "^11.18.2",
+-    "next": "16.3.5",
++    "next": "16.3.8",
+     "next-themes": "^0.4.6",
+     "nextjs-toploader": "^3.9.17",
+     "nuqs": "^2.8.9",

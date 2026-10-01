@@ -1,0 +1,35 @@
+{
+  "baseCommit": "2ecd87edffe69c3b7a46eac577f9a542b4f291cd",
+  "source": "/Users/ouxianxing/.codex/visualizations/2026/09/30/01a0f2d3-c546-7451-a135-e5866039c423/rafii-founder-completion",
+  "copiedUncommittedPaths": [
+    {
+      "path": "control-web/app/control/founder-workspace.tsx",
+      "sha256": "448dc5aa09e081eb3d8a4576c548b3225ccbf6ac9e0e408e53cb636f6955dfad"
+    },
+    {
+      "path": "src/rafii_control/workspace.py",
+      "sha256": "8d4aa97549765b86a9232bc304a305d0a04a66932af01352f77b3873d18a3864"
+    },
+    {
+      "path": "control-web/package.json",
+      "sha256": "9247207b6c20a036166a1fac2c46c63474fe2e1e5a4690f07be7b848d68476e0"
+    },
+    {
+      "path": "control-web/package-lock.json",
+      "sha256": "07e996eca66efbdf9aecfc4c03820e875d1b87e0a87d4304cbcac3f3c9e45315"
+    },
+    {
+      "path": "web/package.json",
+      "sha256": "c51cb0f09edc914f2084fdb2f2bf6483d899298e87075883a2b66dc961a88c34"
+    },
+    {
+      "path": "web/package-lock.json",
+      "sha256": "72494342c0aaf26355149cd714ef2b7c46c971c1447e9ff1b9a2a53f68ef2ca7"
+    },
+    {
+      "path": "control-web/tests/workspace-browser.cjs",
+      "sha256": "d95659bc906575f0e575459d11f9e360a7fee8798ace795738748be330c2111b"
+    }
+  ],
+  "state": "dependent local preview snapshot; original unchanged"
+}

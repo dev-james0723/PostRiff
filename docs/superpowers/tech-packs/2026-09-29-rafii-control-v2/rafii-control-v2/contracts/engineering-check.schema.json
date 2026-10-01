@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:engineering-check",
+  "title": "engineering-check",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "repository": {
+      "const": "dev-james0723/PostRiff"
+    },
+    "candidateSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "baseSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "workflowDefinitionSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "trustedWorkflowId": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_.-]{1,100}$"
+    },
+    "suiteId": {
+      "type": "string",
+      "enum": [
+        "source-fast",
+        "domain-integrity",
+        "browser-critical",
+        "security-static",
+        "performance",
+        "release-contract",
+        "agent-regression",
+        "deep-nightly"
+      ]
+    },
+    "manifestVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "environment": {
+      "const": "disposable"
+    },
+    "networkProfile": {
+      "type": "string",
+      "enum": [
+        "deny_all",
+        "approved_package_registry",
+        "approved_readonly_probe"
+      ]
+    },
+    "maxWallSeconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 3600
+    },
+    "maxSpendMinor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "approvalRef": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "artifactPolicy": {
+      "const": "private_redacted_digest_bound"
+    },
+    "fixture": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "repository",
+    "candidateSha",
+    "baseSha",
+    "workflowDefinitionSha",
+    "trustedWorkflowId",
+    "suiteId",
+    "manifestVersion",
+    "environment",
+    "networkProfile",
+    "maxWallSeconds",
+    "maxSpendMinor",
+    "currency",
+    "approvalRef",
+    "artifactPolicy",
+    "fixture"
+  ],
+  "additionalProperties": false,
+  "description": "No shell command, production secret, target DB connection or mutable branch ref is accepted. Trusted workflow and approval must be resolved and validated by server."
+}

@@ -1,0 +1,218 @@
+[
+  {
+    "id": "R01",
+    "title": "Pinned consumer-saas branch observation",
+    "url": "https://api.github.com/repos/dev-james0723/PostRiff/branches/consumer-saas",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Source snapshot only, not production deployment proof."
+  },
+  {
+    "id": "R02",
+    "title": "Surface-neutral agent contracts",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/src/postriff_phase2/agent_runtime_v2/contracts.py",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "External/destructive/secret tools forbidden; workspace default; verified typed results."
+  },
+  {
+    "id": "R03",
+    "title": "Notification architecture",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/src/postriff_phase2/notifications/__init__.py",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Existing transactional event and delivery design."
+  },
+  {
+    "id": "R04",
+    "title": "NotificationService",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/src/postriff_phase2/notifications/service.py",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Read lines 1–140; source flags are not proof of activated delivery."
+  },
+  {
+    "id": "R05",
+    "title": "JEV client",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/src/postriff_phase2/growth/jev.py",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Read lines 1–130; qualified provider/account state not tested."
+  },
+  {
+    "id": "R06",
+    "title": "Frontend package and script inventory",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/web/package.json",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Recharts/TanStack/Sentry and current commands verified in source."
+  },
+  {
+    "id": "R07",
+    "title": "Browser CI workflow",
+    "url": "https://github.com/dev-james0723/PostRiff/blob/d91660b7936a5158b820914107306ad4a1e51c2d/.github/workflows/rafii-browser.yml",
+    "accessed": "2026-09-29",
+    "kind": "repo_evidence",
+    "scope_note": "Workflow read, not executed; exact checked/skip evidence needed."
+  },
+  {
+    "id": "S01",
+    "title": "PostHog Product Analytics",
+    "url": "https://posthog.com/product-analytics",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Trends, funnels, retention, paths and integrations; do not enable broad autocapture by default."
+  },
+  {
+    "id": "S02",
+    "title": "PostHog product analytics API documentation source",
+    "url": "https://github.com/PostHog/posthog.com/blob/master/contents/docs/product-analytics/surfaces/api.mdx",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Project Query API; exact scopes and hosted region must be verified at setup."
+  },
+  {
+    "id": "S03",
+    "title": "Sentry: List an organization’s issues",
+    "url": "https://docs.sentry.io/api/events/list-an-organizations-issues/",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Use organization endpoint and project filter, not deprecated project-issues listing."
+  },
+  {
+    "id": "S04",
+    "title": "Sentry Seer",
+    "url": "https://docs.sentry.io/product/ai-in-sentry/seer",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Optional AI diagnosis/patch capabilities; plan, repository authorization and data processing approval required."
+  },
+  {
+    "id": "S05",
+    "title": "Vercel Drains",
+    "url": "https://vercel.com/docs/drains",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Plan/cost/coverage dependent; no assumed account entitlement."
+  },
+  {
+    "id": "S06",
+    "title": "OpenTelemetry signals",
+    "url": "https://opentelemetry.io/docs/concepts/signals/",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Traces, metrics and logs; configuration and redaction remain application responsibilities."
+  },
+  {
+    "id": "S07",
+    "title": "Stripe: Automate payment retries",
+    "url": "https://docs.stripe.com/billing/revenue-recovery/smart-retries",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Eligible invoice recovery; hard-decline/missing-method limitations; avoid competing retry loops."
+  },
+  {
+    "id": "S08",
+    "title": "Stripe webhooks",
+    "url": "https://docs.stripe.com/webhooks",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Signature, retries, event-order and duplicate handling; qualify actual API version."
+  },
+  {
+    "id": "S09",
+    "title": "Resend webhooks",
+    "url": "https://resend.com/docs/webhooks/introduction",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Delivery/bounce and event-driven workflows; signed ingress and suppression required."
+  },
+  {
+    "id": "S10",
+    "title": "Supabase row-level security",
+    "url": "https://supabase.com/docs/guides/database/postgres/row-level-security",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Service-role bypass; view and role grants; no client secret exposure."
+  },
+  {
+    "id": "S11",
+    "title": "GitHub App installation authentication",
+    "url": "https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Short-lived installation tokens scoped to repositories/permissions."
+  },
+  {
+    "id": "S12",
+    "title": "GitHub: Securely using pull_request_target",
+    "url": "https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Do not run untrusted PR code with privileged base-context secrets."
+  },
+  {
+    "id": "S13",
+    "title": "Checkly documentation",
+    "url": "https://www.checklyhq.com/docs/",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "API/browser monitoring and REST integration; optional independent monitoring vendor."
+  },
+  {
+    "id": "S14",
+    "title": "Search Console Search Analytics query",
+    "url": "https://developers.google.com/webmaster-tools/v1/searchanalytics/query",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Aggregate site/query/page data; coverage and top-row limitations; no individual-user identity."
+  },
+  {
+    "id": "S15",
+    "title": "Langfuse documentation",
+    "url": "https://langfuse.com/docs",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Optional AI trace/evaluation workflow; choose one supplemental system and control private capture."
+  },
+  {
+    "id": "S16",
+    "title": "React Flow documentation",
+    "url": "https://reactflow.dev/learn",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Optional interactive node/edge UI, not an authorization or graph-database layer."
+  },
+  {
+    "id": "S17",
+    "title": "Apache ECharts features",
+    "url": "https://echarts.apache.org/en/feature.html",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Optional specialized chart renderer; do not add without a demonstrated gap."
+  },
+  {
+    "id": "S18",
+    "title": "Semgrep Community Edition",
+    "url": "https://semgrep.dev/products/community-edition",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Static analysis/rules, not proof the app has no vulnerabilities."
+  },
+  {
+    "id": "S19",
+    "title": "PyPA pip-audit",
+    "url": "https://github.com/pypa/pip-audit",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Known dependency advisories; dependency resolution can execute package installation behavior."
+  },
+  {
+    "id": "S20",
+    "title": "Lighthouse CI",
+    "url": "https://github.com/GoogleChrome/lighthouse-ci",
+    "accessed": "2026-09-29",
+    "kind": "official_documentation",
+    "scope_note": "Controlled performance checks, not production uptime verification."
+  }
+]

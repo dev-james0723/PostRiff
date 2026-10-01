@@ -1,0 +1,1669 @@
+openapi: 3.1.0
+info:
+  title: Rafii Control v2 Intelligence API
+  version: 2.0.0-design
+  description: Proposed initial intelligence contract. Not deployed. Existing support,
+    billing and user lifecycle endpoints require scoped adapters and are specified
+    in the master document; this file does not claim to implement all product routes.
+servers:
+- url: /api/control/v2
+  description: Same-origin control BFF; not the customer application host.
+security:
+- FounderSession: []
+paths:
+  /session:
+    get:
+      operationId: sessionRead
+      summary: Read current founder session and capabilities
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /overview:
+    get:
+      operationId: overviewRead
+      summary: Read six core metrics, source health and decisions
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /metrics/query:
+    post:
+      operationId: metricQuery
+      summary: Query approved metrics with semantic validation
+      x-required-capability: metrics.query
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema: &id001
+          type: string
+          minLength: 1
+          maxLength: 500
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricQuery'
+  /metrics/receipts/{id}:
+    get:
+      operationId: queryReceiptRead
+      summary: Read an authorized metric query receipt
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: &id002
+          type: string
+          format: uuid
+  /dashboards:
+    get:
+      operationId: dashboardList
+      summary: List available versioned dashboard views
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /dashboards/charts:
+    post:
+      operationId: chartSave
+      summary: Save a validated chart view, no new executable metric definition
+      x-required-capability: dashboards.write
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema: *id001
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChartSpec'
+  /copilot/turns:
+    post:
+      operationId: copilotTurn
+      summary: Submit a founder-scoped read/proposal turn
+      x-required-capability: copilot.use
+      responses:
+        '202':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema: *id001
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopilotTurn'
+  /copilot/runs/{id}:
+    get:
+      operationId: copilotRunRead
+      summary: Read run state and authorized evidence
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id002
+  /recommendations:
+    get:
+      operationId: recommendationList
+      summary: Read current recommendations and evidence state
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /recommendations/{id}:
+    get:
+      operationId: recommendationRead
+      summary: Read one recommendation
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id002
+  /approvals:
+    post:
+      operationId: approvalConfirm
+      summary: Confirm exact action digest with single-use fresh step-up proof
+      x-required-capability: actions.approve
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema: *id001
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+  /actions/{id}:
+    get:
+      operationId: actionRead
+      summary: Read durable action status; distinguish pending and verified outcomes
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id002
+  /engineering/checks:
+    post:
+      operationId: engineeringCheckSubmit
+      summary: Submit exact-SHA check using a validated existing approval
+      x-required-capability: engineering.check.execute
+      responses:
+        '202':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema: *id001
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EngineeringCheck'
+  /engineering/checks/{id}/receipt:
+    get:
+      operationId: engineeringReceiptRead
+      summary: Read verified runner receipt
+      x-required-capability: engineering.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EngineeringReceipt'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id002
+  /sources/health:
+    get:
+      operationId: sourceHealth
+      summary: Read source coverage, cursors and detector heartbeats
+      x-required-capability: control.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /audit:
+    get:
+      operationId: auditRead
+      summary: Read paginated safe audit events
+      x-required-capability: audit.read
+      responses:
+        '200':
+          description: Returned with safe schema and current evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafeProjection'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Operator/capability/scope denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Bounded query/operation rate exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Source or execution unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    FounderSession:
+      type: apiKey
+      in: cookie
+      name: __Host-rafii-control
+  schemas:
+    MetricQuery:
+      type: object
+      properties:
+        metricIds:
+          type: array
+          items:
+            type: string
+            enum: &id005
+            - paid_workspaces
+            - mrr
+            - delinquent_mrr
+            - mrr_new
+            - mrr_expansion
+            - mrr_contraction
+            - mrr_churn
+            - collections
+            - refunds
+            - dispute_net
+            - net_collections
+            - recovery_rate
+            - nrr
+            - grr
+            - logo_churn
+            - contribution
+            - cost_coverage
+            - active_users
+            - active_workspaces
+            - activation_rate
+            - time_to_value
+            - retention_d7
+            - retention_d28
+            - feature_adoption
+            - task_success
+            - publish_verified
+            - useful_outcomes
+            - automation_success
+            - ai_actual_cost
+            - ai_failed_cost
+            - cost_per_useful
+            - ai_quality
+            - ai_latency
+            - task_latency
+            - credit_grants
+            - credit_consumption
+            - credit_available
+            - credit_held
+            - credit_debt
+            - api_errors
+            - api_latency
+            - queue_age
+            - slo_burn
+            - affected_workspaces
+            - source_lag
+            - open_tickets
+            - first_response
+            - resolution_time
+            - csat
+            - repeat_tickets
+            - required_checks
+            - check_failures
+            - flake_rate
+            - security_open
+            - gsc_clicks
+            - gsc_ctr
+            - attribution_coverage
+            - source_paid_conversion
+            - cac
+            - decision_recovered_cash
+            - experiment_effect
+            - time_back
+            - mrr_reactivation
+          minItems: 1
+          maxItems: 6
+          uniqueItems: true
+        interval:
+          type: object
+          properties:
+            start: &id003
+              type: string
+              format: date-time
+            end: *id003
+            timeZone:
+              type: string
+              minLength: 1
+              maxLength: 80
+          required:
+          - start
+          - end
+          - timeZone
+          additionalProperties: false
+        groupBy:
+          type: array
+          items:
+            type: string
+            enum: &id004
+            - age_band
+            - baseline_version
+            - category
+            - cohort
+            - cost_center
+            - country
+            - currency
+            - device
+            - experiment
+            - failure_class
+            - feature
+            - grant_source
+            - incident
+            - job_type
+            - locale
+            - model
+            - page
+            - payment_type
+            - plan
+            - platform
+            - playbook
+            - priority
+            - provider
+            - query
+            - reason
+            - release
+            - repository
+            - route
+            - rubric_version
+            - scanner
+            - service
+            - severity
+            - source
+            - state
+            - status
+            - stream
+            - suite
+            - task_type
+            - test_id
+            - variant
+            - window
+            - workflow_type
+          uniqueItems: true
+          maxItems: 3
+        filters:
+          type: array
+          items:
+            type: object
+            properties:
+              dimension:
+                type: string
+                enum: *id004
+              operator:
+                type: string
+                enum:
+                - eq
+                - in
+              values:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                minItems: 1
+                maxItems: 20
+                uniqueItems: true
+            required:
+            - dimension
+            - operator
+            - values
+            additionalProperties: false
+          maxItems: 10
+        comparison:
+          type: string
+          enum:
+          - none
+          - previous_equal_elapsed
+          - previous_complete
+          - cohort_age_aligned
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      required:
+      - metricIds
+      - interval
+      - groupBy
+      - filters
+      - comparison
+      - limit
+      additionalProperties: false
+      description: Structural validation only. Server must additionally check interval
+        ordering/length, IANA timezone, per-metric dimensions, currency/grain compatibility,
+        permissions and query budget.
+    ChartSpec:
+      type: object
+      properties:
+        chartId:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{2,79}$
+        question:
+          type: string
+          minLength: 8
+          maxLength: 300
+        metricIds:
+          type: array
+          items:
+            type: string
+            enum: *id005
+          minItems: 1
+          maxItems: 6
+          uniqueItems: true
+        queryReceiptId: *id002
+        visualType:
+          type: string
+          enum:
+          - aging_histogram
+          - aging_table
+          - annotated_line
+          - annotated_timeline
+          - distribution
+          - entity_graph
+          - evidence_table
+          - flow
+          - funnel
+          - heatmap
+          - histogram
+          - interval_bar
+          - line
+          - matrix
+          - metric_strip
+          - outcome_table
+          - paired_comparison
+          - pareto
+          - priority_scatter
+          - scatter
+          - scenario_table
+          - service_graph
+          - stacked_area
+          - stacked_bar
+          - status_matrix
+          - survival_curve
+          - timeline
+          - trace_waterfall
+          - waterfall
+        definitionVersion:
+          type: integer
+          minimum: 1
+        dataState: &id009
+          type: string
+          enum:
+          - measured
+          - partial
+          - stale
+          - unavailable
+          - not_applicable
+          - suppressed
+        asOf: *id003
+        unit: *id001
+        grain: *id001
+        drilldownPolicy:
+          type: string
+          enum:
+          - aggregate_only
+          - founder_metadata
+          - valid_support_grant
+      required:
+      - chartId
+      - question
+      - metricIds
+      - queryReceiptId
+      - visualType
+      - definitionVersion
+      - dataState
+      - asOf
+      - unit
+      - grain
+      - drilldownPolicy
+      additionalProperties: false
+    Recommendation:
+      type: object
+      properties:
+        schemaVersion:
+          const: 2.0.0
+        recommendationId: *id002
+        investigationId: *id002
+        environment: &id006
+          type: string
+          enum:
+          - production
+          - staging
+          - local
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        facts:
+          type: array
+          items:
+            type: object
+            properties:
+              statement:
+                type: string
+                minLength: 1
+                maxLength: 2000
+              kind:
+                type: string
+                enum:
+                - stored
+                - deterministic_derived
+              evidenceRefs:
+                type: array
+                items: *id002
+                minItems: 1
+                maxItems: 20
+                uniqueItems: true
+            required:
+            - statement
+            - kind
+            - evidenceRefs
+            additionalProperties: false
+          minItems: 1
+          maxItems: 30
+          uniqueItems: true
+        hypotheses:
+          type: array
+          items:
+            type: object
+            properties:
+              statement:
+                type: string
+                minLength: 1
+                maxLength: 2000
+              supportingEvidenceRefs:
+                type: array
+                items: *id002
+                minItems: 1
+                maxItems: 20
+                uniqueItems: true
+              status:
+                type: string
+                enum:
+                - unconfirmed
+                - supported_not_causal
+                - reproduced
+            required:
+            - statement
+            - supportingEvidenceRefs
+            - status
+            additionalProperties: false
+          maxItems: 10
+        proposedAction:
+          type: object
+          properties:
+            operation:
+              type: string
+              enum:
+              - support.reply
+              - credits.grant
+              - credits.reverse
+              - billing.refund
+              - account.security_lock
+              - account.suspend
+              - account.reinstate
+              - account.delete
+              - engineering.check
+              - engineering.patch
+              - release.prepare
+              - chart.save
+            targetRefs:
+              type: array
+              items: *id001
+              minItems: 1
+              maxItems: 20
+              uniqueItems: true
+            riskTier:
+              type: string
+              enum:
+              - R0
+              - R1
+              - R2
+              - R3
+              - R4
+            parametersDigest: &id008
+              type: string
+              pattern: ^[0-9a-f]{64}$
+            requiresHumanApproval:
+              const: true
+            environment: *id006
+          required:
+          - operation
+          - targetRefs
+          - riskTier
+          - parametersDigest
+          - requiresHumanApproval
+          - environment
+          additionalProperties: false
+        impact:
+          type: object
+          properties:
+            basis:
+              type: string
+              enum:
+              - scenario
+              - observed_association
+              - experiment_estimate
+              - unknown
+            currency:
+              type:
+              - string
+              - 'null'
+              pattern: ^[A-Z]{3}$
+            lowMinor:
+              type:
+              - integer
+              - 'null'
+            baseMinor:
+              type:
+              - integer
+              - 'null'
+            highMinor:
+              type:
+              - integer
+              - 'null'
+            assumptions:
+              type: array
+              items: *id001
+              maxItems: 20
+          required:
+          - basis
+          - currency
+          - lowMinor
+          - baseMinor
+          - highMinor
+          - assumptions
+          additionalProperties: false
+        measurementPlan:
+          type: object
+          properties:
+            primaryMetric:
+              type: string
+              enum: *id005
+            guardrailMetrics:
+              type: array
+              items:
+                type: string
+                enum: *id005
+              maxItems: 6
+              uniqueItems: true
+            windowDays:
+              type: integer
+              minimum: 1
+              maximum: 366
+            method:
+              type: string
+              enum:
+              - deterministic_reconciliation
+              - functional_verification
+              - randomized_experiment
+              - observational_review
+            successCriterion: *id001
+          required:
+          - primaryMetric
+          - guardrailMetrics
+          - windowDays
+          - method
+          - successCriterion
+          additionalProperties: false
+        state:
+          type: string
+          enum:
+          - proposed
+          - approved
+          - rejected
+          - snoozed
+          - executing
+          - verification_pending
+          - measuring
+          - validated
+          - inconclusive
+          - invalidated
+          - closed
+        expiresAt: *id003
+        fixture:
+          type: boolean
+      required:
+      - schemaVersion
+      - recommendationId
+      - investigationId
+      - environment
+      - title
+      - facts
+      - hypotheses
+      - proposedAction
+      - impact
+      - measurementPlan
+      - state
+      - expiresAt
+      - fixture
+      additionalProperties: false
+      description: A recommendation is not an execution capability. Server validates
+        evidence ownership, freshness, operation policy and digest. Impact ranges
+        are not guaranteed revenue.
+    EventEnvelope:
+      type: object
+      properties:
+        schemaVersion:
+          const: 1
+        eventId: *id002
+        eventType:
+          type: string
+          enum:
+          - control.source.stale
+          - control.signal.detected
+          - control.investigation.completed
+          - control.recommendation.proposed
+          - control.action.verified
+          - control.engineering.check_completed
+          - control.heartbeat.missed
+        source: *id001
+        sourceEventId: *id001
+        environment: *id006
+        eventTime: *id003
+        receivedAt: *id003
+        subject:
+          type: object
+          properties:
+            type:
+              type: string
+              enum:
+              - source
+              - workspace
+              - incident
+              - investigation
+              - recommendation
+              - action
+              - engineering_job
+              - worker
+            id: *id001
+          required:
+          - type
+          - id
+          additionalProperties: false
+        classification:
+          type: string
+          enum:
+          - public
+          - internal_metadata
+          - customer_metadata
+          - private_support
+          - restricted_security
+        dedupeKey:
+          type: string
+          minLength: 8
+          maxLength: 250
+        payload:
+          type: object
+          maxProperties: 20
+        fixture:
+          type: boolean
+      required:
+      - schemaVersion
+      - eventId
+      - eventType
+      - source
+      - sourceEventId
+      - environment
+      - eventTime
+      - receivedAt
+      - subject
+      - classification
+      - dedupeKey
+      - payload
+      - fixture
+      additionalProperties: false
+      description: Envelope contract only. Each eventType needs its own allowlisted
+        payload validator before ingestion. Do not use a generic payload object to
+        bypass privacy validation.
+    EngineeringCheck:
+      type: object
+      properties:
+        schemaVersion:
+          const: 2.0.0
+        requestId: *id002
+        repository:
+          const: dev-james0723/PostRiff
+        candidateSha: &id007
+          type: string
+          pattern: ^[0-9a-f]{40}$
+        baseSha: *id007
+        workflowDefinitionSha: *id007
+        trustedWorkflowId:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,100}$
+        suiteId:
+          type: string
+          enum:
+          - source-fast
+          - domain-integrity
+          - browser-critical
+          - security-static
+          - performance
+          - release-contract
+          - agent-regression
+          - deep-nightly
+        manifestVersion:
+          type: integer
+          minimum: 1
+        environment:
+          const: disposable
+        networkProfile:
+          type: string
+          enum:
+          - deny_all
+          - approved_package_registry
+          - approved_readonly_probe
+        maxWallSeconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        maxSpendMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        approvalRef: *id002
+        artifactPolicy:
+          const: private_redacted_digest_bound
+        fixture:
+          type: boolean
+      required:
+      - schemaVersion
+      - requestId
+      - repository
+      - candidateSha
+      - baseSha
+      - workflowDefinitionSha
+      - trustedWorkflowId
+      - suiteId
+      - manifestVersion
+      - environment
+      - networkProfile
+      - maxWallSeconds
+      - maxSpendMinor
+      - currency
+      - approvalRef
+      - artifactPolicy
+      - fixture
+      additionalProperties: false
+      description: No shell command, production secret, target DB connection or mutable
+        branch ref is accepted. Trusted workflow and approval must be resolved and
+        validated by server.
+    EngineeringReceipt:
+      type: object
+      properties:
+        jobId: *id002
+        requestId: *id002
+        checkedSha: *id007
+        workflowDefinitionSha: *id007
+        state:
+          type: string
+          enum:
+          - passed
+          - failed
+          - partial
+          - infrastructure_failed
+          - canceled
+          - outcome_unknown
+        startedAt: *id003
+        finishedAt: *id003
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name: *id001
+              required:
+                type: boolean
+              status:
+                type: string
+                enum:
+                - pass
+                - fail
+                - skipped
+                - blocked
+                - not_run
+              exitCode:
+                type:
+                - integer
+                - 'null'
+              evidenceDigest:
+                type:
+                - string
+                - 'null'
+                pattern: ^[0-9a-f]{64}$
+            required:
+            - name
+            - required
+            - status
+            - exitCode
+            - evidenceDigest
+            additionalProperties: false
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+        attestationRef: *id001
+        fixture:
+          type: boolean
+      required:
+      - jobId
+      - requestId
+      - checkedSha
+      - workflowDefinitionSha
+      - state
+      - startedAt
+      - finishedAt
+      - checks
+      - attestationRef
+      - fixture
+      additionalProperties: false
+      description: Schema does not establish authenticity. Broker must verify attestation
+        and exact source metadata; a required non-pass prohibits state=passed.
+    ApprovalRequest:
+      type: object
+      properties:
+        proposalId: *id002
+        proposalVersion:
+          type: integer
+          minimum: 1
+        actionDigest: *id008
+        stepUpProofId: *id002
+        confirmation:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required:
+      - proposalId
+      - proposalVersion
+      - actionDigest
+      - stepUpProofId
+      - confirmation
+      additionalProperties: false
+    CopilotTurn:
+      type: object
+      properties:
+        requestId: *id002
+        conversationId: *id002
+        message:
+          type: string
+          minLength: 1
+          maxLength: 16000
+        contextEvidenceIds:
+          type: array
+          items: *id002
+          uniqueItems: true
+          maxItems: 20
+        modality:
+          type: string
+          enum:
+          - text
+          - voice
+      required:
+      - requestId
+      - conversationId
+      - message
+      - contextEvidenceIds
+      - modality
+      additionalProperties: false
+    Error:
+      type: object
+      properties:
+        requestId: *id002
+        code:
+          type: string
+          enum:
+          - AUTH_REQUIRED
+          - FOUNDER_REQUIRED
+          - STEP_UP_REQUIRED
+          - SCOPE_DENIED
+          - STALE_PREVIEW
+          - POLICY_CHANGED
+          - BUDGET_EXCEEDED
+          - SOURCE_UNAVAILABLE
+          - RUNNER_NOT_CONNECTED
+          - RATE_LIMITED
+          - IDEMPOTENCY_CONFLICT
+          - OUTCOME_UNKNOWN
+          - VALIDATION_FAILED
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+      required:
+      - requestId
+      - code
+      - message
+      additionalProperties: false
+    JobAccepted:
+      type: object
+      properties:
+        requestId: *id002
+        jobId: *id002
+        state:
+          type: string
+          enum:
+          - queued
+          - submitted_unconfirmed
+          - running
+          - blocked
+        statusPath:
+          type: string
+          pattern: ^/api/control/v2/
+      required:
+      - requestId
+      - jobId
+      - state
+      - statusPath
+      additionalProperties: false
+    SafeProjection:
+      type: object
+      properties:
+        requestId: *id002
+        environment: *id006
+        asOf: *id003
+        dataState: *id009
+        receiptIds:
+          type: array
+          items: *id002
+          maxItems: 100
+        data:
+          type: object
+      required:
+      - requestId
+      - environment
+      - asOf
+      - dataState
+      - receiptIds
+      - data
+      additionalProperties: false
+      description: Endpoint-specific data projection must be implemented as an allowlisted
+        DTO. Generic data is a placeholder for typed read views, not permission to
+        return raw database rows.
+    QueryResult:
+      type: object
+      properties:
+        requestId: *id002
+        queryReceiptId: *id002
+        asOf: *id003
+        dataState: *id009
+        rows:
+          type: array
+          items:
+            type: object
+          maxItems: 1000
+        warnings:
+          type: array
+          items: *id001
+          maxItems: 20
+      required:
+      - requestId
+      - queryReceiptId
+      - asOf
+      - dataState
+      - rows
+      - warnings
+      additionalProperties: false
