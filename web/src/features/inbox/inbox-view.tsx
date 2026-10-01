@@ -226,7 +226,19 @@ function InboxPage() {
       />
     );
   } else if (threads.length === 0 && !(followUpsAvailable && ((followUps.data?.counts.open ?? 0) > 0 || activeFilter === 'follow_ups'))) {
-    main = <InboxEmpty channels={channels} providers={providers} />;
+    // No comments and no open follow-up: the view switcher isn't shown, so the Follow-ups view (where a follow-up can
+    // be started without a comment) is offered here; otherwise it would be reachable only from a notification link.
+    main = (
+      <InboxEmpty
+        channels={channels}
+        providers={providers}
+        action={followUpsAvailable && canEdit ? (
+          <Button variant='glass' size='control' onClick={() => void setParams({ filter: 'follow_ups' })}>
+            {followUpCopy.tab}
+          </Button>
+        ) : undefined}
+      />
+    );
   } else {
     main = (
       <div className={PANES}>
@@ -440,7 +452,7 @@ function InboxSkeleton() {
  * No comments yet. The coverage strip above already lists each account with its Comments and Reply
  * levels and their evidence, so this state only says what is missing, with no second account list.
  */
-function InboxEmpty({ channels, providers }: { channels: ChannelView[] | undefined; providers: ProviderView[] | undefined }) {
+function InboxEmpty({ channels, providers, action }: { channels: ChannelView[] | undefined; providers: ProviderView[] | undefined; action?: ReactNode }) {
   const noAccounts = channels !== undefined && channels.length === 0;
   const anyDirect = (channels ?? []).some((channel) => channel.capabilities.comments_read?.level === 'Direct' && commentsReadFor(channel.platform, providers));
   return (
@@ -455,6 +467,7 @@ function InboxEmpty({ channels, providers }: { channels: ChannelView[] | undefin
               ? 'Rafii checks comments when a post is verified. Use Check for new comments to refresh later replies.'
               : `Comments appear for ${commentReadNames(providers)} accounts with Direct comments.`
         }
+        action={action}
         media={
           <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
             <Icons.inbox className='size-5' />
