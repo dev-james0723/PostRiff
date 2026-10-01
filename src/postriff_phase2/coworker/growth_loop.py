@@ -182,8 +182,13 @@ def planning_context(state, slot, now=None):
                 and cohort.get("connectionId") == slot.get("channelId") and cohort.get("provider") == str(slot.get("platform") or "").lower()
                 and cohort.get("language") == slot.get("language") and cohort.get("contentTypeId") == slot.get("contentType")):
             preferences.append({"experimentId": experiment["id"], "dimension": experiment["dimension"], "preferredFactor": experiment["result"].get("supportedFactor"), "causal": False})
-    return {"goal": {k: goal.get(k) for k in ("id", "name", "goalType", "primaryMetric", "targetValue", "targetAt")} if goal else None,
-            "approvedStrategyPreferences": preferences[:5], "constraints": "Recipe goals and user constraints win. Review and Queue approval remain required."}
+    context = {"goal": {k: goal.get(k) for k in ("id", "name", "goalType", "primaryMetric", "targetValue", "targetAt")} if goal else None,
+               "approvedStrategyPreferences": preferences[:5], "constraints": "Recipe goals and user constraints win. Review and Queue approval remain required."}
+    from .. import proof
+    if proof.enabled():   # RAFII Product Growth R-PROOF-02: accepted next-week decisions planned onto this slot, still in effect
+        from ..proof import strategy
+        context["strategyDecisions"] = strategy.for_slot(state, slot, {p["experimentId"] for p in preferences})
+    return context
 
 
 def transition(experiment, target, actor, now):

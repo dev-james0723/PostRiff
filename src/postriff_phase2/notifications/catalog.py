@@ -39,6 +39,8 @@ EVENTS = {
     # A relationship follow-up the person scheduled is due (G2-REL). An internal reminder: it never contacts the lead.
     "relationship.follow_up_due": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "follow_up_due"},
     "opportunity.detected": {"category": "opportunities", "severity": "info", "audience": "edit", "email": "digest", "push": "off", "template": "opportunity"},
+    # RAFII Product Growth R-BRF-02: one recipient's weekly opportunity brief (in-app; email only in the digest; never push, never urgent).
+    "opportunity.brief_ready": {"category": "opportunities", "severity": "info", "audience": "actor", "email": "digest", "push": "off", "template": "opportunity"},
     "analytics.weekly_ready": {"category": "analytics", "severity": "info", "audience": "edit", "email": "immediate", "push": "off", "template": "weekly_performance"},
     "analytics.anomaly_detected": {"category": "analytics", "severity": "warning", "audience": "edit", "email": "digest", "push": "off", "template": "analytics_anomaly"},
     "learning.preference_proposed": {"category": "learning", "severity": "info", "audience": "owner", "email": "digest", "push": "off", "template": "preference_proposed"},

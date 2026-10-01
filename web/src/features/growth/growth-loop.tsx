@@ -13,6 +13,7 @@ import { useCoworkerApi, usePerformance } from '@/lib/coworker/hooks';
 import type { GrowthExperiment, GrowthGoal, GrowthProof } from '@/lib/coworker/growth-types';
 import { QueryProblem } from '@/features/coworker/parts';
 import { cn } from '@/lib/utils';
+import { ProofRevisions } from './proof-v2';
 
 const queryKey = (w: string) => ['coworker', w, 'growth-loop'] as const;
 const field = 'rafii-focus rafii-quiet min-h-11 w-full rounded-xl border border-border px-3 text-base';
@@ -140,6 +141,7 @@ export function GrowthAnalytics() {
     <section aria-labelledby='proof-title' className='flex flex-col gap-3' id='proof-history'>
       <div className='flex flex-wrap items-center justify-between gap-3'><h2 id='proof-title' className='text-lg font-medium'>Proof of value</h2>{owner && <div className='flex flex-wrap gap-2'>{(['weekly', 'monthly'] as const).map(f => <Button key={f} variant='glass' disabled={growth.pending} onClick={() => void growth.run(() => growth.api.generateGrowthProof(growth.w, f))}>Generate {f} recap</Button>)}</div>}</div>
       <p className='text-muted-foreground text-sm'>Completed reporting periods (UTC), backed by approved work and verified outcomes. Your existing notification settings control delivery.</p>
+      <ProofRevisions owner={owner} />
       {data.proofs.toReversed().map(p => <ProofCard key={p.id} proof={p} open={() => { void growth.api.growthProofAction(growth.w, p.id, 'opened').catch(() => {}); }} act={async () => { if (await growth.run(() => growth.api.growthProofAction(growth.w, p.id, 'acted'))) window.location.assign('/app/weekly'); }} />)}
       {!data.proofs.length && <p className='text-muted-foreground text-sm'>Your first recap will show accepted work, publishing verification and the data actually covered.</p>}
     </section>

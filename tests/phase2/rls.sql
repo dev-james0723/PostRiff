@@ -51,6 +51,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/080_customer_results.sql
 \ir ../../migrations/postriff/081_relationships.sql
 \ir ../../migrations/postriff/083_visual_packs.sql
+\ir ../../migrations/postriff/084_briefs_proof_strategy.sql
 \ir ../../migrations/postriff/087_source_uploads.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
