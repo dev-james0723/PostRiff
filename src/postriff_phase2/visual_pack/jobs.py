@@ -15,7 +15,6 @@ WORKSPACES_PER_TICK = 10
 
 
 def tick(hosted, deadline) -> dict:
-    from .service import VisualPackService
     storage = getattr(getattr(hosted, "assets", None), "storage", None)
     if storage is None:
         return {"status": "skipped", "reason": "storage_unconfigured"}
@@ -33,22 +32,31 @@ def tick(hosted, deadline) -> dict:
                     "  AND coalesce(a->>'deleted','false')='false' AND coalesce(a->>'deletionPending','false')='false'"
                     "  AND a->>'processing'='decoded' AND coalesce(nullif(a->>'mime',''),'image/') LIKE 'image/%%')) LIMIT %s", (WORKSPACES_PER_TICK,))
         candidates = [row[0] for row in cur.fetchall()]
+    failed = 0
     for workspace_id in candidates:
         if time.monotonic() >= deadline:
             break
+        try:
+            purged += _sweep(hosted, storage, workspace_id)
+            workspaces += 1
+        except Exception:  # noqa: BLE001 - one workspace's storage error must not stop the others; it is retried next tick
+            failed += 1
+    return {"status": "ok", "workspaces": workspaces, "purged": purged, **({"failed": failed} if failed else {})}
+
+
+def _sweep(hosted, storage, workspace_id) -> int:
+    from .service import VisualPackService
+    with hosted.connection_factory() as db, db.cursor() as cur:
+        cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
+        row = cur.fetchone()
+        state = (json.loads(row[0]) if isinstance(row[0], str) else row[0]) if row else {}
+        stale = VisualPackService._stale_renders(cur, workspace_id, state)
+    for item in stale:
+        for name in item["objects"]:   # files first: a revision is marked purged only once its files are gone
+            storage.delete(workspace_id, "visual-pack", name)
         with hosted.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
-            row = cur.fetchone()
-            state = (json.loads(row[0]) if isinstance(row[0], str) else row[0]) if row else {}
-            stale = VisualPackService._stale_renders(cur, workspace_id, state)
-        workspaces += 1
-        for item in stale:
-            for name in item["objects"]:
-                storage.delete(workspace_id, "visual-pack", name)
-            with hosted.connection_factory() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_visual_pack_revisions SET purged_at=now(),purge_reason='source_image_deleted' "
-                            "WHERE workspace_id=%s AND pack_id=%s AND revision_no=%s AND purged_at IS NULL", (workspace_id, item["packId"], item["revision"]))
-                VisualPackService._fact(cur, workspace_id, item["packId"], item["revision"], "purged", None,
-                                        {"reason": "source_image_deleted", "files": len(item["objects"])})
-            purged += 1
-    return {"status": "ok", "workspaces": workspaces, "purged": purged}
+            cur.execute("UPDATE public.pr_visual_pack_revisions SET purged_at=now(),purge_reason='source_image_deleted' "
+                        "WHERE workspace_id=%s AND pack_id=%s AND revision_no=%s AND purged_at IS NULL", (workspace_id, item["packId"], item["revision"]))
+            VisualPackService._fact(cur, workspace_id, item["packId"], item["revision"], "purged", None,
+                                    {"reason": "source_image_deleted", "files": len(item["objects"])})
+    return len(stale)
