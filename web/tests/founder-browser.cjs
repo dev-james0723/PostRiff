@@ -122,7 +122,24 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
       check(`${label}: no fallback state`, !/is on its way|could not be drawn|Section failed/i.test(body), body.match(/[^.\n]*(is on its way|could not be drawn|Section failed)[^.\n]*/i)?.[0]);
       check(`${label}: never renders NaN or undefined`, !/\bNaN\b|\bundefined\b/.test(body), body.match(/[^\n]{0,60}\b(NaN|undefined)\b[^\n]{0,60}/)?.[0]);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      check(`${label}: no horizontal scroll`, overflow <= 1, overflow);
+      let culprits;
+      if (overflow > 1) {
+        // Name what sticks out: the widest and the narrowest elements whose right edge passes the viewport.
+        culprits = await page.evaluate(() => {
+          const limit = window.innerWidth + 1;
+          const out = [];
+          for (const element of document.querySelectorAll('body *')) {
+            const rect = element.getBoundingClientRect();
+            if (rect.width > 0 && rect.right > limit) {
+              const cls = typeof element.className === 'string' ? element.className : '';
+              out.push({ tag: element.tagName.toLowerCase(), cls: cls.slice(0, 90), role: element.getAttribute('role'), label: element.getAttribute('aria-label'), right: Math.round(rect.right), width: Math.round(rect.width) });
+            }
+          }
+          out.sort((a, b) => b.width - a.width);
+          return { widest: out.slice(0, 4), narrowest: out.slice(-4) };
+        });
+      }
+      check(`${label}: no horizontal scroll`, overflow <= 1, { overflow, culprits });
       if (axeHere) {
         const violations = await axe(page);
         check(`${label}: axe without critical/serious violations`, violations.length === 0, violations);

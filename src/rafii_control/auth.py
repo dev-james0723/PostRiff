@@ -20,8 +20,11 @@ CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'wo
                           # Founder Admin P1/P2 (CONTRACTS §8, migration 056). Every write among them needs a fresh second factor
                           # (step_up) and a preview → confirm pair with a content-free audit row; the agent never holds them.
                           'usage.reconcile', 'credits.adjust', 'accounts.block', 'refunds.prepare', 'founder.export'})
-# Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget of 120/min. A domain page asks for
+# Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget (READ_BUDGET). A page load makes
+# five to ten Control reads (session, page records, incidents, follow-ups, receipts), so 300/min lets a founder move quickly
+# between sections and still bounds a runaway client. A domain page asks for
 # 8–15 receipted metrics at once, so metrics.query allows 240/min (4/s): enough to move between sections, still a hard ceiling.
+READ_BUDGET = 300
 BUDGETS = {'copilot.use': 5, 'metrics.query': 240, 'founder.agent.turn': 20, 'founder.call.request': 5, 'founder.action': 10, 'founder.voice': 5, 'founder.export': 10}
 MOUNTS = ('separate', 'embedded')
 
@@ -216,7 +219,7 @@ class Boundary:
             if ending_preview and (capability != 'control.read' or not unsafe): raise ControlError('SCOPE_DENIED')
             # Read throttling must not prevent an authorized founder from revoking their session.
             purpose = 'session.logout' if ending_session else 'preview.stop' if ending_preview else 'copilot.read' if capability == 'copilot.use' and not unsafe else purpose or capability
-            self.store.budget(purpose, user, BUDGETS.get(purpose, 120))
+            self.store.budget(purpose, user, BUDGETS.get(purpose, READ_BUDGET))
             self._audit(capability, 'allowed', user, session_id, request_id)
             self.store.touch(row['token_hash'], now)
             return {'operator': operator, 'session': row, 'csrfToken': csrf_token(token)}

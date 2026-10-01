@@ -16,6 +16,12 @@ from .demo_dataset import (sample_data, SCHEMA_VERSION, COLLECTIONS, PAGE_SIZE,
                            bounded_snapshot, linked_records, refresh_summary, receipt)
 
 
+# The founder's Demo dataset is one ~66 MB row; parsing it costs seconds, and a page reads it several times. Reads keep the
+# parsed payload per process, keyed by operator, environment and the row's version (xmin changes on every write), so a
+# Demo action or reset is seen on the next read. Only the latest version per operator is kept. Callers get a shallow copy.
+_DEMO_CACHE = {}
+
+
 class WorkspaceService:
     def __init__(self, store): self.store = store
 
@@ -64,11 +70,31 @@ class WorkspaceService:
             return False
         return bool(apply_demo_action(data, action, principal))
 
+    def _demo_version(self, con, actor):
+        row = con.execute('SELECT xmin::text AS version FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s',
+                          (actor, self.store.environment)).fetchone()
+        return row['version'] if row else None
+
+    def _cached_demo(self, con, actor):
+        entry = _DEMO_CACHE.get((actor, self.store.environment))
+        if entry is None: return None
+        try: version = self._demo_version(con, actor)
+        except Exception: return None
+        return dict(entry[1]) if version is not None and version == entry[0] else None
+
+    def _remember_demo(self, con, actor, data):
+        try: version = self._demo_version(con, actor)
+        except Exception: return
+        if version is not None: _DEMO_CACHE[(actor, self.store.environment)] = (version, data)
+
     def demo(self, principal, action=None):
         # Isolation is enforced by RLS and the verified principal, never a browser-supplied actor.
         with self.store.transaction() as con:
             actor = self.identity(principal)
             con.execute("SELECT set_config('rafii_control.operator',%s,true)",(actor,))
+            if action is None:
+                cached = self._cached_demo(con, actor)
+                if cached is not None: return cached
             # Reads take no row lock: a page fires several Demo reads at once, and a FOR UPDATE on this one large row made them
             # queue behind each other until the 10 s Control deadline answered 503. Actions and the one-time upgrade still lock.
             read = action is None
@@ -92,7 +118,9 @@ class WorkspaceService:
                 con.execute('UPDATE rafii_control.demo_workspaces SET payload=%s,replays=%s WHERE operator_id=%s AND environment=%s',
                             (Jsonb(data),Jsonb(replays),actor,self.store.environment))
             data['receipt'] = receipt(data)
-            if action is None: return data
+            if action is None:
+                self._remember_demo(con, actor, data)
+                return dict(data)
             if set(action) != {'action','targetId','value','revision','requestId'}: raise ControlError('VALIDATION_FAILED',400)
             if (not isinstance(action['action'],str) or not isinstance(action['targetId'],str) or
                 not re.fullmatch('[A-Za-z0-9-]{1,80}',action['targetId']) or not isinstance(action['value'],str) or len(action['value'].encode())>4000 or

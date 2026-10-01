@@ -62,9 +62,19 @@ class ControlApplication:
         self.workspace = WorkspaceService(queries.store) if queries and hasattr(queries,'store') else None
         self._founder_store = None
 
+    @staticmethod
+    def deadline_seconds(path):
+        """The request's wall-clock budget. Ordinary reads keep 10 s. A founder agent turn runs the model inside the request
+        (agent_runtime_v2.TURN_BUDGET_SECONDS = 240), so agent routes get 270 s, under the function's 300 s limit. The
+        Overview composes sixteen receipted metrics in one call, so it gets 30 s. Each statement stays capped at 5 s."""
+        tail = path[len('/api/control/v2'):] if path.startswith('/api/control/v2/') else path
+        if tail.startswith('/agent/'): return 270
+        if tail == '/overview': return 30
+        return 10
+
     def __call__(self, environ, start_response):
         request_id = str(uuid.uuid4())
-        deadline_token = deadline.set(monotonic()+10)
+        deadline_token = deadline.set(monotonic()+self.deadline_seconds(environ.get('PATH_INFO', '')))
         headers = [('Content-Type', 'application/json'), ('Cache-Control', 'private, no-store'), ('Vary', 'Cookie, Origin'),
                    ('X-Content-Type-Options', 'nosniff'), ('Referrer-Policy', 'no-referrer')]
         status = 200
