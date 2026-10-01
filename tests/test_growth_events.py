@@ -1,6 +1,7 @@
 """R-MET-03 event taxonomy: allowlisted properties, dedupe shape, never raising into the caller."""
 import json
 import unittest
+from unittest import mock
 
 from postriff_phase2 import growth_events
 
@@ -30,19 +31,41 @@ class GrowthEventsTest(unittest.TestCase):
         self.assertEqual(growth_events.properties("draft.accepted", {"revision": True, "origin": "Continuation"}), {})
         self.assertEqual(growth_events.properties("week.completed", {"slots": 2_000_000}), {})
 
-    def test_emit_dedupes_on_entity_revision_and_uses_savepoint(self):
-        cur = Cursor()
-        self.assertTrue(growth_events.emit(cur, workspace_id="w", event="draft.accepted", entity_id="v_1", revision=2,
-                                           user_id="u", values={"origin": "continuation", "revision": 2}))
-        insert = next(p for s, p in cur.statements if s.startswith("INSERT"))
-        self.assertEqual(insert[4], "draft.accepted:v_1:2")
+    W, U = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"
+
+    def setUp(self):
+        if growth_events._shared is not None:
+            growth_events._shared.reset()   # a suspension from another test must not hide this one's write
+
+    def check_written(self, cur, savepoint):
+        insert = next(p for s, p in cur.statements if s.startswith("INSERT INTO public.pr_product_events"))
+        self.assertEqual((insert[0], insert[1], insert[2], insert[4]), (self.W, self.U, "draft.accepted", "draft.accepted:v_1:2"))
         self.assertEqual(json.loads(insert[3]), {"origin": "continuation", "revision": 2})
-        self.assertEqual(cur.statements[0][0], "SAVEPOINT growth_event")
+        self.assertTrue(cur.statements[0][0].startswith(savepoint), cur.statements[0][0])
+
+    def test_emit_goes_through_the_shared_founder_writer_when_present(self):
+        self.assertIsNotNone(growth_events._shared, "Founder's product_events is part of production now")
+        cur = Cursor()
+        self.assertTrue(growth_events.emit(cur, workspace_id=self.W, event="draft.accepted", entity_id="v_1", revision=2,
+                                           user_id=self.U, values={"origin": "continuation", "revision": 2}))
+        self.check_written(cur, "SAVEPOINT product_event_")
+
+    def test_emit_falls_back_to_the_identical_local_write(self):
+        cur = Cursor()
+        with mock.patch.object(growth_events, "_shared", None):
+            self.assertTrue(growth_events.emit(cur, workspace_id=self.W, event="draft.accepted", entity_id="v_1", revision=2,
+                                               user_id=self.U, values={"origin": "continuation", "revision": 2}))
+        self.check_written(cur, "SAVEPOINT growth_event")
 
     def test_failure_never_raises_into_the_product_action(self):
-        cur = Cursor(fail_on_insert=True)
-        self.assertFalse(growth_events.emit(cur, workspace_id="w", event="result.ingested", entity_id="r", values={}))
-        self.assertIn("ROLLBACK TO SAVEPOINT growth_event", [s for s, _ in cur.statements])
+        for shared in (growth_events._shared, None):
+            cur = Cursor(fail_on_insert=True)
+            with mock.patch.object(growth_events, "_shared", shared):
+                self.assertFalse(growth_events.emit(cur, workspace_id=self.W, event="result.ingested", entity_id="r", values={}))
+            self.assertTrue(any(s.startswith("ROLLBACK TO SAVEPOINT") for s, _ in cur.statements), shared)
+
+    def test_non_uuid_workspace_is_never_written(self):
+        self.assertFalse(growth_events.emit(Cursor(), workspace_id="w", event="result.ingested", entity_id="r"))
 
     def test_unknown_event_is_a_programming_error(self):
         with self.assertRaises(ValueError):

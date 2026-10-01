@@ -352,6 +352,9 @@ class HostedCallSiteTests(unittest.TestCase):
         service = HostedWorkspaceService.__new__(HostedWorkspaceService)
         service.connection_factory, service.verify_session, service.public_base_url = (lambda: script), (lambda token: USER), ""
         service.commands = SimpleNamespace(present=lambda saved, revision: {"revision": revision})
+        # Pricing v2 (merged with Product Growth v2): bootstrap reads the billing mode and refreshes the plan lifecycle.
+        service.billing = SimpleNamespace(pricing_v2_enabled=False, lifecycle=lambda cur, workspace_id, now: None)
+        service.clock = lambda: NOW
         result = service.bootstrap("token", "studio")
         return script, result
 

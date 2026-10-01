@@ -5,8 +5,10 @@ with the PostgreSQL repository's contract. The disposable-database run is tests/
 """
 import copy
 import unittest
+from unittest import mock
 
 from postriff_alpha.domain import AlphaError
+from postriff_phase2 import growth_events
 from postriff_phase2 import campaigns
 from postriff_phase2.coworker import overlays
 from postriff_phase2.series import jobs, model as m
@@ -358,7 +360,10 @@ class ContractTest(Base):
 
     def test_approval_records_one_episode_accepted_event_and_a_content_free_audit(self):
         series = self.create()["series"]
-        self.act("approve", series["id"], series["episodes"][0]["id"])
+        # The fixture's workspace id is not a UUID, which the shared Founder writer (rightly) refuses to record; the
+        # identical local write is used to check the event's shape here (test_growth_events covers both writers).
+        with mock.patch.object(growth_events, "_shared", None):
+            self.act("approve", series["id"], series["episodes"][0]["id"])
         inserts = [params for sql, params in self.repo.sql if "pr_product_events" in sql]
         self.assertEqual(len(inserts), 1)
         self.assertEqual(inserts[0][2], "series.episode_accepted")

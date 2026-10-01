@@ -182,6 +182,7 @@ def _price_fields(obj, item, price):
 def _subscription_fields(obj):
     item = _first_item(obj)
     meta = _metadata(obj, ("metadata",))
+    price = item.get("price") if isinstance(item.get("price"), dict) else {}   # expanded price, for the valued fields
     return {
         "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None, "priceVariantId": meta.get("price_variant_id") or None, "priceId": _ref(item.get("price")),
         "customerId": _ref(obj.get("customer")), "subscriptionId": _ref(obj.get("id")),
