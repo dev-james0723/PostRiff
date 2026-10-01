@@ -6,7 +6,7 @@ plus `blocked` / `failed` / `not_run` with a reason. Data mode (`demo|synthetic|
 means: focused unit tests + disposable PostgreSQL 17 groups on a private port, synthetic providers, Python 3.12, on the
 integrated branch unless a row says "worker branch". Web TypeScript is checked only in CI on this machine (D-017).
 
-Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft) · pushed HEAD `41c4e9cf`.
+Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft) · integrated head `dd1870b4` (pushed: `d2469a9f`).
 
 ## Program gates
 
@@ -14,12 +14,12 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 |---|---|---|
 | G0.1 integration map | local_verified | `DECISIONS.md` D-001…D-007; production `dpl_HSmKDFfjkd8UCaoo2QfgerZUVwLL` @ `dcb5bcdc` |
 | Pricing v2 + Inbox v1 merged | local_verified | merges `8726adbd`, `575caaf9` |
-| Slices merged | 6 of 7 | results `de727483`, relationships `d16e9652`, visual pack `c5c91d90`, series `38abb86c`, intake `b6eac5e2`, pricing web `e8a68703`; briefs/proof (W-LOOP) still in progress |
-| Local unit suite (integrated) | passed at `7dc55c5f` (3,128 OK / 245 skipped); slice modules re-run after each merge (271 + 147 OK) | `.venv-growth`, Python 3.12 |
-| Web node tests (integrated) | passed: 604/604 at `41c4e9cf` parent | `node --test --test-concurrency=1 web/tests/*` |
-| PR #87 CI | `3a1d7b3a`: unit gate failed on a copy-gate hit (fixed `7dc55c5f`); `a42bd212`: web build failed on 4 TS2345 errors (fixed `41c4e9cf`); `41c4e9cf` running | GitHub Actions `Rafii local release gates`, `Rafii browser scenes` |
-| Browser journeys | first-week journey added to `rafii-browser.yml`; other slices not yet in the harness | `web/tests/growth-v2-browser.cjs` |
-| Vercel preview build | passed on `d3825fbf`; not re-run since the slice merges | Vercel check on PR #87 |
+| Slices merged | 7 of 7 | results `de727483`, relationships `d16e9652`, visual pack `c5c91d90`, series `38abb86c`, intake `b6eac5e2`, pricing web `e8a68703`, briefs/proof `7e4815ce` |
+| Local unit + web node tests | passed | slice and affected modules after each merge; web node 605/605; oxlint 0 errors |
+| PR #87 CI on `d2469a9f` | typecheck + lint + preview window: **passed**; browser scenes: Automations now passes, but the growth harness step fails because Next 16 refuses a second `next dev` in `web/` (W-BROWSER fixing via `POSTRIFF_DIST_DIR`); release gates: running | GitHub Actions runs 36934793626, 36934793633, 36934793624 |
+| Vercel preview | `dpl_2xQHeEv1XfQenwPaWepNQFN59Lr6` @ `d2469a9f` READY (staging-isolated); pricing page legacy and unchanged; `/api/growth-features` → `{"firstWeek": false}`; found and fixed `/api/plans` 500 on a pre-048 database (`c8ccf2a6`) | `vercel curl`, runtime log `UndefinedColumn` |
+| Whole-branch review | running (billing, backend security/privacy, web, briefs/proof + late endpoints) | four read-only reviewers |
+| Browser journeys for slices (AC37/AC39) | in progress (W-BROWSER) | `web/tests/growth-v2-browser.cjs` |
 
 ## Requirements
 
@@ -37,13 +37,13 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 | R-OUT-01..03 | local_verified | migration 080; `postgres_results` (25), signing/model unit tests, webhook contract | live first-party connection needs a customer endpoint |
 | R-SER-01/02 | local_verified (worker branch PG; unit on integrated) | series in workspace planning state, projected to `pr_campaigns` (no migration 082, D-021); `postgres_series` (8 checks) | integrated PG run in CI; browser |
 | R-VIS-01..03 | local_verified (export path); queue handoff `blocked` | migration 083; Pillow + bundled Noto Sans TC; `postgres_visual_packs` (AC22/AC23); publisher guard refuses multi-image jobs | a publisher must be verified for carousels before queueing (CAROUSEL_VERIFIED empty) |
-| R-BRF-01/02, R-PROOF-01/02 | in progress | W-LOOP (084) | integrate when reported |
+| R-BRF-01/02, R-PROOF-01/02 | local_verified | migration 084; `postgres_briefs_proof` (17 groups, AC24–AC27, AC34) re-run on the integrated branch with the real results/visual-pack modules; unit 405 OK; web gated by `briefs`/`proof` | browser journeys; staging |
 | R-ENG-01/02 | local_verified | `growth_v2_routes` (dispatch/public/cron); 9 slice tools registered through `growth_v2_agent_tools` (voice parity, scopes); array schemas declare items | per-slice browser coverage |
-| R-ENG-03 | local_verified (disposable) | migrations 080, 081, 083, 087 additive with forced RLS; `rls.sql` loads them in order; 082 unused (D-021) | sha-pinned release runner (prepared, not executed) |
-| R-MET-01 dictionary | local_verified | `metric_definitions.py`; Founder-format contract `contracts/founder-metrics-growth.json` generated from it with a drift test (`6b5b0402`) | Founder owner registers the 20 definitions in `metrics.d` |
+| R-ENG-03 | local_verified (disposable) | migrations 080, 081, 083, 084, 087 additive with forced RLS; `rls.sql` loads them in order; 082 unused (D-021); pre-048 readers guarded (`postgres_pricing_catalog_pre048`) | runner `scripts/product_growth_release_migrate.py` pins all eight files (not executed) |
+| R-MET-01 dictionary | local_verified | `metric_definitions.py`; 20 Founder catalog rows generated by `scripts/growth_metric_contract.py` in Founder's own vocabulary; checked read-only by Founder Control's main-checkout session against PR #88 (no id collisions) | PR #88 owner appends the rows to `catalogs/metrics.json` (not `metrics.d/`) |
 | R-MET-02 paid conversion | local_verified | cash-paid from history, refund-adjusted variants, `test_metric_definitions`, `postgres_growth_fleet_v2` | `dataState=partial` until `pr_invoices` (Founder P1) lands |
 | R-MET-03 events/costs | implemented | one taxonomy (`growth_events`); emitted by first week, results (ingested/reversed), relationships (followup_outcome), series (episode_accepted), visual pack (accepted/exported); intake emits audit rows only | briefs/proof events with W-LOOP; cost lineage via Founder `business_usage_v2` |
-| R-NFR-01..04 | not_run | — | release gates on staging |
+| R-NFR-01..04 | partially verified locally | trust boundaries, consent/retention and bounded jobs covered by slice PG groups; features never queried while off (growth-features gate); a11y lint clean | browser a11y/layout journeys (W-BROWSER); p95 bounded-read measurement needs staging (blocked on migrations) |
 
 ## Live blockers (exact owner action)
 
