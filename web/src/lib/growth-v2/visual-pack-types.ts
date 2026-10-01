@@ -124,6 +124,7 @@ export interface PackPalette {
 export interface PackView {
   definitionVersion: string;
   dataState: 'available' | 'partial' | 'unavailable' | 'stale';
+  asOf: number;
   pack: { id: string; language: string; currentRevision: number; createdAt: number; updatedAt: number; status: 'active' | 'archived'; format: string; source: { variantId: string | null; campaignId: string | null } };
   revision: PackRevision;
   receipt: string;
@@ -154,6 +155,8 @@ export interface PackList {
   items: PackListItem[];
   nextCursor: string | null;
   definitionVersion: string;
+  dataState: 'available' | 'partial' | 'unavailable' | 'stale';
+  asOf: number;
 }
 
 export interface SlidePatch {

@@ -18,6 +18,7 @@ import hashlib
 import io
 import json
 import re
+import time
 import uuid
 import zipfile
 from contextlib import contextmanager
@@ -349,7 +350,7 @@ class VisualPackService:
             next_cursor = None
             if more and rows:
                 next_cursor = base64.urlsafe_b64encode(json.dumps([float(rows[-1][7]), rows[-1][0]]).encode()).decode().rstrip("=")
-            return {"items": items, "nextCursor": next_cursor, "definitionVersion": DEFINITION}
+            return {"items": items, "nextCursor": next_cursor, "definitionVersion": DEFINITION, "asOf": time.time(), "dataState": "available"}
 
     def get(self, workspace_id, token, pack_id):
         with self._tx(token, workspace_id, "read") as (cur, _principal, state):
@@ -379,7 +380,7 @@ class VisualPackService:
         current = rev["revision"] == pack["currentRevision"]
         assisted = current and rev["state"] in ("accepted",) + EXPORTED and status == "current" and live["ok"] and rev["purgedAt"] is None
         return {
-            "definitionVersion": DEFINITION, "dataState": "available",
+            "definitionVersion": DEFINITION, "dataState": "available", "asOf": time.time(),
             "pack": {k: pack[k] for k in ("id", "language", "currentRevision", "createdAt", "updatedAt", "status")}
                     | {"format": checks.FORMAT, "source": {"variantId": pack["sourceVariantId"], "campaignId": pack["sourceCampaignId"]}},
             "revision": {"revision": rev["revision"], "state": rev["state"], "current": current, "createdAt": rev["createdAt"],

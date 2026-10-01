@@ -256,7 +256,7 @@ with connection() as db:
     db.execute("UPDATE public.pr_memberships SET role='owner',can_publish=true WHERE workspace_id=%s AND user_id=%s", (wid, ONE))
 error = refused(lambda: packs.queue(wid, "one", pack_id, {"expectedRevision": 4, "channelId": "ig-account"}), 409, "unsupported_input")
 view = packs.get(wid, "one", pack_id)
-check("queue refused with its reason and nothing queued", "Export the files" in str(error) and view["handoff"]["queue"]["available"] is False
+check("AC23 Queue handoff refused with its reason; nothing queued", "Export the files" in str(error) and view["handoff"]["queue"]["available"] is False
       and view["handoff"]["queue"]["channels"][0]["supported"] is False and rows("SELECT count(*) FROM public.pr_visual_pack_events WHERE kind='queued'")[0][0] == 0)
 
 # --- accept → export → download → confirm, each a separate fact (AC23) ---------------------------------------------------
@@ -280,7 +280,7 @@ with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
     pngs = [bundle.read(f"slide-{i:02d}.png") for i in range(1, 7)]
     alt = bundle.read("alt-text.txt").decode()
     caption = bundle.read("caption.txt").decode()
-check("export zip: six PNGs, caption, alt text, manifest, handoff note", names == [f"slide-{i:02d}.png" for i in range(1, 7)] + ["caption.txt", "alt-text.txt", "manifest.json", "HANDOFF.txt"])
+check("AC22 export zip: six PNGs, caption, alt text, manifest, handoff note", names == [f"slide-{i:02d}.png" for i in range(1, 7)] + ["caption.txt", "alt-text.txt", "manifest.json", "HANDOFF.txt"])
 check("export PNGs are the rendered files", [hashlib.sha256(p).hexdigest() for p in pngs] == [f["sha256"] for f in files])
 check("export manifest has no storage locations and says not published", "storagePath" not in json.dumps(exported_manifest)
       and exported_manifest["publication"] == "not_published_by_rafii" and exported_manifest["handoff"] == "assisted_export")
@@ -291,7 +291,7 @@ check("downloads are byte-identical and counted once as a fact", archive == seco
 refused(lambda: packs.confirm_used(wid, "one", pack_id, {"expectedRevision": 4}), 400, "approval_required")
 used = packs.confirm_used(wid, "one", pack_id, {"expectedRevision": 4, "confirmed": True})
 facts = used["revision"]["facts"]
-check("export_ready, downloaded and user_confirmed_used are separate facts", used["revision"]["state"] == "user_confirmed_used"
+check("AC23 export_ready, downloaded and user_confirmed_used are separate facts", used["revision"]["state"] == "user_confirmed_used"
       and facts["exportReadyAt"] and facts["downloadedAt"] and facts["userConfirmedUsedAt"] and facts["queuedAt"] is None
       and "did not publish" in used["receipt"])
 with connection() as db, db.cursor() as cur:
@@ -302,12 +302,12 @@ check("handoff_counts per fact, nothing queued or verified", counts == {"exportR
 
 # --- editing an exported pack invalidates acceptance/export; earlier revisions and files stay (AC23) ----------------------
 changed = packs.edit(wid, "one", pack_id, {"idempotencyKey": "edit-0008-after", "expectedRevision": 4, "slides": [{"key": slides[0]["key"], "text": "新的開場：週六陶藝體驗。"}]})
-check("edit after export: new draft revision, old one superseded", changed["revision"]["revision"] == 5 and changed["revision"]["state"] == "draft"
+check("AC23 edit after export: new draft revision, the exported one superseded", changed["revision"]["revision"] == 5 and changed["revision"]["state"] == "draft"
       and rows("SELECT state,export_digest IS NOT NULL,confirmed_used_at IS NOT NULL FROM public.pr_visual_pack_revisions WHERE pack_id=%s AND revision_no=4", pack_id)[0] == ("superseded", True, True))
 refused(lambda: packs.download(wid, "one", pack_id, 4), 409, "approval_expired")
 check("earlier revision files stay readable", packs.slide(wid, "one", pack_id, 4, 1)[1] == files[0]["sha256"] and len(objects.under(wid)) == 6)
 rerendered = packs.render(wid, "one", pack_id, {"expectedRevision": 5})
-check("the new revision renders its own files", len(objects.under(wid)) == 12 and rerendered["revision"]["render"]["slides"][0]["sha256"] != files[0]["sha256"]
+check("AC23 the edited revision renders its own files and manifest", len(objects.under(wid)) == 12 and rerendered["revision"]["render"]["slides"][0]["sha256"] != files[0]["sha256"]
       and rerendered["revision"]["render"]["slides"][1]["sha256"] == files[1]["sha256"])
 
 # A changed draft (claim/CTA) blocks acceptance until the pack is reconciled with it.
