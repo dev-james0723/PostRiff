@@ -128,12 +128,20 @@ class CampaignWorker:
                                          'observation': f"{event['value']:g} {event['metric']}, compared with a typical {event['typical']:g} across {event['sampleSize']} comparable posts"}
             if (task.get('include') or {}).get('evergreen'):
                 if occurrence.get('evergreen') is None:
-                    posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now, basis=insights.COMPARISON_BASIS)['posts']
+                    # A run following a Signature Series takes the series' approved episode (no metrics needed).
+                    series_id = task['include']['evergreen'].get('seriesId')
+                    posts = None if series_id else insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now, basis=insights.COMPARISON_BASIS)['posts']
                     occurrence['evergreen'] = campaigns.evergreen_post(state, task, occurrence['scheduledFor'], posts) or {}
-                    if occurrence['evergreen']:
+                    if occurrence['evergreen'].get('episodeId'):
+                        from .series import model as series_model
+                        series_model.mark_drafting(state, occurrence['evergreen']['seriesId'], occurrence['evergreen']['episodeId'], task['id'], occurrence['id'], now)
+                        task['evergreenUsed'] = (list(task.get('evergreenUsed') or []) + ['episode:' + occurrence['evergreen']['episodeId']])[-200:]
+                    elif occurrence['evergreen']:
                         task['evergreenUsed'] = (list(task.get('evergreenUsed') or []) + [occurrence['evergreen']['jobId']])[-200:]
                 if occurrence['evergreen']:
                     context['evergreen'] = {key: occurrence['evergreen'][key] for key in ('platform', 'publishedAt', 'text')}
+                    if occurrence['evergreen'].get('episode'):
+                        context['evergreen']['episode'] = occurrence['evergreen']['episode']
             self._save(cur, workspace_id, state, actor)
             return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources, 'staged':staged}
 
@@ -236,7 +244,10 @@ class CampaignWorker:
             lead += ', about the new material in the source provided with this run'
         if 'strongPost' in data:
             lead += ', following up the published post in the data to continue its conversation (the numbers are an observation, not proof of what caused them)'
-        if 'evergreen' in data:
+        if 'evergreen' in data and (data['evergreen'] or {}).get('episode'):
+            lead += (', writing the approved series episode in the data from the earlier material: keep to its role, angle and question, use only the '
+                     'claims listed with the episode and do not copy the earlier text')
+        elif 'evergreen' in data:
             lead += ', giving the earlier published post in the data a fresh take for today without copying it'
         return lead + ', using these campaign details as data: '
 
