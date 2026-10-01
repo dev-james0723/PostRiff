@@ -11,8 +11,8 @@ export const FOUNDER_SIGN_IN_PATH = '/founder/sign-in';
 
 const BY_CODE: Record<string, string> = {
   RATE_LIMITED: 'Identity source is rate limited. Wait before retrying.',
-  WORKSPACE_CONFIGURATION_REQUIRED: 'Required database setup is incomplete. Live access must be qualified before records can be shown.',
-  WORKSPACE_ACCESS_REQUIRED: 'The database connection cannot read the required records. Review secure access configuration and retry.',
+  WORKSPACE_CONFIGURATION_REQUIRED: 'Required database setup is incomplete. Live access must be qualified before records can be shown.', // copy-audit: allow — founder-only control error
+  WORKSPACE_ACCESS_REQUIRED: 'The database connection cannot read the required records. Review secure access configuration and retry.', // copy-audit: allow — founder-only control error
   POLICY_DISABLED: 'This action is switched off by policy. Nothing was sent or dialled.',
   CSRF_REQUIRED: 'Your session needs a fresh page. Reload and retry.',
   CSRF_INVALID: 'Your session needs a fresh page. Reload and retry.',

@@ -11,7 +11,7 @@ import { StatusChip } from '@/features/workspace/rafii-parts';
 import { cn } from '@/lib/utils';
 import { useFounderSession } from './founder-session';
 
-const ENVIRONMENT_LABEL: Record<string, string> = { local: 'Local', staging: 'Staging', production: 'Production' };
+const ENVIRONMENT_LABEL: Record<string, string> = { local: 'Local', staging: 'Staging', production: 'Production' }; // copy-audit: allow — founder-only environment badge
 
 /**
  * The founder sidebar: the eight sections in three groups, the environment badge in the footer (an environment is

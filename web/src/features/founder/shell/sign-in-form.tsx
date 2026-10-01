@@ -24,7 +24,7 @@ import { getSupabaseEnv, hasSupabaseEnv } from '@/lib/supabase/env';
 type Step = { kind: 'password' } | { kind: 'code'; client: SupabaseClient; factorId: string };
 
 const COPY = {
-  notConfigured: 'Founder identity is not configured for this deployment.',
+  notConfigured: 'Founder identity is not configured for this deployment.', // copy-audit: allow — founder-only sign-in
   signIn: 'Sign-in could not be verified.',
   noFactor: 'A verified authenticator app is required. Enrol one through Account security first.',
   code: 'Second-factor verification failed.',
