@@ -59,12 +59,54 @@ def public(app, environ, start_response, method, path):
     return None
 
 
+# Which program features this deployment has switched on, from each slice's own flag function (module, function).
+# The web reads this once and never asks a switched-off resource (whose 404 would be noise on every shared page).
+FEATURES = {
+    "firstWeek": ("postriff_phase2.first_week.service", "enabled"),
+    "sourceUploads": ("postriff_phase2.source_uploads.limits", None),
+    "relationships": ("postriff_phase2.relationships.service", "enabled"),
+    "results": ("postriff_phase2.results.service", "enabled"),
+    "series": ("postriff_phase2.series.model", "enabled"),
+    "visualPacks": ("postriff_phase2.visual_pack.service", "enabled"),
+    "briefs": ("postriff_phase2.briefs.service", "enabled"),
+    "proof": ("postriff_phase2.proof.service", "enabled"),
+}
+
+
+def feature_state():
+    """{feature: bool}. A slice missing from the build, or whose flag check fails, is off (never guessed on)."""
+    state = {}
+    for key, (name, function) in FEATURES.items():
+        try:
+            module = _module(name)
+            if module is None:
+                state[key] = False
+            elif function is None:     # source uploads: its limits carry the flag with the preview-isolated environment
+                state[key] = bool(module.Policy.from_environment().enabled)
+            else:
+                state[key] = bool(getattr(module, function)())
+        except Exception:
+            state[key] = False
+    if state["firstWeek"]:
+        from .coworker import flags
+        state["firstWeek"] = flags.enabled("RAFII_WEEKLY_OPERATOR_ENABLED")   # the first week drives the Weekly Operator
+    return state
+
+
 def handles(parts):
-    return len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in RESOURCES
+    return len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and (parts[3] in RESOURCES or parts[3:] == ["growth-features"])
 
 
 def handle(app, environ, start_response, hosted, token, method, parts):
     from postriff_alpha.domain import AlphaError
+    if parts[3:] == ["growth-features"]:
+        if method not in ("GET", "HEAD"):
+            raise AlphaError("Method not allowed.", 405)
+        from .hosted import _membership
+        from .permissions import require
+        with hosted.repository.transaction(token, parts[2]) as (_cur, row, _principal):
+            require(_membership(row), "read")   # members only, although it reveals nothing but switch states
+        return app._json(start_response, 200, {"features": feature_state()})
     module = _module(RESOURCES[parts[3]])
     if module is None:
         raise AlphaError("This feature is not available.", 404, code="feature_disabled")
