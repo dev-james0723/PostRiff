@@ -88,6 +88,15 @@ test('every change posts its series revision and one idempotency key', async () 
   for (const call of calls) assert.equal(call.init.headers['Content-Type'], 'application/json');
 });
 
+test('episode images are referenced by id under the episode', async () => {
+  const { calls, api } = harness();
+  await api.linkAsset('w1', 's1', 'e1', 3, 'img/1', 'key-asset-0001');
+  await api.unlinkAsset('w1', 's1', 'e1', 4, 'img/1', 'key-asset-0002');
+  assert.equal(calls[0].url, '/api/workspaces/w1/series/s1/episodes/e1/assets');
+  assert.deepEqual(calls[0].body, { assetId: 'img/1', expectedRevision: 3, idempotencyKey: 'key-asset-0001' });
+  assert.equal(calls[1].url, '/api/workspaces/w1/series/s1/episodes/e1/assets/img%2F1/unlink');
+});
+
 test('feature_disabled and conflicts surface as typed errors, never as success', async () => {
   const { api } = harness([
     { status: 404, body: { error: 'This feature is not available.', code: 'feature_disabled' } },

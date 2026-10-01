@@ -77,6 +77,8 @@ class RoutesTest(unittest.TestCase):
             ("POST", [sid, "episodes", eid, "drafts"], {}, "", ("link", (sid, eid, {}), {})),
             ("GET", [sid, "episodes", eid, "drafts", vid, "check"], None, "", ("draft_check", (sid, eid, vid), {})),
             ("POST", [sid, "episodes", eid, "drafts", vid, "unlink"], {}, "", ("unlink", (sid, eid, vid, {}), {})),
+            ("POST", [sid, "episodes", eid, "assets"], {}, "", ("link_asset", (sid, eid, {}), {})),
+            ("POST", [sid, "episodes", eid, "assets", "img1", "unlink"], {}, "", ("unlink_asset", (sid, eid, "img1", {}), {})),
             ("POST", [sid, "claims", "cl_1"], {}, "", ("claim", (sid, "cl_1", {}), {})),
             ("POST", [sid, "decisions", "sd_1", "revoke"], {}, "", ("revoke", (sid, "sd_1", {}), {})),
         ]

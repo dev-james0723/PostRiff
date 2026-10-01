@@ -85,6 +85,8 @@ export type SeriesChange =
   | { kind: 'approve'; id: string; revision: number; episodeId: string }
   | { kind: 'link'; id: string; revision: number; episodeId: string; variantId: string; acknowledgedWarnings: string[] }
   | { kind: 'unlink'; id: string; revision: number; episodeId: string; variantId: string }
+  | { kind: 'linkAsset'; id: string; revision: number; episodeId: string; assetId: string }
+  | { kind: 'unlinkAsset'; id: string; revision: number; episodeId: string; assetId: string }
   | { kind: 'claim'; id: string; revision: number; claimId: string; action: ClaimAction }
   | { kind: 'revoke'; id: string; revision: number; decisionId: string };
 
@@ -104,6 +106,10 @@ function run(api: SeriesApi, w: string, change: SeriesChange, key: string): Prom
       return api.link(w, change.id, change.episodeId, change.revision, change.variantId, change.acknowledgedWarnings, key);
     case 'unlink':
       return api.unlink(w, change.id, change.episodeId, change.revision, change.variantId, key);
+    case 'linkAsset':
+      return api.linkAsset(w, change.id, change.episodeId, change.revision, change.assetId, key);
+    case 'unlinkAsset':
+      return api.unlinkAsset(w, change.id, change.episodeId, change.revision, change.assetId, key);
     case 'claim':
       return api.claim(w, change.id, change.claimId, change.revision, change.action, key);
     case 'revoke':

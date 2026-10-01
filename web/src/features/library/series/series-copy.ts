@@ -101,6 +101,11 @@ export interface SeriesCopy {
   follow: string;
   followNone: string;
   followNote: string;
+  addImage: string;
+  chooseImage: string;
+  noImages: string;
+  images: string;
+  imageGone: string;
   brief: { intro: string; role: string; question: string; angle: string; facts: string; noFacts: string; rules: string };
 }
 
@@ -214,6 +219,11 @@ const EN: SeriesCopy = {
   follow: 'Follow a series',
   followNone: 'No series: any older post',
   followNote: 'Each run drafts the series’ approved episode, once.',
+  addImage: 'Add an image',
+  chooseImage: 'Choose a Library image',
+  noImages: 'No images in Library yet.',
+  images: '{n} image(s) from Library',
+  imageGone: 'An image was deleted from Library.',
   brief: {
     intro: 'Draft episode {n} of my series “{title}” for review.',
     role: 'Role: {role}.',
@@ -335,6 +345,11 @@ const ZH: SeriesCopy = {
   follow: '跟隨系列',
   followNone: '不跟隨：任何較舊的帖文',
   followNote: '每次執行只草擬系列中已批准的一集，不會重複。',
+  addImage: '加入圖片',
+  chooseImage: '選擇媒體庫圖片',
+  noImages: '媒體庫暫時沒有圖片。',
+  images: '{n} 張媒體庫圖片',
+  imageGone: '有圖片已從媒體庫刪除。',
   brief: {
     intro: '請為我的系列「{title}」草擬第 {n} 集，供我審閱。',
     role: '類型：{role}。',

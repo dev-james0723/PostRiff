@@ -66,6 +66,8 @@ export interface SeriesEpisode {
   drafts: SeriesDraft[];
   candidateDrafts: { variantId: string; platform: string | null; language: string | null; excerpt: string }[];
   assetIds: string[];
+  /** Library images referenced by this episode; a deleted one is `available: false`. */
+  assets: { assetId: string; available: boolean }[];
   lineage: { originKind: 'post' | 'source'; originId: string; originDigest: string } | null;
   basis: { reason: 'default' | 'accepted_role' | 'after_rejection'; decisionIds: string[] } | null;
   automation: { taskId: string; occurrenceId: string; at: number }[];

@@ -11,6 +11,8 @@ POST series/{id}/episodes/{eid}/approve             approve as the next episode
 POST series/{id}/episodes/{eid}/drafts              link an existing draft (acknowledgedWarnings)
 GET  series/{id}/episodes/{eid}/drafts/{vid}/check  duplicate refusal or warnings, no change
 POST series/{id}/episodes/{eid}/drafts/{vid}/unlink remove a draft from the episode
+POST series/{id}/episodes/{eid}/assets              reference a Library image (assetId)
+POST series/{id}/episodes/{eid}/assets/{aid}/unlink remove that image reference
 POST series/{id}/claims/{cid}                       reviewed | update | remove a fact
 POST series/{id}/decisions/{did}/revoke             stop a decision shaping future plans
 
@@ -61,6 +63,10 @@ def handle(app, environ, start_response, hosted, token, method, parts):
         value = service.draft_check(workspace_id, token, _id(rest[0]), _id(rest[2]), _id(rest[4]))
     elif method == "POST" and len(rest) == 6 and rest[1] == "episodes" and rest[3] == "drafts" and rest[5] == "unlink":
         value = service.unlink(workspace_id, token, _id(rest[0]), _id(rest[2]), _id(rest[4]), body)
+    elif method == "POST" and len(rest) == 4 and rest[1] == "episodes" and rest[3] == "assets":
+        value = service.link_asset(workspace_id, token, _id(rest[0]), _id(rest[2]), body)
+    elif method == "POST" and len(rest) == 6 and rest[1] == "episodes" and rest[3] == "assets" and rest[5] == "unlink":
+        value = service.unlink_asset(workspace_id, token, _id(rest[0]), _id(rest[2]), _id(rest[4]), body)
     elif method == "POST" and len(rest) == 3 and rest[1] == "claims":
         value = service.claim(workspace_id, token, _id(rest[0]), _id(rest[2]), body)
     elif method == "POST" and len(rest) == 4 and rest[1] == "decisions" and rest[3] == "revoke":

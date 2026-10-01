@@ -63,6 +63,8 @@ def episode_view(state, campaign, episode, today, jobs):
     series = campaign["series"]
     issues = m.episode_issues(state, series, episode, today)
     drafts = [_draft(state, ref, jobs) for ref in episode.get("draftRefs") or []]
+    # A deleted Library image shows as unavailable, never as still attached.
+    live_assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets") or [] if isinstance(a, dict) and not a.get("deleted")}
     published = any(d.get("published") for d in drafts)
     blocked = None
     if episode.get("state") == "planned":
@@ -72,7 +74,9 @@ def episode_view(state, campaign, episode, today, jobs):
             "state": "published" if published else episode.get("state"), "workflowState": episode.get("state"), "angleDecision": episode.get("angleDecision"),
             "factState": "needs_fact_review" if issues else "ok", "factReasons": sorted({m.REASON_CODES[found] for _, found, _ in issues}),
             "claimIds": list(episode.get("claimIds") or []), "drafts": drafts, "candidateDrafts": _candidates(state, episode) if episode.get("state") == "drafting" else [],
-            "assetIds": list(episode.get("assetIds") or []), "lineage": episode.get("lineage"), "basis": episode.get("basis"),
+            "assetIds": list(episode.get("assetIds") or []),
+            "assets": [{"assetId": asset_id, "available": asset_id in live_assets} for asset_id in episode.get("assetIds") or []],
+            "lineage": episode.get("lineage"), "basis": episode.get("basis"),
             "automation": list(episode.get("automation") or []), "covered": bool(drafts), "published": published,
             "canApprove": episode.get("state") == "planned" and blocked is None, "blockedReason": blocked,
             "approvedAt": episode.get("approvedAt"), "createdAt": episode.get("createdAt"), "updatedAt": episode.get("updatedAt")}

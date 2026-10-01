@@ -58,6 +58,10 @@ export function createSeriesApi(getToken: TokenSource) {
       change(`${episode(w, id, episodeId)}/drafts`, revision, key, { variantId, acknowledgedWarnings }),
     unlink: (w: string, id: string, episodeId: string, revision: number, variantId: string, key: string) =>
       change(`${episode(w, id, episodeId)}/drafts/${seg(variantId)}/unlink`, revision, key),
+    linkAsset: (w: string, id: string, episodeId: string, revision: number, assetId: string, key: string) =>
+      change(`${episode(w, id, episodeId)}/assets`, revision, key, { assetId }),
+    unlinkAsset: (w: string, id: string, episodeId: string, revision: number, assetId: string, key: string) =>
+      change(`${episode(w, id, episodeId)}/assets/${seg(assetId)}/unlink`, revision, key),
     claim: (w: string, id: string, claimId: string, revision: number, action: ClaimAction, key: string) =>
       change(`${one(w, id)}/claims/${seg(claimId)}`, revision, key, action),
     revoke: (w: string, id: string, decisionId: string, revision: number, key: string) => change(`${one(w, id)}/decisions/${seg(decisionId)}/revoke`, revision, key)

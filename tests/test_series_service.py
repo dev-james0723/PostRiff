@@ -367,6 +367,25 @@ class ContractTest(Base):
         self.assertEqual(kinds, ["series.created", "series.episode_approved"])
         self.assertNotIn("practise", repr(self.repo.audits))   # ids, enums and counts only
 
+    def test_episode_images_are_references_to_library_images_and_a_deleted_one_shows(self):
+        series = self.create()["series"]
+        first = series["episodes"][0]["id"]
+        assets = self.repo.workspaces["w1"]["state"]["phase2"]["assets"]
+        assets += [{"id": "img1", "mime": "image/jpeg", "hash": "h1"}, {"id": "vid1", "mime": "video/mp4", "hash": "h2"}]
+        with self.assertRaises(AlphaError) as caught:   # not before the episode is approved
+            self.act("link_asset", series["id"], first, assetId="img1")
+        self.assertEqual(caught.exception.code, "approval_required")
+        self.act("approve", series["id"], first)
+        linked = self.act("link_asset", series["id"], first, assetId="img1")["series"]["episodes"][0]
+        self.assertEqual(linked["assets"], [{"assetId": "img1", "available": True}])
+        for asset_id, status in (("vid1", 409), ("img1", 409), ("nope", 404)):
+            with self.subTest(asset_id), self.assertRaises(AlphaError) as caught:
+                self.act("link_asset", series["id"], first, assetId=asset_id)
+            self.assertEqual(caught.exception.status, status)
+        self.repo.workspaces["w1"]["state"]["phase2"]["assets"][0]["deleted"] = True
+        self.assertEqual(self.service.get("w1", "owner", series["id"])["series"]["episodes"][0]["assets"], [{"assetId": "img1", "available": False}])
+        self.assertEqual(self.act("unlink_asset", series["id"], first, "img1")["series"]["episodes"][0]["assets"], [])
+
     def test_a_series_campaign_is_never_rescheduled_or_rewritten_as_a_plain_brief(self):
         series = self.create()["series"]
         state = self.state()

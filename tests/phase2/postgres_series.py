@@ -153,11 +153,20 @@ denied(lambda: series.get(wa, "two", sid), 403)
 denied(lambda: series.get(wb, "two", sid), 404)
 add(wb, "two", variants=[variant("foreign-draft", "A draft that lives in workspace B.")])
 denied(lambda: act("link", sid, first, variantId="foreign-draft", acknowledgedWarnings=[]), 404)
+
+
+def foreign_image(state, _actor):
+    state["phase2"]["assets"].append({"id": "foreign-image", "mime": "image/jpeg", "hash": "f" * 64, "deleted": False})
+    return state
+
+
+command(wb, "two", foreign_image)
+denied(lambda: act("link_asset", sid, first, assetId="foreign-image"), 404)
 assert series.get(wa, "five", sid)["series"]["id"] == sid
 denied(lambda: act("plan", sid, token="five", count=2), 403)
 editor = act("decide", sid, created["series"]["episodes"][2]["id"], token="three", decision="accept")["result"]
 assert (editor["storage"], editor["reason"]) == ("series", "owner_required"), editor
-checks.append("cross-tenant series and draft ids are unavailable; viewers read only; an editor's decision stays on the series")
+checks.append("cross-tenant series, draft and image ids are unavailable; viewers read only; an editor's decision stays on the series")
 
 # 4. Duplicate refusal, near-duplicate acknowledgement, expiry gate through the real sweep SQL.
 add(wa, "one", variants=[variant("copy", EN.upper()), variant("near", EN.replace("five minutes", "ten minutes")), variant("fresh", "Tonight: one five-minute drill, then your piece.")])

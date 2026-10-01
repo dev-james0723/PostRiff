@@ -84,8 +84,36 @@ function DraftPicker({ copy, series, episode, apply, busy, onDone }: { copy: Ser
   );
 }
 
+/** Reference one Library image for the episode (images only; the image itself stays in Library). */
+function ImagePicker({ copy, series, episode, apply, busy, onDone }: { copy: SeriesCopy; series: SeriesView; episode: SeriesEpisode; apply: Apply; busy: boolean; onDone: () => void }) {
+  const id = useId();
+  const snapshot = useSnapshot();
+  const images = (snapshot.data?.state.phase2?.assets ?? []).filter((asset) => !asset.deleted && !asset.mime?.startsWith('video/') && !episode.assetIds.includes(asset.id));
+  const [assetId, setAssetId] = useState('');
+  if (!images.length) return <p className='text-muted-foreground text-sm'>{copy.noImages}</p>;
+  return (
+    <div className='flex flex-wrap items-end gap-2'>
+      <label htmlFor={`${id}-image`} className='flex flex-col gap-1 text-sm font-medium'>
+        {copy.chooseImage}
+        <NativeSelect id={`${id}-image`} value={assetId} onChange={(event) => setAssetId(event.target.value)}>
+          <NativeSelectOption value=''>—</NativeSelectOption>
+          {images.slice(0, 50).map((asset) => (
+            <NativeSelectOption key={asset.id} value={asset.id}>{`${asset.width ?? '?'}×${asset.height ?? '?'} · ${asset.hash.slice(0, 8)}`}</NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </label>
+      <Button variant='glass' size='lg' className='min-h-11' disabled={busy || !assetId}
+              onClick={() => { apply({ kind: 'linkAsset', id: series.id, revision: series.revision, episodeId: episode.id, assetId }); onDone(); }}>
+        {copy.link}
+      </Button>
+      <Button variant='quiet' size='lg' className='min-h-11' onClick={onDone}>{copy.cancel}</Button>
+    </div>
+  );
+}
+
 function EpisodeCard({ copy, series, episode, canEdit, apply, busy }: { copy: SeriesCopy; series: SeriesView; episode: SeriesEpisode; canEdit: boolean; apply: Apply; busy: boolean }) {
   const [picking, setPicking] = useState(false);
+  const [pickingImage, setPickingImage] = useState(false);
   const titleId = useId();
   const decide = (decision: 'accept' | 'reject' | 'do_not_repeat', level: 'angle' | 'role' = 'angle') =>
     apply({ kind: 'decide', id: series.id, revision: series.revision, episodeId: episode.id, decision, level });
@@ -131,6 +159,19 @@ function EpisodeCard({ copy, series, episode, canEdit, apply, busy }: { copy: Se
           ))}
         </ul>
       )}
+      {episode.assets.length > 0 && (
+        <div className='flex flex-wrap items-center gap-2 text-xs'>
+          <span className='text-muted-foreground'>{fill(copy.images, { n: episode.assets.length })}</span>
+          {episode.assets.some((asset) => !asset.available) && <span role='status'>{copy.imageGone}</span>}
+          {canEdit && episode.assets.map((asset) => (
+            <Button key={asset.assetId} variant='quiet' size='lg' className='min-h-11' disabled={busy}
+                    aria-label={`${copy.unlink} ${asset.assetId.slice(0, 8)}`}
+                    onClick={() => apply({ kind: 'unlinkAsset', id: series.id, revision: series.revision, episodeId: episode.id, assetId: asset.assetId })}>
+              {copy.unlink} · {asset.assetId.slice(0, 8)}
+            </Button>
+          ))}
+        </div>
+      )}
       {canEdit && episode.candidateDrafts.length > 0 && (
         <ul className='flex flex-col gap-1.5' aria-label={copy.candidate}>
           {episode.candidateDrafts.map((draft) => (
@@ -154,6 +195,9 @@ function EpisodeCard({ copy, series, episode, canEdit, apply, busy }: { copy: Se
           {producing && !picking && (
             <Button variant='glass' size='lg' className='min-h-11' onClick={() => setPicking(true)}>{copy.addDraft}</Button>
           )}
+          {producing && !pickingImage && (
+            <Button variant='quiet' size='lg' className='min-h-11' onClick={() => setPickingImage(true)}>{copy.addImage}</Button>
+          )}
           {producing && episode.factState === 'ok' && (
             <Button variant='glass' size='lg' className='min-h-11' onClick={() => panelStore.ask(episodeBrief(copy, series, episode))}>
               <Icons.sparkles aria-hidden />
@@ -173,6 +217,7 @@ function EpisodeCard({ copy, series, episode, canEdit, apply, busy }: { copy: Se
       )}
       {producing && <p className='text-muted-foreground text-xs'>{copy.draftNote}</p>}
       {picking && <DraftPicker copy={copy} series={series} episode={episode} apply={apply} busy={busy} onDone={() => setPicking(false)} />}
+      {pickingImage && <ImagePicker copy={copy} series={series} episode={episode} apply={apply} busy={busy} onDone={() => setPickingImage(false)} />}
     </Surface>
   );
 }

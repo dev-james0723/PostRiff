@@ -286,6 +286,38 @@ def unlink_draft(state, campaign, episode_id, variant_id, actor, now):
     return {"variantId": variant_id, "episodeState": episode["state"]}
 
 
+def link_asset(state, campaign, episode_id, payload, actor, now):
+    """Reference an existing Library image for an episode (images only, as campaign links; the image is not copied)."""
+    from .. import asset_kinds
+    episode = m.episode_of(campaign["series"], episode_id)
+    if episode.get("state") not in ("approved", "drafting", "drafted"):
+        raise AlphaError("Approve this episode as the next one before adding its image.", 409, code="approval_required")
+    asset_id = payload.get("assetId")
+    if not isinstance(asset_id, str) or not m._ID.match(asset_id):
+        raise AlphaError("Choose an image from this workspace.", 400)
+    asset = next((a for a in (state.get("phase2") or {}).get("assets") or [] if isinstance(a, dict) and a.get("id") == asset_id and not a.get("deleted")), None)
+    if asset is None:
+        raise AlphaError("That image is not in this workspace.", 404)
+    if asset_kinds.kind_of(asset) == "video":
+        raise AlphaError("A series episode takes images from Library, not videos.", 409, code="unsupported_input")
+    if asset_id in (episode.get("assetIds") or []):
+        raise AlphaError("This image is already part of this episode.", 409, code="already_linked")
+    if len(episode.get("assetIds") or []) >= m.MAX_ASSETS:
+        raise AlphaError(f"An episode keeps up to {m.MAX_ASSETS} images.", 409)
+    episode.setdefault("assetIds", []).append(asset_id)
+    episode["updatedAt"] = now
+    return {"assetId": asset_id}
+
+
+def unlink_asset(state, campaign, episode_id, asset_id, actor, now):
+    episode = m.episode_of(campaign["series"], episode_id)
+    if asset_id not in (episode.get("assetIds") or []):
+        raise AlphaError("That image is not part of this episode.", 404)
+    episode["assetIds"] = [a for a in episode["assetIds"] if a != asset_id]
+    episode["updatedAt"] = now
+    return {"assetId": asset_id}
+
+
 def set_status(state, campaign, payload, actor, now):
     status = payload.get("status")
     if status not in m.STATUSES:

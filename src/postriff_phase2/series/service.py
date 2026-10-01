@@ -23,7 +23,7 @@ from . import commands, model as m, views
 DEFAULT_LIMIT, MAX_LIMIT = 25, 50
 AUDIT = {"create": "series.created", "plan": "series.planned", "decide": "series.angle_decided", "revoke": "series.decision_revoked",
          "approve": "series.episode_approved", "claim": "series.fact_reviewed", "link": "series.draft_linked", "unlink": "series.draft_unlinked",
-         "status": "series.status_changed"}
+         "asset": "series.asset_linked", "asset_unlink": "series.asset_unlinked", "status": "series.status_changed"}
 
 
 class _Replay(Exception):
@@ -299,6 +299,15 @@ class SeriesService:
         return self._mutate(workspace_id, token, payload, "unlink", series_id,
                             lambda state, actor, campaign, now: commands.unlink_draft(state, campaign, episode_id, variant_id, actor, now),
                             target={"episodeId": episode_id, "variantId": variant_id})
+
+    def link_asset(self, workspace_id, token, series_id, episode_id, payload):
+        return self._mutate(workspace_id, token, payload, "asset", series_id,
+                            lambda state, actor, campaign, now: commands.link_asset(state, campaign, episode_id, payload, actor, now), target={"episodeId": episode_id})
+
+    def unlink_asset(self, workspace_id, token, series_id, episode_id, asset_id, payload):
+        return self._mutate(workspace_id, token, payload, "asset_unlink", series_id,
+                            lambda state, actor, campaign, now: commands.unlink_asset(state, campaign, episode_id, asset_id, actor, now),
+                            target={"episodeId": episode_id, "assetId": asset_id})
 
     def set_status(self, workspace_id, token, series_id, payload):
         return self._mutate(workspace_id, token, payload, "status", series_id,
