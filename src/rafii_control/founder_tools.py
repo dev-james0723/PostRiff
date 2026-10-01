@@ -586,7 +586,11 @@ def _demo_attention(ctx: RafiiRunContext, founder: dict) -> list[dict]:
             continue
         items.append({"id": incident["id"], "severity": "critical" if incident.get("severity") == "critical" else "warning", "title": incident.get("title"), "scope": "operations",
                       "count": incident.get("affectedCount"), "since": incident.get("observedAt"), "state": incident.get("state"), "receiptId": receipt["id"],
-                      "href": console_href("operations", incident=incident["id"], mode="demo"), "actions": [] if incident.get("acknowledged") else ["acknowledge"]})
+                      "href": console_href("operations", incident=incident["id"], mode="demo"),
+                      # Same {id,label,kind,href} shape as the Live overview; Demo incidents carry no ack (no version is
+                      # ever acknowledged from Demo, CONTRACTS §3), so only explain/open are offered.
+                      "actions": [{"id": "explain", "label": "Explain", "kind": "explain", "href": None},
+                                  {"id": "open", "label": "Open", "kind": "open", "href": console_href("operations", incident=incident["id"], mode="demo")}]})
     if receipt.get("dataState") == "stale":
         items.append({"id": "demo-stale-source", "severity": "critical", "title": "Source data is stale", "scope": "data", "count": None, "since": receipt.get("lastGoodAsOf"),
                       "receiptId": receipt["id"], "href": console_href("advanced", mode="demo"), "actions": []})

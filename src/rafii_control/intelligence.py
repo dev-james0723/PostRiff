@@ -41,7 +41,15 @@ class Catalog:
     def __init__(self, path=PACK):
         path = Path(path)
         self.metrics = {}
-        for row in json.loads((path / 'catalogs/metrics.json').read_text()):
+        # metrics.json holds the tech pack's proposed entries plus the P0 activations; each later founder slice appends its own
+        # activated_v1 entries in catalogs/metrics.d/<slice>.json (sorted, after metrics.json) so slices never edit one file.
+        rows = json.loads((path / 'catalogs/metrics.json').read_text())
+        for extension in sorted((path / 'catalogs/metrics.d').glob('*.json')):
+            extra = json.loads(extension.read_text())
+            if not isinstance(extra, list) or any(not isinstance(row, dict) or row.get('status') != ACTIVATED for row in extra):
+                raise ValueError('metrics.d entries must be activated_v1 rows: ' + extension.name)
+            rows.extend(extra)
+        for row in rows:
             # An activated_v1 entry appended to the catalog governs its id; the proposed text stays untouched.
             current = self.metrics.get(row['id'])
             if current is not None and current.get('status') == ACTIVATED and row.get('status') == ACTIVATED: raise ValueError('duplicate activated metric ' + row['id'])

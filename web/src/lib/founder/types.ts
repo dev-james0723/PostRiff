@@ -182,6 +182,8 @@ export interface MetricRow {
   sourceWatermark?: string | null;
   reason?: string | null;
   collectingSince?: string | null;
+  /** History a definition still needs before it can be measured (reason `insufficient_history`). */
+  history?: { availableDays: number; requiredDays: number } | null;
   delta?: number | null;
   deltaPeriod?: string | null;
   sparkline?: Array<number | null> | null;

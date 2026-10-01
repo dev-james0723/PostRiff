@@ -31,12 +31,16 @@ def main():
         try:
             migration = ROOT / 'migrations/postriff/049_rafii_control_foundation.sql'
             workflow = ROOT / 'migrations/postriff/051_rafii_control_read_workflow.sql'
-            founder_views = ROOT / 'migrations/postriff/054_rafii_control_founder_views.sql'
-            founder_contact = ROOT / 'migrations/postriff/055_rafii_control_founder_contact.sql'
-            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', founder_views, founder_views, founder_contact, founder_contact]  # Reapplication must be safe.
+            # Founder Admin migrations from 054 on (P0 views/contact, then the P1/P2 slices of CONTRACTS §8) apply in number
+            # order after 053, each twice: reapplication must be safe. Numbers below 054 that other owners hold are never globbed.
+            founder = [path for path in sorted((ROOT / 'migrations/postriff').glob('0[5-9][0-9]_*.sql')) if int(path.name[:3]) >= 54]
+            files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql']
+            files += [path for path in founder for _ in (0, 1)]  # Reapplication must be safe.
             for file in files:
                 subprocess.run([str(PG / 'psql'), env['RAFII_CONTROL_TEST_DSN'], '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(file)], check=True, stdout=subprocess.DEVNULL, env=env)
-            result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', 'test_*.py', '-v'], cwd=ROOT, env=env) if '--browser-only' not in sys.argv else None
+            # --pattern 'test_founder_revenue*.py' runs one slice's tests against the same freshly migrated database.
+            pattern = sys.argv[sys.argv.index('--pattern') + 1] if '--pattern' in sys.argv else 'test_*.py'
+            result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/control', '-p', pattern, '-v'], cwd=ROOT, env=env) if '--browser-only' not in sys.argv else None
             if result and result.returncode:return result.returncode
             if '--browser' not in sys.argv:return 0
             if '--capture' in sys.argv:env['RAFII_CONTROL_TEST_CAPTURE']=str(Path(sys.argv[sys.argv.index('--capture')+1]).resolve(strict=True))

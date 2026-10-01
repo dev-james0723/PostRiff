@@ -1,7 +1,7 @@
 name: Rafii Control foundation
 on:
   pull_request:
-    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'scripts/rafii_control_*', 'tests/control/**', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'migrations/postriff/05[4-9]_*', 'migrations/postriff/06[0-9]_*', 'scripts/rafii_control_*', 'tests/control/**', 'tests/phase2/rls.sql', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,10 +48,11 @@ jobs:
           npm --prefix control-web run typecheck
           npm --prefix control-web run lint
           npm --prefix control-web run build
-      - name: Production-mode browser against disposable restricted PostgreSQL
-        run: |
-          cd control-web && npx playwright install --with-deps chromium && cd ..
-          python scripts/rafii_control_pg.py --browser
+      # The separate control-web browser gate is retired with the separate dashboard it tested: PRD v2.0 §4 (option B)
+      # moved the founder surface into the Rafii app (web/src/app/founder, Control embedded in the consumer API), and
+      # /control/* now redirects there. That surface's end-to-end browser gate is .github/workflows/founder-browser.yml
+      # (real Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identity).
+      # control-web keeps its contract, type, lint and build checks above until it is deleted.
       - name: Exact-content separate Control function archive
         run: |
           python -m pip install uv==0.11.16

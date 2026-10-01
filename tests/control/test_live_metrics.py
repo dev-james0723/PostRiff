@@ -66,11 +66,15 @@ class LiveMetricTests(unittest.TestCase):
         shipped = json.loads((PACK / 'catalogs/metrics.json').read_text())
         self.assertEqual(len(docs), 63)
         self.assertEqual(shipped[:63], docs)
-        activated = {row['id'] for row in shipped[63:]}
+        # P0 activations follow the 63 proposed rows in metrics.json; P1/P2 slices add theirs in catalogs/metrics.d/*.json.
+        extensions = [row for path in sorted((PACK / 'catalogs/metrics.d').glob('*.json')) for row in json.loads(path.read_text())]
+        activated = {row['id'] for row in shipped[63:] + extensions}
+        live_metrics.load_extensions()
         self.assertEqual(activated, set(live_metrics.METRIC_SOURCES))
-        self.assertTrue(all(row['status'] == ACTIVATED for row in shipped[63:]))
+        self.assertTrue(all(row['status'] == ACTIVATED for row in shipped[63:] + extensions))
         self.assertTrue(all(self.catalog.activated(metric_id) for metric_id in activated))
-        self.assertEqual(self.catalog.metrics['mrr']['status'], 'proposed_definition_not_activated')
+        # Definitions the PRD rules out for this release stay proposed (§7.1: no CAC, LTV or payback).
+        self.assertEqual(self.catalog.metrics['cac']['status'], 'proposed_definition_not_activated')
         # The structural schema now admits exactly the catalog ids and dimensions.
         self.catalog.validate('metric-query', query('phone_calls', ['kind', 'window']))
         with self.assertRaises(ControlError): self.catalog.validate('metric-query', query('not_a_metric'))
@@ -181,7 +185,8 @@ class LiveMetricTests(unittest.TestCase):
         from rafii_control import founder_cron, founder_sources
         self.assertEqual(SOURCE_IDS, founder_sources.SOURCE_IDS)
         self.assertEqual(set(live_metrics.METRIC_SOURCES.values()) <= set(SOURCE_IDS), True)
-        self.assertEqual(set(live_metrics.METRIC_SOURCES), set(SPECS) | live_metrics.COMPOSITE | live_metrics.PYTHON_ONLY)
+        live_metrics.load_extensions()
+        self.assertEqual(set(live_metrics.METRIC_SOURCES), set(SPECS) | live_metrics.COMPOSITE | live_metrics.PYTHON_ONLY | set(live_metrics.CUSTOM))
         self.assertEqual(live_metrics.METRIC_SOURCES['paid_customers'], 'database')
 
         class Probed:

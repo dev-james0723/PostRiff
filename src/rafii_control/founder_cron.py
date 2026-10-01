@@ -94,6 +94,18 @@ def default_calls_factory(service, values):
     return lambda operator_id: founder_contact.PhoneCalls(phone, ops, operator_id)
 
 
+# Founder P1/P2 slices add cron stages from their own modules (CONTRACTS §8): register_stage(name, fn) at import, where
+# fn(fstore, service, values, now) returns a JSON-serialisable summary. Stages run after the P0 stages, each bounded by
+# _stage so one failing slice reports 'unavailable' without breaking the tick or the consumer worker.
+STAGES = []
+
+
+def register_stage(name, work):
+    if not isinstance(name, str) or not name.isidentifier() or not callable(work) or any(existing == name for existing, _ in STAGES):
+        raise ValueError('invalid or duplicate founder cron stage')
+    STAGES.append((name, work))
+
+
 def tick(service, values, *, fstore=None, calls_factory=None, clock=time.time, observe=None, lease_owner=None):
     """One founder tick. Returns a JSON-serialisable summary; stage failures are reported, never raised."""
     if not truthy(values.get('RAFII_CONTROL_ENABLED')):
@@ -113,6 +125,12 @@ def tick(service, values, *, fstore=None, calls_factory=None, clock=time.time, o
     _stage(result, 'schedules', lambda: schedules_stage(fstore, values, observations, operators, now, calls_factory, notify,
                                                         lease_owner or 'founder-cron:' + uuid.uuid4().hex[:12]))
     _stage(result, 'reconcile', lambda: reconcile_stage(fstore, operators, now, calls_factory))
+    from . import slices
+    failed = slices.load()
+    if failed:
+        result['slices'] = {'status': 'unavailable', 'failed': sorted(failed)}
+    for name, work in list(STAGES):
+        _stage(result, name, lambda work=work: work(fstore, service, values, now))
     return result
 
 

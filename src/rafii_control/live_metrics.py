@@ -145,6 +145,37 @@ SPECS = {
 }
 COMPOSITE = {'cost_vs_cash'}
 PYTHON_ONLY = {'cron_heartbeat', 'source_health'}
+# Founder Admin P1/P2 slices extend this registry from their own modules (CONTRACTS §8) instead of editing SPECS here:
+# `register(specs=..., custom=..., sources=...)` at import. A custom metric is {'rows': fn, 'previous': fn | None}, where
+# fn(service, metric, query, interval, stale) -> rows built with build_row over reader projections; 'previous' defaults
+# to the same fn over previous_interval(query), and None means the metric has no comparison (rows say so).
+CUSTOM = {}
+
+
+def register(*, specs=None, custom=None, sources=None):
+    """Add activated metrics from a slice module. Ids are unique across SPECS, CUSTOM, COMPOSITE and PYTHON_ONLY."""
+    taken = set(SPECS) | set(CUSTOM) | COMPOSITE | PYTHON_ONLY
+    for metric_id in list(specs or {}) + list(custom or {}):
+        if metric_id in taken: raise ValueError('duplicate live metric ' + metric_id)
+        taken.add(metric_id)
+    SPECS.update(specs or {})
+    for metric_id, entry in (custom or {}).items():
+        if not callable(entry.get('rows')) or ('previous' in entry and entry['previous'] is not None and not callable(entry['previous'])):
+            raise ValueError('invalid custom live metric ' + metric_id)
+        CUSTOM[metric_id] = entry
+    for metric_id, source_id in (sources or {}).items():
+        if source_id not in SOURCE_IDS: raise ValueError('unknown source for ' + metric_id)
+        METRIC_SOURCES[metric_id] = source_id
+
+
+def load_extensions():
+    """Import every installed founder slice once (rafii_control.slices); a failed slice leaves its metrics adapter_unavailable."""
+    from . import slices
+    slices.load()
+
+
+def known(metric_id):
+    return metric_id in SPECS or metric_id in CUSTOM or metric_id in COMPOSITE or metric_id in PYTHON_ONLY
 UNKNOWN_RESERVATIONS = MetricStatement('unknown_reservations', 'SELECT u.id,u."workspaceId",u."runId",u."reservationId",u.kind,u.dimension,u.provider,u.model,u.feature,u."estimatedUsdMicro",u.at FROM rafii_control.business_usage_v2 u'
                                        f' WHERE u."costState"=\'estimated_unknown\' AND NOT u."aiUsageExempt" AND {settled_elsewhere("u")} ORDER BY u.at DESC,u.id LIMIT %s')
 
@@ -230,12 +261,17 @@ def source_stale(row, now):
     return bool(checked) and (now - parse_stamp(checked)).total_seconds() > STALE_AFTER_SECONDS
 
 
-def build_row(metric, interval, dimensions, *, value, unit, currency=None, state, known=0, unknown=0, numerator=None, denominator=None, watermark=None, sample_count=0, reason=None, measures=None, fixture=False):
+def build_row(metric, interval, dimensions, *, value, unit, currency=None, state, known=0, unknown=0, numerator=None, denominator=None, watermark=None, sample_count=0, reason=None, measures=None, fixture=False,
+              collecting_since=None, history=None):
+    """One metric row. `collecting_since` (ISO 8601) names when the row's instrumentation started recording; `history`
+    ({availableDays, requiredDays}) says how much history a definition still needs (reason 'insufficient_history')."""
     row = dict(metricId=metric['id'], definitionVersion=DEFINITION_VERSION, interval=dict(interval), dimensions=dict(dimensions), value=value, unit=unit,
                dataState=state, coverage=dict(known=known, unknown=unknown, numerator=numerator, denominator=denominator), sourceWatermark=watermark,
                sampleCount=sample_count, reason=reason, fixture=fixture)
     if currency: row['currency'] = currency
     if measures: row['measures'] = measures
+    if collecting_since: row['collectingSince'] = collecting_since
+    if history: row['history'] = dict(availableDays=int(history['availableDays']), requiredDays=int(history['requiredDays']))
     return row
 
 
@@ -340,16 +376,26 @@ def compute(service, query, metrics):
     """Rows for activated metrics in one query; comparison rows are matched by non-window dimensions."""
     if query['comparison'] == 'cohort_age_aligned': raise ControlError('VALIDATION_FAILED', 400)
     if query['comparison'] != 'none' and 'window' in query['groupBy']: raise ControlError('VALIDATION_FAILED', 400)
+    load_extensions()
     now, sources, interval, rows = service.clock(), source_states(service), interval_of(query), []
     for metric in metrics:
         stale = source_stale(sources.get(METRIC_SOURCES.get(metric['id'])), now)
+        custom = CUSTOM.get(metric['id'])
+        if not known(metric['id']):
+            # Activated in the catalog but its slice did not load in this process: say so, never zero, never a 503 for the rest.
+            rows.append(build_row(metric, interval, {}, value=None, unit=metric['unit'], state='unavailable', reason='adapter_unavailable'))
+            continue
         if metric['id'] == 'cron_heartbeat': current = _heartbeat_rows(metric, query, sources, now)
         elif metric['id'] == 'source_health': current = _source_rows(metric, query, sources, now)
         elif metric['id'] in COMPOSITE: current = _cost_vs_cash(service, metric, query, interval, stale)
+        elif custom: current = custom['rows'](service, metric, query, interval, stale)
         else: current = _metric_rows(service, metric, query, interval, stale)
         if query['comparison'] != 'none':
             spec = SPECS.get(metric['id'], {})
             if metric['id'] in PYTHON_ONLY: previous = None
+            elif custom:
+                compare = custom.get('previous', custom['rows'])
+                previous = compare(service, metric, {**query, 'comparison': 'none'}, previous_interval(query), stale) if compare else None
             elif spec.get('snapshot'): previous = _snapshot_comparison(service, metric, query, interval)
             elif metric['id'] in COMPOSITE: previous = _cost_vs_cash(service, metric, query, previous_interval(query), stale)
             else: previous = _metric_rows(service, metric, query, previous_interval(query), stale)

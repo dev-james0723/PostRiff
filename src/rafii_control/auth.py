@@ -16,9 +16,12 @@ from postriff_alpha.domain import AlphaError
 COOKIE = '__Host-rafii-control'
 CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'workspaces.read', 'engineering.read', 'audit.read', 'copilot.use', 'workspaces.test.rename',
                           # Founder Admin v2 (CONTRACTS §3). The last two are also the audit action names the agent/contact slices record.
-                          'incidents.ack', 'followups.write', 'control.settings', 'founder.agent.turn', 'founder.call.request'})
+                          'incidents.ack', 'followups.write', 'control.settings', 'founder.agent.turn', 'founder.call.request',
+                          # Founder Admin P1/P2 (CONTRACTS §8, migration 056). Every write among them needs a fresh second factor
+                          # (step_up) and a preview → confirm pair with a content-free audit row; the agent never holds them.
+                          'usage.reconcile', 'credits.adjust', 'accounts.block', 'refunds.prepare', 'founder.export'})
 # Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget of 120/min.
-BUDGETS = {'copilot.use': 5, 'metrics.query': 30, 'founder.agent.turn': 20, 'founder.call.request': 5}
+BUDGETS = {'copilot.use': 5, 'metrics.query': 30, 'founder.agent.turn': 20, 'founder.call.request': 5, 'founder.action': 10, 'founder.voice': 5, 'founder.export': 10}
 MOUNTS = ('separate', 'embedded')
 
 

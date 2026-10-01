@@ -180,7 +180,8 @@ class FounderToolTests(unittest.TestCase):
         found = run_tool(ctx, "founder_attention_list", {"limit": 3})
         self.assertEqual(len(found["items"]), 3)
         self.assertEqual(found["items"][0]["id"], Scenarios.outage["incidents"][0]["id"])
-        self.assertEqual(found["items"][0]["actions"], ["acknowledge"])
+        # Structured like the Live overview; a Demo incident is never acknowledged, so there is no ack action.
+        self.assertEqual([action["kind"] for action in found["items"][0]["actions"]], ["explain", "open"])
         incident = run_tool(ctx, "founder_incident_read", {"incidentId": found["items"][0]["id"]})
         self.assertEqual(incident["incident"]["state"], "open")
         self.assertNotIn("affectedRecords", incident["incident"], "affected records stay behind the entity lookup")

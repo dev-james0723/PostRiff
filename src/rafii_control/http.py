@@ -16,6 +16,29 @@ from .workspace import WorkspaceService
 ID = '[A-Za-z0-9_-]{1,80}'
 # Founder Admin v2 prefixes (CONTRACTS §3) served by lazily imported slice modules; '/overview' joins only with ?mode=.
 FOUNDER_PREFIXES = ('/incidents', '/follow-ups', '/contact-policy', '/briefing-schedules', '/calls/', '/agent/', '/usage/')
+# Founder Admin P1/P2 slices add routes here from their own modules (CONTRACTS §8) instead of editing the dispatch below:
+# (method, path regex, capability, module, function, options). options: step_up (fresh MFA <=300 s), budget (BUDGETS purpose),
+# demo_ok (Demo mode allowed; otherwise ?mode=demo is refused for writes). The handler is
+# module.function(app, principal, request) with request = {method, path, body, query, match, mode, now, requestId, environ}.
+EXTENSION_ROUTES = []
+
+
+def register_route(method, pattern, capability, module, function, **options):
+    """Register one founder route. The capability must exist in auth.CAPABILITIES; patterns are full-match regexes."""
+    if method not in ('GET', 'POST', 'PUT', 'DELETE') or capability not in CAPABILITIES or set(options) - {'step_up', 'budget', 'demo_ok'}:
+        raise ValueError('invalid founder route')
+    compiled = re.compile(pattern)
+    if any(route[0] == method and route[1].pattern == compiled.pattern for route in EXTENSION_ROUTES):
+        raise ValueError('duplicate founder route ' + method + ' ' + pattern)
+    EXTENSION_ROUTES.append((method, compiled, capability, module, function, dict(options)))
+
+
+def extension_route(path, method):
+    for route in EXTENSION_ROUTES:
+        if route[0] == method and (match := route[1].fullmatch(path)): return route, match
+    return None, None
+
+
 STATUS = {200: 'OK', 201: 'Created', 202: 'Accepted', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 409: 'Conflict', 429: 'Too Many Requests', 503: 'Unavailable'}
 
 
@@ -31,6 +54,9 @@ class ControlApplication:
         for the founder agent and test-call routes; ``None`` (separate mount) makes those routes SOURCE_UNAVAILABLE.
         ``flags``: the RAFII_FOUNDER_* deployment flags handed to founder_contact (never any other variable)."""
         self.boundary, self.queries, self.runtime, self.flags = boundary, queries, runtime, dict(flags or {})
+        # Founder P1/P2 slices register their routes, metrics and cron stages at import (rafii_control.slices).
+        from . import slices
+        slices.load()
         self.workspace = WorkspaceService(queries.store) if queries and hasattr(queries,'store') else None
         self._founder_store = None
 
@@ -77,7 +103,8 @@ class ControlApplication:
                     try: self.boundary.authorize(token, 'prohibited', origin=origin, unsafe=method != 'GET', request_id=request_id)
                     except ControlError: pass
                     raise
-                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename' or capability == 'control.settings', ending_session=path == '/session/logout', ending_preview=self.preview_cleanup(path,body), request_id=request_id, purpose=self.budget_purpose(path, method))
+                route, _ = extension_route(path, method)
+                principal = self.boundary.authorize(token, capability, origin=origin, csrf=environ.get('HTTP_X_CSRF_TOKEN'), unsafe=method != 'GET', step_up=path == '/workspace/live/rename' or capability == 'control.settings' or bool(route and route[5].get('step_up')), ending_session=path == '/session/logout', ending_preview=self.preview_cleanup(path,body), request_id=request_id, purpose=(route[5].get('budget') if route else None) or self.budget_purpose(path, method))
                 if path == '/session':
                     data = {'assurance': 'aal2', 'capabilities': sorted(set(principal['operator']['capabilities']) & CAPABILITIES), 'csrfToken': principal['csrfToken']}
                 elif path == '/session/logout':
@@ -147,7 +174,7 @@ class ControlApplication:
 
     @staticmethod
     def founder_route(path, query):
-        return path.startswith(FOUNDER_PREFIXES) or (path == '/overview' and 'mode' in query)
+        return path.startswith(FOUNDER_PREFIXES) or (path == '/overview' and 'mode' in query) or any(route[1].fullmatch(path) for route in EXTENSION_ROUTES)
 
     @staticmethod
     def query_mode(query):
@@ -203,6 +230,12 @@ class ControlApplication:
         ``founder_agent.<fn>(consumer_service, principal, ..., request_id)`` as CONTRACTS §4."""
         if not self.queries: raise ControlError('SOURCE_UNAVAILABLE', 503)
         queries, mode, now, operator = self.queries, self.query_mode(query), self.boundary.clock(), principal['operator']['user_id']
+        route, match = extension_route(path, method)
+        if route:
+            if mode == 'demo' and method != 'GET' and not route[5].get('demo_ok'): raise ControlError('VALIDATION_FAILED', 400)
+            handler = getattr(founder_module(route[3]), route[4], None)
+            if handler is None: raise ControlError('SOURCE_UNAVAILABLE', 503)
+            return handler(self, principal, dict(method=method, path=path, body=body, query=query, match=match.groups(), mode=mode, now=now, requestId=request_id, environ=environ))
         if path == '/overview': return founder_module('live_metrics').overview(principal, mode, self.query_period(query), queries, request_id=request_id)
         if path == '/usage/unknown': return founder_module('live_metrics').unknown_reservations(principal, mode, queries, limit=self.query_int(query, 'limit', 200))
         if path == '/incidents':
@@ -289,4 +322,6 @@ class ControlApplication:
             if path == '/agent/turns' or re.fullmatch(f'/agent/runs/{ID}/cancel', path): return 'copilot.use'
         if method == 'PUT' and path == '/contact-policy': return 'control.settings'
         if method == 'DELETE' and re.fullmatch(f'/briefing-schedules/{ID}', path): return 'control.settings'
+        route, _ = extension_route(path, method)
+        if route: return route[2]
         raise ControlError('SCOPE_DENIED', 404)

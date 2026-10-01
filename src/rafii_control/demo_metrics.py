@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from .auth import ControlError
-from .live_metrics import (SOURCE_IDS, HEARTBEAT_STALE_SECONDS, build_row, interval_of, previous_interval, parse_stamp, stamp)
+from .live_metrics import (SOURCE_IDS, HEARTBEAT_STALE_SECONDS, build_row, interval_of, load_extensions, previous_interval, parse_stamp, stamp)
 
 ADAPTER = 'demo_metrics/v1'
 MAX_POINTS = 1000
@@ -223,8 +223,25 @@ def _cost_vs_cash(metric, data, query, interval, stale):
     return rows
 
 
+def register(custom):
+    """Demo parity for a slice's activated metrics (CONTRACTS §8): {metric_id: fn(metric, data, query, interval, now, stale) -> rows}.
+    A slice whose records the Demo dataset does not simulate registers `not_simulated` for that id, never a zero."""
+    for metric_id, fn in custom.items():
+        if metric_id in CUSTOM or not callable(fn): raise ValueError('duplicate or invalid demo metric ' + metric_id)
+        CUSTOM[metric_id] = fn
+
+
+def not_simulated(metric, data, query, interval, now, stale):
+    return [build_row(metric, interval, {}, value=None, unit=metric['unit'], state='unavailable', reason='demo_not_simulated', fixture=True)]
+
+
+CUSTOM = {}
+
+
 def _rows(metric, data, query, interval, now, stale):
     metric_id = metric['id']
+    if metric_id in CUSTOM:
+        return CUSTOM[metric_id](metric, data, query, interval, now, stale)
     if metric_id in NOT_SIMULATED:
         return [build_row(metric, interval, {}, value=None, unit=metric['unit'], state='unavailable', reason='demo_not_simulated', fixture=True)]
     if metric_id == 'cron_heartbeat': return _heartbeat_rows(metric, data, interval, now)
@@ -264,6 +281,7 @@ def compute(data, query, metrics):
     if not isinstance(data, dict) or data.get('mode') != 'demo' or not isinstance(data.get('asOf'), str): raise ControlError('SCOPE_DENIED')
     if query['comparison'] == 'cohort_age_aligned': raise ControlError('VALIDATION_FAILED', 400)
     if query['comparison'] != 'none' and 'window' in query['groupBy']: raise ControlError('VALIDATION_FAILED', 400)
+    load_extensions()
     now = parse_stamp(data['asOf'])
     stale, _, _ = _sources(data)
     interval, rows = interval_of(query), []
