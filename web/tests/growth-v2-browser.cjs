@@ -78,6 +78,9 @@ async function context(browser, viewport, principal, options = {}) {
     ...(options.timezoneId ? { timezoneId: options.timezoneId } : {})
   });
   await ctx.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: principal, url: base }]);
+  // The anonymous Post Doctor allows three checks a day per client address (anti-abuse; the platform edge sets
+  // X-Forwarded-For in production). Each anonymous run here is its own synthetic visitor (TEST-NET-2 address).
+  if (options.visitor) await ctx.setExtraHTTPHeaders({ 'X-Forwarded-For': `198.51.100.${options.visitor}` });
   await ctx.addInitScript(({ id, nudged }) => {
     localStorage.setItem('postriff-dev-principal', id);
     localStorage.setItem('postriff-onboarding:' + id, JSON.stringify({ completed: {}, dismissed: { welcome: 1 }, nudged }));
@@ -110,9 +113,11 @@ function watch(page) {
   });
 }
 
+let visitors = 0;
+
 async function firstWeekJourney(browser, viewport, draft, language) {
   const principal = randomUUID();
-  const ctx = await context(browser, viewport, principal);
+  const ctx = await context(browser, viewport, principal, { visitor: (visitors += 1) });
   const page = await ctx.newPage();
   watch(page);
   const label = `${viewport.name}/${language}`;
@@ -184,7 +189,7 @@ async function firstWeekJourney(browser, viewport, draft, language) {
 }
 
 async function blockedStorage(browser) {
-  const ctx = await context(browser, VIEWPORTS[0], randomUUID());
+  const ctx = await context(browser, VIEWPORTS[0], randomUUID(), { visitor: (visitors += 1) });
   await ctx.addInitScript(() => {
     Object.defineProperty(window, 'sessionStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
   });
@@ -208,19 +213,24 @@ async function blockedStorage(browser) {
 /** The slices' own words (English and Traditional Chinese), from the same pure modules the app renders. */
 async function loadCopy() {
   const load = (path) => import(pathToFileURL(resolve(__dirname, '../src', path)).href);
-  const [results, relationships, series, visualPack, intake] = await Promise.all([
+  const [results, relationships, series, visualPack, intake, proof, briefs] = await Promise.all([
     load('features/growth/results/present.ts'),
     load('lib/growth-v2/relationships-model.ts'),
     load('features/library/series/series-copy.ts'),
     load('lib/growth-v2/visual-pack-logic.ts'),
-    load('lib/growth-v2/source-uploads-model.ts')
+    load('lib/growth-v2/source-uploads-model.ts'),
+    load('lib/growth-v2/proof-present.ts'),
+    load('lib/growth-v2/briefs-present.ts')
   ]);
+  const both = (make) => ({ en: make('en'), 'zh-Hant': make('zh-Hant') });
   return {
     results: results.COPY,
-    followUp: { en: relationships.followUpCopy('en'), 'zh-Hant': relationships.followUpCopy('zh-Hant') },
+    followUp: both(relationships.followUpCopy),
     series: series.COPY,
-    visualPack: { en: visualPack.copyFor('en'), 'zh-Hant': visualPack.copyFor('zh-Hant') },
+    visualPack: both(visualPack.copyFor),
     intake: intake.COPY,
+    proof: both(proof.proofCopy),
+    brief: both(briefs.briefCopy),
     fill: series.fill
   };
 }
@@ -370,7 +380,8 @@ async function resultsJourney(env, { label, zh, entry }) {
   await page.keyboard.press('Enter');
   const form = page.getByRole('dialog', { name: copy.form.title, exact: true });
   await form.waitFor();
-  await form.getByLabel(copy.form.type, { exact: true }).selectOption('booking');
+  // A select wrapped in its <label> carries its current option in its name ("What happened Lead"): match the label part.
+  await form.getByLabel(copy.form.type).selectOption('booking');
   await form.getByLabel(copy.form.amount, { exact: true }).fill('45.50');
   await form.getByLabel(copy.form.currency, { exact: true }).fill('USD');
   const note = zh ? '預約了十一月班的試堂' : 'Booked a trial lesson for the November cohort';
@@ -399,7 +410,7 @@ async function resultsJourney(env, { label, zh, entry }) {
     separate && blended.length === 0 && summary.classes.first_party_reported === null && summary.classes.provider_native === null
     && summary.classes.user_declared.counts.booking === 1 && summary.classes.user_declared.money.usd?.minor === 4550,
     { classes: summary.classes, blendedKeys: blended });
-  await shot(page, `results-${fileLabel(label)}-1-declared`);
+  await shot(page, `${fileLabel(label)}-1-declared`);
 
   // Amend: a new version of the same result (it still counts once).
   await row.getByRole('button', { name: copy.item.edit, exact: true }).click();
@@ -431,7 +442,7 @@ async function resultsJourney(env, { label, zh, entry }) {
     events.items.length === 1 && events.items[0].status === 'reversed' && summary.classes.user_declared.reversed === 1
     && !summary.classes.user_declared.counts.booking && Object.keys(summary.classes.user_declared.money).length === 0,
     { status: events.items[0]?.status, declared: summary.classes.user_declared });
-  await shot(page, `results-${fileLabel(label)}-2-reversed`);
+  await shot(page, `${fileLabel(label)}-2-reversed`);
   await axeCheck(page, `results ledger ${label}`);
   await noHorizontalScroll(page, `results ledger ${label}`);
 
@@ -447,7 +458,7 @@ async function resultsJourney(env, { label, zh, entry }) {
   const made = page.getByRole('dialog', { name: copy.links.created, exact: true });
   await made.waitFor();
   const shown = await made.getByRole('textbox').inputValue();
-  await shot(page, `results-${fileLabel(label)}-3-link-ready`);
+  await shot(page, `${fileLabel(label)}-3-link-ready`);
   const slug = shown.split('/api/l/')[1] || '';
   const hop = await ctx.request.get(`${base}/api/l/${slug}`, {
     maxRedirects: 0, failOnStatusCode: false,
@@ -468,7 +479,7 @@ async function resultsJourney(env, { label, zh, entry }) {
     { clicks: listed.items[0]?.clicks });
   await axeCheck(page, `results links ${label}`);
   await noHorizontalScroll(page, `results links ${label}`);
-  await shot(page, `results-${fileLabel(label)}-4-links`);
+  await shot(page, `${fileLabel(label)}-4-links`);
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */
@@ -515,7 +526,10 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
   record(`follow-ups: created without a thread, due in the person's zone — ${label}`,
     detail.state === 'new' && detail.threadIds.length === 0 && detail.due?.local === `${day}T10:00` && detail.due?.timeZone === ZONE[viewport.name],
     { state: detail.state, due: detail.due, threads: detail.threadIds.length });
-  await shot(page, `followups-${fileLabel(label)}-1-created`);
+  const cardText = await card.innerText();
+  record(`follow-ups: a follow-up without a conversation says so in the person's language (no platform named) — ${label}`,
+    cardText.includes(copy.noConversationHint) && !cardText.includes('the platform'), { hint: copy.noConversationHint });
+  await shot(page, `${fileLabel(label)}-1-created`);
 
   // Set a new due time in the editor.
   await card.getByRole('button', { name: copy.edit, exact: true }).click();
@@ -531,7 +545,7 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
   await card.getByText(copy.snoozedUntil(''), { exact: false }).waitFor();
   detail = (await must('GET', `/api/workspaces/${wid}/relationships/${relationshipId}`)).relationship;
   const snoozed = detail.followUp.status === 'snoozed' && detail.snoozedUntil > Date.now() / 1000 + 6 * 86400;
-  await shot(page, `followups-${fileLabel(label)}-2-snoozed`);
+  await shot(page, `${fileLabel(label)}-2-snoozed`);
   // Wide screens: the toast's Undo. Below 1024 px the follow-up is a modal sheet, so the toast outside it is hidden from
   // keyboard and assistive tech; the card's own "Unsnooze" is the undo there.
   if (twoPane) await page.getByRole('button', { name: copy.undo, exact: true }).click();
@@ -550,7 +564,7 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
   await card.getByText(`${copy.states.won} · ${copy.provenance.user_declared}`, { exact: true }).waitFor();
   detail = (await must('GET', `/api/workspaces/${wid}/relationships/${relationshipId}`)).relationship;
   record(`follow-ups: won by picking a declared result — ${label}`, detail.state === 'won' && detail.won?.resultId === seededId && detail.won?.provenance === 'user_declared', { won: detail.won });
-  await shot(page, `followups-${fileLabel(label)}-3-won-picked`);
+  await shot(page, `${fileLabel(label)}-3-won-picked`);
 
   // Reopen, then won again by recording the result in place.
   await card.getByRole('button', { name: copy.reopen, exact: true }).click();
@@ -576,7 +590,7 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
     reopened && detail.state === 'won' && detail.won?.resultId === recordedId && recordedId !== seededId
     && recorded?.type === 'booking' && recorded?.amount?.minor === 8000 && recorded?.provenance === 'user_declared',
     { won: detail.won, recorded: recorded && { type: recorded.type, amount: recorded.amount, provenance: recorded.provenance } });
-  await shot(page, `followups-${fileLabel(label)}-4-won-recorded`, true);
+  await shot(page, `${fileLabel(label)}-4-won-recorded`, true);
   await axeCheck(page, `follow-ups ${label}`);
   await noHorizontalScroll(page, `follow-ups ${label}`);
 }
@@ -643,7 +657,7 @@ async function seriesJourney(env, { label, zh }) {
   await detail.getByRole('combobox', { name: copy.planMore, exact: true }).selectOption('4');
   await detail.getByRole('button', { name: copy.planMore, exact: true }).click();
   await until(async () => (await episodes.count()) === 4, 'a fourth planned episode');
-  await shot(page, `series-${fileLabel(label)}-1-planned`);
+  await shot(page, `${fileLabel(label)}-1-planned`);
 
   // Approve an episode angle ("Keep this angle"); approval as next is offered while its facts are current.
   const first = episodes.first();
@@ -683,7 +697,7 @@ async function seriesJourney(env, { label, zh }) {
     gated.factState === 'needs_fact_review' && gated.canApprove === false && gated.blockedReason === 'needs_fact_review' && approveOffered === 0
     && refused.status === 409 && refused.body?.code === 'needs_fact_review' && view.claims.every((c) => c.freshness.state !== 'ok'),
     { episode: gated.index, reasons: gated.factReasons, approveOffered, status: refused.status, code: refused.body?.code, message: refused.body?.error });
-  await shot(page, `series-${fileLabel(label)}-2-gated`);
+  await shot(page, `${fileLabel(label)}-2-gated`);
   await axeCheck(page, `series detail ${label}`);
   await noHorizontalScroll(page, `series detail ${label}`);
 
@@ -693,7 +707,9 @@ async function seriesJourney(env, { label, zh }) {
     const flagged = factsRegion.getByRole('listitem').filter({ has: page.getByRole('button', { name: copy.removeFact, exact: true }) });
     const remaining = await flagged.count();
     if (remaining === 0) break;
-    const item = flagged.first();
+    // Pin the row by its fact text: once "Still true" opens its form, its buttons go and `first()` would move on.
+    const claimText = (await flagged.first().locator('span').first().innerText()).trim();
+    const item = factsRegion.getByRole('listitem').filter({ hasText: claimText });
     const unsupported = (await item.getByText(copy.reason.missing_support, { exact: true }).count()) > 0 || (await item.getByText(copy.reason.source_unavailable, { exact: true }).count()) > 0;
     if (!unsupported && (await item.getByRole('button', { name: copy.stillTrue, exact: true }).count()) > 0) {
       await item.getByRole('button', { name: copy.stillTrue, exact: true }).click();
@@ -709,7 +725,7 @@ async function seriesJourney(env, { label, zh }) {
   record(`series: after the facts are reviewed the episode is approved as next — ${label}`,
     view.episodes.find((e) => e.id === gated.id)?.workflowState === 'approved' && view.claims.every((c) => c.freshness.state === 'ok' || c.freshness.state === 'removed'),
     { claims: view.claims.map((c) => c.freshness.state) });
-  await shot(page, `series-${fileLabel(label)}-3-approved`);
+  await shot(page, `${fileLabel(label)}-3-approved`);
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */
@@ -804,13 +820,13 @@ async function visualPackJourney(env, { label, zh, entry }) {
   const preview = editor.getByRole('region', { name: copy.preview, exact: true });
   await until(async () => (await preview.getByRole('img').count()) === 6, 'six rendered slides in the preview', 60000);
   await preview.scrollIntoViewIfNeeded();
-  await shot(page, `visualpack-${fileLabel(label)}-1-rendered`);
+  await shot(page, `${fileLabel(label)}-1-rendered`);
   view = await must('GET', `/api/workspaces/${wid}/visual-packs/${packId}`);
   const sizes = [];
   for (const slide of view.revision.render.slides) {
     const png = await bytes(slide.href);
     sizes.push(pngSize(png));
-    writeFileSync(resolve(out, `visualpack-${fileLabel(label)}-slide-${String(slide.position).padStart(2, '0')}.png`), png);
+    writeFileSync(resolve(out, `${fileLabel(label)}-slide-${String(slide.position).padStart(2, '0')}.png`), png);
   }
   record(`visual pack: six server-rendered 1080×1350 PNGs with alt text — ${label}`,
     sizes.length === 6 && sizes.every((s) => s && s.width === 1080 && s.height === 1350) && view.revision.render.slides.every((s) => s.altText.trim().length > 0),
@@ -824,7 +840,7 @@ async function visualPackJourney(env, { label, zh, entry }) {
   editor = titled('export_ready', 2);
   await editor.waitFor({ timeout: 60000 });
   const [download] = await Promise.all([page.waitForEvent('download'), editor.getByRole('button', { name: copy.download, exact: true }).click()]);
-  const zipPath = resolve(out, `visualpack-${fileLabel(label)}.zip`);
+  const zipPath = resolve(out, `${fileLabel(label)}.zip`);
   await download.saveAs(zipPath);
   const zip = readFileSync(zipPath);
   const names = zipEntries(zip).map((e) => e.name);
@@ -850,7 +866,7 @@ async function visualPackJourney(env, { label, zh, entry }) {
     && after.revision.state === 'downloaded' && after.revision.facts.queuedAt === null,
     { status: refused.status, code: refused.body?.code, message: refused.body?.error, capability });
   entry.queueRefusal = refused.body?.error;
-  await shot(page, `visualpack-${fileLabel(label)}-2-downloaded`);
+  await shot(page, `${fileLabel(label)}-2-downloaded`);
   await axeCheck(page, `visual pack editor ${label}`);
   await noHorizontalScroll(page, `visual pack editor ${label}`);
 }
@@ -944,18 +960,18 @@ async function intakeJourney(env, { label, zh }) {
   record(`intake: audio refused with transcription_route_not_enabled before upload — ${label}`,
     begins.length === 0 && refusedApi.status === 409 && refusedApi.body?.code === 'transcription_route_not_enabled',
     { tabPresses: presses, beginRequests: begins.length, status: refusedApi.status, code: refusedApi.body?.code });
-  await shot(page, `intake-${fileLabel(label)}-1-audio-refused`);
+  await shot(page, `${fileLabel(label)}-1-audio-refused`);
 
   // A small text PDF: upload → check → read → review the text → correct it → create the source.
   const [pdfPicker] = await Promise.all([page.waitForEvent('filechooser'), choose.click()]);
   await pdfPicker.setFiles({ name: 'practice-notes.pdf', mimeType: 'application/pdf', buffer: makePdf(PDF_LINES) });
   const detail = panel.getByRole('region', { name: 'practice-notes.pdf', exact: true });
-  await detail.getByText(copy.reviewTitle, { exact: true }).waitFor({ timeout: 120000 });
+  await detail.getByRole('heading', { name: copy.reviewTitle, exact: true }).waitFor({ timeout: 120000 });
   const area = detail.getByRole('textbox', { name: copy.reviewTitle, exact: true });
   const extracted = await area.inputValue();
   const flat = extracted.replace(/\s+/g, ' ');
   record(`intake: the extracted text is the PDF's text, for review — ${label}`, PDF_LINES.every((line) => flat.includes(line)), { characters: extracted.length });
-  await shot(page, `intake-${fileLabel(label)}-2-review`);
+  await shot(page, `${fileLabel(label)}-2-review`);
   const addition = zh ? '每星期錄一次音，可以幫助成年學生聽到自己的進步。' : 'A weekly recording helps adult students hear their progress.';
   await area.fill(`${extracted.trimEnd()}\n${addition}`);
   await detail.getByRole('button', { name: copy.useAsSource, exact: true }).click();
@@ -970,10 +986,103 @@ async function intakeJourney(env, { label, zh }) {
     upload?.job?.state === 'completed' && Boolean(source) && source.origin?.kind === 'source_upload' && approved.length >= PDF_LINES.length
     && approved.some((fact) => fact.text.includes(addition.slice(0, 12))),
     { job: upload?.job?.state, statements: approved.length, origin: source?.origin?.kind });
-  await shot(page, `intake-${fileLabel(label)}-3-source`);
+  await shot(page, `${fileLabel(label)}-3-source`);
   if (await page.getByRole('dialog').count()) await page.keyboard.press('Escape');   // the source inspector sheet below lg
   await axeCheck(page, `intake ${label}`);
   await noHorizontalScroll(page, `intake ${label}`);
+}
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* 8. Proof revisions (Analytics → Proof of value → Evidence by revision)                                               */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+async function proofJourney(env, { label, zh, entry }) {
+  const { page, wid, must } = env;
+  const copy = C.proof[zh ? 'zh-Hant' : 'en'];
+  // Results the person declared inside last week's completed period (Monday to Monday, UTC: the workspace's default).
+  const now = new Date();
+  const monday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7));
+  const lastWeek = (day, hour) => new Date(monday - 7 * 86400e3 + day * 86400e3 + hour * 3600e3).toISOString();
+  await must('POST', `/api/workspaces/${wid}/results/events`, {
+    type: 'lead', occurredAt: lastWeek(3, 12), quantity: 1, note: zh ? '工作坊查詢' : 'Workshop enquiry', idempotencyKey: `proof-${randomUUID()}`
+  });
+  await page.goto(base + '/app/analytics');
+  const section = page.getByRole('region', { name: copy.title, exact: true });
+  await section.waitFor({ timeout: 120000 });
+  await section.scrollIntoViewIfNeeded();
+  await section.getByText(copy.empty, { exact: true }).waitFor();
+  // Keyboard only: Tab to the owner's "Recompute last week", Enter records revision 1 from stored records.
+  const recompute = section.getByRole('button', { name: copy.refresh, exact: true });
+  const presses = await tabTo(page, recompute, { back: 3 });
+  await page.keyboard.press('Enter');
+  await section.getByRole('status').filter({ hasText: copy.appended(1) }).waitFor({ timeout: 60000 });
+  const card = section.getByRole('article');
+  await card.getByRole('heading', { name: new RegExp(escapeRe(copy.revision(1))) }).waitFor();
+  let proof = (await must('GET', `/api/workspaces/${wid}/proof/proofs?frequency=weekly`)).proofs[0];
+  const firstOutcomes = proof?.latest.counts.figures.outcomes;
+  record(`proof: keyboard recompute records revision 1 with the declared result counted by its source — ${label}`,
+    proof?.latest.revision === 1 && proof.latest.reason === 'initial' && firstOutcomes?.dataState !== 'unavailable' && Boolean(firstOutcomes?.value?.user_declared)
+    && (await card.innerText()).includes(copy.provenance.user_declared),
+    { tabPresses: presses, outcomes: firstOutcomes?.value, dataState: firstOutcomes?.dataState, period: proof && [proof.periodStart, proof.periodEnd, proof.timeZone] });
+  await shot(page, `${fileLabel(label)}-1-revision1`);
+
+  // Late data: another result in the same period; recomputing appends revision 2 with what changed, revision 1 stays.
+  await must('POST', `/api/workspaces/${wid}/results/events`, {
+    type: 'booking', occurredAt: lastWeek(4, 15), amount: { minor: 9000, currency: 'usd' }, quantity: 1, note: zh ? '預約試堂' : 'Trial lesson booked',
+    idempotencyKey: `proof-${randomUUID()}`
+  });
+  await recompute.click();
+  await section.getByRole('status').filter({ hasText: copy.appended(2) }).waitFor({ timeout: 60000 });
+  await card.getByRole('heading', { name: new RegExp(escapeRe(copy.revision(2))) }).waitFor();
+  await card.getByText(copy.history, { exact: true }).click();
+  const history = card.locator('details').filter({ hasText: copy.history }).locator('ol > li');
+  await until(async () => (await history.count()) === 2, 'two revisions in the history');
+  const historyText = await history.allInnerTexts();
+  proof = (await must('GET', `/api/workspaces/${wid}/proof/proofs?frequency=weekly`)).proofs[0];
+  const late = proof.revisions.find((r) => r.revision === 2);
+  const kept = await must('GET', `/api/workspaces/${wid}/proof/proofs/${proof.proofId}/revisions/1`);
+  record(`proof: late data appends revision 2 with its correction; revision 1 stays readable — ${label}`,
+    proof.latest.revision === 2 && proof.revisions.length === 2 && late?.reason === 'late_data' && late.correction.some((c) => c.figure === 'outcomes')
+    && Boolean(kept) && historyText.some((text) => text.includes(copy.reason.late_data) && text.includes(copy.correction)),
+    { revisions: proof.revisions.map((r) => `${r.revision}:${r.reason}`), correction: late?.correction?.map((c) => c.figure), history: historyText.map((t) => t.slice(0, 160)) });
+  entry.proofId = proof.proofId;
+  await shot(page, `${fileLabel(label)}-2-revision2`);
+  await axeCheck(page, `proof ${label}`);
+  await noHorizontalScroll(page, `proof ${label}`);
+}
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* 9. Opportunity brief (Weekly → This week)                                                                            */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+async function briefJourney(env, { label, zh, entry }) {
+  const { page, wid, must } = env;
+  const copy = C.brief[zh ? 'zh-Hant' : 'en'];
+  const current = await must('GET', `/api/workspaces/${wid}/briefs/current`);
+  await page.goto(base + '/app/weekly');
+  const panel = page.getByRole('region', { name: copy.title, exact: true });
+  await panel.waitFor({ timeout: 120000 });
+  await panel.scrollIntoViewIfNeeded();
+  const chips = await panel.getByRole('list', { name: copy.coverage, exact: true }).getByRole('listitem').allInnerTexts();
+  const expected = current.coverage.map((source) => `${copy.source[source.source]}: ${copy.sourceState[source.state]}`);
+  const items = current.edition?.items ?? current.items ?? [];
+  record(`brief: each stored source shows its own state, as the API reports it — ${label}`,
+    expected.length === 3 && expected.every((text) => chips.some((chip) => chip.trim() === text)),
+    { chips, coverage: current.coverage.map((source) => `${source.source}:${source.state}${source.reason ? `(${source.reason})` : ''}`), dataState: current.dataState });
+  if (items.length === 0) {
+    // An empty brief says so (valid result or no source), never an invented opportunity.
+    const description = current.dataState === 'unavailable' ? copy.emptyUnavailable : copy.emptyAvailable;
+    await panel.getByText(copy.emptyTitle, { exact: true }).waitFor();
+    record(`brief: no stored evidence → an honest empty brief, no invented item — ${label}`,
+      (await panel.getByText(description, { exact: true }).count()) === 1 && (await panel.getByRole('button', { name: copy.saveIdea }).count()) === 0, { dataState: current.dataState });
+    entry.keyboard = 'not applicable: an empty brief offers no action';
+    entry.actions = 'not_run: the growth harness stores no trend, listening or Radar evidence (research is off and the Radar/trend fixtures are not started), so the brief has no item to accept, save, dismiss or restore';
+  } else {
+    entry.actions = `not_run: ${items.length} stored item(s) appeared; item actions are not scripted in this journey`;
+  }
+  await shot(page, `${fileLabel(label)}`);
+  await axeCheck(page, `brief ${label}`);
+  await noHorizontalScroll(page, `brief ${label}`);
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */
@@ -1038,6 +1147,14 @@ async function pricingJourney(browser, viewport) {
     record(`pricing: keyboard reaches and follows Creator's action — ${label}`, true, { tabPresses: presses, landed: new URL(page.url()).pathname });
     await page.goto(base + '/pricing', { timeout: 180000 });
     await free.waitFor();
+    // The FAQ reveals on scroll: bring it into view as a reader would, then capture the whole page.
+    const faq = page.locator('#faq');
+    await faq.scrollIntoViewIfNeeded();
+    await faq.getByRole('button').first().waitFor({ state: 'visible', timeout: 15000 });
+    record(`pricing: the FAQ shows when scrolled to — ${label}`, (await faq.getByRole('button').count()) > 0, { questions: await faq.getByRole('button').count() });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await shot(page, `pricing-v2-${viewport.name}`, true);
     await axeCheck(page, `pricing ${label}`);
     await noHorizontalScroll(page, `pricing ${label}`);
@@ -1076,7 +1193,8 @@ async function main() {
       await blockedStorage(browser).catch((error) => failures.push(`blocked storage: ${error.message.slice(0, 300)}`));
       entry.status = failures.length === before ? 'pass' : 'fail';
     }
-    const program = [['results', resultsJourney], ['follow-ups', followUpJourney], ['series', seriesJourney], ['visual-pack', visualPackJourney], ['intake', intakeJourney]];
+    const program = [['results', resultsJourney], ['follow-ups', followUpJourney], ['series', seriesJourney], ['visual-pack', visualPackJourney],
+      ['intake', intakeJourney], ['proof', proofJourney], ['brief', briefJourney]];
     for (const [name, run] of program) {
       if (!want(name)) continue;
       for (const viewport of VIEWPORTS) await runJourney(name, browser, viewport, run);
