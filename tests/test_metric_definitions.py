@@ -135,3 +135,19 @@ class WeekCompletionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FounderContractTest(unittest.TestCase):
+    """The Founder Control catalog contract is generated from these definitions; it must never drift (AC31)."""
+
+    def test_contract_file_matches_the_definitions(self):
+        import json
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "docs/design/rafii-product-growth/contracts/founder-metrics-growth.json"
+        contract = {item["id"]: item for item in json.loads(path.read_text())}
+        expected = {k for k, v in m.DEFINITIONS.items() if v.get("owner") != "founder"}
+        self.assertEqual(set(contract), expected)
+        for metric_id, item in contract.items():
+            self.assertEqual(item["definition"], m.DEFINITIONS[metric_id]["definition"], metric_id)
+            self.assertEqual(item["status"], m.PROPOSED, metric_id)
+            self.assertEqual(item["zero_denominator"], "unavailable", metric_id)
