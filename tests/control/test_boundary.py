@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
-from rafii_control.auth import Boundary, ControlError, Config, VerifiedIdentity, fresh_mfa
+from rafii_control.auth import Boundary, ControlError, Config, READ_BUDGET, VerifiedIdentity, fresh_mfa
 from rafii_control.http import ControlApplication
 
 USER = '10000000-0000-4000-8000-000000000001'
@@ -207,6 +207,6 @@ class HttpTests(BoundaryTests):
         self.store.budget=lambda purpose,actor,limit:budgets.append((purpose,limit))
         self.boundary.authorize(token,'copilot.use')
         self.boundary.authorize(token,'copilot.use',origin='http://localhost:4449',csrf=session['csrfToken'],unsafe=True)
-        self.assertEqual(budgets,[('copilot.read',120),('copilot.use',5)])
+        self.assertEqual(budgets,[('copilot.read',READ_BUDGET),('copilot.use',5)])
         self.store.operator_row['capabilities']=['control.read']
         with self.assertRaisesRegex(ControlError,'SCOPE_DENIED'):self.boundary.authorize(token,'copilot.use')

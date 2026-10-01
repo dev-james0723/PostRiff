@@ -8,7 +8,7 @@ import time
 import types
 import unittest
 from unittest.mock import MagicMock, Mock, patch
-from rafii_control.auth import Boundary, CAPABILITIES, Config, ControlError, VerifiedIdentity
+from rafii_control.auth import Boundary, CAPABILITIES, Config, ControlError, READ_BUDGET, VerifiedIdentity
 from rafii_control.hosted import PROHIBITED, create_app, embedded_app, founder_tick
 from rafii_control.http import ControlApplication
 from control.test_boundary import MemoryStore, NOW, USER
@@ -122,7 +122,7 @@ class MultiOriginBoundaryTests(unittest.TestCase):
         self.boundary.authorize(token, 'copilot.use', **unsafe)
         self.boundary.authorize(token, 'copilot.use')
         self.boundary.authorize(token, 'incidents.ack', **unsafe)
-        self.assertEqual(budgets, [('founder.agent.turn', 20), ('founder.call.request', 5), ('copilot.use', 5), ('copilot.read', 120), ('incidents.ack', 120)])
+        self.assertEqual(budgets, [('founder.agent.turn', 20), ('founder.call.request', 5), ('copilot.use', 5), ('copilot.read', READ_BUDGET), ('incidents.ack', READ_BUDGET)])
         self.store.operator_row['capabilities'] = ['control.read']
         for capability in ('incidents.ack', 'followups.write', 'control.settings'):
             with self.assertRaisesRegex(ControlError, 'SCOPE_DENIED'): self.boundary.authorize(token, capability, **unsafe)
