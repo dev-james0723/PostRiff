@@ -58,6 +58,19 @@ def phone_number(value):
     return value
 
 
+def call_duration_limit(payload, maximum, *, kind='explicit', inbound=False):
+    if not isinstance(payload, dict):
+        raise AlphaError('Send valid call request options.', 400)
+    if 'callDurationLimitSeconds' not in payload:
+        return maximum
+    if kind != 'explicit' or inbound:
+        raise AlphaError('A per-call duration limit is available for explicit outbound calls only.', 400, code='phone_duration_scope')
+    seconds = payload['callDurationLimitSeconds']
+    if type(seconds) is not int or not 60 <= seconds <= maximum:
+        raise AlphaError(f'Choose a call duration between 60 and {maximum} seconds.', 400, code='phone_duration_limit')
+    return seconds
+
+
 def preferences(patch, current=None):
     if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
         raise AlphaError('Send valid phone preferences.', 400)

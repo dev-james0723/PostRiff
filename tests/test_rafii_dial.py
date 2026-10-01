@@ -75,6 +75,14 @@ class DialTests(unittest.TestCase):
         self.assertEqual(self.http.requests[-1][2]['maxCallDurationSeconds'],3600)
         self.assertEqual(PhoneConfig({'RAFII_PHONE_MAX_SECONDS':'60'}).cap_seconds,3600)
 
+    def test_explicit_shorter_duration_reaches_the_only_provider_create(self):
+        receipt=self.provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=60)
+        self.assertEqual(receipt.state,'ringing')
+        creates=[r for r in self.http.requests if r[0]=='POST' and r[1]=='/calls']
+        self.assertEqual(len(creates),1)
+        self.assertEqual(creates[0][2]['maxCallDurationSeconds'],60)
+        self.assertEqual(creates[0][3],{'Idempotency-Key':'rafii-phone:'+CALL})
+
     def test_managed_llm_wrong_url_or_formats_never_dial(self):
         for key,value in [('access','pending'),('enabled',False),('activeMode','llm'),('audio',{'wsUrl':'wss://other.test'})]:
             with self.subTest(key=key):

@@ -2,12 +2,16 @@
 import asyncio
 import base64
 import json
+import os
+import socket
 from http import HTTPStatus
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from openai import AsyncOpenAI
+from openai import BadRequestError
+import httpx2
 from openai.types.live.client_event_param import ClientEventParam
 from openai.types.live.instructions_append_event_param import InstructionsAppendEventParam
 from openai.types.live.commentary_append_event_param import CommentaryAppendEventParam
@@ -15,10 +19,11 @@ from pydantic import TypeAdapter
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.server import serve
+from websockets.datastructures import Headers
 
 from postriff_phase2.agent_runtime_v2 import live
 from postriff_phase2.phone.asgi import create_lazy_app
-from postriff_phase2.phone.diagnostics import MediaFailure, metadata, report_failure
+from postriff_phase2.phone.diagnostics import MediaFailure, metadata, report_failure, handshake_request_id
 from postriff_phase2.phone.providers.twilio import TwilioMediaTransport
 from postriff_phase2.phone.session import bridge
 
@@ -71,9 +76,140 @@ class MediaDiagnosticTest(unittest.TestCase):
         self.assertIn('"phase": "unknown"', output)
         self.assertEqual(output.count(CALL_ID), 1)
         self.assertEqual(metadata('live_event', event={'error': {'code': 'missing_required_parameter', 'param': 'delegation_id'}}),
-                         {'phase': 'live_event', 'errorCode': 'missing_required_parameter', 'errorParam': 'delegation_id'})
+                         {'phase': 'live_event', 'errorCode': 'missing_required_parameter', 'errorParam': 'delegation_id',
+                          'rejectedCommand': 'unknown', 'commandEchoState': 'missing',
+                          'errorCategory': 'other', 'reasonBasis': 'unclassified'})
         self.assertEqual(metadata('live_event', event={'error': {'code': {'secret': PRIVATE}}}),
-                         {'phase': 'live_event', 'errorCode': 'other'})
+                         {'phase': 'live_event', 'errorCode': 'other', 'rejectedCommand': 'unknown',
+                          'commandEchoState': 'missing', 'errorCategory': 'other', 'reasonBasis': 'unclassified'})
+
+    def test_actual_sdk_exception_preserves_known_details_and_opaque_request_id(self):
+        request_id = 'req_' + 'a' * 32
+        response = httpx2.Response(400, request=httpx2.Request('GET', 'https://api.openai.com/v1/live/sessions'),
+                                   headers={'x-request-id': request_id, 'Authorization': PRIVATE})
+        error = BadRequestError(PRIVATE, response=response, body={'code': 'unsupported_sample_rate',
+            'type': 'invalid_request_error', 'param': 'audio.format.rate', 'message': PRIVATE})
+        result = metadata('live_connect', error)
+        self.assertEqual((result['errorCode'], result['errorType'], result['errorParam']),
+                         ('unsupported_sample_rate', 'invalid_request_error', 'audio.format.rate'))
+        self.assertEqual((result['errorCategory'], result['reasonBasis']), ('audio_format', 'exact_code'))
+        self.assertEqual((result['httpStatus'], result['providerRequestId']), (400, request_id))
+        self.assertNotIn(PRIVATE, json.dumps(result))
+        self.assertNotIn('Authorization', json.dumps(result))
+
+    def test_exception_attributes_and_bounded_upgrade_body_are_reduced_to_enums(self):
+        error = RuntimeError(PRIVATE)
+        error.code, error.type, error.param = 'invalid_value', 'invalid_request_error', 'audio.format.type'
+        result = metadata('live_event', error, live_started=False, greeting_sent=False)
+        self.assertEqual((result['errorParam'], result['errorCategory'], result['reasonBasis']),
+                         ('audio.format.type', 'audio_format', 'code_param'))
+        self.assertEqual((result['rejectedCommand'], result['commandEchoState']), ('unknown', 'missing'))
+        self.assertNotIn(PRIVATE, json.dumps(result))
+        error = RuntimeError(PRIVATE)
+        error.response = SimpleNamespace(status_code=400, body=bytearray(json.dumps({'error': {
+            'code': 'unknown_parameter', 'type': 'invalid_request_error', 'param': 'session.model',
+            'client_event_id': 'phone-start-1', 'message': PRIVATE}}).encode()), headers={})
+        result = metadata('live_connect', error)
+        self.assertEqual((result['errorCode'], result['errorParam']), ('unknown_parameter', 'session.model'))
+        self.assertEqual((result['rejectedCommand'], result['commandEchoState']), ('session_start', 'known'))
+        error.response.body = bytearray(b'a' * 8193)
+        self.assertNotIn('errorCode', metadata('live_connect', error))
+
+    def test_request_id_rejects_pii_nonhex_wrong_length_and_other_headers(self):
+        for value in (PRIVATE, 'req_' + 'a' * 31, 'req_' + 'a' * 33, 'req_' + 'z' * 32,
+                      'req_' + 'A' * 32, {'private': PRIVATE}, None):
+            error = RuntimeError(PRIVATE)
+            error.request_id = value
+            error.response = SimpleNamespace(headers={'x-request-id': value, 'Authorization': PRIVATE})
+            result = metadata('live_connect', error)
+            self.assertNotIn('providerRequestId', result)
+            self.assertNotIn(PRIVATE, json.dumps(result))
+        error.response.headers['x-request-id'] = 'req_' + 'b' * 32
+        self.assertEqual(metadata('live_connect', error)['providerRequestId'], 'req_' + 'b' * 32)
+
+    def test_finite_audio_capacity_codes_and_quota_require_exact_code_evidence(self):
+        for code, category in (('unsupported_audio_format', 'audio_format'), ('invalid_audio_format', 'audio_format'),
+                ('unsupported_sample_rate', 'audio_format'), ('invalid_sample_rate', 'audio_format'),
+                ('too_many_concurrent_sessions', 'live_capacity'), ('too_many_concurrent_live_sessions', 'live_capacity'),
+                ('concurrent_session_limit_exceeded', 'live_capacity'), ('live_session_concurrency_limit', 'live_capacity'),
+                ('insufficient_quota', 'quota')):
+            result = metadata('live_event', event={'error': {'code': code, 'message': PRIVATE}})
+            self.assertEqual((result['errorCode'], result['errorCategory'], result['reasonBasis']),
+                             (code, category, 'exact_code'))
+            self.assertNotIn(PRIVATE, json.dumps(result))
+        error = RuntimeError(PRIVATE)
+        error.response = SimpleNamespace(status_code=429)
+        result = metadata('live_event', error, event={'error': {
+            'code': 'invalid_request_error', 'type': 'invalid_request_error', 'message': 'Insufficient quota. ' + PRIVATE}},
+            live_started=False, greeting_sent=False)
+        self.assertEqual((result['errorCategory'], result['reasonBasis']), ('other', 'unclassified'))
+        self.assertEqual(result['httpStatus'], 429)
+        self.assertNotIn(PRIVATE, json.dumps(result))
+
+    def test_server_event_id_never_substitutes_for_missing_command_echo(self):
+        result = metadata('live_event', event={'type': 'error', 'event_id': 'phone-start-1',
+            'error': {'type': 'invalid_request_error', 'code': PRIVATE}}, live_started=False, greeting_sent=False)
+        self.assertEqual((result['rejectedCommand'], result['commandEchoState']), ('unknown', 'missing'))
+        self.assertFalse(result['liveStarted'])
+        self.assertFalse(result['greetingSent'])
+        for value, state in ((PRIVATE, 'unrecognized'), ({'private': PRIVATE}, 'invalid_type')):
+            result = metadata('live_event', event={'error': {'client_event_id': value}})
+            self.assertEqual((result['rejectedCommand'], result['commandEchoState']), ('unknown', state))
+            self.assertNotIn(PRIVATE, json.dumps(result))
+
+    def test_upgrade_request_id_comes_only_from_single_sdk_socket_header(self):
+        request_id = 'req_' + 'c' * 32
+        connection = SimpleNamespace(_connection=SimpleNamespace(response=SimpleNamespace(headers=Headers(
+            [('x-request-id', request_id), ('Authorization', PRIVATE), ('x-session-id', PRIVATE)]))),
+            request_id=PRIVATE, event_id=PRIVATE, session_id=PRIVATE)
+        self.assertEqual(handshake_request_id(connection), request_id)
+        with self.assertLogs('rafii.phone.media', level='WARNING') as logs:
+            report_failure(CALL_ID, 'live_event', event={'error': {'type': 'invalid_request_error', 'code': PRIVATE}},
+                live_started=False, greeting_sent=False, provider_request_id=handshake_request_id(connection))
+        self.assertIn(request_id, logs.output[0])
+        self.assertIn('"rejectedCommand": "unknown"', logs.output[0])
+        self.assertIn('"commandEchoState": "missing"', logs.output[0])
+        self.assertNotIn(PRIVATE, logs.output[0])
+        connection._connection.response.headers['x-request-id'] = 'req_' + 'd' * 32
+        self.assertIsNone(handshake_request_id(connection))  # Duplicate headers are ambiguous, not a new failure.
+        error = RuntimeError(PRIVATE)
+        error.response = connection._connection.response
+        self.assertNotIn('providerRequestId', metadata('live_connect', error))
+        connection._connection.response.headers = Headers([('x-request-id', PRIVATE)])
+        self.assertIsNone(handshake_request_id(connection))
+        self.assertIsNone(handshake_request_id(SimpleNamespace(response=SimpleNamespace(headers={'x-request-id': request_id}))))
+        for value in (PRIVATE, 'req_' + 'z' * 32, 'req_' + 'a' * 31, None):
+            result = metadata('live_event', request_id=value)
+            self.assertNotIn('providerRequestId', result)
+        failure = MediaFailure('live_receive', RuntimeError(PRIVATE), provider_request_id=request_id)
+        self.assertEqual(failure.diagnostic['providerRequestId'], request_id)
+        self.assertNotIn(PRIVATE, json.dumps(failure.diagnostic))
+
+    def test_actual_sdk_manager_exposes_only_upgrade_request_id_without_network(self):
+        from openai.lib import _websocket
+        request_id = 'req_' + 'e' * 32
+        class FakeSocket:
+            def __init__(self):
+                self.response = SimpleNamespace(headers=Headers([('x-request-id', request_id), ('Authorization', PRIVATE)]))
+                self.closed = False
+            async def close(self, **_kwargs):
+                self.closed = True
+        captured = FakeSocket()
+        async def connect(_url, **_kwargs):
+            return captured
+        async def inspect():
+            with patch.dict(os.environ, {}, clear=True), patch.object(socket.socket, 'connect', side_effect=AssertionError('network forbidden')), \
+                    patch.object(_websocket, '_WebSocketConnect', connect):
+                async with AsyncOpenAI(api_key='offline-fixture', max_retries=0) as client:
+                    async with client.live.connect() as connection:
+                        self.assertEqual(handshake_request_id(connection), request_id)
+                        result = metadata('live_event', event={'error': {'type': 'invalid_request_error'}},
+                                          live_started=False, request_id=handshake_request_id(connection))
+                        self.assertEqual(result['providerRequestId'], request_id)
+                        self.assertEqual(result['rejectedCommand'], 'unknown')
+                        self.assertNotIn(PRIVATE, json.dumps(result))
+        asyncio.run(inspect())
+        self.assertTrue(captured.closed)
 
     def test_lazy_runtime_failure_stays_closed_and_reports_only_safe_metadata(self):
         def unavailable():

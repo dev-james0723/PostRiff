@@ -13,7 +13,7 @@ from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.greeting import opening
 from . import billing, resume, store
 from .providers.base import TelephonyMediaTransport
-from .diagnostics import MediaFailure, report_failure
+from .diagnostics import MediaFailure, report_failure, handshake_request_id
 
 HANDOFF_SECONDS = 540
 
@@ -153,6 +153,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
     rotating = False
     handoff_ready = False
     command_counts = {}
+    request_id = handshake_request_id(connection)
 
     async def send(event):
         # Correlate rejected commands without embedding a call, delegation, transcript or audio identifier.
@@ -165,7 +166,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
     try:
         await send({'type':'session.start', 'session':controller.configuration()})
     except Exception as error:
-        raise MediaFailure('live_start', error) from None
+        raise MediaFailure('live_start', error, provider_request_id=request_id) from None
     ready = asyncio.Event()
     greeting_sent = False
 
@@ -173,7 +174,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         try:
             return await work
         except Exception as error:
-            raise MediaFailure(phase, error) from None
+            raise MediaFailure(phase, error, provider_request_id=request_id) from None
 
     async def delegation(event):
         try:
@@ -197,7 +198,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         try:
             await read_live()
         except Exception as error:
-            raise MediaFailure('live_receive', error) from None
+            raise MediaFailure('live_receive', error, provider_request_id=request_id) from None
 
     async def read_live():
         nonlocal final_usage, final_reason, greeting_sent
@@ -241,11 +242,11 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 break
             elif kind == 'error':
                 report_failure(controller.call_id, 'live_event', event=event,
-                               live_started=ready.is_set(), greeting_sent=greeting_sent)
+                               live_started=ready.is_set(), greeting_sent=greeting_sent, provider_request_id=request_id)
                 finished.set()
                 break
         if not finished.is_set() and not controller.closed:
-            report_failure(controller.call_id, 'live_receive', event={'error': {'code': 'stream_closed'}})
+            report_failure(controller.call_id, 'live_receive', event={'error': {'code': 'stream_closed'}}, provider_request_id=request_id)
 
     async def from_phone():
         try:
