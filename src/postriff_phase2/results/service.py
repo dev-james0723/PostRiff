@@ -945,7 +945,7 @@ class ResultsService:
         # 4. Parse and normalize; unknown fields are dropped, never stored.
         try:
             payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
             return _refused(400, "result_payload_invalid", "The body must be one JSON object.", "payload_invalid")
         try:
             event = model.normalize_first_party(payload, now)

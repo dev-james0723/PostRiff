@@ -257,6 +257,9 @@ class AC17ReceiverTest(Base):
         self.assertEqual((out.status, out.body["code"]), (413, "result_body_too_large"))
         status, _, body = app_call("POST", "/api/results/webhook/" + conn["id"], big, {"HTTP_X_RAFII_SIGNATURE": signing.sign(secret, CLOCK[0], big)})
         self.assertEqual((status, json.loads(body)["code"]), (413, "result_body_too_large"))
+        for raw in (b"[" * 8000 + b"]" * 8000, b"\xff\xfe", b'"just a string"', b"{not json"):   # signed, but not one readable object
+            out = RESULTS.ingest(conn["id"], signing.sign(secret, CLOCK[0], raw), raw)
+            self.assertEqual((out.status, out.body["code"]), (400, "result_payload_invalid"), raw[:12])
         for unknown in ("not-a-uuid", str(uuid.uuid4())):
             out = RESULTS.ingest(unknown, "t=1,v1=" + "a" * 64, b"{}")
             self.assertEqual((out.status, out.body), (404, {"error": "Not found.", "code": "not_found"}))
