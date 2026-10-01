@@ -33,6 +33,9 @@ jobs:
       - name: Install pinned dependencies and disposable PostgreSQL
         run: |
           python -m pip install -r requirements-control.txt
+          # Embedded-mount tests also import the consumer notification service, whose web push signing needs cryptography
+          # (same pin as requirements.txt). Control itself still installs no model or payment SDK.
+          python -m pip install 'cryptography==50.0.1'
           npm install -g npm@11.12.1
           npm --prefix control-web ci
           sudo apt-get update

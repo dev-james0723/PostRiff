@@ -62,7 +62,9 @@ class FounderNoticesMigrationTests(unittest.TestCase):
                 con.execute(sql, (self.user,))
 
     def store(self, environment='local'):
-        return PostgresStore(connection_factory(self.dsn, 'rafii_control_session', environment), connection_factory(self.dsn, 'rafii_control_reader', environment), environment)
+        # The harness login is privileged, which connection_factory only accepts for 'local'; the store's own environment
+        # (what RLS scopes by) is still `environment`.
+        return PostgresStore(connection_factory(self.dsn, 'rafii_control_session', 'local'), connection_factory(self.dsn, 'rafii_control_reader', 'local'), environment)
 
     def row(self, **changes):
         base = {'id': str(uuid.uuid4()), 'operator_id': self.user, 'event_type': 'founder.incident_opened', 'severity': 'warning', 'subject_type': 'founder_incident',
