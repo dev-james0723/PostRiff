@@ -10,6 +10,6 @@
     {"id": "upload_image", "routeId": "library", "title": "Upload an image to the Library", "summary": "Add an image to the Library so it can be attached to posts.", "keywords": ["upload", "image", "photo", "picture", "library", "media", "上載", "相", "相片", "圖片", "圖庫"]},
     {"id": "turn_on_web_search", "routeId": "memory", "title": "Turn on web search", "summary": "On Memory, the workspace owner allows Rafii to search the web for current facts.", "keywords": ["web search", "search the web", "internet", "research", "google", "news", "weather", "上網", "網上搜尋", "搜尋", "研究", "天氣"]},
     {"id": "choose_model", "routeId": "models", "title": "Choose Rafii's writer", "summary": "On Models & providers, pick which AI writer drafts your posts.", "keywords": ["model", "writer", "ai model", "claude", "gpt", "provider", "模型", "寫手"]},
-    {"id": "check_plan", "routeId": "billing", "title": "Check your plan and credits", "summary": "On Usage & plan, see what is left of each allowance, including media credits for images.", "keywords": ["credits", "media credits", "plan", "billing", "usage", "top up", "buy", "額度", "積分", "計劃", "增值", "用量"]}
+    {"id": "check_plan", "routeId": "billing", "title": "Check your plan and credits", "summary": "On Usage & plan, see what is left on your plan this period and when it resets.", "keywords": ["credits", "media credits", "plan", "billing", "usage", "top up", "buy", "額度", "積分", "計劃", "增值", "用量"]}
   ]
 }

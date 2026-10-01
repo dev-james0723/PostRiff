@@ -35,7 +35,7 @@ const SUGGESTIONS: Record<string, { read: string[]; edit?: string[] }> = {
   automations: { read: ['What will my automations do this week?', "Why wasn't the last automation post published?"], edit: ['Pause my weekly automation for two weeks'] },
   memory: { read: ['What do you remember about my brand?', 'Can the cloud model read my memory?'] },
   brand: { read: ['What is our brand voice?', 'Who is our target audience?'] },
-  billing: { read: ['How many writing batches are left?', 'Why did drafting stop?'] },
+  billing: { read: ['What’s left on my plan this period?', 'Why did drafting stop?'] },
   models: { read: ['Which writer is Rafii using?', 'Why is a model unavailable?'] },
   ideas: { read: ['How do sources work?', 'Can a cloud model read my sources?'] },
   inbox: { read: ['Which accounts feed this inbox?', 'Can Rafii reply for me?'] },

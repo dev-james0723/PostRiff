@@ -8,21 +8,34 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUsage } from '@/lib/api/hooks';
 import type { AgentInfo, ModelOption } from '@/lib/api/types';
+import { writingAllowance, type WritingAllowance } from '@/lib/billing/mode';
+import type { BillingCopy } from '@/lib/billing/mode-copy';
 import { modelName, shortLabel } from '@/features/agent/use-model';
+import { useBillingCopy, useCopyLocale } from '@/features/billing/use-copy-locale';
 import { formatNumber } from '@/lib/time';
 import { KIND_LABEL, costCopy, routeKind } from './catalog';
 
-/** Writing batches left, read from Usage only when the current writer is metered. */
-function BatchesLeft() {
-  const usage = useUsage();
-  if (usage.isLoading) return <span aria-hidden className='t-skel-pulse bg-muted inline-block h-4 w-24 rounded-md align-middle' />;
-  const remaining = usage.data?.entitlement?.writingBatchesRemaining;
-  if (typeof remaining !== 'number') return null;
-  return (
-    <span>
-      {formatNumber(remaining)} writing batch{remaining === 1 ? '' : 'es'} left
-    </span>
-  );
+/**
+ * What a metered writer draws on, shown only when the current writer is metered and read by billing mode:
+ * writing batches left (legacy), managed credits left (Creator), or that Free includes no managed writing.
+ */
+function AllowanceLeft({ allowance, copy }: { allowance: WritingAllowance; copy: BillingCopy['work'] }) {
+  switch (allowance.kind) {
+    case 'loading':
+      return <span aria-hidden className='t-skel-pulse bg-muted inline-block h-4 w-24 rounded-md align-middle' />;
+    case 'batches':
+      return (
+        <span>
+          {formatNumber(allowance.remaining)} writing batch{allowance.remaining === 1 ? '' : 'es'} left
+        </span>
+      );
+    case 'credits':
+      return <span>{copy.creditsLeft(formatNumber(allowance.available))}</span>;
+    case 'free':
+      return <span>{copy.freeNoManaged}</span>;
+    default:
+      return null;
+  }
 }
 
 export interface WritingNowProps {
@@ -45,6 +58,9 @@ export interface WritingNowProps {
  * that is unavailable stays chosen until the person picks another; nothing is substituted for them.
  */
 export function WritingNow({ loading, error, onRetry, options, agents, model, option, saved, picked, auto }: WritingNowProps) {
+  const allowance = writingAllowance(useUsage());
+  const locale = useCopyLocale();
+  const workCopy = useBillingCopy().work;
   const body = () => {
     if (loading) {
       return (
@@ -76,7 +92,7 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
     }
 
     const kind = routeKind(option, agents);
-    const cost = costCopy(option.costClass);
+    const cost = costCopy(option.costClass, allowance, locale);
 
     return (
       <div className='flex flex-col gap-2'>
@@ -93,7 +109,7 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
         )}
         <p className='text-muted-foreground flex flex-wrap gap-x-2 text-sm'>
           <span>{option.costClass === 'none' ? 'Free' : option.costClass === 'subscription' ? 'Paid by your CLI subscription' : cost.line}</span>
-          {option.costClass === 'paid' && <BatchesLeft />}
+          {option.costClass === 'paid' && <AllowanceLeft allowance={allowance} copy={workCopy} />}
         </p>
         {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />}
         <p className='text-muted-foreground text-xs leading-relaxed'>Your pick is saved in this browser. Auto follows the workspace default.</p>

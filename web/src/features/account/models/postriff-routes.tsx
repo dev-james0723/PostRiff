@@ -7,8 +7,12 @@ import { StateMessage, Surface } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CostBadge } from '@/components/ui/model-selector';
+import { useUsage } from '@/lib/api/hooks';
 import type { AgentInfo, MemoryEgress, ModelOption } from '@/lib/api/types';
+import { writingAllowance, type WritingAllowance } from '@/lib/billing/mode';
+import type { CopyLocale } from '@/lib/billing/mode-copy';
 import { AUTO_MODEL } from '@/features/agent/use-model';
+import { useCopyLocale } from '@/features/billing/use-copy-locale';
 import { KIND_LABEL, costCopy, routeKind, routeReasoning } from './catalog';
 import { OPTION_CLASS } from './cli-route-card';
 import { ReasoningChips } from './reasoning-chips';
@@ -31,11 +35,16 @@ function Line({ term, children }: { term: string; children: ReactNode }) {
 function RowDescription({
   option,
   agents,
-  consent
+  consent,
+  allowance,
+  locale
 }: {
   option: ModelOption;
   agents: AgentInfo[];
   consent: MemoryConsent;
+  /** What paid drafting draws on here (batches, credits, or nothing on Free), so the cost line names the right unit. */
+  allowance: WritingAllowance;
+  locale: CopyLocale;
 }) {
   const kind = routeKind(option, agents);
   const reasoning = routeReasoning(option);
@@ -46,7 +55,7 @@ function RowDescription({
       {/* The server's reason an option is unavailable is technical; the badge already says "Not available". */}
       {option.qualified && option.detail && <span className='hidden sm:inline'>{option.detail}</span>}
       {option.qualified && option.priced === false && <span>No price is configured for this model.</span>}
-      <Line term='Cost'>{costCopy(option.costClass).line}</Line>
+      <Line term='Cost'>{costCopy(option.costClass, allowance, locale).line}</Line>
       {managedLive && (
         <>
           <Line term='Sources'>Only those you allowed for the cloud</Line>
@@ -88,6 +97,8 @@ export interface PostriffRoutesProps {
 }
 
 export function PostriffRoutes({ loading, listed, options, agents, current, onChoose, consent, autoName }: PostriffRoutesProps) {
+  const allowance = writingAllowance(useUsage());
+  const locale = useCopyLocale();
   // Available writers first; the sort is stable, so catalog order holds within each group.
   const rows = options.filter((option) => routeKind(option, agents) !== 'cli').toSorted((a, b) => Number(b.qualified && b.priced !== false) - Number(a.qualified && a.priced !== false));
   const liveManagedListed = rows.some((option) => option.qualified && routeKind(option, agents) === 'managed');
@@ -141,7 +152,7 @@ export function PostriffRoutes({ loading, listed, options, agents, current, onCh
                         </AnimatedBadge>
                       </span>
                     }
-                    description={<RowDescription option={option} agents={agents} consent={consent} />}
+                    description={<RowDescription option={option} agents={agents} consent={consent} allowance={allowance} locale={locale} />}
                     className={OPTION_CLASS}
                   />
                 );

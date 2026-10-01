@@ -3,35 +3,63 @@
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
 import { Surface } from '@/components/rafii';
+import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { cents } from '@/lib/api/client';
 import type { Usage } from '@/lib/api/types';
+import { billingModeOf, isLegacyPlanUnderV2, planListKind, v2PlanCardModels } from '@/lib/billing/mode';
+import { formatDate } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { planSummary } from './billing-copy';
-import { isTrial, lifecycleTone, planTimeline } from './billing-model';
+import { planSummary, type PlanSummary } from './billing-copy';
+import { currentTerms, isTrial, lifecycleTone, planTimeline } from './billing-model';
 import { ACTION_STATEFUL } from './lifecycle-alert';
+import { useBillingCopy } from './use-copy-locale';
 import { PORTAL, type BillingRedirect } from './use-billing-redirect';
 
 /**
  * The plan in one glance: its name, the one thing that changes next, and one action when there is
  * one (UI simplification spec §9). Price and exact dates sit behind Details for a trial; a paid
  * plan shows its price, because money stays visible. Payment trouble is announced, not tucked away.
+ *
+ * Pricing v2: Free reads "Free" (never "Plan unavailable"), a Creator subscriber sees the price of their own
+ * variant, and a Studio / Studio Assist package kept after v2 launched is labelled as a legacy plan.
  */
 export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect; now: number }) {
+  const v2Copy = useBillingCopy().summary;
   const sub = usage.subscription;
   const status = usage.lifecycle?.status;
-  const trial = isTrial(usage);
-  const summary = planSummary({
-    timeline: planTimeline(usage, now),
-    planLabel: sub?.label,
-    trial,
-    status,
-    isOwner,
-    portalAvailable: usage.billing?.portalAvailable === true,
-    checkoutAvailable: usage.billing?.checkoutAvailable === true
-  });
+  const mode = billingModeOf(usage);
+  const trial = mode !== 'free_preview' && isTrial(usage);
+  const legacyPlan = isLegacyPlanUnderV2(usage);
+  // "Choose a plan" only when the plan list below really offers a checkout (no anchor to a list without one).
+  const canChoose = planListKind(usage) === 'v2' ? v2PlanCardModels(usage, isOwner).some((card) => card.offer === 'checkout') : usage.billing?.checkoutAvailable === true;
+
+  let summary: PlanSummary;
+  if (mode === 'free_preview') {
+    const ended = sub && (status === 'cancelled' || status === 'expired') && sub.currentPeriodEnd ? v2Copy.ended(sub.label, formatDate(sub.currentPeriodEnd)) : null;
+    summary = {
+      title: v2Copy.freeTitle,
+      badge: null,
+      line: ended ?? v2Copy.freeLine,
+      exactDate: null,
+      action: canChoose && isOwner ? 'plans' : null,
+      actionLabel: canChoose && isOwner ? v2Copy.seeCreator : null,
+      urgent: false
+    };
+  } else {
+    summary = planSummary({
+      timeline: planTimeline(usage, now),
+      planLabel: sub?.label ?? currentTerms(usage)?.label,
+      trial,
+      status,
+      isOwner,
+      portalAvailable: usage.billing?.portalAvailable === true,
+      checkoutAvailable: canChoose
+    });
+  }
   const portalError = redirect.errorFor(PORTAL);
-  const price = sub ? `${cents(sub.priceCents, sub.currency)}${trial ? '' : ' / month'}${!trial && sub.priceStatus !== 'active' ? ' · proposed price' : ''}` : null;
+  const price =
+    mode === 'free_preview' || !sub ? null : `${cents(sub.priceCents, sub.currency)}${trial ? '' : ' / month'}${!trial && sub.priceStatus !== 'active' ? ' · proposed price' : ''}`;
 
   return (
     <Surface
@@ -51,6 +79,7 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
               {summary.badge}
             </AnimatedBadge>
           )}
+          {legacyPlan && <Badge variant='secondary'>{v2Copy.legacyBadge}</Badge>}
         </h2>
         {summary.line && (
           <p role={summary.urgent ? 'alert' : undefined} className={cn('text-base', summary.urgent ? 'text-foreground font-medium' : 'text-foreground/90')}>
@@ -58,6 +87,7 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
           </p>
         )}
         {!trial && price && <p className='text-muted-foreground text-sm tabular-nums'>{price}</p>}
+        {legacyPlan && <p className='text-muted-foreground text-sm'>{v2Copy.legacyNote}</p>}
         {trial && (price || summary.exactDate) && (
           <details className='group text-muted-foreground mt-1 text-sm'>
             <summary className='rafii-focus hover:text-foreground w-fit cursor-pointer list-none rounded-md underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden'>

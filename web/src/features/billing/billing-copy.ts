@@ -5,6 +5,9 @@
  * API returns or the backend enforces.
  */
 import type { InfobarContent } from '@/components/ui/infobar';
+import { V2_CATALOG } from '@/config/plans';
+import type { BillingMode } from '@/lib/api/types';
+import { billingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 import { formatDate } from '@/lib/time';
 import { humanize, type PlanTimeline } from './billing-model';
 
@@ -34,6 +37,37 @@ export const infoContent: InfobarContent = {
     }
   ]
 };
+
+/**
+ * The page's info panel for the workspace's billing mode. Legacy keeps the panel above (trial, writing batches);
+ * Pricing v2 explains managed credits or the Free preview instead; before the mode is known, only what holds for
+ * every plan.
+ */
+export function infoContentFor(mode: BillingMode | null, locale: CopyLocale = 'en'): InfobarContent {
+  if (mode === 'legacy_allowances') return infoContent;
+  const copy = billingCopy(locale).info;
+  const guide = { title: copy.guide, url: '/docs/usage-and-billing' };
+  if (mode === 'managed_credits') {
+    return {
+      title: copy.title,
+      sections: [
+        { title: copy.overageTitle, description: copy.overageBodyCredits },
+        { title: copy.creditsTitle, description: copy.creditsBody(String(V2_CATALOG.creditsPerUsd ?? 300)), links: [guide] },
+        { title: copy.cancelTitle, description: copy.cancelBody }
+      ]
+    };
+  }
+  if (mode === 'free_preview') {
+    return {
+      title: copy.title,
+      sections: [
+        { title: copy.freeTitle, description: copy.freeBody },
+        { title: copy.overageTitle, description: copy.overageBodyFree, links: [guide] }
+      ]
+    };
+  }
+  return { title: 'Billing', sections: [infoContent.sections[0], infoContent.sections[2]] };
+}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

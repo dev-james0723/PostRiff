@@ -13,9 +13,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { keys, useAct, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Snapshot } from '@/lib/api/types';
-import { formatBytes } from '@/lib/time';
+import { writingAllowance } from '@/lib/billing/mode';
+import { formatBytes, formatNumber } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { useBillingCopy } from '@/features/billing/use-copy-locale';
 import { useDraftHandoff } from './use-draft';
 import { hostOf, ideaSources, LINK_PATTERN, plural, useActError } from './use-sources';
 
@@ -70,6 +72,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
   const { workspaceId } = useWorkspaceApi();
   const snapshot = useSnapshot();
   const usage = useUsage();
+  const workCopy = useBillingCopy().work;
   const act = useAct();
   const onError = useActError();
   const draft = useDraftHandoff();
@@ -230,7 +233,16 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
     }
   }
 
-  const batches = usage.isLoading ? '…' : usage.isError || !usage.data ? 'Unavailable' : String(usage.data.entitlement.writingBatchesRemaining);
+  // What a cloud draft draws on, by billing mode: legacy writing batches, Creator's credits, or nothing on Free.
+  const allowance = writingAllowance(usage);
+  const allowanceTitle =
+    allowance.kind === 'batches'
+      ? `${allowance.remaining} writing batches left`
+      : allowance.kind === 'credits'
+        ? workCopy.creditsLeft(formatNumber(allowance.available))
+        : allowance.kind === 'free'
+          ? workCopy.freeNoManaged
+          : undefined;
 
   return (
     // The page's work surface (DNA §5.2, §21.10): one glass panel, its WHAT control, the entry field and one commitment.
@@ -353,7 +365,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
 
         <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
           {/* Which model writes and for where; secondary, so it stays off phones. The allowance is in the page's info. */}
-          <p className='text-muted-foreground hidden min-w-0 text-xs leading-relaxed sm:block sm:max-w-sm' title={batches === 'Unavailable' ? undefined : `${batches} writing batches left`}>
+          <p className='text-muted-foreground hidden min-w-0 text-xs leading-relaxed sm:block sm:max-w-sm' title={allowanceTitle}>
             {draft.modelLabel} · {draft.destinationLabel}
           </p>
           <div className='flex flex-wrap items-center gap-2 sm:shrink-0'>

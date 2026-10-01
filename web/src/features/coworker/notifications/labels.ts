@@ -43,7 +43,7 @@ export const CATEGORY_LABELS: Record<string, { label: string; hint: string; emai
   research: { label: 'Research', hint: 'Research needs your input.' },
   assets: { label: 'Images', hint: 'An image needs review.' },
   budget: { label: 'Budget', hint: 'A spending limit was reached.' },
-  billing: { label: 'Billing', hint: 'Payments and trial.', emailNote: 'Emails always reach the owner.' },
+  billing: { label: 'Billing', hint: 'Payments and plan changes.', emailNote: 'Emails always reach the owner.' },
   security: { label: 'Security', hint: 'New sign-ins and account changes.', emailNote: 'Emails always reach you.' }
 };
 

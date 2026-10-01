@@ -7,7 +7,8 @@ import { Icons } from '@/components/icons';
 import { InfoTip, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMemory, useModels, useRescanModels, useSnapshot } from '@/lib/api/hooks';
+import { useMemory, useModels, useRescanModels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { writingAllowance, type WritingAllowance } from '@/lib/billing/mode';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { modelName, useModelChoice } from '@/features/agent/use-model';
 import { routeKind } from './models/catalog';
@@ -21,12 +22,22 @@ import { WorkspaceDefaultCard } from './models/workspace-default';
 import { WritingNow } from './models/writing-now';
 
 const PAGE_TITLE = 'Models';
-const infoContent = {
+
+/** How the managed model is paid for, by what this workspace spends (Pricing v2 never mentions writing batches). */
+const MANAGED_PAID_BY: Record<WritingAllowance['kind'], string> = {
+  batches: 'The managed model, which uses writing batches.',
+  credits: 'The managed model, which uses managed credits from your plan.',
+  free: 'The managed model, which needs the Creator plan.',
+  loading: 'The managed model, which uses your plan’s paid AI usage.',
+  unavailable: 'The managed model, which uses your plan’s paid AI usage.'
+};
+
+const infoContentFor = (allowance: WritingAllowance) => ({
   title: 'Where drafts are written',
   sections: [
     {
       title: 'Three kinds of writer',
-      description: 'A coding CLI you sign in to, paid by its own subscription. The managed model, which uses writing batches. The free preview, which uses no AI model.'
+      description: `A coding CLI you sign in to, paid by its own subscription. ${MANAGED_PAID_BY[allowance.kind]} The free preview, which uses no AI model.`
     },
     {
       title: 'Your pick',
@@ -37,7 +48,7 @@ const infoContent = {
       description: 'Running a CLI from your own computer isn’t available yet.'
     }
   ]
-};
+});
 
 function NoEditAccess() {
   return (
@@ -65,6 +76,7 @@ function ModelsBody() {
   const rescan = useRescanModels();
   const [picked, setPicked] = useState(false);
   const now = useNowSeconds();
+  const allowance = writingAllowance(useUsage());
 
   const options = choice.options;
   const agents = models.data?.agents ?? [];
@@ -86,7 +98,7 @@ function ModelsBody() {
   return (
     <PageContainer
       pageTitle={PAGE_TITLE}
-      infoContent={infoContent}
+      infoContent={infoContentFor(allowance)}
       pageHeaderAction={<CheckAgainButton rescan={rescan.mutateAsync} checking={checking} disabled={loading} />}
     >
       {models.data ? (

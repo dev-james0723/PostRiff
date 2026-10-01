@@ -207,7 +207,7 @@ function channelName(event: AuditEvent, lookup: AuditLookup) {
   return provider ? { platform: provider, full: provider } : null;
 }
 
-const PLAN_NAMES: Record<string, string> = { trial: 'Trial', studio: 'Studio', assist: 'Studio Assist' };
+const PLAN_NAMES: Record<string, string> = { trial: 'Trial', studio: 'Studio', assist: 'Studio Assist', free: 'Free', creator: 'Creator', starter: 'Starter' };
 
 /** Plan terms ids are `<plan>-v<n>` or `<plan>-<variant>-v<n>` (`007_consumer_web_billing.sql`). */
 function planFromTerms(termsId: string) {
@@ -231,10 +231,18 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
     case 'api_token.draft_requested': return { headline: 'Requested a draft through an API token', detail: 'Uses the same source and writing allowance checks as the app.', tone: 'neutral' };
     case 'workspace.created': {
       const plan = text(meta.plan);
-      // `pr_bootstrap` starts every workspace on a trial of the plan chosen at sign-up.
+      // `pr_bootstrap` starts a legacy workspace on a trial of the plan chosen at sign-up; under Pricing v2
+      // `pr_bootstrap_free` starts it on Free, with no trial (`hosted.bootstrap` records plan "free").
       return {
         headline: 'Created this workspace',
-        detail: plan && plan !== 'trial' ? `Started on a trial of ${PLAN_NAMES[plan] ?? capitalise(plan)}.` : plan ? 'Started on a trial.' : null,
+        detail:
+          plan === 'free'
+            ? 'Started on Free.'
+            : plan && plan !== 'trial'
+              ? `Started on a trial of ${PLAN_NAMES[plan] ?? capitalise(plan)}.`
+              : plan
+                ? 'Started on a trial.'
+                : null,
         tone: 'neutral'
       };
     }
