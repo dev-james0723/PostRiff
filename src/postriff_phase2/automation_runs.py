@@ -94,6 +94,10 @@ def _update_run(service, workspace_id, occurrence_id, actor, change, binding=Non
             return None
         result = change(state, occurrence, task, cur)
         _save(cur, workspace_id, state, actor)
+        if isinstance(result, dict) and result.get("lifecycle"):
+            from . import product_events
+            # Product taxonomy (PRD §8.6): automation.run_completed for a run that ended; behind its own savepoint.
+            product_events.run_completed(cur, workspace_id, actor, occurrence_id, result["lifecycle"])
         return result if result is not None else {}
 
 
@@ -455,7 +459,8 @@ def advance(worker, max_workspaces=20, max_commits=10):
     engine = service.commands.engine
     commits, notices, changed_total = [], [], 0
     with service.connection_factory() as db, db.cursor() as cur:
-        cur.execute("""SELECT id::text,state FROM pr_workspaces WHERE NOT state ? 'accountDeletion' AND (
+        # A founder account block freezes the workspace like a pending deletion: nothing advances, expires or is queued.
+        cur.execute("""SELECT id::text,state FROM pr_workspaces WHERE NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock' AND (
             EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,occurrences}','[]'::jsonb)) o
                     WHERE o->>'lifecycle'='drafted' AND EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(o->'items','[]'::jsonb)) i
                         WHERE i->>'state' = ANY(%s) AND (i->>'publishAt' IS NOT NULL OR i->>'jobId' IS NOT NULL OR i->>'state' = 'needs_revision')))

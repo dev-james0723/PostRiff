@@ -15,6 +15,7 @@ import hmac
 import json
 import re
 import time
+from decimal import ROUND_HALF_UP, Decimal
 from postriff_alpha.domain import AlphaError
 from .providers import http_transport
 
@@ -22,6 +23,8 @@ API = "https://api.stripe.com/v1"
 _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,48}$")
 
 # Stripe event type → internal event type. None means "derive from the subscription object's status".
+# The last two are recorded with their fields but change no subscription state (Billing.TRANSITIONS has no entry for
+# them): a refund never changes MRR, and a trial notice only records the trial end (founder billing events, 057).
 EVENT_TYPES = {
     "checkout.session.completed": "subscription.activated",  # only when mode=subscription
     "customer.subscription.created": None,
@@ -29,6 +32,8 @@ EVENT_TYPES = {
     "customer.subscription.deleted": "subscription.cancelled",
     "invoice.payment_failed": "invoice.payment_failed",
     "invoice.paid": "subscription.updated",
+    "charge.refunded": "charge.refunded",
+    "customer.subscription.trial_will_end": "subscription.trial_will_end",
 }
 # Stripe subscription status → internal event type (customer.subscription.created|updated).
 SUBSCRIPTION_STATUS_EVENTS = {
@@ -65,6 +70,109 @@ def _first_item(obj):
     return items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else {}
 
 
+def _item_count(obj):
+    items = (obj.get("items") or {}).get("data") if isinstance(obj.get("items"), dict) else None
+    return len(items) if isinstance(items, list) else 0
+
+
+def _minor(value):
+    """A non-negative integer amount in minor units, else None."""
+    return value if type(value) is int and 0 <= value <= 100_000_000_000 else None
+
+
+def _currency(value):
+    return value.lower() if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{3}", value) else None
+
+
+def _coupon_of(discount):
+    """The coupon of one Stripe discount: `discount.coupon` (older API versions) or `discount.source.coupon` (newer)."""
+    coupon = discount.get("coupon")
+    if not isinstance(coupon, dict) and isinstance(discount.get("source"), dict):
+        coupon = discount["source"].get("coupon")
+    return coupon if isinstance(coupon, dict) else None
+
+
+def _discount_value(discount, gross, currency):
+    """(duration, amount per invoice, end) for one discount, or None when it cannot be valued from the payload."""
+    coupon = _coupon_of(discount)
+    if coupon is None:
+        return None
+    duration = coupon.get("duration")
+    if duration == "once":
+        return ("once", 0, None)  # a one-time discount does not change recurring revenue
+    if duration not in ("forever", "repeating"):
+        return None
+    amount_off, percent_off = _minor(coupon.get("amount_off")), coupon.get("percent_off")
+    if amount_off is not None:
+        if _currency(coupon.get("currency")) != currency:
+            return None
+        value = min(amount_off, gross)
+    elif isinstance(percent_off, (int, float)) and not isinstance(percent_off, bool) and 0 < percent_off <= 100:
+        value = int((Decimal(gross) * Decimal(str(percent_off)) / 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    else:
+        return None
+    end = _epoch(discount.get("end")) if duration == "repeating" else None
+    if duration == "repeating" and end is None:
+        return None
+    return (duration, value, end)
+
+
+def _discount_fields(obj, item, gross, currency):
+    """Recurring discount per invoice for MRR (PRD §7.1 M04: forever and repeating discounts are subtracted, one-time ones
+    are not). Returns {discountMinor, discountEnd}: 0 when there is no discount; discountMinor None ("present but unknown")
+    when a discount is only an unexpanded id, uses an unknown coupon shape or several repeating/forever discounts mix."""
+    found, ids = [], set()
+    candidates = [obj.get("discount")] + list(obj.get("discounts") if isinstance(obj.get("discounts"), list) else []) \
+        + list(item.get("discounts") if isinstance(item.get("discounts"), list) else [])
+    for entry in candidates:
+        if entry is None:
+            continue
+        key = _ref(entry)
+        if key and key in ids:
+            continue
+        if not isinstance(entry, dict):
+            return {"discountMinor": None, "discountEnd": None}  # an id we cannot value from the payload
+        if key:
+            ids.add(key)
+        found.append(entry)
+    if not found:
+        return {"discountMinor": 0, "discountEnd": None}
+    if gross is None or currency is None:
+        return {"discountMinor": None, "discountEnd": None}
+    values = [_discount_value(entry, gross, currency) for entry in found]
+    if any(value is None for value in values):
+        return {"discountMinor": None, "discountEnd": None}
+    forever = sum(value for duration, value, _ in values if duration == "forever")
+    repeating = [(value, end) for duration, value, end in values if duration == "repeating"]
+    if not repeating:
+        return {"discountMinor": forever, "discountEnd": None}
+    if forever == 0 and len(repeating) == 1:
+        return {"discountMinor": repeating[0][0], "discountEnd": repeating[0][1]}
+    return {"discountMinor": None, "discountEnd": None}
+
+
+def _price_fields(obj, item, price):
+    """Recurring price of the subscription for founder MRR (057 pr_subscription_events). Only a single-item, per-unit,
+    tax-exclusive price is valued: several items, tiered prices or tax-inclusive amounts leave unitAmount unknown (None),
+    which the founder metrics report as coverage.unknown, never as a list price."""
+    recurring = price.get("recurring") if isinstance(price.get("recurring"), dict) else {}
+    interval = recurring.get("interval") if recurring.get("interval") in ("day", "week", "month", "year") else None
+    count = recurring.get("interval_count")
+    usage = recurring.get("usage_type") if recurring.get("usage_type") in ("licensed", "metered") else None
+    quantity = item.get("quantity") if type(item.get("quantity")) is int and 0 <= item.get("quantity") <= 1_000_000 else None
+    currency = _currency(price.get("currency")) or _currency(obj.get("currency"))
+    unit = _minor(price.get("unit_amount"))
+    if _item_count(obj) != 1 or price.get("tax_behavior") == "inclusive" or price.get("billing_scheme") not in (None, "per_unit"):
+        unit = None
+    gross = unit * (quantity if quantity is not None else 1) if unit is not None else None
+    return {
+        "interval": interval, "intervalCount": count if type(count) is int and 1 <= count <= 1000 else (1 if interval else None),
+        "usageType": usage, "unitAmount": unit, "quantity": quantity, "currency": currency,
+        **_discount_fields(obj, item, gross, currency),
+        "trialEnd": _epoch(obj.get("trial_end")), "cancelAt": _epoch(obj.get("cancel_at")),
+    }
+
+
 def _subscription_fields(obj):
     item = _first_item(obj)
     meta = _metadata(obj, ("metadata",))
@@ -75,6 +183,8 @@ def _subscription_fields(obj):
         # Stripe API 2025-03-31 moved current_period_end onto subscription items; accept both shapes.
         "currentPeriodEnd": _epoch(obj.get("current_period_end")) if obj.get("current_period_end") is not None else _epoch(item.get("current_period_end")),
         "cancelAtPeriodEnd": bool(obj.get("cancel_at_period_end")),
+        # items[0].price.recurring interval/count, unit amount, quantity, currency and recurring discounts (PRD §8.5).
+        **_price_fields(obj, item, price),
     }
 
 
@@ -100,6 +210,19 @@ def _invoice_fields(obj):
         "currency": obj.get("currency") if isinstance(obj.get("currency"), str) else None,
         # Older API versions carry payment_intent on the invoice; 2025+ versions list invoice payments.
         "paymentIntentId": _ref(obj.get("payment_intent")) or _ref(first_payment.get("payment_intent")),
+        # Founder invoice record (057 pr_invoices): amount due and the invoice's own status.
+        "amountDue": _minor(obj.get("amount_due")),
+        "invoiceStatus": obj.get("status") if obj.get("status") in ("draft", "open", "paid", "uncollectible", "void") else None,
+    }
+
+
+def _charge_fields(obj):
+    """charge.refunded: ids and the refunded amount only. It is recorded and changes no subscription state."""
+    meta = _metadata(obj, ("metadata",))
+    return {
+        "workspaceId": meta.get("workspace_id") or "", "customerId": _ref(obj.get("customer")), "chargeId": _ref(obj.get("id")),
+        "invoiceId": _ref(obj.get("invoice")), "paymentIntentId": _ref(obj.get("payment_intent")),
+        "amountRefunded": _minor(obj.get("amount_refunded")), "currency": _currency(obj.get("currency")),
     }
 
 
@@ -182,6 +305,8 @@ class StripePaymentProvider:
                 internal = SUBSCRIPTION_STATUS_EVENTS.get(obj.get("status"))
                 if internal is None:
                     return event  # incomplete/paused etc.: recorded as ignored
+        elif stripe_type.startswith("charge."):
+            fields = _charge_fields(obj)
         else:
             fields = _invoice_fields(obj)
         event.update({k: v for k, v in fields.items() if v is not None})

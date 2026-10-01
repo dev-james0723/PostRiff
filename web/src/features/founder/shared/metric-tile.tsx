@@ -107,12 +107,14 @@ export interface MetricTileProps {
   definition?: string | null;
   /** The window the value covers ("Last 30 days"), shown with the label so a tile carries its period even without a delta (PRD §3.4). */
   periodLabel?: string | null;
+  /** A short qualifier from the definition ("Candidate v2 catalog (not active)"), shown under the value. */
+  note?: string | null;
   /** "Ask Rafii" about this tile; omitted, the button is not shown. */
   onAsk?: () => void;
   className?: string;
 }
 
-export function MetricTile({ id, label, value, unit, currency, delta, deltaPeriod, sparkline, dataState, coverage, href, receiptId, collectingSince, definition, periodLabel, onAsk, className }: MetricTileProps) {
+export function MetricTile({ id, label, value, unit, currency, delta, deltaPeriod, sparkline, dataState, coverage, href, receiptId, collectingSince, definition, periodLabel, note, onAsk, className }: MetricTileProps) {
   const ready = dataState === 'measured' || dataState === 'partial' || dataState === 'stale' || dataState === 'synthetic' || dataState === 'demo';
   const shown = ready && value !== null && value !== undefined;
   const change = shown ? formatDelta(delta, unit, currency) : null;
@@ -141,6 +143,7 @@ export function MetricTile({ id, label, value, unit, currency, delta, deltaPerio
         </span>
         {shown && <Sparkline points={sparkline} className='shrink-0' />}
       </div>
+      {note && <span className='text-muted-foreground -mt-1 text-xs'>{note}</span>}
       <div className='flex min-h-5 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs'>
         {change ? (
           <span className={cn('flex items-center gap-1 tabular-nums', change.direction === 'flat' ? 'text-muted-foreground' : 'text-foreground')}>

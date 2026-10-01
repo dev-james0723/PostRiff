@@ -66,6 +66,8 @@ export interface PulseTile {
   collectingSince?: string | null;
   definition?: string | null;
   reason?: string | null;
+  /** A short qualifier the definition attaches to the value, e.g. "Candidate v2 catalog (not active)" on the Demo MRR. */
+  note?: string | null;
 }
 
 export type AttentionSeverity = 'info' | 'warning' | 'critical';
@@ -300,7 +302,8 @@ export interface FollowUpWriteBody {
 export interface ContactPolicy {
   revision: number;
   liveDeliveryEnabled: boolean;
-  channels: Record<string, unknown>;
+  /** The channels the policy lists (`call`, `email`, `push`, `in_app`); a list, as founder_contact sends it. */
+  channels: string[];
   destinationRef: string | null;
   quietStart: number;
   quietEnd: number;

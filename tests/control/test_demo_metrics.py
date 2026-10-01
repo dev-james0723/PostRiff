@@ -56,10 +56,16 @@ class DemoMetricTests(unittest.TestCase):
                 self.assertTrue(rows)
                 for row in rows:
                     self.assertEqual(set(row) >= {'metricId', 'definitionVersion', 'interval', 'dimensions', 'value', 'unit', 'dataState', 'coverage', 'sourceWatermark'}, True)
-                    self.assertEqual((row['metricId'], row['definitionVersion'], row['fixture']), (metric_id, 'v1', True))
+                    version = (self.catalog.metrics[metric_id].get('activation') or {}).get('definitionVersion') or 'v1'
+                    self.assertEqual((row['metricId'], row['definitionVersion'], row['fixture']), (metric_id, version, True))
                     self.assertEqual(set(row['coverage']), {'known', 'unknown', 'numerator', 'denominator'})
                     if metric_id in NOT_SIMULATED:
                         self.assertEqual((row['value'], row['dataState'], row['reason']), (None, 'unavailable', 'demo_not_simulated'))
+                    elif row['dataState'] == 'unavailable':
+                        # A slice may honestly say its records are not simulated in Demo, or that the definition needs more
+                        # history than the Demo snapshot holds; never a zero, never another reason.
+                        self.assertIsNone(row['value'])
+                        self.assertIn(row['reason'], ('demo_not_simulated', 'insufficient_history'))
                     else:
                         self.assertIn(row['dataState'], ('measured', 'partial', 'not_applicable'))
 
@@ -206,7 +212,9 @@ class DemoMetricTests(unittest.TestCase):
         self.assertEqual(tiles['cash_collected']['currency'], 'USD')
         self.assertEqual(tiles['ai_cost_actual']['unit'], 'usd_micro')
         self.assertGreater(tiles['ai_cost_actual']['value'], 0)
-        self.assertEqual(tiles['mrr']['dataState'], 'unavailable')
+        # MRR is activated (CONTRACTS §8.A): the Demo computes it from the candidate catalog and says so on the tile.
+        self.assertEqual(tiles['mrr']['dataState'], 'measured')
+        self.assertIn('Candidate v2 catalog', tiles['mrr'].get('note') or '')
         self.assertEqual(tiles['publish_outcomes']['dataState'], 'unavailable')
         self.assertIn('incident_' + self.data['incidents'][-1]['id'], [item['id'] for item in page['attention']])
         self.assertTrue(any(item['id'] == 'data_requests_backlog' for item in page['attention']))

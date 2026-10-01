@@ -18,6 +18,8 @@ export const NATIVE_CURRENCY_METRIC_IDS: readonly string[] = [
   'mrr_churn',
   'mrr_contraction',
   'mrr_expansion',
+  'mrr_forecast',
+  'mrr_movements',
   'mrr_new',
   'mrr_reactivation',
   'net_collections',

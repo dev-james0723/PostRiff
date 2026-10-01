@@ -5,7 +5,9 @@
  * context (section, selected entity, chart, period, filters, incident) to `POST /agent/turns` under an
  * `Idempotency-Key`. A running turn is polled through `GET /agent/runs/{id}` and can be cancelled. Every state is
  * the real one: "working" only while a request is in flight, receipts only when the server returned them, and a
- * failed turn is resent with its own key so the server sees one request. Voice is present but not connected yet.
+ * failed turn is resent with its own key so the server sees one request. Voice (`voice.tsx`) opens under the header: a
+ * GPT-Live call whose every spoken question is a founder turn in this same conversation, or the blocker codes that keep
+ * it off here.
  */
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -13,7 +15,6 @@ import { IconMicrophone } from '@tabler/icons-react';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { FOUNDER_SECTIONS, isFounderSectionId } from '@/config/founder-nav';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
 import { RafiiAvatar } from '@/features/site-agent/rafii-avatar';
@@ -27,11 +28,12 @@ import { cn } from '@/lib/utils';
 import { FounderAnswer } from './answer';
 import { suggestedPrompts } from './prompts';
 import { conversationKey, founderPanelStore, useFounderPanel, useFounderThread, type FounderThreadItem } from './store';
+import { FounderVoice } from './voice';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'canceled', 'blocked', 'error', 'done']);
 const POLL_MS = 1500;
 const POLL_LIMIT = 80;
-const NOT_CONNECTED = 'Founder Rafii is not connected in this environment yet: no ops workspace is configured for it.';
+const NOT_CONNECTED = 'Founder Rafii is not connected in this environment yet: no founder workspace is set. Create one in Settings → Contact & calls → Founder workspace.';
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,6 +68,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
   const [text, setText] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const activeRun = useRef<string | null>(null);
@@ -211,14 +214,9 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             Viewing {contextLabel} <Icons.chevronDown aria-hidden className='inline size-3' />
           </button>
         </div>
-        <Tooltip>
-          <TooltipTrigger render={<span className='inline-flex' />}>
-            <Button type='button' variant='quiet' size='icon-control' aria-label='Voice: not yet connected' disabled aria-disabled className='opacity-50'>
-              <IconMicrophone className='size-5' />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side='bottom'>Voice isn’t connected for the founder admin yet.</TooltipContent>
-        </Tooltip>
+        <Button type='button' variant='quiet' size='icon-control' aria-label='Voice' title='Voice (GPT-Live)' aria-expanded={voiceOpen} aria-controls={voiceOpen ? 'founder-voice' : undefined} onClick={() => setVoiceOpen((open) => !open)} className={cn(voiceOpen && 'rafii-glass-selected')}>
+          <IconMicrophone className='size-5' />
+        </Button>
         <Button type='button' variant='quiet' size='icon-control' aria-label='More Rafii options' aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
           <Icons.dots className='size-5' />
         </Button>
@@ -242,9 +240,10 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             <Icons.add className='size-4' /> New conversation
           </Button>
           <p className='text-muted-foreground px-3 py-1 text-xs'>{conversationId ? `Conversation ${conversationId.slice(0, 8)}… in ${mode === 'demo' ? 'Demo' : 'Live'} · ${environment ?? ''}` : 'No conversation yet in this mode.'}</p>
-          <p className='text-muted-foreground px-3 py-1 text-xs'>Voice and phone calls follow the contact policy in Settings; neither is connected yet.</p>
+          <p className='text-muted-foreground px-3 py-1 text-xs'>Voice answers through the same founder tools as typing. Phone calls follow the contact policy in Settings and stay off while live delivery is off.</p>
         </div>
       )}
+      <FounderVoice conversationKey={key} conversationId={conversationId} visible={voiceOpen} />
       <div className='rafii-chat-log min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3' role='log' aria-live='polite' aria-relevant='additions' aria-label='Conversation with Rafii'>
         {empty ? (
           <div className='flex flex-col items-start gap-5 pt-7'>

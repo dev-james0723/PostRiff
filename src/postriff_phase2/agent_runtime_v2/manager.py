@@ -154,18 +154,24 @@ async def drive(ctx: RafiiRunContext, run, timeout: float):
 
 
 def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
-    """Wrap any Agents SDK Model: count calls and tokens into the ledger (Manager and nested specialists alike)."""
+    """Wrap any Agents SDK Model: count calls and tokens into the ledger (Manager and nested specialists alike). Each answered
+    call is a span (priced for the turn's spend); a call that failed is kept apart in `ledger.calls` for pr_ai_call_events
+    only (record_calls), so failures never change what a turn is charged."""
     from agents.models.interface import Model
 
     class MeteredModel(Model):
         async def get_response(self, *args, **kwargs):
-            started = time.monotonic()
-            response = await model.get_response(*args, **kwargs)
+            started, wall = time.monotonic(), time.time()
+            try:
+                response = await model.get_response(*args, **kwargs)
+            except BaseException as error:
+                _note_failure(ledger, error, workload=workload, route=route, started=started, wall=wall)
+                raise
             usage = getattr(response, "usage", None)
             ledger.model_requests += 1
             ledger.spans.append({"span": "generation", "agent": agent, "workload": workload, "model": (route or {}).get("model"),
                                  "inputTokens": getattr(usage, "input_tokens", 0) or 0, "outputTokens": getattr(usage, "output_tokens", 0) or 0,
-                                 "latencyMs": round((time.monotonic() - started) * 1000)})
+                                 "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(response, usage, route, wall)})
             return response
 
         def stream_response(self, *args, **kwargs):
@@ -178,6 +184,125 @@ def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
                 await closer()
 
     return MeteredModel()
+
+
+# --- provider attempts → public.pr_ai_call_events (Founder Admin CONTRACTS §8.B, PRD §8.1 "spans → rows") ------------------
+def _attempt_detail(response, usage, route, wall) -> dict:
+    """Content-free facts of one answered call: the provider account, its request id, cached and reasoning tokens (inside
+    input/output, OpenAI semantics) and when it started. Never raises."""
+    try:
+        detail = {"provider": (route or {}).get("provider"), "status": "ok", "startedAt": wall}
+        request_id = getattr(response, "request_id", None) or getattr(response, "response_id", None)
+        if isinstance(request_id, str) and request_id:
+            detail["requestId"] = request_id[:200]
+        cached = getattr(getattr(usage, "input_tokens_details", None), "cached_tokens", None)
+        reasoning = getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", None)
+        if type(cached) is int:
+            detail["cachedTokens"] = cached
+        if type(reasoning) is int:
+            detail["reasoningTokens"] = reasoning
+        return detail
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def failure_status(error) -> tuple[str, int | None]:
+    """(status, HTTP status) of a failed provider attempt. A 429 or other 4xx was refused before any work; a cancelled call,
+    a timeout and a server or transport error leave the provider's outcome unknown."""
+    if isinstance(error, asyncio.CancelledError):
+        return "cancelled", None
+    status = getattr(error, "status_code", None)
+    status = status if type(status) is int and 100 <= status <= 599 else None
+    name = type(error).__name__
+    if status == 429 or name == "RateLimitError":
+        return "rate_limited", status or 429
+    if isinstance(error, (asyncio.TimeoutError, TimeoutError)) or "Timeout" in name:
+        return "timeout", status
+    if status is not None and 400 <= status < 500:
+        return "failed", status
+    return "unknown", status
+
+
+def _note_failure(ledger, error, *, workload, route, started, wall) -> None:
+    try:
+        calls = getattr(ledger, "calls", None)
+        if not isinstance(calls, list):
+            return
+        status, http_status = failure_status(error)
+        refused = status == "rate_limited" or (status == "failed" and http_status is not None)
+        calls.append({"workload": workload, "model": (route or {}).get("model"), "provider": (route or {}).get("provider"), "status": status,
+                      "http_status": http_status, "latency_ms": round((time.monotonic() - started) * 1000), "started_at": wall,
+                      **({"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0, "reasoning_tokens": 0, "cost_usd_micro": 0, "cost_source": "provider"}
+                         if refused else {})})
+    except Exception:  # noqa: BLE001 - noting a failure never hides it
+        pass
+
+
+def price_version(cfg, model) -> str | None:
+    """The price table a span's cost comes from: the seeded agent table when the configured price is its default, else the
+    deployment's own override ('configured'); None when the model has no price (its cost stays unknown)."""
+    from .. import ai_call_events
+    price = cfg.price(model) if cfg is not None and model else None
+    if price is None:
+        return None
+    default = runtime_config.DEFAULT_PRICES.get(str(model).split("/", 1)[-1])
+    return ai_call_events.AGENT_V2 if default is not None and tuple(price) == tuple(default) else ai_call_events.CONFIGURED
+
+
+def span_attempt(cfg, span: dict) -> dict:
+    """One answered generation span as an attempt row, priced exactly as the turn's spend prices it (RuntimeConfig.
+    estimate_usd_micro). A span whose provider outcome was unknown (`estimated`) records no tokens and no cost."""
+    from .. import ai_call_events
+    model = span.get("model") or ""
+    provider = span.get("provider")
+    if not provider and cfg is not None:
+        try:
+            provider = cfg.route(span.get("workload") or "fast_language", reason="usage record").provider
+        except Exception:  # noqa: BLE001 - an unknown workload names the configured provider
+            provider = getattr(cfg, "provider", None)
+    status = "unknown" if span.get("estimated") else (span.get("status") or "ok")
+    attempt = {"workload": span.get("workload"), "model": model or None, "provider": provider, "status": status, "latency_ms": span.get("latencyMs"),
+               "started_at": span.get("startedAt"), "provider_request_id": span.get("requestId")}
+    if status == "ok":
+        try:
+            estimate = cfg.estimate_usd_micro(model, span.get("inputTokens") or 0, span.get("outputTokens") or 0) if cfg is not None and model else None
+            cost, source, _ = ai_call_events.table_cost(estimate, price_version(cfg, model))
+        except Exception:  # noqa: BLE001 - no usable price: the cost stays unknown, never zero
+            cost, source = None, "unknown"
+        attempt.update(input_tokens=span.get("inputTokens"), output_tokens=span.get("outputTokens"), cached_input_tokens=span.get("cachedTokens"),
+                       reasoning_tokens=span.get("reasoningTokens"), cost_usd_micro=cost, cost_source=source)
+    return attempt
+
+
+def record_calls(cur, ctx, reservation=None) -> int:
+    """This turn's provider attempts → public.pr_ai_call_events inside the caller's settle transaction (under a savepoint, so
+    a missing table or a bad row never touches the settle): every metered generation (Manager, specialists, vision, follow-up
+    chips) and every failed generation or image noted in `ledger.calls`. Ids, counts and amounts only. Never raises."""
+    try:
+        from .. import ai_call_events
+        ledger = getattr(ctx, "ledger", None)
+        if cur is None or ledger is None:
+            return 0
+        trace = str(getattr(ctx, "trace_id", "") or "turn")[:60]
+        attempts = [{**span_attempt(ctx.config, span), "physical_attempt_id": f"{trace}:s{index}"} for index, span in enumerate(ledger.spans)]
+        attempts += [{**call, "physical_attempt_id": f"{trace}:c{index}"} for index, call in enumerate(getattr(ledger, "calls", []) or []) if isinstance(call, dict)]
+        base = {"workspace_id": ctx.workspace_id, "user_id": ctx.principal, "feature": "agent", "run_id": ctx.run_id,
+                "reservation_id": (reservation or {}).get("reservationId")}
+        return ai_call_events.write_attempts(base, attempts, cursor=cur)
+    except Exception:  # noqa: BLE001 - recording never fails a turn
+        return 0
+
+
+def record_span(cur, cfg, span, *, workspace_id, user_id, run_id, reservation=None, trace_id=None) -> int:
+    """One span outside a Manager turn (follow-up chips after a deterministic answer) → pr_ai_call_events. Never raises."""
+    try:
+        from .. import ai_call_events
+        if cur is None or not isinstance(span, dict):
+            return 0
+        base = {"workspace_id": workspace_id, "user_id": user_id, "feature": "agent", "run_id": run_id, "reservation_id": (reservation or {}).get("reservationId")}
+        return ai_call_events.write_attempts(base, [{**span_attempt(cfg, span), "physical_attempt_id": f"{str(trace_id or 'chips')[:60]}:chips"}], cursor=cur)
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def instructions(ctx: RafiiRunContext) -> str:

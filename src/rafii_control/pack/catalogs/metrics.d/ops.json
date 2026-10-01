@@ -1,0 +1,226 @@
+[
+ {
+  "id": "api_error_rate",
+  "version": 1,
+  "title": "API server error rate",
+  "grain": "request interval",
+  "unit": "ratio",
+  "definition": "5xx responses / all responses recorded by the consumer request hook, per route pattern (method + path with every identifier masked) and period; coverage numerator = 5xx, denominator = requests; 4xx shown as a measure, not as errors. Half-open intervals; window = local day, hour = local hour in the report time zone.",
+  "source_contract": "pr_request_metrics (060) via rafii_control.business_request_metrics (066)",
+  "allowed_dimensions": [
+   "route",
+   "window",
+   "hour"
+  ],
+  "query_template_ref": "metrics/api_error_rate/v1",
+  "default_exclusions": [],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "minute",
+  "limitations": "Collected from the first flush after deploy (collectingSince); 30-day retention, older intervals are partial (retention_limited). Best-effort writer: a crash can lose the last minutes of one instance (gap, never zero). No workspace at the route level, so internal, test and founder traffic cannot be excluded. Stale when no row arrived for 20 minutes although the cron requests every minute.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": false,
+   "prd": "7.1 M25"
+  }
+ },
+ {
+  "id": "api_latency",
+  "version": 1,
+  "title": "API latency p50/p95",
+  "grain": "request interval",
+  "unit": "milliseconds",
+  "definition": "p50 and p95 request duration per route pattern and period, read from the summed 20-bucket latency histogram (bounds 10..30000 ms, last bucket open-ended) with linear interpolation inside the bucket that holds the rank; never an average of per-minute percentiles. The 'percentile' dimension (p50, p95) is always present.",
+  "source_contract": "pr_request_metrics (060) via rafii_control.business_request_metrics (066)",
+  "allowed_dimensions": [
+   "percentile",
+   "route",
+   "window",
+   "hour"
+  ],
+  "query_template_ref": "metrics/api_latency/v1",
+  "default_exclusions": [],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "minute",
+  "limitations": "Histogram resolution bounds the error to the bucket width; above 30 s only 'at least 30000 ms' is known (openEnded). Fewer than 30 requests in a group is partial (small_sample). Same collection, retention and traffic limits as api_error_rate.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": false,
+   "prd": "7.1 M25"
+  }
+ },
+ {
+  "id": "queue_health",
+  "version": 1,
+  "title": "Queue and job health",
+  "grain": "operational snapshot",
+  "unit": "count",
+  "definition": "Per operational counter of the per-minute operational_signals snapshot (delayed, uncertain, failed and held publications; stuck model and research runs; unsettled cost; budget stops; billing rejections; notification backlog and dead letters; growth readings; SMS signals) the peak over the group, with the latest reading and its time as measures. 'counter' is always present; 'queue' groups counters.",
+  "source_contract": "pr_operational_snapshots (060) via rafii_control.business_operational_snapshots (066)",
+  "allowed_dimensions": [
+   "counter",
+   "queue",
+   "window",
+   "hour"
+  ],
+  "query_template_ref": "metrics/queue_health/v1",
+  "default_exclusions": [],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "minute",
+  "limitations": "Counts of overdue or failed work at each minute, not a per-job wait-time distribution (jobs live in workspace state). Snapshot counts span every workspace. Written by the founder cron each tick; stale when no snapshot arrived for 10 minutes; 30-day retention.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": false,
+   "prd": "7.1 M25-M27; 7.3"
+  }
+ },
+ {
+  "id": "connection_health",
+  "version": 1,
+  "title": "Connection health",
+  "grain": "connection capability",
+  "unit": "count",
+  "definition": "Connections x capability by provider, capability, health state (ok; expiring within 7 days; expired; blocked = revoked, scopes missing or identity unverified) and capability level, as of the last hourly refresh from workspace channel state using the customer Channels card's own connection_state; measure workspaces = distinct workspaces. Customer workspaces only.",
+  "source_contract": "pr_connection_health (060) via rafii_control.business_connection_health (066)",
+  "allowed_dimensions": [
+   "provider",
+   "capability",
+   "state",
+   "level"
+  ],
+  "query_template_ref": "metrics/connection_health/v1",
+  "default_exclusions": [
+   "synthetic",
+   "test",
+   "internal_founder_activity"
+  ],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "hourly",
+  "limitations": "A current snapshot, not a history; the interval does not filter it. Short-lived access tokens refreshed on use may show expiring, exactly as the customer sees them. Unavailable until the first refresh finds a connection; stale when the refresh is older than 3 hours.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": true,
+   "prd": "7.1 M29; 10.2 P1-7"
+  }
+ },
+ {
+  "id": "publish_by_provider",
+  "version": 1,
+  "title": "Publishing success by provider",
+  "grain": "occurrence",
+  "unit": "ratio",
+  "definition": "Verified / all publish outcomes (publish.verified, publish.failed, publish.uncertain notification events) per provider (payload platform) and period; uncertain outcomes stay in the denominator and are reported as unknown coverage. Measures: verified, failed, uncertain counts.",
+  "source_contract": "pr_notification_events via rafii_control.business_notification_events (054)",
+  "allowed_dimensions": [
+   "provider",
+   "window"
+  ],
+  "query_template_ref": "metrics/publish_by_provider/v1",
+  "default_exclusions": [
+   "synthetic",
+   "test",
+   "internal_founder_activity",
+   "fixture_subscriptions"
+  ],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "event_driven_or_15m",
+  "limitations": "Produced only while notifications v2 is enabled; otherwise unavailable, never zero. Platform comes from the event payload; events without one are 'unknown'.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": false,
+   "prd": "7.1 M22; 7.2"
+  }
+ },
+ {
+  "id": "slo_burn",
+  "version": 1,
+  "title": "Error budget burn (proposed 99.5% SLO, not approved)",
+  "grain": "service window",
+  "unit": "multiple",
+  "definition": "Burn rate = bad-event ratio / (1 - 0.995) over trailing 5m, 30m, 1h and 6h windows ending at min(interval end, now), for API availability (5xx over API requests, cron and founder Control excluded) and publish success (failed + uncertain over all publish outcomes). Multi-window pairs per the SRE workbook: 1h/5m alerts above 14.4x, 6h/30m above 6x, only when both windows hold at least 20 events. Rows carry slo and burn_window.",
+  "source_contract": "pr_request_metrics and pr_notification_events via rafii_control projections (066, 054)",
+  "allowed_dimensions": [
+   "slo",
+   "burn_window"
+  ],
+  "query_template_ref": "metrics/slo_burn/v1",
+  "default_exclusions": [],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "minute",
+  "limitations": "The 99.5% target is a proposal nobody has approved: every row says 'proposed SLO, not approved' (measures.basis = proposed_slo) and is not an uptime promise. No synthetic probe fills low-traffic windows: no events is not_applicable, under 20 events is partial (low_traffic). Same request-metric limits as api_error_rate.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": true,
+   "prd": "7.3; 8.7; 13.4"
+  }
+ },
+ {
+  "id": "support_aging",
+  "version": 1,
+  "title": "Support inbox aging",
+  "grain": "pending job snapshot",
+  "unit": "count",
+  "definition": "Open data requests (status requested) by age band (under 1 day, 1-3, 3-7, 7-14, 14-30, over 30 days) and kind as of now, with the oldest age in seconds as a measure. Every row carries measures.ticketSource = not_collected: no support-ticket source has been chosen (decision D7). Grouping or filtering by 'source' (data_requests, support_tickets) adds the support-ticket source as its own row, unavailable with reason not_collected, never a zero.",
+  "source_contract": "pr_data_requests via rafii_control.business_data_requests_v2 (054)",
+  "allowed_dimensions": [
+   "source",
+   "kind",
+   "age_band"
+  ],
+  "query_template_ref": "metrics/support_aging/v1",
+  "default_exclusions": [
+   "synthetic",
+   "test",
+   "internal_founder_activity"
+  ],
+  "data_state_required": true,
+  "currency_policy": "not_applicable",
+  "zero_denominator": "not_applicable",
+  "refresh_target": "event_driven_or_15m",
+  "limitations": "Data requests are not a ticket system; support conversations are not collected (D7). A current snapshot; the interval does not filter it.",
+  "status": "activated_v1",
+  "activation": {
+   "definitionVersion": "v1",
+   "liveAdapter": "rafii_control.founder_metrics_ops",
+   "demoAdapter": "rafii_control.founder_metrics_ops.demo_support_aging",
+   "migration": "060_founder_reliability+066_founder_ops_views",
+   "snapshot": true,
+   "prd": "5.3; 7.1 M31-M32; 10.2 P1-4"
+  }
+ }
+]

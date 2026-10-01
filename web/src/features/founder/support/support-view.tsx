@@ -15,18 +15,21 @@ import { useAsk } from '../customers/kit/ask';
 import { CategoryBars } from '../customers/kit/charts';
 import { useEvidenceDrawer } from '../customers/kit/evidence';
 import { count, recordLabel, stateLabel, whenDate } from '../customers/kit/format';
-import { categoriesFromRows } from '../customers/kit/metric';
-import { DataStateChip, FounderPage, MetricChartCard, MetricTileFromQuery, Panel, PanelGrid, TileGrid } from '../customers/kit/page-frame';
+import { DataStateChip, FounderPage, MetricChartCard, MetricTileFromQuery, Panel, PanelGrid, QueryState, TileGrid } from '../customers/kit/page-frame';
 import { RECORDS_PAGE_SIZE, pageCount } from '../customers/kit/records';
 import { RecordsTable } from '../customers/kit/records-table';
 import { TabAnchor, useSectionTab } from '../customers/kit/tabs';
-import type { RecordRow } from '../customers/kit/types';
+import type { MetricRow, RecordRow } from '../customers/kit/types';
+import { REQUEST_KIND_LABELS, ageBandItems, byDimension, formatAge, measure, openRequestsRow, opsSpec, ticketSource } from '../operations/ops-model';
 
 /**
- * Support (PRD §5.3, §9): the data-request backlog and its aging from the receipt path, and the request list from
- * the workspace query (`tickets` → `business_requests` in Live). There is no ticket system; the page says so
- * rather than drawing response-time charts from nothing.
+ * Support (PRD §5.3, §7.1 M31–M32, §9; CONTRACTS §8.D): the inbox of account data requests with its aging histogram and
+ * kinds (`support_aging`, receipted), and the request list from the workspace query (`tickets` → `business_requests`
+ * in Live). There is no ticket system: the server reports the support-ticket source as not collected until decision D7
+ * picks one, and the page says so rather than drawing response-time charts from nothing.
  */
+const PERIOD = '30d' as const;
+
 function columns(onOpen: (row: RecordRow) => void): ColumnDef<RecordRow>[] {
   return [
     { id: 'title', header: 'Request', cell: ({ row }) => <span className='text-foreground font-medium'>{recordLabel(row.original)}</span> },
@@ -54,6 +57,23 @@ function columns(onOpen: (row: RecordRow) => void): ColumnDef<RecordRow>[] {
   ];
 }
 
+/** The support-ticket source as the server reports it; "not chosen (D7)" until a ticket source exists. */
+function TicketSourceState({ rows, demo }: { rows: readonly MetricRow[]; demo: boolean }) {
+  const tickets = ticketSource(rows);
+  if (tickets?.collected) return <StateMessage kind='success' layout='inline' title='A ticket source is connected' description='Support conversations are collected; response and resolution times follow from it.' />;
+  return (
+    <StateMessage
+      kind='unsupported'
+      title='Ticket source not chosen (D7)'
+      description={
+        demo
+          ? 'Demo shows sandbox requests. Customer conversations and replies are not collected until a support source is chosen (decision D7).'
+          : 'Support conversations are not collected until a ticket source is chosen (decision D7). This page shows account data requests (export, deletion, diagnostics) only; response and resolution times appear once a ticket source exists.'
+      }
+    />
+  );
+}
+
 export function SupportView() {
   const mode = useFounderMode();
   const ask = useAsk();
@@ -62,7 +82,7 @@ export function SupportView() {
   const [page, setPage] = useQueryState('page', parseAsInteger.withDefault(1).withOptions({ history: 'replace', clearOnDefault: true }));
   const search = useDebounce(filters.q, 250);
   const tab = useSectionTab('support');
-  useFounderPageContext({ section: 'support', period: '30d', filters: { status: filters.status, q: search } });
+  useFounderPageContext({ section: 'support', period: PERIOD, filters: { status: filters.status, q: search } });
   const update = useCallback(
     (next: Partial<typeof filters>) => {
       void setFilters(next);
@@ -71,9 +91,11 @@ export function SupportView() {
     [setFilters, setPage]
   );
 
-  const backlog = useTileMetric({ id: 'data_requests_backlog', period: '30d' });
-  const aging = useMetric({ id: 'data_requests_backlog', period: '90d', groupBy: ['age_band'] });
-  const byKind = useMetric({ id: 'data_requests_backlog', period: '90d', groupBy: ['kind'] });
+  const openRequests = useTileMetric(opsSpec('supportOpen', PERIOD));
+  const aging = useMetric(opsSpec('supportAging', PERIOD));
+  const kinds = useMetric(opsSpec('supportKinds', PERIOD));
+  const sources = useMetric(opsSpec('supportSources', PERIOD));
+  const oldest = measure(openRequestsRow(openRequests.data?.rows), 'oldestSeconds');
   const requests = useRecords({ collection: 'tickets', search, status: filters.status, page, recordId: '' });
   const data = requests.data?.data;
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
@@ -94,42 +116,51 @@ export function SupportView() {
         </Button>
       }
     >
-      <StateMessage kind='partial' layout='inline' title='No ticket system is connected' description={mode === 'demo' ? 'Demo shows sandbox requests. Live shows account data requests (export, deletion) only; customer conversations and replies need an approved support connection.' : 'Live shows account data requests (export, deletion) from pr_data_requests. Response and resolution times appear once a ticket source exists.'} />
-
       <TileGrid>
-        <MetricTileFromQuery query={backlog} input={{ id: 'data_requests_backlog', label: 'Open data requests', period: '30d' }} onAsk={() => ask({ prompt: 'How many data requests are open, and which are overdue?', chart: 'data_requests_backlog', period: '30d' })} />
+        <MetricTileFromQuery query={openRequests} input={{ id: 'support_aging', label: 'Open data requests', period: PERIOD }} onAsk={() => ask({ prompt: 'How many data requests are open, how old is the oldest, and which kinds are waiting?', chart: 'support_aging', period: PERIOD })} />
       </TileGrid>
 
       <PanelGrid>
         <TabAnchor section='support' tab='aging' active={tab}>
-          <MetricChartCard query={aging} id='data_requests_backlog' title='Backlog aging' subtitle='Open requests by age band' period='90d' unavailableDescription='Aging comes from business_data_requests_v2; no open request was measured.'>
-            {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'age_band')} unit={result.rows[0]?.unit ?? 'count'} />}
+          <MetricChartCard query={aging} id='support_aging' title='Backlog aging' subtitle='Open data requests by how long they have waited' period={PERIOD} unavailableDescription='Aging comes from the data-request projection; no open request was measured.'>
+            {(result) => (
+              <div className='flex flex-col gap-2'>
+                <CategoryBars items={ageBandItems(result.rows)} unit='count' emptyTitle='No open request is waiting' />
+                {oldest !== null && <p className='text-muted-foreground text-xs'>The oldest open request has waited {formatAge(oldest)}.</p>}
+              </div>
+            )}
           </MetricChartCard>
         </TabAnchor>
         <TabAnchor section='support' tab='status' active={tab}>
-          <MetricChartCard query={byKind} id='data_requests_backlog' title='Open requests by kind' subtitle='Requests still waiting, by kind (export, deletion…)' period='90d'>
-            {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'kind')} unit={result.rows[0]?.unit ?? 'count'} />}
+          <MetricChartCard query={kinds} id='support_aging' title='Open requests by kind' subtitle='Requests still waiting: export, deletion, diagnostics' period={PERIOD} unavailableDescription='No open request was measured by kind.'>
+            {(result) => <CategoryBars items={byDimension(result.rows, 'kind', REQUEST_KIND_LABELS)} unit='count' emptyTitle='No open request is waiting' />}
           </MetricChartCard>
         </TabAnchor>
       </PanelGrid>
 
-      <TabAnchor section='support' tab='inbox' active={tab}>
-      <Panel title='Requests' description='Server-searched, 50 per page. A row opens as evidence; the customer is on Customers.' actions={requests.data && <DataStateChip state={requests.data.dataState} />}>
-        <Workbar
-          search={filters.q}
-          onSearch={(value) => update({ q: value })}
-          searchPlaceholder='Search titles or record ids'
-          searchLabel='Search requests'
-          filters={
-            <FilterPanel count={activeFilterCount} onClear={() => update({ status: 'all' })} eyebrow='Requests'>
-              <FilterSelect label='Status' value={filters.status} onChange={(value) => update({ status: value })} options={[{ value: 'all', label: 'All statuses' }, ...statuses.map((status) => ({ value: status, label: stateLabel(status) }))]} />
-            </FilterPanel>
-          }
-          summary={<ActiveFilters count={activeFilterCount} summary={`status ${stateLabel(filters.status)}`} onClear={() => update({ status: 'all' })} />}
-          count={data ? `${count(rows.length)} of ${count(data.total)}` : null}
-        />
-        <RecordsTable table={table} status={{ isPending: requests.isPending, isFetching: requests.isFetching, error: requests.error, total: data?.total, pageSize: data?.pageSize ?? RECORDS_PAGE_SIZE, refetch: requests.refetch }} label='Requests' caption={`Requests · ${mode === 'demo' ? 'fictional sample data' : 'Live records'}`} onOpen={open} filtered={Boolean(search) || activeFilterCount > 0} onClear={() => update({ q: '', status: 'all' })} />
+      <Panel title='Support sources' description='Where support work is collected from. Missing sources are said, never drawn as zero.' actions={sources.data && <DataStateChip state={sources.data.dataState} />}>
+        <QueryState query={sources} label='support sources'>
+          {(result) => <TicketSourceState rows={result.rows} demo={mode === 'demo'} />}
+        </QueryState>
       </Panel>
+
+      <TabAnchor section='support' tab='inbox' active={tab}>
+        <Panel title='Inbox' description='Data requests, server-searched, 50 per page. A row opens as evidence; the customer is on Customers.' actions={requests.data && <DataStateChip state={requests.data.dataState} />}>
+          <Workbar
+            search={filters.q}
+            onSearch={(value) => update({ q: value })}
+            searchPlaceholder='Search titles or record ids'
+            searchLabel='Search requests'
+            filters={
+              <FilterPanel count={activeFilterCount} onClear={() => update({ status: 'all' })} eyebrow='Requests'>
+                <FilterSelect label='Status' value={filters.status} onChange={(value) => update({ status: value })} options={[{ value: 'all', label: 'All statuses' }, ...statuses.map((status) => ({ value: status, label: stateLabel(status) }))]} />
+              </FilterPanel>
+            }
+            summary={<ActiveFilters count={activeFilterCount} summary={`status ${stateLabel(filters.status)}`} onClear={() => update({ status: 'all' })} />}
+            count={data ? `${count(rows.length)} of ${count(data.total)}` : null}
+          />
+          <RecordsTable table={table} status={{ isPending: requests.isPending, isFetching: requests.isFetching, error: requests.error, total: data?.total, pageSize: data?.pageSize ?? RECORDS_PAGE_SIZE, refetch: requests.refetch }} label='Requests' caption={`Requests · ${mode === 'demo' ? 'fictional sample data' : 'Live records'}`} onOpen={open} filtered={Boolean(search) || activeFilterCount > 0} onClear={() => update({ q: '', status: 'all' })} />
+        </Panel>
       </TabAnchor>
       {evidence.drawer}
     </FounderPage>

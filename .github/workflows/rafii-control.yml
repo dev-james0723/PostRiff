@@ -1,7 +1,7 @@
 name: Rafii Control foundation
 on:
   pull_request:
-    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'migrations/postriff/05[4-9]_*', 'migrations/postriff/06[0-9]_*', 'scripts/rafii_control_*', 'tests/control/**', 'tests/phase2/rls.sql', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'migrations/postriff/05[4-9]_*', 'migrations/postriff/06[0-9]_*', 'migrations/postriff/07[0-9]_*', 'scripts/rafii_control_*', 'tests/control/**', 'tests/phase2/rls.sql', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', '.github/workflows/rafii-control.yml']
   workflow_dispatch:
 permissions:
   contents: read

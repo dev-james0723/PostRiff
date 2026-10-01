@@ -86,12 +86,18 @@ def _consumer_connection(service):
     return factory
 
 
-def default_calls_factory(service, values):
-    """PhoneCalls per operator, or None when the phone product or the ops workspace is absent (attempts then suppress)."""
-    phone, ops = getattr(service, 'phone', None), values.get('RAFII_FOUNDER_OPS_WORKSPACE_ID')
-    if not phone or not ops:
+def default_calls_factory(service, values, fstore=None):
+    """PhoneCalls per operator, or None when the phone product or the operator's ops workspace (the deployment variable, else
+    the founder's stored setting) is absent; attempts then suppress."""
+    phone = getattr(service, 'phone', None)
+    if not phone:
         return lambda operator_id: None
-    return lambda operator_id: founder_contact.PhoneCalls(phone, ops, operator_id)
+    from .founder_ops import resolve
+
+    def calls(operator_id):
+        ops, _source = resolve(values, getattr(fstore, 'store', None), operator_id)
+        return founder_contact.PhoneCalls(phone, ops, operator_id) if ops else None
+    return calls
 
 
 # Founder P1/P2 slices add cron stages from their own modules (CONTRACTS §8): register_stage(name, fn) at import, where
@@ -114,13 +120,13 @@ def tick(service, values, *, fstore=None, calls_factory=None, clock=time.time, o
     if fstore is None:
         return {'status': 'disabled', 'reason': 'control_store_not_configured'}
     now = float(clock())
-    calls_factory = calls_factory or default_calls_factory(service, values)
+    calls_factory = calls_factory or default_calls_factory(service, values, fstore)
     result = {'status': 'ok', 'at': now, 'environment': fstore.environment}
     operators = _stage(result, 'operators', lambda: fstore.founder_operators()) or []
     _stage(result, 'probes', lambda: probe(fstore, service, values, now))
     _stage(result, 'snapshot', lambda: subscription_snapshot(service, now))
     observations = _stage(result, 'observations', lambda: (observe or observe_live)(fstore, service, values, now)) or {}
-    notify = _notifier(service, operators, now, fstore)
+    notify = _notifier(service, operators, now, fstore, values)
     _stage(result, 'incidents', lambda: incidents_stage(fstore, values, observations, operators, now, calls_factory, notify))
     _stage(result, 'schedules', lambda: schedules_stage(fstore, values, observations, operators, now, calls_factory, notify,
                                                         lease_owner or 'founder-cron:' + uuid.uuid4().hex[:12]))
@@ -146,30 +152,45 @@ def _stage(result, name, work):
 
 # --- probes and snapshot --------------------------------------------------------------------------------------------------
 def probe(fstore, service, values, now):
-    """Self, consumer database, control database, phone provider and notifications → source_health rows (the ids in
-    founder_sources.SOURCE_IDS, which the metric adapters read back)."""
-    rows = {'cron': ('measured', 'qualified')}
+    """Self, consumer database, control database and its reader role, phone provider, notifications, and the event-recency
+    sources (Stripe webhooks, email provider, model settles) → source_health rows: exactly the ids in
+    founder_sources.SOURCE_IDS, which the metric adapters read back (CONTRACTS §8.D). Reachability sources stamp `now` as
+    their watermark when measured; event sources stamp their latest good event. Every probe is bounded and never raises."""
+    from . import founder_sources
+    rows = {'cron': ('measured', 'qualified', now)}
+    recency = {}
     try:
         with _consumer_connection(service)() as db:
             db.execute('SELECT 1')
-        rows['database'] = ('measured', 'qualified')
+            rows['database'] = ('measured', 'qualified', now)
+            recency = founder_sources.event_recency(db, service)
     except Exception:
-        rows['database'] = ('unavailable', 'provider_unavailable')
+        if 'database' not in rows:
+            rows['database'] = ('unavailable', 'provider_unavailable', None)
     try:
-        rows['control_database'] = ('measured', 'qualified') if fstore.ping() else ('unavailable', 'provider_unavailable')
+        rows['control_database'] = ('measured', 'qualified', now) if fstore.ping() else ('unavailable', 'provider_unavailable', None)
     except Exception:
-        rows['control_database'] = ('unavailable', 'provider_unavailable')
-    phone = getattr(service, 'phone', None)
-    provider = getattr(phone, 'provider', None)
-    rows['phone_provider'] = ('measured', 'qualified') if provider and provider.configured else ('not_applicable', 'not_configured')
-    notifications = getattr(service, 'notifications', None)
-    rows['notifications'] = ('measured', 'qualified') if notifications and notifications.enabled() else ('not_applicable', 'not_configured')
+        rows['control_database'] = ('unavailable', 'provider_unavailable', None)
+    state, reason = founder_sources.reader_probe(fstore)
+    rows['control_reader'] = (state, reason, now if state == 'measured' else None)
+    try:
+        provider = getattr(getattr(service, 'phone', None), 'provider', None)
+        rows['phone_provider'] = ('measured', 'qualified', now) if provider and provider.configured else ('not_applicable', 'not_configured', None)
+    except Exception:
+        rows['phone_provider'] = ('unavailable', 'provider_unavailable', None)
+    try:
+        notifications = getattr(service, 'notifications', None)
+        rows['notifications'] = ('measured', 'qualified', now) if notifications and notifications.enabled() else ('not_applicable', 'not_configured', None)
+    except Exception:
+        rows['notifications'] = ('unavailable', 'provider_unavailable', None)
+    for source_id in founder_sources.EVENT_SOURCE_IDS:
+        rows[source_id] = recency.get(source_id, ('unavailable', 'provider_unavailable', None))
     if set(rows) != set(SOURCE_IDS):   # the readers (live_metrics, demo_metrics) iterate SOURCE_IDS; a drift here would show as 'never probed'
         raise ValueError('probe ids and founder_sources.SOURCE_IDS must agree')
     written = {}
-    for source_id, (state, reason) in rows.items():
+    for source_id, (state, reason, watermark) in rows.items():
         try:
-            fstore.upsert_source_health(source_id, state, reason, now, watermark=now if state == 'measured' else None)
+            fstore.upsert_source_health(source_id, state, reason, now, watermark=watermark)
             written[source_id] = state
         except Exception:
             written[source_id] = 'write_failed'
@@ -181,10 +202,32 @@ def local_day(now):
     return datetime.fromtimestamp(float(now), ZoneInfo(TIME_ZONE)).date()
 
 
+SNAPSHOT_MRR_COLUMNS = ('mrr_minor', 'currency', 'interval', 'interval_count')
+
+
+def _snapshot_mrr_sql(cur):
+    """The MRR-recording snapshot insert (founder_metrics_revenue.snapshot_insert_sql), or None while 057 is not applied
+    (no pr_subscription_events, or the snapshot table lacks its MRR columns) or the revenue slice cannot be imported."""
+    cur.execute("SELECT to_regclass('public.pr_subscription_events') IS NOT NULL,"
+                "(SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='pr_subscription_snapshots' AND column_name = ANY(%s))",
+                (list(SNAPSHOT_MRR_COLUMNS),))
+    row = cur.fetchone()
+    if not row or not row[0] or int(row[1] or 0) != len(SNAPSHOT_MRR_COLUMNS):
+        return None
+    try:
+        from .founder_metrics_revenue import snapshot_insert_sql
+    except Exception:  # noqa: BLE001 - the plan/status snapshot never depends on the revenue slice
+        return None
+    return snapshot_insert_sql()
+
+
 def subscription_snapshot(service, now):
     """Once per report-time-zone day: copy every subscription's plan/status/provider into public.pr_subscription_snapshots
     (054). The snapshot is the state at the first tick of the local day, so the history series (`live_metrics
-    ._subscription_history`, which reads `day` as a local date) is never mis-dated by an evening tick."""
+    ._subscription_history`, which reads `day` as a local date) is never mis-dated by an evening tick. Once 057 is applied
+    the same row also records the workspace's normalized MRR, currency and billing interval from its latest billing events
+    (null when no priced event exists: unknown, never the list price); if that richer insert fails, the plan/status
+    snapshot is still written."""
     day = local_day(now).isoformat()
     with _consumer_connection(service)() as db, db.cursor() as cur:
         cur.execute("SELECT to_regclass('public.pr_subscription_snapshots')")
@@ -193,15 +236,37 @@ def subscription_snapshot(service, now):
         cur.execute('SELECT 1 FROM public.pr_subscription_snapshots WHERE day=%s::date LIMIT 1', (day,))
         if cur.fetchone():
             return {'status': 'ok', 'day': day, 'inserted': 0, 'existing': True}
-        cur.execute('INSERT INTO public.pr_subscription_snapshots(day,workspace_id,plan_terms_id,status,provider) '
-                    'SELECT %s::date,workspace_id,plan_terms_id,status,provider FROM public.pr_subscriptions ON CONFLICT(day,workspace_id) DO NOTHING', (day,))
-        inserted = cur.rowcount
+        inserted, mrr = None, False
+        mrr_sql = _snapshot_mrr_sql(cur)
+        if mrr_sql:
+            cur.execute('SAVEPOINT founder_snapshot_mrr')
+            try:
+                cur.execute(mrr_sql, (float(now), day))
+                inserted, mrr = cur.rowcount, True
+                cur.execute('RELEASE SAVEPOINT founder_snapshot_mrr')
+            except Exception:  # noqa: BLE001 - fall back to the plan/status snapshot below
+                cur.execute('ROLLBACK TO SAVEPOINT founder_snapshot_mrr')
+                cur.execute('RELEASE SAVEPOINT founder_snapshot_mrr')
+        if not mrr:
+            cur.execute('INSERT INTO public.pr_subscription_snapshots(day,workspace_id,plan_terms_id,status,provider) '
+                        'SELECT %s::date,workspace_id,plan_terms_id,status,provider FROM public.pr_subscriptions ON CONFLICT(day,workspace_id) DO NOTHING', (day,))
+            inserted = cur.rowcount
         db.commit()
-    return {'status': 'ok', 'day': day, 'inserted': max(0, inserted or 0), 'existing': False}
+    return {'status': 'ok', 'day': day, 'inserted': max(0, inserted or 0), 'existing': False, 'mrr': mrr}
 
 
 # --- observations (counts, states and timestamps only) --------------------------------------------------------------------
 def observe_live(fstore, service, values, now):
+    """What the detectors see this tick. Publishing outcomes and new past-due subscriptions are fixed counts on the
+    consumer connection. AI cost (CONTRACTS §8.E) goes through the reader projections instead: the activated
+    `ai_cost_actual` v1 statement (`live_metrics.compose`) over `rafii_control.business_usage_v2`, grouped by
+    report-time-zone day, so aiUsageExempt rows and workspaces classified internal/test/demo are excluded exactly as in the
+    receipted metric, and the budget stop comes from `business_budgets`. A missing or unreadable projection leaves cost
+    unobserved, so the cost detector neither opens nor resolves an episode on absent data."""
+    from datetime import timedelta
+
+    from . import live_metrics
+    from .store import MetricStatement
     observations = {'sources': [], 'sources_probed': True, 'publish': {'available': False}, 'cost': {'available': False}, 'payments': {'available': False}}
     try:
         observations['sources'] = fstore.source_health()
@@ -219,29 +284,41 @@ def observe_live(fstore, service, values, now):
                 observations['publish'] = {'available': True, 'window_minutes': PUBLISH_WINDOW_MINUTES, 'failed': int(failed), 'uncertain': int(uncertain), 'verified': int(verified)}
             else:
                 observations['publish'] = {'available': False, 'reason': 'notifications_disabled'}
-            # Report-time-zone days and the same aiUsageExempt exclusion as ai_cost_actual. Workspace classifications live in
-            # the control schema behind forced RLS, which this consumer connection cannot read, so the spend covers every
-            # workspace; the detector names that basis in its evidence instead of pretending to equal the receipted metric.
-            cur.execute("SELECT (at AT TIME ZONE %s)::date::text AS day,coalesce(sum(actual_usd_micro),0) FROM public.pr_usage_ledger "
-                        "WHERE kind='settle' AND cost_state='actual' AND at>to_timestamp(%s) "
-                        "AND NOT coalesce(CASE WHEN jsonb_typeof(meta->'aiUsageExempt')='boolean' THEN (meta->>'aiUsageExempt')::boolean END,false) GROUP BY 1 ORDER BY 1",
-                        (TIME_ZONE, now - 9 * 86400))
-            by_day = {row[0]: int(row[1]) for row in cur.fetchall()}
-            today = local_day(now)
-            history = [by_day.get(local_day(now - days * 86400).isoformat(), 0) for days in range(7, 0, -1)]
-            cur.execute("SELECT to_regclass('public.pr_budgets')")
-            stop = False
-            if cur.fetchone()[0] is not None:
-                cur.execute("SELECT exists(SELECT 1 FROM public.pr_budgets WHERE status='approved' AND stop_usd_micro IS NOT NULL "
-                            "AND spent_usd_micro+reserved_usd_micro>=stop_usd_micro AND scope IN ('global','global-month'))")
-                stop = bool(cur.fetchone()[0])
-            observations['cost'] = {'available': True, 'today_usd_micro': by_day.get(today.isoformat(), 0), 'daily_usd_micro': history, 'budget_stop_reached': stop,
-                                    'basis': 'all_workspaces_excluding_exempt', 'time_zone': TIME_ZONE}
             cur.execute("SELECT count(*) FROM public.pr_subscriptions WHERE status='past_due' AND provider<>'fixture' AND coalesce(last_event_at,updated_at)>to_timestamp(%s)",
                         (now - 24 * 3600,))
             observations['payments'] = {'available': True, 'past_due_new': int(cur.fetchone()[0])}
     except Exception as error:
         observations['error'] = type(error).__name__
+    store = getattr(fstore, 'store', None)
+    if store is None or not callable(getattr(store, 'metric_rows', None)):
+        observations['cost'] = {'available': False, 'reason': 'projection_unavailable'}
+        return observations
+    local = datetime.fromtimestamp(float(now), ZoneInfo(TIME_ZONE)).replace(microsecond=0)
+    today = local.date()
+    first = datetime.combine(today - timedelta(days=7), datetime.min.time(), tzinfo=ZoneInfo(TIME_ZONE))
+    query = {'metricIds': ['ai_cost_actual'], 'interval': {'start': live_metrics.stamp(first), 'end': live_metrics.stamp(local + timedelta(seconds=1)), 'timeZone': TIME_ZONE},
+             'groupBy': ['window'], 'filters': [], 'comparison': 'none', 'limit': live_metrics.MAX_POINTS}
+    try:
+        statement, params, _group_by, _history = live_metrics.compose('ai_cost_actual', query)
+        rows = store.metric_rows(statement, params)
+    except live_metrics.MISSING_SOURCE:
+        observations['cost'] = {'available': False, 'reason': 'projection_unavailable'}
+        return observations
+    except Exception as error:
+        observations['cost'] = {'available': False, 'reason': 'projection_error', 'error': type(error).__name__}
+        return observations
+    by_day = {str(row['d_window']): int(live_metrics.number(row['value']) or 0) for row in rows if row.get('d_window')}
+    history = [by_day.get((today - timedelta(days=days)).isoformat(), 0) for days in range(7, 0, -1)]
+    stop, budget = False, 'observed'
+    try:
+        found = store.metric_rows(MetricStatement('founder_budget_stop', 'SELECT EXISTS(SELECT 1 FROM rafii_control.business_budgets b WHERE b.status=\'approved\' '
+                                                  'AND b."stopUsdMicro" IS NOT NULL AND b."spentUsdMicro"+b."reservedUsdMicro">=b."stopUsdMicro" '
+                                                  'AND b.scope IN (\'global\',\'global-month\')) AS stop'), ())
+        stop = bool(found and found[0].get('stop'))
+    except Exception:
+        budget = 'unavailable'
+    observations['cost'] = {'available': True, 'today_usd_micro': by_day.get(today.isoformat(), 0), 'daily_usd_micro': history, 'budget_stop_reached': stop,
+                            'budget': budget, 'basis': 'ai_cost_actual_v1_reader_projection', 'time_zone': TIME_ZONE}
     return observations
 
 
@@ -292,41 +369,22 @@ def notification_channels(fstore, operator_id):
     return sorted(allowed)
 
 
-def _notifier(service, operators, now, fstore=None):
-    """notify(event_type, subject) → emits one founder event per operator through the shared outbox, or None when the
-    notification feature is off. Payload: title/href/count only; deliveries are limited to `notification_channels`."""
-    notifications = getattr(service, 'notifications', None)
-    if not notifications or not operators:
-        return None
+def _notifier(service, operators, now, fstore=None, values=None):
+    """notify(event_type, subject) for the founder notices of this tick (CONTRACTS §8.E; founder_notifications.notifier):
+    every notice is recorded in the founder's in-app centre (rafii_control.founder_notices, when installed) and emitted
+    per operator through the shared outbox (workspace_id=None, user_id=operator; payload title/href only) when the
+    consumer notification feature is on. Email/push are planned only when the founder contact policy enables live
+    delivery and lists the channel AND RAFII_FOUNDER_EMAIL_ENABLED / RAFII_FOUNDER_PUSH_ENABLED are set (`values`, else
+    the process environment the cron runs with); founder quiet hours hold everything below critical/security. None when
+    there is neither a founder centre nor an enabled outbox, or when the notices slice cannot load (the tick goes on)."""
     try:
-        if not notifications.enabled():
-            return None
-    except Exception:
+        from . import founder_notifications
+        return founder_notifications.notifier(service, operators, now, fstore, values)
+    except Exception as error:  # noqa: BLE001 - notices are best-effort; detectors, briefings and contact still run
+        import json
+        import logging
+        logging.getLogger('rafii_control.founder_cron').warning(json.dumps({'event': 'founder_notifier_unavailable', 'error': type(error).__name__}))
         return None
-
-    def notify(event_type, subject):
-        founder_incidents.register_notification_events()
-        # The outbox redacts long digit runs in payload strings, so the subject id travels in entity_id, never in the href.
-        if 'detector' in subject:
-            title = f"{subject['severity']} incident: {subject['detector']} ({subject['scope']})"
-            if event_type == 'founder.incident_recovered':
-                title = f"Recovered: {subject['detector']} ({subject['scope']})"
-            entity_type, entity_id, href = 'founder_incident', subject['id'], '/founder/operations'
-            dedupe = f"{event_type}:{subject['id']}:{subject['version']}"
-        else:
-            title = f"Founder {subject['kind']} briefing v{subject['version']} is ready"
-            entity_type, entity_id, href = 'founder_report', subject['id'], '/founder/reports'
-            dedupe = f"{event_type}:{subject['id']}"
-        emitted = []
-        channels = {operator: notification_channels(fstore, operator) for operator in operators}
-        with _consumer_connection(service)() as db, db.cursor() as cur:
-            for operator in operators:
-                emitted.append(notifications.emit(cur, workspace_id=None, user_id=operator, event_type=event_type, dedupe_key=dedupe,
-                                                  entity_type=entity_type, entity_id=entity_id, payload={'title': title[:200], 'href': href},
-                                                  channel_filter=channels[operator]))
-            db.commit()
-        return emitted
-    return notify
 
 
 def incidents_stage(fstore, values, observations, operators, now, calls_factory, notify):
@@ -346,14 +404,19 @@ def incidents_stage(fstore, values, observations, operators, now, calls_factory,
 
 
 def schedules_stage(fstore, values, observations, operators, now, calls_factory, notify, lease_owner):
+    """Claim due briefing occurrences, compose each report once and contact the founder. The report's values come from
+    receipted `QueryService.metric_query` reads run as the schedule's operator (`founder_briefings.briefing_facts`, cron
+    principal = that operator's own active founder row, capability checks intact); only when no receipt can be produced
+    do the cron's unreceipted observations stand in, and the report's coverage names that basis and why."""
     due = founder_schedules.claim_due(fstore, now, lease_owner=lease_owner)
     delivered, missed = [], []
     for item in due['claimed'] + due['missed']:
         schedule, operator = item['schedule'], item['schedule']['operator_id']
         report = fstore.report(item['report_id']) if item.get('report_id') else None
         if report is None:
-            brief = founder_briefings.compose_brief(schedule['kind'], briefing_receipts(observations, now), now=now, time_zone=schedule['time_zone'],
-                                                    environment=fstore.environment, incidents=fstore.open_incidents())
+            facts, basis = founder_briefings.briefing_facts(fstore, operator, schedule['kind'], now, fallback=lambda: briefing_receipts(observations, now))
+            brief = founder_briefings.compose_brief(schedule['kind'], facts, now=now, time_zone=schedule['time_zone'],
+                                                    environment=fstore.environment, incidents=fstore.open_incidents(), basis=basis)
             report = founder_briefings.save_report(fstore, operator, brief)
             fstore.update_occurrence(item['id'], report_id=report['id'], updated_at=now)
         if notify is not None:
@@ -361,16 +424,17 @@ def schedules_stage(fstore, values, observations, operators, now, calls_factory,
                 notify('founder.briefing_ready', report)
             except Exception:
                 pass
+        sourced = {'basis': (report.get('coverage') or {}).get('basis'), 'receipts': len(report.get('receipt_ids') or [])}
         if item['state'] == 'missed':
             # Late slot: the briefing reaches the inbox; no catch-up call is placed.
             founder_schedules.finish_occurrence(fstore, item['id'], state='missed', now=now, report_id=report['id'])
-            missed.append({'occurrenceId': item['id'], 'reportId': report['id']})
+            missed.append({'occurrenceId': item['id'], 'reportId': report['id'], **sourced})
             continue
         attempt, decision, _created = founder_contact.contact(fstore, calls_factory(operator), operator, 'briefing', report['id'], now, flags=values,
                                                               scheduled_at=item['scheduled_at'])
         founder_schedules.finish_occurrence(fstore, item['id'], state='delivered', now=now, report_id=report['id'], attempt_id=attempt['id'])
         delivered.append({'occurrenceId': item['id'], 'reportId': report['id'], 'attemptId': attempt['id'], 'attemptState': attempt['state'],
-                          'decision': decision['decision']})
+                          'decision': decision['decision'], **sourced})
     return {'delivered': delivered, 'missed': missed, 'coalesced': [o['id'] for o in due['coalesced']]}
 
 

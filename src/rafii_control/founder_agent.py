@@ -622,9 +622,27 @@ def founder_blocks(section: dict) -> list[dict]:
 
 
 # --- the public operations (CONTRACTS §3: POST /agent/turns, GET /agent/runs/{id}, GET /agent/conversations/{id}/state, POST /agent/runs/{id}/cancel) ---
+def _resolve_ops(values, control, principal):
+    """The ops workspace: RAFII_FOUNDER_OPS_WORKSPACE_ID, else the founder's stored setting (founder_ops, created from
+    Settings); 409 POLICY_DISABLED (ops_workspace_not_configured) when neither exists."""
+    import os
+    env = values if values is not None else os.environ
+    if env.get(OPS_WORKSPACE_ENV):
+        return ops_workspace_id(values)
+    try:
+        from . import founder_ops
+    except ImportError:
+        return ops_workspace_id(values)
+    store = getattr(getattr(control, "queries", None), "store", None)
+    workspace, _source = founder_ops.resolve(env, store, principal["operator"]["user_id"])
+    if not workspace:
+        raise PolicyDisabled("ops_workspace_not_configured")
+    return workspace
+
+
 def _prepare(service, control_principal, *, mode, control, context, request_id, values, base=None, model_factory=None):
     principal = require_founder(control_principal)
-    ops = ops_workspace_id(values)
+    ops = _resolve_ops(values, control, principal)
     founder = founder_scope_for(principal, mode, control, context, request_identifier(request_id))
     runtime, capability = founder_runtime(service, ops, principal["operator"]["user_id"], founder, base=base, model_factory=model_factory)
     return principal, ops, founder, runtime, capability
@@ -688,12 +706,12 @@ def _founder_run(cur, workspace_id, run_id, operator_id):
     return (parts[0], parts[1]) if len(parts) == 3 and parts[0] in MODES else None
 
 
-def run(service, control_principal, run_id, request_id=None, *, values=None, base=None) -> dict:
+def run(service, control_principal, run_id, request_id=None, *, values=None, base=None, control=None) -> dict:
     """The stored result of one founder run (GET /agent/runs/{id}): this founder's own founder runs only; any other run
     is the same 404 as a missing one."""
     if not isinstance(run_id, str) or not _UUID.match(run_id):
         raise ControlError("VALIDATION_FAILED", 400)
-    principal, ops, _founder, runtime, capability = _prepare(service, control_principal, mode="live", control=None, context={}, request_id=request_id, values=values, base=base)
+    principal, ops, _founder, runtime, capability = _prepare(service, control_principal, mode="live", control=control, context={}, request_id=request_id, values=values, base=base)
     try:
         with runtime.service.repository.transaction(capability, ops) as (cur, _row, _principal):
             found = _founder_run(cur, ops, run_id, principal["operator"]["user_id"])
@@ -708,11 +726,11 @@ def run(service, control_principal, run_id, request_id=None, *, values=None, bas
 stored = run   # the contract's name for the same read
 
 
-def cancel(service, control_principal, run_id, request_id=None, *, values=None, base=None) -> dict:
+def cancel(service, control_principal, run_id, request_id=None, *, values=None, base=None, control=None) -> dict:
     """Stop a running founder turn before its next change (POST /agent/runs/{id}/cancel); the runtime's own cancel path."""
     if not isinstance(run_id, str) or not _UUID.match(run_id):
         raise ControlError("VALIDATION_FAILED", 400)
-    principal, ops, _founder, runtime, capability = _prepare(service, control_principal, mode="live", control=None, context={}, request_id=request_id, values=values, base=base)
+    principal, ops, _founder, runtime, capability = _prepare(service, control_principal, mode="live", control=control, context={}, request_id=request_id, values=values, base=base)
     try:
         with runtime.service.repository.transaction(capability, ops) as (cur, _row, _principal):
             found = _founder_run(cur, ops, run_id, principal["operator"]["user_id"])
@@ -724,14 +742,14 @@ def cancel(service, control_principal, run_id, request_id=None, *, values=None, 
     return {**out, "mode": found[0], "environment": found[1], "namespace": conversation_namespace(*found), "_dataState": "not_applicable"}
 
 
-def conversation_state(service, control_principal, conversation_id, request_id=None, *, mode=None, values=None, base=None) -> dict:
+def conversation_state(service, control_principal, conversation_id, request_id=None, *, mode=None, values=None, base=None, control=None) -> dict:
     """The conversation's state for the panel (GET /agent/conversations/{id}/state): the active task, images and pending
     approvals of one founder conversation, with the namespace (mode, environment) the conversation was created in. When the
     caller names a `mode`, the conversation must belong to it; otherwise the namespace is read from the conversation."""
     from postriff_phase2.agent_runtime_v2 import service as runtime_service
     if not isinstance(conversation_id, str) or not _UUID.match(conversation_id) or (mode is not None and mode not in MODES):
         raise ControlError("VALIDATION_FAILED", 400)
-    principal, ops, founder, runtime, capability = _prepare(service, control_principal, mode=mode or "live", control=None, context={}, request_id=request_id, values=values, base=base)
+    principal, ops, founder, runtime, capability = _prepare(service, control_principal, mode=mode or "live", control=control, context={}, request_id=request_id, values=values, base=base)
     try:
         found = runtime.conversation_namespace_of(ops, capability, conversation_id)
         if mode is not None and found != founder["namespace"]:

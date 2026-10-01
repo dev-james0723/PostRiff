@@ -19,6 +19,7 @@ SLICES = (
     'founder_voice',             # §8.E founder voice sessions
     'founder_notifications',     # §8.E founder email/push notices and digests
     'founder_actions',           # §8.F reconcile, credits adjust, account blocks, refund intents
+    'founder_ops',               # §8.H the founder's internal ops workspace (Settings → create once)
 )
 STATE = {'loaded': False, 'failed': {}}
 

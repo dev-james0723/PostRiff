@@ -7,12 +7,14 @@ route so the same chat affordance behaves consistently for every writer.
 import base64
 import json
 import ssl
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from postriff_alpha.domain import AlphaError, clean
 
-from .model_runtime import gateway_routing, provider_map
+from . import ai_call_events
+from .model_runtime import gateway_generation, gateway_routing, provider_map
 
 
 DEFAULT_ENDPOINT = "https://ai-gateway.vercel.sh/v1/images/generations"
@@ -87,12 +89,24 @@ class GatewayImageRuntime:
         self.allowed_providers = [str(p) for p in allowed_providers] if allowed_providers else [model.split("/", 1)[0]]
 
     def generate(self, prompt, *, count=1, emit=lambda _event: None):
+        # A request that reached the provider is one pr_ai_call_events attempt (Founder Admin §8.B), noted in the active
+        # ai_call_events scope whatever the outcome; nothing is noted when the request was refused before sending.
+        meter = {}
+        try:
+            return self._generate(prompt, count=count, emit=emit, meter=meter)
+        finally:
+            if meter:
+                began = meter.pop("began")
+                ai_call_events.attempt(provider=self.provider, model=self.model, workload="image_generation", latency_ms=round((time.monotonic() - began) * 1000), **meter)
+
+    def _generate(self, prompt, *, count, emit, meter):
         prompt = clean(prompt, 4000)
         if not prompt:
             raise AlphaError("Describe the image you want to generate.", 400)
         if count != 1:
             raise AlphaError("This chat generates one reviewable image candidate at a time.", 400)
         emit({"type": "progress.updated", "stage": "image_generation", "percent": 25})
+        meter.update(began=time.monotonic(), started_at=time.time(), status="unknown")
         response = self.transport(
             "POST",
             DEFAULT_ENDPOINT,
@@ -107,16 +121,23 @@ class GatewayImageRuntime:
             },
         )
         status, body = response.get("status"), response.get("body") or {}
+        meter["http_status"] = status if type(status) is int else None
         if status == 429:
+            meter.update(status="rate_limited", images=0, cost_usd_micro=0, cost_source="provider")
             raise ImageGenerationError("The image provider is busy. No automatic retry was made.", 429, uncertain=False)
         if status is None or status >= 500:
             raise ImageGenerationError("The image request outcome is unknown. Usage must be reconciled before retrying.", uncertain=True)
         if status != 200:
+            meter.update(status="failed", images=0, cost_usd_micro=0, cost_source="provider")
             raise ImageGenerationError("The image provider rejected this request; no image was saved.", status=502, uncertain=False)
         usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
         final_provider, gateway_cost = gateway_routing(body)
         reported = usage.get("cost")
         cost = float(reported) if type(reported) in (int, float) and reported >= 0 else gateway_cost
+        # Answered: the provider made (and billed) an image even if it is not kept below.
+        meter.update(status="ok", images=1, provider_request_id=gateway_generation(body))
+        if ai_call_events.usd_micro(cost) is not None:
+            meter.update(cost_usd_micro=ai_call_events.usd_micro(cost), cost_source="gateway")
         if final_provider and final_provider not in self.allowed_providers:
             raise ImageGenerationError(
                 f"The image was made by {final_provider}, outside the approved providers, so it was not kept.",

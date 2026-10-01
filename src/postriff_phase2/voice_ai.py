@@ -9,7 +9,7 @@ import json
 import math
 import re
 from postriff_alpha.domain import AlphaError
-from . import voice_analysis, voice_sources
+from . import ai_call_events, voice_analysis, voice_sources
 
 MAX_INPUT_BYTES = 60_000
 
@@ -154,7 +154,10 @@ class HostedVoiceAnalysis:
         # can proceed; evidence and revision are checked again before any profile is saved.
         result = None
         try:
-            result = runtime.analyze_voice(projection, model, instructions)
+            # The provider attempt becomes one pr_ai_call_events row (Founder Admin §8.B), written when the call returns.
+            with ai_call_events.scope(feature="voice", workspace_id=workspace_id, user_id=actor, reservation_id=reservation["reservationId"],
+                                      connect=getattr(self.repository, "connection_factory", None)):
+                result = runtime.analyze_voice(projection, model, instructions)
             proposal = proposal_from_output(result['output'], projection, actor, self.clock(), model, runtime.provider)
             def keep(state, principal):
                 current = voice_sources.project(state, ids, 'analysis', route)

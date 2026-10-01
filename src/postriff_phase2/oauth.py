@@ -366,6 +366,9 @@ class OAuthService:
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
+            from . import product_events
+            # Product taxonomy (PRD §8.6): one event per completed connect flow (the OAuth transaction is the version).
+            product_events.record(cur, workspace_id, principal, "channel.connected", connection_id, transaction_id, {"provider": provider_id})
         # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
         horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
         channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
@@ -604,6 +607,10 @@ class OAuthService:
                             from .hosted import audit
                             audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
                                   {"provider": "xiaohongshu", "eventId": event_id})
+                            from . import product_events
+                            # Product taxonomy: a disconnection nobody in the workspace chose (no user; the provider event is the version).
+                            product_events.record(cur, workspace_id, None, "channel.disconnected", connection_id,
+                                                  hashlib.sha256(str(event_id).encode()).hexdigest()[:16], {"provider": "xiaohongshu", "cause": "provider"})
                     cur.execute(
                         "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='xiaohongshu' AND event_id=%s",
                         ("revoked" if affected else "acknowledged", event_id),
@@ -902,6 +909,13 @@ class OAuthService:
             from .growth.history_import import mark_for_purge
             mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)
             audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote)})
+            from . import product_events
+            # Product taxonomy: the connection generation (when it was verified) is the version, pairing it with its connect.
+            connected = next((item for item in ((state or {}).get("phase2") or {}).get("channels") or [] if isinstance(item, dict) and item.get("id") == connection_id), {})
+            generation = connected.get("verifiedAt")
+            product_events.record(cur, workspace_id, principal, "channel.disconnected", connection_id,
+                                  int(generation) if isinstance(generation, (int, float)) and not isinstance(generation, bool) and generation > 0 else int(self.clock()),
+                                  {"provider": stored[0], "cause": "member"})
         # Outside the transaction that held the workspace row, so it cannot deadlock with the import or metric steps.
         from .growth.history_import import purge_after_disconnect
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)

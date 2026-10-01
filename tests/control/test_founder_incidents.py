@@ -298,7 +298,8 @@ class NotificationTests(unittest.TestCase):
         fstore.save_policy(OPERATOR, enabled_policy(channels=['call', 'push']), T0)
         self.assertEqual(founder_cron.notification_channels(fstore, OPERATOR), ['in_app', 'push'])
         fstore.save_policy(OPERATOR, enabled_policy(channels=['call', 'email', 'push']), T0 + 1)
-        founder_cron._notifier(service, [OPERATOR], T0, fstore)('founder.incident_opened', {**incident, 'version': 2})
+        # Email/push also need the deployment flags (CONTRACTS §8.E), not only the contact policy.
+        founder_cron._notifier(service, [OPERATOR], T0, fstore, {'RAFII_FOUNDER_EMAIL_ENABLED': '1', 'RAFII_FOUNDER_PUSH_ENABLED': '1'})('founder.incident_opened', {**incident, 'version': 2})
         self.assertEqual(notifications.emitted[-1]['channel_filter'], ['email', 'in_app', 'push'])
         fstore.save_policy(OPERATOR, enabled_policy(liveDeliveryEnabled=False, channels=['call', 'email', 'push']), T0 + 2)
         self.assertEqual(founder_cron.notification_channels(fstore, OPERATOR), ['in_app'], 'channels mean nothing while live delivery is off')

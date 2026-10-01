@@ -194,6 +194,9 @@ export function MetricChartCard({ query, id, title, subtitle, period, askPrompt,
           const failure = failureOf(query.error);
           return <StateMessage kind={failure.status === 403 ? 'permission' : 'error'} title={`Couldn't load ${title.toLowerCase()}`} description={failure.message} action={<RetryAction onRetry={() => void query.refetch()} />} />;
         })()
+      ) : result && result.rows.length === 0 && result.dataState === 'measured' ? (
+        // A collecting source with no events in this period: measured emptiness, not a missing source.
+        <StateMessage kind='empty' title={`No ${title.toLowerCase()} in this period`} description='The source is collecting; nothing fell inside the selected period.' />
       ) : !result || result.rows.length === 0 || state === 'unavailable' ? (
         <StateMessage kind='unsupported' title={unavailableTitle ?? `${title} is not collected yet`} description={<>{unavailableDescription ?? 'The source has not produced a measured row for this definition.'} <CollectingNote dataState='unavailable' collectingSince={collectingSince(first)} lastGoodAt={lastGoodAt(first)} reason={first?.reason ?? null} className='mt-1 inline' /></>} />
       ) : (

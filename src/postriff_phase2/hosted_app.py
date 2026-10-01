@@ -69,12 +69,16 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
         principal = candidate.verify(access_token)
         session_id = verified_session_id(access_token, principal)
         if connection_factory is not None:
+            # A founder account block (operator_actions, migration 062) is folded into this one statement; it is
+            # skipped, never an error, while the block table is not installed.
+            from .operator_actions import blocked_error, session_flags
             with connection_factory() as db:
                 with db.cursor() as cur:
-                    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal))
-                    deleted, revoked, mfa_required = cur.fetchone()
+                    (deleted, revoked, mfa_required), blocked = session_flags(db, cur, "SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal), principal, 3)
             if deleted or revoked:
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
+            if blocked:
+                raise blocked_error()
             # Someone who turned on two-factor authentication must present it on every session:
             # the UI hides nothing the API would not also refuse.
             if enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2":
@@ -460,6 +464,13 @@ class HostedApplication:
                 'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
+            # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
+            # written later by a background flusher. Never the raw path; never fails, slows or joins this request.
+            try:
+                from .request_metrics import observe as observe_request
+                observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
+            except Exception:
+                pass
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -656,6 +667,8 @@ class HostedApplication:
                     result['operations'] = operational_snapshot(service.repository.connection_factory)
                 except Exception:
                     result['operations'] = {'status':'unavailable', 'notificationDelivery':'not_configured'}
+                # The founder cron's operational_snapshot stage persists this minute's counts instead of recomputing them.
+                service.last_operational_snapshot = result['operations']
                 try:
                     # Founder Control cron (CONTRACTS §1): gated on RAFII_CONTROL_ENABLED inside founder_tick; any failure
                     # (including an unfinished rafii_control.founder_cron) reports 'unavailable' and never breaks the tick.

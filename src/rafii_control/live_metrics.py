@@ -143,6 +143,23 @@ SPECS = {
     'security_events': dict(base=f'SELECT a."workspaceId" AS wid, a.at, a.kind FROM rafii_control.business_audit_events a WHERE {interval_clause("a.at")}',
                             interval_params=1, probe='rafii_control.business_audit_events', value='count(*)', dims={'kind': 'b.kind'}, unit='count'),
 }
+# cash_collected v2 (CONTRACTS §8.A, slice-revenue): funded top-ups + every plan's paid invoices (057 pr_invoices through the
+# 063 business_invoices view) + credit-plan grants whose invoice is not recorded there (deduplicated by invoice id). It serves
+# only while the catalog's governing cash_collected row is version 2 or later (founder_metrics_revenue.activate_cash_collected),
+# so a receipt never pairs v2 numbers with the v1 definition; until then v1 above stays in SPECS.
+CASH_COLLECTED_V1 = SPECS['cash_collected']
+CASH_COLLECTED_V2 = dict(base=('SELECT p."workspaceId" AS wid, p.at, p.currency, \'top_up\' AS payment_type, p."amountMinor" AS amount FROM rafii_control.business_payments_v2 p'
+                               f' WHERE p.status=\'funded\' AND p.livemode AND {interval_clause("p.at")} AND {excluded("p.\"workspaceId\"")}'
+                               ' UNION ALL SELECT i."workspaceId", i."eventAt", i.currency, \'subscription_invoice\', i."amountPaidMinor" FROM rafii_control.business_invoices i'
+                               f' WHERE i.status=\'paid\' AND i.livemode AND i.provider<>\'fixture\' AND i."amountPaidMinor" IS NOT NULL AND {interval_clause("i.\"eventAt\"")}'
+                               f' AND {excluded("i.\"workspaceId\"")}'
+                               ' UNION ALL SELECT g."workspaceId", g."recordedAt", g.currency, \'subscription_invoice\', g."amountMinor" FROM rafii_control.business_subscription_grants g'
+                               f' WHERE g.livemode AND {interval_clause("g.\"recordedAt\"")} AND {excluded("g.\"workspaceId\"")}'
+                               ' AND NOT EXISTS (SELECT 1 FROM rafii_control.business_invoices d WHERE d."invoiceId"=g."invoiceId" AND d.status=\'paid\')'),
+                         interval_params=3, value='coalesce(sum(b.amount),0)', dims={'currency': 'b.currency', 'payment_type': 'b.payment_type'},
+                         probe=('(SELECT 1 FROM rafii_control.business_payments_v2 UNION ALL SELECT 1 FROM rafii_control.business_invoices'
+                                ' UNION ALL SELECT 1 FROM rafii_control.business_subscription_grants) cash_sources'),
+                         unit='currency_minor', currency='b.currency', state='partial', reason='invoices_before_instrumentation_not_recorded')
 COMPOSITE = {'cost_vs_cash'}
 PYTHON_ONLY = {'cron_heartbeat', 'source_health'}
 # Founder Admin P1/P2 slices extend this registry from their own modules (CONTRACTS §8) instead of editing SPECS here:
@@ -265,7 +282,8 @@ def build_row(metric, interval, dimensions, *, value, unit, currency=None, state
               collecting_since=None, history=None):
     """One metric row. `collecting_since` (ISO 8601) names when the row's instrumentation started recording; `history`
     ({availableDays, requiredDays}) says how much history a definition still needs (reason 'insufficient_history')."""
-    row = dict(metricId=metric['id'], definitionVersion=DEFINITION_VERSION, interval=dict(interval), dimensions=dict(dimensions), value=value, unit=unit,
+    version = (metric.get('activation') or {}).get('definitionVersion') or DEFINITION_VERSION
+    row = dict(metricId=metric['id'], definitionVersion=version, interval=dict(interval), dimensions=dict(dimensions), value=value, unit=unit,
                dataState=state, coverage=dict(known=known, unknown=unknown, numerator=numerator, denominator=denominator), sourceWatermark=watermark,
                sampleCount=sample_count, reason=reason, fixture=fixture)
     if currency: row['currency'] = currency
@@ -406,7 +424,9 @@ def compute(service, query, metrics):
         rows.extend(current)
     coverage = dict(complete=all(row['dataState'] == 'measured' for row in rows), returnedRows=len(rows), populationTotal=None, inputLimit=MAX_POINTS,
                     reason='activated_v1' if rows else 'no_rows')
-    versions = dict(adapter=ADAPTER, migration='054_rafii_control_founder_views', timeZone=query['interval']['timeZone'], sources={metric['id']: METRIC_SOURCES.get(metric['id']) for metric in metrics})
+    migrations = {metric['id']: (metric.get('activation') or {}).get('migration') or '054_rafii_control_founder_views' for metric in metrics}
+    versions = dict(adapter=ADAPTER, migration=next(iter(migrations.values()), '054_rafii_control_founder_views'), migrations=migrations,
+                    timeZone=query['interval']['timeZone'], sources={metric['id']: METRIC_SOURCES.get(metric['id']) for metric in metrics})
     return rows, coverage, versions
 
 
@@ -483,9 +503,15 @@ def _tile(metric_id, label, href, unit, result, sparkline, *, ratio=False, prefe
     delta = (value - previous) if value is not None and previous is not None else None
     points = [dict(window=point['dimensions'].get('window'), value=_ratio(point) if ratio else point['value'], dataState=point['dataState'])
               for point in (sparkline['rows'] if sparkline else []) if point['dimensions'].get('window')]
-    return dict(id=metric_id, label=label, value=value, unit='ratio' if ratio else row['unit'], currency=row.get('currency'), delta=delta,
+    tile = dict(id=metric_id, label=label, value=value, unit='ratio' if ratio else row['unit'], currency=row.get('currency'), delta=delta,
                 deltaPeriod=(comparison.get('interval') or {}).get('start') if comparison else None, sparkline=points, dataState=row['dataState'], coverage=row.get('coverage'),
                 receiptId=result['queryReceiptId'], href=href, reason=row.get('reason'))
+    # A short qualifier the definition attaches to its value (e.g. "Candidate v2 catalog (not active)" on the Demo MRR) and
+    # the instrumentation start, so a tile never looks more final than its row.
+    note = (row.get('measures') or {}).get('catalogLabel')
+    if isinstance(note, str) and note: tile['note'] = note[:80]
+    if row.get('collectingSince'): tile['collectingSince'] = row['collectingSince']
+    return tile
 
 
 def _series(result, *, ratio=False, scale=1):

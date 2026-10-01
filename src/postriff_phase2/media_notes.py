@@ -15,7 +15,7 @@ import time
 
 from postriff_alpha.domain import AlphaError
 
-from . import asset_kinds, media_consent
+from . import ai_call_events, asset_kinds, media_consent
 
 READER_VERSION = "notes-v1"
 PROMPT_TOKENS = 700
@@ -110,7 +110,17 @@ class MediaReader:
         return {"typicalUsdMicro": typical, "ceilingUsdMicro": ceiling, "model": route.model, "provider": route.provider}
 
     def read(self, images, kind, timeout=TIMEOUT_SECONDS):
-        """Call the vision route. Raises creative.CreativeError (with `uncertain`) on failure."""
+        """Call the vision route. Raises creative.CreativeError (with `uncertain`) on failure. A request that reached the
+        provider is one pr_ai_call_events attempt in the caller's ai_call_events scope (Founder Admin §8.B)."""
+        meter = {}
+        try:
+            return self._read(images, kind, timeout, meter)
+        finally:
+            if meter:
+                began = meter.pop("began")
+                ai_call_events.attempt(workload="vision", latency_ms=round((time.monotonic() - began) * 1000), **meter)
+
+    def _read(self, images, kind, timeout, meter):
         from .agent_runtime_v2 import creative
         route = self.route()
         if not route.available:
@@ -118,6 +128,7 @@ class MediaReader:
         key = self.cfg.credential(route.provider)
         user_text = f"Question: {QUESTION}\n" + ("These are frames from one video, in order." if kind == "video_frames" else "")
         started = time.monotonic()
+        meter.update(began=started, started_at=time.time(), status="unknown", provider=route.provider, model=route.model)
         if route.provider == "openai":
             content = [{"type": "input_text", "text": user_text}] + [{"type": "input_image", "image_url": creative._data_url(raw, mime)} for raw, mime in images]
             response = self.transport("POST", "https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, body={
@@ -125,6 +136,7 @@ class MediaReader:
                 "input": [{"role": "user", "content": content}],
                 "text": {"format": {"type": "json_schema", "name": "media_notes", "schema": creative.VISION_SCHEMA, "strict": True}}}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
+            _meter_response(meter, status)
             if status != 200:
                 raise creative._status_error(status, body)
             text = body.get("output_text") or "".join(part.get("text", "") for item in body.get("output") or [] if isinstance(item, dict) and item.get("type") == "message"
@@ -136,12 +148,14 @@ class MediaReader:
                 "response_format": {"type": "json_schema", "json_schema": {"name": "media_notes", "schema": creative.VISION_SCHEMA, "strict": True}},
                 "messages": [{"role": "system", "content": creative.VISION_SYSTEM}, {"role": "user", "content": content}]}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
+            _meter_response(meter, status)
             if status != 200:
                 raise creative._status_error(status, body)
             text = ((body.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
         usage = body.get("usage") or {}
         tokens_in = usage.get("input_tokens") or usage.get("prompt_tokens")
         tokens_out = usage.get("output_tokens") or usage.get("completion_tokens")
+        meter.update(input_tokens=tokens_in, output_tokens=tokens_out, **_meter_cost(self.cfg, route.model, tokens_in, tokens_out))
         try:
             findings = json.loads(text)
         except (TypeError, ValueError) as error:
@@ -151,6 +165,29 @@ class MediaReader:
         cost = self.cfg.estimate_usd_micro(route.model, tokens_in, tokens_out) if isinstance(tokens_in, int) and isinstance(tokens_out, int) else None
         return {"text": render_note(findings, kind), "model": route.model, "provider": route.provider, "costUsdMicro": cost,
                 "usage": {"inputTokens": tokens_in, "outputTokens": tokens_out}, "latencyMs": round((time.monotonic() - started) * 1000)}
+
+
+def _meter_response(meter, status):
+    """The HTTP outcome of a read for its pr_ai_call_events attempt: a 429 or other 4xx was refused before any work (it costs
+    nothing), a 5xx or no answer leaves the outcome unknown, a 200 was answered."""
+    meter["http_status"] = status if type(status) is int else None
+    if type(status) is int and 400 <= status < 500:
+        meter.update(status="rate_limited" if status == 429 else "failed", cost_usd_micro=0, cost_source="provider", input_tokens=0, output_tokens=0)
+    elif status == 200:
+        meter["status"] = "ok"
+
+
+def _meter_cost(cfg, model, tokens_in, tokens_out):
+    """The read's cost as the settle books it (the agent price table), labelled with that table's version; {} when unknown."""
+    from .agent_runtime_v2 import config as runtime_config
+    if not (isinstance(tokens_in, int) and isinstance(tokens_out, int)):
+        return {}
+    cost, price = cfg.estimate_usd_micro(model, tokens_in, tokens_out), cfg.price(model)
+    if cost is None or price is None:
+        return {}
+    default = runtime_config.DEFAULT_PRICES.get(str(model).split("/", 1)[-1])
+    version = ai_call_events.AGENT_V2 if default is not None and tuple(price) == tuple(default) else ai_call_events.CONFIGURED
+    return {"cost_usd_micro": cost, "cost_source": "table:" + version}
 
 
 # --- storage of notes (pr_media_notes, migration 031) --------------------------------------------------------------------
@@ -315,7 +352,10 @@ class MediaNotes:
             finish("failed", 0)   # refused before anything reached the provider
             return _failed(asset_id)
         try:
-            result = self.reader.read(images, kind)
+            # The provider attempt becomes one pr_ai_call_events row (Founder Admin §8.B), written when the read returns.
+            with ai_call_events.scope(feature="notes", workspace_id=workspace_id, user_id=actor, reservation_id=reservation_id,
+                                      connect=getattr(repo, "connection_factory", None)):
+                result = self.reader.read(images, kind)
         except AlphaError as error:
             # Once the request may have reached the provider its cost can't be proven, so it is never settled as free.
             finish("failed", 0) if getattr(error, "code", None) == "route_unavailable" else finish("unknown")
