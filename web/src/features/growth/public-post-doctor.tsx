@@ -1,40 +1,86 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createApi } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Surface } from '@/components/rafii';
+import { rafiiDialog, rafiiDialogFooter } from '@/components/auth/form-styles';
+import { buildRecord, newNonce, saveContinuation, signUpHref } from '@/lib/growth-v2/continuation';
 import type { PostCheck } from '@/lib/growth/types';
 import { CheckResult } from './shared';
 
 const api = createApi(async () => null);
 
+function tabStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null; // a browser that blocks site data
+  }
+}
+
 export function PublicPostDoctor() {
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   const draftId = useId();
   const [text, setText] = useState('');
+  const [checkedText, setCheckedText] = useState('');
   const [platform, setPlatform] = useState('Threads');
   const [language, setLanguage] = useState('en');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<PostCheck | null>(null);
+  const [continuing, setContinuing] = useState(false);
+  const [keep, setKeep] = useState({ original: true, edited: true });
+  const [keepError, setKeepError] = useState('');
+  const edited = result !== null && text.trim() !== checkedText.trim() && text.trim().length > 0;
+
   async function check() {
     setBusy(true);
     setError('');
     setResult(null);
     try {
       setResult(await api.publicPostDoctor({ text, platform, language, confirmed }));
+      setCheckedText(text);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Post Doctor is unavailable.');
     } finally {
       setBusy(false);
     }
   }
+
+  function openContinue() {
+    setKeep({ original: !edited, edited });
+    setKeepError('');
+    setContinuing(true);
+  }
+
+  function continueWithDraft() {
+    setKeepError('');
+    let record;
+    try {
+      record = buildRecord({ nonce: newNonce(), now: Date.now(), platform, language, original: checkedText, edited: edited ? text : null,
+        select: { original: keep.original, edited: keep.edited && edited }, result });
+    } catch (err) {
+      setKeepError(err instanceof Error ? err.message : 'Choose a version to keep.');
+      return;
+    }
+    if (!saveContinuation(tabStorage(), record)) {
+      setKeepError('Your browser blocked temporary storage, so nothing was kept. Copy your draft, sign up, then paste it into Weekly.');
+      return;
+    }
+    router.push(signUpHref(record.nonce, false));
+  }
+
   return (
     <Surface material='quiet' className='mx-auto flex max-w-3xl flex-col gap-4'>
       <label htmlFor={draftId} className='flex flex-col gap-2 text-sm'>
@@ -43,16 +89,15 @@ export function PublicPostDoctor() {
           disabled={!ready}
           id={draftId}
           aria-label='Your draft'
+          lang={language === 'other' ? undefined : language}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setResult(null);
-          }}
+          onChange={(e) => setText(e.target.value)}
           maxLength={8000}
           rows={8}
           placeholder='Paste your own draft here.'
         />
       </label>
+      {edited && <p className='text-muted-foreground text-xs'>You’ve edited the draft since it was checked. The feedback below is for the checked version.</p>}
       <div className='flex flex-wrap gap-4'>
         <label className='flex flex-col gap-1 text-sm'>
           Platform
@@ -112,9 +157,55 @@ export function PublicPostDoctor() {
         </p>
       )}
       {result && <CheckResult result={result} />}
+      {result && (
+        <div className='flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-4'>
+          <p className='text-sm font-medium'>Turn this draft into your first week</p>
+          <p className='text-muted-foreground text-sm'>
+            Keep this draft, create a free account, and plan a week of posts from it. Nothing is saved until you choose to continue.
+          </p>
+          <Button variant='glass' className='self-start' onClick={openContinue}>
+            Continue with this draft
+          </Button>
+        </div>
+      )}
       <Link href='/app' className='text-sm underline'>
         Open Rafii for saved drafts, rewriting and your Creator Genome
       </Link>
+      <Dialog open={continuing} onOpenChange={setContinuing}>
+        <DialogContent className={rafiiDialog}>
+          <DialogHeader>
+            <DialogTitle>Continue with this draft</DialogTitle>
+            <DialogDescription>
+              Rafii keeps the version you choose only in this browser tab, for up to 24 hours, so it’s still here after you sign up.
+              It is not sent to Rafii’s servers until you import it into a workspace. Closing the tab or choosing Discard removes it.
+            </DialogDescription>
+          </DialogHeader>
+          <fieldset className='flex flex-col gap-3'>
+            <legend className='sr-only'>Versions to keep</legend>
+            <Label className='flex items-start gap-2 text-sm'>
+              <Checkbox checked={keep.original} onCheckedChange={(checked) => setKeep((k) => ({ ...k, original: checked === true }))} />
+              The version you checked
+            </Label>
+            <Label className={edited ? 'flex items-start gap-2 text-sm' : 'text-muted-foreground flex items-start gap-2 text-sm'}>
+              <Checkbox disabled={!edited} checked={keep.edited && edited} onCheckedChange={(checked) => setKeep((k) => ({ ...k, edited: checked === true }))} />
+              {edited ? 'Your edited version' : 'Your edited version (edit the draft above to keep one)'}
+            </Label>
+          </fieldset>
+          {keepError && (
+            <p role='alert' className='text-destructive text-sm'>
+              {keepError}
+            </p>
+          )}
+          <DialogFooter className={rafiiDialogFooter}>
+            <Button variant='ghost' onClick={() => setContinuing(false)}>
+              Cancel
+            </Button>
+            <Button variant='action' onClick={continueWithDraft} disabled={!keep.original && !(keep.edited && edited)}>
+              Keep it and sign up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Surface>
   );
 }

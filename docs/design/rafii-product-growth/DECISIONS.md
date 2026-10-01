@@ -48,3 +48,7 @@ Pricing v2's handoff forbids production deployment, production DDL, live Stripe 
 **D-014 · Raw audio has no approved transcription route.** The only speech-to-text use today is phone sign-in digits, isolated by design. The intake adapter is built against a configurable route (`RAFII_TRANSCRIPTION_ROUTE`, unset by default) and reports audio as `unsupported` until James approves a provider, model and budget; tests use a labelled synthetic transcriber.
 
 **D-015 · Local test environment.** A private venv `.venv-growth` (Python 3.12 as in `.python-version` and CI, `requirements-dev.txt`) replaces the shared canonical venv, which lacks `jsonschema`/`openai`. PostgreSQL groups run on private ports (coordinator 55871; slices 55881–55887).
+
+**D-016 · "EN + zh-Hant" for changed flows.** The app has no UI-translation layer (`web/src/lib/locales` covers content languages only), so this program does not introduce one. Changed flows must accept, store, render and lay out English and Traditional Chinese content correctly (`lang` attributes, CJK-aware wrapping, the bundled TC font for rendered images) and are verified with both; UI chrome stays in the app's single language. Adding a translation framework would be a new design-system-level change outside the PRD.
+
+**D-017 · Local typecheck deferred to CI while the Mac is saturated.** At 18:xx UTC the Mac showed swap 98 % and load 25 on 12 cores; `tsc --noEmit` for the web app is memory-heavy, so web typecheck, lint and build run in PR CI for every integrated slice.
