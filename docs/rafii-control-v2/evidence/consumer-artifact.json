@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "execution": "actual local Vercel Python builder output; not deployed or invoked on Vercel",
+  "cliVersion": "59.23.2",
+  "builderVersion": "14.2.0",
+  "runtime": "python3.12",
+  "architecture": "x86_64",
+  "bytes": 31007139,
+  "sha256": "96352785a3e50548fa9ba42ab4f0f89811a22879b40e196424b030b7b56a9366",
+  "archive": ".codex/consumer-ready/python-artifact-gvN3PN/function.zip",
+  "files": 4759,
+  "routes": [
+    {
+      "source": "/api/phone/dial/media/(.*)",
+      "destination": {
+        "service": "rafii_phone_media"
+      }
+    },
+    {
+      "source": "/api/phone/media/(.*)",
+      "destination": {
+        "service": "rafii_phone_media"
+      }
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "postriff_api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "postriff_web"
+      }
+    }
+  ],
+  "controlExcluded": true
+}

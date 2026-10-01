@@ -1,0 +1,16 @@
+{
+  "metricIds": [
+    "activation_rate"
+  ],
+  "interval": {
+    "start": "2026-09-01T00:00:00Z",
+    "end": "2026-09-15T00:00:00Z",
+    "timeZone": "UTC"
+  },
+  "groupBy": [
+    "device"
+  ],
+  "filters": [],
+  "comparison": "previous_complete",
+  "limit": 100
+}

@@ -27,7 +27,9 @@ export interface PageHeaderProps {
 export function PageHeader({ eyebrow, title, accent, description, actions, infoContent, density = 'functional', className, titleId }: PageHeaderProps) {
   const creative = density === 'creative';
   return (
-    <header className={cn('flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6', className)}>
+    // md:flex-wrap: when the actions do not fit beside the title (a tablet with the sidebar open), they wrap below it
+    // instead of squeezing the title column to zero width.
+    <header className={cn('flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between md:gap-6', className)}>
       <div className='flex min-w-0 flex-col gap-1.5'>
         {eyebrow && (
           <span className='rafii-eyebrow inline-flex items-center gap-2.5'>

@@ -1,0 +1,783 @@
+{
+  "execution": "local subset; full v2 operational acceptance BLOCKED",
+  "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+  "counts": {
+    "passed": 16,
+    "failed": 0,
+    "blocked": 25,
+    "out_of_scope": 55
+  },
+  "cases": [
+    {
+      "id": "AUTH-01",
+      "scenario": "Customer session sent to control API",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_boundary.py::HttpTests.test_bearer_alone_never_authorizes_founder_api",
+      "observed_outcome": "Customer bearer alone denied.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AUTH-02",
+      "scenario": "User metadata contains isAdmin=true",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_hosted.py::HostedErrors.test_editable_admin_metadata_never_enrolls_an_operator",
+      "observed_outcome": "Verified non-founder with editable isAdmin metadata denied.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AUTH-03",
+      "scenario": "Founder session with revoked operator record",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_boundary.py::BoundaryTests.test_revocation_and_epoch_change_take_effect_next_request",
+      "observed_outcome": "Revoked operator denied on next read.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AUTH-04",
+      "scenario": "Old auth epoch after security lock",
+      "status": "blocked",
+      "reason": "Epoch invalidation is tested for reads; queued effect execution is absent.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AUTH-05",
+      "scenario": "AAL1 attempts an R3 refund",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AUTH-06",
+      "scenario": "Approved session cookie on sibling origin",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_boundary.py::BoundaryTests.test_cross_origin_csrf_and_unknown_capability_fail_closed",
+      "observed_outcome": "Sibling origin and invalid CSRF denied; browser confirms.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AUTH-07",
+      "scenario": "Preview origin tries production session exchange",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_boundary.py::BoundaryTests.test_disabled_flag_and_preview_production_fail_closed",
+      "observed_outcome": "Preview production-authority configuration rejected.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AUTH-08",
+      "scenario": "Passkey enrolled on old RP used after domain change",
+      "status": "blocked",
+      "reason": "Actual hosted RP, MFA recovery and domain qualification require founder approval.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-01",
+      "scenario": "Normal support read without customer grant",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_database.py::DatabaseTests.test_real_store_boundary_safe_projection_receipts_and_idempotency",
+      "observed_outcome": "Safe metadata only; private canary suppressed in real DB/API/browser.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "PRIV-02",
+      "scenario": "Founder reason supplied but customer consent absent",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-03",
+      "scenario": "Expired/revoked support grant in cached query",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-04",
+      "scenario": "Private transcript appears in log exception",
+      "status": "blocked",
+      "reason": "Safe API exception denial is tested; private-support log redaction/egress is not qualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-05",
+      "scenario": "Canary OAuth token appears in trace attributes",
+      "status": "blocked",
+      "reason": "Credential/provider canaries are absent from API/audit; downstream telemetry transports remain unqualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-06",
+      "scenario": "Customer deletion followed by historical event replay",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-07",
+      "scenario": "Export contains spreadsheet formula prefix",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "PRIV-08",
+      "scenario": "Support attachment redirects to unknown host",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "METRIC-01",
+      "scenario": "Annual subscription plus monthly subscription",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_metrics.py::MetricGoldenTests.test_monthly_annual_native_currencies_and_topups_are_distinct",
+      "observed_outcome": "Pure synthetic annual/monthly kernel; no policy activation.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "METRIC-02",
+      "scenario": "One-time credit top-up alongside subscription",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_metrics.py::MetricGoldenTests.test_monthly_annual_native_currencies_and_topups_are_distinct",
+      "observed_outcome": "Top-ups excluded by the pure kernel.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "METRIC-03",
+      "scenario": "Pending and succeeded refund of same payment",
+      "status": "blocked",
+      "reason": "Pure verified cash kernel exists; provider refund lifecycle and financial policy remain inactive.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "METRIC-04",
+      "scenario": "Refund and dispute affect same underlying funds",
+      "status": "blocked",
+      "reason": "Same movement identity dedupes; fund-level refund/dispute overlap policy is not qualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "METRIC-05",
+      "scenario": "Mixed native currencies and missing FX",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_metrics.py::MetricGoldenTests.test_monthly_annual_native_currencies_and_topups_are_distinct",
+      "observed_outcome": "Native currencies retained separately; mrr query without currency rejected.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "METRIC-06",
+      "scenario": "Zero denominator and missing source",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_workflow.py::WorkflowTests.test_policy_currency_environment_and_query_boundaries",
+      "observed_outcome": "Absent source remains unavailable/null; denominator kernel does not invent zero.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "METRIC-07",
+      "scenario": "Immature D7/D28 cohort",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_metrics.py::MetricGoldenTests.test_retention_excludes_unmatured_cohort_and_empty_denominator",
+      "observed_outcome": "Only mature synthetic cohort denominators counted.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "METRIC-08",
+      "scenario": "Two provider p95s available but no mergeable distribution",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-01",
+      "scenario": "Identical provider event delivered repeatedly",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_workflow.py::WorkflowTests.test_duplicate_and_conflicting_events_never_change_materialized_count",
+      "observed_outcome": "One materialized value; duplicate replay ignored; conflicting lineage rejected.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "DATA-02",
+      "scenario": "Out-of-order event arrives after newer state",
+      "status": "blocked",
+      "reason": "Immutable historical check projections exist; mutable source state-machine regression handling is not qualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-03",
+      "scenario": "Backfill loads months of historic failures",
+      "status": "blocked",
+      "reason": "This adapter has no alert sender; operational baseline/backfill monitor behavior is not qualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-04",
+      "scenario": "Source heartbeat stops during funnel decline",
+      "status": "blocked",
+      "reason": "Read UI distinguishes stale/partial/absent sources; incident/monitor correlation remains unqualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-05",
+      "scenario": "Two workers process same projection partition",
+      "status": "blocked",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5",
+      "local_subset_test": "tests/control/test_workflow.py::WorkflowTests.test_concurrent_replay_commits_one_event_and_projection",
+      "local_subset_outcome": "Two concurrent ingests commit one normalized event and one rollup.",
+      "reason": "Concurrent PostgreSQL replay commits one event/rollup; partition worker lease/fencing is not implemented or operationally qualified."
+    },
+    {
+      "id": "DATA-06",
+      "scenario": "Metric version changes midway through comparison",
+      "status": "blocked",
+      "reason": "Queries bind definition versions and reject unsupported comparisons; cross-version recomputation remains absent.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-07",
+      "scenario": "One user belongs to three workspaces",
+      "status": "blocked",
+      "reason": "Safe membership metadata is present; corresponding business metric source/grain policy remains inactive.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "DATA-08",
+      "scenario": "Customer sends forged payment success browser event",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AGENT-01",
+      "scenario": "User tells customer Rafii to enter founder mode",
+      "status": "blocked",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5",
+      "local_subset_test": "tests/control/test_intelligence.py::IntelligenceTests.test_founder_tools_have_no_customer_context_or_effect_executor",
+      "local_subset_outcome": "Founder namespace/capabilities remain separate; no effect executor.",
+      "reason": "Founder namespace/capability separation is tested; a customer-agent escalation journey was not executed."
+    },
+    {
+      "id": "AGENT-02",
+      "scenario": "Log text instructs model to reveal credentials",
+      "status": "blocked",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5",
+      "local_subset_test": "tests/control/test_intelligence.py::IntelligenceTests.test_founder_tools_have_no_customer_context_or_effect_executor",
+      "local_subset_outcome": "Untrusted prose cannot introduce a secret/effect tool.",
+      "reason": "No secret/effect tool is mounted and adversarial prose cannot alter read templates; model/log injection execution is not qualified while paid inference is disabled."
+    },
+    {
+      "id": "AGENT-03",
+      "scenario": "Model fabricates a query receipt or numeric fact",
+      "status": "blocked",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5",
+      "local_subset_test": "tests/control/test_workflow.py::WorkflowTests.test_source_to_projection_query_receipt_and_grounded_copilot",
+      "local_subset_outcome": "Answer rows exactly bind to persisted receipt; forged/expired context denied.",
+      "reason": "Receipt existence/expiry/grounding is verified in deterministic mode; fabricated model-output validation has not been executed because no model is mounted."
+    },
+    {
+      "id": "AGENT-04",
+      "scenario": "Model requests free SQL through metric tool",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_intelligence.py::IntelligenceTests.test_sql_unknown_fields_excess_limits_timezone_and_dimension_fail",
+      "observed_outcome": "SQL/unknown dimensions/timezones/limits rejected before query.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "AGENT-05",
+      "scenario": "Founder asks ambiguous profitable plan question with incomplete cost",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AGENT-06",
+      "scenario": "Provider unavailable mid-investigation",
+      "status": "blocked",
+      "reason": "Reserved read failure stores a safe blocked record; mid-provider partial-evidence recovery not qualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AGENT-07",
+      "scenario": "Model reaches investigation spend or tool limit",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "AGENT-08",
+      "scenario": "Voice says approve a refund without fresh identity proof",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-01",
+      "scenario": "Reuse approval for a larger refund amount",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-02",
+      "scenario": "Reuse approval for a different user/workspace",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-03",
+      "scenario": "Reuse approval for production after staging review",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-04",
+      "scenario": "Target changes between preview and confirmation",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-05",
+      "scenario": "Approval reused after successful execution",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-06",
+      "scenario": "Identical idempotency key with changed body",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_database.py::DatabaseTests.test_real_store_boundary_safe_projection_receipts_and_idempotency",
+      "observed_outcome": "Copilot changed body under same key rejected; no external action.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "APPROVAL-07",
+      "scenario": "Agent attempts to change its own standing policy",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "APPROVAL-08",
+      "scenario": "External response lost after a request",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-01",
+      "scenario": "Branch moves after check approval",
+      "status": "blocked",
+      "reason": "Exact-SHA stage guards are tested; authorized external runner is not active.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-02",
+      "scenario": "PR edits workflow to exfiltrate secrets",
+      "status": "blocked",
+      "reason": "Control archive excludes customer/privileged runtime; ephemeral external check runner remains unqualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-03",
+      "scenario": "Malicious dependency install script",
+      "status": "blocked",
+      "reason": "Pinned local build has no model/financial secrets; external dependency runner sandbox remains unqualified.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-04",
+      "scenario": "Required security test skipped but build passes",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_intelligence.py::IntelligenceTests.test_engineering_states_require_attestation_exact_sha_and_all_required_checks",
+      "observed_outcome": "Skipped required check cannot qualify checks_passed.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "ENGINEERING-05",
+      "scenario": "Build fails ENOSPC",
+      "status": "blocked",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5",
+      "local_subset_test": "tests/control/test_intelligence.py::IntelligenceTests.test_engineering_states_require_attestation_exact_sha_and_all_required_checks",
+      "local_subset_outcome": "Infrastructure failure cannot qualify a product fix.",
+      "reason": "Typed infrastructure failures cannot qualify checks passed; actual ENOSPC source classification was not reproduced in this iteration."
+    },
+    {
+      "id": "ENGINEERING-06",
+      "scenario": "Model supplies unsigned invented test receipt",
+      "status": "blocked",
+      "reason": "Unqualified observed green stays suspected; provider-confirmed broker qualification remains absent.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-07",
+      "scenario": "Patch changes files outside allowed set",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "ENGINEERING-08",
+      "scenario": "Patch passes CI but not deployed",
+      "status": "blocked",
+      "reason": "Stages stay distinct and unqualified greens remain suspected; hosted deployment qualification is blocked.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-01",
+      "scenario": "Concurrent admin credit grant retry",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-02",
+      "scenario": "Reverse a partially consumed grant",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-03",
+      "scenario": "Monthly invoice delivered after subscription state event",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-04",
+      "scenario": "Native Stripe retry already scheduled",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-05",
+      "scenario": "Hard-decline payment needs new method",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-06",
+      "scenario": "Test webhook submitted to live endpoint",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-07",
+      "scenario": "Private operations model cost incurred",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "BILLING-08",
+      "scenario": "Ban user with active recurring subscription",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-01",
+      "scenario": "Internal note entered while public reply tab absent",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-02",
+      "scenario": "Inbound email has forged sender with security-change request",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-03",
+      "scenario": "Provider accepts reply then delivery bounces",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-04",
+      "scenario": "Customer replies to waiting_customer",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-05",
+      "scenario": "Waiting_engineering ticket",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-06",
+      "scenario": "AI drafts refund-complete message before provider confirmation",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-07",
+      "scenario": "Multiple tickets link same incident",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "SUPPORT-08",
+      "scenario": "Closed ticket gets related later reply",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-01",
+      "scenario": "Initial scan finds old failures",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-02",
+      "scenario": "Ten symptoms from same provider outage",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-03",
+      "scenario": "Founder acknowledges but issue persists",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-04",
+      "scenario": "Quiet hours and noncritical growth signal",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-05",
+      "scenario": "Control worker and primary notification service fail",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-06",
+      "scenario": "Daily schedule crosses DST",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-07",
+      "scenario": "Customer preferences changed",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "MONITOR-08",
+      "scenario": "Model budget exhausted",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-01",
+      "scenario": "Small sample appears to show large conversion uplift",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-02",
+      "scenario": "Randomization sample-ratio mismatch",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-03",
+      "scenario": "Feature adoption correlates with retention",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-04",
+      "scenario": "Observed recovered payment linked to two decisions",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-05",
+      "scenario": "Contribution estimate lacks hosting/support cost",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-06",
+      "scenario": "Price experiment targets existing customer terms",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-07",
+      "scenario": "Opportunity proposes cheaper model",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "GROWTH-08",
+      "scenario": "Negative or inconclusive experiment",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-01",
+      "scenario": "Customer deployment fails while control project healthy",
+      "status": "blocked",
+      "reason": "Separate local package and safe projections passed; actual independent hosted failure isolation is untested.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-02",
+      "scenario": "Database restore contains old approval",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-03",
+      "scenario": "Restored queue contains financial request already sent",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-04",
+      "scenario": "Source query exceeds time/row budget",
+      "status": "blocked",
+      "reason": "1001-input/output caps and five-second read timeout exist; bounded report job remains absent.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-05",
+      "scenario": "Normal user probes founder table through Data API",
+      "status": "passed",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+      "test_identifier": "tests/control/test_database.py::DatabaseTests.test_control_tables_force_rls_and_never_grant_browser_access",
+      "observed_outcome": "Actual anon/authenticated/service_role reads denied under forced RLS.",
+      "environment": "local_synthetic_or_disposable",
+      "artifact": "read-workflow-checks.json",
+      "artifact_digest": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+    },
+    {
+      "id": "RESILIENCE-06",
+      "scenario": "Audit exporter credential compromised",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-07",
+      "scenario": "User deletion involves retained financial rows",
+      "status": "out_of_scope",
+      "reason": "Effectful financial/account, private-support, monitor, experiment or other full-v2 capability remains disabled/outside this iteration.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    },
+    {
+      "id": "RESILIENCE-08",
+      "scenario": "Rollback control deployment",
+      "status": "blocked",
+      "reason": "Migrations are additive and reapplied safely; approved hosted rollback and audit preservation remain untested.",
+      "exact_sha": "f48a1be242b36dc04664dbb91ba5257a21de5dcd"
+    }
+  ],
+  "milestone": {
+    "HTTP_429_5xx_auth_timeout_malformed": "passed",
+    "source_projection_materialization": "passed",
+    "zero_unavailable_stale_partial": "passed",
+    "duplicate_conflicting_concurrent_events": "passed",
+    "currency_policy_bounds": "passed",
+    "chart_accessible_table_receipt_grounded_copilot": "passed",
+    "staging_authorization_and_hosted_qualification": "blocked",
+    "draft_PR_source_push_without_unapproved_preview": "blocked"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-09-29T23:25:23.912069+00:00",
+  "command": [
+    "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/control-verification-env-9n5oqs3a/venv/bin/python",
+    "scripts/postriff_pg_suite.py",
+    "postgres_trend_whitespace"
+  ],
+  "coverage": [
+    "All original29 cases retained; exact DSN admission refuses libpq redirects before connecting",
+    "Real service typed current get/stored/list hides operator reviews; superseding review blocks accept/replay/apply/queue",
+    "Actual advanced enqueue/run genome/saturation/graph; reviewed semantics and literal native phrases; no global qualification",
+    "Current review registry/config gates; viewer current reads without edit dependency locks; owner review authority remains active",
+    "NOSUPERUSER NOBYPASSRLS runtime; canonical baseline040 only, no003/pr_runtime"
+  ],
+  "errors": 0,
+  "execution_state": "actual_disposable_postgresql_synthetic_source_generation_and_review_records",
+  "failures": 0,
+  "generation_transport": "injected ServerModelRuntime synthetic responses only",
+  "limitations": [
+    "Synthetic positive review fixtures do not establish empirical qualification or M3 completion",
+    "No production data, registry, migration, deployment or flags modified"
+  ],
+  "postgres_version": "17.11 (Homebrew)",
+  "provider_model_calls": 0,
+  "python_version": "3.12.13 (main, Mar  3 2026, 12:39:30) [Clang 17.0.0 (clang-1700.6.4.2)]",
+  "seconds": 32.352,
+  "skips": 0,
+  "source_guard_unchanged": true,
+  "target": "127.0.0.1:55438/postgres",
+  "tests": 35
+}

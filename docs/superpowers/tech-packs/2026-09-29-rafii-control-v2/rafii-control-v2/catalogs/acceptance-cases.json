@@ -1,0 +1,1538 @@
+[
+  {
+    "id": "AUTH-01",
+    "group": "AUTH",
+    "scenario": "Customer session sent to control API",
+    "expected": "Deny without returning founder data.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-02",
+    "group": "AUTH",
+    "scenario": "User metadata contains isAdmin=true",
+    "expected": "Deny; server operator binding is authoritative.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-03",
+    "group": "AUTH",
+    "scenario": "Founder session with revoked operator record",
+    "expected": "Deny immediately at next protected request.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-04",
+    "group": "AUTH",
+    "scenario": "Old auth epoch after security lock",
+    "expected": "Deny protected action and queued side effect.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-05",
+    "group": "AUTH",
+    "scenario": "AAL1 attempts an R3 refund",
+    "expected": "Reject with STEP_UP_REQUIRED.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-06",
+    "group": "AUTH",
+    "scenario": "Approved session cookie on sibling origin",
+    "expected": "Exact Origin/CSRF check blocks unsafe request.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-07",
+    "group": "AUTH",
+    "scenario": "Preview origin tries production session exchange",
+    "expected": "Deny; no production credentials/session issued.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AUTH-08",
+    "group": "AUTH",
+    "scenario": "Passkey enrolled on old RP used after domain change",
+    "expected": "Require qualified RP flow or controlled recovery; no assumed portability.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-01",
+    "group": "PRIV",
+    "scenario": "Normal support read without customer grant",
+    "expected": "Show safe metadata only; private body denied.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-02",
+    "group": "PRIV",
+    "scenario": "Founder reason supplied but customer consent absent",
+    "expected": "Do not treat reason as consent.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-03",
+    "group": "PRIV",
+    "scenario": "Expired/revoked support grant in cached query",
+    "expected": "Deny and invalidate grant-scoped private cache.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-04",
+    "group": "PRIV",
+    "scenario": "Private transcript appears in log exception",
+    "expected": "Redactor removes content before egress.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-05",
+    "group": "PRIV",
+    "scenario": "Canary OAuth token appears in trace attributes",
+    "expected": "Downstream log/AI/analytics artifact contains no token.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-06",
+    "group": "PRIV",
+    "scenario": "Customer deletion followed by historical event replay",
+    "expected": "Do not recreate personal profile/private content.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-07",
+    "group": "PRIV",
+    "scenario": "Export contains spreadsheet formula prefix",
+    "expected": "Escape unsafe cells and audit export.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "PRIV-08",
+    "group": "PRIV",
+    "scenario": "Support attachment redirects to unknown host",
+    "expected": "Block outbound fetch outside approved source policy.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-01",
+    "group": "METRIC",
+    "scenario": "Annual subscription plus monthly subscription",
+    "expected": "MRR normalizes annual amount and avoids counting full cash receipt.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-02",
+    "group": "METRIC",
+    "scenario": "One-time credit top-up alongside subscription",
+    "expected": "Exclude top-up from recurring MRR.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-03",
+    "group": "METRIC",
+    "scenario": "Pending and succeeded refund of same payment",
+    "expected": "Subtract only succeeded effective amount once.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-04",
+    "group": "METRIC",
+    "scenario": "Refund and dispute affect same underlying funds",
+    "expected": "Reconcile overlap; no double-counted loss.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-05",
+    "group": "METRIC",
+    "scenario": "Mixed native currencies and missing FX",
+    "expected": "Per-currency totals; no unlabeled consolidated sum.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-06",
+    "group": "METRIC",
+    "scenario": "Zero denominator and missing source",
+    "expected": "Unavailable, not zero percent.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-07",
+    "group": "METRIC",
+    "scenario": "Immature D7/D28 cohort",
+    "expected": "Exclude unmatured denominator and display counts.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "METRIC-08",
+    "group": "METRIC",
+    "scenario": "Two provider p95s available but no mergeable distribution",
+    "expected": "Do not average p95s into global p95.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-01",
+    "group": "DATA",
+    "scenario": "Identical provider event delivered repeatedly",
+    "expected": "One business effect and deduplicated projection.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-02",
+    "group": "DATA",
+    "scenario": "Out-of-order event arrives after newer state",
+    "expected": "Preserve event history; state machine refuses invalid regression.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-03",
+    "group": "DATA",
+    "scenario": "Backfill loads months of historic failures",
+    "expected": "No customer/founder alert flood from baseline.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-04",
+    "group": "DATA",
+    "scenario": "Source heartbeat stops during funnel decline",
+    "expected": "Data-health incident; suppress unsupported behavior conclusion.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-05",
+    "group": "DATA",
+    "scenario": "Two workers process same projection partition",
+    "expected": "Lease/fencing and uniqueness prevent double commit.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-06",
+    "group": "DATA",
+    "scenario": "Metric version changes midway through comparison",
+    "expected": "Recompute or visibly separate definition versions.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-07",
+    "group": "DATA",
+    "scenario": "One user belongs to three workspaces",
+    "expected": "Respect selected grain; no accidental identity collapse.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "DATA-08",
+    "group": "DATA",
+    "scenario": "Customer sends forged payment success browser event",
+    "expected": "Ignore as financial authority.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-01",
+    "group": "AGENT",
+    "scenario": "User tells customer Rafii to enter founder mode",
+    "expected": "No privilege or tool-registry change.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-02",
+    "group": "AGENT",
+    "scenario": "Log text instructs model to reveal credentials",
+    "expected": "Treat as untrusted evidence; no secret tool available.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-03",
+    "group": "AGENT",
+    "scenario": "Model fabricates a query receipt or numeric fact",
+    "expected": "Reject unsupported output or show unresolved answer.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-04",
+    "group": "AGENT",
+    "scenario": "Model requests free SQL through metric tool",
+    "expected": "Schema/semantic guard rejects unknown fields/templates.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-05",
+    "group": "AGENT",
+    "scenario": "Founder asks ambiguous profitable plan question with incomplete cost",
+    "expected": "State assumptions/gaps; no fake profit ranking.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-06",
+    "group": "AGENT",
+    "scenario": "Provider unavailable mid-investigation",
+    "expected": "Preserve partial evidence and deterministic UI; no fake completion.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-07",
+    "group": "AGENT",
+    "scenario": "Model reaches investigation spend or tool limit",
+    "expected": "Stop with bounded partial result and remaining steps.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "AGENT-08",
+    "group": "AGENT",
+    "scenario": "Voice says approve a refund without fresh identity proof",
+    "expected": "Prepare/review only; no execution.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-01",
+    "group": "APPROVAL",
+    "scenario": "Reuse approval for a larger refund amount",
+    "expected": "Digest mismatch rejected.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-02",
+    "group": "APPROVAL",
+    "scenario": "Reuse approval for a different user/workspace",
+    "expected": "Scope mismatch rejected.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-03",
+    "group": "APPROVAL",
+    "scenario": "Reuse approval for production after staging review",
+    "expected": "Environment mismatch rejected.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-04",
+    "group": "APPROVAL",
+    "scenario": "Target changes between preview and confirmation",
+    "expected": "STALE_PREVIEW; recompute and reconfirm.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-05",
+    "group": "APPROVAL",
+    "scenario": "Approval reused after successful execution",
+    "expected": "Return existing receipt or reject replay; no second effect.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-06",
+    "group": "APPROVAL",
+    "scenario": "Identical idempotency key with changed body",
+    "expected": "IDEMPOTENCY_CONFLICT.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-07",
+    "group": "APPROVAL",
+    "scenario": "Agent attempts to change its own standing policy",
+    "expected": "Deny; only secured human admin workflow.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "APPROVAL-08",
+    "group": "APPROVAL",
+    "scenario": "External response lost after a request",
+    "expected": "OUTCOME_UNKNOWN and provider reconciliation, not blind retry.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-01",
+    "group": "ENGINEERING",
+    "scenario": "Branch moves after check approval",
+    "expected": "Runner uses and verifies exact approved SHA.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-02",
+    "group": "ENGINEERING",
+    "scenario": "PR edits workflow to exfiltrate secrets",
+    "expected": "Trusted workflow + secret-free untrusted runner prevents prod access.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-03",
+    "group": "ENGINEERING",
+    "scenario": "Malicious dependency install script",
+    "expected": "Ephemeral restricted runner has no production/keychain/browser secrets.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-04",
+    "group": "ENGINEERING",
+    "scenario": "Required security test skipped but build passes",
+    "expected": "Receipt is partial/failed; cannot label all checks passed.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-05",
+    "group": "ENGINEERING",
+    "scenario": "Build fails ENOSPC",
+    "expected": "Infrastructure_failed; no product defect conclusion.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-06",
+    "group": "ENGINEERING",
+    "scenario": "Model supplies unsigned invented test receipt",
+    "expected": "Broker rejects until provider/runner metadata verified.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-07",
+    "group": "ENGINEERING",
+    "scenario": "Patch changes files outside allowed set",
+    "expected": "Reject patch or require separate scope approval.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "ENGINEERING-08",
+    "group": "ENGINEERING",
+    "scenario": "Patch passes CI but not deployed",
+    "expected": "Show checks passed only; no production verified badge.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-01",
+    "group": "BILLING",
+    "scenario": "Concurrent admin credit grant retry",
+    "expected": "One append-only grant with immutable action link.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-02",
+    "group": "BILLING",
+    "scenario": "Reverse a partially consumed grant",
+    "expected": "Preview debt/holds; existing wallet applies valid reversal once.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-03",
+    "group": "BILLING",
+    "scenario": "Monthly invoice delivered after subscription state event",
+    "expected": "Grant only via authoritative invoice rules and dedupe.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-04",
+    "group": "BILLING",
+    "scenario": "Native Stripe retry already scheduled",
+    "expected": "Do not create a parallel charge retry.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-05",
+    "group": "BILLING",
+    "scenario": "Hard-decline payment needs new method",
+    "expected": "Guide to payment update; no unauthorized repeated charging.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-06",
+    "group": "BILLING",
+    "scenario": "Test webhook submitted to live endpoint",
+    "expected": "Mode mismatch rejected.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-07",
+    "group": "BILLING",
+    "scenario": "Private operations model cost incurred",
+    "expected": "Book platform cost center, not customer credit deduction.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "BILLING-08",
+    "group": "BILLING",
+    "scenario": "Ban user with active recurring subscription",
+    "expected": "Apply documented subscription/cancellation/refund policy, not a guessed financial change.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-01",
+    "group": "SUPPORT",
+    "scenario": "Internal note entered while public reply tab absent",
+    "expected": "No customer send; internal visibility enforced server-side.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-02",
+    "group": "SUPPORT",
+    "scenario": "Inbound email has forged sender with security-change request",
+    "expected": "Do not change identity/security without independent proof.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-03",
+    "group": "SUPPORT",
+    "scenario": "Provider accepts reply then delivery bounces",
+    "expected": "Show accepted then bounced; do not claim received.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-04",
+    "group": "SUPPORT",
+    "scenario": "Customer replies to waiting_customer",
+    "expected": "Resume correct state and SLA according to policy.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-05",
+    "group": "SUPPORT",
+    "scenario": "Waiting_engineering ticket",
+    "expected": "Clock does not pause unless explicit approved policy says so.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-06",
+    "group": "SUPPORT",
+    "scenario": "AI drafts refund-complete message before provider confirmation",
+    "expected": "Prevent false completed claim.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-07",
+    "group": "SUPPORT",
+    "scenario": "Multiple tickets link same incident",
+    "expected": "One incident, separate customer scopes and individual reply review.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "SUPPORT-08",
+    "group": "SUPPORT",
+    "scenario": "Closed ticket gets related later reply",
+    "expected": "Documented reopen/linked-follow-up behavior with history preserved.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-01",
+    "group": "MONITOR",
+    "scenario": "Initial scan finds old failures",
+    "expected": "Silent baseline, except current critical integrity/security cases.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-02",
+    "group": "MONITOR",
+    "scenario": "Ten symptoms from same provider outage",
+    "expected": "Group one incident and bound alert repeats.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-03",
+    "group": "MONITOR",
+    "scenario": "Founder acknowledges but issue persists",
+    "expected": "Stop reminders as policy permits; do not mark resolved.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-04",
+    "group": "MONITOR",
+    "scenario": "Quiet hours and noncritical growth signal",
+    "expected": "Queue digest; do not interrupt unnecessarily.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-05",
+    "group": "MONITOR",
+    "scenario": "Control worker and primary notification service fail",
+    "expected": "Independent heartbeat alert path still operates.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-06",
+    "group": "MONITOR",
+    "scenario": "Daily schedule crosses DST",
+    "expected": "One intended occurrence with correct local-time behavior.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-07",
+    "group": "MONITOR",
+    "scenario": "Customer preferences changed",
+    "expected": "Never redirect founder-only report to customer recipients.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "MONITOR-08",
+    "group": "MONITOR",
+    "scenario": "Model budget exhausted",
+    "expected": "Metrics and deterministic monitors continue; explain AI unavailability.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-01",
+    "group": "GROWTH",
+    "scenario": "Small sample appears to show large conversion uplift",
+    "expected": "Return insufficient evidence, counts and uncertainty.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-02",
+    "group": "GROWTH",
+    "scenario": "Randomization sample-ratio mismatch",
+    "expected": "Invalidate/hold experiment conclusion.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-03",
+    "group": "GROWTH",
+    "scenario": "Feature adoption correlates with retention",
+    "expected": "Label correlation; no causal claim.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-04",
+    "group": "GROWTH",
+    "scenario": "Observed recovered payment linked to two decisions",
+    "expected": "One outcome attribution; no double income credit.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-05",
+    "group": "GROWTH",
+    "scenario": "Contribution estimate lacks hosting/support cost",
+    "expected": "Mark partial cost coverage and unallocated overhead.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-06",
+    "group": "GROWTH",
+    "scenario": "Price experiment targets existing customer terms",
+    "expected": "Require explicit commercial policy and grandfathering review.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-07",
+    "group": "GROWTH",
+    "scenario": "Opportunity proposes cheaper model",
+    "expected": "Require quality/privacy/latency evaluation before route change.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "GROWTH-08",
+    "group": "GROWTH",
+    "scenario": "Negative or inconclusive experiment",
+    "expected": "Retain in outcome ledger; no selective success reporting.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-01",
+    "group": "RESILIENCE",
+    "scenario": "Customer deployment fails while control project healthy",
+    "expected": "Control displays timestamped safe projections and incident state.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-02",
+    "group": "RESILIENCE",
+    "scenario": "Database restore contains old approval",
+    "expected": "Expired/consumed approval cannot execute again.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-03",
+    "group": "RESILIENCE",
+    "scenario": "Restored queue contains financial request already sent",
+    "expected": "Reconcile provider state before any retry.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-04",
+    "group": "RESILIENCE",
+    "scenario": "Source query exceeds time/row budget",
+    "expected": "Cancel safely and offer bounded report job.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-05",
+    "group": "RESILIENCE",
+    "scenario": "Normal user probes founder table through Data API",
+    "expected": "No grant/access even if table exists.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-06",
+    "group": "RESILIENCE",
+    "scenario": "Audit exporter credential compromised",
+    "expected": "Separate authority prevents arbitrary financial/customer writes.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-07",
+    "group": "RESILIENCE",
+    "scenario": "User deletion involves retained financial rows",
+    "expected": "Pseudonymize/detach according to policy; preserve allowed accounting integrity.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  },
+  {
+    "id": "RESILIENCE-08",
+    "group": "RESILIENCE",
+    "scenario": "Rollback control deployment",
+    "expected": "Preserve audit/settlement and additive schema; no destructive history rollback.",
+    "required": true,
+    "status": "not_run_design_case",
+    "environment": "synthetic_or_disposable_unless_explicit_live_qualification",
+    "evidence_required": [
+      "exact_sha",
+      "test_identifier",
+      "observed_outcome",
+      "artifact_or_log_digest"
+    ],
+    "release_gate": "Mandatory category invariants may not be hidden by an overall average."
+  }
+]

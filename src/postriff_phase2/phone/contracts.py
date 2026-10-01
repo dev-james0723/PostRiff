@@ -9,6 +9,10 @@ from postriff_alpha.domain import AlphaError
 STATES = ('requested', 'dialing', 'ringing', 'answered', 'live', 'ending', 'completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'ambiguous', 'cancelled')
 TERMINAL = frozenset(('completed', 'busy', 'declined', 'no_answer', 'voicemail', 'failed', 'cancelled'))
 CALL_EVENTS = frozenset(('publish.failed', 'publish.uncertain', 'campaign.approval_required', 'campaign.blocked', 'channel.reconnect_required'))
+# Founder Admin (CONTRACTS §5). Never part of a customer event allowlist: planner.eligibility accepts these only through the
+# founder scope that runtime.principal_phone attaches for the ops workspace, with a reason key 'founder:<purpose>:<id>'.
+FOUNDER_CALL_EVENTS = frozenset(('founder.incident', 'founder.briefing'))
+FOUNDER_REASON_PREFIX = 'founder:'
 FLAGS = ('RAFII_PHONE_ENABLED', 'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_INBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED')
 DEFAULTS = {'enabled': False, 'proactiveCalls': False, 'scheduledCalls': False, 'quietStart': 1320, 'quietEnd': 480,
             'timeZone': 'UTC', 'maxCallsPerDay': 2, 'maxMilliCreditsPerCall': 0, 'eventAllowlist': [], 'customRules': [],
@@ -56,6 +60,19 @@ def phone_number(value):
     if not isinstance(value, str) or not re.fullmatch(r'\+[1-9][0-9]{7,14}', value):
         raise AlphaError('Enter a phone number with its country code, such as +14155550123.', 400, code='phone_invalid')
     return value
+
+
+def call_duration_limit(payload, maximum, *, kind='explicit', inbound=False):
+    if not isinstance(payload, dict):
+        raise AlphaError('Send valid call request options.', 400)
+    if 'callDurationLimitSeconds' not in payload:
+        return maximum
+    if kind != 'explicit' or inbound:
+        raise AlphaError('A per-call duration limit is available for explicit outbound calls only.', 400, code='phone_duration_scope')
+    seconds = payload['callDurationLimitSeconds']
+    if type(seconds) is not int or not 60 <= seconds <= maximum:
+        raise AlphaError(f'Choose a call duration between 60 and {maximum} seconds.', 400, code='phone_duration_limit')
+    return seconds
 
 
 def preferences(patch, current=None):

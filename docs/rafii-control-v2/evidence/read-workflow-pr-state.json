@@ -1,0 +1,53 @@
+{
+  "baseRefName": "consumer-saas",
+  "headRefName": "feat/rafii-founder-control-v2",
+  "headRefOid": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "isDraft": true,
+  "number": 83,
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-30T00:14:39Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/36649170993/job/109679056244",
+      "name": "local-foundation",
+      "startedAt": "2026-09-30T00:12:29Z",
+      "status": "COMPLETED",
+      "workflowName": "Rafii Control foundation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-30T00:30:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/36649171014/job/109679251150",
+      "name": "local-gates",
+      "startedAt": "2026-09-30T00:13:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Rafii local release gates"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "Vercel",
+      "startedAt": "2026-09-30T00:13:25Z",
+      "state": "SUCCESS",
+      "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/EScN3vkrx3LenT1DDr8CtSm8szE8"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-30T00:13:26Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://vercel.com/github",
+      "name": "Vercel Preview Comments",
+      "startedAt": "2026-09-30T00:13:26Z",
+      "status": "COMPLETED",
+      "workflowName": ""
+    }
+  ],
+  "title": "Add Rafii Control v2 founder boundary and read-only foundations",
+  "url": "https://github.com/dev-james0723/PostRiff/pull/83",
+  "execution": "remote PR metadata inspection; local continuation source not pushed",
+  "localImplementationCommit": "f48a1be242b36dc04664dbb91ba5257a21de5dcd",
+  "checksScope": "foundation remote head only",
+  "push": "held under no-deploy instruction; deployment suppression unverified"
+}

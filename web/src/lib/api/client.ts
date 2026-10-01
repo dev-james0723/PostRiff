@@ -453,7 +453,7 @@ export function createApi(getToken: TokenSource) {
     phoneVerify: (w: string, number: string) => send<{ sent: boolean }>('POST', `${ws(w)}/phone/verification`, { number }),
     phoneConfirm: (w: string, code: string) => send<{ verified: boolean }>('POST', `${ws(w)}/phone/verification/confirm`, { code }),
     phoneDelete: (w: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/number`),
-    phoneCall: (w: string, body: { idempotencyKey: string; conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean }) => send<PhoneCall>('POST', `${ws(w)}/phone/calls`, body),
+    phoneCall: (w: string, body: { idempotencyKey: string; conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean; callDurationLimitSeconds?: number }) => send<PhoneCall>('POST', `${ws(w)}/phone/calls`, body),
     phoneEnd: (w: string, id: string) => send<{ ended: boolean; state?: string }>('POST', `${ws(w)}/phone/calls/${encodeURIComponent(id)}/end`),
     phoneSchedule: (w: string, schedule: { weekdays: string[]; localTime: string; timeZone: string }) => send<{ id: string }>('POST', `${ws(w)}/phone/schedules`, { schedule }),
     phoneDeleteSchedule: (w: string, id: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/schedules/${encodeURIComponent(id)}`),

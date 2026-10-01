@@ -101,6 +101,7 @@ export class WebRtcLiveTransport implements LiveTransport {
     document.body.appendChild(audio);
     this.audio = audio;
     pc.addEventListener('track', (event) => {
+      if (this.closed) return;
       const stream = event.streams[0];
       audio.srcObject = stream;
       try {
@@ -120,6 +121,7 @@ export class WebRtcLiveTransport implements LiveTransport {
     const channel = pc.createDataChannel('oai-events');
     this.channel = channel;
     channel.addEventListener('message', (message) => {
+      if (this.closed) return;
       try {
         const event = JSON.parse(String(message.data)) as LiveEvent;
         if (event && typeof event.type === 'string') this.events.emit(event);
@@ -128,9 +130,17 @@ export class WebRtcLiveTransport implements LiveTransport {
       }
     });
     channel.addEventListener('open', () => {
+      if (this.closed) return;
       for (const item of this.queue.splice(0)) channel.send(item);
     });
+    channel.addEventListener('close', () => {
+      if (!this.closed) this.states.emit('closed');
+    });
+    channel.addEventListener('error', () => {
+      if (!this.closed) this.states.emit('failed');
+    });
     pc.addEventListener('connectionstatechange', () => {
+      if (this.closed) return;
       const state = pc.connectionState;
       if (state === 'connected') this.states.emit('connected');
       else if (state === 'disconnected') this.states.emit('disconnected');
@@ -153,6 +163,7 @@ export class WebRtcLiveTransport implements LiveTransport {
   }
 
   send(event: Record<string, unknown>) {
+    if (this.closed) return;
     const raw = JSON.stringify(event);
     if (this.channel?.readyState === 'open') this.channel.send(raw);
     else this.queue.push(raw);
@@ -183,7 +194,9 @@ export class WebRtcLiveTransport implements LiveTransport {
   }
 
   close() {
+    if (this.closed) return;
     this.closed = true;
+    this.queue = [];
     try {
       this.channel?.close();
     } catch {
@@ -253,6 +266,7 @@ export class FakeLiveTransport implements LiveTransport {
   async connect(offer: (sdp: string) => Promise<string>) {
     this.states.emit('connecting');
     await offer('v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=rafii-fake-live\r\nt=0 0\r\n');
+    if (this.closed) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
     this.install();
     this.states.emit('connected');
     setTimeout(() => this.emit({ type: 'session.started', session: { id: 'live_fake', expires_at: Math.floor(Date.now() / 1000) + 1800 } }), 20);

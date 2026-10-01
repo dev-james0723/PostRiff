@@ -1,0 +1,51 @@
+[
+  {
+    "name": "frontend-contracts",
+    "command": [
+      "npm",
+      "--prefix",
+      "control-web",
+      "test"
+    ],
+    "exitCode": 0,
+    "log": "docs/rafii-control-v2/evidence/raw/read-workflow/frontend-contracts.log",
+    "sha256": "af91797d8cb92fbf32181b77b01b1f89ecbb7827acd10fad7245bfe89f734d7b"
+  },
+  {
+    "name": "frontend-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "control-web",
+      "run",
+      "lint"
+    ],
+    "exitCode": 0,
+    "log": "docs/rafii-control-v2/evidence/raw/read-workflow/frontend-lint.log",
+    "sha256": "cf009b3157568363d3d1b6e3378e8c7067e5a322e84978a4d5e8ce15976eedb5"
+  },
+  {
+    "name": "frontend-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "control-web",
+      "run",
+      "build"
+    ],
+    "exitCode": 0,
+    "log": "docs/rafii-control-v2/evidence/raw/read-workflow/frontend-build.log",
+    "sha256": "cc9eef6b072a834d301bbb09ce3a7b24602da846a3cd8acbe06974ea1da26db1"
+  },
+  {
+    "name": "postgres-browser",
+    "command": [
+      "/Users/ouxianxing/.codex/worktrees/rafii-founder-control-v2/James-Au-Studio/.control-venv/bin/python",
+      "scripts/rafii_control_pg.py",
+      "--browser"
+    ],
+    "exitCode": 0,
+    "log": "docs/rafii-control-v2/evidence/raw/read-workflow/postgres-browser.log",
+    "sha256": "a2f26fb206f48710d5b38810226d045b5ff78956266703f19f06e1382fa5a6c5"
+  }
+]

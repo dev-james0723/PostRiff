@@ -156,7 +156,7 @@ def center(cur, user_id, workspace_id=None, limit=50, before=None, unread_only=F
     cur.execute(sql, params)
     items = []
     for r in cur.fetchall():
-        spec = catalog.EVENTS.get(r[3], {})
+        spec = catalog.EVENTS.get(r[3]) or catalog.EXTENSION_EVENTS.get(r[3], {})
         items.append({"id": r[0], "status": r[1], "createdAt": float(r[2]), "type": r[3], "category": r[4], "severity": r[5], "entity": {"type": r[6], "id": r[7]},
                       "payload": r[8] or {}, "workspaceId": r[9], "readAt": float(r[10]) if r[10] else None, "actedAt": float(r[11]) if r[11] else None,
                       "actionable": spec.get("severity") in ("action", "critical", "warning", "security")})

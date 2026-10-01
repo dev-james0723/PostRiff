@@ -4,10 +4,12 @@ import hashlib
 import hmac
 import io
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 import unittest
 from datetime import datetime
+from contextlib import contextmanager
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from postriff_alpha.domain import AlphaError
@@ -16,6 +18,8 @@ from postriff_phase2.phone import contracts, planner, rules
 from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
 from postriff_phase2.phone.providers.twilio import TwilioProvider
 from postriff_phase2.phone.session import FAREWELL
+from postriff_phase2.phone.service import PhoneService
+from postriff_phase2.permissions import Membership
 
 
 class PhonePolicyTest(unittest.TestCase):
@@ -83,6 +87,102 @@ class PhonePolicyTest(unittest.TestCase):
             self.assertTrue(FAREWELL.fullmatch(text))
         for text in ('write a goodbye post','do not hang up','explain how to hang up'):
             self.assertFalse(FAREWELL.fullmatch(text))
+
+
+class CallDurationLimitTest(unittest.TestCase):
+    def test_omitted_limit_preserves_the_product_maximum_for_every_call_kind(self):
+        for kind, inbound in [('explicit', False), ('scheduled', False), ('proactive', False), ('explicit', True)]:
+            with self.subTest(kind=kind, inbound=inbound):
+                self.assertEqual(contracts.call_duration_limit({}, 3600, kind=kind, inbound=inbound), 3600)
+
+    def test_supplied_limit_accepts_exact_integer_boundaries(self):
+        for maximum, value in [(3600, 60), (3600, 61), (3600, 3600), (120, 120)]:
+            with self.subTest(maximum=maximum, value=value):
+                self.assertEqual(contracts.call_duration_limit({'callDurationLimitSeconds': value}, maximum), value)
+
+    def test_supplied_limit_rejects_wrong_types_and_values_outside_the_server_cap(self):
+        for value in [True, False, None, '60', 60.0, [], {}, -1, 0, 59, 3601]:
+            with self.subTest(value=value):
+                with self.assertRaises(AlphaError) as raised:
+                    contracts.call_duration_limit({'callDurationLimitSeconds': value}, 3600)
+                self.assertEqual(raised.exception.status, 400)
+        with self.assertRaises(AlphaError) as raised:
+            contracts.call_duration_limit({'callDurationLimitSeconds': 121}, 120)
+        self.assertEqual(raised.exception.status, 400)
+
+    def test_supplied_limit_is_only_available_to_explicit_outbound_calls(self):
+        for kind, inbound in [('scheduled', False), ('proactive', False), ('explicit', True)]:
+            with self.subTest(kind=kind, inbound=inbound):
+                with self.assertRaises(AlphaError) as raised:
+                    contracts.call_duration_limit({'callDurationLimitSeconds': 60}, 3600, kind=kind, inbound=inbound)
+                self.assertEqual(raised.exception.status, 400)
+
+
+class PhoneRequestDurationRetryTest(unittest.TestCase):
+    def setUp(self):
+        self.cursor = Mock()
+        self.cursor.fetchone.return_value = ('existing-call', 'workspace')
+        self.member = Membership('owner')
+
+        @contextmanager
+        def transaction(token, workspace):
+            self.assertEqual((token, workspace), ('session', 'workspace'))
+            yield self.cursor, object(), 'principal'
+
+        hosted = SimpleNamespace(clock=lambda: 1000, oauth=SimpleNamespace(vault=object()),
+                                 repository=SimpleNamespace(transaction=transaction),
+                                 ideas=SimpleNamespace(_member=lambda row: self.member))
+        runtime = SimpleNamespace(cfg=SimpleNamespace(route=Mock(return_value=SimpleNamespace(available=True))))
+        self.provider = FakeTelephonyProvider()
+        self.phone = PhoneService(hosted, {'RAFII_PHONE_ENABLED': '1'}, provider=self.provider, runtime=runtime)
+        self.call = {'id': 'existing-call', 'conversation_id': 'conversation', 'state': 'ambiguous',
+                     'kind': 'explicit', 'provider': 'fake', 'direction': 'outbound', 'requested_at': 1000,
+                     'duration_seconds': None, 'failure_class': None, 'max_seconds': 60}
+
+    def test_omitted_or_identical_limit_returns_the_original_call_without_dispatch(self):
+        for cap in (60, 3600):
+            self.call['max_seconds'] = cap
+            for extra in ({}, {'callDurationLimitSeconds': cap}):
+                with self.subTest(cap=cap, extra=extra), \
+                        patch('postriff_phase2.phone.service.store.call', return_value=self.call) as stored, \
+                        patch('postriff_phase2.phone.delivery.deliver') as deliver:
+                    result = self.phone.request('workspace', 'session', {'idempotencyKey': 'same-request', **extra})
+                    self.assertEqual((result['id'], result['maxSeconds'], result['state']), ('existing-call', cap, 'ambiguous'))
+                    stored.assert_called_once_with(self.cursor, 'existing-call')
+                    deliver.assert_not_called()
+                    self.assertEqual(self.call['max_seconds'], cap)
+        self.assertEqual(self.provider.create_count, 0)
+
+    def test_a_changed_supplied_limit_conflicts_without_mutating_or_redialing(self):
+        for old_cap, requested in [(3600, 60), (60, 120)]:
+            self.call['max_seconds'] = old_cap
+            with self.subTest(old_cap=old_cap, requested=requested), \
+                    patch('postriff_phase2.phone.service.store.call', return_value=self.call), \
+                    patch('postriff_phase2.phone.delivery.deliver') as deliver:
+                with self.assertRaises(AlphaError) as raised:
+                    self.phone.request('workspace', 'session', {'idempotencyKey': 'same-request', 'callDurationLimitSeconds': requested})
+                self.assertEqual(raised.exception.status, 409)
+                self.assertEqual(self.call['max_seconds'], old_cap)
+                deliver.assert_not_called()
+        self.assertEqual(self.provider.create_count, 0)
+
+    def test_cross_workspace_denial_precedes_duration_conflict_and_call_lookup(self):
+        self.cursor.fetchone.return_value = ('existing-call', 'other-workspace')
+        with patch('postriff_phase2.phone.service.store.call') as stored, \
+                patch('postriff_phase2.phone.delivery.deliver') as deliver, self.assertRaises(AlphaError) as raised:
+            self.phone.request('workspace', 'session', {'idempotencyKey': 'same-request', 'callDurationLimitSeconds': 120})
+        self.assertEqual(raised.exception.status, 404)
+        stored.assert_not_called()
+        deliver.assert_not_called()
+
+    def test_existing_key_does_not_bypass_edit_permission(self):
+        self.member = Membership('viewer')
+        with patch('postriff_phase2.phone.service.store.call') as stored, \
+                patch('postriff_phase2.phone.delivery.deliver') as deliver, self.assertRaises(AlphaError) as raised:
+            self.phone.request('workspace', 'session', {'idempotencyKey': 'same-request', 'callDurationLimitSeconds': 60})
+        self.assertEqual(raised.exception.status, 403)
+        stored.assert_not_called()
+        deliver.assert_not_called()
 
 
 class CustomCallRuleTest(unittest.TestCase):
@@ -204,6 +304,17 @@ class PhoneTransportTest(unittest.TestCase):
             self.assertEqual(p.create_outbound_call(number='+14155550111',call_id='one',max_seconds=600).state,'ambiguous')
             p.reconcile(number='+14155550111',call_id='one',call_ref=None,requested_at=0)
             self.assertEqual(calls,['POST','GET'])
+
+    def test_twilio_preserves_a_shorter_per_call_limit_in_its_only_create_request(self):
+        requests = []
+        def transport(method, url, fields=None):
+            requests.append((method, fields))
+            return 201, {'sid': 'CA' + 'c' * 32, 'status': 'queued'}
+        receipt = self.twilio(transport).create_outbound_call(number='+14155550111', call_id='short-call', max_seconds=60)
+        self.assertEqual(receipt.state, 'ringing')
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0][0], 'POST')
+        self.assertIn(('TimeLimit', '60'), requests[0][1])
 
     def test_twilio_rejection_has_safe_reason_and_no_payload(self):
         for status, code, reason in [(401,20003,'provider_auth'), (400,21219,'provider_trial_recipient'),

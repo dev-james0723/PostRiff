@@ -62,9 +62,25 @@ MAX_ATTEMPTS = {"email": 6, "push": 5, "in_app": 1, "phone": 1, "sms": 3}
 PUBLISH_STATE_EVENTS = {"verified": "publish.verified", "failed": "publish.failed", "uncertain": "publish.uncertain", "scheduled": "publish.scheduled"}
 
 
+# Events an embedded service registers at runtime (Founder mode: rafii_control.founder_incidents). They live beside EVENTS,
+# never inside it: the locked notification-planning policy (skills/rafii-registry.json) hashes EVENTS, so the shipped
+# customer catalogue stays byte-stable, and public() never lists these events on the customer settings page.
+EXTENSION_EVENTS = {}
+
+
+def register_extension_events(events):
+    """Idempotent: a name already defined in EVENTS or EXTENSION_EVENTS keeps its first definition."""
+    for name, item in events.items():
+        if name in EVENTS or name in EXTENSION_EVENTS:
+            continue
+        if item.get("audience") not in AUDIENCES:
+            raise ValueError(f"unknown audience for notification event {name!r}")
+        EXTENSION_EVENTS[name] = {**item, "sms": item.get("sms", "off")}
+
+
 def spec(event_type):
     try:
-        return EVENTS[event_type]
+        return EVENTS[event_type] if event_type in EVENTS else EXTENSION_EVENTS[event_type]
     except KeyError as error:
         raise ValueError(f"unknown notification event {event_type!r}") from error
 

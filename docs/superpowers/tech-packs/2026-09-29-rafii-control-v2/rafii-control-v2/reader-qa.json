@@ -1,0 +1,10 @@
+{
+  "scope": "Generated HTML documentation reader only; not Rafii application QA.",
+  "status": "visual_preview_not_verified",
+  "details": "The installed Playwright bundled browser was absent. An available system Chromium launched, but navigation to the local file was blocked by administrator policy. No bypass was attempted. HTML parsing, anchor resolution and absence of external scripts were checked separately.",
+  "structural_checks": {
+    "broken_internal_anchors": 0,
+    "external_scripts": 0,
+    "table_count": 28
+  }
+}

@@ -147,6 +147,40 @@ class DurablePipeline(unittest.TestCase):
             'coverage_epoch':'epoch-v1','completeness':'complete_within_scope',
             'coverage_interval':{'start':cls.observations[0]['event_at'][:13]+':00:00Z','end':cls.cutoff},'markers':[]})
 
+    @classmethod
+    def _completed_hour(cls, value):
+        return contracts.instant(value).replace(minute=0, second=0, microsecond=0)
+
+    @classmethod
+    def _anchor_event_window(cls, cur, scope, sources, cutoff):
+        """Keep copied fixture events in the database's latest completed hour.
+
+        The durable pipeline intentionally selects the latest completed hour.  These
+        tests can run across an hour boundary after ``setUpClass`` seeds the fixture;
+        move only provider event times to the new equivalent hour.  ``available_at``
+        remains the database-stamped knowledge time and is never rewritten.
+        """
+        seed_end = contracts.instant(cls.cutoff)
+        target_end = cls._completed_hour(cutoff)
+        delta = target_end - seed_end
+        if not delta:
+            return
+        seconds = delta.total_seconds()
+        ids = [source['observation_id'] for source in sources]
+        for source in sources:
+            if source.get('event_at') is not None:
+                source['event_at'] = contracts.iso(contracts.instant(source['event_at']) + delta)
+        cur.execute("""UPDATE public.pr_trend_observations
+                      SET event_at=event_at + (%s * interval '1 second')
+                      WHERE scope_key=%s AND observation_id=ANY(%s::uuid[])""",
+                    (seconds, scope, ids))
+
+    def test_event_window_anchor_handles_hour_rollover(self):
+        seed = contracts.instant(self.cutoff)
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(minutes=59))), seed)
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(hours=1, minutes=1))),
+                         seed + timedelta(hours=1))
+
     def test_a_atomic_ingest_to_receipt_projection_retry_and_future_cutoff(self):
         with self.store.transaction() as cur:
             claim=self.outbox.claim('pipeline-test','offline-test',lease_seconds=300,cursor=cur)
@@ -243,6 +277,7 @@ class DurablePipeline(unittest.TestCase):
                 source['deletion_key']=source['observation_id']
                 sources.append(source);live.put_observation(source,cursor=cur)
             cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+            self._anchor_event_window(cur, scope, sources, cutoff)
             event=TrendOutbox(live).enqueue(scope,'bounded-default','trend.ingested',{
                 **self.event['payload'],'decision_cutoff':cutoff,'observation_ids':[o['observation_id'] for o in sources]},cursor=cur)
         pipeline=TrendPipeline(live);outbox=TrendOutbox(live)
@@ -314,6 +349,7 @@ class DurablePipeline(unittest.TestCase):
             with live.transaction() as cur:
                 for source in sources:live.put_observation(source,cursor=cur)
                 cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+                self._anchor_event_window(cur, scope, sources, cutoff)
                 event=outbox.enqueue(scope,key,'trend.ingested',{**self.event['payload'],'provider_id':provider,
                     'observation_ids':[o['observation_id'] for o in sources],'decision_cutoff':cutoff},cursor=cur)
             claim=outbox.claim('pipeline-test','evidence-worker',lease_seconds=300)
@@ -492,6 +528,7 @@ class DurablePipeline(unittest.TestCase):
             burst=[source(n) for n in range(700)]
             for o in burst:live.put_observation(o,cursor=cur)
             cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+            self._anchor_event_window(cur, scope, burst, cutoff)
             event=outbox.enqueue(scope,'root-700','trend.ingested',{**self.event['payload'],'decision_cutoff':cutoff,
                 'observation_ids':[o['observation_id'] for o in burst]},cursor=cur)
         pipeline=TrendPipeline(live,max_observations=700,max_episodes=1)

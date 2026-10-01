@@ -163,6 +163,7 @@ class PhoneService:
             inbound.require_available(self)
             if kind != 'explicit' or dispatch:
                 raise AlphaError('Invalid inbound admission.', 403)
+        duration_limit = contracts.call_duration_limit(payload, self.config.cap_seconds, kind=kind, inbound=bool(_inbound))
         key = payload.get('idempotencyKey')
         if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9:_-]{8,100}', key):
             raise AlphaError('Send a unique call request key.', 400)
@@ -179,7 +180,10 @@ class PhoneService:
             if prior:
                 if prior[1] != workspace_id:
                     raise AlphaError('Call unavailable.', 404)
-                return store.public_call(store.call(cur, prior[0]))
+                original = store.call(cur, prior[0])
+                if 'callDurationLimitSeconds' in payload and duration_limit != original['max_seconds']:
+                    raise AlphaError('This request key belongs to a different call duration. Check the original call before requesting another.', 409, code='phone_duration_conflict')
+                return store.public_call(original)
             identity, prefs = store.number(cur, principal), store.prefs(cur, principal, workspace_id)
             custom_ref = rules.reason_ref(reason_key) if kind == 'proactive' else None
             if custom_ref:
@@ -223,7 +227,7 @@ class PhoneService:
             live_authority, tel_authority = billing.authorities(self, cur, workspace_id, principal, row[0],
                 maximum=payload.get('maxMilliCredits') if kind == 'explicit' else prefs['maxMilliCreditsPerCall'],
                 use_available=kind == 'explicit' and payload.get('useAvailableCredits') is True,
-                conversation_id=conversation_id, number_hash=identity['hash'], kind=kind, reason=reason, costs=(estimate_live, estimate_tel))
+                conversation_id=conversation_id, number_hash=identity['hash'], kind=kind, reason=reason, costs=(estimate_live, estimate_tel), cap_seconds=duration_limit)
             call_id = str(uuid.uuid4())
             agent_style = style.load(cur, principal)
             locale, voice = live.locale_and_voice({}, agent_style)
@@ -237,14 +241,14 @@ class PhoneService:
                         (conversation_id, workspace_id, principal, route.model, hashlib.sha256(call_id.encode()).hexdigest(), hashlib.sha256(b'phone-v1').hexdigest(), 'voice:phone:' + call_id, json.dumps(artifact)))
             run_id = cur.fetchone()[0]
             live_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_live, 'phone-live:' + call_id, charge_batch=False,
-                         provider='openai', model=route.model, run_id=run_id, credit_authority=live_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds, 'phoneCallId':call_id})
+                         provider='openai', model=route.model, run_id=run_id, credit_authority=live_authority, meta={'via': 'rafii_phone', 'capSeconds': duration_limit, 'phoneCallId':call_id})
             tel_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_tel, 'phone-tel:' + call_id, charge_batch=False,
-                         provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds, 'phoneCallId':call_id})
+                         provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': duration_limit, 'phoneCallId':call_id})
             artifact['voice']['reservationId'] = live_res['reservationId']
             cur.execute('UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id=%s', (json.dumps(artifact), run_id))
             cur.execute('INSERT INTO public.pr_phone_calls(id,user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,max_seconds,'
                         'live_reservation_id,telephony_reservation_id,reserved_usd_micro,requested_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,\'requested\',%s,%s,%s,%s,%s,%s,to_timestamp(%s))',
-                        (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], self.config.cap_seconds,
+                        (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], duration_limit,
                          live_res['reservationId'], tel_res['reservationId'], estimate, now))
             cur.execute('UPDATE public.pr_phone_calls SET funded_seconds=60 WHERE id=%s', (call_id,))
             if _inbound:

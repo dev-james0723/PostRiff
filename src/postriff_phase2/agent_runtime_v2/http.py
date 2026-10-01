@@ -74,7 +74,7 @@ def handle(app, environ, start_response, service, token, method, parts):
         from .live import VoiceSessions
         voice = VoiceSessions(runtime, transport=runtime.live_transport)
         if len(rest) == 1:
-            return app._json(start_response, 201, voice.start(workspace_id, token, app._body(environ)))
+            return app._json(start_response, 201, voice.start(workspace_id, token, app._body(environ), request_id=environ.get('postriff.request_id')))
         if len(rest) == 3 and rest[2] == "transcript":
             return app._json(start_response, 200, voice.transcript(workspace_id, token, rest[1], app._body(environ)))
         if len(rest) == 3 and rest[2] == "end":

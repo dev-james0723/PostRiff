@@ -19,6 +19,7 @@ server's own clock. `store: false`: no recording is kept by the provider for Raf
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import time
@@ -37,6 +38,27 @@ MAX_SDP_BYTES = 64_000
 MAX_TRANSCRIPT_TURNS = 400
 MAX_ACTIVE_SESSIONS = 2
 MAX_HISTORY_CHARS = 12_000
+LOG = logging.getLogger("rafii.voice")
+PROVIDER_ERROR_CODES = frozenset(("invalid_api_key", "authentication_error", "permission_denied", "insufficient_quota",
+                                "credit_balance_exhausted", "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                                "organization_usage_limit_exceeded", "rate_limit_exceeded", "slow_down", "server_is_overloaded",
+                                "model_not_found", "invalid_request_error", "server_error",
+                                "context_length_exceeded", "session_expired", "missing_required_parameter", "invalid_value",
+                                "invalid_argument", "unknown_parameter", "unsupported_value", "content_filter",
+                                "too_many_concurrent_sessions", "too_many_concurrent_live_sessions",
+                                "concurrent_session_limit_exceeded", "live_session_concurrency_limit"))
+PROVIDER_ERROR_PARAMS = frozenset(("model", "session", "session.model", "instructions", "session.instructions", "input", "session.input",
+                                 "delegation", "session.delegation", "store", "session.store", "audio.output.voice", "session.audio.output.voice",
+                                 "client", "session.client", "client.data_channel", "session.client.data_channel",
+                                 "client.data_channel.allowed_client_events", "session.client.data_channel.allowed_client_events",
+                                 "client.data_channel.allowed_server_events", "session.client.data_channel.allowed_server_events",
+                                 "transport", "transport.type", "transport.sdp"))
+START_FAILURE_CODES = frozenset(("live_auth", "live_forbidden", "live_busy", "live_quota", "live_rejected", "live_unreadable", "live_unreachable", "live_error"))
+ACCOUNT_LIMIT_CODES = frozenset(("insufficient_quota", "credit_balance_exhausted", "organization_spend_limit_exceeded",
+                                 "project_spend_limit_exceeded", "organization_usage_limit_exceeded"))
+TRANSIENT_LIMIT_CODES = frozenset(("rate_limit_exceeded", "slow_down", "too_many_concurrent_sessions",
+                                   "too_many_concurrent_live_sessions", "concurrent_session_limit_exceeded",
+                                   "live_session_concurrency_limit"))
 VOICES = ("marin", "cedar", "sage", "verse", "coral", "alloy")
 ALLOWED_CLIENT_EVENTS = ["session.commentary.append", "session.thinking.append", "session.instructions.append", "session.input_audio.mute",
                          "session.input_audio.unmute", "session.close"]
@@ -130,6 +152,27 @@ def speakable_result(result):
     return contracts.speakable(agent.get("speakableSummary") or body.get("text") or "I couldn’t confirm that change. Please check Rafii.", 1200)
 
 
+def creation_diagnostic(body=None, *, status=None, provider_request_id=None) -> dict:
+    """Only enumerated provider metadata; never its message, payload, SDP, history or headers."""
+    details = {"phase": "live_create"}
+    if type(status) is int and 100 <= status <= 599:
+        details["upstreamStatus"] = status
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict):
+        for field, allowed in (("code", PROVIDER_ERROR_CODES), ("type", PROVIDER_ERROR_CODES), ("param", PROVIDER_ERROR_PARAMS)):
+            value = error.get(field)
+            if value is not None:
+                details["error" + field.capitalize()] = value if isinstance(value, str) and value in allowed else "other"
+    if isinstance(provider_request_id, str) and re.fullmatch(r"req_[0-9a-f]{32}", provider_request_id):
+        details["providerRequestId"] = provider_request_id
+    return details
+
+
+def _known_admission_refusal(status) -> bool:
+    # A refused admission costs zero. Success with an invalid answer, 5xx and unknown transport outcomes may have billed.
+    return type(status) is int and 400 <= status <= 499
+
+
 def live_transport(method, url, headers=None, body=None, timeout=20):
     """Server-to-OpenAI JSON call for Live session creation (the key stays on the server)."""
     import ssl
@@ -138,17 +181,25 @@ def live_transport(method, url, headers=None, body=None, timeout=20):
     if url != LIVE_ENDPOINT:
         raise AlphaError("That Live endpoint is not allowed.", 503)
     request = Request(url, data=json.dumps(body).encode(), headers={"Accept": "application/json", "Content-Type": "application/json", **(headers or {})}, method=method)
+    provider_request_id = None
     try:
         with build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(request, timeout=timeout) as response:
             raw, status = response.read(200_000), response.status
+            provider_request_id = response.headers.get("x-request-id")
     except HTTPError as error:
-        raw, status = error.read(20_000), error.code
+        try:
+            raw, status = error.read(20_000), error.code
+            provider_request_id = error.headers.get("x-request-id") if error.headers else None
+        finally:
+            error.close()
     except (URLError, TimeoutError, OSError) as error:
         raise AlphaError("The voice service didn't answer. Voice Mode didn't start; you can keep typing.", 503, code="live_unreachable") from error
     try:
-        return {"status": status, "body": json.loads(raw) if raw else {}}
+        return {"status": status, "body": json.loads(raw) if raw else {}, "providerRequestId": provider_request_id}
     except ValueError as error:
-        raise AlphaError("The voice service returned an unreadable answer. Voice Mode didn't start.", 502, code="live_unreadable") from error
+        failure = AlphaError("The voice service returned an unreadable answer. Voice Mode didn't start.", 502, code="live_unreadable")
+        failure.live_diagnostic = creation_diagnostic(status=status, provider_request_id=provider_request_id)
+        raise failure from error
 
 
 class VoiceSessions:
@@ -159,7 +210,7 @@ class VoiceSessions:
         self.transport = transport or live_transport
 
     # --- start ---------------------------------------------------------------------------------------------------------
-    def start(self, workspace_id, token, payload) -> dict:
+    def start(self, workspace_id, token, payload, *, request_id=None) -> dict:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured voice request.", 400)
         sdp = payload.get("sdp")
@@ -208,27 +259,66 @@ class VoiceSessions:
             artifact = self._artifact(cur, workspace_id, voice_session_id)
             artifact["voice"]["reservationId"] = reservation["reservationId"]
             self._save(cur, workspace_id, voice_session_id, artifact)
-        session = session_config(route.model, locale, voice, style, history, browser=True)
+        try:
+            session = session_config(route.model, locale, voice, style, history, browser=True)
+        except Exception as error:  # noqa: BLE001 — reservation already committed
+            self._start_failed(workspace_id, token, voice_session_id, reservation, "live_error", {"phase": "live_config"}, request_id)
+            raise AlphaError("The voice service didn't start a session. You can keep typing.", 502, code="live_error") from error
         try:
             response = self.transport("POST", LIVE_ENDPOINT, headers={"Authorization": f"Bearer {self.cfg.credential('openai')}"}, body={"session": session, "transport": {"type": "webrtc", "sdp": sdp}})
         except AlphaError as error:
-            self._close(workspace_id, token, voice_session_id, reservation, state="failed", reason=error.code or "live_error", seconds=None)
+            raw_details = getattr(error, "live_diagnostic", None)
+            raw_details = raw_details if isinstance(raw_details, dict) else {}
+            details = creation_diagnostic(status=raw_details.get("upstreamStatus"), provider_request_id=raw_details.get("providerRequestId"))
+            reason = error.code if error.code in START_FAILURE_CODES else "live_error"
+            self._start_failed(workspace_id, token, voice_session_id, reservation, reason, details, request_id)
             raise
-        status, body = response.get("status"), response.get("body") or {}
-        answer = ((body.get("transport") or {}).get("sdp")) if isinstance(body, dict) else None
-        live_id = ((body.get("session") or {}).get("id")) if isinstance(body, dict) else None
-        if status != 201 or not isinstance(answer, str) or not isinstance(live_id, str):
-            code = {401: "live_auth", 403: "live_forbidden", 429: "live_busy"}.get(status, "live_rejected")
-            self._close(workspace_id, token, voice_session_id, reservation, state="failed", reason=code, seconds=0 if status and status < 500 else None)
-            raise AlphaError("The voice service didn't start a session" + (" (it is busy; try again in a moment)" if status == 429 else "") + ". You can keep typing.", 502, code=code)
-        with repo.transaction(token, workspace_id) as (cur, _row, _principal):
-            artifact = self._artifact(cur, workspace_id, voice_session_id)
-            artifact["voice"].update({"state": "live", "liveSessionId": live_id, "reservationId": reservation["reservationId"], "connectedAt": self._now()})
-            self._save(cur, workspace_id, voice_session_id, artifact)
-            ideas._insert_event(cur, workspace_id, voice_session_id, safe_event("run.started", agent="voice", model=route.model, modality="voice", locale=locale))
+        except Exception as error:  # noqa: BLE001 — a failed transport must not leave its reserved session running
+            self._start_failed(workspace_id, token, voice_session_id, reservation, "live_error", creation_diagnostic(), request_id)
+            raise AlphaError("The voice service didn't start a session. You can keep typing.", 502, code="live_error") from error
+        response = response if isinstance(response, dict) else {}
+        status, body = response.get("status"), response.get("body")
+        status = status if type(status) is int else None
+        details = creation_diagnostic(body, status=status, provider_request_id=response.get("providerRequestId"))
+        body = body if isinstance(body, dict) else {}
+        transport, provider_session = body.get("transport"), body.get("session")
+        answer = transport.get("sdp") if isinstance(transport, dict) else None
+        live_id = provider_session.get("id") if isinstance(provider_session, dict) else None
+        if type(status) is not int or status != 201 or not isinstance(answer, str) or not answer.strip() or not isinstance(live_id, str) or not live_id.strip():
+            code = {401: "live_auth", 403: "live_forbidden"}.get(status, "live_rejected")
+            if status == 429 and details.get("errorCode") in ACCOUNT_LIMIT_CODES:
+                code = "live_quota"
+            elif status == 429 and details.get("errorCode") in TRANSIENT_LIMIT_CODES:
+                code = "live_busy"
+            self._start_failed(workspace_id, token, voice_session_id, reservation, code, details, request_id)
+            message = {
+                "live_quota": "Voice Mode couldn't start because the provider account has exhausted credits or a usage limit. Ask a workspace owner to check API billing and limits.",
+                "live_busy": "The voice service is temporarily busy. Try again later; you can keep typing.",
+            }.get(code, "The voice service didn't start a session. You can keep typing.")
+            raise AlphaError(message, 502, code=code)
+        try:
+            with repo.transaction(token, workspace_id) as (cur, _row, _principal):
+                artifact = self._artifact(cur, workspace_id, voice_session_id)
+                artifact["voice"].update({"state": "live", "liveSessionId": live_id, "reservationId": reservation["reservationId"], "connectedAt": self._now()})
+                self._save(cur, workspace_id, voice_session_id, artifact)
+                ideas._insert_event(cur, workspace_id, voice_session_id, safe_event("run.started", agent="voice", model=route.model, modality="voice", locale=locale))
+        except Exception as error:  # noqa: BLE001 — provider admission may already have billed
+            self._start_failed(workspace_id, token, voice_session_id, reservation, "live_error", {**details, "phase": "live_persist"}, request_id)
+            raise AlphaError("The voice service didn't start a session. You can keep typing.", 502, code="live_error") from error
         # `locale` and `voice` are what this call actually uses (the request's, else the person's style); the voice session adopts them.
         return {"voiceSessionId": voice_session_id, "liveSessionId": live_id, "conversationId": conversation_id, "sdp": answer, "dataChannel": DATA_CHANNEL,
                 "model": route.model, "locale": locale, "voice": voice, "openingGreeting": opening_greeting, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
+
+    def _start_failed(self, workspace_id, token, voice_session_id, reservation, reason, diagnostic, request_id):
+        details = {**diagnostic, "reason": reason}
+        if isinstance(request_id, str) and re.fullmatch(r"[0-9a-f]{32}", request_id):
+            details["requestId"] = request_id
+        LOG.warning("rafii.voice.start.failed %s", json.dumps(details, sort_keys=True))
+        try:
+            self._close(workspace_id, token, voice_session_id, reservation, state="failed", reason=reason,
+                        seconds=0 if _known_admission_refusal(details.get("upstreamStatus")) else None, failure_diagnostic=details)
+        except Exception:  # noqa: BLE001 — one best-effort cleanup, retain the original safe start error
+            LOG.warning("rafii.voice.start.cleanup.failed %s", json.dumps({**details, "phase": "live_cleanup"}, sort_keys=True))
 
     def _reap(self, cur, workspace_id, principal):
         """A tab closed mid-call (or a sign-out, which can't end it without a session) never ends its session. Any member's
@@ -308,7 +398,7 @@ class VoiceSessions:
             reservation = artifact["voice"].get("reservationId")
         return self._close(workspace_id, token, voice_session_id, {"reservationId": reservation} if reservation else None, state="ended", reason=reason, seconds=seconds)
 
-    def _close(self, workspace_id, token, voice_session_id, reservation, *, state, reason, seconds):
+    def _close(self, workspace_id, token, voice_session_id, reservation, *, state, reason, seconds, failure_diagnostic=None):
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             artifact = self._artifact(cur, workspace_id, voice_session_id)
             voice = artifact["voice"]
@@ -328,6 +418,8 @@ class VoiceSessions:
                 self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
             voice.update({"state": state, "endedAt": self._now(), "reason": reason, "usageSeconds": billed, "costUsdMicro": cost,
                           "clientReportedSeconds": seconds, "billingBasis": ("server clock" if state == "ended" else "Live refused the session") if cost is not None else "unknown until reconciled"})
+            if failure_diagnostic is not None:
+                voice["failureDiagnostic"] = failure_diagnostic
             self._save(cur, workspace_id, voice_session_id, artifact, status="completed" if state == "ended" else "failed")
             kind = "run.completed" if state == "ended" else "run.failed"
             self.service.ideas._insert_event(cur, workspace_id, voice_session_id, safe_event(kind, **({"usage": {"provenance": "voice", "seconds": billed}} if kind == "run.completed" else {"message": f"Voice session ended: {reason}."})))

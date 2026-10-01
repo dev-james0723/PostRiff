@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "captureId": "5b3b476a-0a8c-4d3b-ab6b-6df29d0791ce",
+  "repository": "dev-james0723/PostRiff",
+  "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+  "requestId": "7d66dcad-14ad-4658-9ce0-046e5d04525f",
+  "requestedAt": "2026-09-30T13:47:16Z",
+  "observedAt": "2026-09-30T13:47:40Z",
+  "resourceUrl": "https://api.github.com/repos/dev-james0723/PostRiff/actions/runs?head_sha=be140fdbaad9e13093b3d42215b66ed0a2347a69&event=pull_request&per_page=100&page=1",
+  "providerBodyDigest": "ab45d0bb4f4b12083ea1a0c91d889b6e467c9a948707d1837ff51aa98894cb5a",
+  "workflowRuns": [
+    {
+      "id": 36649170993,
+      "name": "Rafii Control foundation",
+      "head_sha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 3,
+      "run_attempt": 1,
+      "updated_at": "2026-09-30T00:14:40Z",
+      "workflow_id": 370650254
+    },
+    {
+      "id": 36649171014,
+      "name": "Rafii local release gates",
+      "head_sha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 206,
+      "run_attempt": 1,
+      "updated_at": "2026-09-30T00:30:28Z",
+      "workflow_id": 365845611
+    }
+  ],
+  "coverage": {
+    "complete": true,
+    "returnedRuns": 2,
+    "totalRuns": 2,
+    "scope": "pull_request_workflow_runs_first_page"
+  },
+  "provenance": "provider_observed_test",
+  "requiredManifest": {
+    "version": 1,
+    "repository": "dev-james0723/PostRiff",
+    "sha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+    "required": [
+      "Rafii Control foundation",
+      "Rafii local release gates"
+    ],
+    "workflowIds": {
+      "Rafii Control foundation": 370650254,
+      "Rafii local release gates": 365845611
+    }
+  },
+  "adapterVersion": "github-workflow/1"
+}

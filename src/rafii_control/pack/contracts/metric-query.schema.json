@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:metric-query",
+  "title": "metric-query",
+  "type": "object",
+  "properties": {
+    "metricIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "paid_workspaces",
+          "mrr",
+          "delinquent_mrr",
+          "mrr_new",
+          "mrr_expansion",
+          "mrr_contraction",
+          "mrr_churn",
+          "collections",
+          "refunds",
+          "dispute_net",
+          "net_collections",
+          "recovery_rate",
+          "nrr",
+          "grr",
+          "logo_churn",
+          "contribution",
+          "cost_coverage",
+          "active_users",
+          "active_workspaces",
+          "activation_rate",
+          "time_to_value",
+          "retention_d7",
+          "retention_d28",
+          "feature_adoption",
+          "task_success",
+          "publish_verified",
+          "useful_outcomes",
+          "automation_success",
+          "ai_actual_cost",
+          "ai_failed_cost",
+          "cost_per_useful",
+          "ai_quality",
+          "ai_latency",
+          "task_latency",
+          "credit_grants",
+          "credit_consumption",
+          "credit_available",
+          "credit_held",
+          "credit_debt",
+          "api_errors",
+          "api_latency",
+          "queue_age",
+          "slo_burn",
+          "affected_workspaces",
+          "source_lag",
+          "open_tickets",
+          "first_response",
+          "resolution_time",
+          "csat",
+          "repeat_tickets",
+          "required_checks",
+          "check_failures",
+          "flake_rate",
+          "security_open",
+          "gsc_clicks",
+          "gsc_ctr",
+          "attribution_coverage",
+          "source_paid_conversion",
+          "cac",
+          "decision_recovered_cash",
+          "experiment_effect",
+          "time_back",
+          "mrr_reactivation"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true
+    },
+    "interval": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timeZone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "timeZone"
+      ],
+      "additionalProperties": false
+    },
+    "groupBy": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "age_band",
+          "baseline_version",
+          "category",
+          "cohort",
+          "cost_center",
+          "country",
+          "currency",
+          "device",
+          "experiment",
+          "failure_class",
+          "feature",
+          "grant_source",
+          "incident",
+          "job_type",
+          "locale",
+          "model",
+          "page",
+          "payment_type",
+          "plan",
+          "platform",
+          "playbook",
+          "priority",
+          "provider",
+          "query",
+          "reason",
+          "release",
+          "repository",
+          "route",
+          "rubric_version",
+          "scanner",
+          "service",
+          "severity",
+          "source",
+          "state",
+          "status",
+          "stream",
+          "suite",
+          "task_type",
+          "test_id",
+          "variant",
+          "window",
+          "workflow_type"
+        ]
+      },
+      "uniqueItems": true,
+      "maxItems": 3
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "age_band",
+              "baseline_version",
+              "category",
+              "cohort",
+              "cost_center",
+              "country",
+              "currency",
+              "device",
+              "experiment",
+              "failure_class",
+              "feature",
+              "grant_source",
+              "incident",
+              "job_type",
+              "locale",
+              "model",
+              "page",
+              "payment_type",
+              "plan",
+              "platform",
+              "playbook",
+              "priority",
+              "provider",
+              "query",
+              "reason",
+              "release",
+              "repository",
+              "route",
+              "rubric_version",
+              "scanner",
+              "service",
+              "severity",
+              "source",
+              "state",
+              "status",
+              "stream",
+              "suite",
+              "task_type",
+              "test_id",
+              "variant",
+              "window",
+              "workflow_type"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "eq",
+              "in"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "dimension",
+          "operator",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10
+    },
+    "comparison": {
+      "type": "string",
+      "enum": [
+        "none",
+        "previous_equal_elapsed",
+        "previous_complete",
+        "cohort_age_aligned"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    }
+  },
+  "required": [
+    "metricIds",
+    "interval",
+    "groupBy",
+    "filters",
+    "comparison",
+    "limit"
+  ],
+  "additionalProperties": false,
+  "description": "Structural validation only. Server must additionally check interval ordering/length, IANA timezone, per-metric dimensions, currency/grain compatibility, permissions and query budget."
+}

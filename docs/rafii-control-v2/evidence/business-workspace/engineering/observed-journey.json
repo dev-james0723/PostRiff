@@ -1,0 +1,254 @@
+{
+  "execution": "Actual captured public GitHub metadata admitted only into disposable LOCAL PG; synthetic identity",
+  "query": {
+    "comparison": "none",
+    "filters": [],
+    "groupBy": [
+      "suite",
+      "failure_class"
+    ],
+    "interval": {
+      "end": "2026-10-01T00:00:00Z",
+      "start": "2026-09-02T00:00:00Z",
+      "timeZone": "UTC"
+    },
+    "limit": 100,
+    "metricIds": [
+      "check_failures"
+    ]
+  },
+  "result": {
+    "requestId": "b17ce961-08af-482b-b09a-b20fec12ae2f",
+    "queryReceiptId": "9bce5ab7-3c3c-4286-96ab-a32faaa7d4b2",
+    "asOf": "2026-09-30T20:23:54.178150+00:00",
+    "dataState": "measured",
+    "rows": [
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "engineering_job",
+        "value": 0,
+        "sampleCount": 1,
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "Rafii Control foundation",
+          "failure_class": "check"
+        },
+        "sourceWatermark": "2026-09-30T20:20:10.372066+00:00",
+        "sourceReceiptIds": [
+          "10429a5e-653e-4f1f-9ffc-04a7fd00c0b5"
+        ],
+        "fixture": false,
+        "reason": "success",
+        "outcome": "success",
+        "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69"
+      },
+      {
+        "metricId": "check_failures",
+        "definitionVersion": 1,
+        "unit": "count",
+        "grain": "engineering_job",
+        "value": 0,
+        "sampleCount": 1,
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "Rafii local release gates",
+          "failure_class": "check"
+        },
+        "sourceWatermark": "2026-09-30T20:20:10.372066+00:00",
+        "sourceReceiptIds": [
+          "10429a5e-653e-4f1f-9ffc-04a7fd00c0b5"
+        ],
+        "fixture": false,
+        "reason": "success",
+        "outcome": "success",
+        "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69"
+      }
+    ],
+    "executionState": "admitted_operational",
+    "normalizedQuery": {
+      "comparison": "none",
+      "filters": [],
+      "groupBy": [
+        "suite",
+        "failure_class"
+      ],
+      "interval": {
+        "end": "2026-10-01T00:00:00Z",
+        "start": "2026-09-02T00:00:00Z",
+        "timeZone": "UTC"
+      },
+      "limit": 100,
+      "metricIds": [
+        "check_failures"
+      ]
+    },
+    "coverage": {
+      "complete": true,
+      "scope": "exact_sha_required_workflow_manifest",
+      "required": 2,
+      "observed": 2,
+      "returnedRows": 2,
+      "populationTotal": null,
+      "provenance": "admitted_operational",
+      "qualification": "required_checks_succeeded",
+      "releaseAccepted": false
+    },
+    "sourceVersions": {
+      "ageSeconds": 223,
+      "adapter": "github-workflow/1",
+      "manifestVersion": 1,
+      "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+      "snapshotId": "10429a5e-653e-4f1f-9ffc-04a7fd00c0b5",
+      "sourceRequestId": "83bcd6f5-dedc-48b9-b4ae-1eac8931fc32",
+      "resourceUrl": "https://api.github.com/repos/dev-james0723/PostRiff/actions/runs?head_sha=be140fdbaad9e13093b3d42215b66ed0a2347a69&event=pull_request&per_page=100&page=1",
+      "providerBodyDigest": "ab45d0bb4f4b12083ea1a0c91d889b6e467c9a948707d1837ff51aa98894cb5a",
+      "observedAt": "2026-09-30T20:20:10.372066+00:00",
+      "requiredManifest": {
+        "sha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+        "version": 1,
+        "required": [
+          "Rafii Control foundation",
+          "Rafii local release gates"
+        ],
+        "repository": "dev-james0723/PostRiff",
+        "workflowIds": {
+          "Rafii Control foundation": 370650254,
+          "Rafii local release gates": 365845611
+        }
+      }
+    },
+    "warnings": [
+      "Versioned business policy and source qualification are required. Missing data is not zero."
+    ]
+  },
+  "run": {
+    "mode": "deterministic_read_only",
+    "task": null,
+    "facts": [],
+    "runId": "c9bbfc15-9909-4621-b7f1-525ddf9f56fc",
+    "state": "completed",
+    "tools": [
+      {
+        "name": "founder.metrics.query",
+        "audit": "metrics.query",
+        "voice": true,
+        "effect": "READ",
+        "approval": false,
+        "idempotent": true,
+        "permission": "metrics.query"
+      },
+      {
+        "name": "founder.customers.metadata",
+        "audit": "customers.read",
+        "voice": true,
+        "effect": "READ",
+        "approval": false,
+        "idempotent": true,
+        "permission": "customers.read"
+      },
+      {
+        "name": "founder.workspaces.metadata",
+        "audit": "workspaces.read",
+        "voice": true,
+        "effect": "READ",
+        "approval": false,
+        "idempotent": true,
+        "permission": "workspaces.read"
+      },
+      {
+        "name": "founder.engineering.evidence",
+        "audit": "engineering.read",
+        "voice": true,
+        "effect": "READ",
+        "approval": false,
+        "idempotent": true,
+        "permission": "engineering.read"
+      },
+      {
+        "name": "founder.recommendation.prepare",
+        "audit": null,
+        "voice": true,
+        "effect": "CREATE_DRAFT",
+        "approval": true,
+        "idempotent": true,
+        "permission": "copilot.use"
+      }
+    ],
+    "usage": {
+      "costState": "not_applicable",
+      "providerCalls": 0
+    },
+    "blocks": [],
+    "errors": [],
+    "routes": [],
+    "traceId": "trace_69d40676fca6fd9e2409ce203c75c325",
+    "version": 1,
+    "modality": "text",
+    "warnings": [
+      {
+        "code": "MODEL_DISABLED",
+        "message": "Model generation and scheduled investigations are disabled pending explicit budget and access approval."
+      }
+    ],
+    "citations": [],
+    "namespace": "founder",
+    "answerText": "Read-only query evidence. Rafii Control foundation: 0 failures, measured, outcome success. Rafii local release gates: 0 failures, measured, outcome success. Quality states describe the receipt snapshot. Stale, partial and unavailable rows cannot support a current operational conclusion. No action was performed.",
+    "composedBy": "grounded",
+    "references": [],
+    "evidenceRows": [
+      {
+        "unit": "count",
+        "grain": "engineering_job",
+        "value": 0,
+        "reason": "success",
+        "fixture": false,
+        "outcome": "success",
+        "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "Rafii Control foundation",
+          "failure_class": "check"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-30T20:20:10.372066+00:00",
+        "sourceReceiptIds": [
+          "10429a5e-653e-4f1f-9ffc-04a7fd00c0b5"
+        ],
+        "definitionVersion": 1
+      },
+      {
+        "unit": "count",
+        "grain": "engineering_job",
+        "value": 0,
+        "reason": "success",
+        "fixture": false,
+        "outcome": "success",
+        "exactSha": "be140fdbaad9e13093b3d42215b66ed0a2347a69",
+        "metricId": "check_failures",
+        "dataState": "measured",
+        "dimensions": {
+          "suite": "Rafii local release gates",
+          "failure_class": "check"
+        },
+        "sampleCount": 1,
+        "sourceWatermark": "2026-09-30T20:20:10.372066+00:00",
+        "sourceReceiptIds": [
+          "10429a5e-653e-4f1f-9ffc-04a7fd00c0b5"
+        ],
+        "definitionVersion": 1
+      }
+    ],
+    "toolActivity": [],
+    "changedEntities": [],
+    "generatedAssets": [],
+    "queryReceiptIds": [
+      "9bce5ab7-3c3c-4286-96ab-a32faaa7d4b2"
+    ],
+    "recommendations": [],
+    "pendingApprovals": [],
+    "speakableSummary": "Read-only evidence; review quality states before conclusions."
+  }
+}
