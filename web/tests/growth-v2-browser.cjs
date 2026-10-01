@@ -159,21 +159,24 @@ async function firstWeekJourney(browser, viewport, draft, language) {
   // 4. Plan without a connected account, commit, write the rest yourself, hand off.
   await page.getByRole('button', { name: 'Plan my week' }).click();
   await page.getByRole('button', { name: /Commit these \d posts/ }).click();
+  // Wait for the committed week before counting the posts to write (counting at once raced the commit and saw none).
+  await page.getByText('Change the committed posts').waitFor();
   const writes = page.getByRole('textbox', { name: 'Write it yourself' });
-  const count = await writes.count();
-  for (let i = 0; i < count; i += 1) {
-    await page.getByRole('textbox', { name: 'Write it yourself' }).first().fill(language === 'zh-Hant' ? `第${i + 2}篇：一個練習技巧。` : `Post ${i + 2}: one practice skill.`);
+  for (let left = await writes.count(), i = 0; left > 0; i += 1) {
+    await writes.first().fill(language === 'zh-Hant' ? `第${i + 2}篇：一個練習技巧。` : `Post ${i + 2}: one practice skill.`);
     await page.getByRole('button', { name: 'Save this post' }).first().click();
-    await page.waitForTimeout(300);
+    await until(async () => (await writes.count()) < left, 'the written post is saved as a draft');
+    left = await writes.count();
   }
   await page.screenshot({ path: resolve(out, `${label.replace('/', '-')}-3-week.png`), fullPage: true });
   await axeCheck(page, `first week ${label}`);
   await noHorizontalScroll(page, `first week ${label}`);
+  // "I posted it" stays beside a recorded handoff (with Undo), so each post's own button is used once.
   const used = page.getByRole('button', { name: 'I posted it' });
   const handoffs = await used.count();
   for (let i = 0; i < handoffs; i += 1) {
-    await page.getByRole('button', { name: 'I posted it' }).first().click();
-    await page.waitForTimeout(300);
+    await used.nth(i).click();
+    await until(async () => (await page.getByText('You posted it yourself.').count()) > i, 'the handoff is recorded');
   }
   await page.getByText('Your first week is delivered').waitFor();
   const view = await page.evaluate(async () => {
@@ -282,19 +285,29 @@ async function until(check, message, timeout = 30000) {
  * how many presses it took. Fails when the target can't be reached by Tab at all.
  */
 async function tabTo(page, target, { back = 4, max = 30 } = {}) {
-  await target.waitFor({ state: 'visible' });
-  await target.scrollIntoViewIfNeeded();
-  const handle = await target.elementHandle();
-  const started = await page.evaluate(({ element, back }) => {
-    const focusable = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
-    const root = element.closest('[role=dialog]') || document;
-    const all = [...root.querySelectorAll(focusable)].filter((node) => node.tabIndex >= 0 && node.getClientRects().length > 0
-      && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'));
-    const index = all.indexOf(element);
-    if (index < 1) return index === 0 ? 'first' : null;
-    all[Math.max(0, index - back)].focus();
-    return 'ok';
-  }, { element: handle, back });
+  let started = null;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await target.waitFor({ state: 'visible' });
+      await target.scrollIntoViewIfNeeded();
+      const handle = await target.elementHandle();
+      started = await page.evaluate(({ element, back }) => {
+        const focusable = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
+        const root = element.closest('[role=dialog]') || document;
+        const all = [...root.querySelectorAll(focusable)].filter((node) => node.tabIndex >= 0 && node.getClientRects().length > 0
+          && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'));
+        const index = all.indexOf(element);
+        if (index < 1) return index === 0 ? 'first' : null;
+        all[Math.max(0, index - back)].focus();
+        return 'ok';
+      }, { element: handle, back });
+      break;
+    } catch (error) {
+      // A re-render between finding the control and focusing near it: find it again (twice at most).
+      if (attempt >= 2 || !/not attached|detached|Execution context was destroyed/i.test(String(error.message))) throw error;
+      await page.waitForTimeout(500);
+    }
+  }
   if (started === null) throw new Error('keyboard: the target is not in the Tab order');
   if (started === 'first') await page.keyboard.press('Shift+Tab');
   for (let presses = 0; presses <= max; presses += 1) {
@@ -316,7 +329,8 @@ async function tabForward(page, target, max = 12) {
 /** A fresh synthetic principal and workspace for one journey run; zh-Hant runs save the language preference first. */
 async function setup(browser, viewport, language) {
   const principal = randomUUID();
-  const ctx = await context(browser, viewport, principal, { quiet: true, timezoneId: ZONE[viewport.name], locale: language === 'zh-Hant' ? 'zh-HK' : 'en-US' });
+  // Every browser is en-US: a zh-Hant run reads Traditional Chinese only because the person's saved language says so.
+  const ctx = await context(browser, viewport, principal, { quiet: true, timezoneId: ZONE[viewport.name], locale: 'en-US' });
   ctx.setDefaultNavigationTimeout(180000);
   const api = apiFor(ctx, principal);
   const boot = await api.must('POST', '/api/auth/verify', { plan: 'studio' });
