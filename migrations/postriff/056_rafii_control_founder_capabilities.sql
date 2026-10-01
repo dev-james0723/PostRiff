@@ -12,4 +12,10 @@ alter table rafii_control.admin_audit_log drop constraint if exists admin_audit_
 alter table rafii_control.admin_audit_log add constraint admin_audit_log_action_check check(action in ('session.exchange','control.read','metrics.query','customers.read','workspaces.read','engineering.read','audit.read','copilot.use','workspaces.test.rename',
  'incidents.ack','followups.write','control.settings','founder.agent.turn','founder.call.request',
  'usage.reconcile','credits.adjust','accounts.block','refunds.prepare','founder.export','prohibited'));
+-- Every terminal denial is audited with its fixed error code. 051 enumerated ten codes, so founder denials such as
+-- POLICY_DISABLED (ops workspace or delivery not configured) or WORKSPACE_ACCESS_REQUIRED failed their audit insert and
+-- were only logged, as were the contact path's lowercase blocker codes (proactive_off, live_delivery_disabled). The column
+-- keeps its content-free guarantee as a bounded identifier-shaped code, never free text.
+alter table rafii_control.admin_audit_log drop constraint if exists admin_audit_log_error_code_check;
+alter table rafii_control.admin_audit_log add constraint admin_audit_log_error_code_check check(error_code ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$');
 commit;

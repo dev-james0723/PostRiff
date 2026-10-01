@@ -36,9 +36,9 @@ create or replace view rafii_control.business_usage_v2 with(security_barrier=tru
  case split_part(coalesce((select o.idempotency_key from public.pr_usage_ledger o
    where u.reservation_id is not null and o.workspace_id=u.workspace_id and (o.id=u.reservation_id or o.reservation_id=u.reservation_id)
      and split_part(o.idempotency_key,':',1) not in ('settle','reconcile','release') order by o.at,o.id limit 1), u.idempotency_key),':',1)
-  when 'run' then 'writer' when 'image' then 'image' when 'understanding' then 'understanding' when 'learning' then 'learning'
-  when 'voice' then 'voice' when 'reply' then 'reply' when 'notes' then 'notes'
-  when 'agent' then 'agent' when 'agent-follow-ups' then 'agent' when 'agent-resume' then 'agent'
+  when 'run' then 'writer' when 'image' then 'image' when 'agent-image' then 'image' when 'understanding' then 'understanding' when 'learning' then 'learning'
+  when 'voice' then 'voice' when 'reply' then 'reply' when 'notes' then 'notes' when 'media' then 'notes' when 'research' then 'research'
+  when 'agent' then 'agent' when 'agent-follow-ups' then 'agent' when 'agent-resume' then 'agent' when 'founder' then 'agent'
   when 'site-agent' then 'site_agent' when 'phone-live' then 'phone' when 'phone-tel' then 'phone' when 'radar' then 'radar'
   else 'other' end as feature,
  case when jsonb_typeof(u.meta->'credits'->'used')='number' then (u.meta->'credits'->>'used')::numeric::bigint else null end as "creditsUsedMilli",

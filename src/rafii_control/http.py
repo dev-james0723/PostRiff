@@ -54,9 +54,11 @@ class ControlApplication:
         for the founder agent and test-call routes; ``None`` (separate mount) makes those routes SOURCE_UNAVAILABLE.
         ``flags``: the RAFII_FOUNDER_* deployment flags handed to founder_contact (never any other variable)."""
         self.boundary, self.queries, self.runtime, self.flags = boundary, queries, runtime, dict(flags or {})
-        # Founder P1/P2 slices register their routes, metrics and cron stages at import (rafii_control.slices).
-        from . import slices
-        slices.load()
+        # Founder P1/P2 slices register their routes, metrics and cron stages at import (rafii_control.slices). A disabled
+        # Control (every consumer deployment where it is dark) answers 404 before any route, so it never loads them.
+        if getattr(getattr(boundary, 'config', None), 'enabled', False):
+            from . import slices
+            slices.load()
         self.workspace = WorkspaceService(queries.store) if queries and hasattr(queries,'store') else None
         self._founder_store = None
 
