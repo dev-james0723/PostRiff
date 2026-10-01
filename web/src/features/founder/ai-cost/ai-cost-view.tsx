@@ -42,7 +42,7 @@ export function AiCostView() {
 
   const byFeature = useMetric({ id: 'ai_cost_by_feature', period, groupBy: ['feature'] });
   const byModel = useMetric({ id: 'ai_cost_actual', period, groupBy: ['model'] });
-  const byRoute = useMetric({ id: 'ai_cost_actual', period, groupBy: ['route'] });
+  const byProvider = useMetric({ id: 'ai_cost_actual', period, groupBy: ['provider'] });
   const byPlan = useMetric({ id: 'ai_cost_actual', period, groupBy: ['plan'] });
   const coverage = useMetric({ id: 'ai_cost_actual', period: 'mtd' });
 
@@ -98,8 +98,8 @@ export function AiCostView() {
             {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'model')} unit={result.rows[0]?.unit ?? 'usd_micro'} currency={result.rows[0]?.currency} />}
           </MetricChartCard>
         </TabAnchor>
-        <MetricChartCard query={byRoute} id='ai_cost_actual' title='Cost by route' subtitle='Recorded cost per provider route' period={period} unavailableDescription='Route attribution needs the ledger attribution sidecar (PRD §8.2). Fallback and retry ratios follow with pr_ai_call_events.'>
-          {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'route')} unit={result.rows[0]?.unit ?? 'usd_micro'} currency={result.rows[0]?.currency} />}
+        <MetricChartCard query={byProvider} id='ai_cost_actual' title='Cost by provider' subtitle='Recorded cost per provider (primary and fallback routes arrive with per-call events)' period={period} unavailableDescription='Provider attribution comes from the usage ledger; no settled cost was measured in this period.'>
+          {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'provider')} unit={result.rows[0]?.unit ?? 'usd_micro'} currency={result.rows[0]?.currency} />}
         </MetricChartCard>
         <TabAnchor section='ai-cost' tab='by-plan' active={tab}>
         <MetricChartCard query={byPlan} id='ai_cost_actual' title='Cost by plan' subtitle='Recorded cost grouped by the paying plan' period={period} askPrompt='Which plans lose money on AI cost, and which customers drive it?'>

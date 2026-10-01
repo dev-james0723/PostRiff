@@ -31,7 +31,8 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 054–055 | `054_rafii_control_founder_views`, `055_rafii_control_founder_contact` | Founder Admin v2 P0 (`claude/founder-admin-v2`, PR #86) | Founder projections, follow-ups, snapshots; contact policy, briefings, incidents. |
 | 056 | `056_rafii_control_founder_capabilities` | Founder Admin v2 (PR #86) | Declares the P1/P2 founder capabilities; changes no operator. |
 | 057–062 | `057_founder_billing_events`, `058_founder_ai_usage`, `059_founder_product`, `060_founder_reliability`, `061_founder_notifications`, `062_founder_admin_actions` | Founder Admin v2 P1/P2 slices (`docs/design/founder-admin/CONTRACTS.md` §8) | Reserved 2026-10-01 after a scan of every ref and worktree (047, 048, 050 held by other owners; nothing at 056+). 061 may stay unused. |
-| 063 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 063–068 | `063_founder_revenue_views`, `064_founder_ai_views`, `065_founder_product_views`, `066_founder_ops_views`, `067_founder_comms_views`, `068_founder_actions_views` | Founder Admin v2 P1/P2 slices | The `rafii_control` half of each slice; 057–062 hold only public-schema instrumentation so it can ship before the Control schema. 067 may stay unused. |
+| 069 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

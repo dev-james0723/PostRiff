@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
 import { founderPanelStore } from '@/features/founder/agent/store';
 import type { FounderAskRequest } from '@/features/founder/sections';
@@ -11,6 +12,7 @@ import { FounderPanelAbove, FounderPanelDock, FounderPanelHotkeys, FounderPanelO
 import { DemoBanner } from '@/features/founder/shared/demo-banner';
 import { EvidenceDrawer } from '@/features/founder/shared/evidence-drawer';
 import { FounderCommandPalette } from './founder-command-palette';
+import { makeFounderQueryClient } from './founder-query-client';
 import { FounderHeader } from './founder-header';
 import { FounderSessionProvider } from './founder-session';
 import { FounderSidebar } from './founder-sidebar';
@@ -40,7 +42,9 @@ function FounderAskBridge() {
  * proves the cookie is still good.
  */
 export function FounderShell({ defaultOpen, children }: { defaultOpen: boolean; children: ReactNode }) {
+  const [queryClient] = useState(makeFounderQueryClient);
   return (
+    <QueryClientProvider client={queryClient}>
     <FounderSessionProvider>
       <FounderCommandPalette>
         <SidebarProvider defaultOpen={defaultOpen}>
@@ -67,5 +71,6 @@ export function FounderShell({ defaultOpen, children }: { defaultOpen: boolean; 
         </SidebarProvider>
       </FounderCommandPalette>
     </FounderSessionProvider>
+    </QueryClientProvider>
   );
 }

@@ -23,13 +23,14 @@ class DemoStore:
     """Transaction-shaped test double for only the isolated persistent JSONB boundary."""
     environment='local'
 
-    def __init__(self): self.rows={}; self.actions=[]; self.actor=None; self.writes=0
+    def __init__(self): self.rows={}; self.actions=[]; self.actor=None; self.writes=0; self.statements=[]
 
     @contextmanager
     def transaction(self, **kwargs): yield self
 
     def execute(self, statement, values=()):
         statement=str(statement)
+        self.statements.append(statement)
         if 'set_config' in statement:
             self.actor=values[0]
         elif statement.startswith('SELECT payload,replays'):
@@ -53,6 +54,24 @@ class DemoStore:
 class DemoDatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.data=sample_data()
+
+    def test_reads_take_no_row_lock_and_actions_do(self):
+        # A page fires several Demo reads at once; a FOR UPDATE on the one large Demo row queued them past the deadline.
+        store=DemoStore()
+        service=WorkspaceService(store)
+        principal=dict(operator=dict(user_id='fictional-founder-lock',capabilities=['control.read']))
+        service.demo(principal)
+        service.demo(principal)
+        reads=[statement for statement in store.statements if statement.startswith('SELECT payload')]
+        self.assertTrue(reads)
+        self.assertFalse(any('FOR UPDATE' in statement for statement in reads), reads)
+        store.statements.clear()
+        revision=service.demo(principal)['revision']
+        try:
+            service.demo(principal, dict(action='reset', targetId='all', value='', revision=revision, requestId=str(uuid.uuid4())))
+        except Exception:
+            pass
+        self.assertTrue(any(statement.startswith('SELECT payload') and 'FOR UPDATE' in statement for statement in store.statements), store.statements)
 
     def service(self):
         store=DemoStore()

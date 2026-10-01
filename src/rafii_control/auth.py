@@ -20,8 +20,9 @@ CAPABILITIES = frozenset({'control.read', 'metrics.query', 'customers.read', 'wo
                           # Founder Admin P1/P2 (CONTRACTS §8, migration 056). Every write among them needs a fresh second factor
                           # (step_up) and a preview → confirm pair with a content-free audit row; the agent never holds them.
                           'usage.reconcile', 'credits.adjust', 'accounts.block', 'refunds.prepare', 'founder.export'})
-# Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget of 120/min.
-BUDGETS = {'copilot.use': 5, 'metrics.query': 30, 'founder.agent.turn': 20, 'founder.call.request': 5, 'founder.action': 10, 'founder.voice': 5, 'founder.export': 10}
+# Per-minute request budgets by purpose. Purposes not listed share the dashboard read budget of 120/min. A domain page asks for
+# 8–15 receipted metrics at once, so metrics.query allows 240/min (4/s): enough to move between sections, still a hard ceiling.
+BUDGETS = {'copilot.use': 5, 'metrics.query': 240, 'founder.agent.turn': 20, 'founder.call.request': 5, 'founder.action': 10, 'founder.voice': 5, 'founder.export': 10}
 MOUNTS = ('separate', 'embedded')
 
 

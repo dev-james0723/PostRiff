@@ -565,6 +565,17 @@ def _money(row):
     return f"{row['value']:,}"
 
 
+# Why a tile has no number, in words (the receipt keeps the exact reason code).
+REASON_TEXT = {'not_instrumented': 'nothing recorded yet', 'definition_not_activated': 'definition not activated yet',
+               'source_not_configured': 'source not configured here', 'snapshot_history_not_collected': 'daily snapshots not collected yet',
+               'insufficient_history': 'not enough history yet', 'adapter_unavailable': 'adapter unavailable', 'demo_not_simulated': 'not simulated in Demo',
+               'no_rows': 'no rows in this period', 'side_unavailable': 'one side is not measured', 'source_stale': 'source is stale'}
+
+
+def _reason_text(reason):
+    return REASON_TEXT.get(reason) or (str(reason).replace('_', ' ') if reason else 'not measured')
+
+
 def _delta_text(tile):
     """The comparison clause of one brief sentence, in the tile's own unit (money as money, ratios as points)."""
     delta = tile.get('delta')
@@ -580,12 +591,12 @@ def _brief(tiles, attention, sources, mode, period):
     sentences = [('Demo dataset' if mode == 'demo' else 'Live') + f' overview for the last {PERIODS[period]} days; every number carries a receipt and a data state.']
     for tile in tiles:
         if tile['dataState'] in ('unavailable', 'suppressed'):
-            sentences.append(f"{tile['label']}: not yet collected ({tile.get('reason') or 'definition not activated'}).")
+            sentences.append(f"{tile['label']}: {_reason_text(tile.get('reason'))}.")
             continue
         value = f"{tile['value'] * 100:.1f}%" if tile['unit'] == 'ratio' else _money(dict(value=tile['value'], unit=tile['unit'], currency=tile['currency']))
         sentences.append(f"{tile['label']}: {value}{_delta_text(tile)}, {tile['dataState']}.")
     sentences.append('Nothing needs a decision right now.' if not attention else f"{len(attention)} item{'s' if len(attention) != 1 else ''} need attention: " + '; '.join(item['title'] for item in attention) + '.')
-    degraded = [row['sourceId'] for row in sources if row['state'] in ('stale', 'unavailable')]
+    degraded = [str(row['sourceId']).replace('_', ' ') for row in sources if row['state'] in ('stale', 'unavailable')]
     sentences.append('All probed sources are current.' if not degraded else 'Sources not current: ' + ', '.join(degraded) + '. Treat affected metrics as incomplete, not as zero.')
     return ' '.join(sentences)
 

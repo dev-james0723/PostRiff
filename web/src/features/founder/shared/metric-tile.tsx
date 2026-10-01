@@ -125,7 +125,7 @@ export function MetricTile({ id, label, value, unit, currency, delta, deltaPerio
           <span className='text-muted-foreground min-w-0 truncate text-xs font-medium' title={definition ?? undefined}>
             {label}
           </span>
-          {periodLabel && <span className='text-muted-foreground/80 truncate text-[11px]'>{periodLabel}</span>}
+          {periodLabel && <span className='text-muted-foreground truncate text-[11px]'>{periodLabel}</span>}
         </span>
         <CoverageDot dataState={dataState} coverage={coverage} className='-mt-0.5 -mr-1' />
       </div>

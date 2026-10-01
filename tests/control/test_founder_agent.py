@@ -552,5 +552,33 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(self.db.runs[out["runId"]]["artifact"]["trace"]["fallback"], "guardrail_input")
 
 
+class FounderPanelContextTests(unittest.TestCase):
+    """The panel's real turn body (web/src/lib/founder/page-context.ts): presentational keys, nulls, singular entity types."""
+
+    def test_the_panels_context_shape_is_accepted_and_normalised(self):
+        from rafii_control.founder_agent import founder_context, validate_turn
+        context = {"route": "/founder/customers", "section": "customers", "mode": "demo", "environment": "local",
+                   "selectedEntity": {"type": "customer", "id": "customer-3"}, "chart": {"chartId": "paid_customers", "viewVersion": 1},
+                   "period": None, "filters": {"plan": "Studio", "page": 2, "risk": True, "views": ["a", "b"]}, "incidentId": None,
+                   "uiCapabilities": ["navigate", "open_evidence"]}
+        out = founder_context(context)
+        self.assertEqual(out["selectedEntity"], {"collection": "customers", "id": "customer-3"})
+        self.assertEqual(out["chart"]["queryReceiptId"], None)
+        self.assertEqual(out["filters"], {"plan": "Studio", "page": "2", "risk": "true", "views": "a,b"})
+        self.assertNotIn("period", out)
+        self.assertNotIn("mode", out)
+        turn = validate_turn({"message": "hi", "mode": "demo", "idempotencyKey": "k-panel-1", "conversationId": None, "modality": "text",
+                              "pageContext": context, "timeZone": "America/Indiana/Indianapolis"})
+        self.assertEqual(turn["pageContext"]["section"], "customers")
+
+    def test_an_attention_item_carries_no_entity_and_bad_values_are_still_refused(self):
+        from rafii_control.founder_agent import founder_context
+        self.assertNotIn("selectedEntity", founder_context({"section": "overview", "selectedEntity": {"type": "attention", "id": "payment_failures_7d"}}))
+        for bad in ({"mode": "live-ish"}, {"environment": "prod"}, {"uiCapabilities": ["shell"]}, {"selectedEntity": {"type": "customer", "id": "x; drop"}},
+                    {"filters": {"plan": {"nested": 1}}}, {"chart": {"chartId": "c", "viewVersion": "1"}}, {"unknown": 1}):
+            with self.subTest(bad=bad), self.assertRaises(ControlError):
+                founder_context(bad)
+
 if __name__ == "__main__":
     unittest.main()
+

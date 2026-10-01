@@ -127,10 +127,25 @@ def get_policy(fstore, principal, *, now, flags=None):
 
 
 def put_policy(fstore, principal, body, *, now):
-    """PUT /contact-policy (capability control.settings + step_up): validate, bump the revision, return the saved policy."""
+    """PUT /contact-policy (capability control.settings + step_up): validate, bump the revision, return the saved policy.
+    The page sends back the policy it read: `revision` is the compare-and-set token (409 STALE_PREVIEW when another tab
+    saved first) and the read-only `updatedAt` is ignored; every other key must be a policy field."""
     operator = principal['operator']['user_id']
-    policy = validate_policy(body, fstore.policy(operator), operator)
-    return {'policy': public_policy(fstore.save_policy(operator, policy, now))}
+    if not isinstance(body, dict):
+        raise ControlError('VALIDATION_FAILED', 400)
+    body = dict(body)
+    expected = body.pop('revision', None)
+    body.pop('updatedAt', None)
+    if expected is not None and (type(expected) is not int or expected < 0):
+        raise ControlError('VALIDATION_FAILED', 400)
+    current = fstore.policy(operator)
+    if expected is not None and expected != int((current or {}).get('revision', 0) or 0):
+        raise ControlError('STALE_PREVIEW', 409)
+    policy = validate_policy(body, current, operator)
+    saved = fstore.save_policy(operator, policy, now, expected_revision=expected) if expected is not None else fstore.save_policy(operator, policy, now)
+    if saved is None:
+        raise ControlError('STALE_PREVIEW', 409)
+    return {'policy': public_policy(saved)}
 
 
 # --- deterministic planning -----------------------------------------------------------------------------------------------
@@ -414,7 +429,9 @@ class ContactSQL:
             row = con.execute(_POLICY_SELECT + ' WHERE operator_id=%s AND environment=%s', (operator_id, self.environment)).fetchone()
         return _policy_row(row) if row else None
 
-    def save_policy(self, operator_id, policy, now):
+    def save_policy(self, operator_id, policy, now, expected_revision=None):
+        """Upsert the policy; with `expected_revision` the update only applies to that revision (None when it moved)."""
+        guard = '' if expected_revision is None else ' WHERE founder_contact_policy.revision=%s'
         with self.store.transaction() as con:
             row = con.execute(
                 'INSERT INTO rafii_control.founder_contact_policy(operator_id,environment,revision,live_delivery_enabled,channels,destination_ref,'
@@ -423,13 +440,13 @@ class ContactSQL:
                 'ON CONFLICT(operator_id,environment) DO UPDATE SET revision=founder_contact_policy.revision+1,live_delivery_enabled=excluded.live_delivery_enabled,'
                 'channels=excluded.channels,destination_ref=excluded.destination_ref,quiet_start=excluded.quiet_start,quiet_end=excluded.quiet_end,'
                 'time_zone=excluded.time_zone,daily_cap=excluded.daily_cap,concurrent_cap=excluded.concurrent_cap,event_allowlist=excluded.event_allowlist,'
-                'budget_usd_micro_daily=excluded.budget_usd_micro_daily,updated_at=excluded.updated_at '
+                'budget_usd_micro_daily=excluded.budget_usd_micro_daily,updated_at=excluded.updated_at' + guard + ' '
                 'RETURNING operator_id::text AS operator_id,environment,revision,live_delivery_enabled,channels,destination_ref,quiet_start,quiet_end,'
                 'time_zone,daily_cap,concurrent_cap,event_allowlist,budget_usd_micro_daily,extract(epoch from updated_at) AS updated_at',
                 (operator_id, self.environment, policy['live_delivery_enabled'], Jsonb(policy['channels']), policy['destination_ref'],
                  policy['quiet_start'], policy['quiet_end'], policy['time_zone'], policy['daily_cap'], policy['concurrent_cap'],
-                 policy['event_allowlist'], policy['budget_usd_micro_daily'], now)).fetchone()
-        return _policy_row(row)
+                 policy['event_allowlist'], policy['budget_usd_micro_daily'], now) + (() if expected_revision is None else (expected_revision,))).fetchone()
+        return _policy_row(row) if row else None
 
     def destination_verified(self, operator_id):
         with self.store.transaction() as con:

@@ -47,6 +47,13 @@ RUN_KEY_PREFIX = "agent:" + KEY_PREFIX
 MAX_MESSAGE = 4000
 RUNTIME_VERSION = "founder-agent-1"
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+# The founder page context (CONTRACTS §6) and the presentational keys the panel sends with it (checked, then dropped).
+CONTEXT_KEYS = frozenset({"section", "route", "selectedEntity", "chart", "period", "filters", "incidentId", "outline"})
+PRESENTATION_KEYS = frozenset({"mode", "environment", "uiCapabilities"})
+UI_CAPABILITIES = ("navigate", "open_evidence")
+# The panel's singular entity types → founder record collections.
+ENTITY_TYPES = {"customer": "customers", "workspace": "workspaces", "subscription": "subscriptions", "payment": "payments", "invoice": "invoices",
+                "usage": "usage", "ticket": "tickets", "incident": "incidents"}
 _KEY = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")      # the panel's Idempotency-Key header (http.py accepts up to 200)
 _RUN_KEY_LIMIT = 100                                   # the runtime's own idempotency key limit (service.turn)
 _ID = re.compile(r"^[A-Za-z0-9:_.-]{1,80}$")
@@ -154,7 +161,18 @@ def founder_context(raw) -> dict:
     from postriff_phase2.site_agent import contracts as site_contracts
     if raw is None:
         return {}
-    if not isinstance(raw, dict) or set(raw) - {"section", "route", "selectedEntity", "chart", "period", "filters", "incidentId", "outline"}:
+    if not isinstance(raw, dict) or set(raw) - CONTEXT_KEYS - PRESENTATION_KEYS:
+        raise ControlError("VALIDATION_FAILED", 400)
+    # The panel sends every key and uses null for "nothing selected"; null means absent here.
+    raw = {key: value for key, value in raw.items() if value is not None}
+    # Presentational keys the panel sends alongside the context are checked, then left out: the turn's own mode and the
+    # boundary's environment are authoritative, and UI capabilities never widen what the agent may do.
+    if "mode" in raw and raw["mode"] not in MODES:
+        raise ControlError("VALIDATION_FAILED", 400)
+    if "environment" in raw and raw["environment"] not in ("local", "staging", "production"):
+        raise ControlError("VALIDATION_FAILED", 400)
+    if "uiCapabilities" in raw and (not isinstance(raw["uiCapabilities"], list) or len(raw["uiCapabilities"]) > 5
+                                    or any(item not in UI_CAPABILITIES for item in raw["uiCapabilities"])):
         raise ControlError("VALIDATION_FAILED", 400)
     out = {}
     if "section" in raw:
@@ -168,26 +186,45 @@ def founder_context(raw) -> dict:
         out["route"] = route
     if raw.get("selectedEntity") is not None:
         entity = raw["selectedEntity"]
-        if not isinstance(entity, dict) or set(entity) != {"collection", "id"} or entity["collection"] not in COLLECTIONS:
-            raise ControlError("VALIDATION_FAILED", 400)
-        out["selectedEntity"] = {"collection": entity["collection"], "id": _identifier(entity["id"])}
+        # Pages name an entity either by its record collection or by the panel's singular type (customer, workspace, …);
+        # a type that is not a record collection (an Overview attention item) carries no entity, only its id is checked.
+        if isinstance(entity, dict) and set(entity) == {"type", "id"} and isinstance(entity["type"], str):
+            _identifier(entity["id"])
+            collection = ENTITY_TYPES.get(entity["type"])
+            entity = {"collection": collection, "id": entity["id"]} if collection else None
+        if entity is not None:
+            if not isinstance(entity, dict) or set(entity) != {"collection", "id"} or entity["collection"] not in COLLECTIONS:
+                raise ControlError("VALIDATION_FAILED", 400)
+            out["selectedEntity"] = {"collection": entity["collection"], "id": _identifier(entity["id"])}
     if raw.get("chart") is not None:
         chart = raw["chart"]
-        if not isinstance(chart, dict) or not {"chartId", "viewVersion", "queryReceiptId"} <= set(chart) or set(chart) - {"chartId", "viewVersion", "queryReceiptId", "selection"}:
+        # A chart registered from an Ask button may not have a receipt yet; founder_chart_explain then asks for one.
+        if not isinstance(chart, dict) or not {"chartId", "viewVersion"} <= set(chart) or set(chart) - {"chartId", "viewVersion", "queryReceiptId", "selection"}:
             raise ControlError("VALIDATION_FAILED", 400)
-        if type(chart["viewVersion"]) is not int or not isinstance(chart["queryReceiptId"], str) or not 1 <= len(chart["queryReceiptId"]) <= 120:
+        receipt = chart.get("queryReceiptId")
+        if type(chart["viewVersion"]) is not int or (receipt is not None and (not isinstance(receipt, str) or not 1 <= len(receipt) <= 120)):
             raise ControlError("VALIDATION_FAILED", 400)
-        selection = chart.get("selection", [])
+        selection = chart.get("selection") or []
         if not isinstance(selection, list) or len(selection) > 10 or any(not isinstance(s, str) or len(s) > 80 for s in selection):
             raise ControlError("VALIDATION_FAILED", 400)
-        out["chart"] = {"chartId": _identifier(chart["chartId"]), "viewVersion": chart["viewVersion"], "queryReceiptId": chart["queryReceiptId"], "selection": selection}
+        out["chart"] = {"chartId": _identifier(chart["chartId"]), "viewVersion": chart["viewVersion"], "queryReceiptId": receipt, "selection": selection}
     if "period" in raw:
         out["period"] = _text(raw["period"], 40)
     if raw.get("filters") is not None:
         filters = raw["filters"]
-        if not isinstance(filters, dict) or len(filters) > 10 or any(not isinstance(k, str) or not _FIELD.match(k) or not isinstance(v, str) or len(v) > 80 for k, v in filters.items()):
+        if not isinstance(filters, dict) or len(filters) > 10 or any(not isinstance(k, str) or not _FIELD.match(k) for k in filters):
             raise ControlError("VALIDATION_FAILED", 400)
-        out["filters"] = dict(filters)
+        flat = {}
+        for key, value in filters.items():
+            # Pages keep numbers, booleans and short lists in their filters; the agent reads them as bounded strings.
+            if isinstance(value, bool): value = "true" if value else "false"
+            elif isinstance(value, (int, float)): value = str(value)
+            elif isinstance(value, list) and len(value) <= 10 and all(isinstance(item, str) and len(item) <= 40 for item in value): value = ",".join(value)
+            if not isinstance(value, str) or len(value) > 80:
+                raise ControlError("VALIDATION_FAILED", 400)
+            flat[key] = value
+        if flat:
+            out["filters"] = flat
     if "incidentId" in raw:
         out["incidentId"] = _identifier(raw["incidentId"])
     if "outline" in raw:

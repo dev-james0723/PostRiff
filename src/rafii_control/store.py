@@ -4,7 +4,9 @@ from contextlib import contextmanager
 from .deadlines import remaining
 from datetime import datetime
 import hashlib
+from pathlib import Path
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from .auth import ControlError
@@ -179,11 +181,26 @@ class PostgresStore:
             return row['payload'] if row else None
 
 
+# Supabase's database and pooler certificates chain to its own root (not in public trust stores). This is the published
+# `prod-ca-2021.crt` (SHA-256 80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA,
+# pinned by tests/control/test_hosted_tls.py), shipped inside the package so a verify-full DSN needs no filesystem path.
+SUPABASE_ROOT = Path(__file__).resolve().parent / 'pack' / 'supabase-root-2021.crt'
+
+
+def tls_options(dsn):
+    """verify-full without an explicit sslrootcert verifies against the bundled Supabase root; an explicit root wins."""
+    try: params = conninfo_to_dict(dsn)
+    except Exception: return {}   # an unparseable DSN fails at connect, exactly as before
+    if params.get('sslmode') == 'verify-full' and not params.get('sslrootcert'):
+        return {'sslrootcert': str(SUPABASE_ROOT)}
+    return {}
+
+
 def connection_factory(dsn, role, environment):
     """Dedicated non-superuser logins must be enrolled separately; role membership is checked by PostgreSQL."""
     def connect():
         budget=remaining();millis=max(1,int(budget*1000))
-        con = psycopg.connect(dsn, prepare_threshold=None, connect_timeout=max(1, int(budget)), options=f'-c statement_timeout={millis} -c lock_timeout={millis}',keepalives_idle=1,keepalives_interval=1,keepalives_count=1,tcp_user_timeout=millis)
+        con = psycopg.connect(dsn, prepare_threshold=None, connect_timeout=max(1, int(budget)), options=f'-c statement_timeout={millis} -c lock_timeout={millis}',keepalives_idle=1,keepalives_interval=1,keepalives_count=1,tcp_user_timeout=millis,**tls_options(dsn))
         try:
             remaining()
             login = con.execute('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=session_user').fetchone()

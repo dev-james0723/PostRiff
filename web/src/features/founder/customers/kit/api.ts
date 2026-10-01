@@ -1,5 +1,6 @@
 'use client';
 
+import { NATIVE_CURRENCY_METRIC_IDS } from './metric-policy';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
@@ -71,11 +72,23 @@ export interface MetricSpec {
   enabled?: boolean;
 }
 
+/**
+ * Metrics whose catalog `currency_policy` is `native_currency_separate`: the server refuses them unless the query groups
+ * by currency, because amounts in different currencies are never added together. `tests/founder-metric-policy.test.cjs`
+ * keeps this list equal to the catalog (`src/rafii_control/pack/catalogs/metrics.json` and `metrics.d/*.json`).
+ */
+export const NATIVE_CURRENCY_METRICS: ReadonlySet<string> = new Set(NATIVE_CURRENCY_METRIC_IDS);
+
+/** The groupBy a metric needs: the page's dimensions, plus currency for native-currency metrics. */
+export function metricGroupBy(id: string, groupBy: readonly string[] = []): string[] {
+  return NATIVE_CURRENCY_METRICS.has(id) && !groupBy.includes('currency') ? ['currency', ...groupBy] : [...groupBy];
+}
+
 export function metricQueryBody(spec: MetricSpec, now = new Date()): MetricQuery {
   return {
     metricIds: [spec.id],
     interval: periodInterval(spec.period, now),
-    groupBy: spec.groupBy ?? [],
+    groupBy: metricGroupBy(spec.id, spec.groupBy),
     filters: spec.filters ?? [],
     comparison: spec.comparison ?? 'none',
     limit: spec.limit ?? 1000
@@ -93,7 +106,7 @@ export function tileComparison(period: PeriodKey): MetricQuery['comparison'] {
  */
 export function useMetric(spec: MetricSpec) {
   const scope = useFounderScope();
-  const groupBy = spec.groupBy ?? [];
+  const groupBy = metricGroupBy(spec.id, spec.groupBy);
   const filters = spec.filters ?? [];
   return useQuery({
     queryKey: scope.key('metric', spec.id, spec.period, groupBy.join('|'), JSON.stringify(filters), spec.comparison ?? 'none'),

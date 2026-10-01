@@ -61,7 +61,7 @@ export function RevenueView() {
 
   const cashByMonth = useMetric({ id: 'cash_collected', period: '6m', groupBy: ['payment_type'] });
   const planStatus = useMetric({ id: 'subscriptions_by_plan_status', period, groupBy: ['plan', 'status'] });
-  const failures = useMetric({ id: 'payment_failures', period, groupBy: ['reason'] });
+  const failures = useMetric({ id: 'payment_failures', period, groupBy: ['payment_type'] });
   const refunds = useMetric({ id: 'refunds_disputes', period, groupBy: ['status'] });
   const subscriptions = useRecords({ collection: 'subscriptions', search: '', status: 'all', page: 1, recordId: '' });
 
@@ -105,10 +105,10 @@ export function RevenueView() {
           )}
         </MetricChartCard>
         <TabAnchor section='revenue' tab='payments' active={tab}>
-          <MetricChartCard query={failures} id='payment_failures' title='Payment failures' subtitle='Failed payment notices by reason' period={period} unavailableDescription='Payment failure notices (pr_notifications, kind payment_failed) are the source; none were measured.'>
+          <MetricChartCard query={failures} id='payment_failures' title='Payment failures' subtitle='Failed subscription payments and top-ups' period={period} unavailableDescription='Payment failure notices (pr_notifications, kind payment_failed) are the source; none were measured.'>
             {(result) => {
-              const series = seriesFromRows(result.rows, 'reason');
-              return series.points.length > 0 ? <TimeSeriesChart series={series} kind='bar' stacked /> : <CategoryBars items={categoriesFromRows(result.rows, 'reason')} unit={result.rows[0]?.unit ?? 'count'} />;
+              const series = seriesFromRows(result.rows, 'payment_type');
+              return series.points.length > 0 ? <TimeSeriesChart series={series} kind='bar' stacked /> : <CategoryBars items={categoriesFromRows(result.rows, 'payment_type')} unit={result.rows[0]?.unit ?? 'count'} />;
             }}
           </MetricChartCard>
         </TabAnchor>

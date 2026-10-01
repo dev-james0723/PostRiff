@@ -92,7 +92,7 @@ export function OverviewView() {
           <ReportsPanel />
         </div>
       ) : (
-        <div id={`${panelBase}-today`} role='tabpanel' className='flex flex-1 flex-col gap-4 md:gap-5'>
+        <div id={`${panelBase}-today`} role='tabpanel' className='flex min-w-0 flex-1 flex-col gap-4 md:gap-5'>
           <QueryBoundary query={query} loadingTitle='Reading today’s records…'>
             {(envelope) => {
               const overview = envelope.data;

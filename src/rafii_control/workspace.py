@@ -69,14 +69,20 @@ class WorkspaceService:
         with self.store.transaction() as con:
             actor = self.identity(principal)
             con.execute("SELECT set_config('rafii_control.operator',%s,true)",(actor,))
-            row = con.execute('SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE',
-                              (actor,self.store.environment)).fetchone()
+            # Reads take no row lock: a page fires several Demo reads at once, and a FOR UPDATE on this one large row made them
+            # queue behind each other until the 10 s Control deadline answered 503. Actions and the one-time upgrade still lock.
+            read = action is None
+            select = ('SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s' if read else
+                      'SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE')
+            locked = 'SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE'
+            row = con.execute(select, (actor,self.store.environment)).fetchone()
             # Do not generate or serialize all 10,000 records on each read.
             if row is None:
                 con.execute('INSERT INTO rafii_control.demo_workspaces(operator_id,environment,payload) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING',
                             (actor,self.store.environment,Jsonb(sample_data())))
-                row = con.execute('SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE',
-                                  (actor,self.store.environment)).fetchone()
+                row = con.execute(select, (actor,self.store.environment)).fetchone()
+            if read and row['payload'].get('schemaVersion') != SCHEMA_VERSION:
+                row = con.execute(locked, (actor,self.store.environment)).fetchone()
             data, replays = row['payload'], row['replays']
             if data.get('schemaVersion') != SCHEMA_VERSION:
                 previous_revision = data.get('revision', 0)

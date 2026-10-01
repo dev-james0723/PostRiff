@@ -71,9 +71,9 @@ export function SupportView() {
     [setFilters, setPage]
   );
 
-  const backlog = useTileMetric({ id: 'data_requests_backlog', period: '30d', filters: [{ dimension: 'status', operator: 'in', values: ['open', 'requested', 'pending'] }] });
+  const backlog = useTileMetric({ id: 'data_requests_backlog', period: '30d' });
   const aging = useMetric({ id: 'data_requests_backlog', period: '90d', groupBy: ['age_band'] });
-  const byStatus = useMetric({ id: 'data_requests_backlog', period: '90d', groupBy: ['status'] });
+  const byKind = useMetric({ id: 'data_requests_backlog', period: '90d', groupBy: ['kind'] });
   const requests = useRecords({ collection: 'tickets', search, status: filters.status, page, recordId: '' });
   const data = requests.data?.data;
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
@@ -107,8 +107,8 @@ export function SupportView() {
           </MetricChartCard>
         </TabAnchor>
         <TabAnchor section='support' tab='status' active={tab}>
-          <MetricChartCard query={byStatus} id='data_requests_backlog' title='Requests by status' subtitle='All requests in the window' period='90d'>
-            {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'status')} unit={result.rows[0]?.unit ?? 'count'} />}
+          <MetricChartCard query={byKind} id='data_requests_backlog' title='Open requests by kind' subtitle='Requests still waiting, by kind (export, deletion…)' period='90d'>
+            {(result) => <CategoryBars items={categoriesFromRows(result.rows, 'kind')} unit={result.rows[0]?.unit ?? 'count'} />}
           </MetricChartCard>
         </TabAnchor>
       </PanelGrid>

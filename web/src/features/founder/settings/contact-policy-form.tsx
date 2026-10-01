@@ -55,8 +55,8 @@ export function policyFromDraft(policy: ContactPolicy, draft: Draft): { policy: 
   if (quietStart === null || quietEnd === null) return { error: 'Quiet hours need a start and an end time (HH:MM).' };
   const dailyCap = Number(draft.dailyCap);
   const concurrentCap = Number(draft.concurrentCap);
-  if (!Number.isInteger(dailyCap) || dailyCap < 0 || dailyCap > 10) return { error: 'Daily cap must be a whole number from 0 to 10.' };
-  if (!Number.isInteger(concurrentCap) || concurrentCap < 1 || concurrentCap > 3) return { error: 'Concurrent cap must be 1, 2 or 3.' };
+  if (!Number.isInteger(dailyCap) || dailyCap < 0 || dailyCap > 2) return { error: 'Daily cap must be 0, 1 or 2 calls.' };
+  if (!Number.isInteger(concurrentCap) || concurrentCap < 0 || concurrentCap > 1) return { error: 'At most one call at a time (0 or 1).' };
   const budget = Number(draft.budgetUsd);
   if (!Number.isFinite(budget) || budget < 0) return { error: 'Daily budget must be zero or more.' };
   if (!draft.timeZone.trim()) return { error: 'A time zone is required.' };
@@ -206,10 +206,10 @@ export function ContactPolicyForm() {
                 <Input type='time' value={draft.quietEnd} onChange={(event) => setDraft({ ...draft, quietEnd: event.target.value })} className={FIELD_CLASS} />
               </Field>
               <Field label='Daily cap' hint='Contact attempts per day, 0–10.'>
-                <Input type='number' inputMode='numeric' min={0} max={10} value={draft.dailyCap} onChange={(event) => setDraft({ ...draft, dailyCap: event.target.value })} className={FIELD_CLASS} />
+                <Input type='number' inputMode='numeric' min={0} max={2} value={draft.dailyCap} onChange={(event) => setDraft({ ...draft, dailyCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
               <Field label='Concurrent cap' hint='Calls in flight at once, 1–3.'>
-                <Input type='number' inputMode='numeric' min={1} max={3} value={draft.concurrentCap} onChange={(event) => setDraft({ ...draft, concurrentCap: event.target.value })} className={FIELD_CLASS} />
+                <Input type='number' inputMode='numeric' min={0} max={1} value={draft.concurrentCap} onChange={(event) => setDraft({ ...draft, concurrentCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
               <Field label='Daily budget (USD)' hint={`Stored as USD micro; currently ${usdMicro(policy.budgetUsdMicroDaily)} per day.`}>
                 <Input type='number' inputMode='decimal' min={0} step='0.01' value={draft.budgetUsd} onChange={(event) => setDraft({ ...draft, budgetUsd: event.target.value })} className={FIELD_CLASS} />

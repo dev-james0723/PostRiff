@@ -69,7 +69,7 @@ export function OperationsView() {
   const canAck = useCapability('incidents.ack') && mode !== 'demo';
   const ackDisabledReason = mode === 'demo' ? DEMO_ACK_REASON : undefined;
   const heartbeat = useMetric({ id: 'cron_heartbeat', period: '7d' });
-  const publishing = useMetric({ id: 'publish_outcomes', period: '7d', groupBy: ['provider', 'status'] });
+  const publishing = useMetric({ id: 'publish_outcomes', period: '7d', groupBy: ['platform', 'status'] });
   const delivery = useMetric({ id: 'notification_delivery', period: '7d', groupBy: ['status'] });
   const calls = useMetric({ id: 'phone_calls', period: '7d', groupBy: ['state'] });
   const sources = useSourceHealth();
@@ -115,14 +115,14 @@ export function OperationsView() {
 
       <PanelGrid>
         <TabAnchor section='operations' tab='publishing' active={tab}>
-        <MetricChartCard query={publishing} id='publish_outcomes' title='Publishing by provider' subtitle='Outcomes per provider and status, 7 days' period='7d' unavailableDescription='Publishing outcomes come from the publishing jobs; none were measured in the last 7 days.'>
+        <MetricChartCard query={publishing} id='publish_outcomes' title='Publishing by platform' subtitle='Outcomes per platform and status, 7 days' period='7d' unavailableDescription='Publishing outcomes come from the publishing jobs; none were measured in the last 7 days.'>
           {(result) => (
             <SimpleTable
-              rows={wholeIntervalRows(result.rows).filter((row) => row.dimensions?.provider !== undefined)}
-              rowKey={(row, index) => `${row.dimensions?.provider}-${row.dimensions?.status}-${index}`}
-              caption='Publish outcomes by provider and status'
+              rows={wholeIntervalRows(result.rows).filter((row) => row.dimensions?.platform !== undefined)}
+              rowKey={(row, index) => `${row.dimensions?.platform}-${row.dimensions?.status}-${index}`}
+              caption='Publish outcomes by platform and status'
               columns={[
-                { key: 'provider', label: 'Provider', render: (row) => stateLabel(row.dimensions?.provider) },
+                { key: 'platform', label: 'Platform', render: (row) => stateLabel(row.dimensions?.platform) },
                 { key: 'status', label: 'Status', render: (row) => <StatusChip icon={null}>{stateLabel(row.dimensions?.status)}</StatusChip> },
                 { key: 'count', label: 'Publications', align: 'right', render: (row) => <span className={cn(row.dataState !== 'measured' && 'text-muted-foreground italic')}>{metricValue(row)}</span> }
               ]}

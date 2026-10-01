@@ -59,7 +59,9 @@ class MemoryFounderStore:
     def policy(self, operator_id):
         return copy.deepcopy(self.policies.get(operator_id))
 
-    def save_policy(self, operator_id, policy, now):
+    def save_policy(self, operator_id, policy, now, expected_revision=None):
+        if expected_revision is not None and (self.policies.get(operator_id) or {}).get('revision', 0) != expected_revision:
+            return None
         revision = (self.policies.get(operator_id) or {}).get('revision', 0) + 1
         row = {**policy, 'operator_id': operator_id, 'environment': self.environment, 'revision': revision, 'updated_at': now}
         self.policies[operator_id] = row
@@ -382,6 +384,24 @@ class ContactPolicyTests(unittest.TestCase):
         self.assertFalse(view['destination']['verified'])
         self.assertEqual(view['readiness']['incident']['reason'], 'POLICY_DISABLED')
         self.assertFalse(view['flags']['founderCallsEnabled'])
+
+
+class ContactPolicyPanelBodyTests(unittest.TestCase):
+    def test_the_settings_page_body_saves_and_a_stale_revision_conflicts(self):
+        # The page sends back the policy it read (web settings/contact-policy-form.tsx): revision and updatedAt included.
+        fstore = MemoryFounderStore()
+        read = founder_contact.get_policy(fstore, PRINCIPAL, now=T0, flags={})['policy']
+        saved = founder_contact.put_policy(fstore, PRINCIPAL, {**read, 'quietStart': 1260, 'dailyCap': 1}, now=T0)['policy']
+        self.assertEqual((saved['revision'], saved['quietStart'], saved['dailyCap'], saved['liveDeliveryEnabled']), (1, 1260, 1, False))
+        again = founder_contact.put_policy(fstore, PRINCIPAL, {**saved, 'dailyCap': 2}, now=T0 + 1)['policy']
+        self.assertEqual(again['revision'], 2)
+        with self.assertRaises(ControlError) as caught:
+            founder_contact.put_policy(fstore, PRINCIPAL, {**saved, 'dailyCap': 0}, now=T0 + 2)   # saved is revision 1; the store moved to 2
+        self.assertEqual(caught.exception.code, 'STALE_PREVIEW')
+        with self.assertRaises(ControlError):
+            founder_contact.put_policy(fstore, PRINCIPAL, {**again, 'revision': 'two'}, now=T0 + 3)
+        with self.assertRaises(ControlError):
+            founder_contact.put_policy(fstore, PRINCIPAL, {**again, 'unknownField': 1}, now=T0 + 3)
 
 
 class FounderCallEventsTests(unittest.TestCase):
