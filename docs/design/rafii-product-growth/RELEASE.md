@@ -18,7 +18,9 @@ needs his specific approval for that exact action (DECISIONS D-007). Preparing c
 
 Production has received earlier migrations through one-off, sha-pinned runners (see `scripts/trend_release_migrate.py`
 for the current pattern: identity check against the project ref, whole prior ledger match, exact allowed set, plan then
-apply the same plan). This program's runner follows the same pattern with the allowed set below.
+apply the same plan). This program's runner is `scripts/product_growth_release_migrate.py` (`RAFII_GROWTH_MIGRATION_DSN`;
+plan with a read-only session, then apply that exact plan). It pins every allowed file below to its reviewed SHA-256 and
+refuses any other pending file (`tests/test_product_growth_release.py`).
 
 | Order | File | Owner | SHA-256 | Depends on | Reader released in |
 |---|---|---|---|---|---|

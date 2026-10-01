@@ -17,6 +17,7 @@ from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL  # noqa: F401 (legacy callers import it from here)
 from .contracts import digest
+from .developer_usage import ai_usage_exempt
 from .permissions import require
 from .source_policy import project_context, stamp
 from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
@@ -1186,6 +1187,11 @@ class IdeasService:
             prior = self._keyed_run(cur, workspace_id, key, fingerprint)
             if prior:
                 return self._events_for(cur, workspace_id, prior, 0)
+            book = getattr(self.ledger, "credits", None)
+            if book is not None and not ai_usage_exempt(principal) and book.policy(cur, workspace_id):
+                # Plan credits cover writing only (Pricing v2 `textOnly`); how images are priced in credits is not decided,
+                # so a credit-plan image is refused here, before any message, run, reservation or provider call.
+                raise AlphaError("Images are not part of plan credits yet. Nothing was made or charged.", 402, code="image_credits_unavailable")
             chips_report = turn_references.unused_all(state, refs, "image_generation_turn") if turn_references.present(refs) else None
             reported = {"references": chips_report} if chips_report else {}
             self._append_message(cur, workspace_id, conversation_id, "user", {"text": prompt, "sourceIds": [], "intent": "image_generation", **(turn_references.sent_ids(refs, chips_report) if chips_report else {})})

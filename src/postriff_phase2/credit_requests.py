@@ -18,10 +18,11 @@ class CreditRequests:
 
     def _validate(self, payload):
         if not isinstance(payload,dict): raise AlphaError('Supply a draft request.',400)
+        if self.ideas._wants_image(payload):
+            # Plan credits cover writing only (`textOnly`); how images are priced in credits is not decided (DECISIONS D-026).
+            raise AlphaError('Images are not part of plan credits yet. Nothing was made or charged.',402,code='image_credits_unavailable')
         if payload.get('research') is not False:
             raise AlphaError('This credit route supports writing only. Turn off web research for this task.',409)
-        if self.ideas._wants_image(payload):
-            raise AlphaError('Images need a separate credit approval; use the existing media plan.',409)
         runtime=self.ideas._select_runtime(payload.get('model'))
         if runtime.cost_class!='paid': raise AlphaError('This writer does not use cloud credits.',409)
         # The model an Auto request writes with depends on workspace state: estimate and issue take it from estimate_request.

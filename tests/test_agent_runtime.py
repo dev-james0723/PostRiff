@@ -1153,7 +1153,7 @@ class CommandsTest(unittest.TestCase):
         self.assertIn("permissions, consent, credits and approvals", text)
         self.assertIn("ask for what is missing", commands.block({"name": "image", "args": ""}))
         self.assertNotIn("ask for what is missing", commands.block({"name": "stats", "args": ""}))
-        self.assertIn("1 media credit", commands.INSTRUCTIONS["image"])
+        self.assertIn("only as the tool result reports it", commands.INSTRUCTIONS["image"])   # no legacy unit asserted to every plan (R-COM-04)
         self.assertIn("proposal", commands.INSTRUCTIONS["schedule"])
 
     def test_weather_answer_in_english_and_chinese(self):

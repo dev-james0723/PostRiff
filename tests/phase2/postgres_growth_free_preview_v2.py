@@ -387,6 +387,31 @@ class PreviewTests(unittest.TestCase):
         with connection() as db:
             self.assertEqual(db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND provider='rafii-growth'", (self.wid,)).fetchone()[0], 0)
 
+    def test_creator_image_request_is_refused_before_anything_is_written(self):
+        """Plan credits are text-only (D-026): a Creator image request says so plainly, writes no message, run or
+        reservation and calls no image provider; the same request is refused on every path (turn and quote)."""
+        self.creator()
+        ideas = self.host.ideas
+        called = []
+        ideas.image_runtime = type('NoImages', (), {'provider': 'openai', 'model': 'openai/gpt-image-2', 'estimate_usd_micro': 40_000,
+                                                  'generate': lambda *a, **k: called.append(1)})()
+        ideas.assets = object()
+        conversation = ideas.create_conversation(self.wid, 'fixture', 'Images')['conversationId']
+        with connection() as db:
+            before = db.execute("SELECT (SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s)+(SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s)"
+                                "+(SELECT count(*) FROM pr_messages WHERE workspace_id=%s)", (self.wid, self.wid, self.wid)).fetchone()[0]
+        request = {'text': 'A quiet practice room', 'imageGeneration': True, 'idempotencyKey': 'creator-image-1'}
+        with self.assertRaises(AlphaError) as caught:
+            ideas.turn(self.wid, 'fixture', conversation, request)
+        self.assertEqual((caught.exception.status, caught.exception.code), (402, 'image_credits_unavailable'), str(caught.exception))
+        with self.assertRaises(AlphaError) as quoted:
+            ideas.credit_requests.issue(self.wid, 'fixture', {'operation': 'turn', 'conversationId': conversation, 'request': {**request, 'research': False}, 'maxMilliCredits': 30_000})
+        self.assertEqual(quoted.exception.code, 'image_credits_unavailable')
+        with connection() as db:
+            after = db.execute("SELECT (SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s)+(SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s)"
+                               "+(SELECT count(*) FROM pr_messages WHERE workspace_id=%s)", (self.wid, self.wid, self.wid)).fetchone()[0]
+        self.assertEqual((after, called), (before, []))   # no ledger row, run or message; no image provider call
+
     def test_credit_bridge_needs_credits_and_is_not_for_free(self):
         with self.assertRaises(AlphaError) as caught:   # Free: the bridge does not apply
             self.g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': self.body()})

@@ -84,6 +84,24 @@ TEXT = {
 }
 
 
+
+def _known(value):
+    return value if value is not None else "unknown"
+
+
+def _allowance_facts(data):
+    """What the plan has left, in its own billing words (R-COM-04: only legacy plans speak of writing batches or media
+    credits). Creator: the credit balance; Free: no managed allowance; legacy: its allowances. Missing numbers say unknown."""
+    mode = data.get("billingMode") or "legacy_allowances"
+    if mode == "managed_credits":
+        facts = [f"credits available: {_known(data.get('creditsAvailable'))}", f"credits held for running tasks: {_known(data.get('creditsHeld'))}"]
+        if data.get("creditsGranted") is not None:
+            facts.append(f"credits granted this period: {data['creditsGranted']}")
+        return facts + ["nothing is charged beyond a confirmed credit limit"]
+    if mode == "free_preview":
+        return ["Free includes no managed writing, image or research allowance (one Post Doctor check and one recent-posts analysis are the free previews)"]
+    return [f"writing batches left: {_known(data.get('writingBatchesRemaining'))}", f"media credits left: {_known(data.get('mediaCreditsRemaining'))}"]
+
 def t(language: str, key: str, **values) -> str:
     table = TEXT.get(language) or TEXT["en"]
     template = table.get(key) if key in table else TEXT["en"][key]
@@ -167,7 +185,7 @@ def facts(results: dict) -> list[dict]:
         elif tool_id == "privacy.egress_state":
             add(tool_id, f"Cloud memory: {'on' if data['cloudMemory'] else 'off'}; web research: {'on' if data['webResearch'] else 'off'} for this workspace; chosen writer class: {(data['writer'] or {}).get('class') or 'unknown'}.")
         elif tool_id == "entitlements.summary":
-            add(tool_id, f"Plan: {data.get('plan') or 'unknown'}; writing batches left: {data.get('writingBatchesRemaining')}; media credits left: {data.get('mediaCreditsRemaining')}; publishing included: {data.get('canPublish')}; budget status: {data.get('budgetStatus')}.")
+            add(tool_id, f"Plan: {data.get('plan') or 'unknown'}; {'; '.join(_allowance_facts(data))}; publishing included: {data.get('canPublish')}; budget status: {data.get('budgetStatus')}.")
         elif tool_id == "models.summary":
             for m in data["models"]:
                 add(tool_id, f"Writer {m['label']}: {'available' if m['qualified'] else 'unavailable'} ({m['costClass']})" + (f" — {m['detail']}" if not m["qualified"] and m.get("detail") else ""))
@@ -321,8 +339,7 @@ def compose(classification: dict, page: dict, plan: dict, results: dict, *, lang
         plan_data = get("entitlements.summary")
         if plan_data:
             lines.append(t(language, "billing"))
-            lines.append(f"- Writing batches left: {plan_data.get('writingBatchesRemaining') if plan_data.get('writingBatchesRemaining') is not None else 'unknown'}")
-            lines.append(f"- Media credits left: {plan_data.get('mediaCreditsRemaining') if plan_data.get('mediaCreditsRemaining') is not None else 'unknown'}")
+            lines.extend(f"- {fact[0].upper()}{fact[1:]}" for fact in _allowance_facts(plan_data))
             if plan_data.get("canPublish") is not None:
                 lines.append(f"- Publishing included right now: {'yes' if plan_data['canPublish'] else 'no'}")
         extra, refs = _help_blocks(help_result, language, lead=not plan_data)

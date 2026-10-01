@@ -37,7 +37,7 @@ INSTRUCTIONS = {
              "isn't measured.",
     "review": "Say what needs the person's attention now: posts waiting for approval, held or failed posts and gaps (attention_summary, "
               "queue_summary).",
-    "image": "Create an image from the description below through the Creative specialist, and say that it uses 1 media credit.",
+    "image": "Create an image from the description below through the Creative specialist; state what it used only as the tool result reports it.",
     "schedule": "Propose scheduling the latest draft in this conversation at the time below with schedule_propose; it is a proposal the "
                 "person applies, not a change.",
     "automation": "Set up the automation described below: a change to an existing automation is proposed with automation_change_propose; a "

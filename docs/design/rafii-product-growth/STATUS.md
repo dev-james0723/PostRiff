@@ -57,3 +57,4 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 | Founder P1 `pr_invoices` (057) | Paid metrics `partial` | Founder P1 session (PR #88) |
 | Transcription route for raw audio | Audio intake refused before upload | James: approve provider/model + budget |
 | Verified multi-image publisher | Carousels export only; never queued | Engineering + a provider verification run, then James's activation |
+| Image pricing in plan credits (D-026) | Creator images refused with `image_credits_unavailable` | James / Pricing owner: decide the image credit rate and quote basis before Creator activation |

@@ -71,6 +71,7 @@ import { navigationId } from '@/features/context-navigation/markers';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import type { MediaMoment, NavigationItem } from '@/lib/api/types';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import { billingModeOf, imageCostHint } from '@/lib/billing/mode';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
@@ -729,7 +730,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                 detail: imageCapability?.detail ?? 'Checking…',
                 onChange: setImageRequested
               }}
-              hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
+              hint={(imageRequested && imageCostHint(billingModeOf(usage.data))) || '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
               deliveryPlanner={{ open: deliveryPlannerOpen, onOpenChange: setDeliveryPlannerOpen, options: deliveryOptions }}
               slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}

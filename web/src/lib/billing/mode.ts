@@ -33,6 +33,17 @@ export function billingModeOf(usage: { billingMode?: unknown } | null | undefine
 /* ---------- managed credits ---------- */
 
 /** Amber when 10% or less of the period's credits is left. */
+/**
+ * The composer's hint for an image request, in this workspace's billing words (R-COM-04: only legacy plans see media
+ * credits). Plan credits cover writing only for now (DECISIONS D-026); Free has no image allowance. Unknown mode: no hint.
+ */
+export function imageCostHint(mode: BillingMode | null): string | null {
+  if (mode === 'managed_credits') return 'Images are not part of plan credits yet';
+  if (mode === 'free_preview') return 'Images are not included in Free';
+  if (mode === 'legacy_allowances') return 'Uses 1 media credit';
+  return null;
+}
+
 export const CREDIT_WARN_RATIO = 0.1;
 /** Credits that expire within three days are called out; unused credits do not roll over. */
 export const EXPIRING_SOON_SECONDS = 3 * 86400;

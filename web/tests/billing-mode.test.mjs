@@ -8,6 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CREDIT_WARN_RATIO,
+  imageCostHint,
   allowanceReminder,
   billingModeOf,
   costClassKey,
@@ -254,4 +255,11 @@ test('in-app v2 copy exists in English and Traditional Chinese with the same sha
     assert.equal(copyLocale(tag), locale, String(tag));
   }
   assert.equal(billingCopy('zh-Hant').creditMeter.title, BILLING_COPY['zh-Hant'].creditMeter.title);
+});
+
+test('the image hint speaks each billing mode and never guesses (R-COM-04)', () => {
+  assert.equal(imageCostHint('managed_credits'), 'Images are not part of plan credits yet');
+  assert.equal(imageCostHint('free_preview'), 'Images are not included in Free');
+  assert.equal(imageCostHint('legacy_allowances'), 'Uses 1 media credit');
+  assert.equal(imageCostHint(null), null);
 });

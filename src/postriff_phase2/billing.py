@@ -165,7 +165,8 @@ class Ledger:
             preview.validate(cur, workspace_id, dimension, estimated_usd_micro, provider, model, run_id, charge_batch)
         exempt = ai_usage_exempt(member_id) and preview is None
         if preview is None and entitlement["planTermsId"] == "free-v1" and (estimated_usd_micro > 0 or (charge_batch and not exempt)):
-            raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
+            raise AlphaError("Images are not included in Free. Drafts, edits and exports remain available." if dimension == "image_generation" else
+                             "Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
         fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model, **({"platformPreview":preview.record()} if preview else {})})
         cur.execute("SELECT id::text,reservation_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, idempotency_key))
         existing = cur.fetchone()
