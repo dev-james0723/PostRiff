@@ -1,0 +1,83 @@
+name: Rafii growth journeys (temporary)
+# TEMPORARY: the growth v2 harness and its browser journeys, copied from the growth step of rafii-browser.yml for
+# quicker feedback on claude/rpg-browser. A dispatch-only workflow can't be dispatched until it exists on the default
+# branch, so this one runs on pushes to claude/rpg-browser only, and only when the head commit message carries
+# [growth-ci] ("[growth-ci only=results,series]" runs a subset). Deleted before the branch's final commit; the
+# permanent home of these journeys is the growth step in rafii-browser.yml.
+on:
+  push:
+    branches: [claude/rpg-browser]
+permissions:
+  contents: read
+concurrency:
+  group: rafii-growth-journeys-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  growth:
+    if: contains(github.event.head_commit.message, '[growth-ci')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and test tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+      - name: Install PostgreSQL 17 using its signed official repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Install Chromium for Playwright
+        run: npx --prefix web playwright install --with-deps chromium
+      - name: Start a growth v2 harness and a development build
+        run: |
+          RAFII_WEEKLY_OPERATOR_ENABLED=1 RAFII_FIRST_WEEK_ENABLED=1 RAFII_SOURCE_UPLOADS_ENABLED=1 RAFII_RELATIONSHIPS_ENABLED=1 RAFII_RESULTS_ENABLED=1 \
+          RAFII_SERIES_ENABLED=1 RAFII_VISUAL_PACK_ENABLED=1 RAFII_OPPORTUNITY_BRIEF_ENABLED=1 RAFII_PROOF_V2_ENABLED=1 \
+          POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4443 nohup python scripts/postriff_dev_hosted.py --port 4442 --pg-port 55481 --growth-fixture > growth-harness.log 2>&1 &
+          (cd web && POSTRIFF_DIST_DIR=.next-growth NEXT_PUBLIC_PRICING_CATALOG=v2 POSTRIFF_API_ORIGIN=http://127.0.0.1:4442 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4443 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev -p 4443 -H 127.0.0.1 > ../growth-web.log 2>&1 &)
+          for i in $(seq 1 150); do
+            if curl -sf http://127.0.0.1:4442/api/health > /dev/null && curl -s -o /dev/null --max-time 120 http://127.0.0.1:4443/; then
+              for page in /post-doctor /auth/sign-up /app/weekly /app/analytics /app/inbox /app/library /app/ideas /pricing; do curl -s -o /dev/null --max-time 300 -b 'postriff_dev=1' "http://127.0.0.1:4443$page" || true; done
+              echo ready; exit 0
+            fi
+            sleep 2
+          done
+          echo "growth harness or development web server did not start"; tail -n 60 growth-harness.log growth-web.log; exit 1
+      - name: Growth v2 journeys, Chromium
+        env:
+          RAFII_GROWTH_WEB_URL: http://127.0.0.1:4443
+          RAFII_GROWTH_API_URL: http://127.0.0.1:4442
+          RAFII_GROWTH_PRICING_CATALOG: v2
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          ONLY=$(printf '%s' "$MESSAGE" | sed -n 's/.*\[growth-ci only=\([a-z,-]*\)\].*/\1/p' | head -n 1)
+          node web/tests/growth-v2-browser.cjs --out=docs/design/rafii-product-growth/evidence/ci-browser ${ONLY:+--only=$ONLY}
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rafii-growth-journeys-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            docs/design/rafii-product-growth/evidence/ci-browser/
+            growth-harness.log
+            growth-web.log
+          retention-days: 7
