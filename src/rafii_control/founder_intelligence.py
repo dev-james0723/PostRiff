@@ -56,6 +56,13 @@ def _require(data, principal):
     stored=data.get('founderIntelligence')
     if stored and (stored.get('operatorId')!=actor or stored.get('environment')!=session['environment']):
         raise ControlError('SCOPE_DENIED')
+    # Derived messages/reports/summaries and cached action responses retain
+    # customer context. Recheck its CURRENT grant before any read or mutation.
+    for conversation in (stored or {}).get('conversations',[]):
+        for turn in conversation.get('turns',[]):
+            selection=turn.get('chartContext',{}).get('selectedEntity')
+            if selection:
+                QueryService.require(principal,'workspaces.read' if selection['collection']=='workspaces' else 'customers.read')
     return actor,session['environment']
 
 
@@ -70,8 +77,21 @@ def _receipt(data):
     return copy.deepcopy(receipt(data))
 
 
-def _context(data, payload, environment):
-    _fields(payload,('chartId','viewVersion','queryReceiptId','mode','environment'),('selectedSeries',))
+def _entity(data, selection, principal):
+    _fields(selection,('collection','id'))
+    collection,ref=selection['collection'],selection['id']
+    if collection not in ('customers','workspaces','invoices') or not isinstance(ref,str) or not re.fullmatch('[A-Za-z0-9-]{1,80}',ref):
+        raise ControlError('VALIDATION_FAILED',400)
+    QueryService.require(principal,'workspaces.read' if collection=='workspaces' else 'customers.read')
+    row=next((r for r in data.get(collection,[]) if r['id']==ref),None)
+    if row is None: raise ControlError('SCOPE_DENIED')
+    fields=('id','name','company','plan','billingCycle','status','workspaceIds','workspaceId',
+            'memberCount','creditsQuota','creditsUsed','creditsRemaining','amountMinor','currency','period')
+    return {key:copy.deepcopy(row[key]) for key in fields if key in row}
+
+
+def _context(data, payload, environment, principal):
+    _fields(payload,('chartId','viewVersion','queryReceiptId','mode','environment'),('selectedSeries','selectedEntity'))
     if (not isinstance(payload['chartId'],str) or payload['chartId'] not in CHARTS or type(payload['viewVersion']) is not int or payload['viewVersion']!=1 or
         payload['mode']!='demo' or payload['environment']!=environment): raise ControlError('SCOPE_DENIED')
     if payload['queryReceiptId']!=_receipt(data)['id']: raise ControlError('STALE_PREVIEW',409)
@@ -80,7 +100,8 @@ def _context(data, payload, environment):
         raise ControlError('VALIDATION_FAILED',400)
     rows=copy.deepcopy(data.get('analytics',{}).get(CHARTS[payload['chartId']],[]))
     if not isinstance(rows,list) or len(rows)>1000: raise ControlError('BUDGET_EXCEEDED',400)
-    return copy.deepcopy(payload),rows
+    entity=_entity(data,payload['selectedEntity'],principal) if 'selectedEntity' in payload else None
+    return copy.deepcopy(payload),rows,entity
 
 
 def _find(state, collection, ref):
@@ -133,15 +154,18 @@ def _explain(data, message, rows, chart):
             'Ask about a selected chart, invoice exceptions, incident evidence or a sandbox reminder. No action was performed.'),False,[]
 
 
-def _turn(data, state, payload, request_id, now, *, evidence=None):
+def _turn(data, state, payload, request_id, now, principal, *, evidence=None):
     _fields(payload,('message','conversationId','chartContext'),('modality',))
     message=_text(payload['message'])
     modality=payload.get('modality','text')
     if modality not in ('text','voice'): raise ControlError('VALIDATION_FAILED',400)
     if evidence:
         context,rows,receipt=evidence['chartContext'],copy.deepcopy(evidence['evidenceRows']),copy.deepcopy(evidence['receipt'])
+        if 'selectedEntity' in context:
+            QueryService.require(principal,'workspaces.read' if context['selectedEntity']['collection']=='workspaces' else 'customers.read')
+        entity=copy.deepcopy(evidence.get('selectedEntityFacts'))
     else:
-        context,rows=_context(data,payload['chartContext'],state['environment'])
+        context,rows,entity=_context(data,payload['chartContext'],state['environment'],principal)
         receipt=_receipt(data)
     conversation_id=payload['conversationId']
     if conversation_id is None:
@@ -154,11 +178,15 @@ def _turn(data, state, payload, request_id, now, *, evidence=None):
     read_data=data if not evidence else dict(scenario=receipt.get('scenario','normal'),asOf=receipt.get('asOf'),
                                              summary={},incidents=[],analytics={})
     answer,supported,links=_explain(read_data,message,rows,context['chartId'])
+    if entity and any(s in message.casefold() for s in ('customer','workspace','invoice','maya','客戶','工作區','發票')):
+        description='; '.join(f'{key}: {value}' for key,value in entity.items() if key not in ('workspaceIds',))
+        answer='Demo simulation; selected fictional '+context['selectedEntity']['collection']+' evidence. '+description+'. No account or financial change was performed.'
+        supported=True
     if historical: answer='Historical Demo snapshot as of '+str(receipt.get('asOf'))+'. '+answer
     result=empty_result(new_trace_id(),modality)
     result.update(runId=request_id,conversationId=conversation['id'],namespace='founder',mode='demo_simulation',
                   state='completed' if supported else 'blocked',answerText=answer,speakableSummary=answer,
-                  evidenceRows=rows,queryReceiptIds=[receipt['id']],chartContext=context,receipt=receipt,
+                  evidenceRows=rows,selectedEntityFacts=entity,queryReceiptIds=[receipt['id']],chartContext=context,receipt=receipt,
                   scenario=receipt.get('scenario','normal'),historicalContext=historical,createdAt=now,links=links,externalDelivery=False,
                   usage=dict(providerCalls=0,costState='not_applicable',costCenter='founder_operations'),
                   warnings=[dict(code='DEMO_SIMULATION',message='Deterministic simulation; no live model or voice connected.')])
@@ -213,6 +241,7 @@ def _schedule(data,state,payload,now,report=False):
                       kind=payload['kind'],state='ready',createdAt=now,queryReceiptIds=list(last['queryReceiptIds']),
                       receipt=copy.deepcopy(last['receipt']),chartContext=copy.deepcopy(last['chartContext']),
                       evidenceRows=copy.deepcopy(last['evidenceRows']),text=last['answerText'],
+                      selectedEntityFacts=copy.deepcopy(last.get('selectedEntityFacts')),
                       simulation=True,externalDelivery=False,deliveryMode='sandbox',version=1)
         state['reports'].append(briefing)
         row['reportId']=briefing['id']
@@ -236,9 +265,9 @@ def _summary(state,payload,now):
     return copy.deepcopy(row)
 
 
-def _apply(data,state,action,payload,now):
+def _apply(data,state,action,payload,now,principal):
     kind,request_id=action['action'],action['requestId']
-    if kind=='founder_turn': return _turn(data,state,payload,request_id,now)
+    if kind=='founder_turn': return _turn(data,state,payload,request_id,now,principal)
     if kind in ('founder_reminder','founder_report_schedule'):
         return _schedule(data,state,payload,now,kind=='founder_report_schedule')
     if kind=='founder_summary': return _summary(state,payload,now)
@@ -256,7 +285,7 @@ def _apply(data,state,action,payload,now):
         report=_find(state,'reports',attempt['sourceId'])
         conversation=_find(state,'conversations',report['conversationId'])
         return _turn(data,state,dict(message=payload['message'],conversationId=conversation['id'],
-                     chartContext=report['chartContext'],modality='voice'),request_id,now,evidence=report)
+                     chartContext=report['chartContext'],modality='voice'),request_id,now,principal,evidence=report)
     if kind=='founder_voice':
         _fields(payload,('conversationId','operation'),('generationId',))
         conversation=_find(state,'conversations',_id(payload['conversationId']))
@@ -314,7 +343,7 @@ def reduce_action(data, action, principal, *, now=None):
     if not isinstance(payload,dict): raise ControlError('VALIDATION_FAILED',400)
     state=copy.deepcopy(data.get('founderIntelligence') or _empty(actor,environment))
     # Transactional copy: an invalid action never leaves partial state in caller memory.
-    result=_apply(data,state,{**action,'requestId':request_id},payload,now or datetime.now(timezone.utc).isoformat())
+    result=_apply(data,state,{**action,'requestId':request_id},payload,now or datetime.now(timezone.utc).isoformat(),principal)
     data['founderIntelligence']=state
     return result
 

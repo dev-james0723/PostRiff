@@ -40,7 +40,7 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.data = copy.deepcopy(self.seed)
         self.principal = dict(operator=dict(user_id='00000000-0000-0000-0000-000000000001',
                                            role='founder', status='active', environment='local', auth_epoch=1,
-                                           capabilities=['control.read', 'copilot.use', 'metrics.query']),
+                                           capabilities=['control.read', 'copilot.use', 'metrics.query','customers.read','workspaces.read']),
                               session=dict(id=str(uuid.uuid4()), environment='local', assurance='aal2', auth_epoch=1,
                                            revoked_at=None, expires_at=4102444800))
 
@@ -257,6 +257,30 @@ class FounderIntelligenceTests(unittest.TestCase):
         principal=copy.deepcopy(self.principal)
         principal['operator']['capabilities'].remove('copilot.use')
         with self.assertRaises(ControlError):service.authorize_demo_action(self.data,action,principal)
+
+    def test_selected_customer_is_server_resolved_and_grant_rechecked_on_retrieval(self):
+        payload=dict(message='Explain this customer',conversationId=None,chartContext=dict(
+            chartId='plan-distribution',viewVersion=1,queryReceiptId=dataset.receipt(self.data)['id'],
+            mode='demo',environment='local',selectedEntity={'collection':'customers','id':'customer-1'}))
+        run=self.action('founder_turn',payload)
+        self.assertIn('Maya Chen',run['answerText'])
+        self.assertEqual(run['selectedEntityFacts']['id'],'customer-1')
+        self.assertNotIn('email',run['selectedEntityFacts'])
+        self.assertEqual(run['queryReceiptIds'],[dataset.receipt(self.data)['id']])
+        for selection in ({'collection':'customers','id':'customer-missing'},
+                          {'collection':'auth.users','id':'customer-1'},
+                          {'collection':'customers','id':'customer-1','amountMinor':0}):
+            with self.subTest(selection=selection),self.assertRaises(ControlError):
+                self.action('founder_turn',{**payload,'chartContext':{**payload['chartContext'],'selectedEntity':selection}})
+        principal=copy.deepcopy(self.principal)
+        principal['operator']['capabilities'].remove('customers.read')
+        with self.assertRaises(ControlError):service.preview_state(self.data,principal)
+        replay=dict(action='founder_turn',targetId='founder',value=json.dumps(payload),
+                    revision=self.data['revision'],requestId=run['runId'])
+        with self.assertRaises(ControlError):service.authorize_demo_action(self.data,replay,principal)
+        summary=dict(action='founder_summary',targetId='founder',value=json.dumps({'conversationId':run['conversationId']}),
+                     revision=self.data['revision'],requestId=str(uuid.uuid4()))
+        with self.assertRaises(ControlError):service.reduce_action(self.data,summary,principal)
 
 
 if __name__ == '__main__': unittest.main()
