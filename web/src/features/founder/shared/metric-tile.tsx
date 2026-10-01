@@ -141,7 +141,7 @@ export function MetricTile({ id, label, value, unit, currency, delta, deltaPerio
         </span>
         {shown && <Sparkline points={sparkline} className='shrink-0' />}
       </div>
-      <div className='flex min-h-5 items-center justify-between gap-2 text-xs'>
+      <div className='flex min-h-5 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs'>
         {change ? (
           <span className={cn('flex items-center gap-1 tabular-nums', change.direction === 'flat' ? 'text-muted-foreground' : 'text-foreground')}>
             {change.direction === 'up' && <Icons.trendingUp className='size-3.5' aria-hidden />}
