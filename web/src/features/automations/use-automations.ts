@@ -65,12 +65,13 @@ export function monthStart(nowSeconds: number): number {
   return new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000;
 }
 
-/** Campaign briefs that no automation uses yet (made by the earlier planner or a suggestion). */
+/** Campaign briefs that no automation uses yet (made by the earlier planner or a suggestion). A Signature Series is
+ *  planned in Library and followed through an automation's evergreen option, never scheduled as a plain brief. */
 export function unscheduledBriefs(state: SnapshotState | undefined): RaffiCampaign[] {
   const planning = state?.raffi?.campaignPlanning;
   if (!planning) return [];
   const used = new Set(planning.recurringTasks.filter((task) => task.status !== 'cancelled').map((task) => task.campaignId));
-  return planning.campaigns.filter((campaign) => campaign.status !== 'cancelled' && !used.has(campaign.id));
+  return planning.campaigns.filter((campaign) => campaign.status !== 'cancelled' && campaign.kind !== 'series' && !used.has(campaign.id));
 }
 
 /**

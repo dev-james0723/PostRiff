@@ -9,6 +9,10 @@ overlay items in three separate memory types:
 Learned preferences stay where preference learning keeps them (`state.learning`); this module adds the overlay
 metadata the spec asks for (evidence ids, counter-evidence, confidence, last support, expiry, replacement) and the
 explicit notes a person writes, under `state.coworker.overlays`. Nothing here rewrites a skill file.
+
+Explicit strategy items are planning decisions with a narrow scope (a Signature Series' accepted, rejected or
+"do not repeat" angles, scope `{"seriesId": …}`). They apply only to a task that names that series, so they never
+reach a writer prompt, Brand Brain or voice; revoking one is a status change like any note.
 """
 from __future__ import annotations
 
@@ -16,7 +20,9 @@ import hashlib
 import json
 import time
 
-MEMORY_TYPES = ("voice", "brand")
+MEMORY_TYPES = ("voice", "brand", "strategy")
+# What the general note editor accepts; strategy items are written by the feature that owns their scope.
+NOTE_TYPES = ("voice", "brand")
 # Inferred items lose confidence without new support and expire; explicit items never decay.
 INFERRED_HALF_LIFE_DAYS = 90
 INFERRED_EXPIRY_DAYS = 180
@@ -55,6 +61,10 @@ def revisions(state):
 
 def _in_scope(item_scope, scope):
     item_scope = item_scope or {}
+    series = item_scope.get("seriesId")
+    if series and series != scope.get("seriesId"):
+        # A series decision applies to that series' planning only, never to general writing.
+        return False
     platform = item_scope.get("platform")
     if platform and scope.get("platforms") and platform not in scope["platforms"]:
         return False
@@ -132,6 +142,33 @@ def explicit_items(state):
 
 def all_items(state, now=None):
     return explicit_items(state) + learned_items(state, now)
+
+
+def scoped_items(state, memory_type, **scope):
+    """Explicit items of one memory type whose scope carries every given key/value (any status)."""
+    return [i for i in explicit_items(state) if i["memoryType"] == memory_type
+            and all((i.get("scope") or {}).get(key) == value for key, value in scope.items())]
+
+
+def add_item(state, item, actor, now):
+    """Append one explicit item (caller-built, already validated) and record it in the bounded history."""
+    view = ensure(state)
+    view["items"].append(item)
+    view["history"] = view["history"][-99:] + [{"at": now, "id": item["id"], "change": "added", "by": actor}]
+    view["revision"] += 1
+    return item
+
+
+def set_status(state, item_id, status, actor, now):
+    """Change an explicit item's status (active, disabled, retired). Returns False when the item is gone."""
+    view = ensure(state)
+    item = next((i for i in view["items"] if i.get("id") == item_id), None)
+    if item is None:
+        return False
+    item["status"], item["updatedAt"] = status, now
+    view["history"] = view["history"][-99:] + [{"at": now, "id": item_id, "change": status, "by": actor}]
+    view["revision"] += 1
+    return True
 
 
 def effective_view(state, scope, cloud_allowed=True, now=None):

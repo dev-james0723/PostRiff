@@ -760,7 +760,7 @@ class CoworkerService:
         self._require("RAFII_ADAPTIVE_SKILLS_ENABLED")
         from .. import skill_registry
         memory_type = payload.get("memoryType")
-        if memory_type not in overlays.MEMORY_TYPES:
+        if memory_type not in overlays.NOTE_TYPES:
             raise AlphaError("Choose voice or brand.", 400)
         statement = _clean(payload.get("statement"), 240)
         if not statement:
