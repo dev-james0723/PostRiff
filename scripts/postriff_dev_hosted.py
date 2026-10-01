@@ -171,12 +171,21 @@ class InboxFixtureProvider(DevProvider):
 
 class DevAssets:
     """In-memory private media boundary for the synthetic harness, with the video bucket's calls (chat-context SPEC §7.3):
-    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`."""
+    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`.
+
+    DEV-SYNTHETIC, memory only: it also stands in for the private `rafii-source-uploads` bucket (raw PDF/audio intake:
+    signed upload URL, HEAD, bounded range reads, delete; the bucket's own size and MIME limits) and for the immutable,
+    content-addressed PNG writes of rendered Visual Pack slides (`put_immutable`, category `visual-pack`). Nothing here
+    reaches Supabase or any other service; every object disappears with the harness process."""
     VIDEO_BUCKET = "postriff-video"
+    # The real source bucket (hosted_storage.SOURCE_BUCKET) is private, 30 MB, PDF and the four audio types.
+    source_bucket = "rafii-source-uploads"
+    SOURCE_LIMIT = 30_000_000
+    SOURCE_MIMES = ["application/pdf", "audio/wav", "audio/mpeg", "audio/mp4", "audio/ogg"]
 
     def __init__(self):
         self.objects = {}
-        self.uploads = {}   # token → (workspace id, object name)
+        self.uploads = {}   # token → (workspace id, category, object name)
         self.storage = self
 
     def signed_url(self, wid, kind, name, ttl=300):
@@ -201,39 +210,59 @@ class DevAssets:
         from postriff_phase2.hosted_storage import PrivateAssetService
         PrivateAssetService.remove(self, workspace_id, asset)   # the real kind-aware removal (video, poster, frames)
 
-    # --- the video bucket, in memory -------------------------------------------------------------------------------------
+    def put_immutable(self, workspace_id, category, object_name, raw, content_type="image/jpeg"):
+        """The real adapter's rules (hosted_storage.SupabaseStorage.put_immutable): never videos or raw sources (those
+        arrive by signed upload only), PNG only and only for rendered pack slides, no overwrite (409)."""
+        if category in ("video", "source") or (category == "visual-pack") != (content_type == "image/png"):
+            raise AlphaError("Invalid private object location.")
+        if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
+            raise AlphaError("Decoded media is missing or too large.")
+        if (workspace_id, category, object_name) in self.objects:
+            raise AlphaError("This immutable object already exists.", 409)
+        self.objects[(workspace_id, category, object_name)] = raw
+        return f"{workspace_id}/{category}/{object_name}"
+
+    # --- the video and source buckets, in memory ----------------------------------------------------------------------------
     def bucket_info(self, bucket=None):
+        if bucket == self.source_bucket:
+            return {"id": bucket, "public": False, "fileSizeLimit": self.SOURCE_LIMIT, "allowedMimeTypes": list(self.SOURCE_MIMES)}
         return {"id": bucket or self.VIDEO_BUCKET, "public": False, "fileSizeLimit": 100_000_000, "allowedMimeTypes": ["video/mp4", "video/quicktime"]}
 
     def signed_upload_url(self, workspace_id, category, object_name):
         token = uuid.uuid4().hex
-        self.uploads[token] = (workspace_id, object_name)
-        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{self.VIDEO_BUCKET}/{workspace_id}/video/{object_name}?token={token}"
+        self.uploads[token] = (workspace_id, category, object_name)
+        bucket = self.source_bucket if category == "source" else self.VIDEO_BUCKET
+        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{bucket}/{workspace_id}/{category}/{object_name}?token={token}"
 
     def receive_upload(self, token, raw, mime):
         target = self.uploads.pop(token, None)
         if target is None or not raw:
             return False
-        workspace_id, object_name = target
-        if (workspace_id, "video", object_name) in self.objects:
+        workspace_id, category, object_name = target
+        if (workspace_id, category, object_name) in self.objects:
             return False   # no upsert, like the real signed upload
-        self.objects[(workspace_id, "video", object_name)] = raw
-        self.objects[("mime", workspace_id, object_name)] = mime
+        if category == "source" and (len(raw) > self.SOURCE_LIMIT or mime not in self.SOURCE_MIMES):
+            return False   # the private bucket's own size and MIME limits refuse it
+        self.objects[(workspace_id, category, object_name)] = raw
+        self.objects[("mime", workspace_id, category, object_name)] = mime
         return True
 
     def object_info(self, workspace_id, category, object_name):
         raw = self.get(workspace_id, category, object_name)
-        return {"bytes": len(raw), "mime": self.objects.get(("mime", workspace_id, object_name)) or "video/mp4", "etag": hashlib.sha256(raw).hexdigest()[:16]}
+        return {"bytes": len(raw), "mime": self.objects.get(("mime", workspace_id, category, object_name)) or "video/mp4", "etag": hashlib.sha256(raw).hexdigest()[:16]}
 
     def read_range(self, workspace_id, category, object_name, start, length):
         return {"data": self.get(workspace_id, category, object_name)[start:start + length], "ranged": True}
 
     def delete(self, workspace_id, category, object_name):
         self.objects.pop((workspace_id, category, object_name), None)
+        self.objects.pop(("mime", workspace_id, category, object_name), None)
 
     def list_prefix(self, prefix, bucket=None):
-        workspace_id = prefix.split("/", 1)[0]
-        return [f"{workspace_id}/video/{name}" for (ws, category, name) in list(self.objects) if ws == workspace_id and category == "video"]
+        parts = prefix.strip("/").split("/")
+        workspace_id, wanted = parts[0], (parts[1] if len(parts) > 1 else "video")
+        return [f"{workspace_id}/{wanted}/{name}" for key in list(self.objects) if len(key) == 3
+                for (ws, category, name) in [key] if ws == workspace_id and category == wanted]
 
 
 class DevMediaReader:
