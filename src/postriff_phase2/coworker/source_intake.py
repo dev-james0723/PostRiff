@@ -66,10 +66,17 @@ def _clean(value, limit=MAX_TEXT):
     return value.replace("\x00", "").strip()[:limit]
 
 
-def normalize(kind, payload, *, broker=None, now=None):
-    """One input → SourceArtifact. Raises AlphaError(400/409) with the reason when the input cannot be used."""
+def normalize(kind, payload, *, broker=None, now=None, strict=False):
+    """One input → SourceArtifact. Raises AlphaError(400/409) with the reason when the input cannot be used.
+
+    ``strict`` (raw-file intake, R-FWR-04): text longer than MAX_TEXT is refused with its measured length (413
+    ``source_too_long``) instead of being shortened. Other callers keep the historical shortening."""
     if kind not in FORMATS:
         raise AlphaError(f"Unsupported source format {kind!r}.", 400, code="source_format")
+    if strict and isinstance(payload.get("text"), str):
+        measured = len(payload["text"].replace("\x00", "").strip())
+        if measured > MAX_TEXT:
+            raise AlphaError(f"This text has {measured:,} characters; the limit is {MAX_TEXT:,}. Choose fewer pages or shorten it.", 413, code="source_too_long")
     now = now or time.time()
     title = _clean(payload.get("title"), 200)
     text, segments, provenance = "", [], None
