@@ -29,6 +29,7 @@ PUBLIC = (
 CRON = (
     "postriff_phase2.source_uploads.jobs",
     "postriff_phase2.relationships.jobs",
+    "postriff_phase2.visual_pack.jobs",
     "postriff_phase2.briefs.jobs",
     "postriff_phase2.proof.jobs",
 )
