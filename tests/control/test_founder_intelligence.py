@@ -169,6 +169,10 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.assertEqual(snapshot['messages'][0]['role'],'user')
         self.assertEqual(snapshot['messages'][1]['role'],'assistant')
         self.assertEqual(snapshot['messages'][1]['receiptId'],run['queryReceiptIds'][0])
+        for bad in ([],None,{'action':[]},{'action':{}}):
+            for adapter in (service.authorize_demo_action,service.apply_demo_action):
+                with self.subTest(adapter=adapter.__name__,bad=bad),self.assertRaises(ControlError):
+                    adapter(self.data,bad,self.principal)
 
     def test_local_dst_fold_gap_and_no_unspecified_report_time(self):
         self.assertEqual(service.resolve_local_time('2026-03-08T02:30:00','America/New_York'),'2026-03-08T07:00:00+00:00')
@@ -267,6 +271,10 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.assertEqual(run['selectedEntityFacts']['id'],'customer-1')
         self.assertNotIn('email',run['selectedEntityFacts'])
         self.assertEqual(run['queryReceiptIds'],[dataset.receipt(self.data)['id']])
+        self.data['invoices'][1]['status']='past_due'
+        invoice=self.action('founder_turn',{**payload,'message':'Explain selected invoice',
+            'chartContext':{**payload['chartContext'],'selectedEntity':{'collection':'invoices','id':'invoice-1'}}})
+        self.assertEqual(invoice['links'],[{'kind':'invoice','id':'invoice-1'}])
         for selection in ({'collection':'customers','id':'customer-missing'},
                           {'collection':'auth.users','id':'customer-1'},
                           {'collection':'customers','id':'customer-1','amountMinor':0}):
@@ -281,6 +289,36 @@ class FounderIntelligenceTests(unittest.TestCase):
         summary=dict(action='founder_summary',targetId='founder',value=json.dumps({'conversationId':run['conversationId']}),
                      revision=self.data['revision'],requestId=str(uuid.uuid4()))
         with self.assertRaises(ControlError):service.reduce_action(self.data,summary,principal)
+
+    def test_selected_entity_never_overwrites_stale_source_warning(self):
+        self.data.update(scenario='stale_data',dataState='stale')
+        for collection,ref in (('customers','customer-1'),('workspaces','workspace-1'),('invoices','invoice-1')):
+            with self.subTest(collection=collection):
+                run=self.action('founder_turn',dict(message='What is the current customer workspace invoice status?',
+                    conversationId=None,chartContext=dict(chartId='plan-distribution',viewVersion=1,
+                    queryReceiptId=dataset.receipt(self.data)['id'],mode='demo',environment='local',
+                    selectedEntity=dict(collection=collection,id=ref))))
+                self.assertIn('last-good snapshot',run['answerText'])
+                self.assertIn('unavailable',run['answerText'])
+                self.assertNotIn('status: active',run['answerText'])
+
+    def test_saved_entity_report_remains_historical_when_same_scenario_changes(self):
+        run=self.action('founder_turn',dict(message='Explain selected workspace',conversationId=None,
+            chartContext=dict(chartId='plan-distribution',viewVersion=1,queryReceiptId=dataset.receipt(self.data)['id'],
+            mode='demo',environment='local',selectedEntity=dict(collection='workspaces',id='workspace-1'))))
+        self.action('founder_report_schedule',dict(conversationId=run['conversationId'],kind='daily',
+            dueLocal='2026-10-02T09:00:00',timeZone='America/Indiana/Indianapolis',confirmed=True))
+        report=self.data['founderIntelligence']['reports'][0]
+        self.data['workspaces'][0]['name']='Updated Fictional Workspace'
+        self.data['revision']+=1
+        call=self.action('founder_delivery',dict(operation='start',channel='call',sourceId=report['id']))
+        self.action('founder_delivery',dict(operation='advance',channel='call',sourceId=report['id'],attemptId=call['id'],outcome='live'))
+        response=self.action('founder_follow_up',dict(attemptId=call['id'],message='Explain selected workspace'))
+        self.assertTrue(response['historicalContext'])
+        self.assertIn('Historical Demo snapshot',response['answerText'])
+        self.assertIn('Fern Studio',response['answerText'])
+        self.assertNotIn('Updated Fictional Workspace',response['answerText'])
+        self.assertTrue(service.preview_state(self.data,self.principal)['conversations'][0]['turns'][0]['historicalContext'])
 
 
 if __name__ == '__main__': unittest.main()

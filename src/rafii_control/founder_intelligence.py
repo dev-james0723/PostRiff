@@ -174,14 +174,18 @@ def _turn(data, state, payload, request_id, now, principal, *, evidence=None):
         state['conversations'].append(conversation)
     else: conversation=_find(state,'conversations',_id(conversation_id))
     if len(conversation['turns'])>=50: raise ControlError('BUDGET_EXCEEDED',400)
-    historical=receipt.get('scenario','normal')!=data.get('scenario','normal')
-    read_data=data if not evidence else dict(scenario=receipt.get('scenario','normal'),asOf=receipt.get('asOf'),
+    historical=receipt['id']!=_receipt(data)['id']
+    read_data=data if not evidence else dict(scenario=receipt.get('scenario','normal'),asOf=receipt.get('asOf'),dataState=receipt.get('dataState'),
                                              summary={},incidents=[],analytics={})
     answer,supported,links=_explain(read_data,message,rows,context['chartId'])
-    if entity and any(s in message.casefold() for s in ('customer','workspace','invoice','maya','客戶','工作區','發票')):
+    stale=read_data.get('scenario')=='stale_data' or read_data.get('dataState') in ('stale','unavailable','partial') or receipt.get('dataState') in ('stale','unavailable','partial')
+    if entity and stale:
+        answer+=' The selected fictional entity reflects that last-good snapshot; its current status and balance are unavailable.'
+    elif entity and any(s in message.casefold() for s in ('customer','workspace','invoice','maya','客戶','工作區','發票')):
         description='; '.join(f'{key}: {value}' for key,value in entity.items() if key not in ('workspaceIds',))
         answer='Demo simulation; selected fictional '+context['selectedEntity']['collection']+' evidence. '+description+'. No account or financial change was performed.'
         supported=True
+        links=[dict(kind={'customers':'customer','workspaces':'workspace','invoices':'invoice'}[context['selectedEntity']['collection']],id=entity['id'])]
     if historical: answer='Historical Demo snapshot as of '+str(receipt.get('asOf'))+'. '+answer
     result=empty_result(new_trace_id(),modality)
     result.update(runId=request_id,conversationId=conversation['id'],namespace='founder',mode='demo_simulation',
@@ -361,9 +365,10 @@ def preview_state(data, principal):
         state[collection]=state[collection][-limit:]
     for attempt in state['contactAttempts']: attempt.pop('operationRequests',None)
     if isinstance(state.get('lastActionResult'),dict):state['lastActionResult'].pop('operationRequests',None)
+    current_receipt=_receipt(data)['id']
     for conversation in state['conversations']:
         for turn in conversation['turns']:
-            turn['historicalContext']=turn['scenario']!=data.get('scenario','normal')
+            turn['historicalContext']=turn['receipt']['id']!=current_receipt
     # One presentation adapter for the coordinator's panel; these are projections
     # of persisted turns, not another conversation store.
     messages=[]
@@ -416,6 +421,7 @@ def demo_snapshot(data, principal):
 
 def authorize_demo_action(data, action, principal):
     """Call BEFORE returning an action replay from the enclosing Demo store."""
+    if not isinstance(action,dict) or not isinstance(action.get('action'),str): raise ControlError('VALIDATION_FAILED',400)
     if action.get('action') not in ACTIONS: return False
     _require(data,principal)
     return True
@@ -423,6 +429,7 @@ def authorize_demo_action(data, action, principal):
 
 def apply_demo_action(data, action, principal):
     """Existing WorkspaceService extension hook; no new route or persistence."""
+    if not isinstance(action,dict) or not isinstance(action.get('action'),str): raise ControlError('VALIDATION_FAILED',400)
     if action.get('action') not in ACTIONS: return False
     result=reduce_action(data,action,principal)
     data['founderIntelligence']['lastActionResult']=copy.deepcopy(result)

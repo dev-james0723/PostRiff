@@ -89,6 +89,74 @@ class FounderPreviewScenarioTests(unittest.TestCase):
         self.assertEqual(len(self.data['invoices']), 30000)
         self.assertEqual(len(self.data['payments']), 30000)
 
+    def test_payment_exception_persists_same_linked_account_evidence_and_safe_notice(self):
+        result = self.scenario('payment_failure')
+        incident = self.data['incidents'][0]
+        self.assertEqual(incident['id'], result['incidentId'])
+        self.assertEqual(incident['detectorFamily'], 'demo_payment_exception')
+        self.assertEqual(incident['classification'], 'simulated_payment_exception')
+        self.assertEqual(incident['severity'], 'warning')
+        self.assertEqual(incident['affectedCount'], 1)
+        self.assertEqual(incident['affectedRecords'][0]['name'], 'Leo Martins')
+        self.assertEqual(incident['affectedRecords'][0]['workspaceName'], 'Northline Stories')
+        self.assertEqual(incident['affectedRecords'][0]['amountMinor'], 5900)
+        self.assertEqual(incident['affectedRecords'][0]['currency'], 'USD')
+        for collection, source_id in result['paymentSourceIds'].items():
+            self.assertEqual(incident['affectedSourceIds'][collection], [source_id])
+            self.assertTrue(any(row['id'] == source_id for row in self.data[collection]))
+        self.assertIn('unverified', incident['unknown'][0])
+        notice = self.data['notificationEvents'][0]
+        self.assertEqual(notice['incidentId'], incident['id'])
+        self.assertEqual(notice['kind'], 'incident')
+        self.assertEqual(notice['state'], 'queued')
+        for identifier in (incident['id'], incident['episodeId'], notice['id']):
+            self.assertRegex(identifier, r'\A[A-Za-z0-9-]{1,80}\Z')
+        self.assertFalse(notice['externalDelivery'])
+        self.assertIsNone(notice['providerRef'])
+        safe_body = json.dumps([incident, notice])
+        for private in ('@', 'cardLast4', 'recipient'):
+            self.assertNotIn(private, safe_body)
+        before = copy.deepcopy(self.data)
+        self.assertTrue(self.scenario('payment_failure', LATER)['replayed'])
+        self.assertEqual(self.data, before)
+
+    def test_payment_notification_failure_and_recovery_keep_episode_and_derive_restoration(self):
+        opened = self.scenario('payment_failure')
+        original_failure = copy.deepcopy(self.data['summary'])
+        incident = self.data['incidents'][0]
+        first_event = copy.deepcopy(incident['timeline'][0])
+        failed = self.scenario('notification_failure', LATER)
+        self.assertEqual(failed['incidentId'], opened['incidentId'])
+        self.assertEqual(failed['paymentSourceIds'], opened['paymentSourceIds'])
+        self.assertEqual(self.data['summary'], original_failure)
+        self.assertEqual(incident['notificationState'], 'failed')
+        self.assertEqual(self.data['notificationEvents'][0]['state'], 'failed')
+        self.assertEqual(incident['timeline'][0], first_event)
+        self.assertEqual(len(self.data['incidents']), 1)
+        recovered = self.scenario('recovery', '2026-10-01T16:00:00Z')
+        self.assertEqual(recovered['incidentId'], opened['incidentId'])
+        self.assertEqual(incident['state'], 'resolved')
+        self.assertFalse(incident['acknowledged'])
+        self.assertEqual([row['type'] for row in incident['timeline']], ['opened', 'notification_failed', 'resolved'])
+        self.assertEqual(self.data['summary'], self.canonical['summary'])
+        self.assertEqual(self.data['invoices'], self.canonical['invoices'])
+        self.assertEqual(self.data['payments'], self.canonical['payments'])
+        self.assertEqual(len([row for row in self.data['notificationEvents'] if row['kind'] == 'recovery']), 1)
+        before = copy.deepcopy(self.data['notificationEvents'])
+        self.scenario('recovery', '2026-10-01T17:00:00Z')
+        self.assertEqual(self.data['notificationEvents'], before)
+
+    def test_payment_and_outage_have_distinct_detector_episodes_preserving_history(self):
+        self.scenario('payment_failure')
+        payment_incident = copy.deepcopy(self.data['incidents'][0])
+        outage = self.scenario('outage', LATER)
+        self.assertEqual(len(self.data['incidents']), 2)
+        self.assertEqual(self.data['incidents'][0], payment_incident)
+        self.assertNotEqual(outage['incidentId'], payment_incident['id'])
+        self.assertEqual(self.data['incidents'][1]['detectorFamily'], 'demo_publishing_outage')
+        self.assertEqual(self.data['incidents'][1]['affectedCount'], 3)
+        self.assertEqual(self.data['summary'], self.canonical['summary'])
+
     def test_payment_normal_restores_original_fields_and_preserves_unrelated_work(self):
         result = self.scenario('payment_failure')
         affected_workspace = next(row for row in self.data['workspaces'] if row['id'] == result['paymentSourceIds']['workspaces'])
@@ -186,7 +254,13 @@ class FounderPreviewScenarioTests(unittest.TestCase):
         self.assertEqual(self.data['sourceState'], 'stale')
         self.assertEqual(self.data['summary']['dataState'], 'stale')
         self.assertEqual(self.data['summary']['mrrMinor'], original['summary']['mrrMinor'])
-        self.assertEqual(self.data['analytics']['revenueTrend'], original['analytics']['revenueTrend'])
+        financial_keys = ('period', 'currency', 'revenueMinor', 'cashMinor')
+        self.assertEqual([{key: row[key] for key in financial_keys} for row in self.data['analytics']['revenueTrend']],
+                         [{key: row[key] for key in financial_keys} for row in original['analytics']['revenueTrend']])
+        for row in self.data['analytics']['revenueTrend']:
+            self.assertEqual(row['dataState'], 'stale')
+            self.assertEqual(row['asOf'], original['asOf'])
+            self.assertEqual(row['lastGoodAsOf'], original['asOf'])
         self.assertEqual(self.data['connections'][0]['state'], 'stale')
         self.scenario('normal', LATER)
         for key in ('asOf', 'summary', 'analytics', 'connections'):

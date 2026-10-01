@@ -162,26 +162,45 @@ def _notification(data, incident, kind, now, state='queued'):
     return existing
 
 
-def _incident(data, state, now):
+def _incident(data, state, now, *, payment_sources=None, reuse_active=False):
+    family = 'demo_payment_exception' if payment_sources else 'demo_publishing_outage'
     active_id = state.get('activeIncidentId')
     incident = next((row for row in data['incidents'] if row.get('id') == active_id), None)
-    if incident and incident.get('state') != 'resolved':
+    if (incident and incident.get('state') != 'resolved'
+            and (reuse_active or incident.get('detectorFamily') == family)):
         return incident
     state['episode'] += 1
     seed = data['manifest'].get('seed', data['schemaVersion'])
     digest = hashlib.sha256(str(seed).encode()).hexdigest()[:12]
-    episode_id = f'demo-outage-{digest}-{state["episode"]}'
-    sources = _impact(data)
-    incident = dict(id='incident-' + episode_id, episodeId=episode_id, title='Simulated publishing outage',
-                    severity='warning', state='open', classification='simulated_bug_outage',
-                    detectorFamily='demo_publishing_outage', sourceTrust='server_owned_demo_scenario',
+    episode_id = f'demo-{"payment" if payment_sources else "outage"}-{digest}-{state["episode"]}'
+    if payment_sources:
+        customer, workspace, subscription, invoice, payment = payment_sources
+        sources = [dict(customerId=customer['id'], workspaceId=workspace['id'], subscriptionId=subscription['id'],
+                        invoiceId=invoice['id'], paymentId=payment['id'], name=customer.get('name', 'Fictional subscriber'),
+                        workspaceName=workspace.get('name'), plan=subscription.get('plan'),
+                        amountMinor=invoice['amountMinor'], currency=invoice['currency'])]
+        source_ids = {collection: [row['id']] for collection, row in
+                      zip(('customers', 'workspaces', 'subscriptions', 'invoices', 'payments'), payment_sources)}
+        known = [f"The Demo control simulated failed payment {payment['id']} for fictional subscriber {customer.get('name', customer['id'])}.",
+                 f"Linked invoice {invoice['id']} is past due for {invoice['amountMinor']} minor units ({invoice['currency']}); subscription {subscription['id']} is past due.",
+                 'No provider charge, live billing failure or outbound customer message was observed or performed.']
+        title = 'Simulated payment exception — ' + customer.get('name', 'Fictional subscriber')
+        classification = 'simulated_payment_exception'
+    else:
+        sources = _impact(data)
+        source_ids = dict(members=[row['memberId'] for row in sources],
+                          customers=[row['customerId'] for row in sources],
+                          workspaces=[row['workspaceId'] for row in sources])
+        known = ['The Demo control explicitly simulated a publishing outage for these linked fictional records.',
+                 'No live service, customer or provider fault was observed.']
+        title, classification = 'Simulated publishing outage', 'simulated_bug_outage'
+    incident = dict(id='incident-' + episode_id, episodeId=episode_id, title=title,
+                    severity='warning', state='open', classification=classification,
+                    detectorFamily=family, sourceTrust='server_owned_demo_scenario',
                     affectedCount=len(sources), affectedWorkspaceIds=[row['workspaceId'] for row in sources],
-                    affectedSourceIds=dict(members=[row['memberId'] for row in sources],
-                                           customers=[row['customerId'] for row in sources],
-                                           workspaces=[row['workspaceId'] for row in sources]),
+                    affectedSourceIds=source_ids,
                     affectedRecords=sources, observedAt=now, lastGoodAsOf=data['asOf'],
-                    known=['The Demo control explicitly simulated a publishing outage for these linked fictional records.',
-                           'No live service, customer or provider fault was observed.'],
+                    known=known,
                     unknown=['Root cause is unverified; simulated classification is not live causality.'],
                     acknowledged=False, acknowledgement='unacknowledged', notificationState='queued',
                     timeline=[], **_META)
@@ -216,8 +235,12 @@ def apply_scenario(data: dict, scenario_id: str, *, now: str) -> dict:
     if prior.get('appliedScenario') == scenario_id:
         return _result(data, prior, replayed=True)
     # Validate source links before any state mutation so rejection is atomic.
-    payment_sources = _payment_sources(data) if scenario_id == 'payment_failure' else None
-    if scenario_id in ('outage', 'notification_failure'):
+    active = _row(data, 'incidents', prior.get('activeIncidentId'))
+    payment_context = (scenario_id == 'payment_failure' or
+                       (scenario_id == 'notification_failure' and active
+                        and active.get('state') != 'resolved' and active.get('detectorFamily') == 'demo_payment_exception'))
+    payment_sources = _payment_sources(data) if payment_context else None
+    if scenario_id == 'outage' or (scenario_id == 'notification_failure' and not payment_context):
         _impact(data)
     from .demo_dataset import refresh_summary, receipt
 
@@ -226,7 +249,7 @@ def apply_scenario(data: dict, scenario_id: str, *, now: str) -> dict:
     data.setdefault('incidents', [])
     data.setdefault('notificationEvents', [])
     state.pop('paymentSourceIds', None)
-    if scenario_id == 'payment_failure':
+    if payment_context:
         customer, workspace, subscription, invoice, payment = payment_sources
         fields = (('customers', customer, 'billing_review'), ('workspaces', workspace, 'grace'),
                   ('subscriptions', subscription, 'past_due'), ('invoices', invoice, 'past_due'),
@@ -236,19 +259,21 @@ def apply_scenario(data: dict, scenario_id: str, *, now: str) -> dict:
         _patch(data, state, 'paidAt', None, collection='invoices', row_id=invoice['id'])
         _patch(data, state, 'paymentState', 'simulated_payment_failure')
         state['paymentSourceIds'] = {collection: row['id'] for collection, row, _ in fields}
+        incident = _incident(data, state, now, payment_sources=payment_sources)
     elif scenario_id in ('outage', 'notification_failure'):
-        incident = _incident(data, state, now)
-        _patch(data, state, 'supportState', 'simulated_outage')
-        if scenario_id == 'notification_failure':
-            _notification(data, incident, 'incident', now, 'failed')
-            incident['notificationState'] = 'failed'
-            _timeline(incident, 'notification_failed', now)
+        incident = _incident(data, state, now, reuse_active=scenario_id == 'notification_failure')
+        if incident['detectorFamily'] == 'demo_publishing_outage':
+            _patch(data, state, 'supportState', 'simulated_outage')
     elif scenario_id == 'recovery':
         incident = _row(data, 'incidents', state.get('activeIncidentId'))
         if incident and incident.get('state') != 'resolved':
             incident.update(state='resolved', resolvedAt=now)
             _timeline(incident, 'resolved', now)
             _notification(data, incident, 'recovery', now)
+    if scenario_id == 'notification_failure':
+        _notification(data, incident, 'incident', now, 'failed')
+        incident['notificationState'] = 'failed'
+        _timeline(incident, 'notification_failed', now)
     data.update(scenario=scenario_id, scenarioLabel=SCENARIOS[scenario_id])
     refresh_summary(data)
     if scenario_id == 'stale_data':
