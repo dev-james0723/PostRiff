@@ -30,22 +30,37 @@ export function lastGoodAt(row: Pick<MetricRow, 'sourceWatermark'> | null | unde
   return row?.sourceWatermark ?? null;
 }
 
+/**
+ * The time bucket a row belongs to. Live and Demo both put a day bucket in `dimensions.window` ("YYYY-MM-DD" in the
+ * query's time zone) when the query groups by `window`; every row's `interval` is the query interval, never a bucket.
+ */
+export function bucketOf(row: Pick<MetricRow, 'dimensions'>): string | null {
+  const window = row.dimensions?.window;
+  return typeof window === 'string' && window ? window : null;
+}
+
+/** The row's dimensions other than its time bucket. */
+export function otherDimensions(row: Pick<MetricRow, 'dimensions'>): Record<string, string> {
+  const { window: _bucket, ...rest } = row.dimensions ?? {};
+  return rest;
+}
+
 /** Rows without a time bucket (one per dimension combination) describe the whole interval. */
 export function wholeIntervalRows(rows: readonly MetricRow[]): MetricRow[] {
-  return rows.filter((row) => !row.interval?.start);
+  return rows.filter((row) => bucketOf(row) === null);
 }
 
 export function bucketRows(rows: readonly MetricRow[]): MetricRow[] {
-  return rows.filter((row) => Boolean(row.interval?.start));
+  return rows.filter((row) => bucketOf(row) !== null);
 }
 
-/** The one row for a metric over the whole interval, else the first row at all (a single-bucket answer). */
+/** The one row for a metric over the whole interval (undimensioned first), else the first row at all. */
 export function headlineRow(result: MetricResult | undefined, metricId?: string): MetricRow | null {
   if (!result) return null;
   const mine = metricId ? result.rows.filter((row) => row.metricId === metricId) : result.rows;
   if (mine.length === 0) return null;
-  const whole = wholeIntervalRows(mine).find((row) => !row.dimensions || Object.keys(row.dimensions).length === 0);
-  return whole ?? mine[0];
+  const whole = wholeIntervalRows(mine);
+  return whole.find((row) => !hasDimensions(row)) ?? whole[0] ?? mine[0];
 }
 
 export interface TileInput {
@@ -98,7 +113,7 @@ export function tileFromResult(result: MetricResult | undefined, input: TileInpu
 }
 
 function hasDimensions(row: MetricRow): boolean {
-  return Boolean(row.dimensions && Object.keys(row.dimensions).length > 0);
+  return Object.keys(otherDimensions(row)).length > 0;
 }
 
 export interface SeriesPoint {
@@ -124,8 +139,9 @@ export interface Series {
 }
 
 /**
- * Pivot time-bucketed rows into chart points: one point per bucket start, one key per series (a dimension value,
- * or the metric id when the rows carry no dimension). Missing buckets stay `null` so the chart shows a gap.
+ * Pivot time-bucketed rows into chart points: one point per day bucket (`dimensions.window`), one key per series (a
+ * dimension value, or the metric id when the rows carry no other dimension). Missing buckets stay `null` so the chart
+ * shows a gap; whole-interval rows are not points and are left out.
  */
 export function seriesFromRows(rows: readonly MetricRow[], dimension?: string, labelFor: (row: MetricRow) => string = (row) => (dimension ? (row.dimensions?.[dimension] ?? 'unknown') : row.metricId)): Series {
   const buckets = bucketRows(rows);
@@ -138,11 +154,11 @@ export function seriesFromRows(rows: readonly MetricRow[], dimension?: string, l
       descriptor = { key: `s${keys.size}`, label, measured: 0 };
       keys.set(label, descriptor);
     }
-    const start = row.interval!.start;
-    let point = byTime.get(start);
+    const bucket = bucketOf(row)!;
+    let point = byTime.get(bucket);
     if (!point) {
-      point = { t: start };
-      byTime.set(start, point);
+      point = { t: bucket };
+      byTime.set(bucket, point);
     }
     if (isMeasured(row)) {
       point[descriptor.key] = row.value;

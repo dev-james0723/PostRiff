@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { failureOf } from './api';
 import { useAsk } from './ask';
 import { metricValue, stateLabel, tickDate, whenDate } from './format';
-import { collectingSince, headlineRow, lastGoodAt, overallState, tileFromResult, type TileData, type TileInput } from './metric';
+import { bucketOf, collectingSince, headlineRow, lastGoodAt, otherDimensions, overallState, tileFromResult, type TileData, type TileInput } from './metric';
 import { PERIOD_LABEL, PERIOD_SHORT, type PeriodKey } from './period';
 import { ChartCard, DataStateChip as SharedDataStateChip, MetricTile } from './shared';
 import { SimpleTable } from './simple-table';
@@ -150,12 +150,12 @@ export function MetricRowsTable({ rows, caption }: { rows: readonly MetricRow[];
   return (
     <SimpleTable<MetricRow>
       rows={rows}
-      rowKey={(row, index) => `${row.interval?.start ?? 'whole'}-${JSON.stringify(row.dimensions ?? {})}-${index}`}
+      rowKey={(row, index) => `${bucketOf(row) ?? 'whole'}-${JSON.stringify(otherDimensions(row))}-${index}`}
       caption={caption}
       emptyTitle='No rows'
       columns={[
-        { key: 'bucket', label: 'Bucket', render: (row) => (row.interval?.start ? tickDate(row.interval.start) : 'Whole interval') },
-        { key: 'dimensions', label: 'Dimensions', render: (row) => (row.dimensions && Object.keys(row.dimensions).length ? Object.entries(row.dimensions).map(([key, value]) => `${key}: ${stateLabel(value)}`).join(' · ') : '—') },
+        { key: 'bucket', label: 'Bucket', render: (row) => { const bucket = bucketOf(row); return bucket ? tickDate(bucket) : 'Whole interval'; } },
+        { key: 'dimensions', label: 'Dimensions', render: (row) => { const dims = Object.entries(otherDimensions(row)); return dims.length ? dims.map(([key, value]) => `${key}: ${stateLabel(value)}`).join(' · ') : '—'; } },
         { key: 'value', label: 'Value', align: 'right', render: (row) => <span className={cn(row.dataState !== 'measured' && 'text-muted-foreground italic')}>{metricValue(row)}</span> },
         { key: 'state', label: 'State', render: (row) => stateLabel(row.dataState) }
       ]}

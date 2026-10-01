@@ -81,18 +81,41 @@ test('server timestamps are read as ISO strings or epoch seconds, never compared
   assert.equal(format.whenDate(1790000000), format.whenDate('2026-09-21T14:13:20Z'));
 });
 
+// Rows exactly as Live and Demo return them: every row carries the query interval; a day bucket is `dimensions.window`.
+const QUERY_INTERVAL = { start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z', timeZone: 'UTC' };
+const serverRow = (dimensions, value, dataState = 'measured', metricId = 'ai_cost_by_feature') => ({ metricId, definitionVersion: 'v1', interval: QUERY_INTERVAL, dimensions, value, unit: 'usd_micro', dataState });
+
 test('series pivot keeps gaps as null and counts measured buckets per series', () => {
   const rows = [
-    { metricId: 'ai_cost_by_feature', definitionVersion: 'v1', interval: { start: '2026-09-29T00:00:00Z', end: '2026-09-30T00:00:00Z' }, dimensions: { feature: 'draft' }, value: 100, unit: 'usd_micro', dataState: 'measured' },
-    { metricId: 'ai_cost_by_feature', definitionVersion: 'v1', interval: { start: '2026-09-29T00:00:00Z', end: '2026-09-30T00:00:00Z' }, dimensions: { feature: 'publish' }, value: null, unit: 'usd_micro', dataState: 'unavailable' },
-    { metricId: 'ai_cost_by_feature', definitionVersion: 'v1', interval: { start: '2026-09-30T00:00:00Z', end: '2026-10-01T00:00:00Z' }, dimensions: { feature: 'draft' }, value: 50, unit: 'usd_micro', dataState: 'measured' }
+    serverRow({ feature: 'draft', window: '2026-09-29' }, 100),
+    serverRow({ feature: 'publish', window: '2026-09-29' }, null, 'unavailable'),
+    serverRow({ feature: 'draft', window: '2026-09-30' }, 50)
   ];
   const series = metric.seriesFromRows(rows, 'feature');
   assert.deepEqual(series.series.map((s) => [s.label, s.measured]), [['draft', 2], ['publish', 0]]);
-  assert.equal(series.points.length, 2);
+  assert.deepEqual(series.points.map((point) => point.t), ['2026-09-29', '2026-09-30'], 'one point per day bucket, in order');
   assert.equal(series.points[0].s1, null);
   assert.equal(series.points[0].s0, 100);
+  assert.equal(series.points[1].s0, 50);
   assert.equal(series.dataState, 'partial');
+});
+
+test('the query interval every row carries never makes a row a time bucket', () => {
+  const whole = [serverRow({ model: 'gpt' }, 300), serverRow({ model: 'claude' }, 200), serverRow({ model: 'local' }, null, 'unavailable')];
+  const bars = metric.categoriesFromRows(whole, 'model');
+  assert.deepEqual(bars.map((bar) => [bar.label, bar.value]), [['gpt', 300], ['claude', 200], ['local', null]]);
+  assert.equal(metric.wholeIntervalRows(whole).length, 3);
+  assert.equal(metric.bucketRows(whole).length, 0);
+  assert.equal(metric.seriesFromRows(whole, 'model').points.length, 0, 'whole-interval rows are not chart points');
+  const daily = [serverRow({ window: '2026-09-29' }, 1, 'measured', 'mrr'), serverRow({ window: '2026-09-30' }, 2, 'measured', 'mrr')];
+  assert.equal(metric.categoriesFromRows(daily, 'window').length, 0, 'buckets are not categories');
+  assert.deepEqual(metric.otherDimensions({ dimensions: { window: '2026-09-30', plan: 'studio' } }), { plan: 'studio' });
+  // The headline is the undimensioned whole-interval row, else a whole-interval row, never a day bucket when a whole row exists.
+  const mixed = { rows: [...daily, serverRow({}, 7, 'measured', 'mrr')] };
+  assert.equal(metric.headlineRow(mixed, 'mrr').value, 7);
+  const tile = metric.tileFromResult({ requestId: 'r', queryReceiptId: 'q', asOf: NOW.toISOString(), dataState: 'measured', rows: mixed.rows }, { id: 'mrr', label: 'MRR', period: '30d' });
+  assert.equal(tile.value, 7);
+  assert.deepEqual(tile.sparkline, [1, 2], 'the sparkline comes from the day buckets');
 });
 
 test('a tile from an unavailable answer has no value and carries when collection started', () => {
