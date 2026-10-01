@@ -572,6 +572,7 @@ class SourceUploads:
             _upload, job = self._load(cur, workspace_id, upload_id)
         if job and job["state"] == "queued":
             jobs.run_one(self, time.monotonic() + PROCESS_SECONDS, workspace_id=workspace_id, job_id=job["id"])
+            jobs.drain(self, upload_id=upload_id)   # an unsupported or failed file is deleted now, not at the next cron
         return self.status(workspace_id, token, upload_id)
 
     # --- page selection, review and corrections ----------------------------------------------------------------------

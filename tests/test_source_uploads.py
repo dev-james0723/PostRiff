@@ -240,6 +240,11 @@ class FakeApp:
 
 
 class Routes(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        # test_growth_v2_routes checks that a failed lazy import leaves no module behind; don't leave ours either.
+        sys.modules.pop("postriff_phase2.source_uploads.http", None)
+
     def setUp(self):
         from postriff_phase2.source_uploads import http
         self.http = http

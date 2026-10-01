@@ -50,7 +50,7 @@ def _lock(cur, workspace_id):
 def _needed(svc, kind):
     """Seconds one attempt of this kind may take; a job is only claimed when that much time is left."""
     if kind == "pdf_text":
-        return svc.policy.pdf_seconds + 10
+        return svc.policy.pdf_seconds + 5
     if kind == "transcription":
         route, _ = svc.route()
         return (float(route.timeout_seconds) if route else 0) + 10
