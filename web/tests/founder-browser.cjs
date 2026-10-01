@@ -262,11 +262,15 @@ async function main() {
 
       // Deep links land on their panel or tab.
       await attempt(`${width}px ?tab= deep links`, async () => {
+        // Pages with real tabs select the named tab; pages with anchored panels scroll to the panel.
         await page.goto(base + '/founder/revenue?mode=demo&tab=payments');
-        await page.locator('[data-tab="payments"]').waitFor({ timeout: 30000 });
+        await page.getByRole('tab', { name: 'Payments', selected: true }).waitFor({ timeout: 30000 });
+        check(`${width}px revenue ?tab=payments selects its tab`, true);
+        await page.goto(base + '/founder/operations?mode=demo&tab=connections');
+        await page.locator('[data-tab="connections"]').waitFor({ timeout: 30000 });
         await page.waitForTimeout(600);
-        const inView = await page.locator('[data-tab="payments"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
-        check(`${width}px revenue ?tab=payments scrolls to its panel`, inView);
+        const inView = await page.locator('[data-tab="connections"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
+        check(`${width}px operations ?tab=connections scrolls to its panel`, inView);
         await page.goto(base + '/founder/settings?tab=reports');
         await page.getByRole('tab', { name: 'Reports', selected: true }).waitFor({ timeout: 30000 });
         check(`${width}px settings ?tab=reports selects its tab`, true);

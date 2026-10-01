@@ -69,6 +69,13 @@ class FounderActionsPostgresTests(unittest.TestCase):
         operator_actions._STATE.update(status=None, checked=0.0, logged=False)
         with psycopg.connect(self.dsn, autocommit=True) as con:
             con.execute('DELETE FROM rafii_control.request_budgets WHERE bucket=%s', (hashlib.sha256(b'exchange:global').hexdigest(),))
+            # The ledger is shared by every PostgreSQL test module; reservations seeded here (unknown-cost ones included)
+            # must not leak into later modules' all-workspace metric totals.
+            users = [user for user in (getattr(self, 'operator', None), getattr(self, 'customer', None), getattr(self, 'other', None)) if user]
+            workspaces = [ws for ws in (getattr(self, 'operator_ws', None), getattr(self, 'customer_ws', None), getattr(self, 'other_ws', None)) if ws]
+            con.execute('DELETE FROM public.pr_usage_ledger WHERE workspace_id = ANY(%s::uuid[])', (workspaces,))
+            if con.execute("SELECT to_regclass('public.pr_account_blocks') IS NOT NULL").fetchone()[0]:
+                con.execute('DELETE FROM public.pr_account_blocks WHERE user_id = ANY(%s::uuid[]) OR workspace_id = ANY(%s::uuid[])', (users, workspaces))
 
     @staticmethod
     def person(con):
