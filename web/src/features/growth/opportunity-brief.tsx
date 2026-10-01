@@ -8,6 +8,7 @@
  * Chinese follow the person's language preference. Nothing here drafts, schedules or publishes.
  */
 import { useEffect, useId, useRef, useState } from 'react';
+import { useInlineForm } from '@/lib/growth-v2/inline-form';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
@@ -188,12 +189,12 @@ function BriefItemCard({ item, brief, target, canEdit, copy }: { item: BriefItem
 function ReasonPicker({ codes, copy, pending, title, onCancel, onConfirm }: { codes: string[]; copy: Copy; pending: boolean; title: string; onCancel: () => void; onConfirm: (code: string) => void }) {
   const [code, setCode] = useState(codes[0] ?? 'other');
   const id = useId();
+  const { formRef, firstRef } = useInlineForm<HTMLSelectElement>(true, onCancel);
   return (
-    <form className='flex flex-wrap items-end gap-2' aria-label={title} onSubmit={(event) => { event.preventDefault(); onConfirm(code); }}
-          onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }}>
+    <form ref={formRef} className='flex flex-wrap items-end gap-2' aria-label={title} onSubmit={(event) => { event.preventDefault(); onConfirm(code); }}>
       <label className='grid gap-1 text-sm' htmlFor={id}>
         {copy.reason}
-        <select id={id} autoFocus className='rafii-focus rafii-quiet min-h-11 rounded-xl border border-border px-3 text-base' value={code} onChange={(event) => setCode(event.target.value)}>
+        <select id={id} ref={firstRef} className='rafii-focus rafii-quiet min-h-11 rounded-xl border border-border px-3 text-base' value={code} onChange={(event) => setCode(event.target.value)}>
           {codes.map((value) => <option key={value} value={value}>{copy.reasons[value] ?? value}</option>)}
         </select>
       </label>
@@ -213,12 +214,12 @@ function AcceptForm({ item, copy, pending, onCancel, onConfirm }: { item: BriefI
   const angleField = useId();
   const accountField = useId();
   const chosenChannel = channelId || options[0]?.id || '';
+  const { formRef, firstRef } = useInlineForm<HTMLSelectElement>(true, onCancel);
   return (
-    <form className='grid gap-3 sm:grid-cols-2' aria-label={copy.accept} onSubmit={(event) => { event.preventDefault(); if (angleId && chosenChannel) onConfirm(angleId, chosenChannel); }}
-          onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }}>
+    <form ref={formRef} className='grid gap-3 sm:grid-cols-2' aria-label={copy.accept} onSubmit={(event) => { event.preventDefault(); if (angleId && chosenChannel) onConfirm(angleId, chosenChannel); }}>
       <label className='grid gap-1 text-sm' htmlFor={angleField}>
         {copy.chooseAngle}
-        <select id={angleField} autoFocus className='rafii-focus rafii-quiet min-h-11 rounded-xl border border-border px-3 text-base' value={angleId} onChange={(event) => setAngleId(event.target.value)}>
+        <select id={angleField} ref={firstRef} className='rafii-focus rafii-quiet min-h-11 rounded-xl border border-border px-3 text-base' value={angleId} onChange={(event) => setAngleId(event.target.value)}>
           {angles.map((value, index) => <option key={value} value={value}>{index === 0 ? item.angle.text : value}</option>)}
         </select>
       </label>

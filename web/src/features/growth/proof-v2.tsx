@@ -8,6 +8,7 @@
  * existing recap cards below keep working). English and Traditional Chinese follow the person's language preference.
  */
 import { useEffect, useId, useRef, useState } from 'react';
+import { useInlineForm } from '@/lib/growth-v2/inline-form';
 import { toast } from 'sonner';
 import { StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -140,6 +141,7 @@ function DecisionRow({ decision, owner, copy }: { decision: StrategyDecision; ow
   const fieldId = useId();
   const rowId = useId();
   const [focusId, setFocusId] = useState<string | null>(null);
+  const editForm = useInlineForm<HTMLTextAreaElement>(editing, () => { setEditing(false); setFocusId(`${rowId}-edit`); });
   useEffect(() => {   // focus returns to the Edit button on cancel, to the decision's wording after a change
     if (!focusId) return;
     document.getElementById(focusId)?.focus();
@@ -178,11 +180,10 @@ function DecisionRow({ decision, owner, copy }: { decision: StrategyDecision; ow
       {scopeText(decision.scope, copy, channelName).length > 0 && <p className='text-muted-foreground text-xs'>{scopeText(decision.scope, copy, channelName).join(' · ')}</p>}
       {failure && <p role='alert' className='text-destructive text-sm'>{failure}</p>}
       {editing ? (
-        <form className='grid gap-2' onSubmit={(event) => { event.preventDefault(); void act('edit', { statement, ...(channelId ? { scope: { channelId } } : {}) }); }}
-              onKeyDown={(event) => { if (event.key === 'Escape') { setEditing(false); setFocusId(`${rowId}-edit`); } }}>
+        <form ref={editForm.formRef} className='grid gap-2' onSubmit={(event) => { event.preventDefault(); void act('edit', { statement, ...(channelId ? { scope: { channelId } } : {}) }); }}>
           <label className='grid gap-1 text-sm' htmlFor={fieldId}>
             {copy.editLabel}
-            <textarea id={fieldId} autoFocus maxLength={240} required minLength={3} className='rafii-focus rafii-quiet min-h-20 rounded-xl border border-border p-3 text-base'
+            <textarea id={fieldId} ref={editForm.firstRef} aria-label={copy.editLabel} maxLength={240} required minLength={3} className='rafii-focus rafii-quiet min-h-20 rounded-xl border border-border p-3 text-base'
                       value={statement} onChange={(event) => setStatement(event.target.value)} />
           </label>
           {!decision.scope.channelId && (

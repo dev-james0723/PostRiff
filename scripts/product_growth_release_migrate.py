@@ -25,6 +25,7 @@ REVIEWED = {
     '080_customer_results.sql': '846d2be456661a7d012e603bd3bdea54b06b5af61f929820149aa53958e0ed1f',
     '081_relationships.sql': '0d2b181d1d81d2467afa862cc6ac32e42ddea0c8c2368c60b56d996e76f73a33',
     '083_visual_packs.sql': '3aedc1a4a7746489bd85f797e2c0c462a9ea927a77a8291a9dd08800d137955c',
+    '084_briefs_proof_strategy.sql': '5225be48a39b60cbd1114e7cfea3758a568fe04e4aa418c72def650dc99701d5',
     '087_source_uploads.sql': '0acc1a3fcb0865431f4de2e2114951b7cdff93bdedc808654a064e91b5647b65',
 }
 PROJECTS = {'staging': 'oxacvkhpfgytkepxcaqh', 'production': 'buoyhkbodnhzngaotoel'}

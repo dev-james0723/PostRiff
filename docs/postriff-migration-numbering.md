@@ -30,7 +30,7 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 081 | Product Growth v2: relationships (`081_relationships.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 082 | Product Growth v2: unused (series need no DDL; DECISIONS D-021) | — | Do not reassign. |
 | 083 | Product Growth v2: visual packs (`083_visual_packs.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
-| 084 | Product Growth v2: briefs/proof (pending) | `claude/rafii-product-growth-v2` | Reserved. |
+| 084 | Product Growth v2: briefs, proof revisions, strategy decisions (`084_briefs_proof_strategy.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 087 | Product Growth v2: raw source uploads (`087_source_uploads.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 069–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 

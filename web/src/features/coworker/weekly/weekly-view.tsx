@@ -201,8 +201,14 @@ export function WeeklyView() {
                   focusSlot={focusSlot}
                 />
               )}
-              {week && <AppliedDecisions week={week} />}
-              <OpportunityBrief canEdit={canEdit} />
+              {week && (
+                <GrowthFeatureGate feature='proof'>
+                  <AppliedDecisions week={week} />
+                </GrowthFeatureGate>
+              )}
+              <GrowthFeatureGate feature='briefs'>
+                <OpportunityBrief canEdit={canEdit} />
+              </GrowthFeatureGate>
               <WorkspaceOpportunityPreview pool='weekly' />
               <WhyRafiiExplainer />
               <p className='text-muted-foreground text-xs'>

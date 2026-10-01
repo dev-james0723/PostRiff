@@ -30,9 +30,9 @@ refuses any other pending file (`tests/test_product_growth_release.py`).
 | 4 | `080_customer_results.sql` | this program (results) | `846d2be4…53958e0ed1f` | 001–047 | this release |
 | 5 | `081_relationships.sql` | this program (relationships) | `0d2b181d…d76f73a33` | 047 (Inbox threads), 080 (won FK; idempotent re-apply adds it if 080 came later) | this release |
 | 6 | `083_visual_packs.sql` | this program (visual pack) | `3aedc1a4…d137955c` | 001–047 | this release |
-| 7 | `087_source_uploads.sql` | this program (intake) | `0acc1a3f…b5647b65` | 001–047 | this release |
+| 8 | `087_source_uploads.sql` | this program (intake) | `0acc1a3f…b5647b65` | 001–047 | this release |
 | — | 082 | not used: series live in workspace planning state (D-021) | — | — | — |
-| — | 084 | briefs/proof (W-LOOP), pending | _pending_ | — | — |
+| 7 | `084_briefs_proof_strategy.sql` | this program (briefs/proof) | `5225be48…c99701d5` | 001–047 | this release |
 
 Full SHA-256 values are recorded in `DECISIONS.md` and must match the files byte for byte at runner time.
 
