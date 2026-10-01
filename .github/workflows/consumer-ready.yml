@@ -10,7 +10,8 @@ concurrency:
 jobs:
   local-gates:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # About 21 minutes of work on a typical runner; 25 left no room for runner variance and cancelled a passing run.
+    timeout-minutes: 40
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'
