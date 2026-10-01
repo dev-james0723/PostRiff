@@ -73,7 +73,7 @@ def register():
                             "goal": {"type": "string", "maxLength": 600, "required": True},
                             "title": {"type": "string", "maxLength": 120},
                             "episodeCount": {"type": "integer"},
-                            "sourceIds": {"type": "array", "maxItems": m.MAX_SOURCES}}, "Planned a series")
+                            "sourceIds": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": m.MAX_SOURCES}}, "Planned a series")
     def series_prepare(ctx, args):
         if not m.enabled():
             return _disabled()
@@ -96,7 +96,7 @@ def register():
                                               "Prepare one Signature Series episode: its role, angle, question and facts with source, version and review date, whether it needs a fact review or the person's approval, and its drafts. Can plan more episodes (planMore) or attach existing drafts by id (variantIds) after the duplicate check; a near-duplicate is returned for the person to confirm in Library, never attached silently. Never approves, writes, schedules or publishes.",
                                               voice=True),
                            {"seriesId": {"type": "string", "maxLength": 80, "required": True}, "episodeId": {"type": "string", "maxLength": 80},
-                            "variantIds": {"type": "array", "maxItems": m.MAX_DRAFTS}, "planMore": {"type": "boolean"}}, "Prepared an episode")
+                            "variantIds": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": m.MAX_DRAFTS}, "planMore": {"type": "boolean"}}, "Prepared an episode")
     def episode_prepare(ctx, args):
         if not m.enabled():
             return _disabled()
