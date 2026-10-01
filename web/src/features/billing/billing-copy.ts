@@ -7,9 +7,9 @@
 import type { InfobarContent } from '@/components/ui/infobar';
 import { V2_CATALOG } from '@/config/plans';
 import type { BillingMode } from '@/lib/api/types';
+import { billingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 import { formatDate } from '@/lib/time';
 import { humanize, type PlanTimeline } from './billing-model';
-import { billingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 
 export const PAGE = {
   title: 'Usage & plan'

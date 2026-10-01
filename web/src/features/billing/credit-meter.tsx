@@ -3,10 +3,10 @@
 import { Icons } from '@/components/icons';
 import { InfoTip, StateMessage, Surface } from '@/components/rafii';
 import type { Usage } from '@/lib/api/types';
+import { creditMeter } from '@/lib/billing/mode';
 import { formatDate, formatNumber } from '@/lib/time';
 import { Bar } from './allowances';
 import { allowanceTotal, currentTerms } from './billing-model';
-import { creditMeter } from '@/lib/billing/mode';
 import { useBillingCopy } from './use-copy-locale';
 
 /**

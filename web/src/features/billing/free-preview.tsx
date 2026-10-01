@@ -2,9 +2,9 @@
 
 import { StateMessage, Surface } from '@/components/rafii';
 import type { Usage } from '@/lib/api/types';
-import { formatNumber } from '@/lib/time';
 import { freePreviewItems, type PreviewItem } from '@/lib/billing/mode';
 import type { BillingCopy } from '@/lib/billing/mode-copy';
+import { formatNumber } from '@/lib/time';
 import { useBillingCopy } from './use-copy-locale';
 
 function itemLabel(item: PreviewItem, copy: BillingCopy['freePreview']) {
