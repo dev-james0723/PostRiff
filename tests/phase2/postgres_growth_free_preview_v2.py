@@ -5,6 +5,7 @@ import time
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,6 +26,21 @@ POLICY = {'approved': True, 'id': 'synthetic-task5', 'model': MODEL, 'provider':
 
 def connection():
     return psycopg.connect(DSN, client_encoding='utf8')
+
+
+class PricedModels(Models):
+    """The fixture models with a Gateway-reported cost on every call, so the credit bridge settles known amounts."""
+
+    def __init__(self, cost=0.001):
+        super().__init__()
+        self.cost = cost
+
+    def evaluate(self, state, questions, *, timeout_s):
+        return replace(super().evaluate(state, questions, timeout_s=timeout_s), cost_usd=self.cost, cost_source='gateway')
+
+    def chat(self, messages, model, max_tokens, timeout_s):
+        content, _usage = super().chat(messages, model, max_tokens, timeout_s)
+        return content, {'gatewayCost': self.cost}
 
 
 class PreviewTests(unittest.TestCase):
@@ -345,7 +361,7 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(after['genome']['maxPosts'], 20)
         self.assertFalse(any(term in json.dumps(after).lower() for term in ('micro', 'usd', 'sourceid', 'text', 'policy')))
     # --- Credit bridge (Pricing v2: Creator Growth AI pays through its own credit quote) ------------------------------
-    def creator(self, milli=600_000):
+    def creator(self, milli=600_000, models=None):
         with connection() as db:
             db.execute("UPDATE pr_plan_terms SET status='active' WHERE id='creator-v1'")
             db.execute("UPDATE pr_entitlements SET plan_terms_id='creator-v1',source='subscription' WHERE workspace_id=%s", (self.wid,))
@@ -354,9 +370,111 @@ class PreviewTests(unittest.TestCase):
             self.host.ledger.credits.grant(db.cursor(), self.wid, self.actor, 'bridge-grant-' + self.wid, milli, None, source='local-test-only')
         from consumer_fixtures import approve_budgets
         approve_budgets(connection, self.wid)   # operator-approved spending budgets, as in every paid-path test
-        bridged = GrowthService(self.host, env={**ENV, 'POSTRIFF_POST_DOCTOR_V2': '1'}, router_factory=Models().router)
+        bridged = GrowthService(self.host, env={**ENV, 'POSTRIFF_POST_DOCTOR_V2': '1'}, router_factory=(models or Models()).router)
         self.host.growth = bridged
         return bridged
+
+    def bridge_rows(self):
+        with connection() as db:
+            return db.execute("SELECT reservation_id::text,kind,cost_state,actual_usd_micro FROM pr_usage_ledger WHERE workspace_id=%s AND provider='rafii-growth' ORDER BY at,id",
+                              (self.wid,)).fetchall()
+
+    def wallet(self):
+        with connection() as db:
+            view = self.host.ledger.credits.view(db.cursor(), self.wid)
+            return {k: view[k] for k in ('availableMilliCredits', 'heldMilliCredits', 'usedMilliCredits')}
+
+    def unknown(self):
+        with connection() as db:
+            return self.host.ledger.unknown_reservations(db.cursor(), self.wid)
+
+    def test_credit_bridge_lost_response_replay_never_charges_twice_or_conflicts(self):
+        models = PricedModels()
+        g = self.creator(models=models)
+        body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': body})
+        first = g.check(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})
+        calls, wallet = len(models.calls), self.wallet()
+        self.assertEqual(wallet['usedMilliCredits'], 300)   # US$0.001 of verified cost = 0.3 credits, charged once
+        # The response was lost. The browser retries the same request key, with the confirmed quote id or without it.
+        for retry in ({**body, 'creditQuoteId': quote['quoteId']}, body):
+            self.assertEqual(g.check(self.wid, 'fixture', retry), first)
+        self.assertEqual(len(models.calls), calls, 'a replay makes no provider call')
+        self.assertEqual(self.wallet(), wallet, 'a replay charges nothing')
+        self.assertEqual([r[1] for r in self.bridge_rows()], ['reserve', 'settle'])
+        with self.assertRaises(AlphaError) as caught:   # the key still names one request: other input is refused
+            g.check(self.wid, 'fixture', {**body, 'text': 'A different draft entirely.'})
+        self.assertEqual(caught.exception.code, 'growth_key_conflict')
+
+    def test_credit_bridge_refusal_before_any_provider_call_is_released_not_unknown(self):
+        models = PricedModels()
+        g = self.creator(models=models)
+        check_body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': check_body})
+        checked = g.check(self.wid, 'fixture', {**check_body, 'creditQuoteId': quote['quoteId']})
+        body = {'checkId': checked['runId'], 'facts': {}, 'confirmed': True, 'requestKey': str(uuid.uuid4())}
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'rewrite', 'request': body})
+        original = g.guard
+
+        def changed_then_checked(*args, **kwargs):   # consent changes after the quote, before the writer is called
+            g.guard = original
+            self.consent([ROUTES[1]])
+            return original(*args, **kwargs)
+        g.guard = changed_then_checked
+        calls = len(models.calls)
+        with self.assertRaises(AlphaError) as caught:
+            g.rewrite(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})
+        self.assertEqual(caught.exception.code, 'growth_input_changed')
+        self.assertEqual(models.calls[calls:], [], 'the writer was never called')
+        rewrite_rows = [r for r in self.bridge_rows() if r[0] == self.bridge_rows()[-1][0]]
+        self.assertEqual([(r[1], r[2], r[3]) for r in rewrite_rows], [('reserve', 'estimated', None), ('release', 'released', 0)])
+        self.assertEqual(self.unknown(), [], 'nothing waits for reconciliation: no attempt was made')
+        self.assertEqual(self.wallet()['heldMilliCredits'], 0)
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM pr_model_usage_events WHERE workspace_id=%s AND task='postdoctor.rewrite'", (self.wid,)).fetchone()[0], 0)
+
+    def test_credit_bridge_discarded_result_releases_credits_and_books_platform_cost(self):
+        models = PricedModels()
+        g = self.creator(models=models)
+        body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': body})
+        before = self.wallet()
+        models.before = lambda: self.consent([ROUTES[1]])   # consent changes while the (last) model call is running
+        with self.assertRaises(AlphaError) as caught:
+            g.check(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})
+        self.assertEqual(caught.exception.code, 'growth_input_changed')
+        rows = self.bridge_rows()
+        self.assertEqual([(r[1], r[2], r[3]) for r in rows], [('reserve', 'estimated', None), ('release', 'released', 1000)])   # cost booked, not charged
+        self.assertEqual(self.wallet(), before, 'the customer is not charged for a result they never receive')
+        self.assertEqual(self.unknown(), [])
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT status FROM pr_post_doctor_runs WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 'cancelled')
+            self.assertEqual(db.execute('SELECT sum(cost_usd_micro) FROM pr_model_usage_events WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 1000)
+
+    def test_abandoned_credit_reservation_is_held_unknown_for_reconciliation(self):
+        g = self.creator(models=PricedModels())
+        body = self.body()
+        quote = g.credit_quote(self.wid, 'fixture', {'kind': 'check', 'request': body})
+        # The process stops after reserving (between _begin and _finish): nothing would ever settle this reservation.
+        run = g._begin(self.wid, 'fixture', 'check', {**body, 'creditQuoteId': quote['quoteId']},
+                       lambda cur, state, principal: {'draft': g._draft(state, body), 'posts': []})
+        g.sweep()
+        self.assertEqual(self.unknown(), [], 'a run still inside its own time limit is left alone')
+        with connection() as db:
+            db.execute("UPDATE pr_post_doctor_runs SET created_at=now()-interval '1 hour' WHERE id=%s", (run['id'],))
+        held = self.wallet()['heldMilliCredits']
+        self.assertGreater(held, 0)
+        g.sweep()
+        g.sweep()   # once only
+        self.assertEqual([u['reservationId'] for u in self.unknown()], [run['creditReservationId']])
+        self.assertEqual(self.wallet()['heldMilliCredits'], held, 'held for reconciliation: neither charged nor released')
+        self.assertEqual([r[2] for r in self.bridge_rows()], ['estimated', 'estimated_unknown'])
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT status FROM pr_post_doctor_runs WHERE id=%s', (run['id'],)).fetchone()[0], 'unknown')
+        with self.assertRaises(AlphaError) as caught:   # a replay asks for reconciliation; it never runs or reserves again
+            g.check(self.wid, 'fixture', {**body, 'creditQuoteId': quote['quoteId']})
+        self.assertEqual(caught.exception.code, 'growth_request_pending')
+        self.assertEqual(len(self.bridge_rows()), 2)
 
     def test_credit_bridge_quotes_reserves_and_settles_once(self):
         g = self.creator()
