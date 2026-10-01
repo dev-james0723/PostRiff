@@ -132,7 +132,10 @@ class MediaDiagnosticTest(unittest.TestCase):
                 ('unsupported_sample_rate', 'audio_format'), ('invalid_sample_rate', 'audio_format'),
                 ('too_many_concurrent_sessions', 'live_capacity'), ('too_many_concurrent_live_sessions', 'live_capacity'),
                 ('concurrent_session_limit_exceeded', 'live_capacity'), ('live_session_concurrency_limit', 'live_capacity'),
-                ('insufficient_quota', 'quota')):
+                ('insufficient_quota', 'quota'), ('credit_balance_exhausted', 'credits_exhausted'),
+                ('organization_spend_limit_exceeded', 'spend_limit'), ('project_spend_limit_exceeded', 'spend_limit'),
+                ('organization_usage_limit_exceeded', 'usage_limit'), ('slow_down', 'rate_limit'),
+                ('server_is_overloaded', 'provider_capacity')):
             result = metadata('live_event', event={'error': {'code': code, 'message': PRIVATE}})
             self.assertEqual((result['errorCode'], result['errorCategory'], result['reasonBasis']),
                              (code, category, 'exact_code'))

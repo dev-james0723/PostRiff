@@ -40,16 +40,25 @@ MAX_ACTIVE_SESSIONS = 2
 MAX_HISTORY_CHARS = 12_000
 LOG = logging.getLogger("rafii.voice")
 PROVIDER_ERROR_CODES = frozenset(("invalid_api_key", "authentication_error", "permission_denied", "insufficient_quota",
-                                "rate_limit_exceeded", "model_not_found", "invalid_request_error", "server_error",
+                                "credit_balance_exhausted", "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                                "organization_usage_limit_exceeded", "rate_limit_exceeded", "slow_down", "server_is_overloaded",
+                                "model_not_found", "invalid_request_error", "server_error",
                                 "context_length_exceeded", "session_expired", "missing_required_parameter", "invalid_value",
-                                "invalid_argument", "unknown_parameter", "unsupported_value", "content_filter"))
+                                "invalid_argument", "unknown_parameter", "unsupported_value", "content_filter",
+                                "too_many_concurrent_sessions", "too_many_concurrent_live_sessions",
+                                "concurrent_session_limit_exceeded", "live_session_concurrency_limit"))
 PROVIDER_ERROR_PARAMS = frozenset(("model", "session", "session.model", "instructions", "session.instructions", "input", "session.input",
                                  "delegation", "session.delegation", "store", "session.store", "audio.output.voice", "session.audio.output.voice",
                                  "client", "session.client", "client.data_channel", "session.client.data_channel",
                                  "client.data_channel.allowed_client_events", "session.client.data_channel.allowed_client_events",
                                  "client.data_channel.allowed_server_events", "session.client.data_channel.allowed_server_events",
                                  "transport", "transport.type", "transport.sdp"))
-START_FAILURE_CODES = frozenset(("live_auth", "live_forbidden", "live_busy", "live_rejected", "live_unreadable", "live_unreachable", "live_error"))
+START_FAILURE_CODES = frozenset(("live_auth", "live_forbidden", "live_busy", "live_quota", "live_rejected", "live_unreadable", "live_unreachable", "live_error"))
+ACCOUNT_LIMIT_CODES = frozenset(("insufficient_quota", "credit_balance_exhausted", "organization_spend_limit_exceeded",
+                                 "project_spend_limit_exceeded", "organization_usage_limit_exceeded"))
+TRANSIENT_LIMIT_CODES = frozenset(("rate_limit_exceeded", "slow_down", "too_many_concurrent_sessions",
+                                   "too_many_concurrent_live_sessions", "concurrent_session_limit_exceeded",
+                                   "live_session_concurrency_limit"))
 VOICES = ("marin", "cedar", "sage", "verse", "coral", "alloy")
 ALLOWED_CLIENT_EVENTS = ["session.commentary.append", "session.thinking.append", "session.instructions.append", "session.input_audio.mute",
                          "session.input_audio.unmute", "session.close"]
@@ -276,9 +285,17 @@ class VoiceSessions:
         answer = transport.get("sdp") if isinstance(transport, dict) else None
         live_id = provider_session.get("id") if isinstance(provider_session, dict) else None
         if type(status) is not int or status != 201 or not isinstance(answer, str) or not answer.strip() or not isinstance(live_id, str) or not live_id.strip():
-            code = {401: "live_auth", 403: "live_forbidden", 429: "live_busy"}.get(status, "live_rejected")
+            code = {401: "live_auth", 403: "live_forbidden"}.get(status, "live_rejected")
+            if status == 429 and details.get("errorCode") in ACCOUNT_LIMIT_CODES:
+                code = "live_quota"
+            elif status == 429 and details.get("errorCode") in TRANSIENT_LIMIT_CODES:
+                code = "live_busy"
             self._start_failed(workspace_id, token, voice_session_id, reservation, code, details, request_id)
-            raise AlphaError("The voice service didn't start a session" + (" (it is busy; try again in a moment)" if status == 429 else "") + ". You can keep typing.", 502, code=code)
+            message = {
+                "live_quota": "Voice Mode couldn't start because the provider account has exhausted credits or a usage limit. Ask a workspace owner to check API billing and limits.",
+                "live_busy": "The voice service is temporarily busy. Try again later; you can keep typing.",
+            }.get(code, "The voice service didn't start a session. You can keep typing.")
+            raise AlphaError(message, 502, code=code)
         try:
             with repo.transaction(token, workspace_id) as (cur, _row, _principal):
                 artifact = self._artifact(cur, workspace_id, voice_session_id)

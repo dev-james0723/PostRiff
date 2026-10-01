@@ -924,7 +924,7 @@ class HostedApplication:
             # Never log the error message or an arbitrary provider-controlled code.
             parts = path.strip('/').split('/')
             if len(parts) >= 6 and parts[:2] == ['api', 'workspaces'] and parts[3:6] == ['agent', 'voice', 'sessions']:
-                safe_codes = {'live_auth', 'live_forbidden', 'live_busy', 'live_rejected', 'live_unreadable', 'live_error',
+                safe_codes = {'live_auth', 'live_forbidden', 'live_busy', 'live_quota', 'live_rejected', 'live_unreadable', 'live_error',
                               'live_unreachable', 'voice_busy', 'voice_disabled', 'voice_unavailable', 'sdp_invalid'}
                 suffix = '/' + parts[-1] if len(parts) == 8 and parts[-1] in {'end', 'transcript'} else ''
                 environ['postriff.failure'] = {'errorCode': error.code if error.code in safe_codes else 'other',

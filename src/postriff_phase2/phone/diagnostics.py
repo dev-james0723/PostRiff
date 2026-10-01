@@ -16,7 +16,9 @@ ERROR_CLASSES = frozenset(('TypeError', 'ValueError', 'KeyError', 'RuntimeError'
     'ConnectionClosedError', 'ConnectionClosedOK', 'WebSocketDisconnect', 'OperationalError',
     'ProgrammingError', 'InsufficientPrivilege', 'UndefinedTable', 'UndefinedColumn'))
 ERROR_CODES = frozenset(('inbound_hourly_limit', 'inbound_caller_limit', 'inbound_auth_budget', 'invalid_api_key', 'authentication_error', 'permission_denied',
-    'insufficient_quota', 'rate_limit_exceeded', 'model_not_found', 'invalid_request_error',
+    'insufficient_quota', 'credit_balance_exhausted', 'organization_spend_limit_exceeded',
+    'project_spend_limit_exceeded', 'organization_usage_limit_exceeded', 'rate_limit_exceeded',
+    'slow_down', 'server_is_overloaded', 'model_not_found', 'invalid_request_error',
     'server_error', 'context_length_exceeded', 'session_expired', 'phone_ended', 'phone_expired',
     'stream_closed', 'missing_required_parameter', 'invalid_value', 'invalid_argument', 'unknown_parameter', 'unsupported_value',
     'unsupported_audio_format', 'invalid_audio_format', 'unsupported_sample_rate', 'invalid_sample_rate',
@@ -29,7 +31,10 @@ ERROR_PARAMS = frozenset(('delegation_id', 'content', 'model', 'session.model', 
     'delegation', 'session.delegation', 'store', 'session.store'))
 COMMANDS = {'start': 'session_start', 'opening': 'greeting', 'commentary': 'delegation_result',
             'input': 'input_audio', 'close': 'session_close'}
-ERROR_CATEGORIES = {'insufficient_quota': 'quota', 'rate_limit_exceeded': 'rate_limit', 'model_not_found': 'model_not_found',
+ERROR_CATEGORIES = {'insufficient_quota': 'quota', 'credit_balance_exhausted': 'credits_exhausted',
+    'organization_spend_limit_exceeded': 'spend_limit', 'project_spend_limit_exceeded': 'spend_limit',
+    'organization_usage_limit_exceeded': 'usage_limit', 'rate_limit_exceeded': 'rate_limit',
+    'slow_down': 'rate_limit', 'server_is_overloaded': 'provider_capacity', 'model_not_found': 'model_not_found',
     'unsupported_audio_format': 'audio_format', 'invalid_audio_format': 'audio_format',
     'unsupported_sample_rate': 'audio_format', 'invalid_sample_rate': 'audio_format',
     'too_many_concurrent_sessions': 'live_capacity', 'too_many_concurrent_live_sessions': 'live_capacity',

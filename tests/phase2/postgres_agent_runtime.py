@@ -147,12 +147,13 @@ class LiveEndpoint:
     def __init__(self):
         self.requests = []
         self.status = 201
+        self.error_code = None
 
     def __call__(self, method, url, headers=None, body=None, timeout=None):
         assert url == live.LIVE_ENDPOINT, url
         self.requests.append({"body": body, "authorization": (headers or {}).get("Authorization", "")})
         if self.status != 201:
-            return {"status": self.status, "body": {"error": {"message": "busy"}}}
+            return {"status": self.status, "body": {"error": {"code": self.error_code, "message": "busy"}}}
         return {"status": 201, "body": {"session": {"id": "live_" + uuid.uuid4().hex[:10]}, "transport": {"type": "webrtc", "sdp": "v=0\r\no=- answer\r\n"}}}
 
 
@@ -864,8 +865,10 @@ def _():
     assert "OPENAI_API_KEY" in str(error)
     denied(lambda: voice.start(wid, VIEWER, {"sdp": "v=0\r\n"}), 403)
     LIVE.status = 429
+    LIVE.error_code = "rate_limit_exceeded"
     error = denied(lambda: voice.start(wid, OWNER, {"sdp": "v=0\r\n"}), 502)
     LIVE.status = 201
+    LIVE.error_code = None
     failed = one("SELECT status FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'voice:%%' ORDER BY created_at DESC LIMIT 1", wid)[0]
     assert failed == "failed" and error.code == "live_busy"
     return {"actual": "voice_disabled / 503 no key / viewer 403 / live_busy"}

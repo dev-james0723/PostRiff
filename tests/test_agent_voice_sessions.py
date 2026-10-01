@@ -93,7 +93,7 @@ def successful_response():
 
 class VoiceAdmissionTests(unittest.TestCase):
     def test_known_refusals_keep_safe_reason_and_release_reserved_spend_at_zero(self):
-        for status, code in ((400, "live_rejected"), (401, "live_auth"), (403, "live_forbidden"), (404, "live_rejected"), (429, "live_busy")):
+        for status, code in ((400, "live_rejected"), (401, "live_auth"), (403, "live_forbidden"), (404, "live_rejected"), (429, "live_rejected")):
             with self.subTest(status=status):
                 response = {"status": status, "providerRequestId": PROVIDER_REQUEST_ID,
                             "body": {"error": {"code": "model_not_found", "type": "invalid_request_error", "param": "session.model", "message": PRIVATE}}}
@@ -109,6 +109,27 @@ class VoiceAdmissionTests(unittest.TestCase):
                 self.assertEqual((diagnostic["requestId"], diagnostic["providerRequestId"]), (REQUEST_ID, PROVIDER_REQUEST_ID))
                 self.assertNotIn(PRIVATE, str(raised.exception) + json.dumps(fixture.cursor.artifact) + " ".join(captured.output))
                 self.assertNotIn("sk-offline", " ".join(captured.output))
+
+    def test_429_uses_exact_safe_provider_code_before_suggesting_retry_or_billing(self):
+        for provider_code, expected, message in (
+            ("credit_balance_exhausted", "live_quota", "billing"),
+            ("project_spend_limit_exceeded", "live_quota", "billing"),
+            ("organization_usage_limit_exceeded", "live_quota", "billing"),
+            ("rate_limit_exceeded", "live_busy", "Try again later"),
+            ("slow_down", "live_busy", "Try again later"),
+            (None, "live_rejected", "keep typing"),
+        ):
+            with self.subTest(provider_code=provider_code):
+                response = {"status": 429, "body": {"error": {"code": provider_code, "message": PRIVATE}}}
+                fixture = Fixture(lambda *_args, **_kwargs: response)
+                with self.assertLogs("rafii.voice", level="WARNING") as captured, self.assertRaises(AlphaError) as raised:
+                    fixture.start()
+                self.assertEqual((raised.exception.status, raised.exception.code), (502, expected))
+                self.assertIn(message, str(raised.exception))
+                self.assertEqual(fixture.settlements, [("reservation", "completed", 0)])
+                self.assertNotIn(PRIVATE, str(raised.exception) + " ".join(captured.output))
+                if provider_code:
+                    self.assertEqual(fixture.cursor.artifact["voice"]["failureDiagnostic"]["errorCode"], provider_code)
 
     def test_server_failure_keeps_usage_unknown(self):
         fixture = Fixture(lambda *_args, **_kwargs: {"status": 503, "body": {"error": {"code": "server_error"}}})
