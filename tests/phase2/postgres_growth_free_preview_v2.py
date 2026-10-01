@@ -196,7 +196,10 @@ class PreviewTests(unittest.TestCase):
         for kind in ('rewrite', 'audience', 'postmortem'):
             prepared = []
             self.g.env.update(POSTRIFF_AUDIENCE_MINER='1', POSTRIFF_POSTMORTEM='1')
-            self.denied(lambda: self.g._begin(self.wid, 'fixture', kind, self.body(), lambda *a: (_ for _ in ()).throw(AlphaError('Preparation reached without authority', code='unexpected_preparation'))), 'free_managed_writing_unavailable')
+            def prepare(*_args, _prepared=prepared):
+                _prepared.append(kind)   # reaching preparation at all is the failure this test guards against
+                raise AlphaError('Preparation reached without authority', code='unexpected_preparation')
+            self.denied(lambda: self.g._begin(self.wid, 'fixture', kind, self.body(), prepare), 'free_managed_writing_unavailable')
             self.assertEqual(prepared, [])
         self.assertEqual(self.sent, [])
 

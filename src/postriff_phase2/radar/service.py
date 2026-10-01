@@ -138,13 +138,16 @@ class Radar:
                 return self.visible(old)
             maximum=self.maximum(mode)
             if sum(self.sources.ceiling(s) or 0 for s in sources)>maximum:raise AlphaError('These sources exceed this scan allowance.',402)
+            plan=self.plan_gate(cur,wid,spec)
             from ..growth.service import current_genome
             b={**spec,'maximumUsdMicro':maximum,'quoteExpiresAt':self.clock()+600,'quotedAt':self.clock(),
                'items':[],'opportunities':[],'judgments':{},'steps':[],'sourceResults':[],
                'usage':{'knownUsdMicro':0,'unknownAttempts':0,'actualUsdMicro':0},'spentCeiling':0,
                'genome':current_genome(row[1]),'customerCharge':'included_allowance','creditQuote':None,
                'notification':False}
-            if self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1':
+            # Pricing v2: a managed-credit workspace always pays through its credit quote (one cost authority); the
+            # included allowance remains only for legacy plans.
+            if self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1' or plan=='managed_credits':
                 q=self.book.issue(cur,wid,actor,row[0],fingerprint,'radar.'+mode,'radar',millicredits(maximum))
                 b['creditQuote']=q['quoteId'];b['maximumCredits']=q['maxMilliCredits']/1000;b['customerCharge']='credits'
             cur.execute("INSERT INTO public.pr_radar_runs(workspace_id,request_key,created_by,status,fingerprint,context_digest,body) VALUES(%s,%s,%s,'quoted',%s,%s,%s::jsonb) RETURNING id::text",(wid,key,actor,fingerprint,self.context(row[1]),json.dumps(b)))
@@ -158,6 +161,8 @@ class Radar:
             if r[1]!='quoted':return self.visible(r)
             if b['quoteExpiresAt']<=self.clock() or r[2]!=self.context(row[1]):raise AlphaError('This quote expired or permissions changed. Review a new scan.',409)
             self.permitted(row[1],b)
+            if self.plan_gate(cur,wid,b)=='managed_credits' and not b.get('creditQuote'):
+                raise AlphaError('Your plan changed since this quote. Review a new scan.',409,code='radar_quote_plan_changed')
             # Workspace serialization includes ambiguous attempts; they must be resolved first.
             cur.execute("SELECT 1 FROM public.pr_radar_runs WHERE workspace_id=%s AND status in ('running','unknown') LIMIT 1",(wid,))
             if cur.fetchone():raise AlphaError('Finish or reconcile the existing Radar scan first.',409)
@@ -173,6 +178,17 @@ class Radar:
             b['startedAt']=self.clock()
             self.save(cur,wid,rid,b,'running')
             return self.visible((rid,'running',r[2],b))
+
+    def plan_gate(self,cur,wid,spec):
+        """Pricing v2 boundary before any paid I/O: Free has no research allowance, so only a scan that cannot cost
+        anything (no AI step, only zero-cost sources) may run; everything else is refused before a run exists."""
+        ledger=getattr(self.g.hosted,'ledger',None)
+        if ledger is None or not hasattr(ledger,'growth_mode'):return 'legacy'
+        ledger.ensure_entitlement(cur,wid,None)
+        plan=ledger.growth_mode(cur,wid)
+        if plan=='free' and (spec.get('useAi') or any((self.sources.ceiling(s) or 0)>0 for s in spec.get('sources') or [])):
+            raise AlphaError('Free includes no research allowance. Choose free sources without AI analysis, or upgrade to Creator.',402,code='free_research_unavailable')
+        return plan
 
     @staticmethod
     def save(cur,wid,rid,body,status):
