@@ -46,7 +46,7 @@ DUE_FUTURE_SECONDS = 3 * 366 * 86400
 SNOOZE_MAX_SECONDS = 366 * 86400
 EXCERPT = 280
 EVENT = "relationship.follow_up_due"
-_UUID = re.compile(r"^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$")
+_UUID = re.compile(r"^u?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$")
 _KEY = re.compile(r"^[A-Za-z0-9_:.-]{8,80}$")
 _PROVIDER = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 _ZONE = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
@@ -97,7 +97,7 @@ def ident(value, *, missing="Relationship unavailable.", code="relationship_not_
     """A canonical uuid string. Malformed ids answer exactly like unknown ones."""
     if not isinstance(value, str) or not _UUID.match(value):
         raise AlphaError(missing, status, code=code)
-    return str(uuid.UUID(value))
+    return str(uuid.UUID(value.removeprefix("u")))
 
 
 def idempotency_key(value, *, required):
@@ -440,9 +440,16 @@ def due_followups(cur, workspace_id, now):
              "dedupeKey": dedupe_key(rid, token)} for rid, due_at, zone_name, revision, token, thread_id in cur.fetchall()]
 
 
+def link_id(value):
+    """An id for stored links: ``u`` + the uuid's 32 hex digits. The notification store redacts digit runs that start
+    after a non-word character (possible phone numbers), which breaks hyphenated uuids; a token that starts with a letter
+    and has no hyphens can never match. ``ident`` and the Inbox accept this form."""
+    return "u" + uuid.UUID(value).hex
+
+
 def followup_event(item):
     """The notification/attention event for one due follow-up. Content-free: no name, note, interest or message text."""
-    href = f"/app/inbox?filter=follow_ups&relationship={item['id']}" + (f"&thread={item['threadId']}" if item.get("threadId") else "")
+    href = f"/app/inbox?filter=follow_ups&relationship={link_id(item['id'])}" + (f"&thread={link_id(item['threadId'])}" if item.get("threadId") else "")
     return {"event_type": EVENT, "dedupe_key": item["dedupeKey"], "entity_type": "relationship", "entity_id": item["id"],
             "payload": {"title": "A follow-up is due", "reason": "Follow-up due", "href": href}}
 

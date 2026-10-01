@@ -12,7 +12,7 @@ import type { Thread } from '@/lib/api/types';
 import type { RelationshipDetail } from '@/lib/growth-v2/relationships-types';
 import { errorCode, errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
 import { followUpsOff, useRelationshipChange, useRelationshipList } from '@/lib/growth-v2/relationships-hooks';
-import { browserZone, dueInput, isConflict, zoneChoices } from '@/lib/growth-v2/relationships-model';
+import { browserZone, canonicalId, dueInput, isConflict, zoneChoices } from '@/lib/growth-v2/relationships-model';
 import { timeDefaults } from '@/lib/time';
 import { currentCopy } from './copy';
 import { DueFields, FollowUpCard } from './follow-up-card';
@@ -29,10 +29,11 @@ export function FollowUpSection({ thread, canEdit }: { thread: Thread; canEdit: 
   const [mode, setMode] = useState<'idle' | 'create' | 'existing'>('idle');
   const [createdId, setCreatedId] = useState<string | null>(null);
   const items = linked.data?.relationships ?? [];
-  const target = createdId ?? focusId;
+  const target = createdId ?? canonicalId(focusId);
 
   if (followUpsOff(linked)) return null;
-  if (thread.tombstoned && items.length === 0) return null;
+  // Nothing to show: no follow-up yet and this person can't start one (or the comment is gone).
+  if (linked.isSuccess && items.length === 0 && (thread.tombstoned || !canEdit)) return null;
 
   return (
     <section aria-label={copy.section} className='flex flex-col gap-2' data-tour='inbox-follow-up'>

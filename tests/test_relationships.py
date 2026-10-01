@@ -325,9 +325,20 @@ class NotificationWiringTest(unittest.TestCase):
         self.assertEqual(event["event_type"], "relationship.follow_up_due")
         self.assertEqual(event["dedupe_key"], f"relationship.follow_up_due:{RID}:2:{int(NOW - 60)}")
         self.assertEqual(event["payload"], {"title": "A follow-up is due", "reason": "Follow-up due",
-                                            "href": f"/app/inbox?filter=follow_ups&relationship={RID}&thread={TID}"})
+                                            "href": f"/app/inbox?filter=follow_ups&relationship=u{RID.replace('-', '')}&thread=u{TID.replace('-', '')}"})
         self.assertIn("SAVEPOINT relationship_followups", cursor.sql[0])
         self.assertTrue(any(s.startswith("RELEASE SAVEPOINT") for s in cursor.sql))
+
+    def test_stored_follow_up_links_survive_the_phone_number_redaction(self):
+        from postriff_phase2.notifications.store import _clean_payload
+        digits, thread = "11111111-1111-4111-8111-111111111111", "3f2a0000-1234-4567-8901-abcdefabcdef"   # groups that are digit runs
+        hyphenated = f"/app/inbox?filter=follow_ups&relationship={digits}&thread={thread}"
+        self.assertNotEqual(_clean_payload({"href": hyphenated})["href"], hyphenated)   # why stored links use compact ids
+        event = rel.followup_event({"id": digits, "threadId": thread, "dedupeKey": "k"})
+        self.assertEqual(event["payload"]["href"],
+                         "/app/inbox?filter=follow_ups&relationship=u11111111111141118111111111111111&thread=u3f2a0000123445678901abcdefabcdef")
+        self.assertEqual(_clean_payload(event["payload"]), event["payload"])
+        self.assertEqual(rel.ident(rel.link_id(digits)), digits)   # the API accepts the compact form back
 
     def test_detector_survives_a_database_without_the_relationship_tables(self):
         on()

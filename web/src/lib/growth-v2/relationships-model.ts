@@ -332,6 +332,18 @@ export function replyRouteView(route: ReplyRoute | null | undefined, copy: Follo
   return { kind: 'assisted' as const, label: copy.assisted(platform), hint: copy.assistedHint(platform), href };
 }
 
+/**
+ * Ids from a link back to their uuid form. Stored notification links carry `u` + 32 hex digits (a form the phone-number
+ * redaction can't touch); hyphenated uuids pass through unchanged.
+ */
+export function canonicalId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const compact = /^u?([0-9a-f]{32})$/i.exec(value);
+  if (!compact) return value;
+  const hex = compact[1].toLowerCase();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** The Inbox deep link for a follow-up (and its conversation when it has one). */
 export function followUpHref(relationshipId: string, threadId?: string | null): string {
   const params = new URLSearchParams({ filter: 'follow_ups', relationship: relationshipId });

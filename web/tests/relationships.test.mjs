@@ -7,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canonicalId,
   dueInput,
   followUpCopy,
   followUpHref,
@@ -120,6 +121,15 @@ test('reply routes are honest: only direct is a reply; assisted links are https 
   assert.equal(replyRouteView({ kind: 'assisted', provider: 'whatsapp', href: null, reason: 'no_thread' }, ZH).label, '在 WhatsApp 開啟 · 協助');
   assert.equal(platformName('threads'), 'Threads');
   assert.equal(platformName(null), 'the platform');
+});
+
+test('compact link ids (immune to phone-number redaction) come back as uuids', () => {
+  assert.equal(canonicalId('u11111111111141118111111111111111'), '11111111-1111-4111-8111-111111111111');
+  assert.equal(canonicalId('3F2A0000123445678901ABCDEFABCDEF'), '3f2a0000-1234-4567-8901-abcdefabcdef');
+  assert.equal(canonicalId('3f2a0000-1234-4567-8901-abcdefabcdef'), '3f2a0000-1234-4567-8901-abcdefabcdef');
+  assert.equal(canonicalId('not-an-id'), 'not-an-id');
+  assert.equal(canonicalId(''), null);
+  assert.equal(canonicalId(null), null);
 });
 
 test('deep links and queries carry only ids and known filters', () => {

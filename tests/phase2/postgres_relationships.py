@@ -246,6 +246,9 @@ assert jobs.tick(hosted, time.monotonic() + 15) == {"status": "ok", "scanned": 0
 events = follow_up_events()
 assert {key for key, _ in events} == {item["dedupeKey"] for item in due.values()}
 assert all(set(payload) == {"title", "reason", "href"} and payload["href"].startswith("/app/inbox?filter=follow_ups&relationship=") for _, payload in events)
+stored_links = {payload["href"] for _, payload in events}   # as stored by the outbox (after its phone-number redaction)
+assert stored_links == {f"/app/inbox?filter=follow_ups&relationship={rel.link_id(rid)}" + (f"&thread={rel.link_id(item['threadId'])}" if item["threadId"] else "")
+                        for rid, item in due.items()}, stored_links
 recipients = {user for (user,) in sql("SELECT DISTINCT d.user_id::text FROM public.pr_notification_deliveries d JOIN public.pr_notification_events e ON e.id=d.event_id "
                                       "WHERE e.event_type='relationship.follow_up_due' AND e.workspace_id=%s", W)}
 assert recipients == {OWNER}, recipients   # audience 'reply': the editor and viewer without reply rights get nothing
@@ -281,7 +284,7 @@ checks.append("the end of a snooze is a new reminder (one alert); a snoozed foll
 attention = hosted.coworker.attention(W, OWNER)
 item = next(i for i in attention["items"] if i["type"] == "relationship.follow_up_due" and i["evidence"]["entityId"] == r1["id"])
 assert item["urgent"] is False and item["priority"] == 65 and item["title"] == "Follow up with @mei"
-assert item["href"] == f"/app/inbox?filter=follow_ups&relationship={r1['id']}&thread={T1}"
+assert item["href"] == f"/app/inbox?filter=follow_ups&relationship=u{r1['id'].replace('-', '')}&thread=u{T1.replace('-', '')}"
 context = item["context"]
 assert context["exchange"][0] == {"direction": "inbound", "author": "mei", "provider": "threads", "excerpt": "How much is a private lesson?",
                                   "at": context["exchange"][0]["at"]}

@@ -39,6 +39,7 @@ import { ThreadList } from './thread-list';
 import { useTwoPane } from './use-two-pane';
 import { GrowthEntry } from '@/features/growth/studio-parts';
 import { followUpsOff, useRelationshipList } from '@/lib/growth-v2/relationships-hooks';
+import { canonicalId } from '@/lib/growth-v2/relationships-model';
 import type { Relationship } from '@/lib/growth-v2/relationships-types';
 import { currentCopy } from './follow-up/copy';
 import { FollowUpList, FollowUpPanel } from './follow-up/follow-up-list';
@@ -140,13 +141,16 @@ function InboxPage() {
     : triageById.get(thread.threadId)?.priority === activeFilter);
   const freshReplyIds = useMemo(() => new Set(Object.values(sessionReplies).flatMap((list) => list.map((reply) => reply.draftId))), [sessionReplies]);
 
-  const selected = params.thread ? (threads.find((thread) => thread.threadId === params.thread) ?? null) : null;
+  // Notification links carry compact ids; the page works with uuids.
+  const threadParam = canonicalId(params.thread);
+  const relationshipParam = canonicalId(params.relationship);
+  const selected = threadParam ? (threads.find((thread) => thread.threadId === threadParam) ?? null) : null;
   useEffect(() => {
     if (selected && !twoPane) toast.dismiss('page-tour-inbox-tips');
   }, [selected, twoPane]);
-  const missing = Boolean(params.thread && data && !selected);
+  const missing = Boolean(threadParam && data && !selected);
   // A follow-up whose conversation is not loaded (or that has none) opens on its own.
-  const relationshipOnly = activeFilter === 'follow_ups' && params.relationship && !selected ? params.relationship : null;
+  const relationshipOnly = activeFilter === 'follow_ups' && relationshipParam && !selected ? relationshipParam : null;
   if (selected && selected.threadId !== sheetThreadId) setSheetThreadId(selected.threadId);
   if (selected && sheetKind !== 'thread') setSheetKind('thread');
   if (relationshipOnly && relationshipOnly !== sheetRelationshipId) setSheetRelationshipId(relationshipOnly);
@@ -247,9 +251,9 @@ function InboxPage() {
           )}
           <Surface material='quiet' radius='card' padding='none' data-tour='inbox-threads' className={cn('p-1.5 lg:overflow-y-auto', PANE_HEIGHT)}>
             {activeFilter === 'follow_ups' ? (
-              <FollowUpList selectedId={params.relationship} onSelect={selectFollowUp} canEdit={canEdit} />
+              <FollowUpList selectedId={relationshipParam} onSelect={selectFollowUp} canEdit={canEdit} />
             ) : filtered.length > 0 ? (
-              <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} triageById={triageById} />
+              <ThreadList threads={filtered} selectedId={threadParam} onSelect={select} channelsById={channelsById} latestReply={latestReply} triageById={triageById} />
             ) : (
               <StateMessage
                 kind='empty'
