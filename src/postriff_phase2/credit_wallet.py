@@ -7,7 +7,7 @@ import json
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits, actual_millicredits
 
 
 def amount(value):
@@ -206,14 +206,15 @@ class CreditBook:
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'",(workspace_id,reservation_id))
         row=cur.fetchone();credit=row[0] if row else None
         if not credit or outcome=='unknown': return None
-        used=min(credit['maximum'],millicredits(actual)) if outcome=='completed' else 0
+        actual_milli=actual_millicredits(actual) if outcome=='completed' else 0
+        used=min(credit['maximum'],actual_milli)
         remaining=used;allocations=[]
         for lot in credit['allocations']:
             take=min(remaining,lot['milli'])
             if take: allocations.append({'grantId':lot['grantId'],'milli':take});remaining-=take
         if remaining: raise AlphaError('Settlement exceeds its reserved credits.',409)
         return {'op':'settle','policy':credit['policy'],'used':used,'allocations':allocations,
-                'released':credit['maximum']-used,'absorbed':max(0,millicredits(actual)-used) if outcome=='completed' else 0}
+                'released':credit['maximum']-used,'absorbed':max(0,actual_milli-used) if outcome=='completed' else 0}
 
 
 NOTES_KEYS=frozenset({'assetId'})

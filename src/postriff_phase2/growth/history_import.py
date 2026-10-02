@@ -22,6 +22,7 @@ from postriff_alpha.domain import AlphaError
 
 from ..providers import GRAPH_VERSION
 from . import metric_schedule
+from .credit_admission import funding_mode, require_qualified_entry
 
 FLAG = "POSTRIFF_HISTORY_IMPORT"
 WINDOW_DAYS = 90
@@ -228,6 +229,7 @@ class HistoryImporter:
             raise AlphaError("Confirm reading the last 90 days of this account's posts and their metrics.", 400)
         with self.oauth.repository.transaction(token, workspace_id) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            require_qualified_entry(cur,workspace_id)
             throttle(cur, f"history-import:{workspace_id}:{actor}", 5, 3600)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL",
                         (workspace_id, connection_id))
@@ -278,6 +280,7 @@ class HistoryImporter:
 
     def _eligible(self, run):
         with self.connection_factory() as db, db.cursor() as cur:
+            if funding_mode(cur,run["workspaceId"])!='legacy': return False
             cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s", (run["workspaceId"],))
             found = cur.fetchone()
             return (bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])
@@ -349,6 +352,9 @@ class HistoryImporter:
             if self.monotonic() >= deadline:
                 break
             try:
+                if not self._eligible(run):
+                    self._finish(run,"cancelled","not_eligible")
+                    return "cancelled"
                 page = list_page(self.transport, run["provider"], grant["accessToken"], cursor)
             except HistoryHTTP as error:
                 if error.status in (400, 401, 403, 404):

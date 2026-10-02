@@ -19,9 +19,15 @@ class CreditRequests:
     def _validate(self, payload):
         if not isinstance(payload,dict): raise AlphaError('Supply a draft request.',400)
         if payload.get('research') is not False:
-            raise AlphaError('This credit route supports writing only. Turn off web research for this task.',409)
+            raise AlphaError('This credit route does not include web research. Turn it off for this task.',409)
         if self.ideas._wants_image(payload):
-            raise AlphaError('Images need a separate credit approval; use the existing media plan.',409)
+            runtime = getattr(self.ideas, 'image_runtime', None)
+            if runtime is None or not runtime.credit_basis():
+                raise AlphaError('Image credit pricing is not qualified yet. No provider request was made.',503,code='image_credit_unavailable')
+            request = payload['imageGeneration']
+            if request is not True and (set(request) - {'enabled', 'count'} or type(request.get('count', 1)) is not int or request.get('count', 1) != 1):
+                raise AlphaError('Choose one supported image candidate.',400)
+            return runtime, runtime.model
         runtime=self.ideas._select_runtime(payload.get('model'))
         if runtime.cost_class!='paid': raise AlphaError('This writer does not use cloud credits.',409)
         # The model an Auto request writes with depends on workspace state: estimate and issue take it from estimate_request.
@@ -64,8 +70,19 @@ class CreditRequests:
                 'model':cost['model'],'provider':cost['provider'],'policy':policy,'stateRevision':row[0],'kind':info['kind'],'frames':info['frames'],'cached':info['cached']}
 
     def _ceiling(self, runtime, model, request):
+        if self.ideas._wants_image(request):
+            basis = runtime.credit_basis()
+            if not basis:
+                raise AlphaError('Image credit pricing is not qualified yet.',503,code='image_credit_unavailable')
+            return millicredits(basis['ceilingUsdMicro'])
         import math
         return millicredits(math.ceil(runtime.price_quote(request, model) * 1_000_000))
+
+    def _priced_request(self, state, payload, operation, actor):
+        if self.ideas._wants_image(payload):
+            runtime, model = self._validate(payload)
+            return runtime, model, payload
+        return self.ideas.estimate_request(state,payload,operation,actor)
 
     def estimate(self, workspace_id, token, body):
         """A labelled usual cost and the ceiling that will be held, from the request the writer would receive."""
@@ -81,10 +98,10 @@ class CreditRequests:
             if not policy: raise AlphaError('Credit billing is not active for this workspace.',409)
             if operation=='turn': self.ideas._conversation(cur,workspace_id,body.get('conversationId'))
             available=book.view(cur,workspace_id)['availableMilliCredits']
-            runtime,model,request=self.ideas.estimate_request(self.ideas._state(row),payload,operation,actor)
+            runtime,model,request=self._priced_request(self.ideas._state(row),payload,operation,actor)
         import math
         ceiling=self._ceiling(runtime,model,request)
-        usual=min(ceiling,millicredits(math.ceil(runtime.typical_quote(request,model)*1_000_000)))
+        usual=ceiling if self.ideas._wants_image(payload) else min(ceiling,millicredits(math.ceil(runtime.typical_quote(request,model)*1_000_000)))
         return {'estimateMilliCredits':usual,'ceilingMilliCredits':ceiling,'availableMilliCredits':available,'basis':runtime.ESTIMATE_BASIS,
                 'model':model,'provider':runtime.provider,'policy':policy,'reasoning':request.get('reasoning'),'stateRevision':row[0],
                 **({'warnings':[request['writerNote']]} if request.get('writerNote') else {})}
@@ -123,7 +140,7 @@ class CreditRequests:
             elif conversation is not None: raise AlphaError('A new draft cannot name another conversation.',400)
             # The limit must cover the most this exact request can cost, so approval never ends in a later 402. The writer
             # is the one the turn will use: Auto resolves against this workspace's default, as the turn does.
-            runtime,model,request=self.ideas.estimate_request(self.ideas._state(row),payload,operation,actor)
+            runtime,model,request=self._priced_request(self.ideas._state(row),payload,operation,actor)
             ceiling=self._ceiling(runtime,model,request)
             if maximum<ceiling: raise AlphaError(f'This task can use up to {ceiling/1000:.1f} credits. Set the limit to at least {ceiling/1000:.1f}.',402)
             return book.issue(cur,workspace_id,actor,row[0],binding,model,runtime.provider,maximum)
@@ -138,8 +155,9 @@ class CreditRequests:
             if not book.policy(cur,workspace_id): return None
             if operation=='media-notes':
                 return self._notes_authority(cur,workspace_id,row,actor,revision,payload,book)
-            runtime=self.ideas._select_runtime(payload.get('model'))
-            if runtime.cost_class!='paid' and not self.ideas._wants_image(payload): return None
+            if not self.ideas._wants_image(payload):
+                runtime=self.ideas._select_runtime(payload.get('model'))
+                if runtime.cost_class!='paid': return None
             self._validate(payload)
             if operation=='turn': self.ideas._conversation(cur,workspace_id,conversation)
             current=row[0] if revision is None else revision

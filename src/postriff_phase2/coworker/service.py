@@ -118,7 +118,7 @@ class CoworkerService:
         return {**flags.public(), "registryRelease": skill_registry.default_registry().release(),
                 "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=getattr(self.hosted, "metric_reads", None) is not None),
                 "notifications": notifications.status() if notifications else {"enabled": False},
-                "research": research_broker.ResearchBroker(state=state).diagnostics() if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
+                "research": self._research_diagnostics(workspace_id,token,state) if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
                 "weekly": {"recipes": len([r for r in weekly["recipes"] if r.get("status") != "deleted"]), "weeks": len(weekly["weeks"])}}
 
     # === Weekly Social Operator ==================================================================================================
@@ -507,6 +507,32 @@ class CoworkerService:
     def _broker(self, state):
         return research_broker.ResearchBroker(state=state)
 
+    def _research_diagnostics(self,workspace_id,token,state):
+        from ..growth.credit_admission import funding_mode
+        with self.repository.transaction(token,workspace_id) as (cur,_row,_actor):
+            supported=funding_mode(cur,workspace_id)=='legacy'
+        rows=self._broker(state).diagnostics()
+        if supported: return rows
+        return [{**item,'readiness':{'state':'funding_unavailable','reason':'Provider cost and credit funding are not qualified.'}}
+                if item['readiness']['state']=='ready' else item for item in rows]
+
+    def _funded_research_broker(self,workspace_id,token,state):
+        from ..growth.credit_admission import require_qualified_entry
+        from ..permissions import require
+        def guard():
+            with self.repository.transaction(token,workspace_id) as (cur,row,_actor):
+                require(self.hosted.ideas._member(row),'edit')
+                require_qualified_entry(cur,workspace_id)
+        guard()
+        broker=self._broker(state)
+        if isinstance(broker,research_broker.ResearchBroker):
+            broker.before_call=guard
+            from ..research import ExaSearch
+            for provider in broker.providers:
+                backend=getattr(provider,'backend',None)
+                if isinstance(backend,ExaSearch): backend.before_call=guard
+        return broker
+
     def _store_evidence(self, cur, workspace_id, request_key, item_provenance, excerpt):
         prov = item_provenance or {}
         cur.execute("""INSERT INTO public.pr_research_evidence(workspace_id,request_key,provider,provider_kind,access_method,query,url,host,platform,retrieved_at,
@@ -528,7 +554,7 @@ class CoworkerService:
             raise AlphaError("Say what to look for.", 400)
         self._require_edit(workspace_id, token)   # before any provider call: a viewer never causes egress
         state = self._state(workspace_id, token)
-        outcome = self._broker(state).search_items(query, {"limit": 6})
+        outcome = self._funded_research_broker(workspace_id,token,state).search_items(query, {"limit": 6})
         key = f"research:search:{hashlib.sha256(query.encode()).hexdigest()[:16]}"
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
@@ -553,7 +579,10 @@ class CoworkerService:
 
     def research_diagnostics(self, workspace_id, token):
         state = self._state(workspace_id, token)
-        return {"providers": self._broker(state).diagnostics(), "enabled": flags.enabled("RAFII_RESEARCH_BROKER_ENABLED")}
+        from ..growth.credit_admission import funding_mode
+        with self.repository.transaction(token,workspace_id) as (cur,_row,_actor):
+            enabled=flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") and funding_mode(cur,workspace_id)=='legacy'
+        return {"providers": self._research_diagnostics(workspace_id,token,state), "enabled": enabled}
 
     def source_campaign(self, workspace_id, token, payload):
         """One source → FactPack → CanonicalBrief → angles → channel drafts (+ quality) → creative briefs → campaign."""
@@ -565,7 +594,7 @@ class CoworkerService:
         kind = payload.get("format") or "text"
         if kind == "url" and not flags.enabled("RAFII_RESEARCH_BROKER_ENABLED"):
             raise AlphaError("Reading links needs the Research Broker, which is off.", 404, code="feature_disabled")
-        artifact = source_intake.normalize(kind, payload, broker=self._broker(state) if kind == "url" else None, now=now)
+        artifact = source_intake.normalize(kind, payload, broker=self._funded_research_broker(workspace_id,token,state) if kind == "url" else None, now=now)
         pack = fact_pack.build([artifact], now)
         goal = _clean(payload.get("goal"), 600) or f"Share: {artifact['title'][:120]}"
         audience = _clean(payload.get("audience"), 400) or ((state.get("brandHub") or {}).get("audience") or "")

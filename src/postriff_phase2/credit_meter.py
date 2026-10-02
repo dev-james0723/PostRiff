@@ -19,7 +19,23 @@ def _amount(value):
 
 
 def millicredits(cost_usd_micro):
-    numerator = _amount(cost_usd_micro) * CREDITS_PER_USD * 1000
+    return _rounded_millicredits(_amount(cost_usd_micro))
+
+
+def actual_millicredits(cost_usd_micro):
+    """Verified actual ledger costs use storage's domain; the approved debit is capped separately.
+
+    The smaller new-quote domain remains unchanged. A known provider overrun must
+    still be recorded as platform loss instead of stranding the customer's hold.
+    """
+    from .growth.usage import MAX_USD_MICRO
+    if type(cost_usd_micro) is not int or not 0 <= cost_usd_micro <= MAX_USD_MICRO:
+        raise ValueError('Use a known PostgreSQL bigint-safe actual USD-micro amount.')
+    return _rounded_millicredits(cost_usd_micro)
+
+
+def _rounded_millicredits(cost_usd_micro):
+    numerator = cost_usd_micro * CREDITS_PER_USD * 1000
     denominator = MICRO_USD * MILLI_STEP
     return ((numerator + denominator - 1) // denominator) * MILLI_STEP
 

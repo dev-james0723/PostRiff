@@ -11,6 +11,7 @@ What is fail-closed: the runtime refuses any context that was not projected for 
 customer's per-source cloud consent is never sent to a provider.
 """
 import json
+from decimal import Decimal, ROUND_CEILING
 import ssl
 import time
 from urllib.error import HTTPError, URLError
@@ -572,16 +573,8 @@ class ServerModelRuntime(AgentRuntime):
         except AlphaError as error:
             raise _Unknown(str(error), error.status) from error
         status, data = response.get("status"), response.get("body") or {}
-        if status == 429:
-            raise _RateLimited("The model provider is rate limiting; retrying once.")
-        if status is None or status >= 500:
-            raise _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
-        if status != 200 or not isinstance(data, dict):
-            rejected = _Rejected("The AI writer couldn't take this request. Try again.", 502)
-            rejected.http_status = status   # kept for callers that must tell auth/budget from a bad request (growth router)
-            raise rejected
         # Read accounting metadata before validating content: a bad envelope can still be billed.
-        usage = dict(data.get("usage")) if isinstance(data.get("usage"), dict) else {}
+        usage = dict(data.get("usage")) if isinstance(data, dict) and isinstance(data.get("usage"), dict) else {}
         usage.pop("gatewayCost", None)
         usage.pop("gatewayCostRejected", None)
         usage.pop("executionProvider", None)
@@ -593,6 +586,19 @@ class ServerModelRuntime(AgentRuntime):
         elif "cost" in _gateway_metadata(data):
             # Explicit unusable accounting is unknown, not permission to substitute overlapping usage.
             usage["gatewayCostRejected"] = True
+        if status == 429:
+            error = _RateLimited("The model provider is rate limiting; retrying once.")
+            error.usage = usage if usage else {"cost": 0.0}
+            raise error
+        if status is None or status >= 500:
+            error = _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
+            error.usage = usage
+            raise error
+        if status != 200 or not isinstance(data, dict):
+            rejected = _Rejected("The AI writer couldn't take this request. Try again.", 502)
+            rejected.http_status = status
+            rejected.usage = usage if usage else {"cost": 0.0}
+            raise rejected
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
@@ -662,7 +668,7 @@ class ServerModelRuntime(AgentRuntime):
 
         requests_made, prompt_tokens, completion_tokens, reported_cost = 0, 0, 0, None
         usage_complete = True
-        accumulated_cost = 0.0
+        accumulated_cost = Decimal('0')
         reasoning_tokens, reasoning_known = 0, True
         variants, last_error, served_by = None, None, None
 
@@ -684,8 +690,11 @@ class ServerModelRuntime(AgentRuntime):
             nonlocal requests_made, usage_complete, accumulated_cost, prompt_tokens, completion_tokens, reported_cost, reasoning_tokens, reasoning_known, served_by
             requests_made += 1
             call_cost = cost_of(usage)
+            from .growth.usage import cost_usd_micro
+            if cost_usd_micro(call_cost) is None:
+                call_cost = None
             usage_complete = usage_complete and call_cost is not None
-            accumulated_cost += call_cost or 0
+            accumulated_cost += Decimal(str(call_cost)) if call_cost is not None else Decimal('0')
             prompt_tokens += int(usage.get("prompt_tokens") or 0)
             completion_tokens += int(usage.get("completion_tokens") or 0)
             details = usage.get("completion_tokens_details")
@@ -699,7 +708,7 @@ class ServerModelRuntime(AgentRuntime):
             served_by = usage.get("executionProvider") or served_by
 
         def known_cost():
-            return round(accumulated_cost, 6) if usage_complete else None
+            return float(accumulated_cost.quantize(Decimal('0.000001'), rounding=ROUND_CEILING)) if usage_complete else None
 
         def block():
             return {**detail, "tokens": reasoning_tokens if reasoning_known else None}
@@ -708,6 +717,28 @@ class ServerModelRuntime(AgentRuntime):
 
         def failure(message, status=502, dispatched=True, cost_usd=None, code=None):
             return ProviderFailure(message, status, dispatched=dispatched, cost_usd=cost_usd, code=code, usage={"reasoning": block()})
+
+        def verify_serving(usage):
+            allowed = self.allowed_for(model)
+            actual = usage.get("executionProvider")
+            if actual and allowed and actual not in allowed:
+                raise failure("The gateway reported a provider outside the approved set; this draft was not used.", 502, cost_usd=known_cost())
+            if request.get("_creditGuard") and not actual:
+                raise failure("The gateway execution provider could not be verified for the approved route; this draft was not used.", 502, cost_usd=known_cost())
+
+        def credit_guard(call_cap, critique=None):
+            guard = request.get("_creditGuard")
+            if not callable(guard):
+                return
+            from .growth.usage import cost_usd_micro
+            messages = self._messages(request, reasoning, critique=critique)
+            next_cost = cost_usd_micro(self._cost(model, len(json.dumps(messages, ensure_ascii=False).encode()) + 256, call_cap))
+            try:
+                guard(next_usd_micro=next_cost, spent_usd_micro=cost_usd_micro(float(accumulated_cost)), unknown=not usage_complete,
+                      model=model, provider=self.provider)
+            except AlphaError as error:
+                raise failure(str(error), error.status, dispatched=progress["dispatched"],
+                              cost_usd=known_cost() if progress["dispatched"] else 0.0, code=error.code) from error
 
         def budget():
             """(timeout, max_tokens) for the next call, or None when the request's deadline leaves too little time to
@@ -732,29 +763,30 @@ class ServerModelRuntime(AgentRuntime):
                 sent = progress["dispatched"]
                 raise failure(TIME_LEFT_MESSAGE, 503, dispatched=sent, cost_usd=known_cost() if sent else 0.0, code="reasoning_time_exhausted")
             timeout, call_cap = allowance
+            credit_guard(call_cap)
             try:
                 content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
             except _RateLimited as error:
-                requests_made += 1  # refused before any work: known to cost nothing
+                count(getattr(error, "usage", {"cost": 0.0}))
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
                 self.sleep(RATE_LIMIT_BACKOFF_SECONDS)
                 continue
             except _Retry as error:
-                requests_made += 1
-                usage_complete = False
-                reasoning_known = False   # answered (HTTP 200) without usable usage
+                failed_usage = getattr(error, "usage", {})
+                count(failed_usage)
+                verify_serving(failed_usage)
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
                 continue
             except _Rejected as error:
+                count(getattr(error, "usage", {"cost": 0.0}))
                 raise failure(str(error), 502, cost_usd=known_cost()) from error
             except _Unknown as error:
-                raise failure(str(error), error.status, cost_usd=None) from error
+                count(getattr(error, "usage", {}))
+                raise failure(str(error), error.status, cost_usd=known_cost()) from error
             count(usage)
-            allowed = self.allowed_for(model)
-            if usage.get("executionProvider") and allowed and usage["executionProvider"] not in allowed:
-                raise failure("The gateway reported a provider outside the approved set; this draft was not used.", 502, cost_usd=known_cost())
+            verify_serving(usage)
             if usage.get("finishReason") == "length":
                 last_error = "The model reached its output limit before finishing."
                 emit(safe_event("warning.created", message=last_error))
@@ -781,13 +813,18 @@ class ServerModelRuntime(AgentRuntime):
                 timeout, call_cap = allowance
                 revised_content = revised_usage = None
                 try:
+                    credit_guard(call_cap, critique={"variants": variants})
                     revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
-                except (_RateLimited, _Rejected):
-                    pass   # refused before any work: nothing was billed
-                except _Retry:
-                    requests_made += 1
-                    usage_complete = False   # answered, but its cost cannot be read
-                    reasoning_known = False
+                except (_RateLimited, _Rejected) as error:
+                    count(getattr(error, "usage", {"cost": 0.0}))
+                except _Retry as error:
+                    failed_usage = getattr(error, "usage", {})
+                    count(failed_usage)
+                    verify_serving(failed_usage)
+                except ProviderFailure:
+                    raise
+                except _Unknown as error:
+                    count(getattr(error, "usage", {}))
                 except AlphaError:
                     usage_complete = False   # the outcome of this call (and whether it was billed) is unknown
                 revised = False
@@ -795,9 +832,7 @@ class ServerModelRuntime(AgentRuntime):
                     # Counted as soon as the call returns, like the first pass: a costed revise answer that does not
                     # parse keeps its known cost instead of making the whole run's cost unknown.
                     count(revised_usage)
-                    allowed = self.allowed_for(model)
-                    if revised_usage.get("executionProvider") and allowed and revised_usage["executionProvider"] not in allowed:
-                        raise failure("The gateway reported a provider outside the approved set; this draft was not used.", 502, cost_usd=known_cost())
+                    verify_serving(revised_usage)
                     if revised_usage.get("finishReason") != "length":
                         try:
                             variants, revised = self._parse(revised_content, destinations, context), True
