@@ -595,6 +595,18 @@ class WatchdogTests(unittest.TestCase):
         self.assertTrue(out[0].startswith('::notice title=Founder watchdog not configured::'))
         self.assertEqual(founder_sources.watchdog_main({'RAFII_WATCHDOG_DSN': '  '}, out=out.append), 0)
 
+    def test_default_connector_uses_bundled_supabase_root_for_verify_full(self):
+        connection = WatchConnection(heartbeat(30))
+        dsn = 'host=pooler.example dbname=postgres user=watchdog password=secret sslmode=verify-full'
+        from rafii_control import store
+        with mock.patch('psycopg.connect', return_value=connection) as connect:
+            rows = founder_sources.read_source_health(dsn, 'production')
+        self.assertEqual(rows[0]['source_id'], 'cron')
+        kwargs = connect.call_args.kwargs
+        self.assertEqual(kwargs.get('sslrootcert'), str(store.SUPABASE_ROOT))
+        self.assertEqual(kwargs.get('application_name'), 'rafii-founder-watchdog')
+        self.assertNotIn('secret', repr(kwargs))
+
     def test_current_heartbeat_passes_through_the_read_only_watchdog_role(self):
         connection = WatchConnection(heartbeat(120))
         code, out = self.main(connection)

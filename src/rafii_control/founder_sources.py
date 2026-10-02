@@ -18,6 +18,8 @@ probe is not measured. It prints exception classes only, never a DSN or a server
 import os
 import time
 
+from .store import tls_options
+
 # Ids `founder_cron.probe` writes, in display order.
 SOURCE_IDS = ('cron', 'database', 'control_database', 'control_reader', 'phone_provider', 'notifications', 'stripe_webhooks', 'email_provider', 'model_gateway')
 # Sources whose silence opens a founder incident (founder_incidents.THRESHOLDS['source_silence']). The 8.D probes report
@@ -185,7 +187,7 @@ def read_source_health(dsn, environment, *, connect=None):
         import psycopg
 
         def connect():
-            return psycopg.connect(dsn, connect_timeout=10, prepare_threshold=None, application_name='rafii-founder-watchdog')
+            return psycopg.connect(dsn, connect_timeout=10, prepare_threshold=None, application_name='rafii-founder-watchdog', **tls_options(dsn))
     with connect() as con:
         with con.transaction():
             con.execute('SET TRANSACTION READ ONLY')
