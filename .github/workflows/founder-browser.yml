@@ -12,6 +12,7 @@ on:
       - 'src/postriff_phase2/**'
       - 'migrations/postriff/**'
       - 'scripts/postriff_dev_hosted.py'
+      - 'scripts/founder_signin_web.py'
       - 'tests/founder_browser_fixture.py'
       - 'tests/phase2/rls.sql'
       - '.github/workflows/founder-browser.yml'
@@ -73,6 +74,11 @@ jobs:
           echo "harness or web app did not start"; tail -n 80 harness.log web.log; exit 1
       - name: Install Chromium for Playwright
         run: npx --prefix web playwright install --with-deps chromium
+      - name: Founder passkey sign-in (real UI and SDK, local Auth fixtures, Chromium virtual authenticator)
+        run: |
+          python scripts/founder_signin_web.py --prepare npm ci
+          python scripts/founder_signin_web.py npm run build
+          python scripts/founder_signin_web.py --test
       - name: Founder scenes (sections in Live and Demo at 1440/768/390, axe, deep links, evidence, Ask Rafii, settings, follow-ups, sign-out)
         run: FOUNDER_EVIDENCE_DIR=founder-evidence node web/tests/founder-browser.cjs
       - name: Harness and web logs
@@ -83,8 +89,11 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: founder-browser-${{ github.sha }}
+          # Only the explicitly listed synthetic screenshots/results/logs are uploaded.
+          include-hidden-files: true
           path: |
             founder-evidence/
+            .founder-signin-evidence/
             harness.log
             web.log
           retention-days: 14
