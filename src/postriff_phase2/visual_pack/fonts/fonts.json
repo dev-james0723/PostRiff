@@ -1,0 +1,38 @@
+{
+  "schema": "rafii.visual-pack-fonts.v1",
+  "family": "Noto Sans TC",
+  "license": {
+    "id": "OFL-1.1",
+    "file": "OFL.txt",
+    "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+    "source": "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/LICENSE",
+    "copyright": "© 2014-2021 Adobe (http://www.adobe.com/). Noto is a trademark of Google Inc.",
+    "note": "OFL.txt is the upstream license file unchanged; the copyright notice is also carried in each font's name table (ID 0). The fonts are bundled unmodified and are never served to browsers."
+  },
+  "retrievedAt": "2026-10-01",
+  "sourceRepository": "https://github.com/notofonts/noto-cjk (official Noto CJK repository, branch main, Sans/SubsetOTF/TC)",
+  "fonts": [
+    {
+      "weight": "regular",
+      "file": "NotoSansTC-Regular.otf",
+      "postscriptName": "NotoSansTC-Regular",
+      "version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "source": "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/SubsetOTF/TC/NotoSansTC-Regular.otf",
+      "bytes": 5683368,
+      "sha256": "5bab0cb3c1cf89dde07c4a95a4054b195afbcfe784d69d75c340780712237537",
+      "cmapCodePoints": 20745
+    },
+    {
+      "weight": "bold",
+      "file": "NotoSansTC-Bold.otf",
+      "postscriptName": "NotoSansTC-Bold",
+      "version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "source": "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/SubsetOTF/TC/NotoSansTC-Bold.otf",
+      "bytes": 5839972,
+      "sha256": "55420b259eb119bf5f2a0aadba10cf9d736c12d64ab93e78546d69ef5f43558b",
+      "cmapCodePoints": 20745
+    }
+  ],
+  "coverage": "Latin (Basic Latin, Latin-1, Latin Extended-A), general punctuation, arrows, CJK Symbols and Punctuation, fullwidth forms, bopomofo and the Traditional Chinese ideograph set of the TC subset. Emoji, ZWJ and variation selectors are not covered and are reported per slide, never drawn.",
+  "deployment": "11,523,340 bytes for both weights, inside the Python function bundle (well under the Vercel Python function size limit)."
+}

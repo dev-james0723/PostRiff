@@ -15,6 +15,7 @@ export const EVENT_LABELS: Record<string, string> = {
   'automation.failed': 'An automation failed',
   'channel.reconnect_required': 'An account needs reconnecting',
   'engagement.needs_attention': 'A comment needs a reply',
+  'relationship.follow_up_due': 'A follow-up is due',
   'opportunity.detected': 'A new opportunity',
   'analytics.weekly_ready': 'Your weekly results are ready',
   'analytics.anomaly_detected': 'Unusual results',
@@ -35,14 +36,14 @@ export const CATEGORY_LABELS: Record<string, { label: string; hint: string; emai
   campaigns: { label: 'Campaigns', hint: 'Drafts are ready or Rafii needs a decision.' },
   automation: { label: 'Automations', hint: 'An automation finished or failed.' },
   channels: { label: 'Accounts', hint: 'An account needs reconnecting.' },
-  engagement: { label: 'Comments and mentions', hint: 'Someone asked a question or needs an answer.' },
+  engagement: { label: 'Comments and mentions', hint: 'Someone asked a question or needs an answer, or a follow-up you planned is due.' },
   opportunities: { label: 'Opportunities', hint: 'Something fresh from a topic you follow.' },
   analytics: { label: 'Results', hint: 'Weekly results and unusual changes.' },
   learning: { label: 'Learned preferences', hint: 'Rafii noticed a pattern in your edits.' },
   research: { label: 'Research', hint: 'Research needs your input.' },
   assets: { label: 'Images', hint: 'An image needs review.' },
   budget: { label: 'Budget', hint: 'A spending limit was reached.' },
-  billing: { label: 'Billing', hint: 'Payments and trial.', emailNote: 'Emails always reach the owner.' },
+  billing: { label: 'Billing', hint: 'Payments and plan changes.', emailNote: 'Emails always reach the owner.' },
   security: { label: 'Security', hint: 'New sign-ins and account changes.', emailNote: 'Emails always reach you.' }
 };
 

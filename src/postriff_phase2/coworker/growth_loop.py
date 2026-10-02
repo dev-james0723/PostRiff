@@ -182,8 +182,13 @@ def planning_context(state, slot, now=None):
                 and cohort.get("connectionId") == slot.get("channelId") and cohort.get("provider") == str(slot.get("platform") or "").lower()
                 and cohort.get("language") == slot.get("language") and cohort.get("contentTypeId") == slot.get("contentType")):
             preferences.append({"experimentId": experiment["id"], "dimension": experiment["dimension"], "preferredFactor": experiment["result"].get("supportedFactor"), "causal": False})
-    return {"goal": {k: goal.get(k) for k in ("id", "name", "goalType", "primaryMetric", "targetValue", "targetAt")} if goal else None,
-            "approvedStrategyPreferences": preferences[:5], "constraints": "Recipe goals and user constraints win. Review and Queue approval remain required."}
+    context = {"goal": {k: goal.get(k) for k in ("id", "name", "goalType", "primaryMetric", "targetValue", "targetAt")} if goal else None,
+               "approvedStrategyPreferences": preferences[:5], "constraints": "Recipe goals and user constraints win. Review and Queue approval remain required."}
+    from .. import proof
+    if proof.enabled():   # RAFII Product Growth R-PROOF-02: accepted next-week decisions planned onto this slot, still in effect
+        from ..proof import strategy
+        context["strategyDecisions"] = strategy.for_slot(state, slot, {p["experimentId"] for p in preferences})
+    return context
 
 
 def transition(experiment, target, actor, now):
@@ -248,11 +253,12 @@ def proof_counts(state, start, end):
     phase = state.get("phase2") or {}
     jobs = phase.get("jobs") or []
     published = [j for j in jobs if j.get("state") == "verified" and j.get("providerReference") and start <= (verified_at(j) or 0) < end]
-    reviews = [r for r in phase.get("reviews") or [] if r.get("state") == "approved" and start <= (r.get("approvedAt") or r.get("createdAt") or 0) < end]
     weeks = weekly_operator.view(state)["weeks"]
     prepared = {s["variantId"] for w in weeks for s in w.get("slots") or [] if s.get("variantId") and s.get("status") not in ("rejected", "failed") and s.get("acceptedAt") and start <= s["acceptedAt"] < end}
-    approved = {r.get("variantId") for r in reviews if r.get("variantId")}
-    approved |= {j.get("variantId") or (j.get("manifest") or {}).get("variantId") for j in jobs if j.get("approvedAt") and start <= j["approvedAt"] < end and j.get("state") not in ("failed", "cancelled")}
+    # Approving a Queue review always creates its job with approvedAt (store.py), so jobs are the one record of an
+    # approval; a review row carries `status`/`manifest`, never a separate approval time. The store spells it "canceled".
+    approved = {j.get("variantId") or (j.get("manifest") or {}).get("variantId") for j in jobs
+                if j.get("approvedAt") and start <= j["approvedAt"] < end and j.get("state") not in ("failed", "canceled", "cancelled")}
     approved.discard(None)
     planning = ((state.get("raffi") or {}).get("campaignPlanning") or {})
     campaigns = [c for c in planning.get("campaigns") or [] if start <= c.get("createdAt", 0) < end]

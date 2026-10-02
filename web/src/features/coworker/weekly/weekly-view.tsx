@@ -18,7 +18,11 @@ import { cn } from '@/lib/utils';
 import { dayLabel, nextAction, summarizeSlots, weekStateLabel, type NextAction } from '../present';
 import { QueryProblem, ToneChip, WhyRafiiExplainer } from '../parts';
 import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
+import { OpportunityBrief } from '@/features/growth/opportunity-brief';
+import { AppliedDecisions } from './applied-decisions';
 import { OpportunitiesPanel } from './opportunities-panel';
+import { GrowthFeatureGate } from '@/lib/growth-v2/features';
+import { FirstWeekPanel } from './first-week-panel';
 import { RecipeForm, RecipeSummary } from './recipe-form';
 import { SlotCard } from './slot-card';
 
@@ -129,6 +133,9 @@ export function WeeklyView() {
           Rafii is planning and drafting next week. This can take a minute; you can leave this page.
         </p>
       )}
+      <GrowthFeatureGate feature='firstWeek'>
+        <FirstWeekPanel canEdit={canEdit} />
+      </GrowthFeatureGate>
       {weekly.isPending ? (
         <StateMessage kind='loading' title='Loading your week…' />
       ) : weekly.isError ? (
@@ -194,6 +201,14 @@ export function WeeklyView() {
                   focusSlot={focusSlot}
                 />
               )}
+              {week && (
+                <GrowthFeatureGate feature='proof'>
+                  <AppliedDecisions week={week} />
+                </GrowthFeatureGate>
+              )}
+              <GrowthFeatureGate feature='briefs'>
+                <OpportunityBrief canEdit={canEdit} />
+              </GrowthFeatureGate>
               <WorkspaceOpportunityPreview pool='weekly' />
               <WhyRafiiExplainer />
               <p className='text-muted-foreground text-xs'>

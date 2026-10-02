@@ -1,4 +1,4 @@
-"""Private Supabase Storage boundary for decoded Phase 2 media and verified chat videos.
+"""Private Supabase Storage boundary for decoded Phase 2 media, verified chat videos and raw source uploads.
 
 The service key is held by this server-side adapter and is never returned in a
 descriptor, state snapshot, object URL, or error. Every request goes to the
@@ -22,6 +22,13 @@ from .media import decode_upload
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
+# Server-rendered Visual Pack slides only (visual_pack/render.py): `<revision id>-<sha256 of the PNG>.png`, in the private
+# media bucket under `{workspace}/visual-pack/`. Uploaded media keeps its JPEG-only rule.
+PACK_OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.png")
+# Raw source uploads (RAFII Product Growth R-FWR-04): a PDF or an audio recording, written only through a signed
+# upload URL and read back only through bounded range reads. Its own private bucket carries the size/MIME limits.
+SOURCE_OBJECT = re.compile(r"[0-9a-f]{32}\.(pdf|wav|mp3|m4a|ogg)")
+SOURCE_BUCKET = "rafii-source-uploads"
 MAX_BODY = 8 * 1024 * 1024
 MAX_VIDEO_BODY = 100_000_000
 LIST_PAGE = 100
@@ -39,19 +46,20 @@ def storage_opener(context=None):
 
 
 class SupabaseStorage:
-    def __init__(self, project_url, secret_key, *, bucket="postriff-private", video_bucket="postriff-video", send=None, opener=None):
+    def __init__(self, project_url, secret_key, *, bucket="postriff-private", video_bucket="postriff-video", source_bucket=SOURCE_BUCKET, send=None, opener=None):
         parsed = urlparse(project_url)
         if parsed.scheme != "https" or not parsed.hostname or not parsed.hostname.endswith(".supabase.co") or parsed.path not in ("", "/"):
             raise ValueError("An exact Supabase project URL is required.")
         if not isinstance(secret_key, str) or len(secret_key) < 20:
             raise ValueError("A server-only Supabase secret key is required.")
-        if not re.fullmatch(r"[a-z0-9-]{3,63}", bucket) or not re.fullmatch(r"[a-z0-9-]{3,63}", video_bucket):
+        if not all(re.fullmatch(r"[a-z0-9-]{3,63}", name) for name in (bucket, video_bucket, source_bucket)):
             raise ValueError("Use a valid private bucket name.")
         self.project_url = project_url.rstrip("/")
         self.host = parsed.hostname
         self.secret_key = secret_key
         self.bucket = bucket
         self.video_bucket = video_bucket
+        self.source_bucket = source_bucket
         self.opener = opener or storage_opener()
         self.send = send or self._send
 
@@ -76,10 +84,11 @@ class SupabaseStorage:
             raise AlphaError("Private storage is temporarily unavailable.", 503) from error
 
     def _bucket(self, category):
-        return self.video_bucket if category == "video" else self.bucket
+        return self.video_bucket if category == "video" else self.source_bucket if category == "source" else self.bucket
 
     def _path(self, workspace_id, category, object_name):
-        pattern = VIDEO_OBJECT if category == "video" else OBJECT if category in ("media", "artwork") else None
+        pattern = (VIDEO_OBJECT if category == "video" else SOURCE_OBJECT if category == "source" else OBJECT if category in ("media", "artwork")
+                   else PACK_OBJECT if category == "visual-pack" else None)
         if not UUID.fullmatch(str(workspace_id)) or pattern is None or not isinstance(object_name, str) or not pattern.fullmatch(object_name):
             raise AlphaError("Invalid private object location.")
         return f"{workspace_id}/{category}/{object_name}"
@@ -94,8 +103,10 @@ class SupabaseStorage:
         return headers
 
     def put_immutable(self, workspace_id, category, object_name, raw, content_type="image/jpeg"):
-        if category == "video":
-            raise AlphaError("Invalid private object location.")   # videos arrive only through a signed upload
+        if category in ("video", "source"):
+            raise AlphaError("Invalid private object location.")   # videos and raw sources arrive only through a signed upload
+        if (category == "visual-pack") != (content_type == "image/png"):
+            raise AlphaError("Invalid private object location.")   # PNG only for rendered pack slides, and nothing else there
         path = self._path(workspace_id, category, object_name)
         if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
             raise AlphaError("Decoded media is missing or too large.")
@@ -110,7 +121,7 @@ class SupabaseStorage:
         return path
 
     def get(self, workspace_id, category, object_name):
-        if category == "video":
+        if category in ("video", "source"):
             raise AlphaError("Invalid private object location.")   # the generic image route stays capped at 8 MB
         path = self._path(workspace_id, category, object_name)
         url = self._object_url(category, path)
@@ -308,7 +319,7 @@ class SupabaseStorage:
     def list_prefix(self, prefix, bucket=None):
         """Every object name under `{workspace}/{category}/` (paginated, bounded)."""
         parts = str(prefix).strip("/").split("/")
-        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video")):
+        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video", "visual-pack")):
             raise AlphaError("Invalid private object location.")
         folder = "/".join(parts)
         name = bucket or (self.video_bucket if parts[-1] == "video" else self.bucket)

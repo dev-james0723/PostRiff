@@ -27,9 +27,12 @@ import {
   type LedgerFilter
 } from './billing-model';
 
-/** "$0 run" and what the row did to an allowance (when the API says), as small markers. */
-function Markers({ entry }: { entry: LedgerEntry }) {
-  const note = allowanceNote(entry);
+/**
+ * "$0 run" and what the row did to an allowance (when the API says), as small markers. Allowance notes speak
+ * legacy writing batches and media credits, so they appear only for a legacy-allowance workspace (`notes`).
+ */
+function Markers({ entry, notes }: { entry: LedgerEntry; notes: boolean }) {
+  const note = notes ? allowanceNote(entry) : null;
   const zero = isZeroCostRun(entry);
   if (!note && !zero) return null;
   return (
@@ -54,7 +57,7 @@ function rowKey(entry: LedgerEntry, index: number) {
 }
 
 /** One entry per row on a narrow container: when and what first, then estimate → actual and the state. */
-function StackedRows({ entries }: { entries: LedgerEntry[] }) {
+function StackedRows({ entries, notes }: { entries: LedgerEntry[]; notes: boolean }) {
   return (
     <ul className='flex flex-col gap-1.5 @3xl:hidden'>
       {entries.map((entry, index) => (
@@ -73,14 +76,14 @@ function StackedRows({ entries }: { entries: LedgerEntry[] }) {
             </span>
             <StateBadge entry={entry} />
           </div>
-          <Markers entry={entry} />
+          <Markers entry={entry} notes={notes} />
         </li>
       ))}
     </ul>
   );
 }
 
-function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
+function LedgerTable({ entries, notes }: { entries: LedgerEntry[]; notes: boolean }) {
   return (
     <div className='relative rafii-quiet hidden overflow-x-auto rounded-[var(--rafii-radius-card)] px-2 @3xl:block'>
       <Table>
@@ -112,7 +115,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
                 <StateBadge entry={entry} />
               </TableCell>
               <TableCell>
-                <Markers entry={entry} />
+                <Markers entry={entry} notes={notes} />
               </TableCell>
             </TableRow>
           ))}
@@ -122,8 +125,11 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
   );
 }
 
-/** Every reservation, settlement and release the API returns (its latest 100), newest first. */
-export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: boolean }) {
+/**
+ * Every reservation, settlement and release the API returns (its latest 100), newest first. `allowanceNotes` is
+ * off outside legacy allowances: a managed-credit run is not "no allowance used", and Free has no allowance.
+ */
+export function Ledger({ entries, canEdit, allowanceNotes = true }: { entries: LedgerEntry[]; canEdit: boolean; allowanceNotes?: boolean }) {
   const [filter, setFilter] = useState<LedgerFilter>('all');
   const [showAll, setShowAll] = useState(false);
   const counts = ledgerCounts(entries);
@@ -133,7 +139,7 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
   function exportCsv() {
     const stamp = new Date().toISOString().slice(0, 10);
     const name = filter === 'all' ? `usage-${stamp}.csv` : `usage-${filter}-${stamp}.csv`;
-    downloadBlob(new Blob([ledgerCsv(filtered)], { type: 'text/csv;charset=utf-8' }), name);
+    downloadBlob(new Blob([ledgerCsv(filtered, allowanceNotes)], { type: 'text/csv;charset=utf-8' }), name);
   }
 
   return (
@@ -200,8 +206,8 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
             <StateMessage kind='empty' layout='inline' title={`No ${LEDGER_FILTER_LABELS[filter].toLowerCase()} usage`} />
           ) : (
             <>
-              <StackedRows entries={visible} />
-              <LedgerTable entries={visible} />
+              <StackedRows entries={visible} notes={allowanceNotes} />
+              <LedgerTable entries={visible} notes={allowanceNotes} />
             </>
           )}
 

@@ -231,7 +231,7 @@ class CreativeTest(unittest.TestCase):
 class EngagementTest(unittest.TestCase):
     def test_classification_and_no_manufactured_urgency(self):
         cases = {"How much is the tart?": "lead", "Where is the shop?": "question", "My order never arrived": "complaint", "Love this!": "praise",
-                 "Follow for follow": "spam", "幾錢一個？": "lead", "點解咁遲？": "question"}
+                 "Follow for follow": "spam", "Buy fake followers now spam spam spam": "spam", "幾錢一個？": "lead", "點解咁遲？": "question"}
         for text, category in cases.items():
             self.assertEqual(engagement.classify(text), category, text)
         result = engagement.triage([{"threadId": "t1", "text": "My order never arrived", "createdAtProvider": time.time() - 3600}])

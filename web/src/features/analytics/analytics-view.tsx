@@ -10,6 +10,8 @@ import { SectionHeading, StatusChip } from '@/features/workspace/rafii-parts';
 import { TimeBackSection } from '@/features/time-back/time-back-section';
 import { GrowthEntry } from '@/features/growth/studio-parts';
 import { GrowthAnalytics } from '@/features/growth/growth-loop';
+import { BusinessResultsSection } from '@/features/growth/results/results-section';
+import { GrowthFeatureGate } from '@/lib/growth-v2/features';
 import { useAnalytics, useChannels, useSnapshot } from '@/lib/api/hooks';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -172,6 +174,9 @@ export function AnalyticsView() {
         <GrowthEntry />
         <GrowthAnalytics />
         <TimeBackSection />
+        <GrowthFeatureGate feature='results'>
+          <BusinessResultsSection />
+        </GrowthFeatureGate>
         <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
         {channels.error ? (
           <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />

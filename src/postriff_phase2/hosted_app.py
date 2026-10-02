@@ -205,8 +205,12 @@ def runtime_from_environment(environ=None):
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
+    from .plan_pricing import pricing_from_environment
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), **pricing_from_environment(values))
+    service.audience.sync_enabled = values.get("RAFII_INBOX_SYNC_ENABLED") == "1"
+    service.audience.reply_sender_enabled = values.get("RAFII_INBOX_REPLY_SEND_ENABLED") == "1"
+    service.audience.engagement_enabled = values.get("RAFII_ENGAGEMENT_COPILOT_ENABLED") == "1"
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -227,7 +231,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), audience=service.audience)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -509,6 +513,10 @@ class HostedApplication:
             from .growth import http as growth_http
             if (routed := growth_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
+            # RAFII Product Growth: signed first-party result webhooks and tracking redirects authenticate themselves.
+            from . import growth_v2_routes
+            if (routed := growth_v2_routes.public(self, environ, start_response, method, path)) is not None:
+                return routed
             if path == "/api/billing/webhook" and method == "POST":
                 service = self._runtime()
                 length = int(environ.get("CONTENT_LENGTH") or "0")
@@ -606,6 +614,9 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                audience = getattr(service, "audience", None)
+                if audience is not None and getattr(audience, "sync_enabled", False):
+                    result["inboxSync"] = audience.scheduled_sync()
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()
@@ -659,6 +670,9 @@ class HostedApplication:
                 time_savings = getattr(service, "time_savings", None)
                 if time_savings is not None:
                     result["timeSavings"] = time_savings.maintain()
+                # RAFII Product Growth: each enabled slice's bounded background step (intake jobs, briefs, proof revisions…).
+                from . import growth_v2_routes
+                result['growthV2'] = growth_v2_routes.cron(service, time.monotonic() + 20)
                 if getattr(service, 'identity', None) is not None:
                     from .account_deletion import reconcile_identity
                     result['identityDeletion'] = reconcile_identity(service)
@@ -775,6 +789,8 @@ class HostedApplication:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
+            if growth_v2_routes.handles(parts):
+                return growth_v2_routes.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
                 return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
@@ -782,6 +798,8 @@ class HostedApplication:
                 if parts[4] == "credit-checkout":
                     return self._json(start_response, 201, service.billing_credit_checkout(parts[2], token, body.get("packId"), body.get("requestId")))
                 if parts[4] == "checkout":
+                    if set(body) - {"planTermsId", "successPath", "cancelPath"}:
+                        raise AlphaError("Checkout accepts plan intent and return paths only.", 400)
                     return self._json(start_response, 201, service.billing_checkout(parts[2], token, body.get("planTermsId"), body.get("successPath"), body.get("cancelPath")))
                 if parts[4] == "portal":
                     return self._json(start_response, 200, service.billing_portal(parts[2], token, body.get("returnPath")))
@@ -806,8 +824,12 @@ class HostedApplication:
                     return self._json(start_response, 200, service.time_savings.calibrate(parts[2], token, self._body(environ)))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "audience":
                 audience = service.audience
+                if len(parts) == 5 and parts[4] == "sync" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, audience.sync(parts[2], token))
                 if len(parts) == 5 and parts[4] == "threads" and method == "GET":
-                    return self._json(start_response, 200, audience.threads(parts[2], token))
+                    return self._json(start_response, 200, audience.threads(parts[2], token,
+                        cursor=self._query_str(environ, "cursor"), limit=self._query_int(environ, "limit", 50)))
                 if len(parts) == 7 and parts[4] == "threads" and parts[6] == "reply-drafts" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 201, audience.draft_reply(parts[2], token, parts[5], body))

@@ -39,6 +39,8 @@ def handle(app,environ,start_response,hosted,token,method,parts):
         value=service.genome(workspace_id,token)
     elif method=='GET' and len(rest)==2 and rest[0]=='feedback':
         value=service.feedback(workspace_id,token,rest[1])
+    elif method=='POST' and rest==['credit-quotes']:
+        value=service.credit_quote(workspace_id,token,app._body(environ))
     elif method=='POST' and rest==['check']:
         value=service.check(workspace_id,token,app._body(environ))
     elif method=='POST' and rest==['rewrite']:

@@ -379,6 +379,8 @@ class Cursor:
             db.credentials[params[1]]["revoked"] = True
         elif s.startswith("UPDATE public.pr_channel_capabilities"):
             self.result = None
+        elif s.startswith("SELECT capability,level,evidence,capability_version,extract(epoch from verified_at) FROM public.pr_channel_capabilities"):
+            self.rows = []
         elif s.startswith("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = None if not found or found["revoked"] else (found["provider"], found["access"], found["key_id"])

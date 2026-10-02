@@ -24,6 +24,9 @@ from .wave3_connectors import provider_host
 WAVE1 = ("Bluesky", "Mastodon", "Telegram", "Discord", "X")
 WAVE3 = ("Facebook", "YouTube", "TikTok", "Pinterest")
 _URL = re.compile(r"https?://[^\s<>\"]+")
+# Platforms whose multi-image (carousel) publishing is implemented here AND verified against the provider. None is yet,
+# so a job carrying more than one media item is refused before any provider I/O instead of silently posting media[0].
+CAROUSEL_VERIFIED = frozenset()
 
 
 def _provider_reason(body):
@@ -82,8 +85,21 @@ class HostedSocial:
         asset = manifest["media"][0]
         return self.assets.storage.signed_url(manifest["workspaceId"], "media", asset.get("objectName") or asset["id"], 600)
 
+    @staticmethod
+    def _multi_media_refusal(manifest):
+        """More than one media item where no verified carousel path exists: a terminal refusal, before any grant read,
+        qualification check or provider call (consistent with `_unsupported_media`)."""
+        media = manifest.get("media") or []
+        if len(media) > 1 and manifest.get("platform") not in CAROUSEL_VERIFIED:
+            return {"state": "failed", "confirmed": f"{manifest.get('platform') or 'This platform'} posts from Rafii carry text and at most one image or video; "
+                                                    f"this job has {len(media)} media items. Nothing was posted."}
+        return None
+
     # --- submit -------------------------------------------------------------------
     def submit(self, manifest):
+        refusal = self._multi_media_refusal(manifest)
+        if refusal:
+            return refusal
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -730,6 +746,9 @@ class HostedSocial:
         return _uncertain("No conclusive LinkedIn acceptance evidence; do not resubmit")
 
     def _submit_threads(self, manifest, token):
+        refusal = self._multi_media_refusal(manifest)
+        if refusal:
+            return refusal
         user = manifest["providerAccountId"]
         image_url = self._image_url(manifest)
         params = {"media_type": "IMAGE" if image_url else "TEXT", "text": manifest["payload"]["text"], "access_token": token}
@@ -750,6 +769,9 @@ class HostedSocial:
         return _uncertain(f"Threads container {container_id} was created but publish was inconclusive; reconcile by container")
 
     def _submit_instagram(self, manifest, token):
+        refusal = self._multi_media_refusal(manifest)
+        if refusal:
+            return refusal
         user = manifest["providerAccountId"]
         image_url = self._image_url(manifest)
         if not image_url:
@@ -767,6 +789,9 @@ class HostedSocial:
 
     def advance_instagram(self, manifest, job, action):
         """One bounded request. Worker has durably recorded intent before a POST."""
+        refusal = self._multi_media_refusal(manifest)
+        if refusal:   # never create, poll or publish a container that would carry only media[0]
+            return refusal
         if self._provider(manifest) is None:
             return {"state": "held", "confirmed": "Provider review is unavailable; a new review is required"}
         try:

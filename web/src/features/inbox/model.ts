@@ -10,8 +10,10 @@ import { STATUS } from '@/lib/status-labels';
  * when the server starts sending one, the page uses it; until then the page says it is unknown.
  */
 
-export type InboxFilter = 'all' | 'unanswered' | 'replied';
-export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unanswered', 'replied'];
+export type InboxFilter = 'all' | 'needs_reply' | 'review' | 'fyi' | 'unanswered' | 'replied' | 'follow_ups';
+/** `follow_ups` lists relationship follow-ups instead of comments (shown only when that feature is on). */
+export const INBOX_FILTERS = ['all', 'needs_reply', 'review', 'fyi', 'unanswered', 'replied', 'follow_ups'] as const;
+export const TRIAGE_FILTERS: readonly InboxFilter[] = ['needs_reply', 'review', 'fyi'];
 
 import type { ReplyRecord } from '@/lib/api/types';
 export type { ReplyRecord } from '@/lib/api/types';
@@ -89,10 +91,10 @@ export function apiCounts(data: Audience): Partial<Record<InboxFilter, number>> 
 }
 
 /** The API's limit on how many comments one response carries (`audience.py` threads: LIMIT 200). */
-export const THREAD_PAGE_LIMIT = 200;
+export const THREAD_PAGE_LIMIT = 50;
 
 export function providerName(provider: string, channel?: Pick<ChannelView, 'platform'> | null) {
-  if (channel?.platform) return channel.platform;
+  if (channel?.platform && channel.platform.toLowerCase() === provider.toLowerCase()) return channel.platform;
   return provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'the platform';
 }
 
@@ -100,7 +102,7 @@ export function authorLabel(author: string) {
   return author ? `@${author.replace(/^@/, '')}` : 'Unknown account';
 }
 
-/** A reply's backend status in plain words. Approved replies are not sent yet: nothing picks them up. */
+/** A reply's backend status in plain words. Approval and provider execution are separate states. */
 export function replyStatusView(status: string): { label: string; badge: AnimatedBadgeStatus } {
   switch (status) {
     case 'draft':

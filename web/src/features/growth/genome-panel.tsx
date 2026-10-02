@@ -9,6 +9,8 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { CreatorGenome, GenomeResponse } from '@/lib/growth/types';
+import { useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
+import { GrowthCreditConfirm } from './post-doctor-panel';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 
 export function GenomePanel() {
@@ -33,6 +35,8 @@ export function GenomePanel() {
   const [selected, setSelected] = useState<string[]>([]);
   const [sharePath, setSharePath] = useState('');
   const key = useRef<string | null>(null);
+  // Creator under Pricing v2: the analysis is priced and confirmed before it runs (credit bridge), like Post Doctor.
+  const credits = useGrowthCreditApproval<{ genome: CreatorGenome }>(workspaceId);
   if (!catalog.data?.genome) return null;
   const owner = access.role === 'owner';
   const samples =
@@ -43,6 +47,25 @@ export function GenomePanel() {
   function changed() {
     key.current = null;
     setConfirmed(false);
+    credits.cancel(); // a limit confirmed for other input never runs this one
+  }
+
+  async function analyzed(result: { genome: CreatorGenome } | null) {
+    if (!result) return; // waiting for the credit limit to be confirmed
+    setVersionId(result.genome.id);
+    await query.refetch();
+    await snapshot.refetch();
+  }
+
+  /** The request exactly as the screen shows it now (Propose sends it; Confirm checks the priced one still matches). */
+  function requestBody(): Record<string, unknown> {
+    return {
+      ...(data ? { data, account } : { sourceIds }),
+      ownContent: confirmed,
+      retainText: confirmed,
+      confirmed,
+      requestKey: key.current
+    };
   }
 
   async function analyze() {
@@ -50,16 +73,19 @@ export function GenomePanel() {
     setError('');
     key.current ??= crypto.randomUUID();
     try {
-      const result = await api.analyzeHistory(workspaceId, {
-        ...(data ? { data, account } : { sourceIds }),
-        ownContent: confirmed,
-        retainText: confirmed,
-        confirmed,
-        requestKey: key.current
-      });
-      setVersionId(result.genome.id);
-      await query.refetch();
-      await snapshot.refetch();
+      await analyzed(await credits.run('genome', requestBody(), (b) => api.analyzeHistory(workspaceId, b as unknown as Parameters<typeof api.analyzeHistory>[1])));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'History could not be analyzed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmCredits() {
+    setBusy(true);
+    setError('');
+    try {
+      await analyzed(await credits.confirm(requestBody()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
     } finally {
@@ -171,7 +197,10 @@ export function GenomePanel() {
               type='checkbox'
               className='mt-1'
               checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
+              onChange={(e) => {
+                setConfirmed(e.target.checked);
+                credits.cancel(); // a limit shown for the request with the earlier consent never runs this one
+              }}
             />
             These are my own posts. Retain their text in my voice corpus and analyze selected
             samples with the allowed AI routes.
@@ -188,6 +217,7 @@ export function GenomePanel() {
           >
             {busy ? 'Analyzing your history…' : 'Propose my Genome'}
           </Button>
+          <GrowthCreditConfirm quote={credits.pending} busy={busy || credits.quoting} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} />
         </>
       )}
       {query.isError && (

@@ -18,10 +18,11 @@ class CreditRequests:
 
     def _validate(self, payload):
         if not isinstance(payload,dict): raise AlphaError('Supply a draft request.',400)
+        if self.ideas._wants_image(payload):
+            # Plan credits cover writing only (`textOnly`); how images are priced in credits is not decided (DECISIONS D-026).
+            raise AlphaError('Images are not part of plan credits yet. Nothing was made or charged.',402,code='image_credits_unavailable')
         if payload.get('research') is not False:
             raise AlphaError('This credit route supports writing only. Turn off web research for this task.',409)
-        if self.ideas._wants_image(payload):
-            raise AlphaError('Images need a separate credit approval; use the existing media plan.',409)
         runtime=self.ideas._select_runtime(payload.get('model'))
         if runtime.cost_class!='paid': raise AlphaError('This writer does not use cloud credits.',409)
         # The model an Auto request writes with depends on workspace state: estimate and issue take it from estimate_request.
@@ -52,6 +53,7 @@ class CreditRequests:
         book=self._book()
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,_actor):
             require(self.ideas._member(row),'edit')
+            self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
             policy=book.policy(cur,workspace_id)
             if not policy: raise AlphaError('Credit billing is not active for this workspace.',409)
             available=book.view(cur,workspace_id)['availableMilliCredits']
@@ -75,6 +77,7 @@ class CreditRequests:
         if operation not in ('quick-start','turn'): raise AlphaError('Choose quick-start or turn.',400)
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
+            self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
             policy=book.policy(cur,workspace_id)
             if not policy: raise AlphaError('Credit billing is not active for this workspace.',409)
             if operation=='turn': self.ideas._conversation(cur,workspace_id,body.get('conversationId'))
@@ -95,6 +98,7 @@ class CreditRequests:
         except (ValueError,TypeError): raise AlphaError('Invalid credit request or limit.',400)
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
+            self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
             if body.get('expectedRevision')!=row[0]: raise AlphaError('Workspace changed. Review this request again.',409)
             info=self._notes(cur,workspace_id,self.ideas._state(row),payload)
             if info['cached']: raise AlphaError('Rafii already read this; no credits are needed.',409,code='notes_cached')
@@ -114,6 +118,7 @@ class CreditRequests:
         except (ValueError,TypeError): raise AlphaError('Invalid credit request or limit.',400)
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
+            self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
             if body.get('expectedRevision')!=row[0]: raise AlphaError('Workspace changed. Review this request again.',409)
             if operation=='turn': self.ideas._conversation(cur,workspace_id,conversation)
             elif conversation is not None: raise AlphaError('A new draft cannot name another conversation.',400)
@@ -129,6 +134,7 @@ class CreditRequests:
         if book is None: return None
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
+            self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
             if ai_usage_exempt(actor): return None
             if not book.policy(cur,workspace_id): return None
             if operation=='media-notes':

@@ -190,7 +190,7 @@ class CreditPurchases:
         if session not in (None,event['sessionId']) or payment not in (None,event['paymentIntentId']) or cents!=event['amount'] or currency!=event['currency'] or live!=event['live'] or policy!=POLICY_VERSION:
             raise AlphaError('Payment does not match the authorized order.',409)
         if grant: return
-        funded=self.book.grant(cur,workspace,actor,'credit-order:'+event['orderId'],milli,source='verified-stripe-checkout')
+        funded=self.book.grant(cur,workspace,actor,'credit-order:'+event['orderId'],milli,source='verified-stripe-checkout',policy_version=policy)
         cur.execute("UPDATE public.pr_credit_orders SET status='funded',session_id=%s,payment_intent_id=%s,grant_id=%s WHERE id::text=%s",(event['sessionId'],event['paymentIntentId'],funded['entryId'],event['orderId']))
 
     def _close(self, cur, event):

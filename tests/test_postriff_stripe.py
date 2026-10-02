@@ -4,6 +4,7 @@ resolution plus the on_applied callback over a stub cursor."""
 import hashlib
 import hmac
 import json
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -37,6 +38,35 @@ class RecordingTransport:
 
 def provider(transport=None, tolerance=300):
     return StripePaymentProvider("sk_test_x", SECRET, transport=transport, clock=lambda: NOW, tolerance=tolerance)
+
+
+class EarlierSubscriptionStatus(unittest.TestCase):
+    """Re-enrollment reads the earlier subscription from Stripe (GET only) so a second one never collects twice."""
+
+    def provider(self, response):
+        seen = []
+        def transport(method, url, headers=None, form=None):
+            seen.append((method, url, form))
+            return response
+        return StripePaymentProvider("sk_test_x", "whsec_x", transport=transport), seen
+
+    def test_reads_stripe_status_and_treats_unknown_subscriptions_as_ended(self):
+        provider, seen = self.provider({"status": 200, "body": {"id": "sub_1", "status": "past_due"}})
+        self.assertEqual(provider.subscription_status("sub_1"), "past_due")
+        self.assertEqual(seen, [("GET", "https://api.stripe.com/v1/subscriptions/sub_1", None)])
+        missing, _ = self.provider({"status": 404, "body": {"error": {"code": "resource_missing"}}})
+        self.assertEqual(missing.subscription_status("sub_gone"), "missing")
+
+    def test_failure_or_bad_id_never_reads_as_ended(self):
+        failing, _ = self.provider({"status": 500, "body": {}})
+        with self.assertRaises(AlphaError) as caught:
+            failing.subscription_status("sub_1")
+        self.assertEqual(caught.exception.status, 502)
+        provider, seen = self.provider({"status": 200, "body": {"status": "canceled"}})
+        for bad in ("cus_1", "sub_../x", "", None):
+            with self.assertRaises(AlphaError):
+                provider.subscription_status(bad)
+        self.assertEqual(seen, [])
 
 
 class Signatures(unittest.TestCase):
@@ -309,19 +339,142 @@ class Availability(unittest.TestCase):
     def test_stripe_with_active_bound_terms_and_customer(self):
         cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_1",)]})
         block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": True, "portalAvailable": True})
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": True, "portalAvailable": True, "checkoutReason": None})
         self.assertIn(("ws-1", "stripe"), [p for _, p in cur.executed])
 
     def test_stripe_without_active_terms_or_customer(self):
         cur = StubCursor({"SELECT provider_customer_id FROM public.pr_subscriptions": [(None,)]})
         block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False})
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False, "checkoutReason": "not_for_sale"})
 
     def test_fixture_provider_never_offers_checkout(self):
         cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_fixture",)]})
         block = Billing(ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "fixture", "checkoutAvailable": False, "portalAvailable": False})
+        self.assertEqual(block, {"provider": "fixture", "checkoutAvailable": False, "portalAvailable": False, "checkoutReason": "provider_unavailable"})
 
+
+
+    def test_rollback_offers_no_legacy_checkout_to_a_retained_creator_binding(self):
+        # Pricing v2 off again: billing_checkout refuses legacy packages to a Creator binding, so none is offered.
+        cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT plan_terms_id FROM public.pr_subscriptions": [("creator-v1",)],
+                          "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_1",)]})
+        block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": True, "checkoutReason": "creator_reenroll_only"})
+
+
+class VariantMetadata(unittest.TestCase):
+    def test_creator_checkout_binds_variant_to_session_and_subscription(self):
+        self.assertIn("price_variant_id", inspect.signature(StripePaymentProvider.create_checkout_session).parameters,
+                      "missing trusted variant checkout binding")
+        transport = RecordingTransport()
+        provider(transport).create_checkout_session(workspace_id="ws-1", plan_terms_id="creator-v1",
+            price_variant_id="creator-59-v1", price_id="price_synthetic_59", success_url="https://app/ok",
+            cancel_url="https://app/cancel", customer_email="o@example.com", idempotency_key="variant-key")
+        form = transport.calls[0]["form"]
+        self.assertEqual(form["metadata[price_variant_id]"], "creator-59-v1")
+        self.assertEqual(form["subscription_data[metadata][price_variant_id]"], "creator-59-v1")
+        self.assertNotIn("payment_method_types", form)
+
+    def test_signed_subscription_and_invoice_recover_variant_and_price(self):
+        meta = {"workspace_id": "ws-1", "plan_terms_id": "creator-v1", "price_variant_id": "creator-49-v1"}
+        objects = [
+            ("customer.subscription.updated", {"id": "sub_1", "status": "active", "metadata": meta,
+                "items": {"data": [{"price": "price_synthetic_49"}]}}),
+            ("invoice.paid", {"id": "in_1", "status": "paid", "amount_paid": 4900, "currency": "usd",
+                "parent": {"subscription_details": {"subscription": "sub_1", "metadata": meta}},
+                "lines": {"data": [{"pricing": {"price_details": {"price": "price_synthetic_49"}},
+                                     "period": {"start": 100, "end": 200}}]}}),
+            ("checkout.session.completed", {"mode": "subscription", "client_reference_id": "ws-1", "metadata": meta})]
+        for kind, obj in objects:
+            with self.subTest(kind=kind):
+                body = stripe_event(kind, obj)
+                mapped = provider().parse_webhook(f"t={int(NOW)},v1={sign(body)}", body)
+                self.assertEqual(mapped.get("priceVariantId"), "creator-49-v1")
+                if kind != "checkout.session.completed":
+                    self.assertEqual(mapped.get("priceId"), "price_synthetic_49")
+
+    def test_conflicting_signed_checkout_workspace_is_marked_invalid(self):
+        mapped = StripePaymentProvider.map_event("evt", "checkout.session.completed", NOW,
+            {"mode": "subscription", "client_reference_id": "w2", "metadata": {"workspace_id": "w1"}})
+        self.assertTrue(mapped.get("metadataConflict"), "must not silently prefer a conflicting workspace")
+
+    def test_conflicting_invoice_metadata_or_multi_price_cannot_be_silently_selected(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"metadata": {"price_variant_id": "creator-79-v1"},
+             "subscription_details": {"metadata": {"price_variant_id": "creator-49-v1"}},
+             "lines": {"data": [{"price": "price_a"}, {"price": "price_b"}]}})
+        self.assertTrue(mapped.get("metadataConflict"))
+
+
+    def test_invoice_subscription_references_cannot_disagree(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_a", "parent": {"subscription_details": {"subscription": "sub_b"}}})
+        self.assertTrue(mapped.get("metadataConflict"))
+
+    def test_old_and_new_price_carriers_cannot_disagree(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"lines": {"data": [{"price": "price_a", "pricing": {"price_details": {"price": "price_b"}}}]}})
+        self.assertTrue(mapped.get("priceConflict"))
+
+
+    def test_review_f3_invoice_keeps_each_price_period_and_subscription_line_kind(self):
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_1", "lines": {"data": [
+                {"parent": {"type": "invoice_item_details"}, "pricing": {"price_details": {"price": "price_addon"}}, "period": {"start": 10, "end": 20}},
+                {"type": "subscription", "subscription": "sub_1", "price": "price_plan", "period": {"start": 100, "end": 200}}]}})
+        self.assertEqual(mapped.get("invoicePriceLines"), [
+            {"priceIds": ["price_addon"], "kind": "addon", "subscriptionId": None, "subscriptionIds": [], "periodStart": 10.0, "periodEnd": 20.0},
+            {"priceIds": ["price_plan"], "kind": "subscription", "subscriptionId": "sub_1", "subscriptionIds": ["sub_1"], "periodStart": 100.0, "periodEnd": 200.0}])
+
+
+    def test_review_f4_modern_foreign_subscription_is_preserved_and_rejected(self):
+        for parent_kind in ("subscription_item_details", "invoice_item_details"):
+            for reference in ("sub_b", {"id": "sub_b"}):
+                with self.subTest(parent_kind=parent_kind, reference=reference):
+                    body = stripe_event("invoice.paid", {"subscription": "sub_a", "lines": {"data": [{
+                        "parent": {"type": parent_kind, parent_kind: {"subscription": reference}},
+                        "pricing": {"price_details": {"price": "price_plan"}}, "period": {"start": 100, "end": 200}}]}})
+                    mapped = provider().parse_webhook(f"t={int(NOW)},v1={sign(body)}", body)
+                    self.assertTrue(mapped.get("metadataConflict"), "modern line B cannot fund invoice A")
+                    self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionId"), "sub_b")
+                    self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionIds"), ["sub_b"])
+
+    def test_review_f4_conflicting_old_nested_and_invoice_carriers_are_rejected(self):
+        for parent_kind in ("subscription_item_details", "invoice_item_details"):
+            for old, nested in (("sub_a", "sub_b"), ("sub_b", "sub_a")):
+                with self.subTest(parent_kind=parent_kind, old=old, nested=nested):
+                    mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+                        {"subscription": "sub_a", "lines": {"data": [{"subscription": old,
+                         "parent": {"type": parent_kind, parent_kind: {"subscription": nested}}}]}})
+                    self.assertTrue(mapped.get("metadataConflict"), "neither carrier may hide the other")
+                    self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionIds"), ["sub_a", "sub_b"])
+                    self.assertIsNone(mapped["invoicePriceLines"][0].get("subscriptionId"))
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_a", "lines": {"data": [{"parent": {"type": "subscription_item_details",
+                "subscription_item_details": {"subscription": "sub_a"}, "invoice_item_details": {"subscription": "sub_b"}}}]}})
+        self.assertTrue(mapped.get("metadataConflict"), "conflicting nested parent carriers cannot hide each other")
+        self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionIds"), ["sub_a", "sub_b"])
+        mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+            {"subscription": "sub_a", "parent": {"subscription_details": {"subscription": "sub_b"}},
+             "lines": {"data": [{"parent": {"type": "subscription_item_details", "subscription_item_details": {"subscription": "sub_a"}}}]}})
+        self.assertTrue(mapped.get("metadataConflict"), "matching line must not hide invoice carrier conflict")
+
+    def test_review_f4_matching_old_modern_and_absent_carriers_stay_compatible(self):
+        for parent_kind in ("subscription_item_details", "invoice_item_details"):
+            for old, nested in ((None, "sub_a"), ("sub_a", None), ("sub_a", {"id": "sub_a"}), (None, None)):
+                with self.subTest(parent_kind=parent_kind, old=old, nested=nested):
+                    line = {"price": "price_plan", "period": {"start": 100, "end": 200}}
+                    if old is not None:
+                        line["subscription"] = old
+                    if nested is not None:
+                        line["parent"] = {"type": parent_kind, parent_kind: {"subscription": nested}}
+                    mapped = StripePaymentProvider.map_event("evt", "invoice.paid", NOW,
+                        {"subscription": "sub_a", "lines": {"data": [line]}})
+                    self.assertFalse(mapped.get("metadataConflict", False))
+                    self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionId"), "sub_a" if old or nested else None)
+                    self.assertEqual(mapped["invoicePriceLines"][0].get("subscriptionIds"), ["sub_a"] if old or nested else [])
+                    self.assertEqual(mapped["invoicePriceLines"][0]['kind'], ('subscription' if parent_kind == 'subscription_item_details' else 'addon') if nested else 'unknown')
+                    self.assertEqual((mapped["periodStart"], mapped["currentPeriodEnd"]), (100, 200))
 
 if __name__ == "__main__":
     unittest.main()

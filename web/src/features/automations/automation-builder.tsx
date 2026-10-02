@@ -18,6 +18,7 @@ import { pocketSources } from '@/features/agent/home/context-pocket';
 import { settingsOf } from '@/features/agent/use-channel-languages';
 import { useModelChoice } from '@/features/agent/use-model';
 import { ChannelBloomDialog, toFolderAccounts } from '@/features/channels/channel-bloom';
+import { SeriesFollowSelect } from '@/features/library/series/series-follow-select';
 import { ApiError } from '@/lib/api/client';
 import { useModels, useSnapshot } from '@/lib/api/hooks';
 import type { AutomationWorkflow, RaffiCampaign, RecurringDestination, RecurringSchedule, Snapshot } from '@/lib/api/types';
@@ -98,6 +99,8 @@ export interface BuilderInitial {
   withinDays: number;
   /** Refresh one published post at least this many days old (evergreen). */
   evergreenDays: number | null;
+  /** Evergreen follows a Signature Series: each run drafts its approved episode (`include.evergreen.seriesId`). */
+  evergreenSeriesId: string | null;
   /** A workflow Rafii set up in chat (orchestration §1). The builder has no controls for it: it is shown read-only and
    *  saved back unchanged, so editing here never drops it. */
   workflow: AutomationWorkflow | null;
@@ -134,7 +137,7 @@ function groupTargets(destinations: RecurringDestination[]): TargetState[] {
 }
 
 export function blankInitial(timeZone: string): BuilderInitial {
-  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], voiceMode: 'neutral', recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null, workflow: null, intent: null, fixedSchedule: null };
+  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], voiceMode: 'neutral', recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null, evergreenSeriesId: null, workflow: null, intent: null, fixedSchedule: null };
 }
 
 /** Start a new automation from an existing campaign brief (an older campaign or a suggestion). */
@@ -175,6 +178,7 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     maxPerDay: task.schedule.maxPerDay ?? (task.schedule.kind === 'on_strong_post' ? 1 : 3),
     withinDays: task.schedule.withinDays ?? 7,
     evergreenDays: task.include?.evergreen?.minAgeDays ?? null,
+    evergreenSeriesId: (task.include?.evergreen as unknown as { seriesId?: string } | undefined)?.seriesId ?? null,
     workflow: task.workflow ?? null,
     intent: task.intent ?? null,
     fixedSchedule: isFixedForm(task.schedule) ? task.schedule : null
@@ -231,6 +235,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const [maxPerDay, setMaxPerDay] = useState(initial.maxPerDay);
   const [withinDays, setWithinDays] = useState(initial.withinDays);
   const [evergreenDays, setEvergreenDays] = useState<number | null>(initial.evergreenDays);
+  const [evergreenSeriesId, setEvergreenSeriesId] = useState<string | null>(initial.evergreenSeriesId);
   const [templateId, setTemplateId] = useState<AutomationTemplate['id'] | null>(null);
   const [localTime, setLocalTime] = useState(initial.localTime);
   const [timeZone, setTimeZone] = useState(initial.timeZone);
@@ -429,7 +434,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         audience: audience.trim(),
         facts: cleanFacts,
         schedule,
-        include: recentPostsDays || (evergreenDays && !trigger) ? { ...(recentPostsDays ? { recentPostsDays } : {}), ...(evergreenDays && !trigger ? { evergreen: { minAgeDays: evergreenDays } } : {}) } : null,
+        include: recentPostsDays || (evergreenDays && !trigger) ? { ...(recentPostsDays ? { recentPostsDays } : {}), ...(evergreenDays && !trigger ? { evergreen: { minAgeDays: evergreenDays, ...(evergreenSeriesId ? { seriesId: evergreenSeriesId } : {}) } } : {}) } : null,
         destinations,
         destinationLabel,
         contentType: content ? { contentTypeId: content.contentTypeId, formatId: content.formatId, label: content.label, ...(content.library ? { library: content.library } : {}) } : null,
@@ -565,6 +570,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         old, never the same one twice
                       </label>
                     )}
+                    {/* Not gated: it gates itself, so a follow saved earlier can still be cleared while Series is off. */}
+                    {evergreenDays !== null && <SeriesFollowSelect value={evergreenSeriesId} onChange={setEvergreenSeriesId} />}
                   </div>
                 )}
                 {sources.length > 0 && (
@@ -882,7 +889,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     <span className='text-muted-foreground'>
                       {content ? content.label : 'General writing'} · {sourceIds.length ? `${sourceIds.length} source${sourceIds.length === 1 ? '' : 's'}` : 'brief only'}
                       {recentPostsDays ? ' · reads your published posts' : ''}
-                      {evergreenDays && !trigger ? ` · refreshes a post at least ${evergreenDays} days old` : ''}
+                      {evergreenDays && !trigger ? (evergreenSeriesId ? ' · drafts the approved episode of a series' : ` · refreshes a post at least ${evergreenDays} days old`) : ''}
                     </span>
                   </Summary>
                   <Summary term='When' onEdit={() => setStep('when')}>

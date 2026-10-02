@@ -47,6 +47,12 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
+\ir ../../migrations/postriff/047_inbox_operational_sync.sql
+\ir ../../migrations/postriff/080_customer_results.sql
+\ir ../../migrations/postriff/081_relationships.sql
+\ir ../../migrations/postriff/083_visual_packs.sql
+\ir ../../migrations/postriff/084_briefs_proof_strategy.sql
+\ir ../../migrations/postriff/087_source_uploads.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset

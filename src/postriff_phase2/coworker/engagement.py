@@ -22,7 +22,7 @@ CATEGORIES = ("question", "complaint", "lead", "praise", "press_or_partner", "sp
 PRIORITY = {"complaint": "needs_reply", "question": "needs_reply", "lead": "needs_reply", "press_or_partner": "review", "praise": "fyi",
             "other": "fyi", "spam": "ignore", "abusive": "review"}
 RULES = (
-    ("spam", r"(follow for follow|f4f|crypto|airdrop|dm me for|check my profile|click (?:the )?link in my bio|earn \$\d+|whatsapp \+?\d)"),
+    ("spam", r"(follow for follow|f4f|(?:buy|fake) (?:fake )?followers|crypto|airdrop|dm me for|check my profile|click (?:the )?link in my bio|earn \$\d+|whatsapp \+?\d)"),
     ("abusive", r"\b(idiot|stupid|scam artist|shut up|trash|垃圾|白痴|仆街|死開)\b"),
     ("complaint", r"(not working|doesn'?t work|broken|refund|disappointed|terrible|worst|never arrived|charged twice|投訴|退款|壞咗|唔work|失望|差劲|差勁)"),
     ("lead", r"(price|pricing|how much|quote|demo|buy|purchase|order|available in|shipping|book (?:a|an)|contact you|collab|合作|幾錢|价格|價錢|報價|购买|購買)"),

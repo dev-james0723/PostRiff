@@ -97,7 +97,7 @@ class ClosedLoop:
             self.g.guard(wid,token,run)
             with self.repository.transaction(token,wid) as (cur,row,_):current(cur,row[1])
         try:
-            router=self.g._router(sink,run['state'],guard=guard)
+            router=self.g._router(sink,run['state'],guard=guard,credit=run.get('creditReservationId'))
             judgment=JudgmentService(router.evaluator('postmortem.judge')).judge(questions.get('postmortem'),
                 {'comparisons':basis['comparisons'],'reading':basis['reading'],'independentCausalEvidence':[]},
                 scope='personal:'+wid,subject=subject_hash('postmortem',basis['basisDigest']),model='typesafe-ai/jev',workspace_id=wid)
@@ -188,7 +188,7 @@ class ClosedLoop:
             self.g.guard(wid,token,run)
             with self.repository.transaction(token,wid) as (cur,row,_):current(cur,row[1])
         try:
-            router=self.g._router(sink,run['state'],guard=guard)
+            router=self.g._router(sink,run['state'],guard=guard,credit=run.get('creditReservationId'))
             loop=DecisionLoop(miner.MAX_COMMENTS);classified=[];deadline=time.monotonic()+210
             while (cid:=loop.choose([c['id'] for c in selected])) is not None:
                 if time.monotonic()>deadline:break

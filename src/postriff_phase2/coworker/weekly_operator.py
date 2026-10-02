@@ -29,6 +29,7 @@ MAX_SLOTS = 28
 DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 DEFAULT_HOURS = {"LinkedIn": 9, "X": 12, "Threads": 12, "Instagram": 18, "Facebook": 13, "TikTok": 19, "YouTube": 17, "Pinterest": 20, "Bluesky": 12}
 PERSONAL_TYPES = ("personal_reflection", "behind_the_scenes", "music_performance_teaching")
+FIRST_WEEK_PLATFORMS = ("Threads", "Instagram", "LinkedIn", "X", "Bluesky", "Mastodon", "Facebook")
 _ID = re.compile(r"^[a-z0-9_-]{4,64}$")
 
 
@@ -57,13 +58,22 @@ def validate_recipe(payload, state, zone_default="UTC"):
     if not goals:
         raise AlphaError("Give the week at least one goal.", 400)
     destinations = []
+    first_week = payload.get("firstWeek") is True
     for item in (payload.get("destinations") or [])[:8]:
-        channel = channels.get(item.get("channelId"))
-        if channel is None or channel.get("revoked"):
-            raise AlphaError("Choose connected accounts from this workspace.", 400)
         per_week = item.get("postsPerWeek", 3)
         if not isinstance(per_week, int) or isinstance(per_week, bool) or not 0 <= per_week <= 7:
             raise AlphaError("Posts per week are 0–7 per account.", 400)
+        if first_week and item.get("channelId") is None:
+            # A first week can be planned and drafted before any account is connected (PRD R-FWR-02): the slots
+            # stay draftable and say plainly that publishing waits for a connection. One platform, never a guess.
+            if item.get("platform") not in FIRST_WEEK_PLATFORMS or len(payload.get("destinations") or []) != 1:
+                raise AlphaError("Choose one supported platform for your first week.", 400)
+            destinations.append({"channelId": None, "platform": item["platform"], "account": None,
+                                 "language": _clean(item.get("language") or "en", 20), "postsPerWeek": per_week})
+            continue
+        channel = channels.get(item.get("channelId"))
+        if channel is None or channel.get("revoked"):
+            raise AlphaError("Choose connected accounts from this workspace.", 400)
         destinations.append({"channelId": channel["id"], "platform": channel.get("platform"), "account": channel.get("account"),
                              "language": _clean(item.get("language") or channel.get("language") or "en", 20), "postsPerWeek": per_week})
     if not destinations or sum(d["postsPerWeek"] for d in destinations) == 0:
@@ -94,7 +104,8 @@ def validate_recipe(payload, state, zone_default="UTC"):
             "campaignIds": campaign_ids, "sourceIds": source_ids, "planningDay": day, "planningHour": hour, "timeZone": zone,
             "voiceMode": "personalized" if payload.get("voiceMode") == "personalized" else "neutral", "reviewPolicy": "review",
             "expectImages": bool(payload.get("expectImages")), "useResearch": bool(payload.get("useResearch")),
-            "maxCostUsdMicroPerWeek": budget, "model": _clean(payload.get("model"), 80) or None}
+            "maxCostUsdMicroPerWeek": budget, "model": _clean(payload.get("model"), 80) or None,
+            **({"firstWeek": True} if first_week else {})}
 
 
 def save_recipe(state, payload, actor, now, recipe_id=None):
@@ -104,6 +115,11 @@ def save_recipe(state, payload, actor, now, recipe_id=None):
         recipe = next((r for r in weekly["recipes"] if r["id"] == recipe_id), None)
         if recipe is None:
             raise AlphaError("Recipe unavailable.", 404)
+        if not values.get("firstWeek"):
+            # Saving the recipe through the Weekly plan controls (which never send `firstWeek`) is the owner's explicit
+            # choice to draft every week; only then does a first-week recipe become a recurring one.
+            recipe.pop("firstWeek", None)
+            recipe.pop("firstWeekId", None)
         recipe.update(values)
         recipe["version"] += 1
         recipe["updatedAt"] = now
@@ -140,8 +156,24 @@ def iso_week(monday):
     return f"{year}-W{week:02d}"
 
 
+def first_week_only(recipe):
+    """A recipe made by First Week Ready: its owner approved drafting one frozen week, not a weekly habit."""
+    return recipe.get("firstWeek") is True
+
+
+def first_week_id(state, recipe):
+    """The one week a first-week recipe may plan and draft: the week the first-week journey planned."""
+    if recipe.get("firstWeekId"):
+        return recipe["firstWeekId"]
+    journey = (state.get("coworker") or {}).get("firstWeek") or {}
+    return journey.get("weekId") if journey.get("recipeId") == recipe.get("id") else None
+
+
 def due(recipe, now):
-    """True when the recipe's planning moment for next week has passed (planning day/hour in its time zone)."""
+    """True when the recipe's planning moment for next week has passed (planning day/hour in its time zone).
+    A first-week recipe is never due: recurring planning starts only after the owner turns it on in Weekly plan."""
+    if first_week_only(recipe):
+        return False
     zone = ZoneInfo(recipe["timeZone"])
     local = datetime.fromtimestamp(now, zone)
     monday = local.date() - timedelta(days=local.weekday())
@@ -177,7 +209,8 @@ def plan_week(state, recipe, now, monday=None):
     for destination in recipe["destinations"]:
         count = destination["postsPerWeek"]
         days = [round(i * 7 / count) % 7 for i in range(count)] if count else []
-        ready, reason = _channel_ready(state, destination["channelId"], now)
+        unconnected = destination["channelId"] is None
+        ready, reason = (True, "") if unconnected else _channel_ready(state, destination["channelId"], now)
         for n, day in enumerate(days):
             # Weighted round-robin over the content mix, offset per platform so the week does not repeat itself.
             cursor = (index + _stable(destination["platform"], len(mix))) % max(1, len(mix))
@@ -190,7 +223,8 @@ def plan_week(state, recipe, now, monday=None):
                     "day": (monday + timedelta(days=day)).isoformat(), "localTime": when.strftime("%Y-%m-%dT%H:%M"), "timeZone": recipe["timeZone"],
                     "platform": destination["platform"], "language": destination["language"], "channelId": destination["channelId"], "account": destination.get("account"),
                     "contentType": content_type, "goal": goal, "angle": f"{goal} — {content_type.replace('_', ' ')}", "sourceIds": [source["id"]] if source else [],
-                    "status": "planned", "reason": None, "question": None, "variantId": None, "runId": None, "quality": None, "creative": None}
+                    "status": "planned", "reason": None, "question": None, "variantId": None, "runId": None, "quality": None, "creative": None,
+                    **({"publishBlocker": "channel_not_connected"} if unconnected else {})}
             if not ready:
                 slot["status"], slot["reason"] = "channel_unavailable", reason
             elif content_type in PERSONAL_TYPES:
@@ -204,6 +238,14 @@ def plan_week(state, recipe, now, monday=None):
             "weekOf": monday.isoformat(), "isoWeek": iso_week(monday), "state": "planned", "blockedReason": None, "slots": slots,
             "createdAt": now, "updatedAt": now, "readyAt": None, "history": [{"at": now, "state": "planned", "note": f"{len(slots)} posts planned"}],
             "conversationId": None, "costBudgetUsdMicro": recipe["maxCostUsdMicroPerWeek"]}
+    from .. import proof
+    if proof.enabled():   # RAFII Product Growth R-PROOF-02: record which accepted next-week decisions this plan applies, or why not
+        from ..proof import strategy
+        application = strategy.apply_to_week(state, slots, week["weekOf"])
+        for slot in slots:
+            if application["slotDecisions"].get(slot["id"]):
+                slot["strategyDecisions"] = application["slotDecisions"][slot["id"]]
+        week["appliedDecisions"], week["notApplied"] = application["appliedDecisions"], application["notApplied"]
     return week
 
 

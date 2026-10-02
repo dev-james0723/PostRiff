@@ -1,6 +1,8 @@
 import type { ChannelView, ProviderView, Snapshot, Usage } from '@/lib/api/types';
+import { allowanceReminder, V2_CATALOG_VERSION, billingModeOf } from '@/lib/billing/mode';
+import { billingCopy } from '@/lib/billing/mode-copy';
 import { attentionSentence, expiringSoon, isConnected, needsAttention, sortForAttention } from '@/lib/channels/state';
-import { daysUntil, relativeTime } from '@/lib/time';
+import { daysUntil, formatNumber, relativeTime } from '@/lib/time';
 
 /**
  * Everything the "Needs your attention" card lists, derived from real query results only.
@@ -42,9 +44,6 @@ export interface Attention {
   /** Sources that failed to load, so some reminders may be missing. */
   unavailable: AttentionSource[];
 }
-
-/** Writing batches at or below this many left are worth a reminder. */
-const WRITING_LOW = 2;
 
 /** Snapshot channel states (`store.py: channel_state`) that ask for a person, used only when /channels is unreadable. */
 const SNAPSHOT_RECONNECT = 'Reconnect';
@@ -154,24 +153,31 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
     });
   }
 
-  const trialDays = (usageData?.lifecycle?.status === 'trial' || (usageData?.entitlement?.source === 'trial' && usageData?.lifecycle?.status === 'expired')) ? daysUntil(usageData.entitlement?.resetsAt, now) : null;
+  // A Free workspace (Pricing v2) has no trial to end, even when a trial it once had expired into Free.
+  const freePreview = billingModeOf(usageData) === 'free_preview';
+  const trialDays = !freePreview && (usageData?.lifecycle?.status === 'trial' || (usageData?.entitlement?.source === 'trial' && usageData?.lifecycle?.status === 'expired')) ? daysUntil(usageData?.entitlement?.resetsAt, now) : null;
   if (trialDays !== null && trialDays <= 5) {
     items.push({
       id: 'trial',
       tone: 'info',
       title: trialDays > 0 ? `Trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}` : 'Trial has ended',
-      description: 'Choose a plan to keep publishing.',
+      // Under Pricing v2 an ended trial moves to Free: drafts and exports stay, publishing pauses (Free cannot publish).
+      description: usageData?.catalogVersion === V2_CATALOG_VERSION
+        ? 'When it ends, publishing pauses and this workspace moves to Free; your drafts stay. Creator keeps publishing on.'
+        : 'Choose a plan to keep publishing.',
       href: '/app/account/billing',
       action: 'See plans'
     });
   }
 
   // The writing allowance is no longer an Overview headline number (Time back took that place); running low or out
-  // is actionable, so it is a reminder here. The full meters stay under Billing.
-  const writing = usageData?.entitlement;
-  if (writing && typeof writing.writingBatchesRemaining === 'number' && writing.writingBatchesRemaining <= WRITING_LOW) {
-    const left = Math.max(0, writing.writingBatchesRemaining);
-    const resets = writing.resetsAt ? ` It resets ${relativeTime(writing.resetsAt, now)}.` : '';
+  // is actionable, so it is a reminder here. The full meters stay under Billing. Which allowance follows the
+  // billing mode: legacy writing batches, Creator's managed credits, and nothing on Free (Pricing v2).
+  const reminder = allowanceReminder(usageData, now);
+  const credits = billingCopy('en').attention;
+  if (reminder?.kind === 'batches') {
+    const left = reminder.left;
+    const resets = reminder.resetsAt ? ` It resets ${relativeTime(reminder.resetsAt, now)}.` : '';
     items.push({
       id: 'writing-allowance',
       tone: left === 0 ? 'warning' : 'info',
@@ -180,6 +186,14 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       href: '/app/account/billing',
       action: 'See plan'
     });
+  } else if (reminder) {
+    const text =
+      reminder.kind === 'credits_out'
+        ? { tone: 'warning' as const, title: credits.creditsOutTitle, description: reminder.resetsAt ? credits.creditsOutBody(relativeTime(reminder.resetsAt, now)) : credits.creditsOutBodyNoDate }
+        : reminder.kind === 'credits_low'
+          ? { tone: 'info' as const, title: credits.creditsLowTitle(formatNumber(reminder.left)), description: credits.creditsLowBody }
+          : { tone: 'warning' as const, title: credits.debtTitle, description: credits.debtBody(formatNumber(reminder.debt)) };
+    items.push({ id: 'writing-allowance', ...text, href: '/app/account/billing', action: credits.action });
   }
 
   if (channelData) {

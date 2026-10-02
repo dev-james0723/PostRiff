@@ -33,7 +33,11 @@ def mirror(base):
             continue
         (base / entry.name).symlink_to(entry)
     for name in COPIED:
-        shutil.copytree(REPO / name, base / name, ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)
+        if sys.platform == "darwin":
+            # APFS clone: isolated writable files without duplicating the large docs tree.
+            subprocess.run(["cp", "-cR", str(REPO / name), str(base / name)], check=True)
+        else:
+            shutil.copytree(REPO / name, base / name, ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)
     for path in (base / "tests").rglob("*"):
         if path.is_file() and path.suffix in (".py", ".sql"):
             text = path.read_text()
@@ -47,7 +51,7 @@ def main(names):
     with tempfile.TemporaryDirectory(prefix="rafii-pg-mirror-") as tmp:
         base = mirror(Path(tmp) / "repo")
         # Same grouping as postriff_pg_suite.py: these two run inside other scripts' databases.
-        scripts = [p for p in sorted((base / "tests/phase2").glob("*.py")) if p.name not in ("postgres_repository.py", "postgres_safety.py")]
+        scripts = [p for p in sorted((base / "tests/phase2").glob("postgres_*.py")) if p.name not in ("postgres_repository.py", "postgres_safety.py")]
         if names:
             scripts = [p for p in scripts if p.stem in names]
         results = []

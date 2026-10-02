@@ -67,6 +67,8 @@ LINK_KEYS = {"draft": "variantId", "post": "jobId", "asset": "assetId"}
 MAX_CAMPAIGN_ITEMS = 200
 MAX_ITEM_LOG = 100
 LIBRARY_ID = re.compile(r"[a-z0-9][a-z0-9_.:-]{0,79}")
+# A Signature Series (kind "series", series/model.py) keeps its own versioned body; its brief is never rewritten here.
+SERIES_ONLY = "A series is planned in Library. To reshare its episodes, follow it from an automation's evergreen option."
 
 
 def _root(state: dict) -> dict:
@@ -322,7 +324,8 @@ def normalize_schedule(schedule: Any) -> dict:
 
 def normalize_include(value: Any) -> dict | None:
     """Extra context each run reads: `recentPostsDays` adds this workspace's own published posts from that
-    many days; `evergreen.minAgeDays` adds one older published post to refresh (never the same one twice)."""
+    many days; `evergreen.minAgeDays` adds one older published post to refresh (never the same one twice).
+    `evergreen.seriesId` makes the run follow a Signature Series instead: its approved episode (series/model.py)."""
     if value is None or value == {}:
         return None
     if not isinstance(value, dict) or not value or set(value) - {"recentPostsDays", "evergreen"}:
@@ -335,10 +338,14 @@ def normalize_include(value: Any) -> dict | None:
         out["recentPostsDays"] = days
     if "evergreen" in value:
         evergreen = value["evergreen"]
-        age = evergreen.get("minAgeDays") if isinstance(evergreen, dict) and set(evergreen) <= {"minAgeDays"} else None
+        age = evergreen.get("minAgeDays") if isinstance(evergreen, dict) and set(evergreen) <= {"minAgeDays", "seriesId"} else None
         if type(age) is not int or not 14 <= age <= 365:
             raise AlphaError("Reshare posts that are between 14 and 365 days old.")
         out["evergreen"] = {"minAgeDays": age}
+        if "seriesId" in evergreen:
+            if not isinstance(evergreen["seriesId"], str) or not LIBRARY_ID.fullmatch(evergreen["seriesId"]):
+                raise AlphaError("Choose a series from this workspace.")
+            out["evergreen"]["seriesId"] = evergreen["seriesId"]
     return out
 
 
@@ -541,6 +548,10 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
         # The countdown's event date is the brief's date fact unless the person wrote one.
         facts["date"] = schedule["eventDate"]
     include = normalize_include(payload.get("include"))
+    if ((include or {}).get("evergreen") or {}).get("seriesId"):
+        from .series import model as series_model
+        kept = (((existing or {}).get("include") or {}).get("evergreen") or {}).get("seriesId")
+        series_model.followable(state, include["evergreen"]["seriesId"], kept=kept)
     destinations = normalize_destinations(state, payload.get("destinations"))
     content = normalize_content_type(state, payload.get("contentType"))
     content_label, library = _content_display(payload.get("contentType"))
@@ -579,6 +590,8 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
             campaign = _find(root["campaigns"], payload["campaignId"], "Campaign")
             if campaign.get("status") == "cancelled":
                 raise AlphaError("This campaign is cancelled.", 409)
+            if campaign.get("kind") == "series":
+                raise AlphaError(SERIES_ONLY, 409)
             _apply_brief(root, campaign, None, goal, audience, facts, account_ids, actor, now)
         else:
             missing = missing_facts(goal, facts)
@@ -870,6 +883,7 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
     if action == "raffi_campaign_update":
         campaign = _find(root["campaigns"], payload.get("campaignId"), "Campaign")
         if campaign.get("status") == "cancelled": raise AlphaError("This campaign is cancelled.", 409)
+        if campaign.get("kind") == "series": raise AlphaError(SERIES_ONLY, 409)
         for key, limit in (("goal", 1200), ("audience", 800)):
             if key in payload: campaign[key] = _text(payload[key], f"campaign {key}", limit)
         if "facts" in payload:
@@ -888,6 +902,7 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         return {"campaignId": campaign["id"], "version": campaign["version"], "missingFacts": campaign["missingFacts"]}
     if action == "raffi_recurrence_preview":
         campaign = _find(root["campaigns"], payload.get("campaignId"), "Campaign")
+        if campaign.get("kind") == "series": raise AlphaError(SERIES_ONLY, 409)
         if campaign["missingFacts"]: raise AlphaError("Add the missing campaign facts before scheduling recurring preparation.", 409)
         schedule = payload.get("schedule")
         if not isinstance(schedule, dict): raise AlphaError("Add a recurring schedule.")
@@ -1206,11 +1221,19 @@ def enqueue_events(state: dict, task: dict, events: list[dict], now: float) -> b
 
 def evergreen_post(state: dict, task: dict, now: float, posts: list[dict] | None = None) -> dict | None:
     """One older published post to refresh: at least `minAgeDays` old, never one this automation used
-    before; the one that started the most conversation first (when measured), then the oldest."""
+    before; posts no other automation or series reused come first, then the one that started the most
+    conversation (when measured), then the oldest. A post another automation or a series already reused can
+    still be chosen when nothing else is left, but never blindly: the pick names that earlier use (`priorUse`).
+    With `seriesId`, the same slot carries the series' approved episode instead (series/model.py)."""
     config = (task.get("include") or {}).get("evergreen")
     if not config:
         return None
+    if config.get("seriesId"):
+        from .series import model as series_model
+        return series_model.evergreen_episode(state, task, config, now)
+    from .series.model import prior_use
     used = set(task.get("evergreenUsed") or [])
+    others = prior_use(state, exclude_task=task.get("id"))
     measured = {post.get("providerPostId"): _conversation(post)[1] or 0 for post in posts or []}
     best = None
     for job in (state.get("phase2") or {}).get("jobs", []):
@@ -1218,10 +1241,13 @@ def evergreen_post(state: dict, task: dict, now: float, posts: list[dict] | None
         text = str(((job.get("manifest") or {}).get("payload") or {}).get("text") or "").strip()
         if job.get("state") != "verified" or not isinstance(at, (int, float)) or at > now - config["minAgeDays"] * 86400 or not text or job["id"] in used:
             continue
-        rank = (measured.get(job.get("providerReference"), 0), -at)
+        rank = (job["id"] not in others, measured.get(job.get("providerReference"), 0), -at)
         if best is None or rank > best[0]:
             best = (rank, job, at, text)
     if best is None:
         return None
     _, job, at, text = best
-    return {"jobId": job["id"], "platform": (job.get("manifest") or {}).get("platform"), "publishedAt": dt.datetime.fromtimestamp(at, dt.timezone.utc).date().isoformat(), "text": text[:600]}
+    item = {"jobId": job["id"], "platform": (job.get("manifest") or {}).get("platform"), "publishedAt": dt.datetime.fromtimestamp(at, dt.timezone.utc).date().isoformat(), "text": text[:600]}
+    if job["id"] in others:
+        item["priorUse"] = others[job["id"]][:5]
+    return item

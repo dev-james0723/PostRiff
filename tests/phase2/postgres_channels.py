@@ -58,7 +58,8 @@ class FakeProvider:
         self.exchanges, self.revoked, self.refreshes, self.grant_scopes = [], [], 0, None
 
     def capability_scopes(self, capability):
-        return {"publish": ["w_member_social", "openid"], "identity": ["openid"], "analytics": []}.get(capability, [])
+        return {"publish": ["w_member_social", "openid"], "identity": ["openid"], "analytics": [],
+                "comments_read": ["openid", "read_replies"], "reply": ["openid", "manage_replies"]}.get(capability, [])
 
     def explain(self, capability):
         return "PostRiff will post on your behalf only when you approve an exact post."
@@ -191,6 +192,34 @@ kept = oauth.verify(wid_a, "one", done["connectionId"])
 assert kept["identityVerified"] and oauth.channels(wid_a, "one")["channels"][0]["pictureDigest"] == digest and len(picture_fetches) == 3
 picture_fetch_ok[0] = True
 checks.append("a failed picture refresh keeps the stored picture")
+
+# Reconnecting for one Inbox capability must preserve unrelated verified rows when the
+# freshly inspected replacement grant still includes their scopes. Scope loss is a real downgrade.
+restore = oauth.start(wid_a, "one", "linkedin", "publish")
+restore_state = parse_qs(urlparse(restore["authorizeUrl"]).query)["state"][0]
+assert oauth.complete(wid_a, "one", "linkedin", restore_state, "good-code")["capabilities"]["publish"]["level"] == "Direct"
+for capability, scopes in (("comments_read", ["w_member_social", "openid", "read_replies"]),
+                           ("reply", ["w_member_social", "openid", "read_replies", "manage_replies"])):
+    provider.grant_scopes = scopes
+    reconnect = oauth.start(wid_a, "one", "linkedin", capability)
+    reconnect_state = parse_qs(urlparse(reconnect["authorizeUrl"]).query)["state"][0]
+    refreshed = oauth.complete(wid_a, "one", "linkedin", reconnect_state, "good-code")
+    assert refreshed["capabilities"]["publish"]["level"] == "Direct"
+    assert refreshed["capabilities"]["comments_read"]["level"] == "Direct"
+with connection() as db:
+    before = dict(db.execute("SELECT capability,level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND connection_id=%s", (wid_a, done["connectionId"])).fetchall())
+assert before["publish"] == before["reply"] == before["comments_read"] == "Direct"
+provider.grant_scopes = ["openid", "read_replies", "manage_replies"]
+reconnect = oauth.start(wid_a, "one", "linkedin", "comments_read")
+reconnect_state = parse_qs(urlparse(reconnect["authorizeUrl"]).query)["state"][0]
+refreshed = oauth.complete(wid_a, "one", "linkedin", reconnect_state, "good-code")
+assert refreshed["capabilities"]["publish"]["level"] == "Assisted"
+assert "scope" in refreshed["capabilities"]["publish"]["evidence"].lower()
+provider.grant_scopes = None
+reconnect = oauth.start(wid_a, "one", "linkedin", "publish")
+reconnect_state = parse_qs(urlparse(reconnect["authorizeUrl"]).query)["state"][0]
+assert oauth.complete(wid_a, "one", "linkedin", reconnect_state, "good-code")["capabilities"]["publish"]["level"] == "Direct"
+checks.append("Inbox reconnect preserves independent Direct capabilities when scopes remain, and fresh scope loss downgrades with evidence")
 
 # 6. Worker token path refreshes an expired access token server-side; browser role cannot read credentials.
 clock[0] += 120

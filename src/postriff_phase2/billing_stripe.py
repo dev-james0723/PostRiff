@@ -50,6 +50,12 @@ def _ref(value):
     return value if isinstance(value, str) and value else None
 
 
+def _path(obj, *keys):
+    for key in keys:
+        obj = obj.get(key) if isinstance(obj, dict) else None
+    return obj
+
+
 def _metadata(obj, *paths):
     """First metadata dict found along the given key paths (each path a tuple of keys)."""
     for path in paths:
@@ -176,9 +182,9 @@ def _price_fields(obj, item, price):
 def _subscription_fields(obj):
     item = _first_item(obj)
     meta = _metadata(obj, ("metadata",))
-    price = item.get("price") if isinstance(item.get("price"), dict) else {}
+    price = item.get("price") if isinstance(item.get("price"), dict) else {}   # expanded price, for the valued fields
     return {
-        "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None, "priceId": _ref(price),
+        "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None, "priceVariantId": meta.get("price_variant_id") or None, "priceId": _ref(item.get("price")),
         "customerId": _ref(obj.get("customer")), "subscriptionId": _ref(obj.get("id")),
         # Stripe API 2025-03-31 moved current_period_end onto subscription items; accept both shapes.
         "currentPeriodEnd": _epoch(obj.get("current_period_end")) if obj.get("current_period_end") is not None else _epoch(item.get("current_period_end")),
@@ -200,7 +206,8 @@ def _invoice_fields(obj):
     first_payment = payments[0].get("payment") if isinstance(payments, list) and payments and isinstance(payments[0], dict) and isinstance(payments[0].get("payment"), dict) else {}
     amount_paid = obj.get("amount_paid")
     return {
-        "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None,
+        "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None, "priceVariantId": meta.get("price_variant_id") or None,
+        "priceId": _ref(line.get("price")) or _ref(_path(line, "pricing", "price_details", "price")),
         "customerId": _ref(obj.get("customer")), "subscriptionId": _ref(obj.get("subscription")) or _ref(details.get("subscription")),
         "currentPeriodEnd": _epoch(period.get("end")), "periodStart": _epoch(period.get("start")),
         # Monthly credits (FINAL-07) bind to the invoice itself, never to the event that delivered it.
@@ -226,10 +233,36 @@ def _charge_fields(obj):
     }
 
 
+
+def _invoice_price_lines(obj):
+    """Keep signed line facts together; only the server catalog can select the plan line."""
+    lines = _path(obj, "lines", "data")
+    result = []
+    for line in lines if isinstance(lines, list) else []:
+        if not isinstance(line, dict):
+            continue
+        parent_kind = _path(line, "parent", "type")
+        kind = "unknown"
+        if line.get("type") == "subscription" or parent_kind == "subscription_item_details":
+            kind = "subscription"
+        elif line.get("type") in ("invoiceitem", "invoice_item") or parent_kind == "invoice_item_details":
+            kind = "addon"
+        prices = {_ref(line.get("price")), _ref(_path(line, "pricing", "price_details", "price"))} - {None}
+        subscriptions = {_ref(line.get("subscription")),
+                         _ref(_path(line, "parent", "subscription_item_details", "subscription")),
+                         _ref(_path(line, "parent", "invoice_item_details", "subscription"))} - {None}
+        result.append({"priceIds": sorted(prices), "kind": kind,
+                       "subscriptionId": next(iter(subscriptions)) if len(subscriptions) == 1 else None,
+                       "subscriptionIds": sorted(subscriptions),
+                       "periodStart": _epoch(_path(line, "period", "start")),
+                       "periodEnd": _epoch(_path(line, "period", "end"))})
+    return result
+
+
 def _checkout_fields(obj):
     meta = _metadata(obj, ("metadata",))
     return {
-        "workspaceId": obj.get("client_reference_id") or meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None,
+        "workspaceId": obj.get("client_reference_id") or meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None, "priceVariantId": meta.get("price_variant_id") or None,
         "customerId": _ref(obj.get("customer")), "subscriptionId": _ref(obj.get("subscription")),
     }
 
@@ -312,6 +345,37 @@ class StripePaymentProvider:
         event.update({k: v for k, v in fields.items() if v is not None})
         event["type"] = internal
         event["stripeType"] = stripe_type
+        metadata = [obj.get("metadata")]
+        if stripe_type.startswith("invoice."):
+            event["invoicePriceLines"] = _invoice_price_lines(obj)
+            if any(len(line["priceIds"]) > 1 for line in event["invoicePriceLines"]):
+                event["metadataConflict"] = True
+            metadata += [_path(obj, "subscription_details", "metadata"),
+                         _path(obj, "parent", "subscription_details", "metadata")]
+            subscriptions = {_ref(obj.get("subscription")), _ref(_path(obj, "subscription_details", "subscription")),
+                             _ref(_path(obj, "parent", "subscription_details", "subscription"))} - {None}
+            # Check every signed carrier before package/period selection, including addon lines.
+            subscriptions.update(subscription_id for line in event["invoicePriceLines"]
+                                 for subscription_id in line["subscriptionIds"])
+            if len(subscriptions) > 1:
+                event["metadataConflict"] = True
+        for key, field in (("workspace_id", "workspaceId"), ("plan_terms_id", "planTermsId"), ("price_variant_id", "priceVariantId")):
+            values = [m[key] for m in metadata if isinstance(m, dict) and key in m]
+            if key == "workspace_id" and obj.get("client_reference_id"):
+                values.append(obj["client_reference_id"])
+            if any(not isinstance(v, str) or not v.strip() for v in values) or len(set(v for v in values if isinstance(v, str))) > 1:
+                event["metadataConflict"] = True
+            elif values:
+                event[field] = values[0]
+        collection = obj.get("lines") if stripe_type.startswith("invoice.") else obj.get("items")
+        items = collection.get("data") if isinstance(collection, dict) else []
+        prices = {_ref(value) for item in (items or []) if isinstance(item, dict)
+                  for value in (item.get("price"), _path(item, "pricing", "price_details", "price"))} - {None}
+        if len(prices) > 1:
+            # Legacy invoices can include addons; v2 rejects ambiguous package pricing.
+            event["priceConflict"] = True
+        elif prices:
+            event["priceId"] = next(iter(prices))
         return event
 
     # --- sessions ----------------------------------------------------------------------------
@@ -325,6 +389,19 @@ class StripePaymentProvider:
             raise AlphaError(failure + self._summary(body), 502)
         return body
 
+    def subscription_status(self, subscription_id):
+        """Stripe's own status for one subscription (read-only), or "missing" when Stripe has no such subscription."""
+        if not isinstance(subscription_id, str) or not re.fullmatch(r"sub_[A-Za-z0-9_-]{1,250}", subscription_id):
+            raise AlphaError("Unknown earlier subscription.", 409)
+        from urllib.parse import quote
+        response = self.transport("GET", API + "/subscriptions/" + quote(subscription_id, safe=""), headers={"Authorization": "Bearer " + self.secret_key})
+        body = response.get("body")
+        if response.get("status") == 404:
+            return "missing"
+        if response.get("status") != 200 or not isinstance(body, dict) or not isinstance(body.get("status"), str):
+            raise AlphaError("Stripe could not confirm the earlier subscription has ended." + self._summary(body), 502)
+        return body["status"]
+
     @staticmethod
     def _summary(body):
         """Short, safe hint: Stripe's error code/type only — never its message, never request data."""
@@ -332,7 +409,7 @@ class StripePaymentProvider:
         code = (error or {}).get("code") or (error or {}).get("type") if isinstance(error, dict) else None
         return f" (stripe: {code})" if isinstance(code, str) and _SAFE_CODE.match(code) else ""
 
-    def create_checkout_session(self, *, workspace_id, plan_terms_id, price_id, success_url, cancel_url, customer_id=None, customer_email=None, idempotency_key):
+    def create_checkout_session(self, *, workspace_id, plan_terms_id, price_id, success_url, cancel_url, customer_id=None, customer_email=None, idempotency_key, price_variant_id=None):
         for name, value in (("workspace_id", workspace_id), ("plan_terms_id", plan_terms_id), ("price_id", price_id), ("success_url", success_url), ("cancel_url", cancel_url), ("idempotency_key", idempotency_key)):
             if not isinstance(value, str) or not value:
                 raise AlphaError(f"Checkout needs {name}.", 400)
@@ -345,6 +422,11 @@ class StripePaymentProvider:
             "metadata[workspace_id]": workspace_id, "metadata[plan_terms_id]": plan_terms_id,
             "success_url": success_url, "cancel_url": cancel_url, "allow_promotion_codes": "true",
         }
+        if price_variant_id is not None:
+            if not isinstance(price_variant_id, str) or not price_variant_id.strip():
+                raise AlphaError("Checkout needs a valid price variant.", 400)
+            form["metadata[price_variant_id]"] = price_variant_id
+            form["subscription_data[metadata][price_variant_id]"] = price_variant_id
         if customer_id:
             form["customer"] = customer_id
         else:

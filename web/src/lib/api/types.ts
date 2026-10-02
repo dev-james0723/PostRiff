@@ -1514,6 +1514,19 @@ export interface Entitlement {
   version: number;
 }
 
+/**
+ * How a workspace is billed (`billing.py usage_view` → `plan_pricing.billing_mode`, from the server entitlement).
+ * Every billing and allowance surface branches on it; it is never inferred from a price, a batch count or the
+ * presence of a credit wallet.
+ */
+export type BillingMode = 'free_preview' | 'managed_credits' | 'legacy_allowances';
+/** The catalog the API sells from: Pricing v2 (Free + Creator) or the legacy Studio / Studio Assist catalog. */
+export type PricingCatalogVersion = 'pricing-v2-2026-09-28' | 'legacy-2026-09';
+/** `pr_plan_terms.catalog_state` (migration 048): for new sale, hidden, or kept only for existing customers. */
+export type PlanCatalogState = 'public' | 'hidden' | 'legacy';
+/** `pr_plan_terms.plan` families: legacy trial/studio/assist and v2 free/starter/creator (Studio v2 is also `studio`). */
+export type PlanFamily = 'trial' | 'free' | 'starter' | 'creator' | 'studio' | 'assist';
+
 export interface SubscriptionView {
   planTermsId: string;
   provider: string;
@@ -1523,10 +1536,13 @@ export interface SubscriptionView {
   graceUntil: number | null;
   plan: string;
   label: string;
+  /** What this subscription pays: its price variant's amount when it has one (a 49/79 Creator is not shown 59). */
   priceCents: number;
   currency: string;
   priceStatus: string;
   termsVersion: number;
+  /** The Creator price variant this subscription was sold at; null for legacy and trial terms. */
+  priceVariantId: string | null;
   live: boolean;
 }
 
@@ -1540,6 +1556,34 @@ export interface PlanTerms {
   status: string;
   priceLabel: string;
   entitlements: Record<string, unknown>;
+  catalogState: PlanCatalogState;
+  newCheckoutEnabled: boolean;
+  /** The workspace holds these terms (subscription or entitlement), whether or not they are still for sale. */
+  current: boolean;
+}
+
+/** The owner's stable, server-assigned Creator price (49/59/79 share one entitlement); never a client value. */
+export interface CreatorOffer {
+  planTermsId: string;
+  priceVariantId: string;
+  amountCents: number;
+  currency: string;
+}
+
+/** Why a Free preview action cannot run now (`growth/service.py preview_status`); null when it can. */
+export type FreePreviewReason = 'used' | 'plan_unavailable' | 'permission_required' | 'feature_disabled' | 'consent_required' | 'funding_unavailable' | 'rate_limited';
+
+export interface FreePreviewAction {
+  /** Lifetime uses left (0 or 1). */
+  remaining: number;
+  eligible: boolean;
+  reason: FreePreviewReason | null;
+}
+
+/** Free's platform-funded first-value actions: one Post Doctor check and one recent-posts Genome analysis. */
+export interface FreePreview {
+  postDoctor: FreePreviewAction;
+  genome: FreePreviewAction & { maxPosts?: number };
 }
 
 export interface LedgerEntry {
@@ -1563,11 +1607,22 @@ export interface CreditBalance {
   heldMilliCredits: number;
   usedMilliCredits: number;
   debtMilliCredits: number;
+  /** Credits actually granted for the current paid period by a verified invoice; null when none is on record (never the plan's advertised number). */
+  currentPeriodGrantMilliCredits: number | null;
+  /** When the current period's credits expire (epoch seconds); unused credits do not roll over. */
+  currentPeriodExpiresAt: number | null;
   quoteType: "spending_limit";
   textOnly: boolean;
 }
 
 export interface Usage {
+  /** Branch on this, never on a price, a batch count or `credits` being present. */
+  billingMode: BillingMode;
+  catalogVersion: PricingCatalogVersion;
+  /** Owners on Free under Pricing v2: their stable Creator price. Null otherwise. */
+  creatorOffer: CreatorOffer | null;
+  /** Free's remaining preview actions; null outside Free or when they cannot be read. */
+  freePreview: FreePreview | null;
   credits?: CreditBalance | null;
   entitlement: Entitlement;
   subscription: SubscriptionView | null;
@@ -1583,7 +1638,7 @@ export interface Usage {
   ledger: LedgerEntry[];
   planTerms: PlanTerms[];
   note: string;
-  lifecycle: { status: string; exportAvailable?: boolean; draftsRetained?: boolean; canPublish?: boolean };
+  lifecycle: { status: string; plan?: string; exportAvailable?: boolean; draftsRetained?: boolean; canPublish?: boolean };
   billing?: { provider: string; checkoutAvailable: boolean; portalAvailable: boolean };
   membership: Membership;
 }
@@ -1698,9 +1753,12 @@ export interface ReplyRecord {
   label?: string;
   updatedAt?: number | null;
   requiresReconfirmation?: boolean;
+  providerReference?: string | null;
+  events?: { at: number; state: string; message?: string }[];
 }
 
 export interface Thread {
+  triage?: EngagementTriage['items'][number];
   replies?: ReplyRecord[];
   permalink?: string | null;
   createdAtProvider?: number | null;
@@ -1720,9 +1778,30 @@ export interface Thread {
 export interface Audience {
   counts?: { all?: number; replied?: number; unanswered?: number };
   replySendingEnabled?: boolean;
+  engagementEnabled?: boolean;
   threads: Thread[];
   capabilities: { connectionId: string; commentsRead: string }[];
+  sync?: { connectionId: string; lastSyncAt: number | null; errorCode?: string | null; result?: { availability?: string; reason?: string } }[];
+  nextCursor?: string | null;
   limits: string;
+}
+
+export interface AudienceSyncResult {
+  availability: string;
+  reason?: string | null;
+  checkedPosts?: number;
+  pagesRead?: number;
+  ingested?: number;
+  updated?: number;
+  tombstoned?: number;
+  lastSyncAt?: number | null;
+  connections?: { connectionId: string; availability: string; reason?: string | null; lastSyncAt?: number | null }[];
+}
+
+export interface EngagementTriage {
+  items: { threadId: string; category: string; priority: 'needs_reply' | 'review' | 'fyi' | 'done' | 'ignore'; why: string; fresh: boolean; ageHours: number; urgent: false }[];
+  counts: Record<string, number>;
+  note: string;
 }
 
 /* ---------- members, invitations, sessions, audit, privacy ---------- */

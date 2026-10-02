@@ -9,7 +9,7 @@ preference proposals are digest or in-app only.
 """
 from __future__ import annotations
 
-CATALOG_VERSION = "2026-09-26.2"
+CATALOG_VERSION = "2026-10-01.1"
 CATEGORIES = ("approvals", "publishing", "weekly", "automation", "channels", "engagement", "opportunities", "analytics", "learning",
               "budget", "billing", "security", "research", "assets", "campaigns")
 # Who receives an event, by the permission class a member must hold (permissions.CLASSES). "actor" = the person the
@@ -36,7 +36,11 @@ EVENTS = {
     "automation.failed": {"category": "automation", "severity": "warning", "audience": "edit", "email": "immediate", "push": "off", "template": "automation_failed"},
     "channel.reconnect_required": {"category": "channels", "severity": "critical", "audience": "manage_connections", "email": "immediate", "push": "immediate", "template": "channel_reconnect"},
     "engagement.needs_attention": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "engagement"},
+    # A relationship follow-up the person scheduled is due (G2-REL). An internal reminder: it never contacts the lead.
+    "relationship.follow_up_due": {"category": "engagement", "severity": "action", "audience": "reply", "email": "digest", "push": "off", "template": "follow_up_due"},
     "opportunity.detected": {"category": "opportunities", "severity": "info", "audience": "edit", "email": "digest", "push": "off", "template": "opportunity"},
+    # RAFII Product Growth R-BRF-02: one recipient's weekly opportunity brief (in-app; email only in the digest; never push, never urgent).
+    "opportunity.brief_ready": {"category": "opportunities", "severity": "info", "audience": "actor", "email": "digest", "push": "off", "template": "opportunity"},
     "analytics.weekly_ready": {"category": "analytics", "severity": "info", "audience": "edit", "email": "immediate", "push": "off", "template": "weekly_performance"},
     "analytics.anomaly_detected": {"category": "analytics", "severity": "warning", "audience": "edit", "email": "digest", "push": "off", "template": "analytics_anomaly"},
     "learning.preference_proposed": {"category": "learning", "severity": "info", "audience": "owner", "email": "digest", "push": "off", "template": "preference_proposed"},

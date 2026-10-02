@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { TRIAL, formatPrice, type Plan } from '@/config/plans';
+import { TRIAL, formatPrice, v2CardAction, type Plan, type V2PlanCard } from '@/config/plans';
+import { cardPrice } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,53 @@ export function PlanCard({ plan, priceSize = 'inline', className }: { plan: Plan
           Start {TRIAL.days}-day trial
         </Link>
         {plan.status === 'proposed' && <p className='text-muted-foreground text-xs'>Introductory pricing — subject to change before general availability.</p>}
+      </div>
+    </Surface>
+  );
+}
+
+/**
+ * A Pricing v2 plan (Free or Creator) in the same glass recipe. The action follows the catalog's checkout
+ * state: before Creator checkout opens it is the free path with an honest note, never a buy button that fails.
+ */
+export function V2PlanCardView({ card, priceSize = 'inline', className }: { card: V2PlanCard; priceSize?: 'inline' | 'large'; className?: string }) {
+  const action = v2CardAction(card, siteConfig.links.signUp);
+  const price = cardPrice(card);
+  const headingId = `plan-${card.id}`;
+  return (
+    <Surface material='glass' radius='card' padding='lg' className={cn('flex flex-1 flex-col gap-5', className)} role='group' aria-labelledby={headingId}>
+      <div className='flex flex-col gap-1.5'>
+        <p className='text-muted-foreground text-sm'>{card.tagline}</p>
+        {priceSize === 'large' ? (
+          <>
+            <h3 id={headingId} className='text-foreground text-2xl font-medium tracking-[-0.01em]'>
+              {card.name}
+            </h3>
+            <p className='text-foreground text-[2rem] leading-none font-medium tracking-[-0.02em] tabular-nums'>
+              {formatPrice(card)}
+              {card.interval && <span className='text-muted-foreground text-base font-normal tracking-normal'> / {card.interval}</span>}
+            </p>
+          </>
+        ) : (
+          <h3 id={headingId} className='text-foreground flex flex-wrap items-baseline gap-x-2 text-2xl font-medium tracking-[-0.01em]'>
+            {card.name}
+            <span className='text-muted-foreground text-base font-normal tabular-nums'>{price}</span>
+          </h3>
+        )}
+      </div>
+      <ul className='flex flex-1 flex-col gap-2 text-sm'>
+        {card.highlights.map((item) => (
+          <li key={item} className='text-foreground flex items-start gap-2'>
+            <Icons.check className='mt-0.5 size-4 shrink-0' aria-hidden />
+            {item}
+          </li>
+        ))}
+      </ul>
+      <div className='flex flex-col items-start gap-2'>
+        <Link href={action.href} className={buttonVariants({ variant: card.plan === 'free' ? 'glass' : 'action', size: 'control' })}>
+          {action.label}
+        </Link>
+        {action.note && <p className='text-muted-foreground text-xs text-pretty'>{action.note}</p>}
       </div>
     </Surface>
   );

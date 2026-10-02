@@ -1,3 +1,9 @@
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
+
+/** Plan and billing help follows the catalog the site sells from (the trial today, Free and Creator under Pricing v2). */
+const PLAN_HELP = marketingCopy(PRICING_CATALOG).docs;
+
 export interface DocSection {
   heading: string;
   paragraphs: string[];
@@ -17,7 +23,7 @@ export const DOCS: Doc[] = [
     title: 'Getting started',
     summary: 'From a new account to your first approved post.',
     sections: [
-      { heading: 'Create your workspace', paragraphs: ['Sign up with Google or an email code and choose a trial plan. A workspace is created for you; you are its owner.'] },
+      { heading: 'Create your workspace', paragraphs: [PLAN_HELP.gettingStartedCreate] },
       { heading: 'Add a source', paragraphs: ['Open Ideas, paste a thought or a paragraph, mark whether it is your own writing, and choose destinations and a language. Rafii drafts one candidate per destination.'] },
       { heading: 'Add candidates to your drafts', paragraphs: ['Pick the versions that sound like you and add them. This creates reviewable drafts — nothing is published yet.'] },
       { heading: 'Connect a channel', paragraphs: ['In Channels, connect the account you want to publish to. The card shows each capability’s verified level.'] },
@@ -47,12 +53,8 @@ export const DOCS: Doc[] = [
   {
     slug: 'usage-and-billing',
     title: 'Usage & billing',
-    summary: 'Allowances, stop-lines and how plans work.',
-    sections: [
-      { heading: 'Allowances', paragraphs: ['Writing batches, media credits, connected accounts and storage are per plan. When an allowance is used up, the action stops and tells you; nothing is charged silently.'] },
-      { heading: 'Trial', paragraphs: ['14 days, no card, no automatic conversion. You choose a plan yourself when you are ready.'] },
-      { heading: 'Subscriptions', paragraphs: ['Proposed monthly billing through Stripe, available only when the plan and payment integration are activated. Payment method, plan changes, cancellation and invoices live in the billing portal (Account → Usage & plan → Manage billing).'] }
-    ]
+    summary: PLAN_HELP.usageSummary,
+    sections: PLAN_HELP.usageSections
   },
   {
     slug: 'privacy-and-data',

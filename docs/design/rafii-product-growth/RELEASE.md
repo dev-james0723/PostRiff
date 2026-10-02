@@ -1,0 +1,116 @@
+# RAFII Product Growth v2 — release, activation and rollback
+
+This file prepares the release; it does not authorize one. Every step marked **(James)** is a real external operation that
+needs his specific approval for that exact action (DECISIONS D-007). Preparing commands is allowed; executing them is not.
+
+## 1. Release candidate identity (fill at release time)
+
+| Field | Value |
+|---|---|
+| Repository / branch | `dev-james0723/PostRiff` / `claude/rafii-product-growth-v2` |
+| Pull request | #87 (production branch `consumer-saas`; merged in at `2a6c13ef`) |
+| Candidate SHA | _pending_ |
+| CI run (local-gates, scenes) | _pending_ |
+| Vercel preview deployment | _pending_ |
+| Production before release | `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e` (`consumer-saas`, Founder Admin dark; rollback target). Earlier: `dpl_HSmKDFfjkd8UCaoo2QfgerZUVwLL` @ `dcb5bcdc` |
+
+## 2. Migration order (additive; each needs approval; apply before the code that reads it)
+
+Production has received earlier migrations through one-off, sha-pinned runners (see `scripts/trend_release_migrate.py`
+for the current pattern: identity check against the project ref, whole prior ledger match, exact allowed set, plan then
+apply the same plan). This program's runner is `scripts/product_growth_release_migrate.py` (`RAFII_GROWTH_MIGRATION_DSN`;
+plan with a read-only session, then apply that exact plan). It pins every allowed file below to its reviewed SHA-256 and
+refuses any other pending file (`tests/test_product_growth_release.py`).
+
+| Order | File | Owner | SHA-256 | Depends on | Reader released in |
+|---|---|---|---|---|---|
+| 1 | `047_inbox_operational_sync.sql` | Inbox v1 | `bcb9be5b…a369553` | 044 | this release |
+| 2 | `048_pricing_credit_catalog_v2.sql` | Pricing v2 | `a36357de…792ba0` | 020–022 | this release (guarded readers tolerate its absence) |
+| 3 | `050_free_lifecycle_bootstrap.sql` | Pricing v2 | `f9aad0a0…b1e7d` | 048 | this release |
+| 4 | `080_customer_results.sql` | this program (results) | `e6ab39f4…5fe0db0ec6` | 001–047 | this release |
+| 5 | `081_relationships.sql` | this program (relationships) | `fc660cae…1c98433d` | 047 (Inbox threads), 080 (won FK; idempotent re-apply adds it if 080 came later) | this release |
+| 6 | `083_visual_packs.sql` | this program (visual pack) | `3aedc1a4…d137955c` | 001–047 | this release |
+| 7 | `084_briefs_proof_strategy.sql` | this program (briefs/proof) | `5225be48…c99701d5` | 001–047 | this release |
+| 8 | `087_source_uploads.sql` | this program (intake) | `0acc1a3f…b5647b65` | 001–047 | this release |
+| — | 082 | not used: series live in workspace planning state (D-021) | — | — | — |
+
+Full SHA-256 values are recorded in `DECISIONS.md` and must match the files byte for byte at runner time.
+
+Founder Admin's 049 and 051–070 (shipped as files with `047d024e`) are not applied in any database yet. The runner
+refuses any pending file it has not reviewed, so production order is: Founder's migrations by their owner first, then
+this set — or one combined allowed set approved by James.
+
+Rules: never edit an applied file; never reorder; staging first; snapshot before and after; verify forced RLS and grants
+after each; the previous deployment must keep working with the new schema (all changes additive).
+
+## 3. Flags (all default off; names exactly as in code)
+
+| Flag | Scope | Turns on | Rollback effect |
+|---|---|---|---|
+| `POSTRIFF_PRICING_V2_ENABLED` | server | v2 catalog, Free bootstrap, managed-credit modes | new workspaces get trials again; existing v2 rows untouched |
+| `POSTRIFF_CREDITS_ENABLED` | server | the credit book (quotes, reservations, settlement); Creator cannot work without it | paid tasks refuse before I/O; grants and history kept |
+| `NEXT_PUBLIC_PRICING_CATALOG` | web build | public pages show the v2 catalog (`v2`) | `legacy` |
+| `POSTRIFF_CREATOR_PRICE_EXPERIMENT_ENABLED` + `_COHORT` | server | 49/59/79 assignment for an explicit cohort | assignments stay immutable; no new ones |
+| `POSTRIFF_GROWTH_PLATFORM_PREVIEW` | server (JSON policy) | Free first-value runs, platform-funded | Free first-value refuses before paid I/O |
+| `RAFII_INBOX_SYNC_ENABLED` / `RAFII_INBOX_REPLY_SEND_ENABLED` | server | Inbox v1 sync / fenced sender | see Inbox runbook |
+| `RAFII_FIRST_WEEK_ENABLED` | server | first-week resource (needs `RAFII_WEEKLY_OPERATOR_ENABLED`) | panel hidden; journeys kept |
+| `RAFII_SOURCE_UPLOADS_ENABLED`, `RAFII_TRANSCRIPTION_ROUTE` | server | raw PDF/audio intake | new uploads refused; jobs drain |
+| `RAFII_RELATIONSHIPS_ENABLED` | server | relationships + follow-ups | records kept, no new reminders |
+| `RAFII_RESULTS_ENABLED` | server | results, signed receiver, tracking links | receiver/redirect 404; evidence kept |
+| `RAFII_SERIES_ENABLED` | server | Signature Series | series kept; Evergreen unchanged |
+| `RAFII_VISUAL_PACK_ENABLED` | server | visual packs | packs/exports kept |
+| `RAFII_OPPORTUNITY_BRIEF_ENABLED`, `RAFII_PROOF_V2_ENABLED` | server | briefs, proof revisions, strategy decisions | no new editions/revisions |
+
+Other release prerequisites (no flag): the private Supabase Storage bucket `rafii-source-uploads` (size limit
+≤ 30,000,000 bytes; `application/pdf`, `audio/wav`, `audio/mpeg`, `audio/mp4`, `audio/ogg`) must exist before
+`RAFII_SOURCE_UPLOADS_ENABLED`; the Python functions need `pypdf==6.19.0` (in `requirements.txt`); the bundled Noto Sans
+TC fonts (~11.5 MB, SIL OFL) ship in both Python functions so voice can render carousels too.
+
+## 4. Activation manifest (to be completed per approval)
+
+For each capability: project/environment, migration filenames + checksums, source SHA, flags, workspace allowlist,
+per-operation provider capability, budget/consent references, approval owner, rollback condition. Nothing in this table
+is active until its row has an approval reference.
+
+| Capability | Environment | Workspace allowlist | Provider / budget | Approval ref | State |
+|---|---|---|---|---|---|
+| Pricing v2 catalog (Free + Creator view) | production | all new workspaces | none (no paid I/O) | — | not_started |
+| Creator checkout (live Stripe Prices 49/59/79) | production | experiment cohort | Stripe live; needs `POSTRIFF_CREDITS_ENABLED`; the public pages are static, so `web/src/config/plans.ts` `V2_CATALOG` and `contracts/pricing-catalog-v2.json` must be updated to the activated rows and redeployed in the same release | — | blocked (James) |
+| Creator image generation | production | — | image pricing in credits (D-026) | — | blocked (James) |
+| Creator use of the main Rafii agent | production | — | verified 2026-10-01: text/browser agent turns reserve with no credit authority (only phone supplies one, `agent_runtime_v2/service.py` `_reservation_approval`), so under v2 `CreditBook.prepare` answers 402 "Confirm this task credit limit before generating" on every Creator turn; needs a per-turn or per-conversation credit-limit design | — | blocked (product decision + engineering) |
+| Free first-value preview | production | all Free | platform budget policy | — | blocked (James) |
+| First Week Ready | production | internal workspace first | managed credits | — | not_started |
+| Raw audio transcription | production | — | provider + budget | — | blocked (James) |
+| First-party results receiver | production | one customer-like workspace | none | — | not_started |
+| Raw PDF/caption intake | production | internal workspace first | none (local parsing) | — | not_started (bucket needed) |
+| Relationships & follow-ups | production | internal workspace first | none (reminders through the existing outbox) | — | not_started |
+| Signature Series | production | internal workspace first | managed credits for Rafii drafting only | — | not_started |
+| Visual packs (export only) | production | internal workspace first | none (server rendering) | — | not_started |
+| Carousel queueing | production | — | a verified multi-image publisher | — | blocked (no verified provider) |
+
+## 4a. Authorization requests (each one exact; nothing here runs until James approves it)
+
+Each request names what would run. An approval covers only that request. All flags stay off unless a later request
+turns one on.
+
+| # | Request | What would run | Reversible by |
+|---|---|---|---|
+| A1 | Staging migrations | `RAFII_GROWTH_MIGRATION_DSN=<staging migration DSN> python scripts/product_growth_release_migrate.py plan --target staging --plan staging-plan.json`, review the plan, then `apply` with that plan. It covers 047, 048, 050, 080, 081, 083, 084, 087. Founder's 049 and 051–070 must be applied first by their owner, or approved as one combined set. | Additive only. Flags off keeps every reader inert. |
+| A2 | Staging bucket | Create the private Supabase Storage bucket `rafii-source-uploads` (≤ 30 MB; PDF/WAV/MP3/M4A/OGG) in the staging project. | Delete the empty bucket. |
+| A3 | Staging acceptance run | On staging, with the flags turned on one at a time: the slice journeys against the real staging database, plus the R-NFR-04 bounded-read measurement (p95 at 10 concurrent sessions). | Flags off. |
+| A4 | Production deploy of PR #87 | Merge PR #87 into `consumer-saas` and let Vercel deploy production, with every program flag off and `NEXT_PUBLIC_PRICING_CATALOG` unset. This ships Pricing v2 and Inbox v1 code, both dark. | Roll back to `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c`. |
+| A5 | Production migrations | The same runner with `--target production`, after A1–A4. | Additive. Flags off. |
+| A6 | Production bucket | As A2, in production. | Delete the empty bucket. |
+| A7+ | Per-capability activation | One request per row of §4 (environment, allowlist, flags, budget/consent references). Examples: First Week Ready for an internal workspace; results for one customer-like workspace. | That row's flags off. |
+| C1 | Commercial | Live Stripe Prices and Creator checkout (Pricing v2 runbook), `POSTRIFF_CREDITS_ENABLED`, the static catalog update and redeploy, and the Free platform-preview policy. Also needs product decisions: image pricing in credits (D-026), Creator chat credit authority, and the failed-preview rule (D-008). | Checkout off. Existing subscribers keep their terms. |
+| P1 | Providers | A transcription route (provider, model, budget) for raw audio (D-014). The tracking-link destination policy (D-027). | Route unset. Results flag off. |
+
+## 5. Rollback
+
+1. Disable admission of new affected work with the flags above; never erase pending jobs, ledger holds, webhook events,
+   approvals or receipts. Uncertain operations stay reconcilable; switching off never triggers a second send or charge.
+2. Revert to `dpl_HSmKDFfjkd8UCaoo2QfgerZUVwLL` only after confirming the additive schema still serves it.
+3. Legacy subscribers keep their entitlements; disabling Creator sale is not a downgrade of existing customers.
+4. No destructive down-migration or bulk deletion as ordinary rollback.
+5. Triggers: tenant leakage, incorrect charging, duplicate external effects, materially false verification or metric
+   claims, unusable core flow, regression beyond the approved operational budget.

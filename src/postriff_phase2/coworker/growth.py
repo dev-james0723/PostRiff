@@ -95,49 +95,124 @@ def metrics(cur, workspace_id, state, now):
         "notification_unsubscribe_rate": _rate(unsubscribed, members),
         "weekly_return_rate": {"note": "fleet-level: active users in week N who return in week N+1 (growth.fleet, scripts/rafii_growth_report.py)"},
         "automation_retention": {"activeRecipes": sum(1 for r in weekly.get("recipes") or [] if r.get("status") == "active")},
-        "trial_to_paid": {"subscription": sub[0] if sub else "none", "note": "fleet-level rate by positioning arm: growth.fleet"},
-        "paid_retention_30d": {"note": "fleet-level cohort metric: growth.fleet"}, "paid_retention_60d": {"note": "fleet-level cohort metric: growth.fleet"},
-        "paid_retention_90d": {"note": "fleet-level cohort metric: growth.fleet"},
+        "trial_to_paid": {"subscriptionStatus": sub[0] if sub else "none", "note": "Current status only, not a payment. Cash-paid conversion is fleet-level: legacy_trial_to_paid (metric_definitions v1)."},
+        "paid_retention_30d": {"note": "Fleet-level cash_paid_retention_d30 from payment history (metric_definitions v1)."},
+        "paid_retention_60d": {"note": "Fleet-level cash_paid_retention_d60 from payment history (metric_definitions v1)."},
+        "paid_retention_90d": {"note": "Fleet-level cash_paid_retention_d90 from payment history (metric_definitions v1)."},
         "accepted_low_edit_per_active_workspace": {"value": low_edit, "definition": "approved drafts in 90 days with edit distance ≤ 0.15"},
     }
     return {"workspaceId": workspace_id, "metrics": out, "definitions": list(METRICS), "note": "Evidence for the product hypothesis, not a guarantee. Raw generation volume is deliberately not a metric.",
             "withPreferences": with_prefs}
 
 
+def _payment_evidence(cur):
+    """Cash payment evidence per workspace, never a status: the Founder P1 invoice history when that table exists, else the
+    credit-plan invoice grants (legacy-plan invoices are not recorded there, so coverage is partial). Refunds and disputes
+    are keyed by payment intent."""
+    cur.execute("SELECT to_regclass('public.pr_invoices') IS NOT NULL, to_regclass('public.pr_credit_subscription_grants') IS NOT NULL, "
+                "to_regclass('public.pr_credit_refunds') IS NOT NULL, to_regclass('public.pr_credit_disputes') IS NOT NULL")
+    invoices, grants, refunds_table, disputes_table = cur.fetchone()
+    if invoices:
+        source = "pr_invoices"
+        cur.execute("SELECT workspace_id::text,invoice_id,provider,status,livemode,amount_paid,subscription_id,billing_reason,extract(epoch from event_at),"
+                    "payment_intent_id,extract(epoch from period_start),extract(epoch from period_end) FROM public.pr_invoices WHERE workspace_id IS NOT NULL")
+    elif grants:
+        source = "pr_credit_subscription_grants"
+        cur.execute("SELECT workspace_id::text,invoice_id,'stripe','paid',livemode,amount_cents,subscription_id,billing_reason,extract(epoch from recorded_at),"
+                    "payment_intent_id,period_start,period_end FROM public.pr_credit_subscription_grants")
+    else:
+        return None, {}, {}
+    by_workspace, by_intent = {}, {}
+    for wid, invoice, provider, status, live, amount, sub, reason, at, intent, start, end in cur.fetchall():
+        payment = {"workspaceId": wid, "invoiceId": invoice, "provider": provider, "status": status, "livemode": bool(live),
+                   "amountPaid": int(amount) if amount is not None else None, "subscriptionId": sub, "billingReason": reason,
+                   "paidAt": float(at) if at is not None else None, "paymentIntentId": intent,
+                   "periodStart": float(start) if start is not None else None, "periodEnd": float(end) if end is not None else None}
+        by_workspace.setdefault(wid, {"payments": [], "refunds": [], "disputes": []})["payments"].append(payment)
+        if intent:
+            by_intent[intent] = wid
+    if refunds_table:
+        cur.execute("SELECT payment_intent_id,amount_cents,status FROM public.pr_credit_refunds")
+        for intent, amount, status in cur.fetchall():
+            if intent in by_intent:
+                by_workspace[by_intent[intent]]["refunds"].append({"paymentIntentId": intent, "amount": int(amount), "status": status})
+    if disputes_table:
+        cur.execute("SELECT payment_intent_id,status,withdrawn FROM public.pr_credit_disputes")
+        for intent, status, withdrawn in cur.fetchall():
+            if intent in by_intent:
+                by_workspace[by_intent[intent]]["disputes"].append({"paymentIntentId": intent, "status": status, "withdrawn": bool(withdrawn)})
+    return source, by_workspace, by_intent
+
+
+def _mark_partial(value, reason):
+    """Incomplete evidence coverage is added to whatever else limits a row; no reason replaces another."""
+    if not reason or value["dataState"] == "unavailable":
+        return
+    value["dataState"] = "partial"
+    value["reason"] = ",".join(r for r in (value.get("reason"), reason) if r)
+
+
 def fleet(cur):
-    """Fleet-level cohort metrics for the growth report (operators only; no per-person data leaves the function)."""
-    cur.execute("""SELECT count(*) FILTER (WHERE status='active'), count(*) FILTER (WHERE status IN ('cancelled','expired')), count(*) FILTER (WHERE status='trial'), count(*) FROM public.pr_subscriptions""")
-    active, churned, trial, total = cur.fetchone()
+    """Fleet-level cohort metrics for the operator growth report (no per-person data leaves the function).
+
+    Conversion and retention are cash-paid facts from payment history under the shared, versioned definitions in
+    `metric_definitions` (PRD R-MET-02). The old status-based numbers are kept only as an operating view under their own
+    name: a non-trial status is not a payment, and today's status says nothing about day 30/60/90."""
+    from .. import metric_definitions as md
+    cur.execute("SELECT extract(epoch from now())")
+    now = float(cur.fetchone()[0])
+    watermark = now - md.SOURCE_LATENESS
+    cur.execute("""SELECT count(*) FILTER (WHERE status='active'), count(*) FILTER (WHERE status IN ('cancelled','expired')), count(*) FILTER (WHERE status='trial'),
+                          count(*) FILTER (WHERE status='past_due'), count(*) FILTER (WHERE status='grace'), count(*) FROM public.pr_subscriptions WHERE provider<>'fixture'""")
+    active, churned, trial, past_due, grace, total = cur.fetchone()
     cur.execute("""WITH weeks AS (SELECT DISTINCT user_id, date_trunc('week', occurred_at) AS w FROM public.pr_product_events WHERE user_id IS NOT NULL AND occurred_at > now() - interval '120 days')
                    SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM weeks b WHERE b.user_id=a.user_id AND b.w=a.w + interval '1 week')), count(*) FROM weeks a
                    WHERE a.w < date_trunc('week', now())""")
     returned, base = cur.fetchone()
-    # Trial → paid and paid retention, per positioning arm (subject = workspace). A trial counts once it has ended; it
-    # converted when its workspace has a non-trial subscription. Retention at N days: of converted workspaces whose
-    # trial ended at least N days ago, the share still paying (active, past_due or grace). pr_billing_events has no
-    # workspace column, so the trial end is the cohort start; the definition is stated with the numbers.
-    cur.execute("""SELECT coalesce(a.variant, 'unassigned'), t.expires_at, s.status
-                   FROM public.pr_trials t LEFT JOIN public.pr_subscriptions s ON s.workspace_id = t.workspace_id
-                   LEFT JOIN public.pr_experiment_assignments a ON a.experiment = 'positioning_2026_10' AND a.subject_key = t.workspace_id::text
-                   WHERE t.workspace_id IS NOT NULL AND t.expires_at < now()""")
+    source, evidence, _ = _payment_evidence(cur)
+    cur.execute("SELECT count(*) FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id "
+                "WHERE s.provider<>'fixture' AND s.status IN ('active','past_due','grace','cancelled','expired') AND coalesce(p.entitlements->>'creditPolicy','')=''")
+    legacy_paid_rows = cur.fetchone()[0]
+    partial_reason = None if source == "pr_invoices" else ("legacy_plan_invoices_not_recorded" if legacy_paid_rows else "credit_plan_grants_only")
+    # Legacy trial cohorts by positioning arm (subject = workspace): window from the trial start to 30 days after it ended.
+    cur.execute("""SELECT coalesce(a.variant, 'unassigned'), t.workspace_id::text, extract(epoch from t.expires_at)
+                   FROM public.pr_trials t LEFT JOIN public.pr_experiment_assignments a ON a.experiment = 'positioning_2026_10' AND a.subject_key = t.workspace_id::text
+                   WHERE t.workspace_id IS NOT NULL""")
     arms = {}
-    now_rows = cur.fetchall()
-    cur.execute("SELECT extract(epoch from now())")
-    now = float(cur.fetchone()[0])
-    for variant, expires, status in now_rows:
-        arm = arms.setdefault(variant, {"ended": 0, "converted": 0, **{f"d{n}": [0, 0] for n in (30, 60, 90)}})
-        arm["ended"] += 1
-        converted = status is not None and status != "trial"
-        arm["converted"] += 1 if converted else 0
-        for n in (30, 60, 90):
-            if converted and now - expires.timestamp() >= n * 86400:
-                arm[f"d{n}"][1] += 1
-                arm[f"d{n}"][0] += 1 if status in ("active", "past_due", "grace") else 0
-    by_arm = {variant: {"trial_to_paid": _rate(a["converted"], a["ended"]), **{f"paid_retention_{n}d": _rate(*a[f"d{n}"]) for n in (30, 60, 90)}}
-              for variant, a in sorted(arms.items())}
+    for variant, wid, expires in cur.fetchall():
+        entry = {**evidence.get(wid, {"payments": [], "refunds": [], "disputes": []}), "startedAt": float(expires) - 14 * md.DAY, "windowEnd": float(expires) + 30 * md.DAY}
+        arms.setdefault(variant, {})[wid] = entry
+    by_arm = {}
+    for variant, cohort in sorted(arms.items()):
+        rows = {"legacy_trial_to_paid": md.window_conversion("legacy_trial_to_paid", cohort, now=now, watermark=watermark)}
+        for n in md.RETENTION_DAYS:
+            rows[f"cash_paid_retention_d{n}"] = md.retention(cohort, now=now, watermark=watermark, days=n)
+            rows[f"cash_paid_retention_d{n}_refund_adjusted"] = md.retention(cohort, now=now, watermark=watermark, days=n, refund_adjusted=True)
+        for value in rows.values():
+            value["dimensions"] = {"positioningArm": variant}
+            _mark_partial(value, partial_reason)
+        by_arm[variant] = rows
+    # v2 Free cohort (Free bootstrap never creates a trial): the Founder-owned source_paid_conversion definition, 30 days.
+    cur.execute("SELECT w.id::text, extract(epoch from w.created_at) FROM public.pr_workspaces w WHERE NOT EXISTS (SELECT 1 FROM public.pr_trials t WHERE t.workspace_id=w.id) "
+                "AND EXISTS (SELECT 1 FROM public.pr_entitlements e WHERE e.workspace_id=w.id) AND NOT w.state ? 'accountDeletion'")
+    free = {wid: {**evidence.get(wid, {"payments": []}), "startedAt": float(created)} for wid, created in cur.fetchall()}
+    free_row = md.window_conversion("source_paid_conversion", free, now=now, watermark=watermark)
+    free_row["dimensions"] = {"cohort": "v2_free_bootstrap"}
+    _mark_partial(free_row, partial_reason)
     cur.execute("SELECT variant, count(*), count(exposed_at) FROM public.pr_experiment_assignments WHERE experiment='positioning_2026_10' GROUP BY variant")
     exposure = {v: {"assigned": n, "exposed": e} for v, n, e in cur.fetchall()}
-    return {"subscriptions": {"active": active, "churned": churned, "trial": trial, "total": total}, "weekly_return_rate": _rate(returned, base),
+    status_row = md.row("subscriptions_by_current_status", total, data_state="available", known=total, sample_count=total,
+                        measures={"active": active, "pastDue": past_due, "grace": grace, "trial": trial, "cancelledOrExpired": churned})
+    return {"subscriptions": {"active": active, "churned": churned, "trial": trial, "pastDue": past_due, "grace": grace, "total": total,
+                              "label": "Subscriptions by current status (operating view; not conversion, retention or cash)"},
+            "subscriptionsByCurrentStatus": status_row,
+            "weekly_return_rate": {**_rate(returned, base), "label": "Weekly active return: people with any product event in week N who return in week N+1. "
+                                                                       "Not completed work; see next_week_completion_rate."},
             "positioning_2026_10": {"byArm": by_arm, "exposure": exposure,
-                                    "definition": "trial end is the cohort start; paid = a non-trial subscription; retained = active, past_due or grace N days after the trial ended"},
-            "definitions": json.loads(json.dumps(list(METRICS)))}
+                                    "definition": "legacy_trial_to_paid and cash_paid_retention_d30/60/90 (and refund-adjusted) from payment history "
+                                                  "(metric_definitions v1, proposed_definition_not_activated); no status is treated as payment."},
+            "sourcePaidConversion": free_row,
+            "paymentEvidence": {"source": source, "coverage": partial_reason or "complete", "sourceWatermark": watermark,
+                                "note": "Workspace classifications (internal/test/demo) are applied in Founder Control; this operator report excludes only fixture providers and test-mode payments."},
+            "definitions": json.loads(json.dumps(list(METRICS))),
+            "metricDefinitions": {k: {"status": v["status"], "unit": v["unit"], "definitionVersion": md.DEFINITION_VERSION} for k, v in md.DEFINITIONS.items()}}

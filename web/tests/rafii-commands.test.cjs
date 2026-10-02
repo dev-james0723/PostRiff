@@ -120,7 +120,7 @@ test('the extra page and guide words only name pages and guides the manifests ha
 });
 
 test('descriptions say what costs, what waits for approval, and where web search is turned on', () => {
-  assert.match(byName('image').description, /1 media credit/);
+  assert.match(byName('image').description, /shows what it uses on your plan/);   // cost wording follows the billing mode (R-COM-04)
   assert.match(byName('schedule').description, /approve/);
   assert.match(byName('schedule').description, /nothing is published/);
   assert.match(byName('search').description, /owner can turn it on under Memory/);
@@ -271,7 +271,7 @@ test('the menu renders a grouped listbox: /name, the hint and the description on
   assert.ok(all.includes('pointer-coarse:min-h-11'), 'rows are 44 px on touch');
   const image = render('/整圖');
   assert.equal(image.match(/role="option"/g).length, 1);
-  assert.ok(image.includes('uses 1 media credit'));
+  assert.ok(image.includes('the composer shows what it uses on your plan'), 'no legacy unit promised to every plan (R-COM-04)');
   assert.equal(render('hello'), '', 'closed: nothing rendered');
   assert.equal(render('/write '), '');
   assert.equal(render('/wr', 3, { isComposing: true }), '', 'closed during IME composition');

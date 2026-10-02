@@ -12,10 +12,13 @@ import { useInfobar, type InfobarContent } from '@/components/ui/infobar';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMemory, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { formatDate } from '@/lib/time';
+import { writingAllowance } from '@/lib/billing/mode';
+import { formatDate, formatNumber } from '@/lib/time';
+import { useBillingCopy } from '@/features/billing/use-copy-locale';
 import { CaptureCard, type CaptureCardHandle } from './capture-card';
 import { SourceInspector } from './source-inspector';
 import { SourceList } from './source-list';
+import { SourceUploadPanel } from './source-upload-panel';
 import { ideaSources, useMedia, useUseApprovals } from './use-sources';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
@@ -41,6 +44,7 @@ export function IdeasView() {
   const snapshot = useSnapshot();
   const memory = useMemory();
   const usage = useUsage();
+  const workCopy = useBillingCopy().work;
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const [sourceId, setSourceId] = useQueryState('source', parseAsString);
@@ -75,9 +79,9 @@ export function IdeasView() {
   const otherCount = active.length - ideaCount;
 
   const research = memory.data?.research;
-  const entitlement = usage.data?.entitlement;
-  const batches = usage.isLoading ? '…' : usage.isError || !entitlement ? 'Unavailable' : String(entitlement.writingBatchesRemaining);
-  const resets = entitlement?.resetsAt ? formatDate(entitlement.resetsAt) : null;
+  // What cloud drafts draw on, by billing mode: legacy writing batches, Creator's credits, or nothing on Free.
+  const allowance = writingAllowance(usage);
+  const resets = allowance.kind === 'batches' || allowance.kind === 'credits' ? (allowance.resetsAt ? formatDate(allowance.resetsAt) : null) : null;
 
   // Reminders only for what someone can act on. Research that is unavailable everywhere is not offered, so it is not mentioned.
   const reminders: Reminder[] = [];
@@ -87,9 +91,32 @@ export function IdeasView() {
   if (memory.isSuccess && research && research.enabled !== false && research.hosted && !research.web) {
     reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is off', description: 'Drafts use only the sources you add.', href: '/app/workspace/memory', action: 'Open Memory' });
   }
-  if (usage.isSuccess && entitlement && entitlement.writingBatchesRemaining === 0) {
+  if (usage.isSuccess && allowance.kind === 'batches' && allowance.remaining === 0) {
     reminders.push({ id: 'allowance', kind: 'partial', title: 'No writing batches left', description: resets ? `Resets ${resets}.` : undefined, href: '/app/account/billing', action: 'Usage & plan' });
   }
+  if (usage.isSuccess && allowance.kind === 'credits' && allowance.available <= 0) {
+    reminders.push({
+      id: 'allowance',
+      kind: 'partial',
+      title: workCopy.reminderCreditsOut,
+      description: resets ? workCopy.reminderCreditsOutBody(resets) : workCopy.reminderCreditsOutNoDate,
+      href: '/app/account/billing',
+      action: workCopy.reminderAction
+    });
+  }
+
+  const costLine =
+    allowance.kind === 'batches'
+      ? `${allowance.remaining} writing batch${allowance.remaining === 1 ? '' : 'es'} left${resets ? `, resets ${resets}` : ''}. Only cloud drafts use one; saving sources is free.`
+      : allowance.kind === 'credits'
+        ? resets
+          ? workCopy.ideasCostCreditsResets(formatNumber(allowance.available), resets)
+          : workCopy.ideasCostCredits(formatNumber(allowance.available))
+        : allowance.kind === 'free'
+          ? workCopy.ideasCostFree
+          : allowance.kind === 'loading'
+            ? 'Saving sources is free.'
+            : workCopy.ideasCostUnavailable;
 
   const infoContent: InfobarContent = {
     title: 'How sources work',
@@ -124,10 +151,7 @@ export function IdeasView() {
           ]),
       {
         title: 'Cost',
-        description:
-          batches === '…' || batches === 'Unavailable'
-            ? `Writing batches left: ${batches}. Saving sources is free.`
-            : `${batches} writing batch${batches === '1' ? '' : 'es'} left${resets ? `, resets ${resets}` : ''}. Only cloud drafts use one; saving sources is free.`
+        description: costLine
       }
     ]
   };
@@ -198,6 +222,9 @@ export function IdeasView() {
               </Surface>
             )}
             {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='Only editors can add sources.' />}
+            {/* PDF / recording / transcript intake, gated by the sourceUploads growth feature (RAFII_SOURCE_UPLOADS_ENABLED):
+                when it is off no switched-off route is asked, earlier uploads stay manageable, and with none nothing renders. */}
+            <SourceUploadPanel canEdit={canEdit} onSourceCreated={select} />
             <SourceList selectedId={sourceId} onSelect={select} useApprovals={useApprovals} />
           </div>
 

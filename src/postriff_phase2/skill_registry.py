@@ -119,6 +119,8 @@ def registered_tools():
     domain_tools.ensure_registered()
     from .coworker import agent_tools
     agent_tools.register()
+    from . import growth_v2_agent_tools   # RAFII Product Growth slices: already loaded by ensure_registered; strict here,
+    growth_v2_agent_tools.register(strict=True)   # so CI and the lock fail on a slice that cannot register
     return tool_adapter.REGISTRY
 
 

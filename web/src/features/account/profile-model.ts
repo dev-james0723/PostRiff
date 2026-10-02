@@ -24,7 +24,8 @@ export function canLeave(role: WorkspaceRole) {
   return role !== 'owner';
 }
 
-const PLAN_LABELS: Record<string, string> = { trial: 'Trial', studio: 'Studio', assist: 'Studio Assist' };
+/** Workspace summary plans (`hosted.workspace_summary`): legacy trial/studio/assist and Pricing v2 free/creator/starter. */
+const PLAN_LABELS: Record<string, string> = { trial: 'Trial', studio: 'Studio', assist: 'Studio Assist', free: 'Free', creator: 'Creator', starter: 'Starter' };
 
 export function planLabel(item: Pick<WorkspaceListItem, 'plan' | 'trialPlan'>) {
   if (item.plan !== 'trial') return PLAN_LABELS[item.plan] ?? item.plan;

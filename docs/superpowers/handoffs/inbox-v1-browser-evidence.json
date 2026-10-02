@@ -1,0 +1,89 @@
+{
+  "status": "PASS",
+  "execution": "local disposable PostgreSQL; synthetic identity, Threads transport and reply writer; no external provider/model calls",
+  "physicalDevice": false,
+  "results": [
+    {
+      "scenario": "cumulative OAuth reconnect",
+      "passed": true
+    },
+    {
+      "scenario": "manual sync, server freshness and authoritative attention",
+      "passed": true,
+      "counts": {
+        "all": 6,
+        "replied": 0,
+        "unanswered": 6
+      }
+    },
+    {
+      "scenario": "Engagement Copilot filters",
+      "passed": true
+    },
+    {
+      "scenario": "unsupported provider click-through",
+      "passed": true
+    },
+    {
+      "scenario": "synthetic suggestion, edit, exact preview, approval while sender off",
+      "passed": true
+    },
+    {
+      "scenario": "synthetic send and authoritative read-back receipt",
+      "passed": true
+    },
+    {
+      "scenario": "inconclusive synthetic publish, durable uncertain receipt and no resend",
+      "passed": true
+    },
+    {
+      "scenario": "provider sync error without lost comments",
+      "passed": true
+    },
+    {
+      "scenario": "responsive Inbox",
+      "browser": "Chromium emulation",
+      "width": 1440,
+      "height": 900,
+      "reducedMotion": true,
+      "passed": true
+    },
+    {
+      "scenario": "responsive Inbox",
+      "browser": "Chromium emulation",
+      "width": 768,
+      "height": 1024,
+      "reducedMotion": true,
+      "passed": true
+    },
+    {
+      "scenario": "responsive Inbox",
+      "browser": "Chromium emulation",
+      "width": 430,
+      "height": 932,
+      "reducedMotion": true,
+      "passed": true
+    },
+    {
+      "scenario": "responsive Inbox",
+      "browser": "Chromium emulation",
+      "width": 390,
+      "height": 844,
+      "reducedMotion": true,
+      "passed": true
+    },
+    {
+      "scenario": "mobile sheet and back",
+      "browser": "WebKit emulation",
+      "width": 390,
+      "height": 844,
+      "reducedMotion": true,
+      "passed": true
+    },
+    {
+      "scenario": "viewer permission variant",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

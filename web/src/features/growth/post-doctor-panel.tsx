@@ -9,8 +9,42 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { SnapshotVariant } from '@/lib/api/types';
-import type { AdviceGoal, PostCheck, PostRewrite } from '@/lib/growth/types';
+import type { AdviceGoal, DraftCheckBody, PostCheck, PostRewrite } from '@/lib/growth/types';
+import { creditLimitLabel, useGrowthCreditApproval, type GrowthCreditQuote } from '@/lib/growth-v2/growth-credits';
 import { CheckResult, GrowthConsent, useGrowthCatalog } from './shared';
+
+/**
+ * The credit confirmation every Growth AI action shares on a Creator plan: the most this exact request can use, then
+ * Confirm or Cancel. Nothing runs before Confirm. When it appears it takes focus and is announced in a live region, so
+ * a keyboard or screen-reader user knows the request is waiting for them.
+ */
+export function GrowthCreditConfirm({ quote, busy, onConfirm, onCancel }: { quote: GrowthCreditQuote | null; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const id = useId();
+  const group = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (quote) group.current?.focus();
+  }, [quote]);
+  return (
+    <>
+      <p role='status' aria-live='polite' className='sr-only'>
+        {quote ? `Waiting for you: ${creditLimitLabel(quote)}` : ''}
+      </p>
+      {quote && (
+        <div ref={group} tabIndex={-1} role='group' aria-labelledby={`${id}-limit`} className='rafii-focus flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-3 text-sm'>
+          <p id={`${id}-limit`}>{creditLimitLabel(quote)}</p>
+          <div className='flex flex-wrap gap-2'>
+            <Button variant='action' disabled={busy} onClick={onConfirm}>
+              Confirm and run
+            </Button>
+            <Button variant='ghost' disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function PostDoctorPanel({
   variant,
@@ -38,11 +72,58 @@ export function PostDoctorPanel({
   // Keep the key after a lost response: another click reconciles instead of buying a duplicate run.
   const factsId = useId();
   const requests = useRef<{ check?: string; rewrite?: string }>({});
+  // Creator under Pricing v2: a Growth request is priced and confirmed before it runs (credit bridge).
+  const credits = useGrowthCreditApproval<PostCheck | PostRewrite>(workspaceId);
+  const cancelCredits = credits.cancel;
   useEffect(() => {
     setCheck(null); setRewritten(null); setSelected([]); requests.current = {};
-  }, [variant.id, variant.revision]);
+    cancelCredits(); // a limit shown for another revision never runs this one
+  }, [variant.id, variant.revision, cancelCredits]);
+  useEffect(() => {
+    if (dirty) cancelCredits(); // unsaved edits: the saved revision a waiting limit priced is not what the screen shows
+  }, [dirty, cancelCredits]);
   if (!catalog.data?.postDoctor) return null;
   const enabled = checkAccess(access, { permission: 'edit' });
+
+  async function applyCheck(result: PostCheck) {
+    setCheck(result);
+    setRewritten(null);
+    requests.current = {};
+    await snapshot.refetch();
+  }
+
+  function applyRewrite(result: PostRewrite) {
+    setRewritten(result);
+    setSelected(!result.comparison || result.comparison.recommended === 'candidate' ? result.changes.map((c) => c.id) : []);
+  }
+
+  function factEntries() {
+    return facts
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean);
+  }
+
+  /** A request exactly as the screen shows it now (the buttons send it; Confirm checks the priced one still matches). */
+  function requestBody(kind: 'check' | 'rewrite'): Record<string, unknown> | null {
+    if (kind === 'check') {
+      return {
+        ...(catalog.data?.postDoctorV2 ? { goal } : {}),
+        variantId: variant.id,
+        variantRevision: variant.revision,
+        requestKey: requests.current.check,
+        confirmed
+      };
+    }
+    if (!check || !catalog.data) return null;
+    return {
+      checkId: check.runId,
+      model: catalog.data.writer,
+      facts: Object.fromEntries(factEntries().map((f, i) => [`fact${i + 1}`, f])),
+      confirmed,
+      requestKey: requests.current.rewrite
+    };
+  }
 
   async function run(kind: 'check' | 'rewrite') {
     setError('');
@@ -50,33 +131,28 @@ export function PostDoctorPanel({
     requests.current[kind] ??= crypto.randomUUID();
     try {
       if (kind === 'check') {
-        const result = await api.postDoctor(workspaceId, {
-          ...(catalog.data?.postDoctorV2 ? { goal } : {}),
-          variantId: variant.id,
-          variantRevision: variant.revision,
-          requestKey: requests.current.check!,
-          confirmed
-        });
-        setCheck(result);
-        setRewritten(null);
-        requests.current = {};
-        await snapshot.refetch();
+        const result = await credits.run('check', requestBody('check') ?? {}, (b) => api.postDoctor(workspaceId, b as unknown as DraftCheckBody));
+        if (result) await applyCheck(result as PostCheck);
       } else if (check && catalog.data) {
-        const entries = facts
-          .split('\n')
-          .map((f) => f.trim())
-          .filter(Boolean);
-        if (entries.length > 10) throw new Error('Use at most ten facts or real examples.');
-        const result = await api.postDoctorRewrite(workspaceId, {
-          checkId: check.runId,
-          model: catalog.data.writer,
-          facts: Object.fromEntries(entries.map((f, i) => [`fact${i + 1}`, f])),
-          confirmed,
-          requestKey: requests.current.rewrite!
-        });
-        setRewritten(result);
-        setSelected(!result.comparison || result.comparison.recommended === 'candidate' ? result.changes.map((c) => c.id) : []);
+        if (factEntries().length > 10) throw new Error('Use at most ten facts or real examples.');
+        const result = await credits.run('rewrite', requestBody('rewrite') ?? {}, (b) => api.postDoctorRewrite(workspaceId, b as unknown as Parameters<typeof api.postDoctorRewrite>[1]));
+        if (result) applyRewrite(result as PostRewrite);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'This request could not be completed.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function confirmCredits() {
+    const kind = credits.pending?.kind;
+    setError('');
+    setBusy(kind ?? 'check');
+    try {
+      const result = await credits.confirm(kind === 'check' || kind === 'rewrite' ? requestBody(kind) : null);
+      if (result && kind === 'check') await applyCheck(result as PostCheck);
+      if (result && kind === 'rewrite') applyRewrite(result as PostRewrite);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This request could not be completed.');
     } finally {
@@ -139,7 +215,7 @@ export function PostDoctorPanel({
                 className='bg-background border-input min-h-11 w-full rounded-lg border px-3'
                 onChange={(event) => {
                   setGoal(event.target.value as AdviceGoal); setCheck(null); setRewritten(null);
-                  setSelected([]); requests.current = {};
+                  setSelected([]); requests.current = {}; credits.cancel();
                 }}>
                 <option value='general'>Make the idea clear</option>
                 <option value='conversation'>Start a conversation</option>
@@ -159,7 +235,10 @@ export function PostDoctorPanel({
               aria-label='Allow AI analysis of this draft'
               type='checkbox'
               checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
+              onChange={(e) => {
+                setConfirmed(e.target.checked);
+                credits.cancel(); // a limit shown for the request with the earlier consent never runs this one
+              }}
               className='mt-1'
             />
             Analyze this saved draft with the allowed AI models. Up to 10 checks and one rewrite per
@@ -202,6 +281,7 @@ export function PostDoctorPanel({
                   onChange={(e) => {
                     setFacts(e.target.value); setRewritten(null); setSelected([]);
                     requests.current.rewrite = undefined;
+                    if (credits.pending?.kind === 'rewrite') credits.cancel(); // the facts are part of the priced rewrite
                   }}
                   maxLength={10_000}
                   placeholder='Use only facts you are ready to review as sources.'
@@ -284,6 +364,7 @@ export function PostDoctorPanel({
           )}
         </>
       )}
+      <GrowthCreditConfirm quote={credits.pending} busy={Boolean(busy)} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} />
       {error && (
         <p role='alert' className='text-destructive text-sm'>
           {error}

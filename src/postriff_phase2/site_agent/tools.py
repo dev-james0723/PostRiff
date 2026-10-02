@@ -560,6 +560,12 @@ def _writer_class(ctx):
     return {"modelId": ctx.model_id, "class": "none" if runtime.cost_class == "none" else getattr(runtime, "provider_class", "local"), "costClass": runtime.cost_class}
 
 
+def _credits(wallet, key):
+    """Whole credits from a wallet field in milli-credits; None when unknown (never 0 for a missing number)."""
+    value = (wallet or {}).get(key)
+    return round(value / 1000, 1) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
 def entitlements_summary(ctx):
     ledger = getattr(ctx.service, "ledger", None)
     if ctx.cur is None or ledger is None:
@@ -577,6 +583,9 @@ def entitlements_summary(ctx):
     subscription = view.get("subscription") or {}
     data = {"plan": subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId"), "subscriptionStatus": subscription.get("status"),
             "aiUsageExempt": view.get("aiUsageExempt", False),
+            "billingMode": view.get("billingMode") or "legacy_allowances",
+            "creditsAvailable": _credits(view.get("credits"), "availableMilliCredits"), "creditsHeld": _credits(view.get("credits"), "heldMilliCredits"),
+            "creditsGranted": _credits(view.get("credits"), "currentPeriodGrantMilliCredits"),
             "writingBatchesRemaining": entitlement.get("writingBatchesRemaining"), "mediaCreditsRemaining": entitlement.get("mediaCreditsRemaining"),
             "resetsAt": entitlement.get("resetsAt"), "canPublish": can_publish, "budgetStatus": budget.get("status"),
             "spentUsdMicro": budget.get("spentUsdMicro") if owner else None, "stopUsdMicro": budget.get("stopUsdMicro") if owner else None, "costsVisible": owner}

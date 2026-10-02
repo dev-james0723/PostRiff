@@ -1,6 +1,9 @@
 Pillow==12.3.0
 psycopg[binary]==3.3.5
 cryptography==50.0.1
+# Raw source intake (src/postriff_phase2/source_uploads): bounded text extraction from text PDFs. Pure Python,
+# BSD-3-Clause, no dependencies; runs in a killable child process with page/character/time caps.
+pypdf==6.19.0
 # Rafii Control v2 embedded in the consumer API (src/rafii_control): contract validation for its catalog pack.
 jsonschema==4.26.0
 # Rafii Agent Runtime (src/postriff_phase2/agent_runtime_v2): the OpenAI Agents SDK and its client, pinned.

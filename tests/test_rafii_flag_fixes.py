@@ -53,7 +53,8 @@ class Ideas:
     def __init__(self, repository):
         from postriff_phase2.credit_requests import CreditRequests
         self.repository = repository
-        self.ledger = type("Ledger", (), {"credits": Book()})()
+        # Pricing v2: authorize first applies the Free fallback for an expired trial (billing.Ledger.ensure_entitlement).
+        self.ledger = type("Ledger", (), {"credits": Book(), "ensure_entitlement": lambda _self, _cur, _workspace_id, _plan: None})()
         self.credit_requests = CreditRequests(self)
 
     def _member(self, _row):

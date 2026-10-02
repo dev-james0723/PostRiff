@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-24.1",
+  "version": "2026-10-01.1",
   "fallback": "en",
   "locales": {
     "en": {
@@ -255,6 +255,15 @@
           "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
           "cta": "Verify call",
           "status": "security"
+        },
+        "follow_up_due": {
+          "subject": "A follow-up you planned is due",
+          "preheader": "Someone you are talking with is waiting for your next step.",
+          "context": "Follow-ups",
+          "headline": "A follow-up is due",
+          "lead": "A follow-up you scheduled is due. Open it to see the earlier exchange and choose your next step. Rafii never contacts anyone for you.",
+          "cta": "Open follow-ups",
+          "status": "action"
         }
       }
     },
@@ -511,6 +520,15 @@
           "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
           "cta": "Verify call",
           "status": "security"
+        },
+        "follow_up_due": {
+          "subject": "你安排的跟進已到期",
+          "preheader": "有人在等你的下一步。",
+          "context": "跟進",
+          "headline": "跟進事項到期",
+          "lead": "你安排的一項跟進已到期。打開它查看先前的對話，再決定下一步。Rafii 不會替你聯絡任何人。",
+          "cta": "開啟跟進事項",
+          "status": "action"
         }
       }
     },
@@ -767,6 +785,15 @@
           "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
           "cta": "Verify call",
           "status": "security"
+        },
+        "follow_up_due": {
+          "subject": "你安排的跟進已到期",
+          "preheader": "有人在等你的下一步。",
+          "context": "跟進",
+          "headline": "跟進事項到期",
+          "lead": "你安排的一項跟進已到期。打開它查看先前的對話，再決定下一步。Rafii 不會替你聯絡任何人。",
+          "cta": "開啟跟進事項",
+          "status": "action"
         }
       }
     },
@@ -1023,6 +1050,15 @@
           "lead": "Confirm this call with your passkey. If you did not call Rafii, ignore this request.",
           "cta": "Verify call",
           "status": "security"
+        },
+        "follow_up_due": {
+          "subject": "你安排的跟进已到期",
+          "preheader": "有人在等你的下一步。",
+          "context": "跟进",
+          "headline": "跟进事项到期",
+          "lead": "你安排的一项跟进已到期。打开它查看先前的对话，再决定下一步。Rafii 不会替你联系任何人。",
+          "cta": "打开跟进事项",
+          "status": "action"
         }
       }
     }

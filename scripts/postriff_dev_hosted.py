@@ -72,6 +72,10 @@ class DevTransport:
     """Canned provider responses so schedule → publish → verify → insights runs locally."""
     def __init__(self):
         self.posts = {}
+        self.reply_containers = {}
+        self.published_replies = {}
+        self.inbox_error = False
+        self.reply_error = False
 
     def __call__(self, method, url, headers=None, form=None, body=None):
         if "api.linkedin.com/rest/posts" in url and method == "POST":
@@ -84,14 +88,33 @@ class DevTransport:
         if url.endswith("/threads") and method == "POST":
             cid = str(len(self.posts) + 1000)
             self.posts[cid] = form.get("text", "")
+            if form.get("reply_to_id"):
+                self.reply_containers[cid] = (form["reply_to_id"], form.get("text", ""))
             return {"status": 200, "headers": {}, "body": {"id": cid}}
         if url.endswith("/threads_publish"):
+            if self.reply_error:
+                return {"status": 503, "headers": {}, "body": {}}
             mid = "9" + form["creation_id"]
             self.posts[mid] = self.posts.get(form["creation_id"], "")
+            if form["creation_id"] in self.reply_containers:
+                self.published_replies[mid] = self.reply_containers[form["creation_id"]]
             return {"status": 200, "headers": {}, "body": {"id": mid}}
         if "/insights" in url:
             return {"status": 200, "headers": {}, "body": {"data": [{"name": "views", "values": [{"value": 128}]}, {"name": "likes", "values": [{"value": 7}]}, {"name": "replies", "values": [{"value": 2}]}]}}
         if "/replies" in url:
+            if self.inbox_error:
+                return {"status": 429, "headers": {}, "body": {"error": "synthetic cooldown"}}
+            if "is_reply_owned_by_me" in url:
+                return {"status": 200, "headers": {}, "body": {"data": [
+                    {"id": ref, "text": text, "replied_to": {"id": parent}, "is_reply_owned_by_me": True}
+                    for ref, (parent, text) in self.published_replies.items()]}}
+            if getattr(self, "inbox_fixture", False):
+                return {"status": 200, "headers": {}, "body": {"data": [
+                    {"id": "77001", "text": "Where can I read more about the practice method?", "username": "curious_reader", "permalink": "https://www.threads.net/@dev/post/77001"},
+                    {"id": "77002", "text": "This helped me today, thank you!", "username": "grateful_reader"},
+                    {"id": "77003", "text": "My purchase failed and nobody replied.", "username": "customer"},
+                    {"id": "77004", "text": "Buy fake followers now spam spam spam", "username": "spammer"},
+                    {"id": "77005", "text": "Can we partner on a workshop?", "username": "partner"}]}}
             return {"status": 200, "headers": {}, "body": {"data": [{"id": "77001", "text": "Love this — where can I read more?", "username": "curious_reader"}]}}
         if "graph.threads.net" in url and method == "GET":
             mid = url.split("/v24.0/")[1].split("?")[0]
@@ -140,14 +163,29 @@ class DevProvider:
         return True
 
 
+class InboxFixtureProvider(DevProvider):
+    """Local grant proof for the Inbox browser fixture; every listed scope is synthetic."""
+    def inspect_scopes(self, access_token, account_id):
+        return sorted({scope for names in self.scopes.values() for scope in names})
+
+
 class DevAssets:
     """In-memory private media boundary for the synthetic harness, with the video bucket's calls (chat-context SPEC §7.3):
-    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`."""
+    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`.
+
+    DEV-SYNTHETIC, memory only: it also stands in for the private `rafii-source-uploads` bucket (raw PDF/audio intake:
+    signed upload URL, HEAD, bounded range reads, delete; the bucket's own size and MIME limits) and for the immutable,
+    content-addressed PNG writes of rendered Visual Pack slides (`put_immutable`, category `visual-pack`). Nothing here
+    reaches Supabase or any other service; every object disappears with the harness process."""
     VIDEO_BUCKET = "postriff-video"
+    # The real source bucket (hosted_storage.SOURCE_BUCKET) is private, 30 MB, PDF and the four audio types.
+    source_bucket = "rafii-source-uploads"
+    SOURCE_LIMIT = 30_000_000
+    SOURCE_MIMES = ["application/pdf", "audio/wav", "audio/mpeg", "audio/mp4", "audio/ogg"]
 
     def __init__(self):
         self.objects = {}
-        self.uploads = {}   # token → (workspace id, object name)
+        self.uploads = {}   # token → (workspace id, category, object name)
         self.storage = self
 
     def signed_url(self, wid, kind, name, ttl=300):
@@ -172,39 +210,59 @@ class DevAssets:
         from postriff_phase2.hosted_storage import PrivateAssetService
         PrivateAssetService.remove(self, workspace_id, asset)   # the real kind-aware removal (video, poster, frames)
 
-    # --- the video bucket, in memory -------------------------------------------------------------------------------------
+    def put_immutable(self, workspace_id, category, object_name, raw, content_type="image/jpeg"):
+        """The real adapter's rules (hosted_storage.SupabaseStorage.put_immutable): never videos or raw sources (those
+        arrive by signed upload only), PNG only and only for rendered pack slides, no overwrite (409)."""
+        if category in ("video", "source") or (category == "visual-pack") != (content_type == "image/png"):
+            raise AlphaError("Invalid private object location.")
+        if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
+            raise AlphaError("Decoded media is missing or too large.")
+        if (workspace_id, category, object_name) in self.objects:
+            raise AlphaError("This immutable object already exists.", 409)
+        self.objects[(workspace_id, category, object_name)] = raw
+        return f"{workspace_id}/{category}/{object_name}"
+
+    # --- the video and source buckets, in memory ----------------------------------------------------------------------------
     def bucket_info(self, bucket=None):
+        if bucket == self.source_bucket:
+            return {"id": bucket, "public": False, "fileSizeLimit": self.SOURCE_LIMIT, "allowedMimeTypes": list(self.SOURCE_MIMES)}
         return {"id": bucket or self.VIDEO_BUCKET, "public": False, "fileSizeLimit": 100_000_000, "allowedMimeTypes": ["video/mp4", "video/quicktime"]}
 
     def signed_upload_url(self, workspace_id, category, object_name):
         token = uuid.uuid4().hex
-        self.uploads[token] = (workspace_id, object_name)
-        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{self.VIDEO_BUCKET}/{workspace_id}/video/{object_name}?token={token}"
+        self.uploads[token] = (workspace_id, category, object_name)
+        bucket = self.source_bucket if category == "source" else self.VIDEO_BUCKET
+        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{bucket}/{workspace_id}/{category}/{object_name}?token={token}"
 
     def receive_upload(self, token, raw, mime):
         target = self.uploads.pop(token, None)
         if target is None or not raw:
             return False
-        workspace_id, object_name = target
-        if (workspace_id, "video", object_name) in self.objects:
+        workspace_id, category, object_name = target
+        if (workspace_id, category, object_name) in self.objects:
             return False   # no upsert, like the real signed upload
-        self.objects[(workspace_id, "video", object_name)] = raw
-        self.objects[("mime", workspace_id, object_name)] = mime
+        if category == "source" and (len(raw) > self.SOURCE_LIMIT or mime not in self.SOURCE_MIMES):
+            return False   # the private bucket's own size and MIME limits refuse it
+        self.objects[(workspace_id, category, object_name)] = raw
+        self.objects[("mime", workspace_id, category, object_name)] = mime
         return True
 
     def object_info(self, workspace_id, category, object_name):
         raw = self.get(workspace_id, category, object_name)
-        return {"bytes": len(raw), "mime": self.objects.get(("mime", workspace_id, object_name)) or "video/mp4", "etag": hashlib.sha256(raw).hexdigest()[:16]}
+        return {"bytes": len(raw), "mime": self.objects.get(("mime", workspace_id, category, object_name)) or "video/mp4", "etag": hashlib.sha256(raw).hexdigest()[:16]}
 
     def read_range(self, workspace_id, category, object_name, start, length):
         return {"data": self.get(workspace_id, category, object_name)[start:start + length], "ranged": True}
 
     def delete(self, workspace_id, category, object_name):
         self.objects.pop((workspace_id, category, object_name), None)
+        self.objects.pop(("mime", workspace_id, category, object_name), None)
 
     def list_prefix(self, prefix, bucket=None):
-        workspace_id = prefix.split("/", 1)[0]
-        return [f"{workspace_id}/video/{name}" for (ws, category, name) in list(self.objects) if ws == workspace_id and category == "video"]
+        parts = prefix.strip("/").split("/")
+        workspace_id, wanted = parts[0], (parts[1] if len(parts) > 1 else "video")
+        return [f"{workspace_id}/{wanted}/{name}" for key in list(self.objects) if len(key) == 3
+                for (ws, category, name) in [key] if ws == workspace_id and category == wanted]
 
 
 class DevMediaReader:
@@ -271,6 +329,7 @@ def main():
     parser.add_argument('--radar-fixture',action='store_true',help='Radar deterministic providers and models; disposable local database only')
     parser.add_argument('--postdoctor-v2-fixture',action='store_true',help='Post Doctor v2 deterministic models, disposable database only')
     parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
+    parser.add_argument("--inbox-fixture", action="store_true", help="loopback-only Inbox comments, grants and reply writer; no provider/model egress")
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
@@ -282,7 +341,10 @@ def main():
     # POSTRIFF_DEV_WEB_ORIGIN lets the Next.js dev server (which proxies /api and /dev here) own the consent + callback flow.
     base = os.environ.get("POSTRIFF_DEV_WEB_ORIGIN", "").rstrip("/") or f"http://127.0.0.1:{args.port}"
     transport = DevTransport()
+    transport.inbox_fixture = args.inbox_fixture
     providers = {"linkedin": DevProvider("linkedin", "LinkedIn", base), "threads": DevProvider("threads", "Threads", base)}
+    if args.inbox_fixture:
+        providers["threads"] = InboxFixtureProvider("threads", "Threads", base)
     verifier = DevVerifier(connection)
     # OAuth rows must carry an https PostRiff callback (production guard); the dev consent page
     # redirects to the loopback callback itself, so the placeholder host is never contacted.
@@ -308,6 +370,15 @@ def main():
         from postriff_phase2.growth.service import GrowthService
         service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
         if args.radar_fixture:service.growth.radar.sources=Sources()
+    if args.inbox_fixture:
+        service.audience.engagement_enabled = True
+        # The production reply writer still requires a managed paid writer. This local
+        # fixture exercises only the draft/edit/approval path with a synthetic result.
+        from postriff_phase2 import reply_writer
+        def synthetic_reply(_service, _wid, _token, _thread, **_kwargs):
+            return {"text": "Thanks for asking. I can share more about the practice method.", "needs": [],
+                    "provenance": {"route": {"kind": "synthetic_browser_fixture", "provider": "none", "model": "none"}}}
+        reply_writer.write = synthetic_reply
     if args.credit_fixture:
         from launch_credit_fixture import configure
         configure(service, connection)
@@ -350,7 +421,7 @@ def main():
     if args.growth_fixture:
         from postriff_phase2.growth.performance import then_capture
         on_verified=then_capture(on_verified,True)
-    worker = PostgresWorker(connection, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(connection, social=social, on_verified=with_time_back(on_verified, service.time_savings), audience=service.audience if args.inbox_fixture else None)
     app = HostedApplication(service, worker, {"provider": "dev", "execution": "dev-synthetic", "flow": "dev"}, "d" * 24)
     if args.founder_fixture:
         # Founder Admin (CONTRACTS §8.G): Control embedded on /api/control/v2 with synthetic founder identities. The
@@ -364,6 +435,49 @@ def main():
 
     def application(environ, start_response):
         path = environ.get("PATH_INFO", "/")
+        if args.inbox_fixture and path.startswith("/dev/inbox/") and environ["REQUEST_METHOD"] == "POST":
+            try:
+                token = environ.get("HTTP_AUTHORIZATION", "").removeprefix("Bearer ")
+                principal = verifier(token)
+                length = min(int(environ.get("CONTENT_LENGTH") or 0), 4096)
+                payload = json.loads(environ["wsgi.input"].read(length) or b"{}")
+                wid = str(uuid.UUID(payload.get("workspaceId", "")))
+                with service.repository.transaction(token, wid) as (cur, row, _):
+                    from postriff_phase2.permissions import Membership
+                    if not Membership.from_row(*row[2:7]).allows("manage_connections"):
+                        raise AlphaError("Owner fixture required.", 403)
+                    if path == "/dev/inbox/seed":
+                        cur.execute("SELECT connection_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND provider='threads' AND revoked_at IS NULL", (wid,))
+                        connected = cur.fetchone()
+                        if not connected:
+                            raise AlphaError("Connect the synthetic Threads account first.", 409)
+                        cid = connected[0]
+                        cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (wid,))
+                        state = cur.fetchone()[0]
+                        if isinstance(state, str): state = json.loads(state)
+                        state.setdefault("phase2", {}).setdefault("jobs", []).append({"state": "verified", "manifest": {"platform": "Threads", "channelId": cid}, "providerReference": "123", "verification": {"at": time.time()}})
+                        cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s", (json.dumps(state), wid))
+                        cur.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,permalink) VALUES(%s,%s,'instagram','ig-post','ig-comment','unsupported_reader','Can you reply there?','https://www.instagram.com/p/dev/') ON CONFLICT DO NOTHING", (wid, cid))
+                    elif path == "/dev/inbox/sender":
+                        service.audience.reply_sender_enabled = payload.get("enabled") is True
+                    elif path == "/dev/inbox/error":
+                        transport.inbox_error = payload.get("enabled") is True
+                    elif path == "/dev/inbox/reply-error":
+                        transport.reply_error = payload.get("enabled") is True
+                    elif path == "/dev/inbox/cooldown-clear":
+                        cur.execute("UPDATE public.pr_audience_sync SET last_attempt_at=now()-interval '61 seconds' WHERE workspace_id=%s", (wid,))
+                    elif path == "/dev/inbox/viewer":
+                        cur.execute("UPDATE public.pr_memberships SET role=%s WHERE workspace_id=%s AND user_id=%s", ("viewer" if payload.get("enabled") else "owner", wid, principal))
+                    else:
+                        raise AlphaError("Unknown Inbox fixture action.", 404)
+                result = {"ok": True, "senderEnabled": service.audience.reply_sender_enabled}
+                raw = json.dumps(result).encode()
+                start_response("200 OK", [("Content-Type", "application/json"), ("Content-Length", str(len(raw)))])
+                return [raw]
+            except Exception as error:
+                raw = json.dumps({"error": str(error)[:160]}).encode()
+                start_response("400 Bad Request", [("Content-Type", "application/json"), ("Content-Length", str(len(raw)))])
+                return [raw]
         if path.startswith("/dev/upload/") and environ["REQUEST_METHOD"] == "PUT":
             # The browser scene forwards the signed-URL PUT here (the real client only PUTs to Supabase URLs).
             length = int(environ.get("CONTENT_LENGTH") or 0)

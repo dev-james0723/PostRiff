@@ -9,17 +9,21 @@ import { useFlash } from '@/hooks/use-flash';
 import { useChannels, useMembers, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { billingModeOf } from '@/lib/billing/mode';
 import { relativeTime } from '@/lib/time';
-import { Allowances } from './allowances';
+import { Allowances, CostGuardSection } from './allowances';
 import { CreditBalance } from './credit-balance';
+import { CreditMeterCard } from './credit-meter';
 import { CreditPacks } from './credit-packs';
-import { PAGE, infoContent } from './billing-copy';
+import { PAGE, infoContentFor } from './billing-copy';
+import { FreePreviewCard } from './free-preview';
 import { Ledger } from './ledger';
 import { GLASS_STATEFUL } from './lifecycle-alert';
 import { PlanCard } from './plan-card';
 import { CheckoutConfirmation, Plans } from './plans';
 import { useBillingRedirect } from './use-billing-redirect';
 import { useCheckoutReturn } from './use-checkout-return';
+import { useCopyLocale } from './use-copy-locale';
 
 /** What to do next, not what failed underneath; other errors keep the server's own sentence. */
 function loadErrorText(error: unknown) {
@@ -100,9 +104,13 @@ export function BillingView() {
   useEffect(() => setNow(Date.now() / 1000), [usage.dataUpdatedAt]);
 
   const data = usage.data;
+  // Every section below branches on the server's billing mode, never on a price, a batch count or a wallet.
+  const mode = billingModeOf(data);
+  const locale = useCopyLocale();
+  const limits = data && <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} only='capacity' />;
 
   return (
-    <PageContainer pageTitle={PAGE.title} infoContent={infoContent}>
+    <PageContainer pageTitle={PAGE.title} infoContent={infoContentFor(mode, locale)}>
       {!data ? (
         usage.isError ? (
           <LoadError error={usage.error} hasData={false} updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />
@@ -114,11 +122,26 @@ export function BillingView() {
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
           <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-          {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
+          {mode === 'managed_credits' ? (
+            <>
+              <CreditMeterCard usage={data} now={now} />
+              {limits}
+              {isOwner && data.budget && <CostGuardSection budget={data.budget} />}
+            </>
+          ) : mode === 'free_preview' ? (
+            <>
+              <FreePreviewCard usage={data} />
+              {limits}
+            </>
+          ) : mode === 'legacy_allowances' ? (
+            data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />
+          ) : (
+            limits
+          )}
           <Plans usage={data} isOwner={isOwner} redirect={redirect} />
           {data.credits && isOwner && <CreditPacks />}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
-          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
+          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} allowanceNotes={mode === 'legacy_allowances'} />}
         </div>
       )}
     </PageContainer>

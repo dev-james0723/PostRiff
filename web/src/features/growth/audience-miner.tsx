@@ -7,15 +7,22 @@ import { IconArrowUpRight, IconArrowRight, IconMessageCircle2, IconCheck, IconQu
 import { Button } from '@/components/ui/button';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { useUsage } from '@/lib/api/hooks';
+import { billingModeOf } from '@/lib/billing/mode';
+import { growthUseConsent, useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
+import { GrowthCreditConfirm } from './post-doctor-panel';
 import { useGrowthCatalog } from './shared';
 import { EmptyGrowth, useGrowthAction } from './studio-parts';
-import type { AudienceCluster } from '@/lib/growth/types';
+import type { AudienceCluster, AudienceInsights } from '@/lib/growth/types';
+
+type AudienceRun = { clusters: AudienceInsights['clusters']; analyzed: number; available: number; withheld: number; partial: boolean };
 
 export function AudienceMiner() {
   const catalog = useGrowthCatalog();
   const { api, workspaceId } = useWorkspaceApi();
   const query = useQuery({ queryKey: ['growth-audience', workspaceId], queryFn: () => api.audienceInsights(workspaceId), enabled: catalog.data?.audienceMiner === true, retry: false });
   const access = useWorkspaceAccess();
+  const usage = useUsage();
   const [days, setDays] = useState(14);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -23,14 +30,28 @@ export function AudienceMiner() {
   const [summary, setSummary] = useState('');
   const [filter, setFilter] = useState('all');
   const request = useRef<string | null>(null);
+  // Creator under Pricing v2: the analysis is priced and confirmed before it runs (credit bridge), like Post Doctor.
+  const credits = useGrowthCreditApproval<AudienceRun>(workspaceId);
   if (!catalog.data?.audienceMiner) return <EmptyGrowth title='Audience Miner is not enabled here yet.'><p>Your inbox still works as usual.</p></EmptyGrowth>;
+  const consentText = growthUseConsent('Analyze these eligible comments with the allowed AI models', billingModeOf(usage.data));
+  async function finished(result: AudienceRun | null) {
+    if (!result) return; // waiting for the credit limit to be confirmed
+    setSummary(`${result.analyzed} of ${result.available} eligible comments analyzed. ${result.withheld} held out for sensitivity or uncertainty.${result.partial ? ' This is a bounded sample, not the full audience.' : ''}`);
+    await query.refetch();
+  }
+  /** The request exactly as the screen shows it now (Find sends it; Confirm checks the priced one still matches). */
+  const requestBody = (): Record<string, unknown> => ({ days, confirmed, requestKey: request.current });
   async function analyze() {
     setBusy(true); setError(''); request.current ??= crypto.randomUUID();
     try {
-      const result = await api.analyzeAudience(workspaceId, { days, confirmed, requestKey: request.current });
-      setSummary(`${result.analyzed} of ${result.available} eligible comments analyzed. ${result.withheld} held out for sensitivity or uncertainty.${result.partial ? ' This is a bounded sample, not the full audience.' : ''}`);
-      await query.refetch();
+      await finished(await credits.run('audience', requestBody(), (b) => api.analyzeAudience(workspaceId, b as unknown as Parameters<typeof api.analyzeAudience>[1])));
     } catch (err) { setError(err instanceof Error ? err.message : 'Audience analysis could not be completed.'); }
+    finally { setBusy(false); }
+  }
+  async function confirmCredits() {
+    setBusy(true); setError('');
+    try { await finished(await credits.confirm(requestBody())); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Audience analysis could not be completed.'); }
     finally { setBusy(false); }
   }
   const categories = [...new Set(query.data?.clusters.map((c) => c.category) ?? [])];
@@ -41,8 +62,8 @@ export function AudienceMiner() {
     {query.isPending && <p className='growth-loading' role='status'>Looking for eligible conversations…</p>}
     {query.isError && <p role='alert' className='growth-error'>Comments could not be loaded. <Button variant='quiet' onClick={() => void query.refetch()}>Try again</Button></p>}
     {query.data && <>
-      <div className='growth-audience-controls'><label>Look back<select aria-label='Audience window' value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value)); request.current = null; setConfirmed(false); }}>{[7,14,30].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></label><p>Up to {query.data.maximumPerRun} comments per analysis.<br />Two analyses per workspace each day.</p></div>
-      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label='Analyze these eligible comments with the allowed AI models within my daily allowance.' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Analyze these eligible comments with the allowed AI models within my daily allowance.</label><Button className='growth-primary' disabled={busy || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button></>}
+      <div className='growth-audience-controls'><label>Look back<select aria-label='Audience window' value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value)); request.current = null; setConfirmed(false); credits.cancel(); }}>{[7,14,30].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></label><p>Up to {query.data.maximumPerRun} comments per analysis.<br />Two analyses per workspace each day.</p></div>
+      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label={consentText} checked={confirmed} onChange={(e) => { setConfirmed(e.target.checked); credits.cancel(); }} />{consentText}</label><Button className='growth-primary' disabled={busy || credits.quoting || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button><GrowthCreditConfirm quote={credits.pending} busy={busy} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} /></>}
       {!query.data.audienceConsent && <p className='growth-footnote'>The owner must allow comment analysis in AI permissions above.</p>}
       <p className='growth-footnote'>{query.data.coverage}</p>
       {summary && <p role='status' className='growth-success'>{summary}</p>}

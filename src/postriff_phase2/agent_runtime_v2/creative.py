@@ -24,6 +24,7 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 from postriff_alpha.domain import AlphaError, clean
 
 from .. import asset_kinds, media_consent
+from ..developer_usage import ai_usage_exempt
 from . import config as runtime_config, contracts
 from .context import RafiiRunContext
 from .tool_adapter import register
@@ -372,6 +373,12 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
     with ctx.workspace() as (cur, _row, principal, member, state):
         if not member.allows("edit"):
             raise AlphaError("Your role can't create images.", 403, code="tool_forbidden")
+        book = getattr(ctx.service.ledger, "credits", None)
+        if book is not None and not ai_usage_exempt(principal) and book.policy(cur, ctx.workspace_id):
+            # DECISIONS D-026: plan credits cover writing only and images are not priced in credits yet, so no task
+            # credit limit could ever authorise this reservation. Refused before any reservation or provider call, as
+            # the chat image turn (`ideas._image_turn`) and the credit quote are.
+            raise AlphaError("Images are not part of plan credits yet. Nothing was made or charged.", 402, code="image_credits_unavailable")
         if ctx.service.assets is None:
             raise CreativeError("Private media storage is not configured, so a generated image could not be saved.", 503, code="media_storage_not_configured")
         if operation in ("edit", "variant"):

@@ -33,7 +33,13 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 057–062 | `057_founder_billing_events`, `058_founder_ai_usage`, `059_founder_product`, `060_founder_reliability`, `061_founder_notifications`, `062_founder_admin_actions` | Founder Admin v2 P1/P2 slices (`docs/design/founder-admin/CONTRACTS.md` §8) | Reserved 2026-10-01 after a scan of every ref and worktree (047, 048, 050 held by other owners; nothing at 056+). 061 stayed unused. |
 | 063–068 | `063_founder_revenue_views`, `064_founder_ai_views`, `065_founder_product_views`, `066_founder_ops_views`, `067_founder_comms_views`, `068_founder_actions_views` | Founder Admin v2 P1/P2 slices | The `rafii_control` half of each slice; 057–062 hold only public-schema instrumentation so it can ship before the Control schema. |
 | 069–070 | `069_founder_ops_bootstrap`, `070_founder_ops_settings` | Founder Admin v2 P1/P2 (`claude/founder-admin-p1p2`) | 069 makes `pr_bootstrap` prefer a customer workspace over the founder's internal ops workspace; 070 stores each founder's ops workspace (`rafii_control.founder_settings`). Scanned every remote branch and worktree on 2026-10-01: no other 069–079. 061 stayed unused. |
-| 080–089 | — | RAFII Product Growth v2 (PR #87) | Reserved by that session. |
+| 080–089 | RAFII Product Growth v2 (`docs/design/rafii-product-growth/`) | `claude/rafii-product-growth-v2` | Reserved 2026-10-01 after scanning all refs and worktrees (highest in flight: 068). |
+| 080 | Product Growth v2: customer results (`080_customer_results.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 081 | Product Growth v2: relationships (`081_relationships.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 082 | Product Growth v2: unused (series need no DDL; DECISIONS D-021) | — | Do not reassign. |
+| 083 | Product Growth v2: visual packs (`083_visual_packs.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 084 | Product Growth v2: briefs, proof revisions, strategy decisions (`084_briefs_proof_strategy.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
+| 087 | Product Growth v2: raw source uploads (`087_source_uploads.sql`) | `claude/rafii-product-growth-v2` | Written 2026-10-01; not applied anywhere yet. |
 | 071–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)

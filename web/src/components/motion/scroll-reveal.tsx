@@ -5,6 +5,7 @@ import { type ReactNode, type RefObject, useRef } from 'react';
 
 import { EASE_OUT } from '@/lib/ease';
 import { cn } from '@/lib/utils';
+import { revealStates } from './scroll-reveal-states';
 
 export interface ScrollRevealProps {
   children: ReactNode;
@@ -39,19 +40,15 @@ export function ScrollReveal({
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { root, once, amount });
 
-  const hidden = reduce ? { opacity: 0 } : { opacity: 0, y, filter: `blur(${blur}px)` };
-  // PostRiff: drop the filter once settled; a lingering `blur(0px)` keeps a compositing layer and
-  // makes the wrapper the containing block for fixed-position children.
-  const shown = reduce
-    ? { opacity: 1 }
-    : { opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } };
+  // The same hidden state on the server and in the browser; reduced motion changes only how the reveal moves.
+  const { hidden, shown, transition } = revealStates(Boolean(reduce), { y, blur, duration, delay, ease: EASE_OUT });
 
   return (
     <motion.div
       ref={ref}
       initial={hidden}
       animate={inView ? shown : hidden}
-      transition={{ duration, ease: EASE_OUT, delay }}
+      transition={transition}
       className={cn(className)}
     >
       {children}
