@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 os.environ.setdefault('RAFII_PHONE_PROVIDER', 'fake')
 
-from rafii_control import founder_briefings, founder_cron, founder_schedules, founder_policy
+from rafii_control import founder_briefings, founder_cron, founder_schedules, slices
 from rafii_control.auth import ControlError
 from rafii_control.founder_contact import FLAG
 from rafii_control.founder_schedules import LATE_SECONDS, LEASE_SECONDS, claim_due, local_slot, next_occurrence, validate_schedule
@@ -169,7 +169,10 @@ class CronBriefingPathTests(unittest.TestCase):
         self.now = at
         # This fixture models schedule/contact storage, not the separately tested
         # PostgreSQL Ops marker and policy-sync transactions.
-        with patch.object(founder_policy, 'sync_stage', return_value={'status': 'not_applicable', 'reason': 'schedule_fixture'}):
+        slices.load()
+        stages = [(name, (lambda *args: {'status': 'not_applicable', 'reason': 'schedule_fixture'}) if name == 'founder_policy_defaults' else work)
+                  for name, work in founder_cron.STAGES]
+        with patch.object(founder_cron, 'STAGES', stages):
             return founder_cron.tick(self.service, VALUES, fstore=self.fstore, calls_factory=lambda operator: self.calls, clock=lambda: at,
                                      observe=observe or (lambda fstore, service, values, now: observations(now)), lease_owner='test-cron')
 
