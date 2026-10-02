@@ -1296,18 +1296,28 @@ async function pricingJourney(browser, viewport) {
     record(`pricing: keyboard reaches and follows Creator's action — ${label}`, true, { tabPresses: presses, landed: new URL(page.url()).pathname });
     await page.goto(base + '/pricing', { timeout: 180000 });
     await free.waitFor();
-    // The FAQ reveals on scroll: bring it into view as a reader would. Shown means its reveal finished (every ancestor
-    // fully opaque), not only laid out: Playwright counts an element at opacity 0 as visible.
+    // The FAQ reveals on scroll: bring it into view as a reader would. Shown means its reveal finished, not only laid
+    // out (Playwright counts an element at opacity 0 as visible): every ancestor fully opaque, with no blur and no
+    // vertical offset left on it. These browsers ask for reduced motion, as some readers' devices do.
     const faq = page.locator('#faq');
     await faq.scrollIntoViewIfNeeded();
     const question = faq.getByRole('button').first();
     await question.waitFor({ state: 'visible', timeout: 15000 });
-    const opaque = () => question.evaluate((node) => {
-      for (let element = node; element; element = element.parentElement) if (Number(getComputedStyle(element).opacity) < 0.99) return false;
-      return true;
+    const residue = () => question.evaluate((node) => {
+      for (let element = node; element; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        const matrix = /^matrix\(([^)]+)\)$/.exec(style.transform);
+        const offset = matrix ? Math.abs(Number(matrix[1].split(',')[5])) : 0;
+        if (Number(style.opacity) < 0.99 || /blur\((?!0px\))/.test(style.filter) || offset >= 1) {
+          return `${element.tagName.toLowerCase()}: opacity ${style.opacity}, filter ${style.filter}, transform ${style.transform}`;
+        }
+      }
+      return null;
     });
-    const shown = await until(opaque, 'the FAQ finishes revealing', 6000).then(() => true, () => false);
-    record(`pricing: the FAQ shows when scrolled to — ${label}`, shown && (await faq.getByRole('button').count()) > 0, { questions: await faq.getByRole('button').count(), opaque: shown });
+    let left = null;
+    const shown = await until(async () => !(left = await residue()), 'the FAQ finishes revealing', 6000).then(() => true, () => false);
+    const questions = await faq.getByRole('button').count();
+    record(`pricing: the FAQ shows when scrolled to (opaque, unblurred, in place) — ${label}`, shown && questions > 0, { questions, ...(left ? { left } : {}) });
     await revealAll(page);
     await shot(page, `pricing-v2-${viewport.name}`, true);
     await axeCheck(page, `pricing ${label}`);
