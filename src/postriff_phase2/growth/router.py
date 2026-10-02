@@ -164,6 +164,10 @@ class AIModelRouter:
             self.usage.record(event)
         return event
 
+    def _invoke(self, task, model, route, fn, args, kwargs, ids):
+        funding = getattr(self, 'funding_call', None)
+        return funding(task, model, route, fn, args, kwargs, ids) if funding else fn(*args, **kwargs)
+
     def evaluator(self, task):
         """A callable for JudgmentService(evaluate=...)."""
         def evaluate(question_set, state, *, workspace_id=None, subject=None):
@@ -196,15 +200,15 @@ class AIModelRouter:
                     break
                 started = self.clock()
                 try:
-                    raw = self.jev.evaluate(state, questions, timeout_s=remaining)
+                    raw = self._invoke(task, primary, 'primary', self.jev.evaluate, (state, questions), {'timeout_s':remaining}, ids)
                 except (J.JevAuthError, J.JevBudgetExceeded, J.JevBadRequest) as error:
                     self._record(ledger, task=task, model=primary, route="primary", status=error.code,
-                                 latency_ms=self._ms(started), **ids)
+                                 latency_ms=self._ms(started), **_failed_usage(error), **ids)
                     raise RouterError(str(error), error.code, ledger) from error
                 except J.JevError as error:
                     last_error = error
                     self._record(ledger, task=task, model=primary, route="primary", status=error.code,
-                                 latency_ms=self._ms(started), **ids)
+                                 latency_ms=self._ms(started), **_failed_usage(error), **ids)
                     if getattr(self, "reconcile_unknown", False) and not isinstance(error, J.JevRateLimited):
                         raise RouterError("The dispatched evaluation must be reconciled before retry", "dispatch_unknown", ledger) from error
                     if attempt == 0 and isinstance(error, RETRYABLE):
@@ -250,7 +254,7 @@ class AIModelRouter:
             ids = {'workspace_id': workspace_id, 'subject': subject, 'task': task, 'model': model,
                    'route': 'primary' if index == 0 else 'fallback'}
             try:
-                content, usage = self.chat(messages, model, max_tokens, remaining)
+                content, usage = self._invoke(task, model, ids['route'], self.chat, (messages, model, max_tokens, remaining), {}, ids)
             except AlphaError as error:
                 code = getattr(error, 'code', None) or REJECTED_CODES.get(error.status) or {429:'rate_limited',504:'timeout'}.get(error.status, 'upstream')
                 failed = _failed_usage(error)
@@ -288,7 +292,7 @@ class AIModelRouter:
                     {"role": "user", "content": json.dumps({"state": state, "questions": questions}, ensure_ascii=False)}]
         started = self.clock()
         try:
-            content, usage = self.chat(messages, model, max_tokens, remaining)
+            content, usage = self._invoke(task, model, 'fallback', self.chat, (messages, model, max_tokens, remaining), {}, ids)
         except AlphaError as error:
             code = getattr(error, "code", None)
             failed = _failed_usage(error)

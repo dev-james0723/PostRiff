@@ -813,6 +813,9 @@ export interface SchedulePlan {
 
 /** Server estimate for the exact request a credit quote would bind (FINAL-05). */
 export interface CreditEstimate {
+  /** Growth rewrites quote the entire pipeline maximum, not the writer's usual cost. */
+  operation?: CreditOperation;
+  estimateKind?: 'maximum';
   estimateMilliCredits: number;
   ceilingMilliCredits: number;
   availableMilliCredits: number;
@@ -823,13 +826,31 @@ export interface CreditEstimate {
   reasoning?: string;
   /** The workspace revision the estimate was computed on; re-estimate when it changes. */
   stateRevision?: number;
-  /** `media-notes` only. `cached: true` means nothing to pay and no quote needed. */
+  /** Media notes or a completed Growth rewrite: `cached` needs no new quote. */
   kind?: 'photo' | 'video_frames';
   frames?: number;
   cached?: boolean;
 }
 
-export type CreditOperation = 'turn' | 'quick-start' | 'media-notes';
+export type CreditOperation = 'turn' | 'quick-start' | 'media-notes' | 'post-doctor-rewrite';
+
+export interface PostDoctorRewriteRequest {
+  checkId: string;
+  model?: string;
+  facts: Record<string, string>;
+  confirmed: boolean;
+  requestKey: string;
+  creditQuoteId?: string;
+  expectedRevision?: number;
+}
+
+/** Reuse this exact request for estimate, explicit MAX approval and Growth execution. */
+export interface PostDoctorRewriteCreditBody {
+  operation: 'post-doctor-rewrite';
+  request: PostDoctorRewriteRequest;
+  expectedRevision?: number;
+  maxMilliCredits?: number;
+}
 
 /** A read quote binds one asset (SPEC §5.5). */
 export interface MediaNotesCreditBody {

@@ -221,11 +221,16 @@ NOTES_KEYS=frozenset({'assetId'})
 
 
 def request_digest(operation, payload, conversation_id=None):
-    if operation not in ('quick-start','turn','media-notes') or not isinstance(payload,dict):
+    if operation not in ('quick-start','turn','media-notes','post-doctor-rewrite') or not isinstance(payload,dict):
         raise ValueError('Unknown credit operation.')
     if any(not isinstance(key,str) or key.startswith('_') for key in payload):
         raise ValueError('Private execution fields are not accepted.')
     binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','expectedRevision','idempotencyKey')}
+    if operation=='post-doctor-rewrite':
+        from .growth.credit_policy import request
+        if conversation_id is not None: raise ValueError('A rewrite cannot name a conversation.')
+        try: binding=request(payload)
+        except AlphaError as error: raise ValueError('Invalid rewrite credit request.') from error
     if operation=='media-notes':
         # A photo or video read is bound to its asset only (chat-context SPEC §5.5); nothing else can ride on the quote.
         if set(binding)!=NOTES_KEYS or not isinstance(binding['assetId'],str) or conversation_id is not None:

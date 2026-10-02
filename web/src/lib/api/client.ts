@@ -43,6 +43,8 @@ import type {
   ProviderView,
   Run,
   CreditEstimate,
+  PostDoctorRewriteRequest,
+  PostDoctorRewriteCreditBody,
   MediaNotesBody,
   MediaNotesCreditBody,
   MediaNotesResult,
@@ -147,7 +149,7 @@ export function createApi(getToken: TokenSource) {
     radarAdvance: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/advance`, {}, 90_000),
     growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
     postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
-    postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
+    postDoctorRewrite: (w: string, body: PostDoctorRewriteRequest) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
     creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
     analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
     performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
@@ -302,9 +304,9 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/ideas/runs/${encodeURIComponent(runId)}/apply`,
         { expectedRevision, artifactHash }
       ),
-    creditEstimate: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
+    creditEstimate: (w: string, body: Record<string, unknown> | MediaNotesCreditBody | PostDoctorRewriteCreditBody) =>
       send<CreditEstimate>('POST', `${ws(w)}/ideas/credit-estimates`, body),
-    creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
+    creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody | PostDoctorRewriteCreditBody) =>
       send<{ quoteId: string; maxMilliCredits: number; expiresAt: number; kind: "spending_limit" }>("POST", `${ws(w)}/ideas/credit-quotes`, body),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
       send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {

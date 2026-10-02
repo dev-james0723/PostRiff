@@ -16,6 +16,12 @@ class CreditRequests:
         if book is None: raise AlphaError('Credit billing is not enabled.',503)
         return book
 
+    def _growth_rewrite(self, workspace_id, token, body, *, issue=False):
+        growth=getattr(self,'growth',None)
+        if growth is None:
+            raise AlphaError('This Growth route needs a qualified credit bridge before AI use.',503,code='growth_credit_bridge_unavailable')
+        return growth.rewrite_credit_request(workspace_id,token,body,issue=issue)
+
     def _validate(self, payload):
         if not isinstance(payload,dict): raise AlphaError('Supply a draft request.',400)
         if payload.get('research') is not False:
@@ -87,6 +93,7 @@ class CreditRequests:
     def estimate(self, workspace_id, token, body):
         """A labelled usual cost and the ceiling that will be held, from the request the writer would receive."""
         if is_api_token(token): raise AlphaError('Sign in to review a credit estimate.',403)
+        if isinstance(body,dict) and body.get('operation')=='post-doctor-rewrite': return self._growth_rewrite(workspace_id,token,body)
         if isinstance(body,dict) and body.get('operation')=='media-notes': return self._notes_estimate(workspace_id,token,body)
         book=self._book(); payload=body.get('request'); runtime,model=self._validate(payload)
         operation=body.get('operation','quick-start')
@@ -125,6 +132,7 @@ class CreditRequests:
 
     def issue(self, workspace_id, token, body):
         if is_api_token(token): raise AlphaError('Sign in to approve a credit limit.',403)
+        if isinstance(body,dict) and body.get('operation')=='post-doctor-rewrite': return self._growth_rewrite(workspace_id,token,body,issue=True)
         if isinstance(body,dict) and body.get('operation')=='media-notes': return self._notes_issue(workspace_id,token,body)
         book=self._book(); payload=body.get('request');runtime,model=self._validate(payload)
         operation=body.get('operation','quick-start');conversation=body.get('conversationId')
