@@ -44,6 +44,53 @@ def ensure(hosted):
     return hosted.source_uploads
 
 
+_LIVE_OBJECTS = ("awaiting", "present", "deleting")
+
+
+def has_stored_objects(cur, workspace_id) -> bool:
+    """Whether the workspace has a source-upload object that may exist in storage (or a deletion still queued)."""
+    if not store.installed(cur):
+        return False
+    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_source_uploads WHERE workspace_id=%s AND object_name IS NOT NULL AND object_state = ANY(%s)) "
+                "OR EXISTS(SELECT 1 FROM public.pr_source_upload_purges WHERE workspace_id=%s)", (workspace_id, list(_LIVE_OBJECTS), workspace_id))
+    return bool(cur.fetchone()[0])
+
+
+def purge_workspace(hosted, workspace_id) -> int:
+    """Account deletion: delete every source-upload object of the workspace now, before storage is reported deleted
+    (the rows cascade with the workspace afterwards). Not-found is success; any failure raises, so the deletion stays
+    pending and its retry deletes the same objects. An object that a still-valid signed upload URL could write again
+    also gets one more deletion queued for an hour after that URL expires; the queue outlives the workspace and the
+    cron drains it. Returns how many objects were deleted now."""
+    svc = ensure(hosted)
+    with hosted.connection_factory() as db, db.cursor() as cur:
+        if not has_stored_objects(cur, workspace_id):
+            return 0
+        cur.execute("SELECT id::text, bucket, object_name, object_state, coalesce(token_expires_at > now(), false) FROM public.pr_source_uploads "
+                    "WHERE workspace_id=%s AND object_name IS NOT NULL", (workspace_id,))
+        rows = cur.fetchall()
+        cur.execute("SELECT bucket, object_name FROM public.pr_source_upload_purges WHERE workspace_id=%s AND not_before <= now()", (workspace_id,))
+        queued = cur.fetchall()
+    storage = svc.storage
+    if storage is None:
+        raise AlphaError("Private storage deletion is unavailable.", 503)
+    targets = {(bucket, name) for _id, bucket, name, state, _live in rows if state in _LIVE_OBJECTS} | set(queued)
+    managed = getattr(storage, "source_bucket", None)
+    for bucket, name in sorted(targets):
+        if managed and bucket != managed:
+            raise AlphaError("A source upload is in a bucket this deployment doesn't manage.", 409)
+        storage.delete(workspace_id, "source", name)
+    with hosted.connection_factory() as db, db.cursor() as cur:
+        for upload_id, bucket, name, _state, live in rows:
+            if live:
+                store.queue_after_token(cur, {"workspaceId": workspace_id, "id": upload_id, "bucket": bucket, "objectName": name}, "account_deleted")
+        cur.execute("UPDATE public.pr_source_uploads SET object_state='deleted', updated_at=now() WHERE workspace_id=%s AND object_state = ANY(%s)",
+                    (workspace_id, list(_LIVE_OBJECTS)))
+        cur.execute("DELETE FROM public.pr_source_upload_purges WHERE workspace_id=%s AND not_before <= now()", (workspace_id,))
+        db.commit()
+    return len(targets)
+
+
 def _member(row):
     from ..permissions import Membership
     return Membership.from_row(*row[2:7])
@@ -329,6 +376,10 @@ class SourceUploads:
                 if existing["beginDigest"] != request:
                     raise AlphaError("This idempotency key was used for a different upload.", 409, code="idempotency_conflict")
                 upload_id = existing["id"]
+                # A replay signs a fresh URL, which storage keeps valid for TOKEN_SECONDS from now: record that lifetime
+                # first, so every later purge (and the expiry sweep) covers it. Honoured only in the first window.
+                if existing["state"] == "pending" and store.renew_token(cur, workspace_id, upload_id, limits.TOKEN_SECONDS) is None:
+                    raise AlphaError("This upload link has expired. Start the upload again.", 409, code="upload_expired")
             else:
                 mine, pending, active, recent = store.counts(cur, workspace_id, principal)
                 if mine >= self.policy.pending_per_member or pending >= self.policy.pending_per_workspace or active >= self.policy.active_per_workspace:
@@ -360,7 +411,7 @@ class SourceUploads:
         with self._tx(workspace_id, token, "edit") as (cur, _row, principal):
             current = store.upload(cur, workspace_id, upload["id"], lock=True)
             if current and current["state"] == "pending":
-                store.queue_purge(cur, current, "rejected", after_token=True)
+                store.queue_purge(cur, current, "rejected")
                 store.update_upload(cur, workspace_id, upload["id"], state="rejected", reasonCode=reason, displayName=None)
                 self._audit(cur, workspace_id, principal, "source_upload.rejected", upload["id"], {"reason": reason})
         from . import jobs
@@ -810,7 +861,7 @@ class SourceUploads:
             store.delete_derived(cur, workspace_id, job["id"])
             if job["resultId"]:
                 store.update_job(cur, workspace_id, job["id"], resultId=None, currentRevision=0, reviewedRevision=None)
-        store.queue_purge(cur, upload, reason, after_token=upload["state"] == "pending")
+        store.queue_purge(cur, upload, reason)
         if delete:
             store.update_upload(cur, workspace_id, upload["id"], state="deleted", reasonCode=reason, displayName=None, sha256=None, deletedAt=NOW)
         elif upload["state"] in ("pending", "committed"):

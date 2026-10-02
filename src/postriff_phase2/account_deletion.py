@@ -87,6 +87,10 @@ def _delete(service, workspace_id, principal):
         cur.execute("SELECT 1 FROM public.pr_media_uploads WHERE workspace_id=%s LIMIT 1", (workspace_id,))
         if cur.fetchone() and (uploads is None or uploads.storage is None):
             raise AlphaError('Private storage deletion is unavailable. No data was deleted.', 503)
+        # Raw source uploads (PDFs, recordings, their queued deletions) are deleted below, before storage is reported deleted.
+        from .source_uploads import service as source_uploads
+        if source_uploads.has_stored_objects(cur, workspace_id) and source_uploads.ensure(service).storage is None:
+            raise AlphaError('Private storage deletion is unavailable. No data was deleted.', 503)
         pending = state.get('accountDeletion')
         if not pending:
             receipt_id = service.data_requests.record(cur, workspace_id, principal, 'deletion', 'requested', {'stage':'storage_pending'})
@@ -122,6 +126,13 @@ def _delete(service, workspace_id, principal):
     try:
         from .visual_pack.service import purge_workspace as purge_visual_packs
         purge_visual_packs(service, workspace_id)
+    except Exception as error:
+        raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
+    # Raw source uploads: every stored file is deleted now, failing closed, so `storageDeleted` below is true when it is
+    # written (the cascade's own purge queue only drains on the next cron run). A file that a still-valid signed upload
+    # URL could write again gets one more deletion queued after that URL expires; that queue outlives the workspace.
+    try:
+        source_uploads.purge_workspace(service, workspace_id)
     except Exception as error:
         raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
     # Disconnect grants where supported. Never retain plaintext tokens in receipts or logs.

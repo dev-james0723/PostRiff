@@ -200,3 +200,67 @@ with connection() as db:
 denied(lambda: service.delete_account(space, person, 'DELETE'), 503)
 assert service.get(space, person)['state'].get('accountDeletion') is None
 print('PASS video objects, posters, frames, pending/aborted uploads, a deletionPending asset and the prefix are deleted before the workspace; no storage, no deletion')
+
+# Raw source uploads (G1-INTAKE): their stored files are deleted before the receipt says storage was deleted, not by
+# the cron that drains the cascade's purge queue later. A committed PDF, a pending upload whose signed URL is still
+# valid, and a deletion already queued from an earlier cancellation all go now; the pending one also gets one more
+# deletion an hour after its URL expires (that queue row outlives the workspace). A storage failure keeps the
+# deletion pending and retryable; no storage at all refuses before anything is deleted.
+from postriff_phase2.source_uploads.service import SourceUploads  # noqa: E402
+
+
+class SourceStorage:
+    source_bucket = 'rafii-source-uploads'
+
+    def __init__(self, names):
+        self.objects, self.deleted, self.fail = set(names), [], False
+
+    def delete(self, workspace_id, category, name):
+        assert category == 'source'
+        if self.fail:
+            raise AlphaError('Private storage could not delete this object.', 502)
+        self.deleted.append(name)
+        self.objects.discard(name)
+
+
+def source_rows(space, person):
+    committed, pending, cancelled = (uuid.uuid4().hex for _ in range(3))
+    with connection() as db:
+        for ident, state, object_state, token in ((committed, 'committed', 'present', "now()-interval '3 hours'"),
+                                                 (pending, 'pending', 'awaiting', "now()+interval '90 minutes'"),
+                                                 (cancelled, 'cancelled', 'deleting', "now()-interval '3 hours'")):
+            db.execute("INSERT INTO pr_source_uploads(id,workspace_id,kind,state,object_state,bucket,object_name,created_by,token_expires_at) "
+                       f"VALUES(%s,%s,'pdf',%s,%s,'rafii-source-uploads',%s,%s,{token})", (str(uuid.UUID(ident)), space, state, object_state, f'{ident}.pdf', person))
+        db.execute("INSERT INTO pr_source_upload_purges(workspace_id,upload_id,bucket,object_name,reason) VALUES(%s,%s,'rafii-source-uploads',%s,'user_cancelled')",
+                   (space, str(uuid.UUID(cancelled)), f'{cancelled}.pdf'))
+    return committed, pending, cancelled
+
+
+service.assets = Assets()
+person, space = new_account()
+names = source_rows(space, person)
+source_storage = SourceStorage(f'{n}.pdf' for n in names)
+service.source_uploads = SourceUploads(service, values={'RAFII_SOURCE_UPLOADS_ENABLED': '1'}, storage=source_storage)
+source_storage.fail = True
+denied(lambda: service.delete_account(space, person, 'DELETE'), 503)
+assert service.get(space, person)['state']['accountDeletion']['status'] == 'pending'       # frozen and retryable; nothing reported deleted
+with connection() as db:
+    assert db.execute('SELECT count(*) FROM pr_source_uploads WHERE workspace_id=%s', (space,)).fetchone()[0] == 3
+source_storage.fail = False
+result = service.delete_account(space, person, 'DELETE')
+assert result['deleted'] and source_storage.objects == set(), sorted(source_storage.objects)
+assert sorted(source_storage.deleted) == sorted(f'{n}.pdf' for n in names), source_storage.deleted
+with connection() as db:
+    receipt = db.execute('SELECT receipt FROM pr_data_requests WHERE id=%s', (result['receiptId'],)).fetchone()[0]
+    queued = db.execute("SELECT object_name, reason, not_before > now() + interval '2 hours' FROM pr_source_upload_purges WHERE workspace_id=%s", (space,)).fetchall()
+    assert db.execute('SELECT count(*) FROM pr_source_uploads WHERE workspace_id=%s', (space,)).fetchone()[0] == 0
+assert receipt['storageDeleted'] is True, receipt
+assert queued == [(f'{names[1]}.pdf', 'account_deleted', True)], queued                   # only the still-writable URL's re-check
+
+person, space = new_account()
+source_rows(space, person)
+service.source_uploads = SourceUploads(service, values={'RAFII_SOURCE_UPLOADS_ENABLED': '1'}, storage=None)
+service.assets = type('NoStorage', (), {'storage': None, 'remove': lambda self, workspace_id, asset: None})()
+denied(lambda: service.delete_account(space, person, 'DELETE'), 503)
+assert service.get(space, person)['state'].get('accountDeletion') is None
+print('PASS source-upload files (committed, pending, queued) are deleted before storage is reported deleted; a still-valid URL gets a later re-check; failures stay pending; no storage, no deletion')
