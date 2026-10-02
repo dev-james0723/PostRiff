@@ -587,12 +587,23 @@ class HostedWorkspaceService:
             customer_id = existing[0] if existing else None
             # The ended provider subscription identifies one reenrollment generation, across retries/hours.
             generation = {"endedSubscription": existing[2]} if existing and existing[2] else {"acquisitionHour": int(self.clock() // 3600)}
-            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id)
+            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id,
+                  {"priceVariantId": variant_id, "catalog": "pricing-v2" if self.billing.pricing_v2_enabled else "legacy"})
         customer_email = None if customer_id else self._email_for(principal)
         if not customer_id and not customer_email:
             raise AlphaError("Your account email could not be resolved for checkout.", 502)
         key = digest({"checkout": workspace_id, "plan": plan_terms_id, **({"variant": variant_id} if variant_id else {}), "generation": generation})
-        return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=price_id, **({"price_variant_id": variant_id} if variant_id else {}), success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+        session = provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=price_id, **({"price_variant_id": variant_id} if variant_id else {}), success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+        # The provider adapter has validated this response. Observation cannot retry
+        # the provider or discard the returned session if its transaction rolls back.
+        from . import pricing_events
+        try:
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                pricing_events.emit(cur, workspace_id, 'checkout.started', 'checkout_session', session['sessionId'],
+                                    pricing_events.price_facts(plan_terms_id, variant_id))
+        except Exception:
+            print('analytics.checkout_observation_failed')
+        return session
 
     def billing_credit_packs(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):

@@ -83,6 +83,8 @@ class CreditBook:
     def view(self, cur, workspace_id):
         rows, now = self.rows(cur, workspace_id), self.clock()
         wallet = project_credit_wallet(rows, now)
+        from . import pricing_events
+        pricing_events.observe_expiry(cur, workspace_id, rows, now)
         # These are gross, actually granted period credits, not the advertised plan
         # allowance or lifetime usage. Refunds/debt remain in the wallet projection.
         wallet.update(currentPeriodGrantMilliCredits=None, currentPeriodExpiresAt=None)
@@ -121,7 +123,16 @@ class CreditBook:
             if prior[1].get('creditFingerprint')!=fingerprint: raise AlphaError('Credit event conflicts with its earlier version.',409)
             return {'entryId':prior[0],'duplicate':True}
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,kind,dimension,unit,cost_state,idempotency_key,meta) VALUES(%s,%s,'adjust','action','credit','actual',%s,%s::jsonb) RETURNING id::text",(workspace_id,actor,key,json.dumps({'credits':credit,'creditFingerprint':fingerprint})))
-        return {'entryId':cur.fetchone()[0],'duplicate':False}
+        entry_id = cur.fetchone()[0]
+        if credit.get('op') == 'grant':
+            from . import pricing_events
+            source = credit.get('source')
+            pricing_events.emit(cur, workspace_id, 'credits.granted', 'usage_ledger', entry_id,
+                                {'grantedMilliCredits': credit['milli'], 'policy': credit.get('policy'),
+                                 'grantSource': 'subscription' if source == 'verified-stripe-invoice' else
+                                                'purchased' if source == 'verified-stripe-checkout' else 'other',
+                                 'effectiveExpiresAt': credit.get('expiresAt')})
+        return {'entryId':entry_id,'duplicate':False}
 
     def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test', *, policy_version=None):
         """Append funding under the workspace lock. Verified server funding consumers
@@ -201,6 +212,9 @@ class CreditBook:
     def claim(self, cur, workspace_id, reservation_id, credit):
         cur.execute('UPDATE public.pr_credit_quotes SET reservation_id=%s WHERE workspace_id=%s AND id::text=%s AND reservation_id IS NULL RETURNING id',(reservation_id,workspace_id,credit['quoteId']))
         if not cur.fetchone(): raise AlphaError('This credit approval was already claimed.',409)
+        from . import pricing_events
+        pricing_events.emit(cur, workspace_id, 'credits.held', 'usage_ledger', reservation_id,
+                            {'heldMilliCredits': credit['maximum'], 'policy': credit['policy']})
 
     def settlement(self, cur, workspace_id, reservation_id, outcome, actual):
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'",(workspace_id,reservation_id))

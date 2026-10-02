@@ -8,6 +8,7 @@ status is 'proposed' until an explicit commercial decision.
 import hashlib
 import hmac
 import json
+from . import pricing_events
 import math
 import os
 import time
@@ -272,6 +273,10 @@ class Ledger:
         cur.execute("SELECT meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'", (workspace_id, reservation_id))
         original = cur.fetchone()
         uses_credits = bool(original and original[0].get("credits"))
+        meta = (original[0] or {}) if original else {}
+        # Platform usage without verified cost retains its reservation too.
+        if actual_usd_micro is None and (meta.get("platformPreview") or meta.get("aiUsageExempt")):
+            outcome = "unknown"
         if uses_credits:
             cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
             if actual_usd_micro is None:
@@ -309,11 +314,17 @@ class Ledger:
             return {"reservationId": reservation_id, "duplicate": True}
         if outcome == "unknown":
             cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key) VALUES(%s,%s,%s,%s,%s,'settle',%s,%s,%s,%s,NULL,'estimated_unknown',%s,%s)", (workspace_id, member_id, run_id, job_id, reservation_id, dimension, provider, model, estimate, charge_batch, key))
+            pricing_events.settled(cur, workspace_id, reservation_id, 'unknown', None, meta.get('credits'), None, meta)
             return {"reservationId": reservation_id, "state": "estimated_unknown", "note": "Reservation retained until provider usage is reconciled; cost is not recorded as zero."}
         actual = int(actual_usd_micro or 0)
         credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
+        if credit and credit.get("absorbed"):
+            # Retain the surviving Task10–11 operator audit alongside private metrics.
+            cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,NULL,'usage.absorbed_over_max',%s,%s::jsonb)",
+                        (workspace_id, str(reservation_id)[:200], json.dumps({"absorbedMilliCredits": credit["absorbed"], "usedMilliCredits": credit["used"]})))
         kind = "settle" if outcome == "completed" else "release"
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
+        pricing_events.settled(cur, workspace_id, reservation_id, outcome, actual, meta.get('credits'), credit, meta)
         # Exactly the budgets this reservation held, already locked/checked above.
         for scope in scopes:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=greatest(reserved_usd_micro-%s,0),spent_usd_micro=spent_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimate, actual, scope))
@@ -546,6 +557,8 @@ class Billing:
         # A verified paid plan invoice grants its period's credits even when its status update is stale.
         if event.get("stripeType") == "invoice.paid" and event.get("workspaceId") and outcome in ("applied", "stale"):
             self._grant_period_credits(cur, event)
+        if outcome in ("applied", "stale"):
+            pricing_events.signed_billing(cur, event, self.provider.id)
         cur.execute("INSERT INTO public.pr_billing_events(provider,event_id,kind,event_at,payload_digest,outcome) VALUES(%s,%s,%s,to_timestamp(%s),%s,%s)", (self.provider.id, event["id"], kind, float(event["createdAt"]), payload_digest, outcome))
         if outcome == "applied" and self.on_applied is not None:
             try:

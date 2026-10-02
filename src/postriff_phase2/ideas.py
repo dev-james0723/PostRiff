@@ -2016,6 +2016,9 @@ class IdeasService:
                 from .growth.trends.service import validate_stored_bindings
                 validate_stored_bindings(self.repository.connection_factory, cur, workspace_id, actor, state,
                                          artifact["trendLineage"], self.clock())
+            if not tag:
+                from . import pricing_events
+                pricing_events.first_value(cur, workspace_id, run_id, len(created))
         saved = self.repository.command(workspace_id, token, revision, command, after=current_trend_evidence)
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("UPDATE public.pr_agent_runs SET status='applied',updated_at=now() WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))

@@ -9,6 +9,7 @@ from uuid import UUID
 from postriff_alpha.domain import AlphaError
 
 from .credit_meter import V2_POLICY_VERSION
+from . import pricing_events
 
 DEFAULT_VARIANT = 'creator-59-v1'
 EXPERIMENT = 'creator-beta-v1'
@@ -70,7 +71,9 @@ class PlanPricing:
         cur.execute('SELECT price_variant_id FROM public.pr_price_experiment_assignments WHERE workspace_id=%s AND experiment_key=%s', (workspace_id, EXPERIMENT))
         existing = cur.fetchone()
         if existing:
-            return self.variant(cur, existing[0])
+            variant = self.variant(cur, existing[0])
+            pricing_events.assigned(cur, workspace_id, variant, EXPERIMENT)
+            return variant
         if returning:
             # A returning (ended) legacy customer is offered Creator's standard price, never a new experiment bucket.
             return self.variant(cur, DEFAULT_VARIANT)
@@ -82,7 +85,10 @@ class PlanPricing:
                         (workspace_id, EXPERIMENT, selected, 'server-explicit-cohort-v1'))
             cur.execute('SELECT price_variant_id FROM public.pr_price_experiment_assignments WHERE workspace_id=%s AND experiment_key=%s', (workspace_id, EXPERIMENT))
             selected = cur.fetchone()[0]
-        return self.variant(cur, selected)
+        variant = self.variant(cur, selected)
+        if self.experiment_enabled and str(workspace_id) in self.cohort:
+            pricing_events.assigned(cur, workspace_id, variant, EXPERIMENT)
+        return variant
 
     def checkout(self, cur, workspace_id, terms_id):
         """The workspace's own Creator price, or a 409 whose code says why Creator can't be bought here now

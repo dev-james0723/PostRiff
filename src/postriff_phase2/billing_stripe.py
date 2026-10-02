@@ -13,6 +13,7 @@ Secrets never appear in responses, logs or errors; Stripe error bodies are reduc
 import hashlib
 import hmac
 import json
+from . import pricing_events
 import re
 import time
 from postriff_alpha.domain import AlphaError
@@ -208,6 +209,7 @@ class StripePaymentProvider:
             if obj.get("mode") != "subscription":
                 return event
             fields = _checkout_fields(obj)
+            event['checkoutSessionId'] = _ref(obj.get('id'))
         elif stripe_type.startswith("customer.subscription."):
             fields = _subscription_fields(obj)
             if internal is None:
@@ -219,6 +221,13 @@ class StripePaymentProvider:
         event.update({k: v for k, v in fields.items() if v is not None})
         event["type"] = internal
         event["stripeType"] = stripe_type
+        if stripe_type.startswith('customer.subscription.'):
+            details = obj.get('cancellation_details')
+            if isinstance(details, dict):
+                for category in (details.get('feedback'), details.get('reason')):
+                    if isinstance(category, str) and category in pricing_events.CANCELLATION_REASONS:
+                        event['cancellationReason'] = category
+                        break
         metadata = [obj.get("metadata")]
         if stripe_type.startswith("invoice."):
             event["invoicePriceLines"] = _invoice_price_lines(obj)

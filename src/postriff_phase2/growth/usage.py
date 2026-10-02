@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass
+from uuid import UUID
 
 STATUSES_OK = ("ok",)
 MAX_USD_MICRO = 2**63 - 1  # PostgreSQL signed bigint, shared by events/ledger/budgets.
@@ -78,4 +79,17 @@ class PostgresUsageSink:
         row["cost_usd_micro"] = event.cost_usd_micro()
         values = [row[c] for c in self.COLUMNS]
         placeholders = ",".join(["%s"] * len(self.COLUMNS))
-        self.cursor.execute(f"INSERT INTO public.pr_model_usage_events({','.join(self.COLUMNS)}) VALUES({placeholders})", values)
+        sql = f"INSERT INTO public.pr_model_usage_events({','.join(self.COLUMNS)}) VALUES({placeholders})"
+        try:
+            UUID(str(event.workspace_id))
+            scoped = True
+        except (ValueError, TypeError):
+            scoped = False
+        if scoped:
+            self.cursor.execute(sql + ' RETURNING id::text', values)
+            row = self.cursor.fetchone()
+            if row:
+                from .. import pricing_events
+                pricing_events.growth_usage(self.cursor, event, row[0])
+        else:
+            self.cursor.execute(sql, values)

@@ -191,6 +191,10 @@ class CoworkerService:
         def after(cur, state, principal):
             if emit is not None:
                 emit(cur, state, box["week"], principal)
+            if audit_kind == 'weekly.slot_accept':
+                from .. import pricing_events
+                pricing_events.emit(cur, workspace_id, 'weekly_pack.adopted', 'weekly_pack',
+                                    box['week']['id'], {}, self.clock())
 
         self._command(workspace_id, token, change, "edit", audit_kind, week_id, meta or {}, after=after)
         stored = self._find_week(self._state(workspace_id, token), week_id)
