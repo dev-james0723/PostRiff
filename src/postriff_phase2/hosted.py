@@ -496,9 +496,10 @@ class HostedWorkspaceService:
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
             view["creatorOffer"] = None
-            if self.billing.pricing_v2_enabled and view["billingMode"] == "free_preview" and _membership(row).allows("owner"):
+            if self.billing.pricing_v2_enabled and view["billingMode"] in ("free_preview", "legacy_allowances") and _membership(row).allows("owner"):
                 # The offer is the workspace's stable server assignment (49/59/79 share one entitlement); never a
-                # client value. Existing subscribers and unmapped prices simply get no offer.
+                # client value. assign() decides eligibility before writing anything: an open legacy subscription is
+                # refused (subscription_held, no offer), an ended one gets Creator's standard price, never a bucket.
                 try:
                     offer = self.billing.assign_creator_price(cur, workspace_id)
                     view["creatorOffer"] = {k: offer[k] for k in ("planTermsId", "priceVariantId", "amountCents", "currency")}

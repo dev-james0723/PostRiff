@@ -1,5 +1,5 @@
 import type { ChannelView, ProviderView, Snapshot, Usage } from '@/lib/api/types';
-import { allowanceReminder, billingModeOf } from '@/lib/billing/mode';
+import { allowanceReminder, V2_CATALOG_VERSION, billingModeOf } from '@/lib/billing/mode';
 import { billingCopy } from '@/lib/billing/mode-copy';
 import { attentionSentence, expiringSoon, isConnected, needsAttention, sortForAttention } from '@/lib/channels/state';
 import { daysUntil, formatNumber, relativeTime } from '@/lib/time';
@@ -161,7 +161,10 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'trial',
       tone: 'info',
       title: trialDays > 0 ? `Trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}` : 'Trial has ended',
-      description: 'Choose a plan to keep publishing.',
+      // Under Pricing v2 an ended trial continues on Free (drafts and publishing stay); only the legacy catalog stops.
+      description: usageData?.catalogVersion === V2_CATALOG_VERSION
+        ? 'When it ends, this workspace continues on Free and keeps your drafts. See what Creator adds.'
+        : 'Choose a plan to keep publishing.',
       href: '/app/account/billing',
       action: 'See plans'
     });

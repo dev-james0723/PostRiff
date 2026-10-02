@@ -97,6 +97,26 @@ class CatalogApiV2(unittest.TestCase):
         self.assertNotIn('studio-v1', offered)
         self.assertEqual(view['creatorOffer'], {'planTermsId': 'creator-v1', 'priceVariantId': 'creator-59-v1', 'amountCents': 5900, 'currency': 'USD'})
 
+    def legacy(self, status):
+        """This workspace as a Studio Assist (legacy) subscriber in the given subscription state."""
+        with connection() as db:
+            db.execute("UPDATE pr_entitlements SET plan_terms_id='assist-v1',source='subscription' WHERE workspace_id=%s", (self.free,))
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,provider,provider_subscription_id,status,current_period_end) "
+                       "VALUES(%s,'assist-v1','stripe','sub_legacy_1',%s,now()-interval '1 day') ON CONFLICT(workspace_id) DO UPDATE SET "
+                       "plan_terms_id='assist-v1',provider='stripe',provider_subscription_id='sub_legacy_1',status=excluded.status", (self.free, status))
+
+    def test_ended_legacy_owner_is_offered_creator_at_the_standard_price_and_open_one_is_not(self):
+        self.legacy('active')
+        held = self.service().usage(self.free, 'owner')
+        self.assertEqual(held['billingMode'], 'legacy_allowances')
+        self.assertIsNone(held['creatorOffer'])   # an open legacy subscription keeps its terms and the portal
+        self.legacy('cancelled')
+        ended = self.service().usage(self.free, 'owner')
+        self.assertEqual(ended['creatorOffer'], {'planTermsId': 'creator-v1', 'priceVariantId': 'creator-59-v1', 'amountCents': 5900, 'currency': 'USD'})
+        with connection() as db:   # the standard price, never an experiment bucket
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.free,)).fetchone()[0], 0)
+        self.assertIsNone(self.service().usage(self.free, 'viewer')['creatorOffer'])
+
     def test_ac05_non_owner_sees_no_offer_and_no_checkout(self):
         view = self.service().usage(self.free, 'viewer')
         self.assertIsNone(view['creatorOffer'])

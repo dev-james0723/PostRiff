@@ -141,5 +141,6 @@ def plans(app, start_response):
     from .plan_pricing import public_catalog
     service = app._runtime()
     with service.connection_factory() as db, db.cursor() as cur:
-        catalog = public_catalog(cur, service.billing.pricing_v2_enabled)
+        # Creator is purchasable only where its credits can be spent (the credit ledger is on), as checkout requires.
+        catalog = public_catalog(cur, service.billing.pricing_v2_enabled, credits_enabled=getattr(service.ledger, "credits", None) is not None)
     return app._json(start_response, 200, catalog)
