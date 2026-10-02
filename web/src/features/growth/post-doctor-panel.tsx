@@ -10,8 +10,41 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { SnapshotVariant } from '@/lib/api/types';
 import type { AdviceGoal, DraftCheckBody, PostCheck, PostRewrite } from '@/lib/growth/types';
-import { creditLimitLabel, useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
+import { creditLimitLabel, useGrowthCreditApproval, type GrowthCreditQuote } from '@/lib/growth-v2/growth-credits';
 import { CheckResult, GrowthConsent, useGrowthCatalog } from './shared';
+
+/**
+ * The credit confirmation every Growth AI action shares on a Creator plan: the most this exact request can use, then
+ * Confirm or Cancel. Nothing runs before Confirm. When it appears it takes focus and is announced in a live region, so
+ * a keyboard or screen-reader user knows the request is waiting for them.
+ */
+export function GrowthCreditConfirm({ quote, busy, onConfirm, onCancel }: { quote: GrowthCreditQuote | null; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const id = useId();
+  const group = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (quote) group.current?.focus();
+  }, [quote]);
+  return (
+    <>
+      <p role='status' aria-live='polite' className='sr-only'>
+        {quote ? `Waiting for you: ${creditLimitLabel(quote)}` : ''}
+      </p>
+      {quote && (
+        <div ref={group} tabIndex={-1} role='group' aria-labelledby={`${id}-limit`} className='rafii-focus flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-3 text-sm'>
+          <p id={`${id}-limit`}>{creditLimitLabel(quote)}</p>
+          <div className='flex flex-wrap gap-2'>
+            <Button variant='action' disabled={busy} onClick={onConfirm}>
+              Confirm and run
+            </Button>
+            <Button variant='ghost' disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function PostDoctorPanel({
   variant,
@@ -312,19 +345,7 @@ export function PostDoctorPanel({
           )}
         </>
       )}
-      {credits.pending && (
-        <div role='group' aria-label='Confirm the credit limit' className='flex flex-col gap-2 rounded-xl border border-(--rafii-border-subtle) p-3 text-sm'>
-          <p>{creditLimitLabel(credits.pending)}</p>
-          <div className='flex flex-wrap gap-2'>
-            <Button variant='action' disabled={Boolean(busy)} onClick={() => void confirmCredits()}>
-              Confirm and run
-            </Button>
-            <Button variant='ghost' disabled={Boolean(busy)} onClick={credits.cancel}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+      <GrowthCreditConfirm quote={credits.pending} busy={Boolean(busy)} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} />
       {error && (
         <p role='alert' className='text-destructive text-sm'>
           {error}

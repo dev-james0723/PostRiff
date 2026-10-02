@@ -9,7 +9,11 @@ import PageContainer from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { useUsage } from '@/lib/api/hooks';
+import { billingModeOf } from '@/lib/billing/mode';
 import type { GrowthOverview, Postmortem } from '@/lib/growth/types';
+import { growthUseConsent, useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
+import { GrowthCreditConfirm } from './post-doctor-panel';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 import { EmptyGrowth, GrowthHero, useGrowthAction } from './studio-parts';
 import { AudienceMiner } from './audience-miner';
@@ -57,15 +61,30 @@ function Results({ data, onRefresh }: { data: GrowthOverview; onRefresh: () => v
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const request = useRef<string | null>(null);
+  const usage = useUsage();
+  // Creator under Pricing v2: the review is priced and confirmed before it runs (credit bridge), like Post Doctor.
+  const credits = useGrowthCreditApproval<Postmortem>(workspaceId);
+  const cancelCredits = credits.cancel;
   const selected = data.posts.find((p) => p.jobId === selectedId) ?? data.posts[0];
   const saved = data.reports.find((r) => r.jobId === selected?.jobId && r.horizon === horizon);
   const shown = saved ?? (report?.jobId === selected?.jobId && report.horizon === horizon ? report : null);
   const staleBasis = saved?.status === 'stale' ? saved.basisDigest : null;
-  useEffect(() => { request.current = null; setConfirmed(false); setReport(null); setError(''); }, [selected?.jobId, horizon, staleBasis]);
+  useEffect(() => { request.current = null; setConfirmed(false); setReport(null); setError(''); cancelCredits(); }, [selected?.jobId, horizon, staleBasis, cancelCredits]);
+  const consentText = growthUseConsent('Use the allowed AI models to review these readings', billingModeOf(usage.data));
+  function reviewed(result: Postmortem | null) {
+    if (!result) return; // waiting for the credit limit to be confirmed
+    setReport(result); onRefresh();
+  }
   async function review() {
     if (!selected) return;
     setBusy(true); setError(''); request.current ??= crypto.randomUUID();
-    try { setReport(await api.postmortem(workspaceId, { jobId: selected.jobId, horizon, confirmed, requestKey: request.current })); onRefresh(); }
+    try { reviewed(await credits.run('postmortem', { jobId: selected.jobId, horizon, confirmed, requestKey: request.current }, (b) => api.postmortem(workspaceId, b as unknown as Parameters<typeof api.postmortem>[1]))); }
+    catch (err) { setError(err instanceof Error ? err.message : 'This review could not be completed.'); }
+    finally { setBusy(false); }
+  }
+  async function confirmCredits() {
+    setBusy(true); setError('');
+    try { reviewed(await credits.confirm()); }
     catch (err) { setError(err instanceof Error ? err.message : 'This review could not be completed.'); }
     finally { setBusy(false); }
   }
@@ -85,8 +104,9 @@ function Results({ data, onRefresh }: { data: GrowthOverview; onRefresh: () => v
           <IconClock size={28} aria-hidden /><h4>{shown?.status === 'stale' ? 'There’s new evidence to review.' : selected.windows.find((w) => w.horizon === horizon)?.available ? 'The reading is in. Find the useful part.' : 'Give this post a little time.'}</h4>
           <p>{selected.windows.find((w) => w.horizon === horizon)?.available ? 'Compare the exact published draft with this reading window. AI suggests a next step; you decide what becomes a lesson.' : 'No verified reading for this window yet. Missing data stays missing.'}</p>
           {selected.windows.find((w) => w.horizon === horizon)?.available && checkAccess(access, { permission: 'edit' }) && <>
-            <label className='growth-check'><input type='checkbox' aria-label='Use the allowed AI models to review these readings within my daily allowance.' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Use the allowed AI models to review these readings within my daily allowance.</label>
-            <Button className='growth-primary' disabled={busy || !confirmed || !catalog.data?.allowedRoutes.includes(catalog.data.summaryRoute)} onClick={() => void review()}>{busy ? 'Reviewing this window…' : 'Review this result'}<IconArrowUpRight size={17} aria-hidden /></Button>
+            <label className='growth-check'><input type='checkbox' aria-label={consentText} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />{consentText}</label>
+            <Button className='growth-primary' disabled={busy || credits.quoting || !confirmed || !catalog.data?.allowedRoutes.includes(catalog.data.summaryRoute)} onClick={() => void review()}>{busy ? 'Reviewing this window…' : 'Review this result'}<IconArrowUpRight size={17} aria-hidden /></Button>
+            <GrowthCreditConfirm quote={credits.pending} busy={busy} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} />
             {!catalog.data?.allowedRoutes.includes(catalog.data.summaryRoute) && <p>Allow the explanation model in AI permissions above first.</p>}
           </>}
         </div>}

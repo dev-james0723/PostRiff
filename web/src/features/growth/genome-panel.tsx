@@ -9,6 +9,8 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { CreatorGenome, GenomeResponse } from '@/lib/growth/types';
+import { useGrowthCreditApproval } from '@/lib/growth-v2/growth-credits';
+import { GrowthCreditConfirm } from './post-doctor-panel';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 
 export function GenomePanel() {
@@ -33,6 +35,8 @@ export function GenomePanel() {
   const [selected, setSelected] = useState<string[]>([]);
   const [sharePath, setSharePath] = useState('');
   const key = useRef<string | null>(null);
+  // Creator under Pricing v2: the analysis is priced and confirmed before it runs (credit bridge), like Post Doctor.
+  const credits = useGrowthCreditApproval<{ genome: CreatorGenome }>(workspaceId);
   if (!catalog.data?.genome) return null;
   const owner = access.role === 'owner';
   const samples =
@@ -43,6 +47,14 @@ export function GenomePanel() {
   function changed() {
     key.current = null;
     setConfirmed(false);
+    credits.cancel(); // a limit confirmed for other input never runs this one
+  }
+
+  async function analyzed(result: { genome: CreatorGenome } | null) {
+    if (!result) return; // waiting for the credit limit to be confirmed
+    setVersionId(result.genome.id);
+    await query.refetch();
+    await snapshot.refetch();
   }
 
   async function analyze() {
@@ -50,16 +62,26 @@ export function GenomePanel() {
     setError('');
     key.current ??= crypto.randomUUID();
     try {
-      const result = await api.analyzeHistory(workspaceId, {
+      const body = {
         ...(data ? { data, account } : { sourceIds }),
         ownContent: confirmed,
         retainText: confirmed,
         confirmed,
         requestKey: key.current
-      });
-      setVersionId(result.genome.id);
-      await query.refetch();
-      await snapshot.refetch();
+      };
+      await analyzed(await credits.run('genome', body, (b) => api.analyzeHistory(workspaceId, b as unknown as Parameters<typeof api.analyzeHistory>[1])));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'History could not be analyzed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmCredits() {
+    setBusy(true);
+    setError('');
+    try {
+      await analyzed(await credits.confirm());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
     } finally {
@@ -188,6 +210,7 @@ export function GenomePanel() {
           >
             {busy ? 'Analyzing your history…' : 'Propose my Genome'}
           </Button>
+          <GrowthCreditConfirm quote={credits.pending} busy={busy || credits.quoting} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} />
         </>
       )}
       {query.isError && (
