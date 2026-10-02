@@ -148,7 +148,8 @@ class AC30MigrationTest(Base):
             for table in TABLES:
                 self.assertEqual(db.execute("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=%s::regclass", (f"public.{table}",)).fetchone(), (True, True), table)
                 policies = {r[0] for r in db.execute("SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename=%s", (table,)).fetchall()}
-                self.assertEqual(policies, {"trusted_write"} if table == "pr_result_mutations" else {"trusted_write", "tenant_read"}, table)
+                expected = {"trusted_write"} if table == "pr_result_mutations" else {"trusted_write", "owner_read"} if table == "pr_result_connections" else {"trusted_write", "tenant_read"}
+                self.assertEqual(policies, expected, table)
                 for privilege in ("INSERT", "UPDATE", "DELETE"):
                     self.assertFalse(db.execute("SELECT has_table_privilege('authenticated',%s,%s)", (f"public.{table}", privilege)).fetchone()[0], (table, privilege))
                 self.assertFalse(db.execute("SELECT has_table_privilege('anon',%s,'SELECT')", (f"public.{table}",)).fetchone()[0], table)
@@ -156,10 +157,27 @@ class AC30MigrationTest(Base):
             for column in ("secret_ciphertext", "previous_ciphertext", "secret_key_id"):
                 self.assertFalse(db.execute("SELECT has_column_privilege('authenticated','public.pr_result_connections',%s,'SELECT')", (column,)).fetchone()[0], column)
             self.assertTrue(db.execute("SELECT has_column_privilege('authenticated','public.pr_result_connections','last_error_code','SELECT')").fetchone()[0])
+            for table in ("pr_result_events", "pr_result_quarantine"):   # the webhook endpoint is the owner's to know
+                self.assertFalse(db.execute("SELECT has_column_privilege('authenticated',%s,'connection_id','SELECT')", (f"public.{table}",)).fetchone()[0], table)
+                self.assertTrue(db.execute("SELECT has_column_privilege('authenticated',%s,'workspace_id','SELECT')", (f"public.{table}",)).fetchone()[0], table)
             indexes = {r[0] for r in db.execute("SELECT indexname FROM pg_indexes WHERE schemaname='public' AND tablename='pr_result_events'").fetchall()}
             self.assertTrue({"pr_result_events_occurred_idx", "pr_result_events_first_party_uidx", "pr_result_events_declared_uidx",
                              "pr_result_events_one_reversal_uidx"} <= indexes)
             self.assertEqual(db.execute("SELECT count(*) FROM pg_trigger WHERE tgrelid='public.pr_result_events'::regclass AND tgname='pr_result_events_append_only'").fetchone()[0], 1)
+
+
+    def test_members_never_learn_the_webhook_endpoint(self):
+        t = tenant("editor")
+        connect(t)
+        with connection(autocommit=True) as db:
+            db.execute("SET ROLE authenticated")
+            db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (USERS[t.editor],))
+            self.assertEqual(db.execute("SELECT count(id) FROM public.pr_result_connections WHERE workspace_id=%s", (t.wid,)).fetchone()[0], 0)
+            for statement in ("SELECT connection_id FROM public.pr_result_events", "SELECT connection_id FROM public.pr_result_quarantine"):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege, msg=statement):
+                    db.execute(statement)
+            db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (USERS[t.owner],))
+            self.assertEqual(db.execute("SELECT count(id) FROM public.pr_result_connections WHERE workspace_id=%s", (t.wid,)).fetchone()[0], 1)
 
 
 class AC16ProvenanceTest(Base):

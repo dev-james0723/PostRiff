@@ -176,19 +176,32 @@ begin
     end if;
   end loop;
   -- Members read their own workspace's results, links and clicks. Connection secrets and the idempotency ledger stay
-  -- service-only (connections expose their non-secret columns only).
-  foreach t in array array['pr_result_connections','pr_tracking_links','pr_result_events','pr_result_quarantine','pr_link_clicks'] loop
+  -- service-only. The webhook endpoint (a connection's id) is the owner's to know: connections are owner-readable and
+  -- members never get the connection_id column of events or quarantine rows.
+  foreach t in array array['pr_tracking_links','pr_result_events','pr_result_quarantine','pr_link_clicks'] loop
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'tenant_read') then
       execute format('create policy tenant_read on public.%I for select to authenticated using (postriff_private.member(workspace_id))', t);
     end if;
   end loop;
-  foreach t in array array['pr_tracking_links','pr_result_events','pr_result_quarantine','pr_link_clicks'] loop
+  foreach t in array array['pr_tracking_links','pr_link_clicks'] loop
     execute format('grant select on public.%I to authenticated', t);
   end loop;
 end $$;
+drop policy if exists tenant_read on public.pr_result_connections;
+drop policy if exists owner_read on public.pr_result_connections;
+create policy owner_read on public.pr_result_connections for select to authenticated using (
+  postriff_private.member(workspace_id) and exists (
+    select 1 from public.pr_memberships m
+    where m.workspace_id = pr_result_connections.workspace_id and m.user_id = (select auth.uid()) and m.status = 'active' and m.role = 'owner'));
 grant select (id, workspace_id, label, producer, status, secret_fingerprint, previous_fingerprint, previous_expires_at,
               rate_per_minute, rate_per_day, last_received_at, last_event_at, last_error_code, last_error_at, created_by,
               created_at, updated_at, removed_at, revision)
   on public.pr_result_connections to authenticated;
+grant select (id, workspace_id, provenance, result_type, provider_event_id, kind, corrects_id, occurred_at, received_at,
+              amount_minor, currency, quantity, link_id, campaign_ref, attribution, attribution_definition, payload_digest,
+              declared_by, note, test, created_at)
+  on public.pr_result_events to authenticated;
+grant select (id, workspace_id, provider_event_id, payload_digest, reason, existing_id, received_at)
+  on public.pr_result_quarantine to authenticated;
 
 commit;

@@ -27,8 +27,8 @@ refuses any other pending file (`tests/test_product_growth_release.py`).
 | 1 | `047_inbox_operational_sync.sql` | Inbox v1 | `bcb9be5b…a369553` | 044 | this release |
 | 2 | `048_pricing_credit_catalog_v2.sql` | Pricing v2 | `a36357de…792ba0` | 020–022 | this release (guarded readers tolerate its absence) |
 | 3 | `050_free_lifecycle_bootstrap.sql` | Pricing v2 | `f9aad0a0…b1e7d` | 048 | this release |
-| 4 | `080_customer_results.sql` | this program (results) | `846d2be4…53958e0ed1f` | 001–047 | this release |
-| 5 | `081_relationships.sql` | this program (relationships) | `0d2b181d…d76f73a33` | 047 (Inbox threads), 080 (won FK; idempotent re-apply adds it if 080 came later) | this release |
+| 4 | `080_customer_results.sql` | this program (results) | `e6ab39f4…5fe0db0ec6` | 001–047 | this release |
+| 5 | `081_relationships.sql` | this program (relationships) | `fc660cae…1c98433d` | 047 (Inbox threads), 080 (won FK; idempotent re-apply adds it if 080 came later) | this release |
 | 6 | `083_visual_packs.sql` | this program (visual pack) | `3aedc1a4…d137955c` | 001–047 | this release |
 | 7 | `084_briefs_proof_strategy.sql` | this program (briefs/proof) | `5225be48…c99701d5` | 001–047 | this release |
 | 8 | `087_source_uploads.sql` | this program (intake) | `0acc1a3f…b5647b65` | 001–047 | this release |

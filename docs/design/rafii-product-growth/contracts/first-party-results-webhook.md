@@ -31,7 +31,8 @@ this contract.
 4. Send a test event (`"test": true`, or the test producer in §9). It appears in the ledger with a Test label and never
    counts in summaries.
 
-Only the owner can create, rotate, pause, resume or remove a connection. Other members see health, not the endpoint.
+Only the owner can create, rotate, pause, resume or remove a connection. Other members see results, not the endpoint: the
+database gives them no read of connections and no `connection_id` on results or quarantine rows (migration 080).
 
 ## 2. Request
 
@@ -116,8 +117,11 @@ when the event was received.
 ## 7. Rate budget
 
 Per connection, defaults **60 verified events per minute** and **5,000 per day** (owner-adjustable when the connection is
-created: 1–600 per minute, 1–100,000 per day). Every delivery attempt, valid or not, also counts against a budget of
-three times the per-minute rate, checked **before** any signature work so a flood of invalid deliveries stays cheap.
+created: 1–600 per minute, 1–100,000 per day). A delivery is authenticated first (bounded work: the body cap, then the
+signature over the raw bytes); only an authentic delivery takes the connection lock and counts against these verified
+budgets, so unsigned traffic can never use up a producer's budget. Unsigned or wrongly signed deliveries have their own
+abuse budget of three times the per-minute rate; they never change the connection's health or error state and only
+move a bounded daily counter the owner sees ("refused N unsigned deliveries today", capped at 999+).
 Over budget: `429 result_rate_limited` with `Retry-After` (60 s, or 3,600 s for the daily budget).
 
 ## 8. Responses
@@ -137,6 +141,7 @@ is echoed. Errors are `{"error": "<message>", "code": "<code>"}`; a quarantined 
 | 409 | `result_conflict` | Same eventId, different content (quarantined) | No |
 | 409 | `result_reversal_unknown` | `reversalOf` names an event not received yet | After sending the original |
 | 409 | `result_already_reversed` | The original was already reversed (quarantined) | No |
+| 409 | `result_reversal_test_mismatch` | A test reversal of a real event, or a real reversal of a test event; refused and noted on the connection's health | Send a reversal with the same `test` value as its original |
 | 413 | `result_body_too_large` | Body over 16,384 bytes | No |
 | 429 | `result_rate_limited` | Rate budget used up | After `Retry-After` |
 | 503 | `results_unavailable` | Rafii can't verify deliveries for this connection right now | Later; owner may need to rotate |
