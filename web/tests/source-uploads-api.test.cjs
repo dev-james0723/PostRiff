@@ -82,6 +82,46 @@ test('feature_disabled is recognised so the panel hides itself', async () => {
   await assert.rejects(api.limits('w1'), (error) => request.isFeatureDisabled(error) && error.code === 'feature_disabled');
 });
 
+test('"Stop upload" aborts a transcript: its text travels in the request, so the request itself is stopped', async () => {
+  const calls = [];
+  global.fetch = (url, init = {}) =>
+    new Promise((_resolve, reject) => {
+      calls.push({ url, init });
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    });
+  const api = uploads.createSourceUploadsApi(async () => 'session-token');
+  const controller = new AbortController();
+  const pending = api.addTranscript('w1', { name: 't.srt', format: 'srt', text: '1', idempotencyKey: 'k-12345678' }, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending, (error) => error.name === 'AbortError' && uploads.wasStopped(error, controller.signal));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/workspaces/w1/source-uploads/transcripts');
+  assert.equal(calls[0].init.signal, controller.signal);
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer session-token');
+  assert.equal(calls[0].init.headers['X-PostRiff-Request'], 'founder-alpha');
+  // Stopped before it starts: nothing is sent at all.
+  const early = new AbortController();
+  early.abort();
+  global.fetch = async (url, init = {}) => {
+    calls.push({ url, init });
+    if (init.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    return new Response('{}', { status: 200 });
+  };
+  await assert.rejects(api.addTranscript('w1', { name: 't.srt', format: 'srt', text: '1', idempotencyKey: 'k-12345678' }, early.signal), (error) => uploads.wasStopped(error, early.signal));
+});
+
+test('a refused transcript keeps the server’s code and sentence, and is not mistaken for a stop', async () => {
+  const { api } = harness([{ status: 413, body: { error: 'This transcript file has 700,000 characters; the limit is 600,000.', code: 'over_limit' } }]);
+  const controller = new AbortController();
+  await assert.rejects(api.addTranscript('w1', { name: 't.srt', format: 'srt', text: '1', idempotencyKey: 'k-12345678' }, controller.signal), (error) =>
+    error instanceof client.ApiError && error.status === 413 && error.code === 'over_limit' && /700,000/.test(error.message) && !uploads.wasStopped(error, controller.signal));
+  const stoppedTransfer = new AbortController();
+  stoppedTransfer.abort();
+  assert.equal(uploads.wasStopped(new upload.UploadError(upload.UPLOAD_STOPPED, 0), stoppedTransfer.signal), true, 'a stopped storage transfer');
+  assert.equal(uploads.wasStopped(new upload.UploadError(upload.UPLOAD_FAILED, 0, true), null), false, 'a dropped connection is a failure');
+});
+
 test('the file goes only to a signed Storage URL, without the session bearer or app headers', async () => {
   const { api } = harness();
   const sent = [];

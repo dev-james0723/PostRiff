@@ -10,7 +10,8 @@ export type Tone = 'progress' | 'attention' | 'done' | 'error' | 'muted';
 
 interface LimitsLike {
   limits: { audio: { maxBytes: number; maxSeconds: number }; pdf: { maxBytes: number; maxPages: number; maxCharacters: number } };
-  formats: { pdf: { supported: boolean }; audio: { supported: boolean } };
+  /** `audio.accepts`: the canonical types the private bucket takes (all four when absent). */
+  formats: { pdf: { supported: boolean }; audio: { supported: boolean; accepts?: string[] } };
 }
 
 interface ViewLike {
@@ -29,7 +30,23 @@ export function languageFor(locale: string | null | undefined): Lang {
 
 const EN = {
   title: 'Upload a PDF or recording',
+  titleNoAudio: 'Upload a PDF or transcript',
+  titleTranscript: 'Upload a transcript',
+  titleLoading: 'Upload a file',
+  titleManage: 'Earlier uploads',
   intro: 'Rafii reads the text, you check it, and only then does it become a source. Nothing is posted.',
+  offNote: 'New uploads are turned off here. You can still read, cancel and delete earlier uploads.',
+  loadingLimits: 'Loading limits…',
+  limitsLabel: 'Upload limits',
+  deletedUpload: 'Deleted upload',
+  close: 'Close',
+  stopped: 'Upload stopped. Anything that had already arrived is listed under Recent uploads, where you can delete it.',
+  pageStart: 'Start at page 1 or later.',
+  pageOrder: 'The last page can’t come before the first.',
+  pageBeyond: (total: number) => `This PDF has ${total} page${total === 1 ? '' : 's'}; choose pages within it.`,
+  pageTooMany: (max: number) => `Choose at most ${max} pages at a time.`,
+  pageTooLong: (chars: string, max: string) => `These pages have about ${chars} characters of text; the limit is ${max}. Choose fewer pages.`,
+  pageWhole: 'Use whole page numbers.',
   limitsPdf: (mb: string, pages: number, chars: string) => `PDF: up to ${mb}, ${pages} pages and ${chars} characters of text.`,
   limitsAudio: (mb: string, minutes: number) => `Audio: up to ${minutes} minutes and ${mb}. Transcribing uses credits; you see the cost first.`,
   audioOff: 'Audio transcription isn’t available yet. Upload a transcript (SRT, VTT or TXT) instead.',
@@ -79,7 +96,23 @@ type Copy = typeof EN;
 
 const ZH: Copy = {
   title: '上載 PDF 或錄音',
+  titleNoAudio: '上載 PDF 或逐字稿',
+  titleTranscript: '上載逐字稿',
+  titleLoading: '上載檔案',
+  titleManage: '之前的上載',
   intro: 'Rafii 會讀出文字，由你檢查確認後才會成為來源。不會發佈任何內容。',
+  offNote: '此處已關閉新的上載。你仍可閱讀、取消及刪除之前的上載。',
+  loadingLimits: '正在載入上限…',
+  limitsLabel: '上載上限',
+  deletedUpload: '已刪除的上載',
+  close: '關閉',
+  stopped: '已停止上載。若檔案已送達，會列在「最近上載」中，你可以在那裡刪除。',
+  pageStart: '請由第 1 頁或之後開始。',
+  pageOrder: '最後一頁不能早於第一頁。',
+  pageBeyond: (total) => `這份 PDF 共有 ${total} 頁，請在此範圍內選擇。`,
+  pageTooMany: (max) => `每次最多選擇 ${max} 頁。`,
+  pageTooLong: (chars, max) => `這些頁面約有 ${chars} 個字元，上限是 ${max}。請選擇較少頁數。`,
+  pageWhole: '請輸入完整的頁碼。',
   limitsPdf: (mb, pages, chars) => `PDF：最多 ${mb}、${pages} 頁及 ${chars} 個字元的文字。`,
   limitsAudio: (mb, minutes) => `錄音：最長 ${minutes} 分鐘、最多 ${mb}。轉錄會使用點數，開始前會先顯示費用。`,
   audioOff: '暫時未能轉錄錄音。請改為上載逐字稿（SRT、VTT 或 TXT）。',
@@ -178,6 +211,8 @@ export function classifyFile(file: { name: string; type?: string; size: number }
     return { ok: true, kind: 'transcript', format };
   }
   if (extension === 'webm' || type.includes('webm')) {
+    // Without a transcription route, no recording is offered at all: point to transcripts only.
+    if (!limits.formats.audio.supported) return { ok: false, code: 'audio_unavailable', message: copy.audioOff };
     return {
       ok: false,
       code: 'webm',
@@ -187,14 +222,42 @@ export function classifyFile(file: { name: string; type?: string; size: number }
   const audioMime = AUDIO_ALIASES.has(type) ? type : AUDIO_TYPES[extension];
   if (audioMime) {
     if (!limits.formats.audio.supported) return { ok: false, code: 'audio_unavailable', message: copy.audioOff };
+    // A recording type the private bucket doesn't take would only be refused after the upload began.
+    if (!acceptedAudio(limits).includes(CANONICAL_AUDIO[audioMime] ?? audioMime)) return { ok: false, code: 'unsupported_format', message: chooseSentence(limits, lang) };
     if (file.size > limits.limits.audio.maxBytes) return { ok: false, code: 'over_limit', message: overLimit(file.size, limits.limits.audio.maxBytes, lang) };
     return { ok: true, kind: 'audio', mime: audioMime };
   }
-  return {
-    ok: false,
-    code: 'unsupported_format',
-    message: lang === 'zh-Hant' ? '請選擇 PDF、錄音（M4A、MP3、WAV、Ogg/Opus）或逐字稿（SRT、VTT、TXT）。' : 'Choose a PDF, a recording (M4A, MP3, WAV, Ogg/Opus) or a transcript (SRT, VTT, TXT).'
-  };
+  return { ok: false, code: 'unsupported_format', message: chooseSentence(limits, lang) };
+}
+
+const CANONICAL_AUDIO: Record<string, string> = {
+  'audio/mp4': 'audio/mp4', 'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4', 'audio/mpeg': 'audio/mpeg', 'audio/mp3': 'audio/mpeg',
+  'audio/wav': 'audio/wav', 'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'audio/vnd.wave': 'audio/wav', 'audio/ogg': 'audio/ogg', 'audio/opus': 'audio/ogg'
+};
+const AUDIO_NAMES: Record<string, string> = { 'audio/mp4': 'M4A', 'audio/mpeg': 'MP3', 'audio/wav': 'WAV', 'audio/ogg': 'Ogg/Opus' };
+
+/** The canonical recording types this deployment takes: none without a transcription route. */
+function acceptedAudio(limits: { formats: { audio: { supported: boolean; accepts?: string[] } } }): string[] {
+  if (!limits.formats.audio.supported) return [];
+  return (limits.formats.audio.accepts ?? Object.keys(AUDIO_NAMES)).filter((mime) => mime in AUDIO_NAMES);
+}
+
+/** "a, b and c" with the language's own separators. */
+function joinList(items: string[], and: string, comma: string): string {
+  return items.length > 1 ? `${items.slice(0, -1).join(comma)}${and}${items.at(-1)}` : items[0];
+}
+
+/** "Choose …" naming only what can be read here (a refused file never learns about formats that aren't offered). */
+function chooseSentence(limits: LimitsLike, lang: Lang): string {
+  const audio = acceptedAudio(limits).map((mime) => AUDIO_NAMES[mime]);
+  const pdf = limits.formats.pdf.supported;
+  if (lang === 'zh-Hant') {
+    const items = [...(pdf ? ['PDF'] : []), ...(audio.length ? [`錄音（${audio.join('、')}）`] : []), '逐字稿（SRT、VTT、TXT）'];
+    // A space separates Latin letters from the Chinese around them ("請選擇 PDF 或…"), as elsewhere in this copy.
+    return `請選擇${pdf ? ' ' : ''}${joinList(items, '或', '、')}。`.replace(/([A-Za-z])或/g, '$1 或');
+  }
+  const items = [...(pdf ? ['a PDF'] : []), ...(audio.length ? [`a recording (${audio.join(', ')})`] : []), 'a transcript (SRT, VTT, TXT)'];
+  return `Choose ${joinList(items, ' or ', ', ')}.`;
 }
 
 export function overLimit(size: number, max: number, lang: Lang = 'en'): string {
@@ -248,22 +311,135 @@ export function reasonText(reason: string | null | undefined, lang: Lang): strin
   return reason.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
-/** Known API error codes in the person's language; anything else keeps the server's own sentence. */
+/**
+ * Server sentences that carry a measured value (a size, a length, a count of credits), said in Traditional Chinese with
+ * the server's own numbers: a limit refusal never loses the measurement, in any language.
+ */
+const ZH_MEASURED: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^This file is (.+); the limit is (.+)\.$/, (m) => `這個檔案有 ${m[1]}，上限是 ${m[2]}。`],
+  [/^This recording is (.+) long; the limit is (.+)\.$/, (m) => `這段錄音長 ${m[1]}，上限是 ${m[2]}。`],
+  [/^This recording is longer or larger than the transcription route accepts \((.+), (.+)\)\.$/, (m) => `這段錄音超出轉錄路線可接受的長度或大小（${m[1]}、${m[2]}）。`],
+  [/^This text has (.+) characters; the limit is (.+)\.$/, (m) => `這段文字有 ${m[1]} 個字元，上限是 ${m[2]}。`],
+  [/^This transcript file has (.+) characters; the limit is (.+)\.$/, (m) => `這個逐字稿檔案有 ${m[1]} 個字元，上限是 ${m[2]}。`],
+  [/^This transcript has (.+) characters; the limit is (.+)\. Shorten it first\.$/, (m) => `這份逐字稿有 ${m[1]} 個字元，上限是 ${m[2]}。請先刪減。`],
+  [/^This transcription can use up to (.+) credits\. Set the limit to at least (.+)\.$/, (m) => `這次轉錄最多可能使用 ${m[1]} 點。請把上限設為至少 ${m[2]} 點。`]
+];
+
+/** API error codes. `en: null` keeps the server's English sentence (it is already precise); Chinese is always ours. */
+const ERRORS: Record<string, { en: string | null; 'zh-Hant': string }> = {
+  feature_disabled: { en: 'Source uploads aren’t turned on here.', 'zh-Hant': '此處未開啟來源上載功能。' },
+  source_upload_caps: { en: 'Finish or cancel your other uploads first.', 'zh-Hant': '請先完成或取消其他上載。' },
+  insufficient_budget: { en: null, 'zh-Hant': '點數不足或方案不包括轉錄。請查看方案，或改為上載逐字稿。' },
+  revision_conflict: { en: 'This text changed elsewhere. Reload it and try again.', 'zh-Hant': '這段文字已在別處更改。請重新載入再試。' },
+  review_required: { en: 'Review the text first.', 'zh-Hant': '請先檢查文字。' },
+  upload_incomplete: { en: 'The file hasn’t finished uploading. Try again in a moment.', 'zh-Hant': '檔案尚未上載完成，請稍後再試。' },
+  storage_unavailable: { en: 'File storage isn’t available right now. Try again.', 'zh-Hant': '儲存空間暫時無法使用，請再試。' },
+  no_usable_statements: { en: 'No complete statements were found. Edit the text into full sentences.', 'zh-Hant': '找不到完整陳述。請把文字修改成完整句子。' },
+  source_duplicate: { en: 'This text is already a source in this workspace.', 'zh-Hant': '這段文字已是這個工作區的來源。' },
+  source_created: { en: null, 'zh-Hant': '已經用這份上載建立了來源。如要移除，請刪除上載，或在點子中撤回該來源。' },
+  captions_required: { en: null, 'zh-Hant': '找不到帶時間的字幕。請貼上 SRT、WebVTT 或帶時間標記的文字。' },
+  not_a_pdf: { en: null, 'zh-Hant': '只有 PDF 可以選擇頁數。' },
+  not_awaiting_pages: { en: null, 'zh-Hant': '只能在文字等待檢查時選擇頁數。' },
+  invalid_pages: { en: null, 'zh-Hant': '請在 PDF 的頁數範圍內選擇，並符合每次可讀取的頁數上限。' },
+  sample_read_only: { en: null, 'zh-Hant': '示範工作區是唯讀的。' },
+  quote_required: { en: null, 'zh-Hant': '這段錄音尚未轉錄。請先接受轉錄報價。' },
+  not_awaiting_quote: { en: null, 'zh-Hant': '這段錄音並非在等待報價。' },
+  quote_not_needed: { en: null, 'zh-Hant': '這份上載不需要轉錄報價。' },
+  revision_limit: { en: null, 'zh-Hant': '這段文字已修改太多次。請建立來源，或重新開始。' },
+  not_awaiting_review: { en: null, 'zh-Hant': '這段文字並非在等待檢查。' },
+  source_empty: { en: null, 'zh-Hant': '文字不能是空白的。' },
+  not_ready: { en: null, 'zh-Hant': '這份上載還沒有可檢查的文字。' },
+  upload_not_pending: { en: null, 'zh-Hant': '這份上載並非在等待完成。' },
+  unsafe_url: { en: null, 'zh-Hant': '請使用公開的 https 連結。Rafii 只會保留它作參考，不會打開它。' },
+  workspace_revision_conflict: { en: null, 'zh-Hant': '儲存時工作區已有更改，請再試一次。' },
+  idempotency_conflict: { en: null, 'zh-Hant': '這個請求代碼已用於另一個請求。請再試一次。' },
+  // A quote's refusal reasons (the quote route's `reason` with its own sentence).
+  upgrade_required: { en: null, 'zh-Hant': '轉錄需要使用點數，而免費方案沒有點數。請升級至 Creator 以轉錄，或改為上載逐字稿。' },
+  credits_required: { en: null, 'zh-Hant': '轉錄需要包含點數的方案。請改為上載逐字稿，或更換方案。' }
+};
+
+/**
+ * Known API error codes in the person's language; anything else keeps the server's own sentence. A limit refusal
+ * (`over_limit`, and a credit limit set too low) keeps the measured value from the server: in English the sentence is
+ * the server's; in Traditional Chinese it is said again with the same numbers, or left as sent when its shape is new.
+ */
 export function errorText(code: string | undefined, fallback: string, lang: Lang): string {
-  const mapped: Record<string, Said> = {
-    feature_disabled: { en: 'Source uploads aren’t turned on here.', 'zh-Hant': '此處未開啟來源上載功能。' },
-    source_upload_caps: { en: 'Finish or cancel your other uploads first.', 'zh-Hant': '請先完成或取消其他上載。' },
-    insufficient_budget: { en: fallback, 'zh-Hant': '點數不足或方案不包括轉錄。請查看方案，或改為上載逐字稿。' },
-    revision_conflict: { en: 'This text changed elsewhere. Reload it and try again.', 'zh-Hant': '這段文字已在別處更改。請重新載入再試。' },
-    review_required: { en: 'Review the text first.', 'zh-Hant': '請先檢查文字。' },
-    upload_incomplete: { en: 'The file hasn’t finished uploading. Try again in a moment.', 'zh-Hant': '檔案尚未上載完成，請稍後再試。' },
-    storage_unavailable: { en: 'File storage isn’t available right now. Try again.', 'zh-Hant': '儲存空間暫時無法使用，請再試。' },
-    no_usable_statements: { en: 'No complete statements were found. Edit the text into full sentences.', 'zh-Hant': '找不到完整陳述。請把文字修改成完整句子。' },
-    source_duplicate: { en: 'This text is already a source in this workspace.', 'zh-Hant': '這段文字已是這個工作區的來源。' }
-  };
-  // A limit refusal carries the measured size or length in the server's sentence: never replace it with a generic line.
-  const said = code && code !== 'over_limit' ? (mapped[code] ?? REASONS[code]) : undefined;
-  return said ? said[lang] : fallback;
+  if (lang === 'zh-Hant') {
+    for (const [pattern, say] of ZH_MEASURED) {
+      const match = fallback.match(pattern);
+      if (match) return say(match);
+    }
+  }
+  if (!code || code === 'over_limit') return fallback;
+  const mapped = ERRORS[code];
+  if (mapped) return (lang === 'en' ? mapped.en : mapped['zh-Hant']) ?? fallback;
+  return REASONS[code]?.[lang] ?? fallback;
+}
+
+/**
+ * What is wrong with a page range, said before it is sent (the server checks again): whole numbers, from page 1,
+ * in order, inside the PDF, at most `maxPages`, and (when the server measured each page) within the character limit.
+ */
+export function pageRangeProblem(range: { from: number; to: number }, pdf: { total: number; maxPages: number; maxChars?: number; pages?: { page: number; chars: number }[] }, lang: Lang): string | null {
+  const copy = COPY[lang];
+  const { from, to } = range;
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return copy.pageWhole;
+  if (from < 1) return copy.pageStart;
+  if (to < from) return copy.pageOrder;
+  if (to > pdf.total) return copy.pageBeyond(pdf.total);
+  if (to - from + 1 > pdf.maxPages) return copy.pageTooMany(pdf.maxPages);
+  if (pdf.maxChars && pdf.pages?.length) {
+    const chosen = pdf.pages.filter((p) => p.page >= from && p.page <= to);
+    // Pages are joined with a blank line when read, as the server counts them.
+    const chars = chosen.reduce((sum, p) => sum + p.chars, 0) + Math.max(0, chosen.length - 1) * 2;
+    if (chars > pdf.maxChars) return copy.pageTooLong(formatCount(chars, lang), formatCount(pdf.maxChars, lang));
+  }
+  return null;
+}
+
+interface PickerLimits {
+  formats: { pdf: { supported: boolean }; audio: { supported: boolean; accepts?: string[] } };
+}
+
+/** What the native picker matches for each canonical recording type (extensions and the aliases browsers report). */
+const AUDIO_PICKER: Record<string, string[]> = {
+  'audio/mp4': ['.m4a', 'audio/mp4', 'audio/x-m4a'],
+  'audio/mpeg': ['.mp3', 'audio/mpeg'],
+  'audio/wav': ['.wav', 'audio/wav', 'audio/x-wav'],
+  'audio/ogg': ['.ogg', '.opus', 'audio/ogg']
+};
+const TRANSCRIPT_ACCEPT = ['.srt', '.vtt', '.txt', 'text/plain', 'text/vtt'];
+
+/**
+ * The file picker as the server's published limits allow: its `accept` list, the hint under it and the panel title.
+ * Audio is offered only when this deployment can transcribe it, PDFs only when they can be read; transcripts always.
+ * Unknown limits (still loading) offer nothing specific.
+ */
+export function pickerFor(limits: PickerLimits | null | undefined, lang: Lang): { accept: string; hint: string; title: string } {
+  const copy = COPY[lang];
+  if (!limits) return { accept: TRANSCRIPT_ACCEPT.join(','), hint: '', title: copy.titleLoading };
+  const pdf = limits.formats.pdf.supported;
+  const audio = acceptedAudio(limits);
+  const accept = [...(pdf ? ['.pdf', 'application/pdf'] : []), ...audio.flatMap((mime) => AUDIO_PICKER[mime] ?? []), ...TRANSCRIPT_ACCEPT];
+  const names = [...(pdf ? ['PDF'] : []), ...audio.map((mime) => AUDIO_NAMES[mime])];
+  const zh = lang === 'zh-Hant';
+  const transcript = zh ? '逐字稿（SRT、VTT、TXT）' : 'a transcript (SRT, VTT, TXT)';
+  const hint = names.length ? (zh ? `${names.join('、')}，或${transcript}` : `${names.join(', ')}, or ${transcript}`) : zh ? transcript : 'A transcript (SRT, VTT, TXT)';
+  const title = audio.length ? copy.title : pdf ? copy.titleNoAudio : copy.titleTranscript;
+  return { accept: accept.join(','), hint, title };
+}
+
+export type PanelMode = 'hidden' | 'full' | 'view' | 'manage';
+
+/**
+ * How much of the Ideas upload panel shows. Feature on: everything for editors, earlier uploads only for viewers.
+ * Feature off (D-012 stops new work only): earlier uploads stay readable, cancellable and deletable, and nothing new can
+ * start; with none, nothing renders. Not known yet: nothing, so neither an "off" note nor a switched-off route flashes.
+ */
+export function panelMode(feature: 'loading' | 'on' | 'off', canEdit: boolean, uploads: number): PanelMode {
+  if (feature === 'loading') return 'hidden';
+  if (feature === 'on') return canEdit ? 'full' : uploads > 0 ? 'view' : 'hidden';
+  return uploads > 0 ? 'manage' : 'hidden';
 }
 
 /** One label, a tone and an optional explanation for any upload the server returned. */

@@ -31,9 +31,10 @@ export function useSourceUploadsApi() {
   return { api, w: workspaceId as string, enabled: Boolean(workspaceId) };
 }
 
-export function useSourceUploadLimits() {
+/** The published limits. `active: false` (the feature is off or not known yet) never asks the switched-off route. */
+export function useSourceUploadLimits(active = true) {
   const { api, w, enabled } = useSourceUploadsApi();
-  return useQuery({ queryKey: sourceUploadKeys.limits(w), queryFn: () => api.limits(w), enabled, staleTime: 5 * 60_000, retry: shouldRetry });
+  return useQuery({ queryKey: sourceUploadKeys.limits(w), queryFn: () => api.limits(w), enabled: enabled && active, staleTime: 5 * 60_000, retry: shouldRetry });
 }
 
 export function useSourceUploads() {
@@ -95,7 +96,8 @@ export function useStartSourceUpload() {
       const { file, choice } = input;
       if (choice.kind === 'transcript') {
         const text = transcriptText(await file.text());
-        return api.addTranscript(w, { name: file.name, format: choice.format, text, idempotencyKey: idempotencyKey('src-transcript') });
+        // "Stop upload" aborts this request too: the text travels in it.
+        return api.addTranscript(w, { name: file.name, format: choice.format, text, idempotencyKey: idempotencyKey('src-transcript') }, input.signal);
       }
       input.onStage?.('uploading');
       const begun = await api.begin(w, { kind: choice.kind, name: file.name, mime: choice.mime, bytes: file.size, idempotencyKey: idempotencyKey('src-begin'),
