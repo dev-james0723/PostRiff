@@ -7,7 +7,7 @@
 import type { InfobarContent } from '@/components/ui/infobar';
 import { V2_CATALOG } from '@/config/plans';
 import type { BillingMode } from '@/lib/api/types';
-import { billingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
+import { billingCopy, type BillingCopy, type CopyLocale } from '@/lib/billing/mode-copy';
 import { formatDate } from '@/lib/time';
 import { humanize, type PlanTimeline } from './billing-model';
 
@@ -69,8 +69,6 @@ export function infoContentFor(mode: BillingMode | null, locale: CopyLocale = 'e
   return { title: 'Billing', sections: [infoContent.sections[0], infoContent.sections[2]] };
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
 export const LIFECYCLE_LABELS: Record<string, string> = {
   trial: 'Trial',
   active: 'Active',
@@ -119,36 +117,38 @@ export function planSummary(
     isOwner: boolean;
     portalAvailable: boolean;
     checkoutAvailable: boolean;
-  }
+  },
+  /** The words to use: English by default (legacy plans); a v2 card passes the person's billing copy. */
+  words: BillingCopy['planSummary'] = billingCopy('en').planSummary
 ): PlanSummary {
   const { timeline, trial, status, isOwner } = input;
   const portal = isOwner && input.portalAvailable;
   const plans = isOwner && input.checkoutAvailable;
-  const title = trial ? 'Trial' : input.planLabel || 'Plan unavailable';
-  const unusual = status && status !== 'active' && status !== 'trial' ? lifecycleLabel(status) : null;
+  const title = trial ? words.trial : input.planLabel || words.planUnavailable;
+  const unusual = status && status !== 'active' && status !== 'trial' ? (words.statuses[status] ?? humanize(status)) : null;
   const base = { title, badge: trial ? null : unusual, exactDate: null, urgent: false };
-  const manage = portal ? ({ action: 'portal', actionLabel: 'Manage plan' } as const) : ({ action: null, actionLabel: null } as const);
-  const choose = plans ? ({ action: 'plans', actionLabel: 'Choose a plan' } as const) : ({ action: null, actionLabel: null } as const);
+  const manage = portal ? ({ action: 'portal', actionLabel: words.manage } as const) : ({ action: null, actionLabel: null } as const);
+  const choose = plans ? ({ action: 'plans', actionLabel: words.choose } as const) : ({ action: null, actionLabel: null } as const);
 
   switch (timeline.kind) {
     case 'trial_left':
-      return { ...base, line: `${plural(timeline.daysLeft, 'day')} left`, exactDate: `Ends ${formatDate(timeline.endsAt)}`, ...(portal ? manage : choose) };
+      return { ...base, line: words.daysLeft(`${timeline.daysLeft} ${words.day(timeline.daysLeft)}`), exactDate: words.endsExact(formatDate(timeline.endsAt)), ...(portal ? manage : choose) };
     case 'trial_ended':
-      return { ...base, badge: 'Ended', line: 'Publishing is paused', exactDate: `Ended ${formatDate(timeline.endedAt)}`, ...choose };
+      return { ...base, badge: words.badgeEnded, line: words.publishingPaused, exactDate: words.endedExact(formatDate(timeline.endedAt)), ...choose };
     case 'renews':
-      return { ...base, line: `Renews ${formatDate(timeline.at)}`, ...manage };
+      return { ...base, line: words.renews(formatDate(timeline.at)), ...manage };
     case 'ends':
-      return { ...base, line: `Ends ${formatDate(timeline.at)} · won’t renew`, ...manage };
+      return { ...base, line: words.ends(formatDate(timeline.at)), ...manage };
     case 'grace':
       return {
         ...base,
-        badge: 'Payment failed',
-        line: timeline.until ? `Update payment by ${formatDate(timeline.until)}` : 'Update your payment method',
+        badge: words.badgePaymentFailed,
+        line: timeline.until ? words.updatePaymentBy(formatDate(timeline.until)) : words.updatePaymentMethod,
         urgent: true,
-        ...(portal ? { action: 'portal', actionLabel: 'Update payment' } : { action: null, actionLabel: null })
+        ...(portal ? { action: 'portal', actionLabel: words.updatePayment } : { action: null, actionLabel: null })
       };
     case 'ended':
-      return { ...base, line: timeline.at ? `Ended ${formatDate(timeline.at)}` : 'Ended', ...choose };
+      return { ...base, line: timeline.at ? words.ended(formatDate(timeline.at)) : words.endedNoDate, ...choose };
     case 'unavailable':
       return { ...base, line: '', ...(portal || !trial ? manage : choose) };
   }

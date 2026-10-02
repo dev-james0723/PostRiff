@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toFolderAccounts } from '@/features/channels/channel-bloom/helpers';
 import type { QuickStart } from '@/config/quick-starts';
 import { keys, useChannels, useMe, useMemory, useMemoryProposals, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { imageToggle } from '@/lib/billing/mode';
 import { ApiError } from '@/lib/api/client';
 import { deriveAttention } from '@/lib/attention';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -319,6 +320,11 @@ function HomeWorkspace() {
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
   const voiceAvailable = voiceSourceIds.length > 0;
   const imageCapability = models.data?.imageGeneration;
+  // The toggle follows this workspace's plan (D-026: no images on plan credits or Free), not the catalog's legacy wording.
+  const imageState = imageToggle(imageCapability, usage.data, usage.isLoading);
+  useEffect(() => {
+    if (imageRequested && !imageState.available) setImageRequested(false);
+  }, [imageRequested, imageState.available]);
   const generation = useHomeGeneration(params.get('run'));
   // Time back: once a writing run has a conversation, active time here counts toward its first approved draft.
   useActiveWorkTimer({ workflowKey: workflowKey('conversation', generation.conversationId), taskKind: 'draft' });
@@ -391,7 +397,7 @@ function HomeWorkspace() {
   }
 
   const commandReady = canEdit && Boolean(slash) && !preparing && Boolean(snapshot.data) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
-  const canGenerate = commandReady || (canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
+  const canGenerate = commandReady || (canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || imageState.available) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
 
   async function start() {
     const body = text.trim();
@@ -553,8 +559,8 @@ function HomeWorkspace() {
           ? 'Add an idea to start.'
           : !use
             ? 'Tick “Use this text to draft with”.'
-            : imageRequested && !imageCapability?.available
-              ? (imageCapability?.detail ?? 'Image generation isn’t available yet.')
+            : imageRequested && !imageState.available
+              ? imageState.detail
               : `${destinationCount} draft${destinationCount === 1 ? '' : 's'} · ⌘↵ to send`;
 
   const recent = conversations.data?.conversations ?? [];
@@ -621,13 +627,14 @@ function HomeWorkspace() {
                 <button
                   type='button'
                   aria-pressed={imageRequested}
-                  disabled={creditMode || !imageCapability?.available || preparing || generation.busy || generation.running}
+                  disabled={creditMode || !imageState.available || preparing || generation.busy || generation.running}
                   onClick={() => setImageRequested((v) => !v)}
-                  title={imageCapability?.detail ?? 'Checking…'}
-                  className={cn('rafii-focus inline-flex min-h-11 items-center gap-1.5 rounded-md text-xs font-medium', imageRequested ? 'text-foreground' : 'text-muted-foreground hover:text-foreground', !imageCapability?.available && 'opacity-50')}
+                  title={imageState.detail}
+                  className={cn('rafii-focus inline-flex min-h-11 items-center gap-1.5 rounded-md text-xs font-medium', imageRequested ? 'text-foreground' : 'text-muted-foreground hover:text-foreground', !imageState.available && 'opacity-50')}
                 >
                   <Icons.media className='size-3.5' />
                   {imageRequested ? 'Image on' : 'Generate image'}
+                  {!imageState.available && <span className='sr-only'>{` — ${imageState.detail}`}</span>}
                 </button>
               }
               contentType={{
