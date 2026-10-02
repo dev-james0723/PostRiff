@@ -33,6 +33,10 @@ const ACTION: Record<string, string> = {
   'opportunity.detected': 'See the opportunity'
 };
 
+/** A dismissed reminder's one Undo: shown in place and in a toast (`toastId`), and cleared from both when used. */
+type UndoOffer = AttentionUndo & { toastId: string };
+let offers = 0;
+
 /** The server falls back to the event name as a title ("Campaign week ready"); say it in words instead. */
 function titleOf(item: { type: string; title: string }) {
   const generated = item.type.replace('.', ' ').replace(/_/g, ' ').toLowerCase();
@@ -43,11 +47,12 @@ function titleOf(item: { type: string; title: string }) {
  * “What needs my attention?” (coworker spec §12, §19): Rafii's ordered list from the workspace's authoritative
  * state, each item with why it matters and one link. Hidden when the deployment has no coworker routes; nothing
  * is shown while there is nothing to do (the Overview's own panel already says “All clear”). A follow-up reminder
- * dismissed here leaves the list, so its Undo stays here in place (not only in a passing toast).
+ * dismissed here leaves the list, so its Undo stays here in place (not only in a passing toast). The list owns that
+ * Undo: the in-place offer and the toast run the same restore, and using either one clears both.
  */
 export function CoworkerAttention({ className }: { className?: string }) {
   const attention = useCoworkerAttention();
-  const [undo, setUndo] = useState<AttentionUndo | null>(null);
+  const [undo, setUndo] = useState<UndoOffer | null>(null);
   const [undoing, setUndoing] = useState(false);
   if (attention.isPending || isFeatureDisabled(attention.error)) return null;
   if (attention.isError && !attention.data) {
@@ -62,11 +67,23 @@ export function CoworkerAttention({ className }: { className?: string }) {
   const urgent = attention.data?.counts.urgent ?? 0;
   const followUpCopy = currentCopy();
 
-  async function runUndo(offer: AttentionUndo) {
+  /** A reminder was dismissed: its Undo is offered here and in a toast, both bound to this one offer. */
+  function offerUndo(next: AttentionUndo) {
+    offers += 1;
+    const offer: UndoOffer = { ...next, toastId: `attention-undo-${offers}` };
+    setUndo(offer);
+    toast(<span lang={currentLang()}>{offer.message}</span>, {
+      id: offer.toastId,
+      action: { label: <span lang={currentLang()}>{followUpCopy.undo}</span>, onClick: () => void runUndo(offer) }
+    });
+  }
+
+  async function runUndo(offer: UndoOffer) {
+    toast.dismiss(offer.toastId); // one Undo: the toast never offers what was already undone here
     setUndoing(true);
     try {
       await offer.run();
-      setUndo(null);
+      setUndo((current) => (current?.toastId === offer.toastId ? null : current));
     } catch (error) {
       const problem = describeProblem(error, followUpCopy);
       toast.error(<span lang={problem.lang}>{problem.message}</span>);
@@ -92,7 +109,7 @@ export function CoworkerAttention({ className }: { className?: string }) {
       )}
       <ol aria-labelledby='coworker-attention-heading' className='flex flex-col gap-2'>
         {items.slice(0, 8).map((item) => item.type === 'relationship.follow_up_due' ? (
-          <FollowUpAttentionItem key={item.id} item={item} onUndoable={setUndo} />
+          <FollowUpAttentionItem key={item.id} item={item} onUndoable={offerUndo} />
         ) : (
           <li key={item.id} data-attention-type={item.type} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4 sm:flex-row sm:items-center sm:justify-between'>
             <div className='flex min-w-0 items-start gap-3'>

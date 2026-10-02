@@ -85,11 +85,23 @@ export function FollowUpCard({
   const [ownerChoice, setOwnerChoice] = useState<string | null>(null);
   const [undoable, setUndoable] = useState<Undoable | null>(null);
   const [note, setNote] = useState('');
+  // A chosen stage, owner or "won" belongs to the version it was chosen on: Reload, or any newer version, starts again
+  // from what the server holds now, so a choice made before a conflict (409) is never applied to the newer version.
+  const revision = query.data?.relationship.revision ?? null;
+  const [choicesRevision, setChoicesRevision] = useState(revision);
+  if (revision !== choicesRevision) {
+    setChoicesRevision(revision);
+    setStage('');
+    setOwnerChoice(null);
+    setWinning(false);
+  }
   const heading = useRef<HTMLHeadingElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const snoozeButton = useRef<HTMLButtonElement>(null);
   const stageSelect = useRef<HTMLSelectElement>(null);
   const focused = useRef(false);
+  // The toast that carries the current Undo: it goes when that Undo is used here or replaced, so the two never disagree.
+  const undoToast = useRef<string | number | null>(null);
   const loaded = Boolean(query.data);
   // Focus goes back to the control that opened an inline panel when it closes (save or cancel).
   useReturnFocus(editing, editButton, heading);
@@ -133,6 +145,8 @@ export function FollowUpCard({
     setPending(label);
     setProblem(null);
     setUndoable(null); // a new change replaces the last undo offer
+    if (undoToast.current !== null) toast.dismiss(undoToast.current);
+    undoToast.current = null;
     try {
       const result = await change(task);
       after?.(result);
@@ -151,7 +165,7 @@ export function FollowUpCard({
     return (result: RelationshipWrite) => {
       const revision = result.relationship.revision;
       setUndoable({ message, revision, undo });
-      toast(<span lang={lang}>{message}</span>, {
+      undoToast.current = toast(<span lang={lang}>{message}</span>, {
         action: { label: <span lang={lang}>{copy.undo}</span>, onClick: () => void run('undo', undo(revision)) }
       });
     };
@@ -176,8 +190,14 @@ export function FollowUpCard({
   const dismissReminder = () =>
     run('dismiss', (api, w) => api.dismissFollowUp(w, rel.id, rel.revision),
       withUndo(copy.dismissedToast, (revision) => (api, w) => api.restoreFollowUp(w, rel.id, revision)));
+  const resetChoices = () => {
+    setStage('');
+    setOwnerChoice(null);
+    setWinning(false);
+  };
   const reloadAfterConflict = async () => {
     setProblem(null);
+    resetChoices();
     await refresh();
   };
 
@@ -200,7 +220,7 @@ export function FollowUpCard({
       {query.isError && (
         <p role='status' className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
           {copy.staleNotice}
-          <Button variant='quiet' size='sm' className='h-9' onClick={() => void query.refetch()}>{copy.reload}</Button>
+          <Button variant='quiet' size='sm' className='h-9' onClick={() => { resetChoices(); void query.refetch(); }}>{copy.reload}</Button>
         </p>
       )}
 

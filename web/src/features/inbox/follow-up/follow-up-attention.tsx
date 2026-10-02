@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -23,19 +22,34 @@ function contextOf(item: AttentionItem): FollowUpAttentionContext | null {
   return typeof context.relationshipId === 'string' && typeof context.revision === 'number' ? (context as FollowUpAttentionContext) : null;
 }
 
-/** An Undo the attention list keeps showing after the item it belongs to has left the list. */
+/**
+ * An Undo the attention list keeps showing after the item it belongs to has left the list. `run` restores the reminder
+ * once: called again (from the list and its toast both) it answers with that same request, never a second one.
+ */
 export interface AttentionUndo {
   message: string;
   run: () => Promise<unknown>;
 }
 
+/** The first call starts `task`; later calls share its answer. A failed attempt can be tried again. */
+export function once(task: () => Promise<unknown>): () => Promise<unknown> {
+  let started: Promise<unknown> | null = null;
+  return () => {
+    started ??= task().catch((error: unknown) => {
+      started = null;
+      throw error;
+    });
+    return started;
+  };
+}
+
 /**
  * A due follow-up in "What needs my attention": the prior exchange, why it is here, one action (open it in the Inbox,
  * where replying keeps its exact approval) and "Not relevant", which quiets this reminder until its due time changes.
- * The item then leaves the list, so its Undo is handed to the list (`onUndoable`) as well as offered in a toast. A
- * reminder never contacts anyone.
+ * The item then leaves the list, so its Undo is handed to the list (`onUndoable`), which owns it — the in-place offer
+ * and the toast are one Undo, cleared together. A reminder never contacts anyone.
  */
-export function FollowUpAttentionItem({ item, onUndoable }: { item: AttentionItem; onUndoable?: (undo: AttentionUndo) => void }) {
+export function FollowUpAttentionItem({ item, onUndoable }: { item: AttentionItem; onUndoable: (undo: AttentionUndo) => void }) {
   const copy = currentCopy();
   const lang = currentLang();
   const access = useWorkspaceAccess();
@@ -53,16 +67,9 @@ export function FollowUpAttentionItem({ item, onUndoable }: { item: AttentionIte
     setProblem(null);
     try {
       const result = await change((api, w) => api.dismissFollowUp(w, context.relationshipId, context.revision));
-      const undo: AttentionUndo = {
+      onUndoable({
         message: copy.dismissedToast,
-        run: () => change((api, w) => api.restoreFollowUp(w, context.relationshipId, result.relationship.revision))
-      };
-      onUndoable?.(undo);
-      toast(<span lang={lang}>{copy.dismissedToast}</span>, {
-        action: {
-          label: <span lang={lang}>{copy.undo}</span>,
-          onClick: () => void undo.run().catch((error) => toast.error(<span lang={describeProblem(error, copy).lang}>{describeProblem(error, copy).message}</span>))
-        }
+        run: once(() => change((api, w) => api.restoreFollowUp(w, context.relationshipId, result.relationship.revision)))
       });
     } catch (error) {
       setProblem(describeProblem(error, copy));
