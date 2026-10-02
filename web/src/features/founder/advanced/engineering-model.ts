@@ -1,13 +1,18 @@
 /**
  * Advanced → Engineering (CONTRACTS §8.D), pure reading only. Evidence rows are `GET /engineering`
  * (`rafii_control.engineering_evidence`: attested exact-SHA checks, deployments, errors); the required-check manifest
- * for a SHA comes from `GET /engineering/checks` (captured GitHub snapshots). `engineeringState` is
- * `intelligence.engineering_state` line for line, so the page never shows a green the server's rule would not:
- * 'checks_passed' needs a manifest count for one exact 40-hex SHA and exactly that many required checks, all attested
- * and concluded 'success'. Everything else is 'suspected'. Neither state ever means merged, deployed or fixed.
+ * for a SHA comes from `GET /engineering/checks` (an operator-admitted capture, or in hosted environments the CI
+ * collector's 'ci_attested' manifest, migration 071). `engineeringState` is `intelligence.engineering_state` line for
+ * line and `engineeringVerdict` is `QueryService.engineering`'s verdict, so the page never shows a green the server's
+ * rule would not: 'checks_passed' needs the count from the newest trusted manifest for one exact 40-hex SHA and exactly
+ * that many required checks, all attested and concluded 'success'. Everything else is 'suspected'. Neither state ever
+ * means merged, deployed or fixed.
  */
 
 export const EXACT_SHA = /^[0-9a-f]{40}$/;
+
+/** `intelligence.TRUSTED_MANIFEST_PROVENANCE`: synthetic and unadmitted captures never say how many checks are required. */
+export const TRUSTED_MANIFEST_PROVENANCE: readonly string[] = ['admitted_operational', 'ci_attested'];
 
 export interface EngineeringEvidenceRow {
   id: string;
@@ -31,7 +36,9 @@ export interface CheckSnapshot {
   exactSha: string;
   provenance: string;
   observedAt: string;
-  qualification?: { requiredCount?: number; observedRequiredCount?: number; qualification?: string } | null;
+  /** The server's word on whether this manifest's count may be used (trusted provenance and a payload it re-derived). */
+  trusted?: boolean;
+  qualification?: { requiredCount?: number | null; observedRequiredCount?: number; qualification?: string } | null;
 }
 
 export type EngineeringState = 'checks_passed' | 'suspected';
@@ -81,8 +88,11 @@ export function engineeringVerdict(rows: readonly EngineeringEvidenceRow[], snap
   const onSha = required.filter((row) => row.exact_sha === sha);
   const unattested = onSha.filter((row) => row.attested !== true).length;
   const notGreen = onSha.filter((row) => row.conclusion !== 'success').length;
-  const manifest = snapshots === null ? null : (newestFirst(snapshots.filter((snapshot) => snapshot.exactSha === sha), (snapshot) => snapshot.observedAt)[0] ?? null);
-  const count = manifest?.qualification?.requiredCount;
+  // The newest manifest of a trusted provenance speaks for the SHA; one the server could not re-derive (trusted: false)
+  // supplies no count rather than letting an older one outvote it (`QueryService.manifest_for` / `manifest_count`).
+  const trusted = snapshots === null ? [] : snapshots.filter((snapshot) => snapshot.exactSha === sha && TRUSTED_MANIFEST_PROVENANCE.includes(snapshot.provenance));
+  const manifest = snapshots === null ? null : (newestFirst(trusted, (snapshot) => snapshot.observedAt)[0] ?? null);
+  const count = manifest?.trusted === false ? undefined : manifest?.qualification?.requiredCount;
   const requiredCount = typeof count === 'number' && Number.isInteger(count) && count > 0 ? count : null;
   const reason: VerdictReason =
     snapshots === null
@@ -146,7 +156,7 @@ export function verdictText(verdict: EngineeringVerdict): string {
     case 'manifest_unavailable':
       return `${checks(verdict.observed)} on ${sha}, but the required-check manifest could not be read, so completeness is unconfirmed.`;
     case 'manifest_missing':
-      return `${checks(verdict.observed)} on ${sha}, but no required-check manifest for this SHA says how many are required.`;
+      return `${checks(verdict.observed)} on ${sha}, but no trusted required-check manifest for this SHA says how many are required.`;
     case 'count_mismatch':
       return `${checks(verdict.observed)} observed on ${sha}; its manifest requires ${verdict.required ?? 'an unknown number'}.`;
     case 'unattested':

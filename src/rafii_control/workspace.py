@@ -13,16 +13,19 @@ from psycopg.types.json import Jsonb
 from .auth import ControlError
 from .store import serial
 from .deadlines import remaining
-from .demo_dataset import (sample_data, SCHEMA_VERSION, COLLECTIONS, PAGE_SIZE,
-                           bounded_snapshot, linked_records, refresh_summary, receipt)
+from .demo_dataset import (SCHEMA_VERSION, COLLECTIONS, PAGE_SIZE, bounded_snapshot, linked_records, refresh_summary, receipt,
+                           overlay, restore, own, own_records, compact_response, expand_response)
 
 
-# The founder's Demo dataset is one ~66 MB row; parsing it costs seconds, and a page reads it several times. Reads keep the
-# parsed payload per process, keyed by operator, environment and the row's version (xmin changes on every write), so a
-# Demo action or reset is seen on the next read. Only the latest version per operator is kept. Callers get a shallow copy.
+# The founder's Demo row stores only an overlay of their changes (kilobytes); restoring the 10,000-subscriber dataset from it
+# reuses the base each process generates once (demo_dataset.restore). Reads keep the restored, read-only dataset per process,
+# keyed by operator, environment and the row's version (xmin changes on every write), so a Demo action or reset is seen on
+# the next read. Only the latest version per operator is kept. Callers get a shallow copy.
 _DEMO_CACHE = {}
-# Per-statement budget for the large Demo row (creation, first read, rewrite after an action), within the request deadline.
+# Per-statement budget for the Demo row within the request deadline. The overlay is small, but a legacy row that still holds
+# the whole dataset (tens of MB) is read and rewritten once when it is upgraded.
 DEMO_STATEMENT_SECONDS = 30.0
+_DEMO_ROW = 'FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s'
 
 
 class WorkspaceService:
@@ -90,6 +93,50 @@ class WorkspaceService:
         except Exception: return
         if version is not None: _DEMO_CACHE[(actor, self.store.environment)] = (version, data)
 
+    def _stored(self, con, actor, read):
+        """The founder's restored Demo dataset and replays: read-only and shared with the base for a read, the action's own
+        for an action. Creates the row on first use and upgrades an older one under the row lock."""
+        key = (actor, self.store.environment)
+        # Reads take no row lock and skip the replays only actions use: a page fires several Demo reads at once, and a FOR
+        # UPDATE on this row made them queue behind each other until the 10 s Control deadline answered 503.
+        select = 'SELECT payload '+_DEMO_ROW if read else 'SELECT payload,replays '+_DEMO_ROW+' FOR UPDATE'
+        row = con.execute(select, key).fetchone()
+        if row is None:
+            con.execute('INSERT INTO rafii_control.demo_workspaces(operator_id,environment,payload) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING',
+                        (*key, Jsonb(overlay())))
+            row = con.execute(select, key).fetchone()
+        data = self._restore(row['payload'], read)
+        if data is None and read:
+            # One request upgrades the row; concurrent reads wait for its lock here and then find it upgraded.
+            row = con.execute('SELECT payload,replays '+_DEMO_ROW+' FOR UPDATE', key).fetchone()
+            data = self._restore(row['payload'], read)
+        replays = row.get('replays') or {}
+        if data is None:
+            payload, replays = self._upgrade(row['payload'], replays)
+            con.execute('UPDATE rafii_control.demo_workspaces SET payload=%s,replays=%s WHERE operator_id=%s AND environment=%s',
+                        (Jsonb(payload), Jsonb(replays), *key))
+            data = restore(payload, private=not read)
+        return data, replays
+
+    @staticmethod
+    def _restore(payload, read):
+        try: return restore(payload, private=not read)
+        except ValueError: return None
+
+    @staticmethod
+    def _upgrade(payload, replays):
+        """A legacy row holding the whole dataset of this schema keeps the founder's changes, stored as an overlay (and its
+        replays compacted). Any other row (an older schema version or another base) restarts from the base at its next revision."""
+        payload = payload if isinstance(payload, dict) else {}
+        if ('storage' not in payload and payload.get('schemaVersion') == SCHEMA_VERSION and type(payload.get('revision')) is int
+                and all(isinstance(payload.get(name), list) for name in COLLECTIONS)):
+            return overlay(payload), {key: dict(entry, response=compact_response(entry.get('response'))) for key, entry in replays.items()}
+        data = restore(overlay(), private=True)
+        revision = payload.get('revision')
+        data['revision'] = (revision if type(revision) is int else 0) + 1
+        data['manifest']['upgradedFromLegacyDemo'] = True
+        return overlay(data), {}
+
     def demo(self, principal, action=None):
         # Isolation is enforced by RLS and the verified principal, never a browser-supplied actor.
         with self.store.transaction() as con:
@@ -98,32 +145,9 @@ class WorkspaceService:
             if action is None:
                 cached = self._cached_demo(con, actor)
                 if cached is not None: return cached
-            # The Demo row holds the whole 10,000-record dataset (tens of MB of JSON). Creating it, reading it once per process
-            # and rewriting it after an action each take longer than the 5 s per-statement default on a slower database, so
-            # these statements get the rest of the request deadline, at most DEMO_STATEMENT_SECONDS.
+            # Demo statements get the rest of the request deadline, at most DEMO_STATEMENT_SECONDS (a legacy row is large).
             con.execute("SELECT set_config('statement_timeout',%s,true)", (str(max(1, int(remaining(DEMO_STATEMENT_SECONDS) * 1000))),))
-            # Reads take no row lock: a page fires several Demo reads at once, and a FOR UPDATE on this one large row made them
-            # queue behind each other until the 10 s Control deadline answered 503. Actions and the one-time upgrade still lock.
-            read = action is None
-            select = ('SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s' if read else
-                      'SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE')
-            locked = 'SELECT payload,replays FROM rafii_control.demo_workspaces WHERE operator_id=%s AND environment=%s FOR UPDATE'
-            row = con.execute(select, (actor,self.store.environment)).fetchone()
-            # Do not generate or serialize all 10,000 records on each read.
-            if row is None:
-                con.execute('INSERT INTO rafii_control.demo_workspaces(operator_id,environment,payload) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING',
-                            (actor,self.store.environment,Jsonb(sample_data())))
-                row = con.execute(select, (actor,self.store.environment)).fetchone()
-            if read and row['payload'].get('schemaVersion') != SCHEMA_VERSION:
-                row = con.execute(locked, (actor,self.store.environment)).fetchone()
-            data, replays = row['payload'], row['replays']
-            if data.get('schemaVersion') != SCHEMA_VERSION:
-                previous_revision = data.get('revision', 0)
-                data, replays = sample_data(), {}
-                data['revision'] = previous_revision + 1
-                data['manifest']['upgradedFromLegacyDemo'] = True
-                con.execute('UPDATE rafii_control.demo_workspaces SET payload=%s,replays=%s WHERE operator_id=%s AND environment=%s',
-                            (Jsonb(data),Jsonb(replays),actor,self.store.environment))
+            data, replays = self._stored(con, actor, action is None)
             data['receipt'] = receipt(data)
             if action is None:
                 self._remember_demo(con, actor, data)
@@ -142,21 +166,20 @@ class WorkspaceService:
             replay = replays.get(key)
             if replay:
                 if replay['request'] != action: raise ControlError('IDEMPOTENCY_CONFLICT',409)
+                response = expand_response(replay['response'])
                 # Ordinary Demo mutations may also have cached optional AI history.
                 # Keep their replay available, but redact that history after revocation.
-                if replay['response'].get('intelligence'):
+                if response.get('intelligence'):
                     from .founder_intelligence import demo_snapshot
                     current = demo_snapshot(data, principal)['intelligence']
-                    if current.get('code'):
-                        response = copy.deepcopy(replay['response'])
-                        response['intelligence'] = current
-                        return response
-                return replay['response']
+                    if current.get('code'): response['intelligence'] = current
+                return response
             if type(action['revision']) is not int or action['revision'] != data['revision']: raise ControlError('STALE_PREVIEW',409)
             kind = action['action']
+            # Records are the shared, read-only base until an action takes its own copy (self.target / own_records).
             if kind == 'reset':
                 revision = data['revision']
-                data = sample_data()
+                data = restore(overlay(), private=True)
                 data['revision'] = revision
             elif kind == 'rename_workspace':
                 target = self.target(data,'workspaces',action['targetId'])
@@ -170,9 +193,12 @@ class WorkspaceService:
                 target['status'] = 'funded'
                 self.target(data,'workspaces',target['workspaceId'])['status'] = 'active'
                 subscription = next((s for s in data['subscriptions'] if s['workspaceId']==target['workspaceId']), None)
-                if subscription: subscription['status'] = 'active'
+                if subscription: self.target(data,'subscriptions',subscription['id'])['status'] = 'active'
                 if target.get('invoiceId'): self.target(data,'invoices',target['invoiceId'])['status'] = 'paid'
-            elif not self._extension_action(data, action, principal): raise ControlError('SCOPE_DENIED')
+            else:
+                # A scenario patches records in any collection, so it gets private copies of all of them first.
+                if kind == 'set_scenario': own_records(data)
+                if not self._extension_action(data, action, principal): raise ControlError('SCOPE_DENIED')
             data['revision'] += 1
             refresh_summary(data)
             data['receipt'] = receipt(data)
@@ -184,19 +210,20 @@ class WorkspaceService:
                 next((data['activity'].pop(i) for i in range(len(data['activity'])-1,-1,-1)
                       if not str(data['activity'][i]['id']).startswith('activity-')), None)
             response = self._snapshot(data, principal)
-            replays[key] = dict(request=action,response=copy.deepcopy(response))
+            replays[key] = dict(request=action,response=compact_response(response))
             replays = dict(list(replays.items())[-20:])
             con.execute('UPDATE rafii_control.demo_workspaces SET payload=%s,replays=%s WHERE operator_id=%s AND environment=%s',
-                        (Jsonb(data),Jsonb(replays),actor,self.store.environment))
+                        (Jsonb(overlay(data)),Jsonb(replays),actor,self.store.environment))
             con.execute('INSERT INTO rafii_control.workspace_actions(operator_id,environment,mode,request_id,action,target_id) VALUES(%s,%s,\'demo\',%s,%s,%s)',
                         (actor,self.store.environment,key,kind,str(action['targetId'])[:160]))
             return response
 
     @staticmethod
     def target(data, collection, identifier):
-        row = next((r for r in data[collection] if r['id']==identifier),None)
-        if row is None: raise ControlError('VALIDATION_FAILED',400)
-        return row
+        """The action's own copy of one record, to change in place."""
+        index = next((i for i,r in enumerate(data[collection]) if r['id']==identifier),None)
+        if index is None: raise ControlError('VALIDATION_FAILED',400)
+        return own(data[collection], index)
 
     @staticmethod
     def name(value):

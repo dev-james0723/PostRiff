@@ -30,10 +30,11 @@ Modes (one per run; output is JSON lines prefixed FOUNDER-ACTIVATION, ids and bo
                  (FOUNDER_SESSION_SCRAM, FOUNDER_READER_SCRAM, FOUNDER_WATCHDOG_SCRAM); plaintext passwords never reach
                  Vercel's build. Each login may SET to exactly one NOLOGIN Control role and inherits nothing.
     --enroll-pending-founder
-                 enrol, as the founder operator of this environment, the one identity that Control refused with
-                 FOUNDER_REQUIRED at the founder sign-in page in the last 20 minutes. Production sits behind Vercel
-                 team login, so only a team member can reach that page; the refusal row proves the identity passed
-                 Supabase sign-in there. Refuses when there is no such identity, more than one, or another founder.
+                 enrol only the independently verified FOUNDER_EXPECTED_USER_ID, supplied through secure build
+                 configuration, when the one recent FOUNDER_REQUIRED refusal matches that exact identity. Refuses
+                 missing/invalid pins, no candidate, multiple candidates, mismatches, another active founder, or
+                 a revoked operator. Never derive the pin from the refusal row: Vercel team membership and a
+                 successful Supabase sign-in do not establish founder ownership. MFA/session checks remain unchanged.
     --rehearsal  CI only: a loopback disposable database instead of a Vercel target.
 """
 from __future__ import annotations
@@ -373,9 +374,20 @@ def logins(con, environ):
             say(step='login', login=login, member_of=granted, set_without_inherit=True)
 
 
-def enroll(con, environment):
+def enroll(con, environment, environ=None):
+    # A successful upstream sign-in (or Vercel team membership) does not identify the owner. Pin the independently
+    # verified founder before reading refusal candidates; never derive this value from the candidate query itself.
+    from uuid import UUID
+    environ = os.environ if environ is None else environ
+    try:
+        expected = UUID((environ.get('FOUNDER_EXPECTED_USER_ID') or '').strip())
+        if not expected.int:
+            raise ValueError('nil identity')
+    except (ValueError, TypeError, AttributeError):
+        raise Refused('FOUNDER_EXPECTED_USER_ID must be an independently verified, non-nil user UUID') from None
     with con.transaction():
         cur = con.cursor()
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended('rafii-founder-enrollment:' || %s,0))", (environment,))
         cur.execute("SELECT DISTINCT actor FROM rafii_control.admin_audit_log WHERE action='session.exchange' AND result='denied' "
                     "AND error_code='FOUNDER_REQUIRED' AND environment=%s AND actor IS NOT NULL AND occurred_at > now() - interval '20 minutes'",
                     (environment,))
@@ -383,14 +395,20 @@ def enroll(con, environment):
         if len(candidates) != 1:
             raise Refused(f'expected exactly one refused founder sign-in in the last 20 minutes, found {len(candidates)}')
         user = candidates[0]
+        if user != str(expected):
+            raise Refused('the refused identity is not the independently verified founder')
         cur.execute("SELECT count(*) FROM rafii_control.platform_operators WHERE environment=%s AND status='active' AND user_id<>%s", (environment, user))
         if cur.fetchone()[0]:
             raise Refused('another active founder exists in this environment')
         cur.execute('SELECT EXISTS(SELECT 1 FROM auth.users WHERE id=%s)', (user,))
         if not cur.fetchone()[0]:
             raise Refused('the refused identity is not a user of this project')
+        cur.execute('SELECT status FROM rafii_control.platform_operators WHERE user_id=%s AND environment=%s FOR UPDATE', (user, environment))
+        existing = cur.fetchone()
+        if existing is not None and existing[0] != 'active':
+            raise Refused('founder access was revoked; enrollment does not reactivate it')
         cur.execute("INSERT INTO rafii_control.platform_operators(user_id, environment, role, status, capabilities) VALUES (%s, %s, 'founder', 'active', %s) "
-                    "ON CONFLICT (user_id, environment) DO UPDATE SET status='active', capabilities=excluded.capabilities",
+                    "ON CONFLICT (user_id, environment) DO UPDATE SET capabilities=excluded.capabilities",
                     (user, environment, list(CAPABILITIES)))
         cur.execute("SELECT count(*) FROM rafii_control.platform_operators WHERE environment=%s AND status='active'", (environment,))
         say(step='enrolled', environment=environment, active_founders=cur.fetchone()[0], capabilities=len(CAPABILITIES))
@@ -417,7 +435,7 @@ def main(argv=None, environ=None):
             elif args.logins:
                 logins(con, environ)
             elif args.enroll_pending_founder:
-                enroll(con, environment)
+                enroll(con, environment, environ)
             else:
                 with con.transaction():
                     con.execute('SET TRANSACTION READ ONLY')
