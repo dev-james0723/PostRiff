@@ -190,3 +190,24 @@ class WeeklyPrepareFirstWeekGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordSlotTest(unittest.TestCase):
+    """A later successful draft replaces an earlier 'still working' or failure note on the slot (review F4 #3)."""
+
+    def test_success_clears_an_earlier_note_and_question(self):
+        state = {"coworker": {"weekly": {"revision": 0, "weeks": [{"id": "wk", "slots": [
+            {"id": "s1", "status": "generating", "reason": "drafting_timeout", "question": "Rafii couldn't draft this post. Try again, change the angle, or skip it."}]}]}}}
+        service = CoworkerService.__new__(CoworkerService)
+        service._find_week = lambda state_, week_id: next(w for w in state_["coworker"]["weekly"]["weeks"] if w["id"] == week_id)
+        service._command_as = lambda repository, workspace_id, token, fn, *rest: fn(state, None)
+        original_root = weekly_operator.root
+        weekly_operator.root = lambda state_: state_["coworker"]["weekly"]
+        try:
+            service._record_slot(None, "w", "t", "wk", "s1", {"status": "ready_for_review", "variantId": "v1", "runId": "r1"})
+        finally:
+            weekly_operator.root = original_root
+        slot = state["coworker"]["weekly"]["weeks"][0]["slots"][0]
+        self.assertEqual((slot["status"], slot["variantId"]), ("ready_for_review", "v1"))
+        self.assertNotIn("reason", slot)
+        self.assertNotIn("question", slot)

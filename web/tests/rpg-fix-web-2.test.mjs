@@ -255,8 +255,9 @@ test('L5: only the server’s stale-quote answers are priced again; every other 
   const { credits, hook, quotes } = creditsHarness();
   const wallet = server('src/postriff_phase2/credit_wallet.py');
   for (const sentence of ['Credit approval is used or expired. Review it again.', 'This credit approval was already claimed.', 'The model or credit policy changed. Review again.']) {
-    assert.ok(wallet.includes(`AlphaError('${sentence}',409)`), `the server still says: ${sentence}`);
-    assert.equal(credits.staleCreditApproval(new ApiError(sentence, 409, 'conflict')), true, 'as the server sends it: the generic 409 code');
+    assert.ok(wallet.includes(`AlphaError('${sentence}',409,code='credit_quote_stale')`), `the server still says, with its code: ${sentence}`);
+    assert.equal(credits.staleCreditApproval(new ApiError(sentence, 409, 'credit_quote_stale')), true, 'as the server sends it now');
+    assert.equal(credits.staleCreditApproval(new ApiError(sentence, 409, 'conflict')), true, 'an older API: the generic 409 code');
     assert.equal(credits.staleCreditApproval(new ApiError(sentence, 409)), true);
     assert.equal(credits.staleCreditApproval(new ApiError(sentence, 402, 'conflict')), false);
   }
@@ -693,7 +694,7 @@ test('L9: with Series off, the follow is kept and can still be stopped — said 
   }
   // What the copy describes: with the flag off the server keeps a follow an automation already has (and drafts nothing).
   const model = server('src/postriff_phase2/series/model.py');
-  assert.match(model, /if followers\(state, series_id\):\s*return find\(state, series_id, required=False\)/);
+  assert.match(model, /if kept == series_id and followers\(state, series_id\):\s*return find\(state, series_id, required=False\)/);
   assert.match(model, /def evergreen_episode\([^)]*\):[\s\S]*?if not enabled\(\):\s*return None/);
   const select = read('features/library/series/series-follow-select.tsx');
   assert.equal((select.match(/text=\{copy\.followOff\} onClear=\{(?:clear|onClear)\} tone='note'/g) ?? []).length, 2, 'said as a note, not an error');

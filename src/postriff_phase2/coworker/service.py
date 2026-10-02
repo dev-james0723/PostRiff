@@ -379,6 +379,10 @@ class CoworkerService:
                 target["reason"] = result["reason"]
                 if result["status"] == "failed":
                     target["question"] = "Rafii couldn't draft this post. Try again, change the angle, or skip it."
+            elif result["status"] != "failed":
+                # A later successful draft replaces an earlier "still working" or failure note (never a stale reason).
+                target.pop("reason", None)
+                target.pop("question", None)
             if result.get("costState"):
                 target["costState"] = result["costState"]
             weekly_operator.root(state_)["revision"] += 1

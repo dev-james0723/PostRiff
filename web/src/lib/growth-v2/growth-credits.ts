@@ -44,9 +44,14 @@ const STALE_QUOTE_MESSAGES: ReadonlySet<string> = new Set([
   'The model or credit policy changed. Review again.'
 ]);
 
-/** The server refused a remembered quote as used, expired or changed: price it again. Any other 409 is its own error. */
+/**
+ * The server refused a remembered quote as used, expired or changed: price it again. Any other 409 is its own error.
+ * The server says so with `credit_quote_stale`; the exact sentences remain a fallback for an older API during a deploy.
+ */
 export function staleCreditApproval(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 409 && (!error.code || error.code === 'conflict') && STALE_QUOTE_MESSAGES.has(error.message);
+  if (!(error instanceof ApiError) || error.status !== 409) return false;
+  if (error.code === 'credit_quote_stale') return true;
+  return (!error.code || error.code === 'conflict') && STALE_QUOTE_MESSAGES.has(error.message);
 }
 
 /** Said when Confirm meets a request that no longer matches the one its limit priced: nothing was sent. */

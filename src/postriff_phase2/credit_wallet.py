@@ -168,7 +168,7 @@ class CreditBook:
         cur.execute('SELECT policy_id,request_digest,workspace_revision,model,provider,max_millicredits,extract(epoch from expires_at),reservation_id::text FROM public.pr_credit_quotes WHERE workspace_id=%s AND actor=%s AND id::text=%s FOR UPDATE',(workspace_id,actor,str(quote_id)))
         row=cur.fetchone()
         if not row: raise AlphaError('Credit approval unavailable.',403)
-        if row[7] or float(row[6])<=self.clock(): raise AlphaError('Credit approval is used or expired. Review it again.',409)
+        if row[7] or float(row[6])<=self.clock(): raise AlphaError('Credit approval is used or expired. Review it again.',409,code='credit_quote_stale')
         return dict(zip(('policy','digest','revision','model','provider','maximum','expiry','reservationId'),row))
 
     def authorize(self, cur, workspace_id, actor, revision, request_digest, quote_id):
@@ -185,7 +185,7 @@ class CreditBook:
         if not isinstance(authority,dict): raise AlphaError('Confirm this task credit limit before generating.',402)
         quote=self.quote(cur,workspace_id,actor,authority.get('quoteId'))
         if quote['policy']!=policy or quote['digest']!=authority.get('requestDigest') or quote['model']!=model or quote['provider']!=provider:
-            raise AlphaError('The model or credit policy changed. Review again.',409)
+            raise AlphaError('The model or credit policy changed. Review again.',409,code='credit_quote_stale')
         if millicredits(estimate)>quote['maximum']: raise AlphaError('This task exceeds your credit limit. Increase it or reduce the task.',402)
         view=self.view(cur,workspace_id)
         if view['debtMilliCredits'] or view['availableMilliCredits']<quote['maximum']:
@@ -200,7 +200,7 @@ class CreditBook:
 
     def claim(self, cur, workspace_id, reservation_id, credit):
         cur.execute('UPDATE public.pr_credit_quotes SET reservation_id=%s WHERE workspace_id=%s AND id::text=%s AND reservation_id IS NULL RETURNING id',(reservation_id,workspace_id,credit['quoteId']))
-        if not cur.fetchone(): raise AlphaError('This credit approval was already claimed.',409)
+        if not cur.fetchone(): raise AlphaError('This credit approval was already claimed.',409,code='credit_quote_stale')
 
     def settlement(self, cur, workspace_id, reservation_id, outcome, actual):
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'",(workspace_id,reservation_id))
