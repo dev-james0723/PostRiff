@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { parseAsInteger, parseAsString, useQueryState, useQueryStates } from 'nuqs';
 import { Icons } from '@/components/icons';
-import { ActiveFilters, FilterPanel, FilterSelect, SegmentedControl, StateMessage, Workbar, type SegmentOption } from '@/components/rafii';
+import { FilterPanel, FilterSelect, SegmentedControl, StateMessage, Workbar, type SegmentOption } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { DataTableColumnHeader } from '@/components/ui/table/data-table-column-header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FounderAnimatedRows, FounderFilterChips } from '@/features/founder/motion/founder-motion';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -212,7 +213,10 @@ function CustomerList({ filters, search, page, update, clear, risk, index, onOpe
             )}
           </FilterPanel>
         }
-        summary={<ActiveFilters count={activeFilterCount} summary={[filters.status !== 'all' ? `status ${stateLabel(filters.status)}` : null, filters.plan !== 'all' ? `plan ${filters.plan}` : null].filter(Boolean).join(' · ')} onClear={() => update({ status: 'all', plan: 'all' })} />}
+        summary={<FounderFilterChips chips={[
+          ...(filters.status !== 'all' ? [{ id: 'status', label: `Status: ${stateLabel(filters.status)}`, onRemove: () => update({ status: 'all' }) }] : []),
+          ...(filters.plan !== 'all' ? [{ id: 'plan', label: `Plan: ${filters.plan}`, onRemove: () => update({ plan: 'all' }) }] : [])
+        ]} />}
         count={
           data ? (
             <span className='flex items-center gap-2'>
@@ -223,6 +227,7 @@ function CustomerList({ filters, search, page, update, clear, risk, index, onOpe
         }
       />
       <FlagCoverage risk={risk} />
+      <FounderAnimatedRows label='Animated customer records'>
       <RecordsTable
         table={table}
         status={{ isPending: query.isPending, isFetching: query.isFetching, error: query.error, total: data?.total, pageSize: data?.pageSize ?? RECORDS_PAGE_SIZE, refetch: query.refetch }}
@@ -232,6 +237,7 @@ function CustomerList({ filters, search, page, update, clear, risk, index, onOpe
         filtered={Boolean(search) || activeFilterCount > 0}
         onClear={clear}
       />
+      </FounderAnimatedRows>
     </div>
   );
 }

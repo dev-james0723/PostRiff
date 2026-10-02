@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { FounderSaveButton } from '@/features/founder/motion/founder-motion';
 import { Band, FIELD_CLASS, SelectField, StatusChip } from '@/features/workspace/rafii-parts';
 import { cn } from '@/lib/utils';
 import { failureOf, useBriefingSchedules, useCapability, useCreateBriefingSchedule, useDeleteBriefingSchedule } from '../customers/kit/api';
@@ -49,6 +50,8 @@ export function BriefingSchedules() {
   const [enabled, setEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const ids = useId();
+  const currentSchedule = scheduleFromDraft({ kind, localTime, weekdays, timeZone, enabled });
+  const unchangedSavedSchedule = 'schedule' in currentSchedule && JSON.stringify(create.variables) === JSON.stringify(currentSchedule.schedule);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -152,9 +155,9 @@ export function BriefingSchedules() {
             </div>
           )}
           <div className='flex flex-wrap items-center gap-3 sm:col-span-2'>
-            <Button type='submit' variant='action' size='control' disabled={create.isPending || !canSettings} title={canSettings ? undefined : 'Needs the control.settings capability and a step-up.'}>
-              {create.isPending ? <Icons.spinner className='animate-spin' /> : <Icons.add />} Add schedule
-            </Button>
+            <FounderSaveButton state={create.isPending ? 'saving' : create.isError || error ? 'error' : create.isSuccess && unchangedSavedSchedule ? 'saved' : 'idle'} disabled={!canSettings} title={canSettings ? undefined : 'Needs the control.settings capability and a step-up.'}>
+              Add schedule
+            </FounderSaveButton>
             <span className='text-muted-foreground text-xs'>A weekly briefing replaces the daily one on its day. Occurrences more than 15 minutes late are marked missed, never dialled late.</span>
           </div>
         </form>

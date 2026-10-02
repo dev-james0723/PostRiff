@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { FounderScrubbableTrend } from '@/features/founder/motion/founder-motion';
+import { reconcileTrendIndex } from '@/features/founder/motion/founder-motion-behavior';
 import { ChartCard } from '@/features/founder/shared/chart-card';
 import { formatMetricValue, formatTick } from '@/features/founder/shared/format';
 import { StateFallback } from '@/features/founder/shared/state-fallbacks';
@@ -39,6 +41,11 @@ function pivot(trend: OverviewTrend): Row[] {
 
 export function TrendChart({ trend, title, onAsk, period, onPeriodChange, periods, className }: { trend: OverviewTrend | null; title: string; onAsk: () => void; period: string; onPeriodChange: (period: string) => void; periods: readonly string[]; className?: string }) {
   const rows = useMemo(() => (trend ? pivot(trend) : []), [trend]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const reconciledIndex = reconcileTrendIndex(rows.length, selectedIndex);
+  useEffect(() => {
+    if (selectedIndex !== reconciledIndex) setSelectedIndex(reconciledIndex);
+  }, [reconciledIndex, selectedIndex]);
   const list = seriesOf(trend);
   const config = useMemo<ChartConfig>(() => Object.fromEntries(list.map((series, index) => [series.id, { label: series.label, color: PALETTE[index % PALETTE.length] }])), [list]);
   const measured = rows.some((row) => Object.entries(row).some(([key, value]) => key !== 't' && typeof value === 'number'));
@@ -53,11 +60,13 @@ export function TrendChart({ trend, title, onAsk, period, onPeriodChange, period
       ) : !measured ? (
         <StateFallback kind={trend.dataState === 'collecting' ? 'empty' : 'partial'} layout='inline' title={trend.dataState === 'collecting' ? 'Collecting; nothing measured yet' : 'No measured buckets in this period'} description='Buckets the source has not measured are left blank rather than drawn as zero.' />
       ) : (
+        <>
         <ChartContainer config={config} className='aspect-[16/7] min-h-44 w-full'>
           <LineChart data={rows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey='t' tickLine={false} axisLine={false} minTickGap={24} tickFormatter={(value: string) => formatTick(value)} />
             <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={(value: number) => format(value)} />
+            {rows[reconciledIndex]?.t && <ReferenceLine x={rows[reconciledIndex].t} stroke='var(--foreground)' strokeOpacity={0.3} strokeDasharray='3 3' ifOverflow='extendDomain' />}
             <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => formatTick(String(value))} formatter={(value, name) => <span className='flex w-full items-center justify-between gap-3'><span className='text-muted-foreground'>{config[String(name)]?.label ?? String(name)}</span><span className='text-foreground font-mono font-medium tabular-nums'>{typeof value === 'number' ? format(value) : 'Unavailable'}</span></span>} />} />
             <ChartLegend content={<ChartLegendContent />} />
             {list.map((series) => (
@@ -65,6 +74,8 @@ export function TrendChart({ trend, title, onAsk, period, onPeriodChange, period
             ))}
           </LineChart>
         </ChartContainer>
+        <FounderScrubbableTrend trend={trend} selectedIndex={reconciledIndex} onSelectedIndexChange={setSelectedIndex} />
+        </>
       )}
     </ChartCard>
   );

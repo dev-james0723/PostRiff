@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { FounderDonutBreakdown, FounderInlineConfirm, FounderInsightMotion } from '@/features/founder/motion/founder-motion';
 import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
 import { formatRelative } from '@/features/founder/shared/format';
@@ -46,11 +47,7 @@ function ActionButton({ item, action, onAsk, onAck, busy, demo }: { item: Attent
   }
   if (action.kind === 'ack') {
     const bound = typeof action.incidentId === 'string' && typeof action.version === 'number';
-    return (
-      <Button type='button' variant='glass' size='sm' disabled={busy || !bound || demo} title={demo ? DEMO_ACK_REASON : bound ? `Acknowledge version ${action.version}` : 'This incident has no version to acknowledge'} onClick={() => onAck(action)} className='gap-1.5'>
-        <Icons.check className='size-3.5' aria-hidden /> {action.label}
-      </Button>
-    );
+    return <FounderInlineConfirm label={<><Icons.check className='size-3.5' aria-hidden /> {action.label}</>} confirmLabel='Acknowledge' disabled={busy || !bound || demo} onConfirm={() => onAck(action)}>{demo ? <span className='text-muted-foreground px-2 text-xs'>{DEMO_ACK_REASON}</span> : null}</FounderInlineConfirm>;
   }
   return (
     <Button type='button' variant='glass' size='sm' onClick={() => onAsk(item, action)} className='gap-1.5'>
@@ -76,7 +73,9 @@ function AttentionRow({ item, onAsk }: { item: AttentionItem; onAsk: AskAttentio
   const Icon = Icons[severity.icon];
   const href = founderSafeHref(item.href);
   return (
-    <li data-attention-id={item.id} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4'>
+    <li data-attention-id={item.id}>
+    <FounderInsightMotion>
+    <div className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4'>
       <div className='flex items-start gap-3'>
         <span aria-hidden className={cn('mt-0.5 flex shrink-0 items-center', item.severity === 'info' ? 'text-muted-foreground' : 'text-foreground')}>
           <Icon className='size-4' />
@@ -114,6 +113,8 @@ function AttentionRow({ item, onAsk }: { item: AttentionItem; onAsk: AskAttentio
           {error}
         </p>
       )}
+    </div>
+    </FounderInsightMotion>
     </li>
   );
 }
@@ -124,11 +125,17 @@ export function AttentionPanel({ items, onAsk, className }: { items: AttentionIt
       {items.length === 0 ? (
         <StateMessage kind='success' layout='inline' title='All clear' description='No rule has fired. Stale sources would be listed here first.' />
       ) : (
+        <>
+        <FounderDonutBreakdown
+          label='Attention by severity'
+          items={(['critical', 'warning', 'info'] as const).map((severity) => ({ id: severity, label: severity, value: items.filter((item) => item.severity === severity).length })).filter((item) => item.value > 0)}
+        />
         <ul className='flex flex-col gap-2' aria-label='Needs your attention'>
           {items.slice(0, 5).map((item) => (
             <AttentionRow key={item.id} item={item} onAsk={onAsk} />
           ))}
         </ul>
+        </>
       )}
     </Panel>
   );

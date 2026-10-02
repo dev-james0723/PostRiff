@@ -12,10 +12,10 @@
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { IconMicrophone } from '@tabler/icons-react';
-import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { FOUNDER_SECTIONS, isFounderSectionId } from '@/config/founder-nav';
+import { FounderAiEditor, FounderLiveTaskRows, FounderThinkingOrb } from '@/features/founder/motion/founder-motion';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
 import { RafiiAvatar } from '@/features/site-agent/rafii-avatar';
 import { randomKey } from '@/lib/founder/api';
@@ -106,15 +106,16 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
   const lastAssistant = thread.findLast((item) => item.role === 'assistant')?.id;
 
   const waitForRun = useCallback(
-    async (initial: FounderAgentTurnResponse, runId: string): Promise<FounderAgentTurnResponse> => {
+    async (initial: FounderAgentTurnResponse, runId: string, onUpdate?: (response: FounderAgentTurnResponse) => void): Promise<FounderAgentTurnResponse> => {
       activeRun.current = runId;
       let latest = initial;
       try {
         for (let attempt = 0; attempt < POLL_LIMIT; attempt += 1) {
-          if (activeRun.current !== runId) return latest;
+          if (activeRun.current !== runId) return { ...latest, status: 'cancel_requested' };
           await wait(POLL_MS);
           const run = (await api.agentRun(runId)).data;
           latest = merge(initial, run);
+          onUpdate?.(latest);
           if (TERMINAL.has(run.status)) return latest;
         }
         return { ...latest, status: 'timeout' };
@@ -126,10 +127,10 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
   );
 
   const send = useCallback(
-    async (raw: string, retryKey?: string) => {
+    async (raw: string, retryKey?: string, preserveDraft = false): Promise<FounderAgentTurnResponse | null> => {
       const message = raw.trim();
       const k = keyRef.current;
-      if (!message || founderPanelStore.get().busy[k]) return;
+      if (!message || founderPanelStore.get().busy[k]) return null;
       const idempotencyKey = retryKey ?? randomKey();
       const assistantId = `a-${idempotencyKey}`;
       if (!retryKey) {
@@ -138,7 +139,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
       } else {
         founderPanelStore.update(k, assistantId, { pending: true, error: null });
       }
-      setText('');
+      if (!preserveDraft) setText('');
       founderPanelStore.setBusy(k, true);
       try {
         const asked = askContext.current;
@@ -156,12 +157,14 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
           })
         ).data;
         if (response.conversationId) founderPanelStore.setConversation(k, response.conversationId);
-        founderPanelStore.update(k, assistantId, { runId: response.runId });
-        const final = !TERMINAL.has(response.status) && response.runId ? await waitForRun(response, response.runId) : response;
+        founderPanelStore.update(k, assistantId, { runId: response.runId, response });
+        const final = !TERMINAL.has(response.status) && response.runId ? await waitForRun(response, response.runId, (observed) => founderPanelStore.update(k, assistantId, { response: observed })) : response;
         founderPanelStore.update(k, assistantId, { pending: false, response: final, text: final.result?.answerText ?? '', runId: final.runId });
+        return final;
       } catch (error) {
         const notConnected = isFounderApiError(error) && error.status === 409 && error.blocker === 'ops_workspace_not_configured';
         founderPanelStore.update(k, assistantId, { pending: false, error: notConnected ? NOT_CONNECTED : describeFounderError(error), retryKey: notConnected ? null : idempotencyKey, retryText: message });
+        return null;
       } finally {
         founderPanelStore.setBusy(k, false);
       }
@@ -272,6 +275,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         <div ref={end} />
       </div>
       <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        <FounderAiEditor key={key} value={text} onChange={setText} onRequestRevision={(prompt) => send(prompt, undefined, true)} busy={busy} />
         <div className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <textarea
             ref={input}
@@ -308,9 +312,8 @@ function ThreadItem({ item, latest, busy, onAsk, onRetry, onNavigate, onStop }: 
       <li className='flex gap-2.5'>
         <RafiiAvatar size={24} thinking />
         <div className='flex min-w-0 flex-1 flex-col gap-1.5' role='status'>
-          <span className='text-muted-foreground text-xs'>
-            <ThinkingShimmer>{item.runId ? 'Checking the records' : 'Reading your question'}</ThinkingShimmer>
-          </span>
+          <FounderThinkingOrb text={item.runId ? 'Checking the records' : 'Reading your question'} />
+          <FounderLiveTaskRows item={item} />
           {item.runId && (
             <Button type='button' variant='quiet' size='xs' className='self-start' onClick={onStop}>
               Stop
@@ -339,6 +342,7 @@ function ThreadItem({ item, latest, busy, onAsk, onRetry, onNavigate, onStop }: 
     <li className='flex gap-2.5'>
       <RafiiAvatar size={24} className='mt-0.5' />
       <article className={cn('min-w-0 flex-1')} aria-label="Rafii's answer">
+        <FounderLiveTaskRows item={item} />
         {item.response ? <FounderAnswer response={item.response} actions={{ onAsk, onNavigate, latest }} /> : <p className='text-muted-foreground text-sm'>{item.text}</p>}
       </article>
     </li>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { type Table as TanstackTable, flexRender } from '@tanstack/react-table';
+import { motion } from 'motion/react';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -98,10 +99,15 @@ export function RecordsTable({ table, status, label, caption, onOpen, filtered =
               </TableHeader>
               <TableBody>
                 {rows.map((row) => (
-                  <TableRow
-                    key={row.id}
+                  <motion.tr
+                    key={row.original.id}
+                    layout
+                    layoutId={`founder-customer-${row.original.id}`}
+                    data-slot='table-row'
                     data-state={row.getIsSelected() ? 'selected' : undefined}
-                    className={cn(onOpen && 'cursor-pointer')}
+                    data-founder-detail-source={row.original.id}
+                    data-founder-motion='15'
+                    className={cn('border-b transition-[background,box-shadow,transform] duration-200 hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-[state=selected]:shadow-[inset_3px_0_0_var(--foreground)]', onOpen && 'cursor-pointer hover:translate-x-0.5')}
                     onClick={onOpen ? () => onOpen(row.original) : undefined}
                     onKeyDown={
                       onOpen
@@ -117,7 +123,7 @@ export function RecordsTable({ table, status, label, caption, onOpen, filtered =
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
-                  </TableRow>
+                  </motion.tr>
                 ))}
               </TableBody>
             </Table>

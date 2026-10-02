@@ -4,9 +4,10 @@ import { useId } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import { NumberTicker } from '@/components/motion/number-ticker';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { FounderTooltipMotion } from '@/features/founder/motion/founder-motion';
 import type { Coverage, DataState, SeriesPoint } from '@/lib/founder/types';
 import { cn } from '@/lib/utils';
+import { useMotionPreference } from '@/lib/rafii/motion';
 import { formatComparisonPeriod, formatDelta, formatMetricValue } from './format';
 import { ReceiptChip } from './receipt-chip';
 import { founderSafeHref } from './safe-href';
@@ -41,12 +42,11 @@ function coverageLabel(dataState: DataState, coverage?: Coverage | null): string
 export function CoverageDot({ dataState, coverage, className }: { dataState: DataState; coverage?: Coverage | null; className?: string }) {
   const label = coverageLabel(dataState, coverage);
   return (
-    <Tooltip>
-      <TooltipTrigger render={<button type='button' aria-label={`Coverage: ${label}`} className={cn('rafii-focus inline-flex size-4 cursor-help items-center justify-center rounded-full', className)} />}>
+    <FounderTooltipMotion label={label} side='bottom'>
+      <button type='button' aria-label={`Coverage: ${label}`} className={cn('rafii-focus inline-flex size-4 cursor-help items-center justify-center rounded-full', className)}>
         <span aria-hidden className={cn('size-2 rounded-full', COVERAGE_TONE[dataState] ?? 'bg-foreground/45')} />
-      </TooltipTrigger>
-      <TooltipContent side='bottom'>{label}</TooltipContent>
-    </Tooltip>
+      </button>
+    </FounderTooltipMotion>
   );
 }
 
@@ -115,11 +115,12 @@ export interface MetricTileProps {
 }
 
 export function MetricTile({ id, label, value, unit, currency, delta, deltaPeriod, sparkline, dataState, coverage, href, receiptId, collectingSince, definition, periodLabel, note, onAsk, className }: MetricTileProps) {
+  const { reduced } = useMotionPreference();
   const ready = dataState === 'measured' || dataState === 'partial' || dataState === 'stale' || dataState === 'synthetic' || dataState === 'demo';
   const shown = ready && value !== null && value !== undefined;
   const change = shown ? formatDelta(delta, unit, currency) : null;
   const safeHref = founderSafeHref(href);
-  const numeric = shown && (unit === 'count' || unit === '') && typeof value === 'number';
+  const numeric = shown && typeof value === 'number' && Number.isFinite(value);
   return (
     <div data-tile={id} className={cn('rafii-quiet flex min-w-0 flex-col gap-2 rounded-[var(--rafii-radius-card)] p-4', className)}>
       <div className='flex items-start justify-between gap-2'>
@@ -136,7 +137,7 @@ export function MetricTile({ id, label, value, unit, currency, delta, deltaPerio
           {!shown ? (
             dataState === 'collecting' || collectingSince ? <CollectingSince since={collectingSince} className='text-muted-foreground text-sm font-medium' /> : <Unavailable reason={dataState === 'suppressed' ? 'withheld by policy' : 'source not qualified'} className='text-muted-foreground text-sm font-medium' />
           ) : numeric ? (
-            <NumberTicker value={value as number} locale />
+            <span data-founder-motion='16'><NumberTicker value={value as number} format={() => formatMetricValue(value, unit, currency)} startOnView={false} duration={reduced ? 0 : 0.28} stagger={0} /></span>
           ) : (
             formatMetricValue(value, unit, currency)
           )}

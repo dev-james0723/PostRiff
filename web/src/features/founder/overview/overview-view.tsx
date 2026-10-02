@@ -6,6 +6,7 @@ import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import PageContainer from '@/components/layout/page-container';
 import { SegmentedControl } from '@/components/rafii';
 import { founderPanelStore } from '@/features/founder/agent/store';
+import { FounderBentoFocus, FounderMorphSelect } from '@/features/founder/motion/founder-motion';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
 import { DataStateChip, QueryBoundary, StateFallback } from '@/features/founder/shared/state-fallbacks';
 import { founderKeys } from '@/lib/founder/api';
@@ -78,7 +79,7 @@ export function OverviewView() {
   }, [period]);
   const askTrend = useCallback((trend: Overview['trends'][keyof Overview['trends']], fallback: string) => () => founderPanelStore.ask(`Explain the "${trend?.title ?? fallback}" chart for the last ${period}: what the lines show, their coverage, and what would be a measurable next step.`, { section: 'overview', period, chart: trend ? { chartId: trend.id, viewVersion: 1, queryReceiptId: trend.receiptId ?? null } : null }), [period]);
 
-  const periodControl = <SegmentedControl<OverviewPeriod> label='Period' size='sm' widths='content' value={period} onChange={(next) => void setPeriod(next)} options={OVERVIEW_PERIODS.map((value) => ({ value, label: value }))} />;
+  const periodControl = <FounderMorphSelect<OverviewPeriod> label='Period' value={period} onChange={(next) => void setPeriod(next)} options={OVERVIEW_PERIODS.map((value) => ({ value, label: value }))} />;
   const tabs = <SegmentedControl<Tab> label='Overview view' pattern='tabs' size='sm' widths='content' value={tab} onChange={(next) => void setTab(next)} options={TABS.map((value) => ({ value, label: TAB_LABEL[value] }))} panelIds={TABS.map((value) => `${panelBase}-${value}`)} />;
 
   return (
@@ -98,15 +99,15 @@ export function OverviewView() {
               const overview = envelope.data;
               const attention = (overview.attention ?? []).map(normalizeAttentionItem);
               return (
-                <TodayBoundary key={`${mode}-${period}-${envelope.requestId}`}>
-                  <TodayBrief brief={overview.brief} mode={mode} onAsk={askAboutToday} />
-                  <PulseRow tiles={overview.pulse ?? []} onAsk={askTile} />
+                <TodayBoundary key={`${mode}-${period}`}>
+                  <FounderBentoFocus><TodayBrief brief={overview.brief} mode={mode} onAsk={askAboutToday} /></FounderBentoFocus>
+                  <FounderBentoFocus><PulseRow tiles={overview.pulse ?? []} onAsk={askTile} /></FounderBentoFocus>
                   <div className='grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12'>
-                    <AttentionPanel className='lg:col-span-7' items={attention} onAsk={askAttention} />
+                    <FounderBentoFocus className='lg:col-span-7'><AttentionPanel items={attention} onAsk={askAttention} /></FounderBentoFocus>
                     <div className='flex flex-col gap-4 md:gap-5 lg:col-span-5'>
-                      <DataHealthStrip sources={overview.sourceHealth ?? []} mode={mode} />
-                      <TrendChart title='Revenue vs AI cost' trend={overview.trends?.revenueVsCost ?? null} period={period} periods={OVERVIEW_PERIODS} onPeriodChange={(next) => void setPeriod(next as OverviewPeriod)} onAsk={askTrend(overview.trends?.revenueVsCost ?? null, 'Revenue vs AI cost')} />
-                      <TrendChart title='Active workspaces vs publishing verified' trend={overview.trends?.activeVsPublish ?? null} period={period} periods={OVERVIEW_PERIODS} onPeriodChange={(next) => void setPeriod(next as OverviewPeriod)} onAsk={askTrend(overview.trends?.activeVsPublish ?? null, 'Active workspaces vs publishing verified')} />
+                      <FounderBentoFocus><DataHealthStrip sources={overview.sourceHealth ?? []} mode={mode} /></FounderBentoFocus>
+                      <FounderBentoFocus><TrendChart title='Revenue vs AI cost' trend={overview.trends?.revenueVsCost ?? null} period={period} periods={OVERVIEW_PERIODS} onPeriodChange={(next) => void setPeriod(next as OverviewPeriod)} onAsk={askTrend(overview.trends?.revenueVsCost ?? null, 'Revenue vs AI cost')} /></FounderBentoFocus>
+                      <FounderBentoFocus><TrendChart title='Active workspaces vs publishing verified' trend={overview.trends?.activeVsPublish ?? null} period={period} periods={OVERVIEW_PERIODS} onPeriodChange={(next) => void setPeriod(next as OverviewPeriod)} onAsk={askTrend(overview.trends?.activeVsPublish ?? null, 'Active workspaces vs publishing verified')} /></FounderBentoFocus>
                     </div>
                   </div>
                   <p className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>

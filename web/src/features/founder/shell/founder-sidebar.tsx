@@ -3,6 +3,7 @@
 import type { MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { LayoutGroup, motion } from 'motion/react';
 import { Icons } from '@/components/icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from '@/components/ui/sidebar';
@@ -39,6 +40,7 @@ export function FounderSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
+        <LayoutGroup id='founder-sidebar-nav'>
         {FOUNDER_NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
@@ -49,7 +51,8 @@ export function FounderSidebar() {
                 const active = isActiveFounderPath(pathname, section.url);
                 return (
                   <SidebarMenuItem key={id}>
-                    <SidebarMenuButton render={<Link href={founderHref(id, mode)} aria-label={section.title} onClick={closeAfterPick} />} tooltip={section.title} isActive={active}>
+                    <SidebarMenuButton render={<Link href={founderHref(id, mode)} aria-label={section.title} onClick={closeAfterPick} />} tooltip={section.title} isActive={active} className='relative overflow-hidden'>
+                      {active && <motion.span layoutId='founder-sidebar-active' aria-hidden className='absolute inset-0 rounded-md bg-sidebar-accent' transition={{ type: 'spring', stiffness: 430, damping: 38 }} data-founder-motion='02' />}
                       <Icon />
                       <span>{section.title}</span>
                     </SidebarMenuButton>
@@ -59,6 +62,7 @@ export function FounderSidebar() {
             </SidebarMenu>
           </SidebarGroup>
         ))}
+        </LayoutGroup>
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>

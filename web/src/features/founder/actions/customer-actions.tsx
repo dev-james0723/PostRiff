@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react';
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { FounderExpandableActionBar } from '@/features/founder/motion/founder-motion';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useFounderScope } from '../customers/kit/api';
 import { stateLabel, whenDate } from '../customers/kit/format';
@@ -48,18 +48,14 @@ export function CustomerActions({ customerId, workspaces }: { customerId: string
           list && <StatusChip icon={null}>Not blocked</StatusChip>
         )}
       </div>
-      <div className='flex flex-wrap gap-2'>
-        {/* One button for block and lift, so focus returns to the same control after either. */}
-        <Button variant='glass' size='sm' disabled={blockReason !== null} aria-describedby={blockReason ? reasonsId : undefined} onClick={() => setDialog(block ? 'unblock' : 'block')}>
-          <Icons.lock /> {block ? 'Lift block' : 'Block account'}
-        </Button>
-        <Button variant='glass' size='sm' disabled={creditsReason !== null} aria-describedby={creditsReason ? reasonsId : undefined} onClick={() => setDialog('credits')}>
-          <Icons.creditCard /> Adjust credits
-        </Button>
-        <Button variant='glass' size='sm' disabled={refundReason !== null} aria-describedby={refundReason ? reasonsId : undefined} onClick={() => setDialog('refund')}>
-          <Icons.billing /> Prepare refund intent
-        </Button>
-      </div>
+      <FounderExpandableActionBar
+        aria-describedby={blockReason ? reasonsId : undefined}
+        actions={[
+          { id: 'founder-block-action', label: block ? 'Lift block' : 'Block account', icon: <Icons.lock className='size-4' />, disabled: blockReason !== null, reason: blockReason, onClick: () => setDialog(block ? 'unblock' : 'block') },
+          { id: 'founder-credits-action', label: 'Adjust credits', icon: <Icons.creditCard className='size-4' />, disabled: creditsReason !== null, reason: creditsReason, onClick: () => setDialog('credits') },
+          { id: 'founder-refund-action', label: 'Prepare refund intent', icon: <Icons.billing className='size-4' />, disabled: refundReason !== null, reason: refundReason, onClick: () => setDialog('refund') }
+        ]}
+      />
       {reasons.length > 0 && (
         <ul id={reasonsId} className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed'>
           {reasons.map((reason) => (

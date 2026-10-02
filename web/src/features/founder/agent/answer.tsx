@@ -10,6 +10,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { FounderAnswerReveal, FounderApprovalCard, FounderToolChips } from '@/features/founder/motion/founder-motion';
 import { RichText } from '@/features/site-agent/answer';
 import { ReceiptChips } from '@/features/founder/shared/receipt-chip';
 import { founderSafeHref } from '@/features/founder/shared/safe-href';
@@ -111,7 +112,7 @@ function Block({ block, actions }: { block: SiteAgentBlock; actions: FounderAnsw
     }
     case 'question_form':
       return (
-        <div className='flex flex-col gap-2'>
+        <FounderApprovalCard title='Review Rafii suggestion' description='Choose only if you want this answer to continue; nothing is approved automatically.'>
           <RichText text={block.prompt} />
           {block.options.length > 0 && (
             <div className='flex flex-wrap gap-2' role='group' aria-label='Choose an answer'>
@@ -122,7 +123,7 @@ function Block({ block, actions }: { block: SiteAgentBlock; actions: FounderAnsw
               ))}
             </div>
           )}
-        </div>
+        </FounderApprovalCard>
       );
     case 'result_list':
       return (
@@ -164,22 +165,7 @@ function Block({ block, actions }: { block: SiteAgentBlock; actions: FounderAnsw
 
 /** Tool activity rows the server reported, folded away; nothing is listed that did not run. */
 function Checked({ response }: { response: FounderAgentTurnResponse }) {
-  const activity = response.result?.toolActivity ?? [];
-  if (!activity.length) return null;
-  return (
-    <details className='text-muted-foreground text-xs'>
-      <summary className='rafii-focus cursor-pointer rounded'>What Rafii checked ({activity.length})</summary>
-      <ul className='mt-1 flex flex-col gap-0.5 pl-1'>
-        {activity.map((row, index) => (
-          <li key={`${row.tool}-${index}`} className='flex items-center gap-1.5'>
-            {row.status === 'ok' || row.status === 'verified' || row.status === 'done' ? <Icons.check className='size-3 shrink-0' aria-hidden /> : <Icons.warning className='size-3 shrink-0' aria-hidden />}
-            <span className='truncate'>{row.label || row.tool}</span>
-            {row.status && row.status !== 'ok' && <span>({row.status})</span>}
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
+  return <FounderToolChips response={response} />;
 }
 
 export function FounderAnswer({ response, actions }: { response: FounderAgentTurnResponse; actions: FounderAnswerActions }) {
@@ -190,6 +176,7 @@ export function FounderAnswer({ response, actions }: { response: FounderAgentTur
   const empty = blocks.length === 0 && !answerText && !response.founder && errors.length === 0;
   const body: ReactNode = empty ? <p className='text-muted-foreground text-sm'>Rafii returned no answer for this turn (status: {response.status}).</p> : null;
   return (
+    <FounderAnswerReveal>
     <div className='flex min-w-0 flex-col gap-3'>
       {body}
       {blocks.length > 0 ? blocks.map((block, index) => <Block key={`${block.type}-${index}`} block={block} actions={actions} />) : answerText ? <RichText text={answerText} /> : null}
@@ -208,5 +195,6 @@ export function FounderAnswer({ response, actions }: { response: FounderAgentTur
       ))}
       <Checked response={response} />
     </div>
+    </FounderAnswerReveal>
   );
 }

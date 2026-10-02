@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusChip } from '@/features/workspace/rafii-parts';
+import { FounderDetailDialog } from '@/features/founder/motion/founder-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { CustomerActions } from '../actions';
@@ -133,6 +134,7 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
   const ask = useAsk();
   const evidence = useEvidenceDrawer();
   const [tab, setTab] = useState<TabId>('summary');
+  const lastRecord = useRef<string | null>(null);
   const detail = useRecords(recordId ? { collection: 'customers', search: '', status: 'all', page: 1, recordId } : null);
   // The list's flagged-workspace answer (same key, so no extra request), asked only when the operator may read it.
   const risk = useCustomerRisk('flagged');
@@ -140,6 +142,19 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
   useEffect(() => {
     setTab('summary');
   }, [recordId]);
+  useEffect(() => {
+    if (open && recordId) {
+      lastRecord.current = recordId;
+      return;
+    }
+    if (open) return;
+    const id = lastRecord.current;
+    if (!id) return;
+    requestAnimationFrame(() => {
+      const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      document.querySelector<HTMLElement>(`[data-founder-detail-source="${escaped}"]`)?.focus({ preventScroll: true });
+    });
+  }, [open, recordId]);
 
   const data = detail.data?.data;
   const customer = data?.rows[0] ?? null;
@@ -159,7 +174,7 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
         <QueryState query={detail} label='customer' layout='panel' isEmpty={(result) => result.data.rows.length === 0} emptyTitle='Customer not found' emptyDescription='The record id in the address does not match a customer in this source.'>
           {() =>
             customer && (
-              <div className='flex flex-col gap-4 p-4 md:p-5'>
+              <FounderDetailDialog sourceId={customer.id} className='flex flex-col gap-4 p-4 md:p-5'>
                 <SheetHeader className='p-0 pr-10'>
                   <SheetTitle className='flex flex-wrap items-center gap-2'>
                     {recordLabel(customer)}
@@ -300,7 +315,7 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                     <SafeFields row={customer} />
                   </TabsContent>
                 </Tabs>
-              </div>
+              </FounderDetailDialog>
             )
           }
         </QueryState>

@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
 import { founderPanelStore } from '@/features/founder/agent/store';
+import { FounderMotionRoot } from '@/features/founder/motion/founder-motion-root';
 import type { FounderAskRequest } from '@/features/founder/sections';
 import { registrationFromAsk } from './section-page';
 import { InfobarProvider } from '@/components/ui/infobar';
@@ -44,6 +45,7 @@ function FounderAskBridge() {
 export function FounderShell({ defaultOpen, children }: { defaultOpen: boolean; children: ReactNode }) {
   const [queryClient] = useState(makeFounderQueryClient);
   return (
+    <FounderMotionRoot>
     <QueryClientProvider client={queryClient}>
     <FounderSessionProvider>
       <FounderCommandPalette>
@@ -72,5 +74,6 @@ export function FounderShell({ defaultOpen, children }: { defaultOpen: boolean; 
       </FounderCommandPalette>
     </FounderSessionProvider>
     </QueryClientProvider>
+    </FounderMotionRoot>
   );
 }

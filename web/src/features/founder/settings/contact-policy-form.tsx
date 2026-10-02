@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { FounderSaveButton } from '@/features/founder/motion/founder-motion';
 import { Band, FIELD_CLASS, StatusChip } from '@/features/workspace/rafii-parts';
 import { cn } from '@/lib/utils';
 import { failureOf, useCapability, useContactPolicy, useSaveContactPolicy, useTestCall } from '../customers/kit/api';
@@ -187,9 +188,9 @@ export function ContactPolicyForm() {
 
             {error && <StateMessage kind='error' layout='inline' title={error} />}
             <div className='flex flex-wrap items-center gap-3'>
-              <Button type='submit' variant='action' size='control' disabled={save.isPending || !canSettings} title={canSettings ? undefined : 'Needs the control.settings capability and a step-up.'}>
-                {save.isPending ? <Icons.spinner className='animate-spin' /> : <Icons.check />} Save policy
-              </Button>
+              <FounderSaveButton state={save.isPending ? 'saving' : save.isError || error ? 'error' : save.isSuccess && JSON.stringify(draft) === JSON.stringify(draftFromPolicy(policy)) ? 'saved' : 'idle'} disabled={!canSettings} title={canSettings ? undefined : 'Needs the control.settings capability and a step-up.'}>
+                Save policy
+              </FounderSaveButton>
               <span id='contact-policy-live' className='text-muted-foreground text-xs'>
                 Revision {policy.revision}
                 {policy.updatedAt && ` · updated ${whenDateTime(policy.updatedAt)}`} · changes require a fresh second factor.

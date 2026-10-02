@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { KBarAnimator, KBarPortal, KBarPositioner, KBarProvider, KBarSearch, useRegisterActions, type Action } from 'kbar';
+import { motion } from 'motion/react';
 import { Icons } from '@/components/icons';
 import RenderResults from '@/components/kbar/render-result';
 import { Kbd } from '@/components/ui/kbd';
@@ -50,6 +51,7 @@ export function FounderCommandPalette({ children }: { children: ReactNode }) {
       <KBarPortal>
         <KBarPositioner className='rafii-scrim fixed inset-0 z-99999 flex items-start! justify-center p-4! pt-[14vh]!'>
           <KBarAnimator className='rafii-elevated text-foreground relative mx-auto w-full max-w-[600px] overflow-hidden rounded-[var(--rafii-radius-dialog)]'>
+            <motion.div data-founder-motion='01' layout initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.18 }}>
             <div className='sticky top-0 z-10 flex items-center gap-3 px-5 pt-4 pb-3'>
               <Icons.search aria-hidden className='text-muted-foreground size-4 shrink-0' />
               <KBarSearch defaultPlaceholder='Jump to a page or action…' className='placeholder:text-muted-foreground min-w-0 flex-1 border-none bg-transparent py-1.5 text-base outline-hidden focus:ring-0 focus:outline-hidden md:text-sm' />
@@ -69,6 +71,7 @@ export function FounderCommandPalette({ children }: { children: ReactNode }) {
                 <Kbd>esc</Kbd> close
               </span>
             </div>
+            </motion.div>
           </KBarAnimator>
         </KBarPositioner>
       </KBarPortal>

@@ -1,12 +1,15 @@
 'use client';
 
 import { useId, useRef, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FounderApprovalCard, FounderDiffTable, FounderProcessRail, FounderSlideConfirm, FounderStepPanel } from '@/features/founder/motion/founder-motion';
 import { FIELD_CLASS } from '@/features/workspace/rafii-parts';
+import { useFounderActionBusy } from '@/features/founder/motion/founder-motion-root';
 import { randomKey, signInHref } from '@/lib/founder/api';
 import { whenDateTime } from '../customers/kit/format';
 import { postAction, useActionRefresh } from './api';
@@ -95,6 +98,7 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
   const [done, setDone] = useState<{ action: FounderAction; replayed: boolean } | null>(null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [busy, setBusy] = useState<'preview' | 'confirm' | null>(null);
+  useFounderActionBusy(busy !== null);
   const [typed, setTyped] = useState('');
   // A retry of the same payload reuses its request id, so the server answers it once (CONTRACTS §8.F idempotency).
   const previewKey = useRef<{ signature: string; requestId: string } | null>(null);
@@ -129,9 +133,12 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
     try {
       const response = await postAction(path, confirmBody(preview, requestId, typed));
       setDone({ action: response.data.action, replayed: response.data.replayed });
+      toast.success(response.data.replayed ? 'Confirmation already recorded; nothing ran twice.' : 'Founder action recorded.');
       onExecuted?.(response.data.action);
     } catch (error) {
-      setFailure(actionFailure(error));
+      const next = actionFailure(error);
+      setFailure(next);
+      toast.error(next.title);
     } finally {
       setBusy(null);
       refresh(kind);
@@ -155,7 +162,17 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
   return (
     <>
       <RafiiDialogHeader eyebrow={KIND_LABEL[kind]} title={title} intro={intro} />
+      <FounderProcessRail
+        className='px-5 pt-1'
+        steps={[
+          { id: 'form', label: 'Inputs', state: stage === 'form' && busy === null && !failure ? 'current' : busy !== null || preview || done ? 'complete' : 'pending' },
+          { id: 'preview', label: 'Server preview', state: preview ? 'complete' : failure ? 'error' : busy !== null ? 'current' : 'pending' },
+          { id: 'confirm', label: 'Confirm', state: done ? 'complete' : preview && failure ? 'error' : stage === 'review' ? 'current' : 'pending' }
+        ]}
+      />
       <RafiiDialogBody className='flex flex-col gap-4'>
+        <FounderApprovalCard title={stage === 'done' ? 'Action result' : stage === 'form' ? 'Prepare action' : 'Review before approving'}>
+        <FounderStepPanel step={stage}>
         {stage === 'form' && (
           <>
             {form}
@@ -165,6 +182,7 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
         {stage === 'review' && preview && (
           <>
             <ActionSummary action={preview} />
+            <FounderDiffTable before={preview.current} after={preview.effect} comparison='reported-fields' />
             {confirmable ? (
               stillOpen ? (
                 <p className='text-muted-foreground text-xs leading-relaxed'>
@@ -206,6 +224,8 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
             onPreviewAgain={failure.previewAgain && stage === 'review' ? startOver : undefined}
           />
         )}
+        </FounderStepPanel>
+        </FounderApprovalCard>
       </RafiiDialogBody>
       <RafiiDialogFooter>
         <div className='flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
@@ -225,9 +245,12 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
                 Edit
               </Button>
               {confirmable ? (
-                <Button variant={destructive ? 'destructive' : 'action'} size='control' disabled={!canConfirm} onClick={() => void runConfirm()}>
-                  {busy === 'confirm' ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : <Icons.check aria-hidden />} {confirmLabel}
-                </Button>
+                <>
+                  {destructive && <FounderSlideConfirm disabled={!canConfirm} onConfirm={() => void runConfirm()} />}
+                  <Button variant={destructive ? 'destructive' : 'action'} size='control' disabled={!canConfirm} onClick={() => void runConfirm()}>
+                    {busy === 'confirm' ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : <Icons.check aria-hidden />} {confirmLabel}
+                  </Button>
+                </>
               ) : (
                 <Button variant='action' size='control' onClick={() => onOpenChange(false)}>
                   Close

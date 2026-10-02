@@ -1,0 +1,27 @@
+/* Founder-only controls honor the app setting as well as the OS preference. */
+html[data-motion='reduced'] [data-founder-motion],
+html[data-motion='reduced'] [data-founder-motion] *,
+html[data-motion='reduced'] [data-founder-focus] {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) [data-founder-motion],
+  html:not([data-motion='full']) [data-founder-motion] * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+[data-founder-motion='22'][data-focused='true'] {
+  position: fixed;
+  inset: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  z-index: 70;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--rafii-radius-dialog, 1.25rem);
+  padding: 3rem 1rem 1rem;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
+}
