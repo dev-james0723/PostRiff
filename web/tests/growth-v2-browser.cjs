@@ -186,7 +186,9 @@ async function firstWeekJourney(browser, viewport, draft, language) {
       throw new Error(`handoff ${i + 1}: ${response ? response.status() : 'no request'} ${JSON.stringify(body).slice(0, 300)} toasts ${JSON.stringify(toasts).slice(0, 300)}`);
     }
     const slots = (body?.slots ?? []).map((s) => ({ status: s.status, handoff: s.handoff && { state: s.handoff.state, stale: Boolean(s.handoff.stale) } }));
-    await until(async () => (await page.getByText('You posted it yourself.').count()) > i, 'the handoff is recorded').catch(async (error) => {
+    // The last handoff completes the week, and the panel then shows the delivered summary instead of each post.
+    const recorded = async () => (await page.getByText('You posted it yourself.').count()) > i || (body?.complete === true && (await page.getByText('Your first week is delivered').count()) > 0);
+    await until(recorded, 'the handoff is recorded').catch(async (error) => {
       await page.screenshot({ path: resolve(out, `FAIL-first-week-${label.replace('/', '-')}.png`), fullPage: true }).catch(() => undefined);
       throw new Error(`${error.message}; server step ${body?.step}, delivered ${body?.delivered}/${body?.committed}, slots ${JSON.stringify(slots)}, toasts ${JSON.stringify(toasts).slice(0, 200)}`);
     });

@@ -136,7 +136,9 @@ jobs:
         # (--growth-fixture), synthetic identity; the program's flags are on only here. Nothing reaches a provider.
         # Its own dist dir: Next 16 refuses a second `next dev` with the same one ("Another next dev server is already
         # running"; the voice scenes' server on 4441 holds the lock under `.next`). The public pages build the Pricing v2
-        # catalog (NEXT_PUBLIC_PRICING_CATALOG=v2) for the pricing page check.
+        # catalog (NEXT_PUBLIC_PRICING_CATALOG=v2) for the pricing page check. It runs even when an earlier, unrelated
+        # scene failed: it has its own servers, and its evidence is still worth having (the job fails either way).
+        if: ${{ !cancelled() }}
         run: |
           RAFII_WEEKLY_OPERATOR_ENABLED=1 RAFII_FIRST_WEEK_ENABLED=1 RAFII_SOURCE_UPLOADS_ENABLED=1 RAFII_RELATIONSHIPS_ENABLED=1 RAFII_RESULTS_ENABLED=1 \
           RAFII_SERIES_ENABLED=1 RAFII_VISUAL_PACK_ENABLED=1 RAFII_OPPORTUNITY_BRIEF_ENABLED=1 RAFII_PROOF_V2_ENABLED=1 \
@@ -150,7 +152,8 @@ jobs:
             sleep 2
           done
           echo "growth harness or development web server did not start"; tail -n 60 growth-harness.log growth-web.log; exit 1
-      - name: Growth v2 journeys, Chromium (first week, results, follow-ups, series, visual packs, intake, Pricing v2; desktop, tablet, phone; EN + zh-Hant; keyboard; axe)
+      - name: Growth v2 journeys, Chromium (first week, results, follow-ups, series, visual packs, intake, proof, brief, Pricing v2; desktop, tablet, phone; EN + zh-Hant; keyboard; axe)
+        if: ${{ !cancelled() }}
         env:
           RAFII_GROWTH_WEB_URL: http://127.0.0.1:4443
           RAFII_GROWTH_API_URL: http://127.0.0.1:4442
