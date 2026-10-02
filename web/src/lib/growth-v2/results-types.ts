@@ -121,6 +121,11 @@ export interface ConnectionHealth {
   testEvents24h: number;
   quarantined: number;
   quarantined24h: number;
+  /**
+   * Deliveries refused because they weren't signed with this connection's secret, in the current daily window. Anyone who
+   * knows the address can send one, so they never change `dataState` or `lastErrorCode`; the count is capped for display.
+   */
+  unverified: { refused: number; capped: boolean; since: number } | null;
 }
 
 export interface ResultConnection {

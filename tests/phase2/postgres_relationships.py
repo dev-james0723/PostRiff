@@ -205,12 +205,38 @@ theirs = declared(X)
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": theirs, "expectedRevision": waiting["revision"]}), 400, "result_required")
 refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "expectedRevision": waiting["revision"]}), 400, "result_required")
 won = service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": mine, "expectedRevision": waiting["revision"]})["relationship"]
-assert (won["state"], won["won"], won["previousState"], won["followUp"]["status"]) == ("won", {"resultId": mine, "provenance": "user_declared"}, "waiting", "inactive")
+assert (won["state"], won["won"], won["previousState"], won["followUp"]["status"]) == (
+    "won", {"resultId": mine, "provenance": "user_declared", "reversed": False, "reversedAt": None}, "waiting", "inactive")
 undone = service.reopen(W, EDITOR, r1["id"], {"expectedRevision": won["revision"]})["relationship"]
 assert (undone["state"], undone["won"]) == ("waiting", None)
 won_meta = sql("SELECT meta FROM public.pr_relationship_events WHERE relationship_id=%s AND to_state='won'", r1["id"])[0][0]
 assert won_meta["resultId"] == mine and won_meta["provenance"] == "user_declared"
 checks.append("won refused without a declared same-workspace result; keeps the result id and provenance; reopen undoes it")
+
+
+def reverse(workspace, result_id):
+    """The person withdraws their declaration (a reversal row of the results slice, as results.service.reverse writes it)."""
+    sql("INSERT INTO public.pr_result_events(workspace_id,provenance,result_type,provider_event_id,kind,corrects_id,occurred_at,payload_digest,declared_by) "
+        "VALUES(%s,'user_declared','lead',%s,'reversal',%s,now(),%s,(SELECT user_id FROM public.pr_memberships WHERE workspace_id=%s AND role='owner' LIMIT 1))",
+        workspace, "decl_" + uuid.uuid4().hex, result_id, "b" * 64, workspace)
+
+
+withdrawn = declared(W)
+reverse(W, withdrawn)
+refused(lambda: service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": withdrawn, "expectedRevision": undone["revision"]}), 400, "result_required")
+assert service.detail(W, EDITOR, r1["id"])["relationship"]["state"] == "waiting"
+current_result = declared(W)
+won_again = service.transition(W, EDITOR, r1["id"], {"to": "won", "wonResultId": current_result, "expectedRevision": undone["revision"]})["relationship"]
+assert won_again["won"]["reversed"] is False
+reverse(W, current_result)     # withdrawn after the follow-up was won: the follow-up says so and keeps the stage the person chose
+later = service.detail(W, VIEWER, r1["id"])["relationship"]
+assert (later["state"], later["revision"], later["won"]["resultId"], later["won"]["reversed"]) == ("won", won_again["revision"], current_result, True)
+assert isinstance(later["won"]["reversedAt"], float)
+listed = next(r for r in service.list(W, VIEWER, {"state": "won"})["relationships"] if r["id"] == r1["id"])
+assert listed["won"]["reversed"] is True and listed["state"] == "won"
+undone = service.reopen(W, EDITOR, r1["id"], {"expectedRevision": later["revision"]})["relationship"]
+assert (undone["state"], undone["won"]) == ("waiting", None)
+checks.append("won refuses a reversed result (result_required); a result reversed later shows as won.reversed without changing the stage")
 
 # --- DST-correct due times -------------------------------------------------------------------------------------------------
 repeated = next_local(11, 1, 1, 30)

@@ -377,7 +377,9 @@ def view(row, members, now, *, detail=False):
         "owner": owner, "nextAction": row["nextAction"],
         "due": due_view(row["dueAt"], row["dueTimeZone"], row["dueFold"], row["dueRevision"]),
         "snoozedUntil": row["snoozedUntil"], "followUp": followup(row, now),
-        "won": {"resultId": row["wonResultId"], "provenance": row["wonProvenance"]} if row["state"] == "won" else None,
+        # ``reversed``: the result was withdrawn after this follow-up was marked won (None: the results store can't say).
+        "won": {"resultId": row["wonResultId"], "provenance": row["wonProvenance"], "reversed": row.get("wonReversed"),
+                "reversedAt": row.get("wonReversedAt")} if row["state"] == "won" else None,
         "threadIds": row["threadIds"], "noteCount": len(row["notes"]),
         "createdAt": row["createdAt"], "updatedAt": row["updatedAt"], "createdBy": row["createdBy"],
     }
@@ -521,7 +523,9 @@ def attention_context(cur, workspace_id, items, now):
 
 
 def declared_result(cur, workspace_id, result_id):
-    """``won`` needs a declared business result in this workspace (results slice, migration 080)."""
+    """``won`` needs a current declared business result in this workspace (results slice, migration 080): never another
+    workspace's, never a connected tool's, never one that was reversed. The stored id is the result's own id (an
+    amendment's id answers for its result)."""
     result_id = ident(result_id, missing="Choose the declared result this follow-up won.", code="result_required", status=400)
     try:
         from ..results import service as results_service
@@ -538,8 +542,50 @@ def declared_result(cur, workspace_id, result_id):
         found = None
     if not found:
         raise AlphaError("That isn't a declared result in this workspace. Record the result first, then mark the follow-up as won.", 400, code="result_required")
-    provenance = found.get("provenance") if isinstance(found, dict) else getattr(found, "provenance", None)
-    return {"resultId": result_id, "provenance": provenance if provenance in PROVENANCE else None}
+    field = (lambda name: found.get(name)) if isinstance(found, dict) else (lambda name: getattr(found, name, None))
+    if field("reversed"):
+        raise AlphaError("That result was reversed, so it can't mark this follow-up as won. Choose a current result, or record it again.", 400,
+                         code="result_required")
+    provenance = field("provenance")
+    canonical = field("id")
+    return {"resultId": canonical if isinstance(canonical, str) and _UUID.match(canonical) else result_id,
+            "provenance": provenance if provenance in PROVENANCE else None}
+
+
+def won_results(cur, workspace_id, rows):
+    """Say on each won row whether its result was reversed after the follow-up was marked won: ``wonReversed`` is
+    True/False, or None when the results store can't answer (never a guess), with ``wonReversedAt``. The stage itself
+    never changes here; the person decides (reopen, then mark it won with a current result). Never raises."""
+    wanted = [row["wonResultId"] for row in rows if row.get("state") == "won" and row.get("wonResultId")]
+    for row in rows:
+        row["wonReversed"], row["wonReversedAt"] = None, None
+    if not wanted:
+        return rows
+    try:
+        from ..results import service as results_service
+    except ImportError:
+        return rows
+    reader = getattr(results_service, "reversal_states", None)
+    if reader is None:
+        return rows
+    try:
+        cur.execute("SAVEPOINT relationship_won")
+    except Exception:  # noqa: BLE001
+        return rows
+    try:
+        states = reader(cur, workspace_id, wanted)
+        cur.execute("RELEASE SAVEPOINT relationship_won")
+    except Exception:  # noqa: BLE001 - unknown stays unknown; the rest of the read must still answer
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT relationship_won")
+        except Exception:  # noqa: BLE001
+            pass
+        return rows
+    for row in rows:
+        if row.get("state") == "won" and row.get("wonResultId") in states:
+            at = states[row["wonResultId"]]
+            row["wonReversed"], row["wonReversedAt"] = at is not None, at
+    return rows
 
 
 def record(cur, workspace_id, relationship_id, actor, kind, *, from_state=None, to_state=None, meta=None):
@@ -625,7 +671,7 @@ class RelationshipService:
                         "ORDER BY r.due_at ASC NULLS LAST,r.created_at DESC,r.id DESC LIMIT %s", (*params, limit + 1))
             rows = [parse_row(values) for values in cur.fetchall()]
             has_more = len(rows) > limit
-            rows = rows[:limit]
+            rows = won_results(cur, workspace_id, rows[:limit])
             people = members(cur, workspace_id)
             cur.execute(f"SELECT count(*) FILTER (WHERE r.state NOT IN ('won','closed')),count(*) FILTER (WHERE {DUE_NOW_SQL}) "
                         "FROM public.pr_relationships r WHERE r.workspace_id=%s", (now, now, workspace_id))
@@ -640,7 +686,7 @@ class RelationshipService:
             return self._detail(cur, workspace_id, rid, self.clock())
 
     def _detail(self, cur, workspace_id, rid, now):
-        row = self._row(cur, workspace_id, rid)
+        row = won_results(cur, workspace_id, [self._row(cur, workspace_id, rid)])[0]
         threads = linked_threads(cur, workspace_id, [rid]).get(rid, [])
         cur.execute("SELECT kind,from_state,to_state,actor::text,meta,extract(epoch from occurred_at) FROM public.pr_relationship_events "
                     "WHERE workspace_id=%s AND relationship_id=%s ORDER BY occurred_at DESC,id DESC LIMIT 20", (workspace_id, rid))

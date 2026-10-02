@@ -9,15 +9,19 @@ import assert from 'node:assert/strict';
 import {
   canonicalId,
   dueInput,
+  editChanges,
   followUpCopy,
   followUpHref,
   followUpLine,
   followUpLocale,
+  historyLine,
   isConflict,
   nextStates,
+  pickableResults,
   platformName,
   relationshipQuery,
   replyRouteView,
+  replyStatusLabel,
   snoozeChoices,
   stateTone,
   wallTime,
@@ -140,4 +144,47 @@ test('deep links and queries carry only ids and known filters', () => {
   assert.equal(relationshipQuery({ owner: 'me', extra: 'ignored' }), '?owner=me');
   assert.ok(isConflict('revision_conflict') && isConflict('idempotency_conflict') && isConflict('suggestion_changed'));
   assert.ok(!isConflict('result_required') && !isConflict(undefined));
+});
+
+test('an edit sends only what the person changed, normalized like the server', () => {
+  const start = { displayName: 'Mei', interest: 'Private lessons', nextAction: '' };
+  assert.deepEqual(editChanges(start, { ...start }), {});
+  assert.deepEqual(editChanges(start, { ...start, displayName: '  Mei  ' }), {});            // whitespace only: no change
+  assert.deepEqual(editChanges(start, { ...start, nextAction: 'Send   the schedule ' }), { nextAction: 'Send the schedule' });
+  assert.deepEqual(editChanges(start, { ...start, interest: '   ' }), { interest: null });    // emptied: cleared
+  assert.deepEqual(editChanges(start, { displayName: 'Mei Chan', interest: 'Private lessons', nextAction: '' }), { displayName: 'Mei Chan' });
+  // A field another member changed meanwhile is not in the body unless this person changed it too.
+  assert.ok(!('interest' in editChanges(start, { ...start, displayName: 'Mei Chan' })));
+});
+
+test('won picks only the person’s own current declarations', () => {
+  const items = [
+    { id: 'a', status: 'active', provenance: 'user_declared', test: false },
+    { id: 'b', status: 'reversed', provenance: 'user_declared', test: false },
+    { id: 'c', status: 'active', provenance: 'first_party_reported', test: false },
+    { id: 'd', status: 'active', provenance: 'user_declared', test: true }
+  ];
+  assert.deepEqual(pickableResults(items).map((item) => item.id), ['a']);
+  assert.deepEqual(pickableResults([]), []);
+});
+
+test('history, reply status and platform words follow the person’s language', () => {
+  assert.equal(historyLine({ kind: 'snoozed', from: null, to: null }, EN), 'Snoozed');
+  assert.equal(historyLine({ kind: 'state', from: 'new', to: 'waiting' }, EN), 'Stage changed · New → Waiting on them');
+  assert.equal(historyLine({ kind: 'state', from: 'new', to: 'waiting' }, ZH), '階段已變更 · 新建立 → 等待對方');
+  assert.equal(historyLine({ kind: 'followup_dismissed', from: null, to: null }, ZH), '已略過提醒');
+  assert.equal(historyLine({ kind: 'some_new_kind', from: null, to: null }, ZH), ZH.historyKinds.other);   // never the raw enum
+  for (const kind of ['created', 'updated', 'state', 'snoozed', 'unsnoozed', 'closed', 'reopened', 'assigned', 'thread_linked', 'thread_unlinked',
+                      'note_added', 'note_removed', 'due_changed', 'followup_dismissed', 'followup_restored', 'suggestion_dismissed']) {
+    assert.ok(ZH.historyKinds[kind] && !/[a-z_]{3,}/.test(ZH.historyKinds[kind]), kind);
+  }
+  assert.equal(replyStatusLabel('verified', ZH), '已發佈');
+  assert.equal(replyStatusLabel('approved', EN), 'Approved · not sent');
+  assert.equal(replyStatusLabel('something_else', ZH), ZH.replyStatus.other);
+  assert.equal(replyStatusLabel(undefined, EN), EN.replyStatus.other);
+  assert.equal(platformName(null, ZH.thePlatform), '該平台');
+  assert.equal(replyRouteView({ kind: 'assisted', provider: null, href: null, reason: 'no_thread' }, ZH).label, '在 該平台 開啟 · 協助');
+  assert.doesNotMatch(replyRouteView({ kind: 'assisted', provider: null, href: null }, ZH).hint, /the platform/);
+  assert.equal(ZH.followUpWith('Mei'), '跟進 Mei');
+  assert.match(EN.wonWithdrawnHint, /reopen it/);
 });

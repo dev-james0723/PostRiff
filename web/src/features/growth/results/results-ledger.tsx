@@ -9,11 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FIELD_CLASS, SelectField, StatusChip, TEXTAREA_CLASS } from '@/features/workspace/rafii-parts';
 import { errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
-import { useAmendResult, useDeclareResult, useResultsLedger, useReverseResult, useTrackingLinks } from '@/lib/growth-v2/results-hooks';
+import { useAmendResult, useDeclareResult, useResultsLedger, useReverseResult, useTrackingLinkChoices } from '@/lib/growth-v2/results-hooks';
 import type { ResultFilters, ResultItem } from '@/lib/growth-v2/results-types';
-import { formatDateTime } from '@/lib/time';
+import { formatDateTime, timeDefaults } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { amountText, checkDeclaration, duration, formatMoney, isoToLocal, type DeclarationForm, type ResultsCopy } from './present';
+import { amountText, checkDeclaration, duration, formatMoney, isoToLocal, localToIso, type DeclarationForm, type Lang, type ResultsCopy } from './present';
 import { useResultsCopy } from './use-results-copy';
 
 const DECLARABLE = ['lead', 'booking', 'newsletter_signup', 'sale'] as const;
@@ -22,7 +22,7 @@ const KINDS = ['lead', 'booking', 'newsletter_signup', 'sale', 'click'] as const
 /** The ledger: every result with its source, times, link and correction state; the person's own declarations can be
  * edited (a new version) or reversed (kept, marked reversed). Connected tools correct their own events. */
 export function ResultsLedger() {
-  const { copy, locale } = useResultsCopy();
+  const { copy, locale, lang } = useResultsCopy();
   const [filters, setFilters] = useState<ResultFilters>({});
   const ledger = useResultsLedger(filters);
   const [editing, setEditing] = useState<ResultItem | 'new' | null>(null);
@@ -97,13 +97,14 @@ export function ResultsLedger() {
           {copy.loadMore}
         </Button>
       )}
+      {/* Portalled outside the panel, so each dialog carries the panel's language itself. */}
       <RafiiDialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <RafiiDialogContent size='sm'>
+        <RafiiDialogContent size='sm' lang={lang}>
           {editing !== null && <ResultForm key={editing === 'new' ? 'new' : editing.id} item={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
         </RafiiDialogContent>
       </RafiiDialog>
       <RafiiDialog open={reversing !== null} onOpenChange={(open) => !open && setReversing(null)}>
-        <RafiiDialogContent size='sm'>{reversing && <ReverseForm key={reversing.id} item={reversing} onDone={() => setReversing(null)} />}</RafiiDialogContent>
+        <RafiiDialogContent size='sm' lang={lang}>{reversing && <ReverseForm key={reversing.id} item={reversing} onDone={() => setReversing(null)} />}</RafiiDialogContent>
       </RafiiDialog>
     </>
   );
@@ -149,11 +150,11 @@ function LedgerRow({ item, copy, locale, canEdit, onEdit, onReverse }: { item: R
   );
 }
 
-function initialForm(item: ResultItem | null): DeclarationForm {
-  if (!item) return { type: 'lead', occurredAt: isoToLocal(Date.now() / 1000), amount: '', currency: '', quantity: '1', note: '', linkId: '', campaignRef: '' };
+function initialForm(item: ResultItem | null, zone: string | undefined): DeclarationForm {
+  if (!item) return { type: 'lead', occurredAt: isoToLocal(Date.now() / 1000, zone), amount: '', currency: '', quantity: '1', note: '', linkId: '', campaignRef: '' };
   return {
     type: item.type === 'click' ? 'lead' : item.type,
-    occurredAt: isoToLocal(item.occurredAt),
+    occurredAt: isoToLocal(item.occurredAt, zone),
     amount: item.amount ? amountText(item.amount.minor, item.amount.currency) : '',
     currency: item.amount ? item.amount.currency.toUpperCase() : '',
     quantity: String(item.quantity),
@@ -165,14 +166,17 @@ function initialForm(item: ResultItem | null): DeclarationForm {
 
 /** Declare (new) or amend (an existing declaration, as a new version at the revision the person saw). */
 function ResultForm({ item, onDone }: { item: ResultItem | null; onDone: () => void }) {
-  const { copy } = useResultsCopy();
+  const { copy, lang } = useResultsCopy();
   const id = useId();
   const declare = useDeclareResult();
   const amend = useAmendResult();
-  const links = useTrackingLinks();
+  // Every link, not only the first page: the picker loads pages one after another.
+  const links = useTrackingLinkChoices();
   const linkChoices = (links.data?.pages ?? []).flatMap((page) => page.items).filter((link) => link.status === 'active' || link.id === item?.linkId);
-  const [form, setForm] = useState<DeclarationForm>(() => initialForm(item));
-  const [problem, setProblem] = useState<{ field?: keyof DeclarationForm; message: string } | null>(null);
+  // The form reads and writes times in the person's saved zone, the zone the ledger shows them in.
+  const zone = timeDefaults().timeZone;
+  const [form, setForm] = useState<DeclarationForm>(() => initialForm(item, zone));
+  const [problem, setProblem] = useState<{ field?: keyof DeclarationForm; message: string; lang: Lang } | null>(null);
   // One key per intent: a retry after a lost answer replays instead of recording the result twice.
   const intent = useRef(idempotencyKey(item ? 'result-amend' : 'result-declare'));
   const busy = declare.isPending || amend.isPending;
@@ -186,9 +190,9 @@ function ResultForm({ item, onDone }: { item: ResultItem | null; onDone: () => v
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const checked = checkDeclaration(money ? form : { ...form, amount: '', currency: '' }, copy);
+    const checked = checkDeclaration(money ? form : { ...form, amount: '', currency: '' }, copy, (local) => localToIso(local, zone));
     if (!checked.ok) {
-      setProblem({ field: checked.field, message: checked.message });
+      setProblem({ field: checked.field, message: checked.message, lang });
       return;
     }
     try {
@@ -196,7 +200,7 @@ function ResultForm({ item, onDone }: { item: ResultItem | null; onDone: () => v
       else await declare.mutateAsync({ ...checked.value, idempotencyKey: intent.current });
       onDone();
     } catch (error) {
-      setProblem({ message: errorMessage(error) });
+      setProblem({ message: errorMessage(error), lang: 'en' }); // the server's own words
     }
   }
 
@@ -213,7 +217,10 @@ function ResultForm({ item, onDone }: { item: ResultItem | null; onDone: () => v
         </SelectField>
         <div className='flex flex-col gap-2'>
           <Label htmlFor={`${id}-when`}>{copy.form.occurredAt}</Label>
-          <Input id={`${id}-when`} type='datetime-local' value={form.occurredAt} onChange={set('occurredAt')} className={FIELD_CLASS} required {...invalid('occurredAt')} />
+          <Input id={`${id}-when`} type='datetime-local' value={form.occurredAt} onChange={set('occurredAt')} className={FIELD_CLASS} required aria-describedby={`${id}-zone`} {...invalid('occurredAt')} />
+          <p id={`${id}-zone`} className='text-muted-foreground text-xs'>
+            {copy.form.zone(zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)}
+          </p>
         </div>
         {money && (
           <div className='grid grid-cols-[1fr_7rem] gap-3'>
@@ -251,7 +258,7 @@ function ResultForm({ item, onDone }: { item: ResultItem | null; onDone: () => v
           </p>
         </div>
         {problem && (
-          <p id={`${id}-problem`} role='alert' className='text-destructive text-sm'>
+          <p id={`${id}-problem`} role='alert' lang={problem.lang} className='text-destructive text-sm'>
             {problem.message}
           </p>
         )}
@@ -292,7 +299,7 @@ function ReverseForm({ item, onDone }: { item: ResultItem; onDone: () => void })
         <Label htmlFor={`${id}-why`}>{copy.reverse.reason}</Label>
         <Textarea id={`${id}-why`} maxLength={500} rows={2} value={note} onChange={(event) => setNote(event.target.value)} className={TEXTAREA_CLASS} />
         {problem && (
-          <p role='alert' className='text-destructive text-sm'>
+          <p role='alert' lang='en' className='text-destructive text-sm'>
             {problem}
           </p>
         )}

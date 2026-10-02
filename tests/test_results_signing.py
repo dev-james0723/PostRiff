@@ -42,6 +42,18 @@ class SigningContractTest(unittest.TestCase):
         # Exactly at the edge is still inside the window.
         self.assertEqual(signing.verify(header, BODY, [self.secret], self.now + signing.REPLAY_WINDOW_SECONDS)["keyIndex"], 0)
 
+    def test_a_stale_timestamp_is_only_reported_for_a_really_signed_delivery(self):
+        """Without the secret nobody can make a delivery read as "the producer's clock is off": an unsigned or wrongly
+        signed delivery is a mismatch whatever its timestamp."""
+        stale = self.now - signing.REPLAY_WINDOW_SECONDS - 60
+        for header in (signing.sign(signing.new_secret(), stale, BODY), f"t={stale},v1=" + "a" * 64):
+            with self.assertRaises(signing.SignatureError) as caught:
+                signing.verify(header, BODY, [self.secret], self.now)
+            self.assertEqual(caught.exception.code, "signature_mismatch", header)
+        with self.assertRaises(signing.SignatureError) as caught:
+            signing.verify(signing.sign(self.secret, stale, BODY), BODY, [self.secret], self.now)
+        self.assertEqual(caught.exception.code, "timestamp_outside_window")
+
     def test_rotation_accepts_previous_secret_and_dual_signatures(self):
         old, new = self.secret, signing.new_secret()
         old_header = signing.sign(old, self.now, BODY)

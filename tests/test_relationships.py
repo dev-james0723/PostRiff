@@ -433,6 +433,49 @@ class AttentionTest(unittest.TestCase):
         self.assertNotIn("context", items[0])
 
 
+class WonResultTest(unittest.TestCase):
+    """``won`` needs a current declared result; a result reversed later is shown on the follow-up, never applied to its
+    stage behind the person's back."""
+    RESULT = "33333333-3333-4333-8333-333333333333"
+    AMENDMENT = "44444444-4444-4444-8444-444444444444"
+
+    def declared(self, found):
+        return mock.patch("postriff_phase2.results.service.get_declared", return_value=found)
+
+    def test_a_reversed_missing_or_foreign_result_cannot_mark_won(self):
+        for found in ({"id": self.RESULT, "provenance": "user_declared", "reversed": True}, None):
+            with self.declared(found), self.assertRaises(AlphaError) as caught:
+                rel.declared_result(RecordingCursor({}), RID, self.RESULT)
+            self.assertEqual((caught.exception.status, caught.exception.code), (400, "result_required"), found)
+        with self.declared({"id": self.RESULT, "provenance": "user_declared", "reversed": False}):
+            # An amendment's id answers for its result; the follow-up keeps the result's own id.
+            self.assertEqual(rel.declared_result(RecordingCursor({}), RID, self.AMENDMENT), {"resultId": self.RESULT, "provenance": "user_declared"})
+
+    def full(self, **changes):
+        base = row(displayName="Mei", contactProvider=None, contactAccount=None, contactRef=None, interest=None, previousState="waiting",
+                   ownerId=None, nextAction=None, revision=4, threadIds=[], notes=[], createdAt=NOW, updatedAt=NOW, createdBy=RID,
+                   wonResultId=None, wonProvenance=None)
+        base.update(changes)
+        return base
+
+    def test_won_rows_say_whether_their_result_was_reversed_and_unknown_stays_unknown(self):
+        won, still_open = self.full(state="won", wonResultId=self.RESULT, wonProvenance="user_declared"), self.full()
+        with mock.patch("postriff_phase2.results.service.reversal_states", return_value={self.RESULT: NOW - 5}) as reader:
+            rel.won_results(RecordingCursor({}), RID, [won, still_open])
+        reader.assert_called_once_with(mock.ANY, RID, [self.RESULT])
+        self.assertEqual(rel.view(won, {}, NOW)["won"], {"resultId": self.RESULT, "provenance": "user_declared", "reversed": True, "reversedAt": NOW - 5})
+        self.assertEqual((rel.view(won, {}, NOW)["state"], rel.view(still_open, {}, NOW)["won"]), ("won", None))
+        with mock.patch("postriff_phase2.results.service.reversal_states", return_value={self.RESULT: None}):
+            rel.won_results(RecordingCursor({}), RID, [won])
+        self.assertEqual((won["wonReversed"], won["wonReversedAt"]), (False, None))
+        cursor = RecordingCursor({})
+        with mock.patch("postriff_phase2.results.service.reversal_states", side_effect=RuntimeError("relation does not exist")):
+            rel.won_results(cursor, RID, [won])
+        self.assertIsNone(won["wonReversed"])                       # the results store couldn't answer: unknown, never "not reversed"
+        self.assertIn("ROLLBACK TO SAVEPOINT relationship_won", cursor.sql)
+        self.assertEqual(rel.won_results(RecordingCursor({}), RID, [still_open]), [still_open])
+
+
 class AgentToolsTest(unittest.TestCase):
     def setUp(self):
         from postriff_phase2.agent_runtime_v2 import contracts, tool_adapter

@@ -42,8 +42,9 @@ import { useGrowthFeature } from '@/lib/growth-v2/features';
 import { followUpsOff, useRelationshipList } from '@/lib/growth-v2/relationships-hooks';
 import { canonicalId } from '@/lib/growth-v2/relationships-model';
 import type { Relationship } from '@/lib/growth-v2/relationships-types';
-import { currentCopy } from './follow-up/copy';
+import { currentCopy, focusComposer } from './follow-up/copy';
 import { FollowUpList, FollowUpPanel } from './follow-up/follow-up-list';
+import { retainLoaded, seekState } from './pages';
 
 const infoContent = {
   title: 'Inbox',
@@ -98,9 +99,15 @@ function InboxPage() {
   const [sessionReplies, setSessionReplies] = useState<Record<string, ReplyRecord[]>>({});
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [extraThreads, setExtraThreads] = useState<Thread[]>([]);
-  const [pageCursor, setPageCursor] = useState<string | null>(null);
+  // Older pages loaded on demand, and where the next one starts (undefined: none loaded yet, so it follows page 1).
+  const [olderThreads, setOlderThreads] = useState<Thread[]>([]);
+  const [olderCursor, setOlderCursor] = useState<string | null | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
+  const firstPage = useRef<Thread[]>([]);
+  // A search for a conversation that isn't loaded yet (a follow-up's Reply, a notification link), page by page.
+  const [seek, setSeek] = useState<{ id: string | null; pages: number }>({ id: null, pages: 0 });
+  // The conversation whose composer a follow-up's Reply asked for, focused once it is on screen.
+  const [replyTo, setReplyTo] = useState<string | null>(null);
   // The sheet keeps showing the comment it opened with while it slides closed.
   const [sheetThreadId, setSheetThreadId] = useState<string | null>(null);
   const [sheetRelationshipId, setSheetRelationshipId] = useState<string | null>(null);
@@ -112,15 +119,24 @@ function InboxPage() {
   const followUpCopy = currentCopy();
 
   const data = audience.data;
+  // A refreshed first page (a sync, an approved reply) never drops the older pages already loaded, nor a conversation
+  // that newer comments pushed off it: an open older conversation stays open.
   useEffect(() => {
-    setExtraThreads([]);
-    setPageCursor(data?.nextCursor ?? null);
+    const next = data?.threads ?? [];
+    const previous = firstPage.current;
+    firstPage.current = next;
+    if (previous.length > 0) setOlderThreads((current) => retainLoaded(previous, next, current, (thread) => thread.threadId));
   }, [data]);
+  const pageCursor = olderCursor === undefined ? (data?.nextCursor ?? null) : olderCursor;
   const channels = channelsQuery.data?.channels;
   const providers = channelsQuery.data?.providers;
   const channelsById = useMemo(() => new Map((channels ?? []).map((channel) => [channel.id, channel])), [channels]);
 
-  const allThreads = useMemo(() => [...(data?.threads ?? []), ...extraThreads], [data, extraThreads]);
+  const allThreads = useMemo(() => {
+    const first = data?.threads ?? [];
+    const onFirst = new Set(first.map((thread) => thread.threadId));
+    return [...first, ...olderThreads.filter((thread) => !onFirst.has(thread.threadId))];
+  }, [data, olderThreads]);
   const triageById = useMemo(() => new Map(allThreads.filter((thread) => thread.triage).map((thread) => [thread.threadId, thread.triage!])), [allThreads]);
   const threads = useMemo(() => {
     const order: Record<string, number> = { needs_reply: 0, review: 1, fyi: 2, done: 3, ignore: 4 };
@@ -132,7 +148,7 @@ function InboxPage() {
   const repliesFor = useCallback((thread: Thread) => mergedReplies(thread, sessionReplies[thread.threadId]), [sessionReplies]);
   const answered = useCallback((thread: Thread) => repliesFor(thread).some(isAnswered), [repliesFor]);
   const reported = replyHistoryReported(threads);
-  const triageComplete = data?.engagementEnabled === true && pageCursor === null && (data.nextCursor === null || extraThreads.length > 0);
+  const triageComplete = data?.engagementEnabled === true && pageCursor === null && (data.nextCursor === null || olderCursor !== undefined);
   const triageCount = (kind: string) => triageComplete ? [...triageById.values()].filter((item) => item.priority === kind).length : null;
   const counts = data ? { ...countsFor(data, threads, reported, answered),
     needs_reply: triageCount('needs_reply'), review: triageCount('review'), fyi: triageCount('fyi') } : null;
@@ -150,7 +166,47 @@ function InboxPage() {
   useEffect(() => {
     if (selected && !twoPane) toast.dismiss('page-tour-inbox-tips');
   }, [selected, twoPane]);
-  const missing = Boolean(threadParam && data && !selected);
+
+  const loadMore = useCallback(async () => {
+    if (!pageCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.audience(workspaceId, pageCursor);
+      setOlderThreads((current) => [...current, ...page.threads.filter((item) => !current.some((known) => known.threadId === item.threadId))]);
+      setOlderCursor(page.nextCursor ?? null);
+    } catch (error) {
+      setSyncMessage(error instanceof ApiError ? error.message : 'Could not load older comments.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [api, workspaceId, pageCursor, loadingMore]);
+
+  // A linked conversation that isn't loaded yet is looked for page by page (bounded), instead of reading as missing.
+  const seekPages = seek.id === threadParam ? seek.pages : 0;
+  const seeking = seekState({ wanted: threadParam, found: Boolean(selected), loaded: Boolean(data), cursor: pageCursor, pages: seekPages });
+  useEffect(() => {
+    if (seeking !== 'seeking' || loadingMore || !threadParam) return;
+    setSeek({ id: threadParam, pages: seekPages + 1 });
+    void loadMore();
+  }, [seeking, loadingMore, threadParam, seekPages, loadMore]);
+  const keepLooking = () => setSeek({ id: threadParam, pages: 0 });
+  const missing = seeking === 'missing';
+
+  // Reply from a follow-up shown on its own: open its conversation (loading it when needed), then its composer.
+  const replyFrom = (relationshipId: string) => (threadId: string) => {
+    setReplyTo(threadId);
+    void setParams({ relationship: relationshipId, thread: threadId });
+  };
+  useEffect(() => {
+    if (!replyTo || selected?.threadId !== replyTo) return;
+    const target = replyTo;
+    const frame = requestAnimationFrame(() => {
+      focusComposer(target);
+      setReplyTo(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [replyTo, selected]);
+
   // A follow-up whose conversation is not loaded (or that has none) opens on its own.
   const relationshipOnly = activeFilter === 'follow_ups' && relationshipParam && !selected ? relationshipParam : null;
   if (selected && selected.threadId !== sheetThreadId) setSheetThreadId(selected.threadId);
@@ -294,12 +350,13 @@ function InboxPage() {
               </>
             ) : relationshipOnly ? (
               <div className='px-5 py-4'>
-                <FollowUpPanel relationshipId={relationshipOnly} canEdit={canEdit} />
+                <FollowUpPanel key={relationshipOnly} relationshipId={relationshipOnly} canEdit={canEdit} onReply={replyFrom(relationshipOnly)}
+                  seek={seeking} onKeepLooking={keepLooking} />
               </div>
             ) : activeFilter === 'follow_ups' ? (
               <p className='text-muted-foreground flex h-full min-h-48 items-center justify-center p-6 text-center text-sm'>{followUpCopy.pick}</p>
             ) : (
-              <NoThreadSelected missing={missing} onClear={clear} />
+              <NoThreadSelected missing={missing} seeking={seeking === 'seeking'} onKeepLooking={seeking === 'more' ? keepLooking : undefined} onClear={clear} />
             )}
           </Surface>
         )}
@@ -329,27 +386,14 @@ function InboxPage() {
     }
   }
 
-  async function loadMore() {
-    if (!pageCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const page = await api.audience(workspaceId, pageCursor);
-      setExtraThreads((current) => [...current, ...page.threads.filter((item) => !current.some((known) => known.threadId === item.threadId))]);
-      setPageCursor(page.nextCursor ?? null);
-    } catch (error) {
-      setSyncMessage(error instanceof ApiError ? error.message : 'Could not load older comments.');
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
   return (
     <PageContainer pageTitle='Inbox' infoContent={infoContent}>
       <div className='flex min-w-0 flex-col gap-5'>
         <GrowthEntry audience />
         <div className='flex flex-wrap items-center justify-between gap-2' aria-live='polite'>
           <div className='text-muted-foreground text-sm'>
-            {oldestCheck === null ? 'Never checked for new comments' : `Checked ${relativeTime(oldestCheck)}`}
+            {/* Until the comments load there is nothing to say about checks (never "Never checked" while loading). */}
+            {data && (oldestCheck === null ? 'Never checked for new comments' : `Checked ${relativeTime(oldestCheck)}`)}
             {syncError && <span> · Provider refresh unavailable ({syncError.errorCode})</span>}
             {typeof data?.counts?.unanswered === 'number' && <span> · {data.counts.unanswered} unanswered</span>}
           </div>
@@ -385,7 +429,8 @@ function InboxPage() {
                   <SheetDescription className='sr-only'>{followUpCopy.remindersNote}</SheetDescription>
                 </SheetHeader>
                 <div className='min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]'>
-                  <FollowUpPanel relationshipId={sheetRelationshipId} canEdit={canEdit} />
+                  <FollowUpPanel key={sheetRelationshipId} relationshipId={sheetRelationshipId} canEdit={canEdit} onReply={replyFrom(sheetRelationshipId)}
+                    seek={relationshipOnly === sheetRelationshipId ? seeking : 'idle'} onKeepLooking={keepLooking} />
                 </div>
               </>
             )}

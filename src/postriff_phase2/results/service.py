@@ -7,9 +7,14 @@ links, and truthful reads.
 * Connections (`first_party_reported`, owner only): the secret is shown once, stored only encrypted with the existing
   CredentialVault, and rotated with a 24-hour grace for the previous one. Pausing or removing stops ingestion; removal
   destroys the secret and keeps the evidence already received (it is deleted with the workspace, like other records).
-* Public ingestion: size cap → connection lookup → rate budget (before any signature work) → signature on the exact
-  bytes → verified-event budget → JSON → normalization → association against this workspace's own links only →
-  idempotent insert (exact replay is a no-op; a conflicting payload is quarantined, never applied).
+* Public ingestion: size cap → connection lookup → signature on the exact bytes (bounded work) → verified-event budget →
+  JSON → normalization → association against this workspace's own links only → idempotent insert (exact replay is a
+  no-op; a conflicting payload is quarantined, never applied). A delivery that isn't signed with one of the connection's
+  secrets never spends that budget and never changes the connection's health: it has its own abuse budget and only moves
+  a bounded counter the owner sees ("unverified deliveries refused"), because anyone who knows the address can send one.
+* Test traffic stays test traffic: a reversal must match its original (a ``"test": true`` reversal can only reverse a
+  test event), and reads apply a reversal only to an original of the same kind, so test deliveries never change live
+  summaries, ledgers or link associations.
 * Tracking links: server-created opaque slugs bound to one validated public HTTPS destination. The redirect appends
   ``rafii_ref=<slug>.<YYYYMMDD>`` and counts the click into a daily aggregate; no address, user agent or identifier
   is stored. Counts are clicks, not people.
@@ -42,7 +47,8 @@ DECLARED_LINK_DEFINITION = "rafii.user-declared-link.v1"
 ROTATION_GRACE_SECONDS = 24 * 3600
 MAX_CONNECTIONS = 10                # live (not removed) connections per workspace
 MAX_ACTIVE_LINKS = 200
-DELIVERY_BUDGET_FACTOR = 3          # unverified deliveries allowed per minute = 3 × the verified rate
+DELIVERY_BUDGET_FACTOR = 3          # unverified deliveries answered per minute before 429 = 3 × the verified rate
+UNVERIFIED_SHOWN_MAX = 999          # the owner's "unverified deliveries refused" counter reads "999+" beyond this
 LINK_BURST_PER_MINUTE = 300         # more counted clicks than this on one link in a minute are treated as automated
 STALE_AFTER_SECONDS = 7 * 86400
 EARLIEST, LATEST = 946_684_800, 4_102_444_800   # the instants a result may carry (model._instant)
@@ -242,7 +248,11 @@ def _campaign(value):
 _VERSION = ("CROSS JOIN LATERAL (SELECT x.result_type,x.occurred_at,x.amount_minor,x.currency,x.quantity,x.link_id,x.campaign_ref,"
             "x.attribution,x.attribution_definition,x.note FROM public.pr_result_events x WHERE x.workspace_id=e.workspace_id AND "
             "(x.id=e.id OR (x.corrects_id=e.id AND x.kind='amendment')) ORDER BY (x.kind='amendment') DESC,x.created_at DESC,x.id DESC LIMIT 1) v")
-_REVERSAL = "LEFT JOIN public.pr_result_events r ON r.workspace_id=e.workspace_id AND r.corrects_id=e.id AND r.kind='reversal'"
+# A reversal withdraws its original only when both are the same kind of evidence: a test reversal can only withdraw a test
+# event. The receiver refuses a mismatch; this rule also keeps any older mismatched row inert, so test traffic never changes
+# live summaries, the ledger's status or link associations.
+_REVERSAL = ("LEFT JOIN public.pr_result_events r ON r.workspace_id=e.workspace_id AND r.corrects_id=e.id AND r.kind='reversal' "
+             "AND r.test=e.test")
 # A workspace whose account deletion is pending admits no new results or counted clicks (PRD R-NFR-02).
 _NOT_DELETING = "coalesce(w.state->>'accountDeletion','') IN ('','null','false')"
 _EVENT_COLUMNS = ("e.id::text,e.provenance,e.connection_id::text,extract(epoch from e.received_at),e.test,v.result_type,"
@@ -300,6 +310,20 @@ def get_declared(cur, workspace_id, result_id):
                                  "revision")} | {"reversed": view["status"] == "reversed"}
 
 
+def reversal_states(cur, workspace_id, result_ids):
+    """Cross-slice (a relationship marked "won" keeps showing whether its result was later withdrawn):
+    ``{given id: epoch the reversal was received, or None while the result stands}`` for ids that are results of this
+    workspace (an amendment id answers for its result). Other ids are left out. Same reversal rule as every other read."""
+    ids = sorted({ident for ident in (_uuid(value) for value in result_ids or ()) if ident})[:200]
+    if not ids:
+        return {}
+    cur.execute("SELECT g.id::text,extract(epoch from r.received_at) FROM unnest(%s::uuid[]) AS g(id) "
+                "JOIN public.pr_result_events x ON x.workspace_id=%s AND x.id=g.id AND x.kind<>'reversal' "
+                "JOIN public.pr_result_events e ON e.workspace_id=x.workspace_id AND e.kind='event' "
+                f"AND e.id=CASE WHEN x.kind='amendment' THEN x.corrects_id ELSE x.id END {_REVERSAL}", (ids, workspace_id))
+    return {ident: _num(at) for ident, at in cur.fetchall()}
+
+
 def _coverage(cur, workspace_id):
     cur.execute("SELECT count(*) FILTER (WHERE status<>'removed'),count(*) FILTER (WHERE status='active'),count(*) FILTER (WHERE status='paused'),"
                 "count(*) FILTER (WHERE status='removed'),count(*) FILTER (WHERE status='active' AND last_error_at IS NOT NULL AND "
@@ -334,14 +358,24 @@ def period_summary(cur, workspace_id, start, end, *, now=None):
     return {**out, "definition": model.ASSOCIATION_DEFINITION, "asOf": now, "dataState": summary_state(_coverage(cur, workspace_id), end, now)}
 
 
-def _budget(cur, scope, limit, window_seconds):
-    """hosted.throttle's fixed-window counter (hashed scope), answering instead of raising."""
+def _tally(cur, scope, window_seconds):
+    """hosted.throttle's fixed-window counter (hashed scope): one more in the current window, returning the new count."""
     from ..hosted import bucket
     cur.execute("INSERT INTO public.pr_auth_throttle(bucket,window_start,count) VALUES(%s,now(),1) ON CONFLICT(bucket) DO UPDATE SET "
                 "count=CASE WHEN public.pr_auth_throttle.window_start < now()-make_interval(secs=>%s) THEN 1 ELSE public.pr_auth_throttle.count+1 END, "
                 "window_start=CASE WHEN public.pr_auth_throttle.window_start < now()-make_interval(secs=>%s) THEN now() ELSE public.pr_auth_throttle.window_start END "
                 "RETURNING count", (bucket(scope), window_seconds, window_seconds))
-    return cur.fetchone()[0] <= limit
+    return cur.fetchone()[0]
+
+
+def _budget(cur, scope, limit, window_seconds):
+    """hosted.throttle's fixed-window budget, answering instead of raising."""
+    return _tally(cur, scope, window_seconds) <= limit
+
+
+def _unverified_scope(connection_id):
+    """The owner-visible daily count of deliveries refused because they weren't signed with this connection's secret."""
+    return f"results:unverified-day:{connection_id}"
 
 
 def _insert_event(cur, workspace_id, *, provenance, rtype, provider_event_id, occurred, received, connection_id=None, kind="event",
@@ -620,7 +654,7 @@ class ResultsService:
 
     def _connection_views(self, cur, workspace_id, rows, now):
         ids = [r[0] for r in rows]
-        counts, quarantine = {}, {}
+        counts, quarantine, unverified = {}, {}, {}
         if ids:
             cur.execute("SELECT connection_id::text,count(*) FILTER (WHERE kind='event' AND NOT test),count(*) FILTER (WHERE kind='reversal' AND NOT test),"
                         "count(*) FILTER (WHERE test) FROM public.pr_result_events WHERE workspace_id=%s AND connection_id=ANY(%s::uuid[]) "
@@ -629,15 +663,25 @@ class ResultsService:
             cur.execute("SELECT connection_id::text,count(*),count(*) FILTER (WHERE received_at>=to_timestamp(%s)) FROM public.pr_result_quarantine "
                         "WHERE workspace_id=%s AND connection_id=ANY(%s::uuid[]) GROUP BY connection_id", (now - 86400, workspace_id, ids))
             quarantine = {r[0]: r[1:] for r in cur.fetchall()}
+            # Deliveries refused for not being signed with the connection's secret: a counter in the current daily window,
+            # labelled apart from health (anyone who knows the address can send one).
+            from ..hosted import bucket
+            scopes = {bucket(_unverified_scope(ident)): ident for ident in ids}
+            cur.execute("SELECT bucket,count,extract(epoch from window_start) FROM public.pr_auth_throttle WHERE bucket=ANY(%s) "
+                        "AND window_start>=now()-make_interval(secs=>86400)", (list(scopes),))
+            unverified = {scopes[key]: (int(count), float(since)) for key, count, since in cur.fetchall()}
         views = []
         for (ident, label, producer, status, fingerprint, previous, previous_until, per_minute, per_day, received, event_at, error, error_at,
              created, updated, removed, revision) in rows:
             accepted, reversals, tests = counts.get(ident, (0, 0, 0))
             held, held_recent = quarantine.get(ident, (0, 0))
+            refused, refused_since = unverified.get(ident, (0, None))
             grace = previous is not None and previous_until is not None and float(previous_until) > now
             health = connection_health(status, _num(received), _num(event_at), error, _num(error_at), now)
             health.update({"accepted24h": int(accepted), "reversals24h": int(reversals), "testEvents24h": int(tests),
-                           "quarantined": int(held), "quarantined24h": int(held_recent)})
+                           "quarantined": int(held), "quarantined24h": int(held_recent),
+                           "unverified": {"refused": min(refused, UNVERIFIED_SHOWN_MAX), "capped": refused > UNVERIFIED_SHOWN_MAX,
+                                          "since": refused_since} if refused else None})
             views.append({"id": ident, "label": label, "producer": producer, "status": status, "revision": revision,
                           "fingerprint": fingerprint if status != "removed" else None,
                           "previousFingerprint": previous if grace else None, "previousExpiresAt": float(previous_until) if grace else None,
@@ -893,7 +937,12 @@ class ResultsService:
     # -- public: the signed first-party receiver -------------------------------------------------------------------------
     def ingest(self, connection_id, header, raw, now=None):
         """One webhook delivery → Delivery. Never raises for an expected refusal, so the connection's health code and
-        rate counters are committed together with the answer. The body, secret and any contact detail are never logged."""
+        rate counters are committed together with the answer. The body, secret and any contact detail are never logged.
+
+        Authentication comes first; it is bounded work (a capped body, at most four digests and two secrets). Only an
+        authentic delivery takes the connection's row lock, spends its budgets and can record a health problem; an
+        unverified one is answered from its own abuse budget and a bounded counter (``_unverified``), so a flood of
+        unsigned traffic can neither starve the real producer nor make the connection look broken."""
         now = self.clock() if now is None else now
         if not enabled():
             return Delivery(404, {"error": "Not found.", "code": "feature_disabled"})
@@ -904,45 +953,64 @@ class ResultsService:
         ident = _uuid(connection_id)
         if ident is None:
             return Delivery(404, {"error": "Not found.", "code": "not_found"})
+        live = (f"FROM public.pr_result_connections c JOIN public.pr_workspaces w ON w.id=c.workspace_id WHERE c.id=%s AND {_NOT_DELETING}")
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT c.workspace_id::text,c.status,c.secret_ciphertext,c.secret_key_id,c.previous_ciphertext,c.previous_key_id,"
-                            "extract(epoch from c.previous_expires_at),c.rate_per_minute,c.rate_per_day FROM public.pr_result_connections c "
-                            f"JOIN public.pr_workspaces w ON w.id=c.workspace_id WHERE c.id=%s AND {_NOT_DELETING} FOR UPDATE OF c", (ident,))
+                            f"extract(epoch from c.previous_expires_at),c.rate_per_minute,c.rate_per_day {live}", (ident,))
                 row = cur.fetchone()
                 if row is None or row[1] != "active":
                     return Delivery(404, {"error": "Not found.", "code": "not_found"})
-                outcome = self._deliver(cur, ident, row, header, bytes(raw), now)
+                outcome = self._authenticate(cur, ident, row, header, bytes(raw), now)
+                if outcome is None:
+                    # Authentic: this connection's deliveries are serialized from here (budgets, idempotent identity).
+                    cur.execute(f"SELECT c.status {live} FOR UPDATE OF c", (ident,))
+                    locked = cur.fetchone()
+                    if locked is None or locked[0] != "active":   # paused, removed or deleting meanwhile
+                        return Delivery(404, {"error": "Not found.", "code": "not_found"})
+                    outcome = self._deliver(cur, ident, row, bytes(raw), now)
                 if outcome.error:
                     cur.execute("UPDATE public.pr_result_connections SET last_error_code=%s,last_error_at=to_timestamp(%s) WHERE id=%s",
                                 (outcome.error[:60], _ms(now), ident))
         return outcome
 
-    def _deliver(self, cur, connection_id, row, header, raw, now):
-        workspace_id, _status, current, current_key, previous, previous_key, previous_until, per_minute, per_day = row
-        # 1. Rate budget for every attempt, before any signature work (floods of unauthenticated deliveries).
-        if not _budget(cur, f"results:deliveries:{connection_id}", per_minute * DELIVERY_BUDGET_FACTOR, 60):
-            return _refused(429, "result_rate_limited", "Too many deliveries for this connection. Retry in a minute.", "rate_limited", [("Retry-After", "60")])
-        # 2. Signature over the exact bytes, against the current secret and the previous one inside its grace period.
+    def _authenticate(self, cur, connection_id, row, header, raw, now):
+        """None for an authentic delivery inside the replay window; otherwise the refusal to send. The signature is over
+        the exact bytes, against the current secret and the previous one inside its grace period."""
+        _workspace, _status, current, current_key, previous, previous_key, previous_until, per_minute, _per_day = row
         accepted = [self._decrypt(current, current_key)]
         if previous and previous_until is not None and float(previous_until) > now:
             accepted.append(self._decrypt(previous, previous_key))
         accepted = [s for s in accepted if s]
-        if not accepted:
+        if not accepted:   # the connection can't verify anything: a real problem for its owner, whoever sent this
             return _refused(503, "results_unavailable", "This connection can't verify deliveries right now.", "secret_unavailable")
         try:
             signing.verify(header, raw, accepted, now)
         except signing.SignatureError as error:
-            stale = error.code == "timestamp_outside_window"
-            return _refused(401, "result_timestamp_stale" if stale else "result_signature_invalid",
-                            "The signature timestamp is outside the five-minute window." if stale else "The signature is missing, malformed or doesn't match.",
-                            error.code)
-        # 3. Verified events have their own per-minute and per-day budget.
+            if error.code == "timestamp_outside_window":   # signed with the secret, outside the window: the producer's clock (or a replay)
+                return _refused(401, "result_timestamp_stale", "The signature timestamp is outside the five-minute window.", error.code)
+            return self._unverified(cur, connection_id, per_minute)
+        return None
+
+    @staticmethod
+    def _unverified(cur, connection_id, per_minute):
+        """An unsigned, malformed or wrongly signed delivery proves nothing about the producer, so it never spends the
+        connection's verified-event budget and never becomes its health: it moves the owner's daily "unverified deliveries
+        refused" counter and is answered from its own abuse budget (3 × the verified per-minute rate, then 429)."""
+        _tally(cur, _unverified_scope(connection_id), 86400)
+        if not _budget(cur, f"results:unverified:{connection_id}", per_minute * DELIVERY_BUDGET_FACTOR, 60):
+            return Delivery(429, {"error": "Too many unverified deliveries for this connection. Retry in a minute.", "code": "result_rate_limited"},
+                            [("Retry-After", "60")])
+        return Delivery(401, {"error": "The signature is missing, malformed or doesn't match.", "code": "result_signature_invalid"})
+
+    def _deliver(self, cur, connection_id, row, raw, now):
+        workspace_id, _status, _current, _current_key, _previous, _previous_key, _previous_until, per_minute, per_day = row
+        # 1. Authentic events have their own per-minute and per-day budget (unverified deliveries never reach it).
         if not _budget(cur, f"results:events:{connection_id}:m", per_minute, 60):
             return _refused(429, "result_rate_limited", "This connection's per-minute budget is used up. Retry in a minute.", "rate_limited", [("Retry-After", "60")])
         if not _budget(cur, f"results:events:{connection_id}:d", per_day, 86400):
             return _refused(429, "result_rate_limited", "This connection's daily budget is used up.", "daily_budget_exhausted", [("Retry-After", "3600")])
-        # 4. Parse and normalize; unknown fields are dropped, never stored.
+        # 2. Parse and normalize; unknown fields are dropped, never stored.
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError, RecursionError):
@@ -952,7 +1020,7 @@ class ResultsService:
         except AlphaError as error:
             return _refused(400, error.code or "result_payload_invalid", str(error), error.code or "payload_invalid")
         digest = signing.event_digest(event)
-        # 5. Idempotent identity per (workspace, connection, eventId).
+        # 3. Idempotent identity per (workspace, connection, eventId).
         cur.execute("SELECT id::text,payload_digest,attribution FROM public.pr_result_events WHERE workspace_id=%s AND connection_id=%s "
                     "AND provider_event_id=%s AND provenance='first_party_reported'", (workspace_id, connection_id, event["eventId"]))
         existing = cur.fetchone()
@@ -985,16 +1053,21 @@ class ResultsService:
         return Delivery(200, {"receiptId": ident, "status": "accepted", "attribution": association["attribution"]})
 
     def _reverse_reported(self, cur, workspace_id, connection_id, event, digest, now):
-        cur.execute("SELECT id::text,kind,result_type,quantity,link_id::text,campaign_ref,attribution,attribution_definition,"
+        cur.execute("SELECT id::text,kind,result_type,quantity,link_id::text,campaign_ref,attribution,attribution_definition,test,"
                     "EXISTS(SELECT 1 FROM public.pr_result_events r WHERE r.workspace_id=e.workspace_id AND r.corrects_id=e.id AND r.kind='reversal') "
                     "FROM public.pr_result_events e WHERE workspace_id=%s AND connection_id=%s AND provider_event_id=%s AND provenance='first_party_reported'",
                     (workspace_id, connection_id, event["reversalOf"]))
         original = cur.fetchone()
         if original is None:
             return _refused(409, "result_reversal_unknown", "reversalOf names an event this connection hasn't reported. Send the original first.")
-        ident, kind, rtype, quantity, link_id, campaign, attribution, definition, already = original
+        ident, kind, rtype, quantity, link_id, campaign, attribution, definition, original_test, already = original
         if kind != "event" or rtype != event["type"]:
             return _refused(409, "result_reversal_invalid", "A reversal must name an original event of the same type.")
+        if bool(original_test) != event["test"]:
+            # A "test": true delivery (the test producer included) can never withdraw a real result, nor a real reversal a test one.
+            return _refused(409, "result_reversal_test_mismatch",
+                            "A test reversal can only reverse a test event, and a real reversal only a real event. Nothing was changed.",
+                            "reversal_test_mismatch")
         if already:
             held = self._quarantine(cur, workspace_id, connection_id, event["eventId"], digest, "reversal_duplicate", ident)
             return _refused(409, "result_already_reversed", "That event was already reversed. This delivery was quarantined.", "reversal_duplicate",

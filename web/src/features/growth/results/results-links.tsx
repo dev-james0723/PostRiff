@@ -8,11 +8,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Band, FIELD_CLASS, StatusChip } from '@/features/workspace/rafii-parts';
-import { errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
+import { errorCode, errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
 import { useCreateLink, useLinkAction, useTrackingLinks } from '@/lib/growth-v2/results-hooks';
 import type { TrackingLink } from '@/lib/growth-v2/results-types';
-import type { ResultsCopy } from './present';
+import { linkResultsText, type Lang, type ResultsCopy } from './present';
 import { useResultsCopy } from './use-results-copy';
+
+type LinkField = 'destination' | 'label' | 'campaign';
+const CAMPAIGN = /^[A-Za-z0-9_:-]{1,80}$/;
+
+/** Which field a refusal is about, so only that field is marked invalid. */
+function refusedField(code: string | undefined): LinkField | null {
+  if (code === 'result_campaign_invalid') return 'campaign';
+  if (code === 'result_label_invalid') return 'label';
+  if (code === 'link_destination_invalid' || code === 'link_destination_unsafe') return 'destination';
+  return null;
+}
 
 export function linkUrl(link: TrackingLink): string {
   return link.url ?? (typeof window !== 'undefined' ? window.location.origin + link.path : link.path);
@@ -30,7 +41,7 @@ function shortDestination(destination: string): string {
 
 /** Tracking links: server-made links to the person's own public pages; clicks are clicks, not people. */
 export function TrackingLinksView() {
-  const { copy } = useResultsCopy();
+  const { copy, lang } = useResultsCopy();
   const query = useTrackingLinks();
   const [creating, setCreating] = useState(false);
   const pages = query.data?.pages ?? [];
@@ -39,8 +50,8 @@ export function TrackingLinksView() {
   const windowDays = pages[0]?.windowDays ?? 30;
   const copyLink = (link: TrackingLink) =>
     void navigator.clipboard.writeText(linkUrl(link)).then(
-      () => toast.success(copy.links.copied),
-      () => toast.error(copy.links.copyFailed)
+      () => toast.success(<span lang={lang}>{copy.links.copied}</span>),
+      () => toast.error(<span lang={lang}>{copy.links.copyFailed}</span>)
     );
 
   return (
@@ -84,7 +95,7 @@ export function TrackingLinksView() {
         {copy.links.note} {copy.links.windowNote(windowDays)}
       </p>
       <RafiiDialog open={creating} onOpenChange={setCreating}>
-        <RafiiDialogContent size='sm'>{creating && <CreateLink onCopy={copyLink} />}</RafiiDialogContent>
+        <RafiiDialogContent size='sm' lang={lang}>{creating && <CreateLink onCopy={copyLink} lang={lang} />}</RafiiDialogContent>
       </RafiiDialog>
     </>
   );
@@ -93,7 +104,8 @@ export function TrackingLinksView() {
 function LinkRow({ link, copy, canEdit, onCopy }: { link: TrackingLink; copy: ResultsCopy; canEdit: boolean; onCopy: () => void }) {
   const act = useLinkAction();
   const [problem, setProblem] = useState('');
-  const results = Object.values(link.associatedResults).reduce<number>((sum, n) => sum + (n ?? 0), 0);
+  // One part per source, never added together (a declared and a reported result are different kinds of evidence).
+  const results = linkResultsText(link.associatedResults, copy);
 
   async function toggle() {
     setProblem('');
@@ -133,11 +145,11 @@ function LinkRow({ link, copy, canEdit, onCopy }: { link: TrackingLink; copy: Re
           <span className='text-muted-foreground'>
             {' · '}
             {copy.links.bots(link.clicks.likelyBot)}
-            {results > 0 ? ` · ${copy.links.results(results)}` : ''}
+            {results ? ` · ${results}` : ''}
           </span>
         </p>
         {problem && (
-          <p role='alert' className='text-destructive text-sm'>
+          <p role='alert' lang='en' className='text-destructive text-sm'>
             {problem}
           </p>
         )}
@@ -146,25 +158,32 @@ function LinkRow({ link, copy, canEdit, onCopy }: { link: TrackingLink; copy: Re
   );
 }
 
-function CreateLink({ onCopy }: { onCopy: (link: TrackingLink) => void }) {
+function CreateLink({ onCopy, lang }: { onCopy: (link: TrackingLink) => void; lang: Lang }) {
   const { copy } = useResultsCopy();
   const id = useId();
   const create = useCreateLink();
   const [destination, setDestination] = useState('');
   const [label, setLabel] = useState('');
   const [campaign, setCampaign] = useState('');
-  const [problem, setProblem] = useState('');
+  // Our own checks speak the person's language; the server's refusals are English (marked so for assistive technology).
+  const [problem, setProblem] = useState<{ field: LinkField | null; message: string; lang: Lang } | null>(null);
   const [made, setMade] = useState<TrackingLink | null>(null);
   const intent = useRef(idempotencyKey('tracking-link-create'));
+  // Only the field a refusal is about is marked invalid, and described by the message.
+  const invalid = (field: LinkField) => (problem?.field === field ? { 'aria-invalid': true as const, 'aria-errormessage': `${id}-problem` } : {});
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setProblem('');
+    setProblem(null);
+    if (campaign.trim() && !CAMPAIGN.test(campaign.trim())) {
+      setProblem({ field: 'campaign', message: copy.form.campaignInvalid, lang });
+      return;
+    }
     try {
       const result = await create.mutateAsync({ destination: destination.trim(), label: label.trim() || null, campaignRef: campaign.trim() || null, idempotencyKey: intent.current });
       setMade(result.link);
     } catch (error) {
-      setProblem(errorMessage(error));
+      setProblem({ field: refusedField(errorCode(error)), message: errorMessage(error), lang: 'en' });
     }
   }
 
@@ -202,7 +221,7 @@ function CreateLink({ onCopy }: { onCopy: (link: TrackingLink) => void }) {
             onChange={(event) => setDestination(event.target.value)}
             className={FIELD_CLASS}
             aria-describedby={`${id}-destination-hint`}
-            aria-invalid={problem ? true : undefined}
+            {...invalid('destination')}
           />
           <p id={`${id}-destination-hint`} className='text-muted-foreground text-xs'>
             {copy.links.destinationHint}
@@ -210,18 +229,18 @@ function CreateLink({ onCopy }: { onCopy: (link: TrackingLink) => void }) {
         </div>
         <div className='flex flex-col gap-2'>
           <Label htmlFor={`${id}-label`}>{copy.links.label}</Label>
-          <Input id={`${id}-label`} maxLength={80} value={label} onChange={(event) => setLabel(event.target.value)} className={FIELD_CLASS} />
+          <Input id={`${id}-label`} maxLength={80} value={label} onChange={(event) => setLabel(event.target.value)} className={FIELD_CLASS} {...invalid('label')} />
         </div>
         <div className='flex flex-col gap-2'>
           <Label htmlFor={`${id}-campaign`}>{copy.links.campaign}</Label>
-          <Input id={`${id}-campaign`} maxLength={80} autoComplete='off' value={campaign} onChange={(event) => setCampaign(event.target.value)} className={FIELD_CLASS} aria-describedby={`${id}-campaign-hint`} />
+          <Input id={`${id}-campaign`} maxLength={80} autoComplete='off' value={campaign} onChange={(event) => setCampaign(event.target.value)} className={FIELD_CLASS} aria-describedby={`${id}-campaign-hint`} {...invalid('campaign')} />
           <p id={`${id}-campaign-hint`} className='text-muted-foreground text-xs'>
             {copy.links.campaignHint}
           </p>
         </div>
         {problem && (
-          <p role='alert' className='text-destructive text-sm'>
-            {problem}
+          <p id={`${id}-problem`} role='alert' lang={problem.lang} className='text-destructive text-sm'>
+            {problem.message}
           </p>
         )}
       </RafiiDialogBody>

@@ -105,7 +105,13 @@ export interface Relationship {
   due: RelationshipDue | null;
   snoozedUntil: number | null;
   followUp: FollowUpView;
-  won: { resultId: string; provenance: 'provider_native' | 'first_party_reported' | 'user_declared' | null } | null;
+  won: {
+    resultId: string;
+    provenance: 'provider_native' | 'first_party_reported' | 'user_declared' | null;
+    /** The result was reversed after the follow-up was marked won (`null`: the results store couldn't say). The stage stays. */
+    reversed?: boolean | null;
+    reversedAt?: number | null;
+  } | null;
   threadIds: string[];
   noteCount: number;
   createdAt: number;

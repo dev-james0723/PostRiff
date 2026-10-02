@@ -97,6 +97,26 @@ create index if not exists pr_relationship_events_workspace_idx on public.pr_rel
 create index if not exists pr_relationship_events_relationship_idx
   on public.pr_relationship_events (workspace_id, relationship_id, occurred_at desc, id desc);
 
+-- History is immutable for every role, the table owner included (grants alone don't bind the owner): no row is ever
+-- updated, deleted on its own or truncated. Deleting the follow-up or the workspace it belongs to still removes its
+-- history through the foreign-key cascade: by the time the cascade reaches a row, its parent is already gone.
+create or replace function postriff_private.pr_relationship_events_immutable() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if tg_op = 'DELETE' then
+    if not exists (select 1 from public.pr_relationships r where r.workspace_id = old.workspace_id and r.id = old.relationship_id)
+       or not exists (select 1 from public.pr_workspaces w where w.id = old.workspace_id) then
+      return old;
+    end if;
+  end if;
+  raise exception 'pr_relationship_events is append-only history' using errcode = '42501';
+end $$;
+revoke all on function postriff_private.pr_relationship_events_immutable() from public, anon, authenticated;
+create or replace trigger pr_relationship_events_immutable before update or delete on public.pr_relationship_events
+  for each row execute function postriff_private.pr_relationship_events_immutable();
+create or replace trigger pr_relationship_events_no_truncate before truncate on public.pr_relationship_events
+  for each statement execute function postriff_private.pr_relationship_events_immutable();
+
 do $$
 declare t text;
 begin
@@ -115,7 +135,8 @@ begin
   alter table public.pr_relationship_events force row level security;
   revoke all on public.pr_relationship_events from public, anon, authenticated, service_role;
   grant select on public.pr_relationship_events to authenticated;
-  -- No update/delete grant exists for any role: history rows are immutable (workspace deletion cascades).
+  -- No update/delete grant exists for any role, and the trigger above refuses them even for the owner: history rows are
+  -- immutable (deleting the follow-up or the workspace cascades).
   grant select, insert on public.pr_relationship_events to service_role;
   drop policy if exists tenant_read on public.pr_relationship_events;
   create policy tenant_read on public.pr_relationship_events for select to authenticated using (postriff_private.member(workspace_id));

@@ -104,6 +104,27 @@ with psycopg.connect(DSN, autocommit=True) as db:
     db.execute("RESET ROLE")
     checks += ["member-only reads and no browser writes", "revoked/foreign member sees nothing", "anon denied", "history immutable for the service role"]
 
+    # Not only by grant: the trigger binds the table owner too (this connection is the owner, a superuser that bypasses
+    # grants and RLS). No update, no delete of a row on its own, no truncate; re-applying 081 keeps exactly one of each.
+    assert db.execute("SELECT current_setting('is_superuser')").fetchone()[0] == "on"
+    triggers = {r[0] for r in db.execute("SELECT tgname FROM pg_trigger WHERE tgrelid='public.pr_relationship_events'::regclass AND NOT tgisinternal").fetchall()}
+    assert triggers == {"pr_relationship_events_immutable", "pr_relationship_events_no_truncate"}, triggers
+    assert refused(db, "UPDATE public.pr_relationship_events SET kind='closed' WHERE workspace_id=%s", (w1,))
+    assert refused(db, "UPDATE public.pr_relationship_events SET meta='{\"note\":\"rewritten\"}'::jsonb")
+    assert refused(db, "DELETE FROM public.pr_relationship_events WHERE workspace_id=%s", (w1,))
+    assert refused(db, "TRUNCATE public.pr_relationship_events")
+    assert refused(db, "TRUNCATE public.pr_relationship_events CASCADE")
+    assert db.execute("SELECT count(*) FROM public.pr_relationship_events WHERE workspace_id=%s", (w1,)).fetchone()[0] == 1
+    # Removing the follow-up itself still takes its history with it (the foreign-key cascade is the one way out).
+    r2 = str(db.execute("INSERT INTO public.pr_relationships(workspace_id,display_name,created_by) VALUES(%s,'Lee',%s) RETURNING id", (w1, ONE)).fetchone()[0])
+    db.execute("INSERT INTO public.pr_relationship_events(workspace_id,relationship_id,kind,to_state,actor) VALUES(%s,%s,'created','new',%s),(%s,%s,'closed','closed',%s)",
+               (w1, r2, ONE, w1, r2, ONE))
+    assert refused(db, "DELETE FROM public.pr_relationship_events WHERE relationship_id=%s", (r2,))
+    db.execute("DELETE FROM public.pr_relationships WHERE id=%s", (r2,))
+    assert db.execute("SELECT count(*) FROM public.pr_relationship_events WHERE relationship_id=%s", (r2,)).fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM public.pr_relationship_events WHERE workspace_id=%s", (w1,)).fetchone()[0] == 1
+    checks.append("history immutable for the owner role too (trigger: no update, no single delete, no truncate); deleting the follow-up cascades")
+
     # Results (080) precede 081 in the integrated chain: the won foreign key exists, and re-applying 081 keeps it once.
     assert db.execute("SELECT count(*) FROM pg_constraint WHERE conname='pr_relationships_won_result_fk'").fetchone()[0] == 1
     apply()

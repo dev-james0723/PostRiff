@@ -12,15 +12,16 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useMembers } from '@/lib/api/hooks';
-import { errorCode, errorMessage } from '@/lib/growth-v2/request';
+import { errorCode } from '@/lib/growth-v2/request';
 import type { RelationshipsApi } from '@/lib/growth-v2/relationships';
 import { useRelationship, useRelationshipChange, useRelationshipRefresh } from '@/lib/growth-v2/relationships-hooks';
 import {
   browserZone,
   dueInput,
+  editChanges,
   followUpHref,
   followUpLine,
-  isConflict,
+  historyLine,
   nextStates,
   platformName,
   replyRouteView,
@@ -29,26 +30,33 @@ import {
   zoneChoices
 } from '@/lib/growth-v2/relationships-model';
 import type { RelationshipDetail, RelationshipEditInput, RelationshipState, RelationshipWrite } from '@/lib/growth-v2/relationships-types';
+import { useResultsRefresh } from '@/lib/growth-v2/results-hooks';
 import { relativeTime, timeDefaults } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { currentCopy, focusComposer, when } from './copy';
+import { currentCopy, currentLang, describeProblem, focusComposer, when, type FollowUpProblem } from './copy';
+import { usePanelFocus, useReturnFocus } from './focus';
 import { WonResultPicker } from './won-result-picker';
 
 type Run = (api: RelationshipsApi, w: string) => Promise<RelationshipWrite>;
+/** The last change that can be undone, offered in place (not only in a passing toast) while nothing else changed. */
+type Undoable = { message: string; revision: number; undo: (revision: number) => Run };
 
 const NOTE_LIMIT = 500;
 
 /**
  * One follow-up, editable in place: stage, reminder, owner, next step, due time in its zone, notes, linked
- * conversations and history. Every change sends the revision this card shows; a conflict asks to reload instead of
- * overwriting. Snooze, close and "not relevant" offer Undo. Replying is the Inbox composer (exact approval) or, on a
- * platform Rafii can't reply on, an honest "Open on …" link — never a direct success.
+ * conversations and history. Every change sends the revision it started from; a conflict asks to reload instead of
+ * overwriting. Stage and owner change only when the person applies them. Snooze, close and "not relevant" offer Undo
+ * here and in a toast. Replying is the Inbox composer (exact approval) or, on a platform Rafii can't reply on, an
+ * honest "Open on …" link — never a direct success. Mount it with `key={relationshipId}` so nothing typed for one
+ * follow-up can carry over to another.
  */
 export function FollowUpCard({
   relationshipId,
   threadId,
   canEdit,
-  focusOnLoad = false
+  focusOnLoad = false,
+  onReply
 }: {
   relationshipId: string;
   /** The conversation open beside this card, when its composer is on the page. */
@@ -56,22 +64,38 @@ export function FollowUpCard({
   canEdit: boolean;
   /** Move keyboard focus to this card's heading once it has loaded (just started, or opened from a link). */
   focusOnLoad?: boolean;
+  /** Open this conversation's composer in the Inbox (it loads the conversation when it isn't loaded yet). */
+  onReply?: (threadId: string) => void;
 }) {
   const copy = currentCopy();
+  const lang = currentLang();
   const query = useRelationship(relationshipId);
   const change = useRelationshipChange();
   const refresh = useRelationshipRefresh();
+  const refreshResults = useResultsRefresh();
   const members = useMembers();
   const headingId = useId();
   const [pending, setPending] = useState<string | null>(null);
-  const [problem, setProblem] = useState<{ message: string; conflict: boolean } | null>(null);
+  const [problem, setProblem] = useState<FollowUpProblem | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editSession, setEditSession] = useState(0);
   const [snoozing, setSnoozing] = useState(false);
   const [winning, setWinning] = useState(false);
+  const [stage, setStage] = useState<RelationshipState | ''>('');
+  const [ownerChoice, setOwnerChoice] = useState<string | null>(null);
+  const [undoable, setUndoable] = useState<Undoable | null>(null);
   const [note, setNote] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const snoozeButton = useRef<HTMLButtonElement>(null);
+  const stageSelect = useRef<HTMLSelectElement>(null);
   const focused = useRef(false);
   const loaded = Boolean(query.data);
+  // Focus goes back to the control that opened an inline panel when it closes (save or cancel).
+  useReturnFocus(editing, editButton, heading);
+  useReturnFocus(snoozing, snoozeButton, heading);
+  useReturnFocus(winning, stageSelect, heading);
+  const snoozePanel = usePanelFocusWhen<HTMLDivElement>(snoozing, () => setSnoozing(false));
 
   useEffect(() => {
     if (!focusOnLoad || !loaded || focused.current) return;
@@ -79,15 +103,18 @@ export function FollowUpCard({
     heading.current?.focus();
   }, [focusOnLoad, loaded]);
 
+  // Only a first load that failed replaces the card; a failed background refresh keeps it (and anything typed in it).
   if (query.isPending) return <StateMessage kind='loading' layout='inline' title={copy.loading} />;
-  if (query.isError || !query.data) {
+  if (!query.data) {
     return (
-      <StateMessage
-        kind='error'
-        layout='inline'
-        title={errorMessage(query.error, copy.failed)}
-        action={<Button variant='glass' size='sm' className='h-9' onClick={() => void query.refetch()}>{copy.reload}</Button>}
-      />
+      <div lang={lang}>
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title={describeProblem(query.error, copy).message}
+          action={<Button variant='glass' size='sm' className='h-9' onClick={() => void query.refetch()}>{copy.reload}</Button>}
+        />
+      </div>
     );
   }
   const rel: RelationshipDetail = query.data.relationship;
@@ -97,17 +124,23 @@ export function FollowUpCard({
   const route = replyRouteView(thread?.replyRoute ?? rel.replyRoute, copy);
   const activeMembers = (members.data?.members ?? []).filter((member) => member.status === 'active');
   const terminal = rel.state === 'won' || rel.state === 'closed';
+  const currentOwner = rel.owner?.userId ?? '';
+  const ownerValue = ownerChoice ?? currentOwner;
+  const ownerName = rel.owner ? (rel.owner.active ? rel.owner.displayName || rel.owner.userId.slice(0, 8) : copy.formerMember) : copy.unassigned;
+  const offerUndo = undoable && undoable.revision === rel.revision ? undoable : null;
 
   async function run(label: string, task: Run, after?: (result: RelationshipWrite) => void) {
     setPending(label);
     setProblem(null);
+    setUndoable(null); // a new change replaces the last undo offer
     try {
       const result = await change(task);
       after?.(result);
       return result;
     } catch (cause) {
-      const code = errorCode(cause);
-      setProblem({ message: isConflict(code) ? copy.conflict : errorMessage(cause, copy.failed), conflict: isConflict(code) });
+      // A result reversed meanwhile must leave the "won" picker: re-read the person's results.
+      if (errorCode(cause) === 'result_required') void refreshResults();
+      setProblem(describeProblem(cause, copy));
       return null;
     } finally {
       setPending(null);
@@ -116,7 +149,11 @@ export function FollowUpCard({
 
   function withUndo(message: string, undo: (revision: number) => Run) {
     return (result: RelationshipWrite) => {
-      toast(message, { action: { label: copy.undo, onClick: () => void run('undo', undo(result.relationship.revision)) } });
+      const revision = result.relationship.revision;
+      setUndoable({ message, revision, undo });
+      toast(<span lang={lang}>{message}</span>, {
+        action: { label: <span lang={lang}>{copy.undo}</span>, onClick: () => void run('undo', undo(revision)) }
+      });
     };
   }
 
@@ -125,20 +162,27 @@ export function FollowUpCard({
       setSnoozing(false);
       withUndo(copy.snoozedToast, (revision) => (api, w) => api.unsnooze(w, rel.id, revision))(result);
     });
-  const move = (target: RelationshipState) => {
+  /** The stage the person chose, applied only when they confirm it (a select never saves on its own). */
+  const applyStage = (target: RelationshipState) => {
     if (target === 'won') {
       setWinning(true);
       return;
     }
-    void run('state', (api, w) => api.transition(w, rel.id, rel.revision, target),
-      target === 'closed' ? withUndo(copy.closedToast, (revision) => (api, w) => api.reopen(w, rel.id, revision)) : undefined);
+    void run('state', (api, w) => api.transition(w, rel.id, rel.revision, target), (result) => {
+      setStage('');
+      if (target === 'closed') withUndo(copy.closedToast, (revision) => (api, w) => api.reopen(w, rel.id, revision))(result);
+    });
   };
   const dismissReminder = () =>
     run('dismiss', (api, w) => api.dismissFollowUp(w, rel.id, rel.revision),
       withUndo(copy.dismissedToast, (revision) => (api, w) => api.restoreFollowUp(w, rel.id, revision)));
+  const reloadAfterConflict = async () => {
+    setProblem(null);
+    await refresh();
+  };
 
   return (
-    <section aria-labelledby={headingId} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-3.5' data-follow-up={rel.id}>
+    <section lang={lang} aria-labelledby={headingId} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-3.5' data-follow-up={rel.id}>
       <header className='flex flex-wrap items-center gap-2'>
         <h3 id={headingId} ref={heading} tabIndex={-1} className='rafii-focus text-foreground min-w-0 flex-1 truncate rounded-sm text-sm font-medium'>
           {rel.displayName}
@@ -146,7 +190,19 @@ export function FollowUpCard({
         <AnimatedBadge size='sm' status={stateTone(rel.state)} showIcon={false} layout={false} contentKey={rel.state} className='rafii-glass border-0'>
           {copy.states[rel.state]}
         </AnimatedBadge>
+        {rel.won?.reversed && (
+          <AnimatedBadge size='sm' status='warning' showIcon={false} layout={false} className='rafii-glass border-0'>
+            {copy.wonWithdrawn}
+          </AnimatedBadge>
+        )}
       </header>
+
+      {query.isError && (
+        <p role='status' className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
+          {copy.staleNotice}
+          <Button variant='quiet' size='sm' className='h-9' onClick={() => void query.refetch()}>{copy.reload}</Button>
+        </p>
+      )}
 
       <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' aria-live='polite'>
         <Icons.clock className='size-4 shrink-0' aria-hidden />
@@ -163,12 +219,21 @@ export function FollowUpCard({
         )}
       </p>
 
+      {canEdit && offerUndo && (
+        <p role='status' className='rafii-glass flex flex-wrap items-center gap-2 rounded-[var(--rafii-radius-control)] px-3 py-1.5 text-sm'>
+          <span className='min-w-0 flex-1'>{offerUndo.message}</span>
+          <Button variant='quiet' size='sm' className='h-9' disabled={busy} onClick={() => void run('undo', offerUndo.undo(offerUndo.revision))}>
+            {copy.undo}
+          </Button>
+        </p>
+      )}
+
       {rel.suggestion && canEdit && (
         <div className='rafii-glass flex flex-wrap items-center gap-2 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm'>
           <Icons.sparkles className='text-muted-foreground size-4 shrink-0' aria-hidden />
           <span className='min-w-0 flex-1'>
             {copy.suggested(copy.states[rel.suggestion.state])}
-            <span className='text-muted-foreground'> · {copy.reasons[rel.suggestion.reason] ?? rel.suggestion.reason}</span>
+            <span className='text-muted-foreground'> · {copy.reasons[rel.suggestion.reason] ?? copy.reasons.due_passed}</span>
           </span>
           <Button variant='glass' size='sm' className='h-9' disabled={busy}
             onClick={() => void run('state', (api, w) => api.transition(w, rel.id, rel.revision, rel.suggestion!.state, { suggestionKey: rel.suggestion!.key }))}>
@@ -183,10 +248,15 @@ export function FollowUpCard({
 
       {editing ? (
         <FollowUpEditor
+          key={editSession}
           rel={rel}
           zone={zone}
           onCancel={() => setEditing(false)}
           onSaved={() => setEditing(false)}
+          onReload={async () => {
+            await refresh();
+            setEditSession((session) => session + 1); // start again from what the server holds now
+          }}
         />
       ) : (
         <dl className='grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-4'>
@@ -196,21 +266,32 @@ export function FollowUpCard({
           <dd>{rel.due ? `${when(rel.due.at, rel.due.timeZone)} (${rel.due.timeZone})` : copy.noDue}</dd>
           <dt className='text-muted-foreground'>{copy.owner}</dt>
           <dd>
-            {canEdit ? (
-              <NativeSelect
-                size='sm'
-                aria-label={copy.owner}
-                value={rel.owner?.userId ?? ''}
-                disabled={busy}
-                onChange={(event) => void run('assign', (api, w) => api.assign(w, rel.id, rel.revision, event.target.value || null))}
-              >
-                <NativeSelectOption value=''>{copy.unassigned}</NativeSelectOption>
-                {rel.owner && !rel.owner.active && <NativeSelectOption value={rel.owner.userId} disabled>{copy.formerMember}</NativeSelectOption>}
-                {activeMembers.map((member) => (
-                  <NativeSelectOption key={member.userId} value={member.userId}>{member.displayName || member.userId.slice(0, 8)}</NativeSelectOption>
-                ))}
-              </NativeSelect>
-            ) : rel.owner ? (rel.owner.active ? rel.owner.displayName || rel.owner.userId.slice(0, 8) : copy.formerMember) : copy.unassigned}
+            {canEdit && members.isSuccess ? (
+              <div className='flex flex-wrap items-center gap-2'>
+                <NativeSelect size='sm' aria-label={copy.owner} value={ownerValue} disabled={busy} onChange={(event) => setOwnerChoice(event.target.value)}>
+                  <NativeSelectOption value=''>{copy.unassigned}</NativeSelectOption>
+                  {rel.owner && !rel.owner.active && <NativeSelectOption value={rel.owner.userId} disabled>{copy.formerMember}</NativeSelectOption>}
+                  {rel.owner?.active && !activeMembers.some((member) => member.userId === rel.owner!.userId) && (
+                    <NativeSelectOption value={rel.owner.userId}>{ownerName}</NativeSelectOption>
+                  )}
+                  {activeMembers.map((member) => (
+                    <NativeSelectOption key={member.userId} value={member.userId}>{member.displayName || member.userId.slice(0, 8)}</NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                {ownerChoice !== null && ownerChoice !== currentOwner && (
+                  <Button variant='glass' size='sm' className='h-9' disabled={busy}
+                    onClick={() => void run('assign', (api, w) => api.assign(w, rel.id, rel.revision, ownerChoice || null), () => setOwnerChoice(null))}>
+                    {copy.assign}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <span>
+                {ownerName}
+                {canEdit && members.isPending && <span className='text-muted-foreground'> · {copy.membersLoading}</span>}
+                {canEdit && members.isError && <span className='text-muted-foreground'> · {copy.membersFailed}</span>}
+              </span>
+            )}
           </dd>
         </dl>
       )}
@@ -220,6 +301,11 @@ export function FollowUpCard({
         {route.kind === 'direct' && thread ? (
           threadId === thread.threadId ? (
             <Button variant='glass' size='control' onClick={() => focusComposer(thread.threadId)}>
+              <Icons.send className='size-4' aria-hidden />
+              {copy.reply}
+            </Button>
+          ) : onReply ? (
+            <Button variant='glass' size='control' onClick={() => onReply(thread.threadId)}>
               <Icons.send className='size-4' aria-hidden />
               {copy.reply}
             </Button>
@@ -236,7 +322,7 @@ export function FollowUpCard({
           </a>
         ) : null}
         {canEdit && !editing && (
-          <Button variant='quiet' size='control' disabled={busy} onClick={() => setEditing(true)}>
+          <Button ref={editButton} variant='quiet' size='control' disabled={busy} onClick={() => setEditing(true)}>
             <Icons.edit className='size-4' aria-hidden />
             {copy.edit}
           </Button>
@@ -252,13 +338,17 @@ export function FollowUpCard({
             </Button>
           ) : (
             <>
-              <NativeSelect size='sm' aria-label={copy.state} value='' disabled={busy} onChange={(event) => event.target.value && move(event.target.value as RelationshipState)}>
+              <NativeSelect ref={stageSelect} size='sm' aria-label={copy.chooseStage} value={stage} disabled={busy || winning}
+                onChange={(event) => setStage(event.target.value as RelationshipState | '')}>
                 <NativeSelectOption value=''>{copy.state}: {copy.states[rel.state]}</NativeSelectOption>
                 {nextStates(rel.state).map((target) => (
                   <NativeSelectOption key={target} value={target}>{copy.states[target]}</NativeSelectOption>
                 ))}
               </NativeSelect>
-              <Button variant='quiet' size='sm' className='h-9' disabled={busy} aria-expanded={snoozing} onClick={() => setSnoozing((open) => !open)}>
+              <Button variant='glass' size='sm' className='h-9' disabled={busy || winning || !stage} onClick={() => stage && applyStage(stage)}>
+                {copy.changeStage}
+              </Button>
+              <Button ref={snoozeButton} variant='quiet' size='sm' className='h-9' disabled={busy} aria-expanded={snoozing} onClick={() => setSnoozing((open) => !open)}>
                 {copy.snooze}
               </Button>
             </>
@@ -266,28 +356,49 @@ export function FollowUpCard({
         </div>
       )}
       {snoozing && !terminal && (
-        <div role='group' aria-label={copy.snooze} className='flex flex-wrap gap-2'>
+        <div ref={snoozePanel} role='group' aria-label={copy.snooze} className='flex flex-wrap gap-2'>
           {snoozeChoices(Date.now() / 1000, rel.due?.timeZone ?? zone, copy).map((choice) => (
             <Button key={choice.label} variant='glass' size='sm' className='h-9' disabled={busy} onClick={() => void snooze(choice.until)}>
               {choice.label}
             </Button>
           ))}
+          <Button variant='quiet' size='sm' className='h-9' onClick={() => setSnoozing(false)}>{copy.cancel}</Button>
         </div>
       )}
       {winning && (
         <WonResultPicker
           busy={busy}
-          onCancel={() => setWinning(false)}
-          onConfirm={(resultId) => void run('won', (api, w) => api.transition(w, rel.id, rel.revision, 'won', { wonResultId: resultId }), () => setWinning(false))}
+          onCancel={() => {
+            setWinning(false);
+            setStage('');
+          }}
+          onConfirm={(resultId) =>
+            void run('won', (api, w) => api.transition(w, rel.id, rel.revision, 'won', { wonResultId: resultId }), () => {
+              setWinning(false);
+              setStage('');
+            })
+          }
         />
       )}
-      {rel.won && <p className='text-muted-foreground text-xs'>{copy.states.won} · {copy.provenance[rel.won.provenance ?? ''] ?? copy.provenance.unknown}</p>}
+      {rel.won && (
+        rel.won.reversed ? (
+          <div role='note' className='rafii-glass flex flex-col gap-1 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm'>
+            <span className='text-foreground flex items-center gap-2 font-medium'>
+              <Icons.warning className='size-4 shrink-0' aria-hidden />
+              {copy.wonWithdrawn}
+            </span>
+            <span className='text-muted-foreground text-xs leading-relaxed'>{copy.wonWithdrawnHint}</span>
+          </div>
+        ) : (
+          <p className='text-muted-foreground text-xs'>{copy.states.won} · {copy.provenance[rel.won.provenance ?? ''] ?? copy.provenance.unknown}</p>
+        )
+      )}
 
       {problem && (
         <p role='alert' className='text-destructive flex flex-wrap items-center gap-2 text-sm'>
-          {problem.message}
+          <span lang={problem.lang}>{problem.message}</span>
           {problem.conflict && (
-            <Button variant='quiet' size='sm' className='h-9' onClick={() => { setProblem(null); void refresh(); }}>{copy.reload}</Button>
+            <Button variant='quiet' size='sm' className='h-9' onClick={() => void reloadAfterConflict()}>{copy.reload}</Button>
           )}
         </p>
       )}
@@ -335,7 +446,7 @@ export function FollowUpCard({
               return (
                 <li key={item.threadId} className='flex flex-wrap items-center gap-2 text-sm'>
                   <span className='text-foreground font-medium'>@{item.author.replace(/^@/, '') || '—'}</span>
-                  <span className='text-muted-foreground'>{platformName(item.provider)}</span>
+                  <span className='text-muted-foreground'>{platformName(item.provider, copy.thePlatform)}</span>
                   <span className='text-muted-foreground min-w-0 flex-1 truncate'>{item.excerpt}</span>
                   {itemRoute.kind === 'assisted' && itemRoute.href && (
                     <a href={itemRoute.href} target='_blank' rel='noreferrer' className='rafii-focus text-xs underline underline-offset-2'>{itemRoute.label}</a>
@@ -359,8 +470,7 @@ export function FollowUpCard({
           <ol className='text-muted-foreground mt-2 flex flex-col gap-1 text-xs'>
             {rel.history.map((item, index) => (
               <li key={`${item.kind}-${item.at}-${index}`}>
-                {item.kind.replaceAll('_', ' ')}
-                {item.from || item.to ? ` · ${item.from ? copy.states[item.from] : ''} → ${item.to ? copy.states[item.to] : ''}` : ''} · {relativeTime(item.at)}
+                {historyLine(item, copy)} · {relativeTime(item.at)}
               </li>
             ))}
           </ol>
@@ -370,41 +480,98 @@ export function FollowUpCard({
   );
 }
 
-/** Name, interest, next step and the due time in its zone. A repeated local time asks which occurrence. */
-function FollowUpEditor({ rel, zone, onCancel, onSaved }: { rel: RelationshipDetail; zone: string; onCancel: () => void; onSaved: () => void }) {
+/** `usePanelFocus` for a panel that stays in this component: focus moves in when it opens, Escape closes it. */
+function usePanelFocusWhen<P extends HTMLElement>(open: boolean, onCancel: () => void) {
+  const ref = useRef<P>(null);
+  const cancel = useRef(onCancel);
+  useEffect(() => {
+    cancel.current = onCancel;
+  }, [onCancel]);
+  useEffect(() => {
+    const panel = ref.current;
+    if (!open || !panel) return;
+    panel.querySelector<HTMLElement>('button:not([disabled])')?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      cancel.current();
+    };
+    panel.addEventListener('keydown', onKey);
+    return () => panel.removeEventListener('keydown', onKey);
+  }, [open]);
+  return ref;
+}
+
+/**
+ * Name, interest, next step and the due time in its zone. The edit starts from what the card showed — its values and
+ * its revision — and saving sends only the fields the person changed, at that revision: if someone else changed the
+ * follow-up meanwhile the server answers 409 and the editor offers a reload instead of overwriting their change. A
+ * repeated local time asks which occurrence, with nothing pre-selected.
+ */
+function FollowUpEditor({
+  rel,
+  zone,
+  onCancel,
+  onSaved,
+  onReload
+}: {
+  rel: RelationshipDetail;
+  zone: string;
+  onCancel: () => void;
+  onSaved: () => void;
+  onReload: () => Promise<void>;
+}) {
   const copy = currentCopy();
+  const lang = currentLang();
   const change = useRelationshipChange();
   const id = useId();
-  const [name, setName] = useState(rel.displayName);
-  const [interest, setInterest] = useState(rel.interest ?? '');
-  const [nextAction, setNextAction] = useState(rel.nextAction ?? '');
+  const panel = usePanelFocus<HTMLFormElement>(onCancel);
+  const [start] = useState(() => ({
+    revision: rel.revision,
+    values: { displayName: rel.displayName, interest: rel.interest ?? '', nextAction: rel.nextAction ?? '' }
+  }));
+  const [name, setName] = useState(start.values.displayName);
+  const [interest, setInterest] = useState(start.values.interest);
+  const [nextAction, setNextAction] = useState(start.values.nextAction);
   const [local, setLocal] = useState(rel.due?.local ?? '');
   const [timeZone, setTimeZone] = useState(rel.due?.timeZone ?? zone);
   const [dueDirty, setDueDirty] = useState(false);
   const [askFold, setAskFold] = useState(false);
-  const [fold, setFold] = useState<0 | 1>(0);
+  const [fold, setFold] = useState<0 | 1 | null>(null);
   const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<FollowUpProblem | null>(null);
 
   async function save() {
+    if (askFold && fold === null) {
+      setProblem({ message: copy.chooseOccurrence, conflict: false, lang });
+      return;
+    }
     setSaving(true);
     setProblem(null);
     try {
-      const body: RelationshipEditInput = { displayName: name, interest: interest || null, nextAction: nextAction || null };
-      if (dueDirty) body.due = dueInput(local, timeZone, askFold ? fold : undefined);
-      await change((api, w) => api.update(w, rel.id, rel.revision, body));
+      const body: RelationshipEditInput = editChanges(start.values, { displayName: name, interest, nextAction });
+      if (dueDirty) body.due = dueInput(local, timeZone, askFold && fold !== null ? fold : undefined);
+      if (Object.keys(body).length > 0) await change((api, w) => api.update(w, rel.id, start.revision, body));
       onSaved();
     } catch (cause) {
-      const code = errorCode(cause);
-      if (code === 'due_time_ambiguous') setAskFold(true);
-      setProblem(isConflict(code) ? copy.conflict : errorMessage(cause, copy.failed));
+      if (errorCode(cause) === 'due_time_ambiguous') {
+        setAskFold(true);
+        setFold(null);
+      }
+      setProblem(describeProblem(cause, copy, copy.editConflict));
     } finally {
       setSaving(false);
     }
   }
 
+  const resetFold = () => {
+    setAskFold(false);
+    setFold(null);
+  };
+
   return (
     <form
+      ref={panel}
       className='flex flex-col gap-3'
       onSubmit={(event) => {
         event.preventDefault();
@@ -430,21 +597,31 @@ function FollowUpEditor({ rel, zone, onCancel, onSaved }: { rel: RelationshipDet
         zones={zoneChoices(rel.due?.timeZone, zone, browserZone())}
         askFold={askFold}
         fold={fold}
-        onLocal={(value) => { setLocal(value); setDueDirty(true); setAskFold(false); }}
-        onZone={(value) => { setTimeZone(value); setDueDirty(true); setAskFold(false); }}
+        onLocal={(value) => { setLocal(value); setDueDirty(true); resetFold(); }}
+        onZone={(value) => { setTimeZone(value); setDueDirty(true); resetFold(); }}
         onFold={setFold}
-        onClear={() => { setLocal(''); setDueDirty(true); setAskFold(false); }}
+        onClear={() => { setLocal(''); setDueDirty(true); resetFold(); }}
       />
-      {problem && <p role='alert' className='text-destructive text-sm'>{problem}</p>}
+      {problem && (
+        <p role='alert' className='text-destructive flex flex-wrap items-center gap-2 text-sm'>
+          <span lang={problem.lang}>{problem.message}</span>
+          {problem.conflict && (
+            <Button type='button' variant='quiet' size='sm' className='h-9' onClick={() => void onReload()}>{copy.reload}</Button>
+          )}
+        </p>
+      )}
       <div className='flex gap-2'>
-        <Button type='submit' variant='glass' size='control' disabled={saving || !name.trim()}>{saving ? copy.saving : copy.save}</Button>
+        <Button type='submit' variant='glass' size='control' disabled={saving || !name.trim() || (askFold && fold === null)}>{saving ? copy.saving : copy.save}</Button>
         <Button type='button' variant='quiet' size='control' disabled={saving} onClick={onCancel}>{copy.cancel}</Button>
       </div>
     </form>
   );
 }
 
-/** A wall time and its IANA zone; the repeated-hour choice appears only when the server asks for it. */
+/**
+ * A wall time and its IANA zone. The repeated-hour choice appears only when the server asks for it, and nothing is
+ * chosen for the person: they pick the first or the second occurrence.
+ */
 export function DueFields({
   id,
   local,
@@ -462,7 +639,7 @@ export function DueFields({
   timeZone: string;
   zones: string[];
   askFold: boolean;
-  fold: 0 | 1;
+  fold: 0 | 1 | null;
   onLocal: (value: string) => void;
   onZone: (value: string) => void;
   onFold: (value: 0 | 1) => void;
@@ -486,7 +663,7 @@ export function DueFields({
         {local && <Button type='button' variant='quiet' size='sm' className='h-9' onClick={onClear}>{copy.clearDue}</Button>}
       </div>
       {askFold && (
-        <div role='radiogroup' aria-label={copy.repeatedTime} className='flex flex-col gap-1.5 text-sm'>
+        <div role='radiogroup' aria-label={copy.repeatedTime} aria-required='true' className='flex flex-col gap-1.5 text-sm'>
           <p>{copy.repeatedTime}</p>
           {([0, 1] as const).map((value) => (
             <label key={value} className='flex min-h-9 items-center gap-2'>
