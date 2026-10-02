@@ -103,7 +103,7 @@ checks.append("first bootstrap sends one welcome email; later sign-ins do not")
 # 1. Proposed plan terms are not purchasable; usage reports the live provider with no checkout yet.
 denied(lambda: service.billing_checkout(wid, "one", "studio-v1"), 409)
 view = service.usage(wid, "one")
-assert view["billing"] == {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False}, view["billing"]
+assert view["billing"] == {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False, "checkoutReason": "not_for_sale"}, view["billing"]
 checks.append("proposed plan terms refuse checkout (D3); usage shows no purchasable plan")
 
 # 2. Activating terms with a provider price opens checkout; client paths must be relative.

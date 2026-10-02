@@ -17,6 +17,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.billing import Billing
 from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.hosted import HostedWorkspaceService
+from postriff_phase2.plan_pricing import public_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
@@ -70,10 +71,10 @@ class AssignmentV2(unittest.TestCase):
             transport=self.transport, clock=lambda: self.clock[0])
         self.service = self.make_service()
 
-    def make_service(self, enabled=True, experiment=False, cohort=()):
+    def make_service(self, enabled=True, experiment=False, cohort=(), credits=True):
         return HostedWorkspaceService(connection, self.verify, clock=lambda: self.clock[0],
             billing_provider=self.provider, public_base_url='https://app.example.test',
-            email_lookup=lambda actor: 'owner@example.test', credits_enabled=True,
+            email_lookup=lambda actor: 'owner@example.test', credits_enabled=credits,
             pricing_v2_enabled=enabled, creator_experiment_enabled=experiment, creator_experiment_cohort=cohort)
 
     def activate(self):
@@ -316,7 +317,12 @@ class AssignmentV2(unittest.TestCase):
     def test_historical_paid_without_provider_id_is_never_bucketed(self):
         with connection() as db:
             db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status) VALUES(%s,'studio-v1','cancelled')", (self.wid,))
-        with self.assertRaises(AlphaError):
+        # Its legacy plan ended, so it may buy Creator again (F1 finding 5) — at the standard price, never an experiment bucket.
+        self.assertEqual(self.assignment(self.make_service(experiment=True, cohort=(self.wid,)).billing)['priceVariantId'], 'creator-59-v1')
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 0)
+            db.execute("UPDATE pr_subscriptions SET status='active' WHERE workspace_id=%s", (self.wid,))
+        with self.assertRaises(AlphaError):   # an open legacy subscription keeps its paid terms (portal)
             self.assignment(self.make_service(experiment=True, cohort=(self.wid,)).billing)
 
     def test_cross_workspace_subscription_race_cannot_bind_twice(self):
@@ -418,6 +424,72 @@ class AssignmentV2(unittest.TestCase):
         self.assertEqual(form['line_items[0][price]'], 'price_synthetic_79')
         self.assertEqual(form['customer'], 'cus_synthetic' + self.wid)
 
+
+    def legacy_subscription(self, status):
+        with connection() as db:
+            db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,provider,provider_subscription_id,provider_customer_id,status,last_event_at) "
+                       "VALUES(%s,'studio-v1','stripe',%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='studio-v1',price_variant_id=NULL,"
+                       "provider='stripe',provider_subscription_id=excluded.provider_subscription_id,provider_customer_id=excluded.provider_customer_id,"
+                       "status=excluded.status,last_event_at=excluded.last_event_at", (self.wid, 'sub_old' + self.wid, 'cus_synthetic' + self.wid, status, NOW - 20))
+
+    def test_ended_legacy_subscriber_can_buy_creator_and_open_legacy_keeps_the_portal(self):
+        self.activate()
+        for status in ('active', 'past_due', 'grace'):
+            with self.subTest(status=status):
+                self.legacy_subscription(status)
+                self.deny_checkout()
+                billing = self.service.usage(self.wid, 'fixture')['billing']
+                self.assertEqual((billing['checkoutAvailable'], billing['checkoutReason']), (False, 'subscription_held'))
+        for status in ('cancelled', 'expired'):
+            with self.subTest(status=status):
+                self.legacy_subscription(status)
+                billing = self.service.usage(self.wid, 'fixture')['billing']
+                self.assertEqual((billing['checkoutAvailable'], billing['checkoutReason']), (True, None))
+                self.assertEqual(self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')['sessionId'], 'cs_synthetic')
+                form = self.transport.calls[-1][1]
+                self.assertEqual((form['line_items[0][price]'], form['customer']), ('price_synthetic_59', 'cus_synthetic' + self.wid))
+        # The new subscription's first verified event replaces the ended legacy binding; a late legacy event cannot undo it.
+        self.assertEqual(self.webhook(self.sub('59', subscription='sub_new'), 'customer.subscription.created')['outcome'], 'applied')
+        self.assertEqual(self.persisted(), ('creator-v1', 'creator-59-v1', 'active'))
+        old = {'id': 'sub_old' + self.wid, 'customer': 'cus_synthetic' + self.wid, 'status': 'active', 'metadata': {'workspace_id': self.wid, 'plan_terms_id': 'studio-v1'}}
+        self.assertEqual(self.webhook(old, 'customer.subscription.updated')['outcome'], 'rejected')
+        self.assertEqual(self.persisted(), ('creator-v1', 'creator-59-v1', 'active'))
+
+    def test_ended_legacy_replacement_needs_the_same_customer_and_the_workspace_price(self):
+        self.activate()
+        self.legacy_subscription('cancelled')
+        foreign = self.sub('59', subscription='sub_new')
+        foreign['customer'] = 'cus_foreign'
+        self.assertEqual(self.webhook(foreign, 'customer.subscription.created')['outcome'], 'rejected')
+        unpriced = self.sub('59', subscription='sub_new', price=False)
+        self.assertEqual(self.webhook(unpriced, 'customer.subscription.created')['outcome'], 'rejected')
+        self.assertEqual(self.persisted()[:2], ('studio-v1', None))
+
+    def test_creator_is_not_sold_unless_this_server_can_spend_its_credits(self):
+        self.activate()
+        off = self.make_service(credits=False)
+        before = len(self.transport.calls)
+        with self.assertRaises(AlphaError) as caught:
+            off.billing_checkout(self.wid, 'fixture', 'creator-v1')
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, 'credits_unavailable'))
+        billing = off.usage(self.wid, 'fixture')['billing']
+        self.assertEqual((billing['checkoutAvailable'], billing['checkoutReason']), (False, 'credits_unavailable'))
+        with connection() as db:
+            self.assertEqual(public_catalog(db.cursor(), True, credits_enabled=False)['plans'][1]['checkout'], 'not_yet_available')
+            self.assertEqual(public_catalog(db.cursor(), True)['plans'][1]['checkout'], 'available')
+            db.execute("UPDATE pr_plan_terms SET entitlements=jsonb_set(entitlements,'{creditPolicy}','\"credits-candidate-2026-09-23-v1\"') WHERE id='creator-v1'")
+        try:
+            with self.assertRaises(AlphaError) as caught:
+                self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')
+            self.assertEqual(caught.exception.code, 'credit_policy_inactive')
+            self.assertEqual(self.service.usage(self.wid, 'fixture')['billing']['checkoutReason'], 'credit_policy_inactive')
+            with connection() as db:
+                self.assertEqual(public_catalog(db.cursor(), True)['plans'][1]['checkout'], 'not_yet_available')
+        finally:
+            with connection() as db:
+                db.execute("UPDATE pr_plan_terms SET entitlements=jsonb_set(entitlements,'{creditPolicy}','\"credits-v2-2026-09-28\"') WHERE id='creator-v1'")
+        self.assertEqual(len(self.transport.calls), before, 'no checkout session was created')
+        self.assertEqual(self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')['sessionId'], 'cs_synthetic')
 
     def prepare_review_legacy(self, status='cancelled'):
         ent = {'writingBatches': 0, 'mediaCredits': 0, 'members': 1, 'connectedAccounts': 3, 'storageMb': 1000,
