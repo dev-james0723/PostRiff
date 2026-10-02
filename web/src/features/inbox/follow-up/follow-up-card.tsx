@@ -360,7 +360,7 @@ export function FollowUpCard({
             <>
               <NativeSelect ref={stageSelect} size='sm' aria-label={copy.chooseStage} value={stage} disabled={busy || winning}
                 onChange={(event) => setStage(event.target.value as RelationshipState | '')}>
-                <NativeSelectOption value=''>{copy.state}: {copy.states[rel.state]}</NativeSelectOption>
+                <NativeSelectOption value=''>{copy.state}{copy.labelColon}{copy.states[rel.state]}</NativeSelectOption>
                 {nextStates(rel.state).map((target) => (
                   <NativeSelectOption key={target} value={target}>{copy.states[target]}</NativeSelectOption>
                 ))}
