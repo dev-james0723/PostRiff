@@ -23,7 +23,7 @@ import { idempotencyKey, isFeatureDisabled } from '@/lib/growth-v2/request';
 import { useDecide, useProof, useProofs, useRefreshProof } from '@/lib/growth-v2/proof-hooks';
 import {
   appliesFromText, correctionText, coverageReasons, decisionActions, evidenceGroups, evidenceLink, FIGURE_ORDER, figureState, figureText, linkedProofId,
-  mergeProofPages, planningText, proofCopy, proofFailure, proofLocale, scopeText, serverText
+  livePinned, mergeProofPages, planningText, proofCopy, proofFailure, proofLocale, scopeText, serverText
 } from '@/lib/growth-v2/proof-present';
 import type { DecisionAction, ProofView, StrategyDecision } from '@/lib/growth-v2/proof-types';
 
@@ -41,7 +41,7 @@ export function ProofRevisions({ owner }: { owner: boolean }) {
   const refresh = useRefreshProof();
   const [notice, setNotice] = useState<string | null>(null);
   // A proof that must stay visible even before (or without) its page loading: the one just recomputed, or the one a
-  // proof link named.
+  // proof link named. It is read live (`pinnedRead`), so an action on it shows the new state, not the copy pinned here.
   const [pinned, setPinned] = useState<{ proof: ProofView; why: 'recomputed' | 'linked' } | null>(null);
   const [focusProof, setFocusProof] = useState<string | null>(null);
   const [linkedId] = useState(() => (typeof window === 'undefined' ? null : linkedProofId(window.location.search)));
@@ -58,7 +58,10 @@ export function ProofRevisions({ owner }: { owner: boolean }) {
     setFocusProof(proof.proofId);
   }, [linked.data]);
 
-  const shownPinned = pinned && pinned.proof.frequency === frequency ? pinned : null;
+  // Every proof change invalidates the proof queries, so this read follows decisions, recomputes and late data.
+  const pinnedRead = useProof(pinned?.proof.proofId ?? null);
+  const pinnedLive = livePinned(pinned, pinnedRead.data?.proof);
+  const shownPinned = pinnedLive && pinnedLive.proof.frequency === frequency ? pinnedLive : null;
   const list = mergeProofPages(proofs.data?.pages, shownPinned?.proof);
 
   useEffect(() => {

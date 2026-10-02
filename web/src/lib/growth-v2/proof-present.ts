@@ -442,6 +442,16 @@ export function mergeProofPages(pages: Pick<ProofList, 'proofs'>[] | undefined, 
   return pinned && !seen.has(pinned.proofId) ? [pinned, ...out] : out;
 }
 
+/**
+ * The proof kept visible (opened from a link, or just recomputed) as the server has it now: its live read once that has
+ * answered, the snapshot it was pinned with only until then. A decision, recompute or late data on it then shows its new
+ * state instead of the copy taken when it was opened.
+ */
+export function livePinned<P extends { proofId: string }, W>(pinned: { proof: P; why: W } | null, live: P | null | undefined): { proof: P; why: W } | null {
+  if (!pinned) return null;
+  return live && live.proofId === pinned.proof.proofId ? { proof: live, why: pinned.why } : pinned;
+}
+
 /** A proof link (`/app/analytics?proof=gp_…`) names a proof id; anything else is ignored. */
 export function linkedProofId(search: string): string | null {
   const id = new URLSearchParams(search).get('proof');
