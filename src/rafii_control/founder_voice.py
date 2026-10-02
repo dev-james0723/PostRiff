@@ -133,6 +133,10 @@ def voice_sessions_class():
             self.namespace = founder_agent.conversation_namespace(mode, environment)
             self.key_prefix = f'voice:{self.namespace}:'
 
+        def _cap_minutes(self):
+            # Whole-minute broker limits never exceed the stored seconds cap.
+            return max(1, getattr(self, '_founder_cap_seconds', 600) // 60)
+
         def start(self, workspace_id, token, payload, *, request_id=None) -> dict:
             founder_agent = _founder_agent()
             sdp = payload.get('sdp') if isinstance(payload, dict) else None
@@ -146,6 +150,13 @@ def voice_sessions_class():
             repo, ideas = self.service.repository, self.service.ideas
             with repo.transaction(token, workspace_id) as (cur, row, principal):
                 require(ideas._member(row), 'edit')
+                from postriff_phase2.billing import ops_metadata
+                from postriff_phase2.founder_policy import policy_from_marker
+                marker = ops_metadata(cur, workspace_id)
+                if not marker or marker['operatorId'] != str(principal):
+                    raise AlphaError('Founder voice requires the verified internal owner.', 403)
+                policy = policy_from_marker(marker)
+                self._founder_cap_seconds = policy['maxCallSeconds']
                 style = agent_style.load(cur, principal)
                 locale, voice = live.locale_and_voice(payload, style)
                 opening_greeting = opening(cur, principal, locale)
@@ -162,7 +173,7 @@ def voice_sessions_class():
                 self._reap(cur, workspace_id, principal)
                 cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
                             "AND created_at>now()-make_interval(mins=>%s)", (workspace_id, principal, self._cap_minutes()))
-                if cur.fetchone()[0] >= live.MAX_ACTIVE_SESSIONS:
+                if cur.fetchone()[0] >= policy['concurrentCalls']:
                     raise AlphaError('Voice is already on in another tab. End it there first.', 429, code='voice_busy')
                 history = self._history(cur, workspace_id, conversation_id)
                 estimate = self.cfg.live_usd_micro_per_minute * self._cap_minutes()
@@ -171,7 +182,7 @@ def voice_sessions_class():
                             "VALUES(%s,%s,%s,'running',%s,'quick',%s,%s,%s,%s::jsonb) RETURNING id::text",
                             (conversation_id, workspace_id, principal, route.model, digest({'voice': key}), digest({'live': 1, 'founder': 1}), key,
                              json.dumps({'voice': {'state': 'connecting', 'locale': locale, 'voice': voice, 'startedAt': self._now(), 'transcript': [], 'delegations': [],
-                                                   'founder': {'mode': self.mode, 'environment': self.environment, 'namespace': self.namespace}}})))
+                                                   'capSeconds': self._founder_cap_seconds, 'founder': {'mode': self.mode, 'environment': self.environment, 'namespace': self.namespace}}})))
                 voice_session_id = cur.fetchone()[0]
                 # Founder voice is founder operations spend on the ops workspace's own ledger, never a customer's credits.
                 reservation = self.service.ledger.reserve(cur, workspace_id, principal, 'tool', estimate, f'voice:{voice_session_id}', charge_batch=False,
@@ -239,7 +250,48 @@ def voice_sessions_class():
                 raise AlphaError('Voice session unavailable.', 404)
             artifact = json.loads(row[0]) if isinstance(row[0], str) else (row[0] or {})
             artifact.setdefault('voice', {})
+            seconds = artifact['voice'].get('capSeconds', 600)
+            if type(seconds) is int and 60 <= seconds <= 3600:
+                self._founder_cap_seconds = seconds
             return artifact
+
+        def _reap(self, cur, workspace_id, principal):
+            # A bookkeeping timeout is not provider billing evidence. Preserve
+            # the hold until actual provider usage is reconciled.
+            cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s "
+                        "AND idempotency_key LIKE %s AND status='running' "
+                        "AND created_at<=now()-make_interval(secs=>coalesce((artifact->'voice'->>'capSeconds')::int,600)+300) FOR UPDATE SKIP LOCKED",
+                        (workspace_id, principal, self.key_prefix + '%'))
+            for run_id, artifact in cur.fetchall():
+                voice = (artifact or {}).setdefault('voice', {})
+                if voice.get('reservationId'):
+                    self.service.ledger.settle(cur, workspace_id, voice['reservationId'], 'unknown', None)
+                live.record_session(cur, self.cfg, workspace_id, principal, run_id, voice, status='unknown', seconds=None, cost=None)
+                voice.update(state='ended', reason='not_ended_by_client', endedAt=self._now(), usageSeconds=None,
+                             costUsdMicro=None, billingBasis='unknown until provider usage is reconciled')
+                self._save(cur, workspace_id, run_id, artifact, status='completed')
+                self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event('run.completed', usage={'provenance': 'voice', 'costState': 'unknown'}))
+
+        def _close(self, workspace_id, token, voice_session_id, reservation, *, state, reason, seconds, failure_diagnostic=None):
+            if state != 'ended':
+                return super()._close(workspace_id, token, voice_session_id, reservation, state=state, reason=reason,
+                                      seconds=seconds, failure_diagnostic=failure_diagnostic)
+            with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(self.service.ideas._member(row), 'read')
+                artifact = self._artifact(cur, workspace_id, voice_session_id, owner_check=True, principal=principal)
+                voice = artifact['voice']
+                if voice.get('state') in ('ended', 'failed'):
+                    return {'voiceSessionId': voice_session_id, 'state': voice['state'], 'note': 'Already ended.'}
+                started = voice.get('connectedAt') or voice.get('startedAt') or self._now()
+                observed = min(max(0.0, self._now() - started), self._cap_minutes() * 60)
+                if reservation and reservation.get('reservationId'):
+                    self.service.ledger.settle(cur, workspace_id, reservation['reservationId'], 'unknown', None)
+                live.record_session(cur, self.cfg, workspace_id, principal, voice_session_id, voice, status='ok', seconds=None, cost=None)
+                voice.update(state=state, endedAt=self._now(), reason=reason, usageSeconds=None, costUsdMicro=None,
+                             observedDurationSeconds=observed, clientReportedSeconds=seconds, billingBasis='unknown until provider usage is reconciled')
+                self._save(cur, workspace_id, voice_session_id, artifact, status='completed')
+                self.service.ideas._insert_event(cur, workspace_id, voice_session_id, safe_event('run.completed', usage={'provenance': 'voice', 'costState': 'unknown'}))
+            return {'voiceSessionId': voice_session_id, 'state': state, 'reason': reason, 'usageSeconds': None, 'costState': 'unknown'}
 
         def bound(self, workspace_id, token, voice_session_id) -> str:
             """The conversation a delegation runs in: the caller's own live session of this namespace, else a refusal."""
@@ -333,12 +385,21 @@ def status(service, principal, *, mode='live', control=None, values=None, base=N
         blockers.append('consumer_runtime_unavailable')
     elif 'ops_workspace_not_configured' not in blockers:
         sessions, _ops, _capability = _sessions(service, principal, mode, control=control, flags=flags, request_id=request_id, base=base)
+        try:
+            from postriff_phase2.billing import ops_metadata
+            from postriff_phase2.founder_policy import policy_from_marker
+            with sessions.service.repository.transaction(_capability, _ops) as (cur, _row, actor):
+                marker = ops_metadata(cur, _ops)
+                if not marker or marker['operatorId'] != str(actor):
+                    raise ValueError('unverified internal owner')
+                sessions._founder_cap_seconds = policy_from_marker(marker)['maxCallSeconds']
+        except Exception:
+            blockers.append('founder_voice_policy_unavailable')
         blocker = _runtime_blocker(sessions)
         if blocker:
             blockers.append(blocker)
         model = sessions.cfg.route('voice_front_end', reason='founder voice status').model
-    from postriff_phase2.agent_runtime_v2.config import MAX_VOICE_MINUTES
-    return {'available': not blockers, 'blockers': blockers, 'mode': mode, 'capMinutes': MAX_VOICE_MINUTES, 'model': model, 'delegation': 'client',
+    return {'available': not blockers, 'blockers': blockers, 'mode': mode, 'capMinutes': sessions._cap_minutes() if service is not None and 'ops_workspace_not_configured' not in blockers else 10, 'model': model, 'delegation': 'client',
             '_dataState': 'not_applicable'}
 
 

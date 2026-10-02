@@ -1,0 +1,6 @@
+{"event": "telemetry.journal_unavailable", "writer": "product_events", "errorClass": "RuntimeError"}
+{"event": "cron.completed", "requestId": "b995d78b499f4e978ba986cbfae23c7e", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}, "phone": {"status": "disabled"}}
+----------------------------------------------------------------------
+Ran 100 tests in 1.338s
+
+OK

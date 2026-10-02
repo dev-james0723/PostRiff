@@ -1,0 +1,17 @@
+{
+  "executionState": "real_read_only_browser_query",
+  "project": "buoyhkbodnhzngaotoel",
+  "observedAt": "2026-10-02T19:07:47.901Z",
+  "migrationCount": 56,
+  "latestMigration": {
+    "name": "071_founder_engineering_evidence.sql",
+    "sha256": "05b5acdf89f167d702fd44caa7ed5c4c6f755c278766a4055ea4e2d30a068720"
+  },
+  "opsSettings": 0,
+  "internalWorkspaces": 0,
+  "supportInstalled": false,
+  "cutoverInstalled": false,
+  "evidence": "https://supabase.com/dashboard/project/buoyhkbodnhzngaotoel/sql/03826e69-ff72-4285-9039-4d2df11a9ef4",
+  "mutation": false,
+  "connectorState": "both_existing_connections_refuse_named_rafii_projects"
+}

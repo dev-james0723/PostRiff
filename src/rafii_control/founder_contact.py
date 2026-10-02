@@ -40,8 +40,8 @@ FLAG = 'RAFII_FOUNDER_CALLS_ENABLED'
 # admin_audit_log action for every dial decision the attempt ledger records (CONTRACTS §3); content-free.
 AUDIT_ACTION = 'founder.call.request'
 log = logging.getLogger('rafii_control.founder_contact')
-MAX_BUDGET_USD_MICRO = 50_000_000
-CALL_MAX_SECONDS = 300
+MAX_BUDGET_USD_MICRO = 10_000_000_000
+CALL_MAX_SECONDS = 600
 # Attempt states beyond phone.contracts.STATES: planned/eligible (policy evaluated), reserved (row committed, not yet
 # dialed), suppressed (policy or phone product refused; nothing was dialed).
 PLANNING_STATES = ('planned', 'eligible', 'reserved', 'suppressed')
@@ -93,7 +93,7 @@ def validate_policy(body, current, operator_id):
     ref = out['destination_ref']
     if ref is not None and ref != destination_ref(operator_id):
         raise ControlError('VALIDATION_FAILED', 400)
-    for key, low, high in (('quiet_start', 0, 1439), ('quiet_end', 0, 1439), ('daily_cap', 0, 2), ('concurrent_cap', 0, 1),
+    for key, low, high in (('quiet_start', 0, 1439), ('quiet_end', 0, 1439), ('daily_cap', 0, 100), ('concurrent_cap', 0, 10),
                            ('budget_usd_micro_daily', 0, MAX_BUDGET_USD_MICRO)):
         if type(out[key]) is not int or not low <= out[key] <= high:
             raise ControlError('VALIDATION_FAILED', 400)
@@ -359,16 +359,32 @@ class PhoneCalls:
         provider = getattr(self.phone, 'provider', None)
         return bool(self.phone and self.workspace_id and provider and provider.configured)
 
-    def estimate_usd_micro(self, max_seconds=CALL_MAX_SECONDS):
+    def estimate_usd_micro(self, max_seconds=None):
         from postriff_phase2.phone import billing
         try:
-            return int(sum(billing.estimates(self.phone, seconds=max_seconds)))
+            settings = self._settings()
+            return int(sum(billing.estimates(self.phone, seconds=settings['maxCallSeconds'] if max_seconds is None else max_seconds)))
         except Exception:
             return 0
 
+    def _settings(self):
+        from postriff_phase2.billing import ops_metadata
+        from postriff_phase2.founder_policy import policy_from_marker
+        with self.phone.hosted.connection_factory() as db, db.cursor() as cur:
+            marker = ops_metadata(cur, self.workspace_id)
+        if not marker or marker['operatorId'] != str(self.operator_id):
+            raise AlphaError('Founder call requires the verified internal owner.', 403)
+        return policy_from_marker(marker)
+
     def _scoped(self, reason_key_value):
-        from postriff_phase2.phone.runtime import principal_phone
-        return principal_phone(self.phone, self.workspace_id, self.operator_id, founder_reason_key=reason_key_value)
+        from postriff_phase2.phone.runtime import principal_phone, FounderPhoneConfig
+        settings = self._settings()
+        scoped, capability = principal_phone(self.phone, self.workspace_id, self.operator_id, founder_reason_key=reason_key_value)
+        scoped.config = FounderPhoneConfig({**self.phone.config.values, 'RAFII_FOUNDER_OPS_WORKSPACE_ID': self.workspace_id,
+                                           'RAFII_FOUNDER_PHONE_MAX_SECONDS': settings['maxCallSeconds'],
+                                           'RAFII_FOUNDER_PHONE_DAILY_USD_MICRO': settings['dailySpendUsdMicro'] if settings['dailySpendMode'] == 'limited' else 10_000_000_000},
+                                          self.workspace_id, reason_key_value)
+        return scoped, capability
 
     def request(self, attempt):
         scoped, capability = self._scoped(attempt['idempotency_key'])

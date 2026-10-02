@@ -170,8 +170,8 @@ def billing_from_environment(values):
     resend_key = values.get("RESEND_API_KEY")
     base_url = values.get("POSTRIFF_PUBLIC_BASE_URL")
     if resend_key:
-        if not values.get("EMAIL_FROM") or not base_url:
-            raise ValueError("EMAIL_FROM and POSTRIFF_PUBLIC_BASE_URL are required when RESEND_API_KEY is set.")
+        if not values.get("EMAIL_FROM") or not base_url or not values.get('RESEND_WEBHOOK_SECRET'):
+            raise ValueError("EMAIL_FROM, POSTRIFF_PUBLIC_BASE_URL and RESEND_WEBHOOK_SECRET are required when RESEND_API_KEY is set.")
         return provider, Mailer(ResendTransport(resend_key), values["EMAIL_FROM"], base_url)
     return provider, Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
 
@@ -787,6 +787,11 @@ class HostedApplication:
                     return self._json(start_response, 200, service.billing_portal(parts[2], token, body.get("returnPath")))
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] in ("usage", "subscription") and method == "GET":
                 return self._json(start_response, 200, service.usage(parts[2], token))
+            if len(parts) in (5, 6) and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['support', 'tickets']:
+                from . import support
+                data = support.customer(service, parts[2], token, method, parts[5] if len(parts) == 6 else None,
+                                        self._body(environ) if method != 'GET' else None)
+                return self._json(start_response, 200 if method == 'GET' else 201, data)
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "data-requests":
                 if method == "GET":
                     return self._json(start_response, 200, service.data_requests.list(parts[2], token))

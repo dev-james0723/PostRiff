@@ -131,7 +131,9 @@ class WriterTests(unittest.TestCase):
         cur = Script()
         self.assertEqual(pe.record_many(cur, WS, USER, [("voice.created", V1, 3, {}), ("brand.created", V2, 1, None)]), 2)
         kinds = [text.split(" ")[0] + (" TO" if text.startswith("ROLLBACK") else "") for text, _ in cur.statements]
-        self.assertEqual(kinds, ["SAVEPOINT", "INSERT", "RELEASE"])
+        self.assertEqual(kinds, ["SAVEPOINT", "INSERT", "RELEASE", "SAVEPOINT", "INSERT", "RELEASE"])
+        journal = json.loads(cur.statements[4][1][2])
+        self.assertEqual((journal['attempted'], journal['recorded'], journal['state'], journal['rows']), (2, 2, 'recorded', []))
         insert = cur.statements[1][0]
         self.assertTrue(insert.startswith("INSERT INTO public.pr_product_events(workspace_id,user_id,event,properties,dedupe_key) VALUES"))
         self.assertTrue(insert.endswith("ON CONFLICT DO NOTHING"))
@@ -145,7 +147,10 @@ class WriterTests(unittest.TestCase):
             self.assertFalse(pe.record(cur, WS, USER, "workspace.created", WS, 1, {"plan": "studio"}))
         cur.execute("UPDATE public.pr_workspaces SET revision=revision+1 WHERE id=%s", (WS,))
         cur.commit()
-        self.assertEqual([text.split(" ")[0] + " " + text.split(" ")[2] for text, _ in cur.committed], ["INSERT public.pr_audit_events(workspace_id,actor,kind)", "UPDATE SET"])
+        self.assertEqual([text.split(" ")[0] + " " + text.split(" ")[2] for text, _ in cur.committed], ["INSERT public.pr_audit_events(workspace_id,actor,kind)", "INSERT public.pr_audit_events(workspace_id,actor,kind,subject,meta)", "UPDATE SET"])
+        journal = json.loads(cur.committed[1][1][2])
+        self.assertEqual((journal['state'], journal['recoverable'], journal['errorClass']), ('failed', True, 'RuntimeError'))
+        self.assertEqual(journal['rows'][0][2], 'workspace.created')
         self.assertTrue(any(text.startswith("ROLLBACK TO SAVEPOINT product_event_") for text, _ in cur.statements))
         self.assertEqual(cur.events(committed=True), [])
 
@@ -163,12 +168,13 @@ class WriterTests(unittest.TestCase):
                 self.assertNotIn(WS, logs.output[0])
                 quiet = Script()
                 self.assertFalse(pe.record(quiet, WS, USER, "voice.created", V1, 1))
-                self.assertEqual(quiet.statements, [], "suspended: no SQL at all")
+                self.assertFalse(any('INSERT INTO public.pr_product_events' in sql for sql, _ in quiet.statements))
+                self.assertEqual(json.loads(quiet.statements[1][1][2])['state'], 'suspended')
                 self.assertEqual(pe.capture(quiet, WS, {}, {"speaker": {"id": V1, "activeRevision": 1}}, USER), 0)
-                self.assertEqual(quiet.statements, [])
+                self.assertFalse(any('INSERT INTO public.pr_product_events' in sql for sql, _ in quiet.statements))
                 clock[0] += pe.SUSPEND_SECONDS - 1
                 self.assertFalse(pe.record(quiet, WS, USER, "voice.created", V1, 1))
-                self.assertEqual(quiet.statements, [])
+                self.assertFalse(any('INSERT INTO public.pr_product_events' in sql for sql, _ in quiet.statements))
                 clock[0] += 2
                 second = Script(fail=("pr_product_events", type(error)("again")))
                 with self.assertNoLogs("postriff.product_events", "WARNING"):

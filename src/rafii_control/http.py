@@ -226,7 +226,7 @@ class ControlApplication:
         try:
             ops, _source = founder_module('founder_ops').resolve(self.flags, getattr(self.queries, 'store', None), principal['operator']['user_id'])
         except ControlError:
-            ops = self.flags.get('RAFII_FOUNDER_OPS_WORKSPACE_ID')
+            return None
         if self.runtime is None or not ops: return None
         try: phone = getattr(self.runtime(), 'phone', None)
         except Exception: return None

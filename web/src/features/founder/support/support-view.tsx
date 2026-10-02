@@ -1,5 +1,6 @@
 'use client';
 
+import { SupportInbox } from './support-inbox';
 import { useCallback, useMemo } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { parseAsInteger, parseAsString, useQueryState, useQueryStates } from 'nuqs';
@@ -64,11 +65,11 @@ function TicketSourceState({ rows, demo }: { rows: readonly MetricRow[]; demo: b
   return (
     <StateMessage
       kind='unsupported'
-      title='Ticket source not chosen (D7)'
+      title='In-app ticket source is not yet qualified'
       description={
         demo
           ? 'Demo shows sandbox requests. Customer conversations and replies are not collected until a support source is chosen (decision D7).'
-          : 'Support conversations are not collected until a ticket source is chosen (decision D7). This page shows account data requests (export, deletion, diagnostics) only; response and resolution times appear once a ticket source exists.'
+          : 'In-app support is the selected primary source. Apply its schema and verify a fresh ticket journey to qualify its measured coverage. Business-time SLA and CSAT require their own source contracts.'
       }
     />
   );
@@ -162,6 +163,7 @@ export function SupportView() {
           <RecordsTable table={table} status={{ isPending: requests.isPending, isFetching: requests.isFetching, error: requests.error, total: data?.total, pageSize: data?.pageSize ?? RECORDS_PAGE_SIZE, refetch: requests.refetch }} label='Requests' caption={`Requests · ${mode === 'demo' ? 'fictional sample data' : 'Live records'}`} onOpen={open} filtered={Boolean(search) || activeFilterCount > 0} onClear={() => update({ q: '', status: 'all' })} />
         </Panel>
       </TabAnchor>
+      <SupportInbox />
       {evidence.drawer}
     </FounderPage>
   );

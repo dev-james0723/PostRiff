@@ -190,7 +190,11 @@ class NotificationService:
         return delivery.DeliveryWorker(self.hosted.repository.connection_factory, email_transport=self.email_transport if self.email_available() else None,
                                        from_address=self.from_address, push_transport=self.push_transport if self.push_enabled() else None,
                                        vault=getattr(getattr(self.hosted, "oauth", None), "vault", None), base_url=self.base_url,
-                                       address_for=getattr(self.hosted, "_email_for", None), signing_key=self.signing_key, clock=self.clock, sms_service=self)
+                                       address_for=getattr(self.hosted, "_email_for", None), signing_key=self.signing_key, clock=self.clock, sms_service=self,
+                                       reply_to=self.values.get('EMAIL_REPLY_TO'), founder_ledger=getattr(self.hosted, 'ledger', None),
+                                       environment=self.values.get('POSTRIFF_ENVIRONMENT'),
+                                       email_cost_ceiling=int(self.values['RAFII_FOUNDER_EMAIL_COST_CEILING_USD_MICRO']) if str(self.values.get('RAFII_FOUNDER_EMAIL_COST_CEILING_USD_MICRO', '')).isdigit() else None,
+                                       email_cost_qualification=self.values.get('RAFII_FOUNDER_EMAIL_COST_QUALIFICATION_REF'))
 
     # --- person-facing API -----------------------------------------------------------------------------------------------------
     def _principal(self, token, workspace_id=None):

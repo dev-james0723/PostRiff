@@ -117,13 +117,13 @@ const PREVIEW_ROUTE: Record<ActionKind, (targetId: string) => string> = {
   refund_intent: () => `/actions/refunds/preview${LIVE}`
 };
 
-/** A refund intent has no confirm route: execution is not decided. */
+/** Refund execution requires the server to offer an explicit financial confirmation. */
 const CONFIRM_ROUTE: Record<ActionKind, ((targetId: string) => string) | null> = {
   reconcile: () => `/usage/reconcile/confirm${LIVE}`,
   credits_adjust: () => `/actions/credits/confirm${LIVE}`,
   account_block: (targetId) => accountPath(targetId, 'block', 'confirm'),
   account_unblock: (targetId) => accountPath(targetId, 'unblock', 'confirm'),
-  refund_intent: null
+  refund_intent: () => `/actions/refunds/confirm${LIVE}`
 };
 
 export function previewPath(kind: ActionKind, targetId = ''): string {
@@ -131,7 +131,8 @@ export function previewPath(kind: ActionKind, targetId = ''): string {
 }
 
 /** The confirm route for a preview, or null when the action cannot be confirmed from the browser. */
-export function confirmPath(action: Pick<FounderAction, 'kind' | 'targetId'>): string | null {
+export function confirmPath(action: Pick<FounderAction, 'kind' | 'targetId'> & Partial<Pick<FounderAction, 'confirm'>>): string | null {
+  if (action.kind === 'refund_intent' && !action.confirm) return null;
   const route = CONFIRM_ROUTE[action.kind];
   return route ? route(action.targetId) : null;
 }
@@ -139,12 +140,12 @@ export function confirmPath(action: Pick<FounderAction, 'kind' | 'targetId'>): s
 /** The confirm body: the preview id and revision the founder saw, a request id, and the typed word for blocks. */
 export function confirmBody(action: Pick<FounderAction, 'kind' | 'previewId' | 'revision'>, requestId: string, typed?: string): Record<string, string> {
   const body: Record<string, string> = { previewId: action.previewId, revision: action.revision, requestId };
-  if (action.kind === 'account_block') body.confirmation = typed ?? '';
+  if (action.kind === 'account_block' || action.kind === 'refund_intent') body.confirmation = (typed ?? '').trim();
   return body;
 }
 
 export function typedConfirmationOk(kind: ActionKind, typed: string): boolean {
-  return kind !== 'account_block' || typed.trim() === TYPED_BLOCK;
+  return kind === 'refund_intent' ? typed.trim() === 'REFUND' : kind !== 'account_block' || typed.trim() === TYPED_BLOCK;
 }
 
 /* ---------- input parsing (what the founder typed → the integers the server takes) ---------- */
@@ -310,6 +311,8 @@ export const BLOCKER_COPY: Record<string, string> = {
   credit_adjustment_refused: 'The credit ledger refused this adjustment. Preview again.',
   payment_not_found: 'That payment is not recorded for this workspace.',
   payment_not_settled: 'That payment has not been settled, so there is nothing to refund.',
+  payment_disputed: 'Control refused the refund because this payment is disputed.',
+  stripe_mode_mismatch: 'The payment provider mode does not match this request. Control refused the operation.',
   amount_exceeds_refundable: 'That is more than what is left to refund on the payment.',
   currency_mismatch: 'The currency does not match the payment.',
   typed_confirmation_required: `Type ${TYPED_BLOCK} to confirm.`,

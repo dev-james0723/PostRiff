@@ -1,0 +1,21 @@
+{
+  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+  "sourceState": "uncommitted_candidate",
+  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
+  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
+  "executionState": "candidate_local_only",
+  "productionVerified": false,
+  "real": {
+    "state": "not_run",
+    "providerCalls": 0,
+    "providerCostUsd": null,
+    "reason": "Owner defaults accepted; verified Rafii sender, device permission, staging/release gates and real delivery receipts still pending."
+  },
+  "synthetic": {
+    "state": "tests_in_progress",
+    "evidence": []
+  },
+  "observation24Hours": {
+    "state": "not_started"
+  }
+}

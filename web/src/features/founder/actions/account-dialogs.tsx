@@ -202,7 +202,8 @@ export function RefundIntentDialog({ open, onOpenChange, onExecuted, workspaces 
   const [amountText, setAmountText] = useState('');
   const [currency, setCurrency] = useState('usd');
   const [reason, setReason] = useState<RefundReason>('requested_by_customer');
-  const check = refundRequest({ workspaceId, paymentIntentId: payment, amountText, currency, reasonCode: reason });
+  const validated = refundRequest({ workspaceId, paymentIntentId: payment, amountText, currency, reasonCode: reason });
+  const check = validated.ok ? { ...validated, request: { ...validated.request, path: '/actions/refunds/execute/preview' } } : validated;
   const form = (
     <div className='flex flex-col gap-4'>
       <WorkspaceField workspaces={workspaces} value={workspaceId} onChange={setWorkspaceId} />
@@ -220,12 +221,12 @@ export function RefundIntentDialog({ open, onOpenChange, onExecuted, workspaces 
       onOpenChange={onOpenChange}
       onExecuted={onExecuted}
       kind='refund_intent'
-      title='Prepare a refund intent'
-      intro='Records what should be refunded for when the refund policy is decided. No money moves, nothing reaches the payment provider and the customer is not told.'
+      title='Preview a refund'
+      intro='Review the exact payment, amount and refundable balance. A refund reaches Stripe only after a fresh second factor and your typed REFUND confirmation.'
       form={form}
       check={check}
-      previewLabel='Record intent'
-      confirmLabel='Record intent'
+      previewLabel='Preview refund'
+      confirmLabel='Confirm refund'
     />
   );
 }

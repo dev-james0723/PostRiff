@@ -366,8 +366,8 @@ class ContactPolicyTests(unittest.TestCase):
         self.assertFalse(public['liveDeliveryEnabled'])
         self.assertEqual((public['quietStart'], public['quietEnd'], public['timeZone'], public['dailyCap'], public['concurrentCap'], public['budgetUsdMicroDaily']),
                          (1320, 480, 'America/Indiana/Indianapolis', 2, 1, 0))
-        for bad in ({'liveDeliveryEnabled': 'yes'}, {'channels': ['sms']}, {'eventAllowlist': ['publish.failed']}, {'dailyCap': 3}, {'concurrentCap': 2},
-                    {'budgetUsdMicroDaily': 50_000_001}, {'timeZone': 'Nowhere/Here'}, {'destinationRef': destination_ref(OTHER)}, {'quietStart': 1440},
+        for bad in ({'liveDeliveryEnabled': 'yes'}, {'channels': ['sms']}, {'eventAllowlist': ['publish.failed']}, {'dailyCap': 101}, {'concurrentCap': 11},
+                    {'budgetUsdMicroDaily': 10_000_000_001}, {'timeZone': 'Nowhere/Here'}, {'destinationRef': destination_ref(OTHER)}, {'quietStart': 1440},
                     {'unknown': 1}):
             with self.subTest(bad=bad), self.assertRaises(ControlError):
                 validate_policy(bad, None, OPERATOR)

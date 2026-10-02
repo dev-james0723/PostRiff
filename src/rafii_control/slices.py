@@ -20,6 +20,9 @@ SLICES = (
     'founder_notifications',     # §8.E founder email/push notices and digests
     'founder_actions',           # §8.F reconcile, credits adjust, account blocks, refund intents
     'founder_ops',               # §8.H the founder's internal ops workspace (Settings → create once)
+    'founder_support',           # primary in-app tickets and explicit audited identity reveal
+    'founder_policy',            # approved, configurable entitlement and provider spend defaults
+    'founder_activation',        # full-activation gates and bounded telemetry health
 )
 STATE = {'loaded': False, 'failed': {}}
 

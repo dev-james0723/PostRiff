@@ -20,6 +20,14 @@ class FounderPhoneConfig(PhoneConfig):
         self.founder = {'workspaceId': workspace_id, 'opsWorkspaceId': self.values.get('RAFII_FOUNDER_OPS_WORKSPACE_ID') or None,
                         'reasonKey': reason_key}
 
+    @property
+    def cap_seconds(self):
+        return min(3600, max(60, int(self.values.get('RAFII_FOUNDER_PHONE_MAX_SECONDS', 600))))
+
+    @property
+    def daily_budget(self):
+        return max(1, int(self.values.get('RAFII_FOUNDER_PHONE_DAILY_USD_MICRO', 50_000_000)))
+
     def public(self):
         return {**super().public(), 'founder': dict(self.founder)}
 

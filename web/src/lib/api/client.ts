@@ -457,6 +457,9 @@ export function createApi(getToken: TokenSource) {
     phoneEnd: (w: string, id: string) => send<{ ended: boolean; state?: string }>('POST', `${ws(w)}/phone/calls/${encodeURIComponent(id)}/end`),
     phoneSchedule: (w: string, schedule: { weekdays: string[]; localTime: string; timeZone: string }) => send<{ id: string }>('POST', `${ws(w)}/phone/schedules`, { schedule }),
     phoneDeleteSchedule: (w: string, id: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/schedules/${encodeURIComponent(id)}`),
+    supportTickets: (w: string) => get<{ tickets: { id: string; category: string; status: string; revision: number }[] }>(`${ws(w)}/support/tickets`),
+    supportTicket: (w: string, id: string) => get<{ messages: { role: string; body: string; createdAt: string }[] }>(`${ws(w)}/support/tickets/${encodeURIComponent(id)}`),
+    supportMessage: (w: string, body: { requestId: string; message: string; category?: string }, id?: string) => send('POST', `${ws(w)}/support/tickets${id ? '/' + encodeURIComponent(id) : ''}`, body),
     dataRequests: (w: string) => get<{ requests: DataRequest[] }>(`${ws(w)}/data-requests`),
     dataRequest: (w: string, body: Record<string, unknown>) =>
       send<Record<string, unknown> & { kind: string; status: string }>('POST', `${ws(w)}/data-requests`, body)

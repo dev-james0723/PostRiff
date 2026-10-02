@@ -1,0 +1,83 @@
+{
+  "task": "rafii-founder-full-activation-20261002",
+  "phase": "local_acceptance",
+  "baseSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+  "branch": "codex/founder-full-activation-20261002",
+  "singleImplementationReleaseOwner": true,
+  "updatedAt": "2026-10-02T19:18:11.668343+00:00",
+  "liveState": {
+    "productionDeployment": "dpl_6MgiST6Dnyf7ySDjmkKL5RjetcXX",
+    "productionSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+    "databaseRead": "production_read_only_dashboard_verified; connector_grant_mismatch",
+    "productionWrites": 0,
+    "providerDispatches": 0,
+    "migrationApplied": false,
+    "ownerDecisions": "H1-H4,H6 accepted; H5 device prompts remain human-only"
+  },
+  "validation": [
+    {
+      "name": "ops-accounting",
+      "state": "PASS",
+      "execution": "local_disposable_db",
+      "log": "raw/ops-accounting-pg.log",
+      "tests": 10
+    },
+    {
+      "name": "writer-and-email-contracts",
+      "state": "PASS",
+      "execution": "synthetic",
+      "log": "raw/integrity-unit.log",
+      "tests": 100
+    },
+    {
+      "name": "full-python-first",
+      "state": "FAIL",
+      "log": "raw/python-first.log",
+      "tests": 3678,
+      "failures": 4,
+      "errors": 8,
+      "reason": "Ops metadata missing in action doubles and queued entitlement cursor; focused repair 57 tests PASS"
+    },
+    {
+      "name": "full-control-postgres-first",
+      "state": "FAIL",
+      "log": "raw/control-pg-first.log",
+      "tests": 565,
+      "failures": 2,
+      "reason": "New synthetic internal cost leaked into later global fixtures; cleanup repaired; rerun in progress"
+    },
+    {
+      "name": "founder-web-contracts",
+      "state": "PASS",
+      "tests": 130,
+      "log": "raw/founder-web.log"
+    },
+    {
+      "name": "typecheck",
+      "state": "PASS",
+      "log": "raw/typecheck.log"
+    },
+    {
+      "name": "lint",
+      "state": "PASS",
+      "log": "../../../consumer-ready/evidence/activation-lint.log"
+    },
+    {
+      "name": "channels-support-policy-unit",
+      "state": "PASS",
+      "execution": "synthetic",
+      "tests": 89,
+      "skipped": 9,
+      "log": "/tmp/rafii-full-activation-channels-unit-final.log",
+      "sourceBoundary": "before final migration and browser check"
+    }
+  ],
+  "unresolved": [
+    "staging schema/role acceptance through approved database path",
+    "real owner Ops provisioning and capped canaries",
+    "verified Rafii sender and qualified provider email ceiling",
+    "legacy transactional durable outbox qualification",
+    "exact-head CI and guarded release",
+    "24-hour observation"
+  ]
+}

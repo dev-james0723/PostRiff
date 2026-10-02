@@ -1,0 +1,416 @@
+{
+  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+  "sourceState": "uncommitted_candidate",
+  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
+  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
+  "executionState": "candidate_local_only",
+  "productionVerified": false,
+  "features": [
+    {
+      "id": "F01",
+      "name": "Founder authentication",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify existing login, fresh factor, CSRF, logout and non-Founder denial."
+    },
+    {
+      "id": "F02",
+      "name": "Portal pages",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify all pages in Live and Demo at 390, 768 and 1440 pixels."
+    },
+    {
+      "id": "F03",
+      "name": "Customers and workspace integrity",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Reconcile bounded projections against customer A/B and internal tenants."
+    },
+    {
+      "id": "F04",
+      "name": "Internal Ops workspace",
+      "state": "configured_off",
+      "blockers": [
+        "ops_workspace_not_ready",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Finish the reserved workspace through authenticated fresh MFA."
+    },
+    {
+      "id": "F05",
+      "name": "Founder text agent",
+      "state": "configured_off",
+      "blockers": [
+        "ops_workspace_not_ready",
+        "approved_policy_not_saved",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H2"
+      ],
+      "effectiveFlags": {
+        "RAFII_AGENT_V2_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Run one capped owner turn and match its tools, receipts and cost."
+    },
+    {
+      "id": "F06",
+      "name": "Jobs and continuity",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Reconcile stale runs against leases/provider evidence; verify cancellation and continuity."
+    },
+    {
+      "id": "F07",
+      "name": "Browser voice",
+      "state": "blocked_owner",
+      "blockers": [
+        "owner_device_consent",
+        "ops_workspace_not_ready",
+        "approved_policy_not_saved",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [
+        "H5"
+      ],
+      "acceptedOwnerDecisions": [
+        "H2"
+      ],
+      "effectiveFlags": {
+        "RAFII_FOUNDER_VOICE_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Owner microphone consent, bounded voice/delegation/end and settlement canary."
+    },
+    {
+      "id": "F08",
+      "name": "Outbound calls",
+      "state": "blocked_owner",
+      "blockers": [
+        "owner_device_consent",
+        "ops_workspace_not_ready",
+        "approved_policy_not_saved",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [
+        "H5"
+      ],
+      "acceptedOwnerDecisions": [
+        "H2",
+        "H3"
+      ],
+      "effectiveFlags": {
+        "RAFII_FOUNDER_CALLS_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Verified owner destination, contact policy, quiet hours, caps and one approved call."
+    },
+    {
+      "id": "F09",
+      "name": "In-app notices",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Create one safe notice, retry, follow its link and acknowledge it."
+    },
+    {
+      "id": "F10",
+      "name": "Founder email",
+      "state": "configured_off",
+      "blockers": [
+        "durable_cutover_and_delivery_proof_required",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H1",
+        "H2",
+        "H3"
+      ],
+      "effectiveFlags": {
+        "RAFII_FOUNDER_EMAIL_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Approve sender and Founder cutover; verify accepted and signed delivered receipts."
+    },
+    {
+      "id": "F11",
+      "name": "Customer transactional email",
+      "state": "configured_off",
+      "blockers": [
+        "durable_cutover_and_delivery_proof_required",
+        "legacy_outbox_not_qualified",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H1",
+        "H2"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Approve customer cutover; qualify new V2 events and legacy durable outbox."
+    },
+    {
+      "id": "F12",
+      "name": "Founder push",
+      "state": "blocked_owner",
+      "blockers": [
+        "owner_device_consent",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [
+        "H5"
+      ],
+      "acceptedOwnerDecisions": [
+        "H2"
+      ],
+      "effectiveFlags": {
+        "RAFII_FOUNDER_PUSH_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Owner device gesture/subscription, expiry, lock-screen delivery and click/read proof."
+    },
+    {
+      "id": "F13",
+      "name": "Briefings",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H3"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Approve schedules; verify DST, overlap, coalescing, retries and receipt coverage."
+    },
+    {
+      "id": "F14",
+      "name": "Incidents and follow-ups",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Synthetic staging trigger/recovery; observe production detector without customer disruption."
+    },
+    {
+      "id": "F15",
+      "name": "Revenue and payments",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H4"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Qualify approved catalog and signed Stripe test lifecycle; preserve empty real revenue."
+    },
+    {
+      "id": "F16",
+      "name": "AI cost and attempts",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Trace attempts and reserve/settle/late cost; retain unknown historical reservations."
+    },
+    {
+      "id": "F17",
+      "name": "Product and retention",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Trace fresh journeys and watermarks; wait for mature cohorts before measuring retention."
+    },
+    {
+      "id": "F18",
+      "name": "Operations and connections",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify per-stage health, telemetry gaps, queues, source lag and revoked connections."
+    },
+    {
+      "id": "F19",
+      "name": "Support tickets",
+      "state": "configured_off",
+      "blockers": [
+        "support_schema_and_authenticated_flow_not_verified",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H6"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify the in-app ticket source, tenant isolation, reply/reopen/resolve, masked metadata and audited reveal."
+    },
+    {
+      "id": "F20",
+      "name": "Credits and top-ups",
+      "state": "configured_off",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H4"
+      ],
+      "effectiveFlags": {
+        "POSTRIFF_CREDITS_ENABLED": null,
+        "POSTRIFF_CREDIT_PURCHASES_ENABLED": null
+      },
+      "activationProof": "not_verified",
+      "nextAction": "Approve catalog; test grants, reserve/settle and signed top-ups before live charges."
+    },
+    {
+      "id": "F21",
+      "name": "Scoped administrative actions",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify MFA, typed confirmation, CAS, dedupe and bounded reversible account canary."
+    },
+    {
+      "id": "F22",
+      "name": "Refund execution",
+      "state": "configured_off",
+      "blockers": [
+        "stripe_provider_and_financial_confirmation_required",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H4"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Verify fresh-factor typed confirmation, signed Stripe receipts and read-only recovery; actual refunds require per-action confirmation."
+    },
+    {
+      "id": "F23",
+      "name": "Engineering and audit receipts",
+      "state": "ready_for_verification",
+      "blockers": [
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Match exact candidate SHA, required CI, deployment and evidence manifest."
+    },
+    {
+      "id": "F24",
+      "name": "Marketing and attribution",
+      "state": "configured_off",
+      "blockers": [
+        "authorized_sources_not_verified",
+        "fresh_effective_configuration_and_end_to_end_proof_required"
+      ],
+      "ownerDependencies": [],
+      "acceptedOwnerDecisions": [
+        "H6"
+      ],
+      "effectiveFlags": {},
+      "activationProof": "not_verified",
+      "nextAction": "Authorize actual GSC/acquisition/spend sources and wait for qualified history."
+    }
+  ],
+  "acceptedOwnerDefaults": {
+    "version": 1,
+    "revision": 1,
+    "approvalRef": "founder-owner-20261002",
+    "dailySpendMode": "limited",
+    "dailySpendUsdMicro": 50000000,
+    "warnPercent": 80,
+    "timeZone": "America/Indiana/Indianapolis",
+    "replyTo": "jamesau0723@gmail.com",
+    "emailCanaryCount": 3,
+    "pushCanaryCount": 3,
+    "dailyBriefingTime": "08:30",
+    "weeklyReviewTime": "09:00",
+    "weeklyReviewDay": 0,
+    "quietStart": 1320,
+    "quietEnd": 480,
+    "maxCallSeconds": 600,
+    "automaticCallAttemptsDaily": 2,
+    "concurrentCalls": 1,
+    "entitlement": "unlimited",
+    "financialConfirmationRequired": true,
+    "financialRetention": "immutable",
+    "supportSource": "in_app_tickets",
+    "customerPiiDefault": "masked"
+  },
+  "sourceVerification": {
+    "database": "production_read_only_dashboard_verified_connector_grant_mismatch",
+    "productionAliasSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+    "deploymentId": "dpl_6MgiST6Dnyf7ySDjmkKL5RjetcXX",
+    "configuration": "audit_snapshot_not_fresh_effective_flags"
+  }
+}

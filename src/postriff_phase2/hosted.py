@@ -476,7 +476,7 @@ class HostedWorkspaceService:
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
             view = self.ledger.usage_view(cur, workspace_id, actor)
-            view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
+            view["lifecycle"] = {"status": "internal", "canPublish": True, "exportAvailable": True, "draftsRetained": True} if view["entitlement"].get("unlimited") else self.billing.lifecycle(cur, workspace_id, self.clock())
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
             if not _membership(row).allows("owner"):

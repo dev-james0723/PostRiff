@@ -21,7 +21,7 @@ import time
 from .store import tls_options
 
 # Ids `founder_cron.probe` writes, in display order.
-SOURCE_IDS = ('cron', 'database', 'control_database', 'control_reader', 'phone_provider', 'notifications', 'stripe_webhooks', 'email_provider', 'model_gateway')
+SOURCE_IDS = ('cron', 'database', 'control_database', 'control_reader', 'phone_provider', 'notifications', 'stripe_webhooks', 'email_provider', 'model_gateway', 'product_writer', 'ai_writer')
 # Sources whose silence opens a founder incident (founder_incidents.THRESHOLDS['source_silence']). The 8.D probes report
 # health and recency; none of them pages on its own.
 REQUIRED_SOURCES = ('cron', 'database', 'control_database')
@@ -145,6 +145,32 @@ def event_recency(db, service):
         except Exception:
             out[source_id] = ('unavailable', 'provider_unavailable', None)
     return out
+
+
+def writer_health(db):
+    """Durable writer gaps, separate from database reachability and cron health.
+    No events means collection unqualified, not proof a writer is broken.
+    Reads only aggregate counts and timestamps, never recoverable row payloads.
+    """
+    result = {}
+    for source, kind in (('product_writer', 'telemetry.product_events'), ('ai_writer', 'telemetry.ai_call_events')):
+        try:
+            def work():
+                with db.cursor() as cur:
+                    cur.execute("SELECT extract(epoch from max(a.at)),count(*) FILTER(WHERE a.meta->>'state' IN ('failed','suspended') "
+                                "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events r WHERE r.kind='telemetry.recovered' AND r.subject=a.id::text)) "
+                                "FROM public.pr_audit_events a WHERE a.kind=%s AND a.at>now()-interval '24 hours'", (kind,))
+                    return cur.fetchone()
+            row = _savepoint(db, work)
+            if not row or row[0] is None:
+                result[source] = ('partial', 'not_configured', None)
+            elif row[1]:
+                result[source] = ('partial', 'reconciliation_required', float(row[0]))
+            else:
+                result[source] = ('measured', 'qualified', float(row[0]))
+        except Exception:
+            result[source] = ('unavailable', 'provider_unavailable', None)
+    return result
 
 
 # --- independent watchdog (P2, WP11) ---------------------------------------------------------------------------------------

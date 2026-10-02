@@ -32,13 +32,17 @@ def backoff(delivery_id, attempts):
 
 class DeliveryWorker:
     def __init__(self, connection_factory, *, email_transport=None, from_address=None, push_transport=None, vault=None, base_url="https://rafii.invalid",
-                 address_for=None, signing_key=None, clock=time.time, worker_id=None, sms_service=None):
+                 address_for=None, signing_key=None, clock=time.time, worker_id=None, sms_service=None, reply_to=None,
+                 founder_ledger=None, environment=None, email_cost_ceiling=None, email_cost_qualification=None):
         self.connection_factory = connection_factory
         self.sms_service = sms_service
         self.email_transport, self.from_address = email_transport, from_address
         self.push_transport, self.vault = push_transport, vault
         self.base_url, self.address_for, self.signing_key = base_url, address_for, signing_key
         self.clock = clock
+        self.reply_to = reply_to
+        self.founder_ledger, self.environment = founder_ledger, environment
+        self.email_cost_ceiling, self.email_cost_qualification = email_cost_ceiling, email_cost_qualification
         self.worker_id = worker_id or f"ntf-{uuid.uuid4().hex[:12]}"
 
     # --- claim / complete ----------------------------------------------------------------------------------------------
@@ -74,7 +78,7 @@ class DeliveryWorker:
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status='sent', sent_at=now(), provider=%s, provider_ref=%s, template_version=%s, "
                                "lease_owner=NULL, lease_until=NULL, failure_class=NULL, failure_detail=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
                                (outcome.get("provider"), (outcome.get("providerRef") or "")[:200] or None, outcome.get("templateVersion"), row["id"], self.worker_id))
-            elif state in ("transient", "uncertain") and not (row["channel"]=="sms" and state=="uncertain") and row["attempts"] < row["maxAttempts"]:
+            elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 delay = outcome.get("retryAfter") or backoff(row["id"], row["attempts"])
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status='pending', next_attempt_at=now() + make_interval(secs => %s), failure_class=%s, "
                                "failure_detail=%s, lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
@@ -82,7 +86,7 @@ class DeliveryWorker:
             else:
                 final = {"transient": "dead", "uncertain": "dead", "permanent": "failed", "gone": "failed", "config": "suppressed", "membership": "cancelled",
                          "preference": "suppressed", "expired": "cancelled"}.get(state, "failed")
-                if row["channel"]=="sms" and state=="uncertain": final="uncertain"
+                if state=="uncertain": final="uncertain"
                 failure = {"gone": "permanent"}.get(state, state if state in ("transient", "uncertain", "permanent", "config", "membership", "preference", "expired") else "permanent")
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status=%s, failure_class=%s, failure_detail=%s, failed_at=CASE WHEN %s IN ('dead','failed') THEN now() END, "
                                "lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
@@ -98,7 +102,7 @@ class DeliveryWorker:
         this message on this channel (their preferences may have changed since it was planned)."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT e.event_type, e.payload, e.severity, e.expires_at IS NOT NULL AND e.expires_at < now(), coalesce(p.locale,''),
-                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key, e.entity_type, e.entity_id
+                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key, e.entity_type, e.entity_id, extract(epoch from e.occurred_at)
                            FROM public.pr_notification_events e LEFT JOIN public.pr_profiles p ON p.user_id=%s LEFT JOIN public.pr_workspaces w ON w.id=e.workspace_id
                            WHERE e.id::text=%s""", (row["userId"], row["eventId"]))
             event = cur.fetchone()
@@ -122,7 +126,8 @@ class DeliveryWorker:
         if event is None:
             return None
         return {"type": event[0], "payload": event[1] or {}, "severity": event[2], "expired": bool(event[3]) or not trend_current, "locale": event[4] or "en",
-                "workspaceName": event[5] or None, "grouping": event[6], "member": member, "optedOut": opted_out}
+                "workspaceName": event[5] or None, "grouping": event[6], "member": member, "optedOut": opted_out,
+                "occurredAt": float(event[9]) if len(event)>9 and event[9] is not None else None}
 
     def _ack_path(self, href, row):
         from .sms import acknowledgement_path
@@ -158,11 +163,28 @@ class DeliveryWorker:
         if not address:
             return {"state": "permanent", "detail": "the account has no email address"}
         message = self.render(row, ctx)
+        dispatch = {"from": self.from_address, "to": address, "subject": message["subject"], "text": message["text"], "html": message["html"],
+                    "headers": message["headers"], "idempotencyKey": row["key"], 'templateVersion': message['templateVersion'],
+                    "tags": [{"name": "kind", "value": ctx["type"].replace(".", "_")}, {"name": "delivery_id", "value": row["id"]}]}
+        if self.reply_to:
+            dispatch['replyTo'] = self.reply_to
+        if getattr(self.email_transport, 'requires_cutover', False):
+            from .cutover import admit
+            reserve = None
+            if ctx['type'].startswith('founder.'):
+                from . import founder_email
+                try:
+                    workspace, settings = founder_email.context(self, row['userId'])
+                except Exception:
+                    return {'state': 'config', 'detail': 'founder_email_spend_and_reply_to_not_qualified'}
+                dispatch['replyTo'] = settings['replyTo']
+                reserve = lambda cur: founder_email.reserve(self, cur, row['userId'], workspace, settings, row['key'])
+            blocked = admit(self.connection_factory, [row], [ctx], dispatch, now=self.clock(), reserve=reserve)
+            if blocked:
+                return blocked
         receipt = None
         try:
-            receipt = self.email_transport.send({"from": self.from_address, "to": address, "subject": message["subject"], "text": message["text"], "html": message["html"],
-                                                 "headers": message["headers"], "idempotencyKey": row["key"],
-                                                 "tags": [{"name": "kind", "value": ctx["type"].replace(".", "_")}, {"name": "delivery_id", "value": row["id"]}]})
+            receipt = self.email_transport.send(dispatch)
         except Exception as error:  # noqa: BLE001 - classify without leaking provider text
             # ResendTransport raises 502 for any refused request and http_transport 503 for an unreachable service or
             # a timeout: both are retried (bounded). A 4xx the provider reported explicitly is permanent.
@@ -205,6 +227,16 @@ class DeliveryWorker:
             body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
         results = []
         for subscription in subscriptions:
+            if ctx['type'].startswith('founder.') and getattr(self.push_transport, 'requires_cutover', False):
+                from .cutover import admit
+                # Count real device dispatches. A user's two subscriptions must
+                # not silently double a three-push approval.
+                blocked = admit(self.connection_factory, [row], [ctx],
+                    {'idempotencyKey': row['key'] + ':' + subscription['id'], 'templateVersion': message['templateVersion'],
+                     'subscriptionId': subscription['id'], 'payloadDigest': hashlib.sha256(body).hexdigest()}, now=self.clock(), channel='push')
+                if blocked:
+                    results.append(blocked)
+                    continue
             result = self.push_transport.send(subscription, body, ttl=90 if ctx["type"] == "security.phone_call" else 86400 if spec["severity"] in ("critical", "security") else 43200,
                                               urgency=push_module.URGENCY.get(spec["severity"], "normal"), topic=(ctx.get("grouping") or row["eventId"])[:32])
             if result["state"] == "gone":
@@ -254,7 +286,7 @@ class DeliveryWorker:
                 key = {"sent": "sent", "transient": "retry", "uncertain": "retry", "config": "suppressed", "preference": "suppressed", "membership": "cancelled",
                        "expired": "cancelled"}.get(outcome["state"], "failed")
                 if outcome["state"]=="defer": key="deferred"
-                if outcome["state"]=="uncertain" and row["channel"]=="sms": key="uncertain"
+                if outcome["state"]=="uncertain": key="uncertain"
                 if key == "retry" and row["attempts"] >= row["maxAttempts"]:
                     key = "failed"
                 summary[key] += 1
@@ -285,7 +317,7 @@ class DeliveryWorker:
                 db.commit()
             if not rows:
                 continue
-            items, included, excluded = [], [], []
+            items, included, excluded, contexts = [], [], [], []
             first_ctx = None
             for delivery_id, event_id, workspace_id, attempts, max_attempts, created in rows:
                 ctx = self._context({"userId": user_id, "eventId": event_id, "workspaceId": workspace_id}, "email", "digest")
@@ -300,6 +332,7 @@ class DeliveryWorker:
                 else:
                     first_ctx = first_ctx or ctx
                     included.append((delivery_id, attempts, max_attempts, created))
+                    contexts.append(ctx)
                     title = (ctx["payload"] or {}).get("title") or email_render.catalogue()["locales"][email_render.resolve_locale(ctx["locale"])]["templates"].get(
                         catalog.spec(ctx["type"])["template"], {}).get("headline", ctx["type"])
                     detail = (ctx["payload"] or {}).get("platform") or (ctx["payload"] or {}).get("recipeName") or ctx["workspaceName"] or ""
@@ -316,12 +349,19 @@ class DeliveryWorker:
                 else:
                     try:
                         address = self.address_for(user_id) if self.address_for else None
-                        receipt = self.email_transport.send({"from": self.from_address, "to": address, "subject": message["subject"], "text": message["text"],
-                                                             "html": message["html"], "headers": message["headers"], "idempotencyKey": group_key,
-                                                             "tags": [{"name": "kind", "value": "digest"}, {"name": "digest_id", "value": group_key}]}) if address else None
+                        dispatch = {"from": self.from_address, "to": address, "subject": message["subject"], "text": message["text"],
+                                    "html": message["html"], "headers": message["headers"], "idempotencyKey": group_key, 'templateVersion': message['templateVersion'],
+                                    "tags": [{"name": "kind", "value": "digest"}, {"name": "digest_id", "value": group_key}]}
+                        if self.reply_to:
+                            dispatch['replyTo'] = self.reply_to
+                        blocked = None
+                        if getattr(self.email_transport, 'requires_cutover', False):
+                            from .cutover import admit
+                            blocked = admit(self.connection_factory, [{'id': r[0], 'userId': user_id} for r in included], contexts, dispatch, now=self.clock())
+                        receipt = self.email_transport.send(dispatch) if address and not blocked else None
                         outcome = ({"state": "sent", "providerRef": receipt["id"], "templateVersion": message["templateVersion"]}
                                    if isinstance(receipt, dict) and receipt.get("id") and receipt.get("delivered") is not False
-                                   else {"state": "config" if address else "permanent", "detail": "not confirmed" if address else "no address"})
+                                   else blocked or {"state": "config" if address else "permanent", "detail": "not confirmed" if address else "no address"})
                     except Exception:  # noqa: BLE001
                         outcome = {"state": "transient", "detail": "the email service did not accept the digest"}
             digest_id = str(uuid.uuid5(uuid.NAMESPACE_URL, group_key))
@@ -338,7 +378,7 @@ class DeliveryWorker:
                         cur.execute("""UPDATE public.pr_notification_deliveries SET status='pending', next_attempt_at=now() + make_interval(secs => %s), failure_class='transient',
                                        lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s""", (backoff(delivery_id, attempts), delivery_id, self.worker_id))
                     else:
-                        final = "suppressed" if outcome["state"] == "config" else "dead" if outcome["state"] == "transient" else "failed"
+                        final = "suppressed" if outcome["state"] == "config" else "dead" if outcome["state"] == "transient" else 'uncertain' if outcome['state']=='uncertain' else "failed"
                         cur.execute("""UPDATE public.pr_notification_deliveries SET status=%s, failure_class=%s, failure_detail=%s, lease_owner=NULL, lease_until=NULL,
                                        updated_at=now() WHERE id::text=%s AND lease_owner=%s""", (final, outcome["state"], outcome.get("detail"), delivery_id, self.worker_id))
                 db.commit()

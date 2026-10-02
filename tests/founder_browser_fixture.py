@@ -50,16 +50,18 @@ def attach(app, service, dsn, pg_bin, web_origins):
         for user in (FOUNDER, MOBILE_FOUNDER):
             owner.execute("INSERT INTO rafii_control.platform_operators(user_id,environment,role,status,capabilities) VALUES(%s,'local','founder','active',%s) "
                           "ON CONFLICT(user_id,environment) DO UPDATE SET status='active',capabilities=excluded.capabilities", (user, sorted(CAPABILITIES)))
-    # The founder's own workspace is the ops tenant (PRD §4.5), created through the real bootstrap and classified internal.
-    ops = service.bootstrap('dev:' + FOUNDER, 'studio')['workspaceId']
-    with psycopg.connect(dsn, autocommit=True) as owner:
-        owner.execute("INSERT INTO rafii_control.workspace_classifications(workspace_id,kind,reason,environment) VALUES(%s,'internal','founder ops (local harness)','local') "
-                      "ON CONFLICT (workspace_id) DO UPDATE SET kind='internal'", (ops,))
+    # Preserve a customer workspace and provision separate internal tenants through
+    # the actual Ops state machine. Fixture identities remain local and synthetic.
+    service.bootstrap('dev:' + FOUNDER, 'studio')
     values = {'RAFII_CONTROL_ENABLED': '1', 'RAFII_CONTROL_MOUNT': 'embedded', 'RAFII_CONTROL_ENVIRONMENT': 'local',
+              # Synthetic QA model only; these are not production owner approvals.
+              'RAFII_FOUNDER_AI_REQUEST_MAX_USD_MICRO': '1000000',
+              'RAFII_FOUNDER_AI_DAY_MAX_USD_MICRO': '100000000',
+              'RAFII_FOUNDER_AI_TASK_MAX_USD_MICRO': '100000000',
+              'RAFII_FOUNDER_BUDGET_APPROVAL_REF': 'SYNTHETIC-NO-PROVIDER',
               # Two distinct strings for the two logins the cron's control_store expects; locally both SET ROLE from the owner.
               'RAFII_CONTROL_SESSION_DSN': dsn + ' application_name=rafii-control-session',
-              'RAFII_CONTROL_READER_DSN': dsn + ' application_name=rafii-control-reader',
-              'RAFII_FOUNDER_OPS_WORKSPACE_ID': ops}
+              'RAFII_CONTROL_READER_DSN': dsn + ' application_name=rafii-control-reader'}
     os.environ.update(values)
     store = PostgresStore(connection_factory(dsn, 'rafii_control_session', 'local'), connection_factory(dsn, 'rafii_control_reader', 'local'), 'local')
 
@@ -72,4 +74,10 @@ def attach(app, service, dsn, pg_bin, web_origins):
     config = Config(True, 'local', web_origins[0], 'embedded', tuple(dict.fromkeys(web_origins)))
     flags = {key: value for key, value in values.items() if key.startswith('RAFII_FOUNDER_')}
     app.control_app = ControlApplication(Boundary(config, store, verify), QueryService(store), runtime=app._runtime, flags=flags)
+    from rafii_control.founder_ops import create_ops
+    ops = None
+    for user in (FOUNDER, MOBILE_FOUNDER):
+        created = create_ops(app.control_app, {'operator': {'user_id': user}, 'session': {'environment': 'local'}}, {'mode': 'live'})
+        if user == FOUNDER:
+            ops = created['workspaceId']
     return ops

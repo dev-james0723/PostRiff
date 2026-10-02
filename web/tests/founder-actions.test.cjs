@@ -131,13 +131,19 @@ test('inputs parse to the integers the server takes, without float rounding', ()
   assert.equal(model.grantExpiry(30, new Date('2026-10-01T00:00:00Z')), '2026-10-31T00:00:00.000Z');
 });
 
-test('a block needs the typed word; only a block sends it', () => {
+test('blocks and confirmed refunds need their own typed word', () => {
   const action = { kind: 'account_block', previewId: 'p1', revision: '0123456789abcdef' };
   assert.deepEqual(model.confirmBody(action, 'r1', 'BLOCK'), { previewId: 'p1', revision: '0123456789abcdef', requestId: 'r1', confirmation: 'BLOCK' });
   assert.deepEqual(model.confirmBody({ ...action, kind: 'reconcile' }, 'r1', 'BLOCK'), { previewId: 'p1', revision: '0123456789abcdef', requestId: 'r1' });
   assert.equal(model.typedConfirmationOk('account_block', 'block'), false);
   assert.equal(model.typedConfirmationOk('account_block', ' BLOCK '), true);
   assert.equal(model.typedConfirmationOk('credits_adjust', ''), true);
+  assert.equal(model.typedConfirmationOk('refund_intent', ''), false);
+  assert.equal(model.typedConfirmationOk('refund_intent', 'REFUND'), true);
+  assert.equal(model.typedConfirmationOk('refund_intent', 'refund'), false);
+  assert.deepEqual(model.confirmBody({ ...action, kind: 'refund_intent' }, 'r1', ' REFUND '),
+    { previewId: 'p1', revision: '0123456789abcdef', requestId: 'r1', confirmation: 'REFUND' });
+  assert.equal(model.confirmPath({ kind: 'refund_intent', targetId: 'pi_fixture0001', confirm: { path: '/api/control/v2/actions/refunds/confirm' } }), '/actions/refunds/confirm?mode=live');
   assert.match(SERVER, /TYPED_BLOCK = 'BLOCK'/);
 });
 

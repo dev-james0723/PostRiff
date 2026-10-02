@@ -81,6 +81,7 @@ class NullTransport:
 
 class ResendTransport:
     """Real transport: POST https://api.resend.com/emails with a Bearer key. Raises AlphaError 502 on failure."""
+    requires_cutover = True
 
     def __init__(self, api_key, transport=None):
         if not api_key or not isinstance(api_key, str):
@@ -100,6 +101,8 @@ class ResendTransport:
         if message.get("headers"):
             # List-Unsubscribe / List-Unsubscribe-Post from the notification renderer (RFC 8058); values are single-line.
             payload["headers"] = {str(k): " ".join(str(v).split())[:500] for k, v in message["headers"].items()}
+        if message.get('replyTo'):
+            payload['reply_to'] = message['replyTo']
         request_headers = {"Authorization": f"Bearer {self.api_key}"}
         if message.get("idempotencyKey"):
             # Resend deduplicates a retried send with the same key (NotificationService delivery id).
@@ -205,6 +208,10 @@ class Mailer:
             # The notification service owns these notices (events derived from state, planned per preferences, HTML
             # templates, retries); sending here too would email the person twice.
             return {"sent": False, "kind": kind, "reason": "routed_to_notifications_v2"}
+        if getattr(self.transport, 'requires_cutover', False):
+            # Legacy callers have no durable dispatch lease. Do not accidentally
+            # replay trial/billing backlog or send unapproved synchronous mail.
+            return {'sent': False, 'kind': kind, 'reason': 'legacy_delivery_requires_cutover_outbox'}
         try:
             if not valid_address(to):
                 raise AlphaError("Enter a valid email address.")

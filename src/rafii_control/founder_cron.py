@@ -158,12 +158,13 @@ def probe(fstore, service, values, now):
     their watermark when measured; event sources stamp their latest good event. Every probe is bounded and never raises."""
     from . import founder_sources
     rows = {'cron': ('measured', 'qualified', now)}
-    recency = {}
+    recency, writer_health = {}, {}
     try:
         with _consumer_connection(service)() as db:
             db.execute('SELECT 1')
             rows['database'] = ('measured', 'qualified', now)
             recency = founder_sources.event_recency(db, service)
+            writer_health = founder_sources.writer_health(db)
     except Exception:
         if 'database' not in rows:
             rows['database'] = ('unavailable', 'provider_unavailable', None)
@@ -185,6 +186,8 @@ def probe(fstore, service, values, now):
         rows['notifications'] = ('unavailable', 'provider_unavailable', None)
     for source_id in founder_sources.EVENT_SOURCE_IDS:
         rows[source_id] = recency.get(source_id, ('unavailable', 'provider_unavailable', None))
+    for source_id in ('product_writer', 'ai_writer'):
+        rows[source_id] = writer_health.get(source_id, ('unavailable', 'provider_unavailable', None))
     if set(rows) != set(SOURCE_IDS):   # the readers (live_metrics, demo_metrics) iterate SOURCE_IDS; a drift here would show as 'never probed'
         raise ValueError('probe ids and founder_sources.SOURCE_IDS must agree')
     written = {}

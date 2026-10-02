@@ -223,6 +223,13 @@ class FakeDB:
 
 class ActionRouteTests(unittest.TestCase):
     def setUp(self):
+        # These action tests use a MemoryStore; Ops metadata/RLS is independently
+        # exercised against PostgreSQL, including invalid/revoked owners.
+        from rafii_control import founder_ops
+        for name, value in (('ready', True), ('stored', None)):
+            ops_patcher = mock.patch.object(founder_ops, name, return_value=value)
+            ops_patcher.start()
+            self.addCleanup(ops_patcher.stop)
         self.store = MemoryStore()
         self.store.operator_row['capabilities'] = sorted(CAPABILITIES)
         self.budgets = []
@@ -272,14 +279,14 @@ class ActionRouteTests(unittest.TestCase):
         expected = {'/usage/reconcile/preview': 'usage.reconcile', '/usage/reconcile/confirm': 'usage.reconcile', '/actions/credits/preview': 'credits.adjust',
                     '/actions/credits/confirm': 'credits.adjust', '/actions/accounts/([A-Za-z0-9_-]{1,80})/block/preview': 'accounts.block',
                     '/actions/accounts/([A-Za-z0-9_-]{1,80})/block/confirm': 'accounts.block', '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/preview': 'accounts.block',
-                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/confirm': 'accounts.block', '/actions/refunds/preview': 'refunds.prepare'}
+                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/confirm': 'accounts.block', '/actions/refunds/preview': 'refunds.prepare', '/actions/refunds/execute/preview': 'refunds.prepare', '/actions/refunds/confirm': 'refunds.prepare'}
         self.assertEqual({path: capability for (method, path), (capability, _) in routes.items() if method == 'POST'}, expected)
         for (method, path), (capability, options) in routes.items():
             if method == 'POST':
                 self.assertEqual(options, {'step_up': True, 'budget': 'founder.action'}, path)
         self.assertEqual(routes[('GET', '/actions')], ('audit.read', {}))
-        self.assertEqual(len(routes), 10)
-        self.assertNotIn(('POST', '/actions/refunds/confirm'), routes)   # refunds are intents only
+        self.assertEqual(len(routes), 12)
+        self.assertIn(('POST', '/actions/refunds/confirm'), routes)  # financial confirmation remains protected
 
     # --- reconcile ------------------------------------------------------------------------------------------------------------
     def test_reconcile_preview_then_confirm_executes_once_with_both_audits(self):
@@ -498,7 +505,7 @@ class ActionRouteTests(unittest.TestCase):
         status, off = self.request('/actions/refunds/preview', body={**body, 'requestId': rid()})
         self.assertEqual((status, off['code'], off['blocker']), (409, 'POLICY_DISABLED', 'payments_not_configured'))
         status, prohibited = self.request('/actions/refunds/confirm', body=self.confirm_body(preview))
-        self.assertEqual((status, self.last_audit()['action']), (404, 'prohibited'))
+        self.assertEqual((status, self.last_audit()['action']), (400, 'refunds.prepare'))
         # A refund intent's preview id cannot be pushed through another confirm route either.
         status, blocked = self.request('/usage/reconcile/confirm', body=self.confirm_body(preview))
         self.assertEqual((status, blocked['blocker']), (400, 'preview_mismatch'))
@@ -521,7 +528,7 @@ class ActionRouteTests(unittest.TestCase):
         self.assertEqual(status, 200, listing)
         self.assertEqual([a['kind'] for a in listing['data']['actions']], ['refund_intent', 'reconcile'])
         self.assertEqual(listing['data']['activeBlocks'][0]['userId'], CUSTOMER)
-        self.assertEqual(listing['data']['policies'], {'creditsEnabled': False, 'refundExecution': {'allowed': False, 'blocker': 'refund_policy_not_decided'}})
+        self.assertEqual(listing['data']['policies'], {'creditsEnabled': False, 'refundExecution': {'allowed': False, 'confirmationRequired': True, 'blocker': 'stripe_refund_provider_not_configured'}})
         self.assertNotIn('gateway req', json.dumps(listing))   # params (the evidence reference) are never listed
         self.service.ledger.credits = FakeBook()
         self.assertTrue(self.request('/actions', method='GET')[1]['data']['policies']['creditsEnabled'])

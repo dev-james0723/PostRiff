@@ -234,7 +234,7 @@ class WorkspaceService:
     def query(self, principal, body, mode):
         """Bounded, literal global search over fixed projections; never arbitrary SQL."""
         collections={'customers':'business_customers','workspaces':'business_workspaces','subscriptions':'business_subscriptions',
-                     'payments':'business_payments','usage':'business_usage','tickets':'business_requests'}
+                     'payments':'business_payments','usage':'business_usage','tickets':'business_support_tickets'}
         required = {'collection','search','status','page','recordId'}
         optional = {'plan','billingCycle','sort','direction'}
         if (not required <= set(body) or set(body)-required-optional or
@@ -336,7 +336,7 @@ class WorkspaceService:
             workspaces = serial(con.execute("SELECT * FROM rafii_control.business_workspaces ORDER BY CASE WHEN status IN ('past_due','grace') THEN 0 ELSE 1 END,id LIMIT 201").fetchall())
             subscriptions = serial(con.execute('SELECT * FROM rafii_control.business_subscriptions ORDER BY id LIMIT 201').fetchall())
             usage = serial(con.execute('SELECT * FROM rafii_control.business_usage ORDER BY at DESC,id LIMIT 201').fetchall())
-            requests = serial(con.execute('SELECT * FROM rafii_control.business_requests ORDER BY at DESC,id LIMIT 201').fetchall())
+            requests = serial(con.execute('SELECT * FROM rafii_control.business_support_tickets ORDER BY "updatedAt" DESC,id LIMIT 201').fetchall())
             counts = con.execute('SELECT (SELECT count(*) FROM rafii_control.business_customers) AS customers,(SELECT count(*) FROM rafii_control.business_workspaces) AS workspaces,(SELECT count(*) FROM rafii_control.business_workspaces WHERE status IN (\'past_due\',\'grace\')) AS "billingReviews",(SELECT count(*) FROM rafii_control.business_subscriptions WHERE status=\'active\') AS "activeSubscriptions",(SELECT count(*) FROM rafii_control.business_requests WHERE status=\'requested\') AS "openRequests"').fetchone()
             payments_ready = con.execute("SELECT to_regclass('rafii_control.business_payments') IS NOT NULL AS ready").fetchone()['ready']
             payments = serial(con.execute('SELECT * FROM rafii_control.business_payments ORDER BY at DESC,id LIMIT 201').fetchall()) if payments_ready else []
@@ -348,11 +348,11 @@ class WorkspaceService:
         for w in workspaces: w['renameAllowed'] = w['id'] in permitted
         result = dict(mode='live',revision=0,customers=customers[:200],workspaces=workspaces[:200],subscriptions=subscriptions[:200],payments=payments[:200],usage=usage[:200],tickets=requests[:200],activity=activity,
                       summary=dict(counts),limits=dict(pageSize=200,truncated=any(len(r)>200 for r in (customers,workspaces,subscriptions,usage,requests,payments))),
-                      paymentState='connected' if payments_ready else 'not_configured',supportState='metadata_only',usageState='connected')
+                      paymentState='connected' if payments_ready else 'not_configured',supportState='in_app_tickets',usageState='connected')
         result['connections']=[dict(id='database',label='Rafii database',state='connected',required=True,detail='Customer, workspace, subscription and usage records from Rafii.'),
                                dict(id='payments',label='Payment records',state=result['paymentState'],required=True,detail='Stored credit-purchase receipts. Required billing connection; no charges or refunds from Control.'),
                                dict(id='credits',label='Credit balance',state='not_qualified',required=True,detail='Usage records are connected. Credit balances need approved credit terms and a verified calculation before they can be shown.'),
-                               dict(id='support',label='Support',state='metadata_only',required=True,detail='Account requests are connected. Customer conversations and replies need an approved support connection.')]
+                               dict(id='support',label='Support',state='in_app_tickets',required=True,detail='In-app tickets are connected. Explicit support reveal reads original messages after fresh MFA.')]
         return result
 
     def rename(self, principal, body):
