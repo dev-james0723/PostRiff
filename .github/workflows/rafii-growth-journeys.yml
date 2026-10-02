@@ -68,9 +68,18 @@ jobs:
           RAFII_GROWTH_API_URL: http://127.0.0.1:4442
           RAFII_GROWTH_PRICING_CATALOG: v2
           MESSAGE: ${{ github.event.head_commit.message }}
+        # "[growth-ci again=intake,intake]" repeats single journeys after the main pass, each into its own folder.
         run: |
-          ONLY=$(printf '%s' "$MESSAGE" | sed -n 's/.*\[growth-ci only=\([a-z,-]*\)\].*/\1/p' | head -n 1)
-          node web/tests/growth-v2-browser.cjs --out=docs/design/rafii-product-growth/evidence/ci-browser ${ONLY:+--only=$ONLY}
+          ONLY=$(printf '%s' "$MESSAGE" | sed -n 's/.*\[growth-ci[^]]* only=\([a-z,-]*\).*/\1/p' | head -n 1)
+          AGAIN=$(printf '%s' "$MESSAGE" | sed -n 's/.*\[growth-ci[^]]* again=\([a-z,-]*\).*/\1/p' | head -n 1)
+          status=0
+          node web/tests/growth-v2-browser.cjs --out=docs/design/rafii-product-growth/evidence/ci-browser ${ONLY:+--only=$ONLY} || status=1
+          n=0
+          for journey in $(printf '%s' "$AGAIN" | tr ',' ' '); do
+            n=$((n + 1))
+            node web/tests/growth-v2-browser.cjs --out=docs/design/rafii-product-growth/evidence/ci-browser/again-$n --only=$journey || status=1
+          done
+          exit $status
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -968,9 +968,66 @@ function makeWav(seconds = 0.5, rate = 8000) {
   return Buffer.concat([header, data]);
 }
 
-async function intakeJourney(env, { label, zh }) {
+/**
+ * A record of the upload panel over time, for the keyboard step's evidence: which heading, button and file input are
+ * on the page (each new element gets a number, so a re-render that replaces them shows), where focus is, what Enter
+ * and Space did (keydown, keypress, whether anything prevented them) and which clicks reached the button and the input.
+ * It observes only; nothing here decides pass or fail.
+ */
+async function installIntakeProbe(page, copy, startedAt) {
+  await page.evaluate(({ title, choose, startedAt }) => {
+    const log = [];
+    let count = 0;
+    const id = (node) => (node ? (node.__probe ??= ++count) : 0);
+    const describe = (node) => (!node || node === document.body ? 'body' : `${node.tagName.toLowerCase()}#${id(node)}`);
+    const at = () => Date.now() - startedAt;
+    let last = '';
+    const tick = () => {
+      const heading = [...document.querySelectorAll('h2')].find((node) => node.textContent.trim() === title) || null;
+      const section = heading?.closest('section') || null;
+      const button = section ? [...section.querySelectorAll('button')].find((node) => node.textContent.trim() === choose) || null : null;
+      const input = section?.querySelector('input[type=file]') || null;
+      for (const [node, kind] of [[button, 'button'], [input, 'input']]) {
+        if (node && !node.__probeClicks) {
+          node.__probeClicks = true;
+          node.addEventListener('click', (event) => log.push({ t: at(), click: kind, id: id(node), trusted: event.isTrusted, connected: node.isConnected }));
+        }
+      }
+      const state = `h2#${id(heading)} button#${id(button)} input#${id(input)} focus=${describe(document.activeElement)}`;
+      if (state !== last) {
+        last = state;
+        log.push({ t: at(), state });
+      }
+    };
+    setInterval(tick, 50);
+    tick();
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      window.addEventListener(type, (event) => {
+        if (event.key === 'Enter' || event.key === ' ') log.push({ t: at(), [type]: event.key, target: describe(event.target) });
+      }, true);
+      window.addEventListener(type, (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && event.defaultPrevented) log.push({ t: at(), prevented: type });
+      });
+    }
+    window.__intakeProbe = log;
+  }, { title: copy.title, choose: copy.choose, startedAt });
+}
+
+async function intakeJourney(env, { label, zh, entry }) {
   const { page, wid, must, call, ctx } = env;
   const copy = C.intake[zh ? 'zh-Hant' : 'en'];
+  // Evidence for the keyboard step: the person's saved preferences as the app read them, and Chromium's own notes.
+  const startedAt = Date.now();
+  const preferences = [];
+  const notes = [];
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname !== '/api/me' || response.request().method() !== 'GET') return;
+    response.json().then((body) => preferences.push({ t: Date.now() - startedAt, status: response.status(), locale: body?.preferences?.locale ?? null, timeZone: body?.preferences?.timeZone ?? null }))
+      .catch(() => preferences.push({ t: Date.now() - startedAt, status: response.status() }));
+  });
+  page.on('console', (message) => {
+    if (/chooser|activation/i.test(message.text())) notes.push({ t: Date.now() - startedAt, type: message.type(), text: message.text().slice(0, 160) });
+  });
   const limits = await must('GET', `/api/workspaces/${wid}/source-uploads/limits`);
   record(`intake: limits shown before upload — PDF on, audio refused with transcription_route_not_enabled — ${label}`,
     limits.storage === 'ready' && limits.formats.pdf.supported === true && limits.formats.audio.supported === false && limits.formats.audio.reason === 'transcription_route_not_enabled',
@@ -989,6 +1046,7 @@ async function intakeJourney(env, { label, zh }) {
   });
 
   await page.goto(base + '/app/ideas');
+  await installIntakeProbe(page, copy, startedAt);
   const panel = page.getByRole('region', { name: copy.title, exact: true });
   await panel.waitFor({ timeout: 120000 });
   await stable(page, panel);
@@ -997,8 +1055,22 @@ async function intakeJourney(env, { label, zh }) {
   const choose = panel.getByRole('button', { name: copy.choose, exact: true });
 
   // Keyboard only: Tab to "Choose a file", Enter opens the picker. A recording is refused before anything uploads.
-  const presses = await tabTo(page, choose);
-  const [audioPicker] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Enter')]);
+  // Every Enter press is recorded with the probe's account of it; a press that opens nothing is kept as evidence.
+  let presses = 0;
+  let audioPicker = null;
+  const attempts = [];
+  for (let attempt = 1; attempt <= 2 && !audioPicker; attempt += 1) {
+    presses += await tabTo(page, choose);
+    const pressedAt = Date.now() - startedAt;
+    const opened = page.waitForEvent('filechooser', { timeout: 10000 }).catch(() => null);
+    await page.keyboard.press('Enter');
+    audioPicker = await opened;
+    attempts.push({ pressedAt, opened: Boolean(audioPicker) });
+  }
+  entry.keyboardPicker = {
+    attempts, preferences, notes, probe: await page.evaluate(() => window.__intakeProbe).catch((error) => `unavailable: ${error.message.slice(0, 80)}`)
+  };
+  if (!audioPicker) throw new Error(`keyboard: Enter on the focused "${copy.choose}" button never opened the file picker (${attempts.length} presses; probe in the summary)`);
   const wav = makeWav();
   await audioPicker.setFiles({ name: 'lesson-recording.wav', mimeType: 'audio/wav', buffer: wav });
   await panel.getByRole('alert').filter({ hasText: copy.audioOff }).waitFor();
