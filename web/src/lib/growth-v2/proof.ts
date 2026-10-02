@@ -3,13 +3,14 @@ import type { TokenSource } from '@/lib/api/client';
 import { createRequester, seg, ws } from './request';
 import type { DecideInput, DecideResult, ProofList, ProofView, RefreshResult, StrategyList } from './proof-types';
 
+function page(params: Record<string, string | null | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value) query.set(key, value);
+  return query.toString();
+}
+
 export function createProofApi(getToken: TokenSource) {
   const r = createRequester(getToken);
-  const page = (params: Record<string, string | null | undefined>) => {
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) if (value) query.set(key, value);
-    return query.toString();
-  };
   return {
     list: (w: string, frequency?: 'weekly' | 'monthly', cursor?: string | null, limit = 10) =>
       r.get<ProofList>(`${ws(w)}/proof/proofs?${page({ frequency, cursor, limit: String(limit) })}`),

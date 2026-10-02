@@ -83,6 +83,8 @@ export interface StrategyDecision {
   statement: string;
   scope: DecisionScope;
   appliesFrom: number | null;
+  /** The local Monday (YYYY-MM-DD, workspace zone) the decision first applies to; shown as a date, never re-zoned. */
+  appliesFromDate?: string | null;
   createdAt: number;
   basis: Record<string, string>;
   inEffect: boolean;
@@ -119,6 +121,7 @@ export interface RefreshResult {
   revision?: number;
   dataState?: 'unavailable';
   reason?: string;
+  period?: { start: number; end: number; timeZone: string };
   verified: boolean;
 }
 
@@ -141,7 +144,9 @@ export interface DecideResult {
   decision: StrategyDecision;
   replayed: boolean;
   verified: boolean;
-  planning?: { inEffect: boolean; appliesFromDate: string | null; note: string };
+  /** `appliesFromDate`: the first local Monday whose weekly plan was not yet stored; `alreadyPlanned`: the weeks
+   *  (YYYY-MM-DD) that were already planned when the decision was made and so do not use it. */
+  planning?: { inEffect: boolean; appliesFromDate: string | null; alreadyPlanned?: string[]; note: string };
 }
 
 /** What a Weekly plan records about decisions (week.appliedDecisions / week.notApplied). */

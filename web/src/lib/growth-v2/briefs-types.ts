@@ -59,7 +59,8 @@ export interface BriefItem {
   relevance: { reason: string; matches: BriefMatch[] };
   angle: { id: string | null; text: string };
   effort: BriefEffort;
-  action: { kind: 'accept' | 'save_idea'; angleIds?: string[]; platforms?: string[]; requires?: string[] };
+  /** `angles` (newer servers): the words for each of `angleIds`, in the same order. */
+  action: { kind: 'accept' | 'save_idea'; angleIds?: string[]; angles?: { id: string; text: string }[]; platforms?: string[]; requires?: string[] };
   platforms: string[];
   language: string | null;
   limitations: string[];
