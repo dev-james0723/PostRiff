@@ -142,6 +142,17 @@ class FollowingASeriesTest(Base):
                 campaigns.apply_action(self.state, "raffi_recurrence_save", payload, "editor", NOW)
         self.assertEqual(caught.exception.code, "feature_disabled")
 
+    def test_d012_another_automations_follow_never_admits_a_new_one(self):
+        """Review: with the feature off, a brand-new automation could follow a series because some other automation
+        already did. Only the follow the saved automation itself already has is kept."""
+        self.save(seriesId=self.campaign["id"])                       # automation A follows while the feature is on
+        fresh = {"name": "Second evergreen", "goal": "Studio notes", "audience": "Students", "schedule": WEEKLY,
+                 "include": {"evergreen": {"minAgeDays": 30, "seriesId": self.campaign["id"]}},
+                 "destinations": [{"platform": "Threads", "language": "en", "channelId": "acct-threads"}], "route": "deterministic-preview"}
+        with Flags(RAFII_SERIES_ENABLED=False), self.assertRaises(AlphaError) as caught:
+            campaigns.apply_action(self.state, "raffi_recurrence_save", fresh, "editor", NOW)
+        self.assertEqual(caught.exception.code, "feature_disabled")
+
     def test_a_series_is_not_a_brief_to_schedule(self):
         payload = {"name": "X", "goal": "G", "audience": "A", "schedule": WEEKLY, "campaignId": self.campaign["id"],
                    "destinations": [{"platform": "Threads", "language": "en"}], "route": "deterministic-preview"}

@@ -39,7 +39,7 @@ class FreeLifecycle(unittest.TestCase):
     def setUp(self):
         self.clock = [float(NOW)]
         self.actor = str(uuid.uuid4())
-        self.sent, self.stripe_calls = [], []
+        self.sent, self.stripe_calls, self.stripe_reads = [], [], []
         with connection() as db:
             db.execute('INSERT INTO auth.users(id) VALUES(%s)', (self.actor,))
             db.execute("UPDATE pr_plan_terms SET status='active',new_checkout_enabled=true WHERE id='creator-v1'")
@@ -50,7 +50,11 @@ class FreeLifecycle(unittest.TestCase):
         verify.session_id = lambda token, actor: 'task4-' + self.actor
         verify.auth_time = lambda token, actor: self.clock[0]
         self.verify = verify
+        self.stripe_subscription = 'canceled'   # what Stripe reports for an earlier subscription (read-only GET)
         def stripe_transport(method, url, headers=None, form=None):
+            if method == 'GET' and '/subscriptions/' in url:
+                self.stripe_reads.append(url)
+                return {'status': 200, 'body': {'id': url.rsplit('/', 1)[1], 'status': self.stripe_subscription}}
             self.stripe_calls.append((url, form))
             return {'status': 200, 'body': {'id': 'cs_task4', 'url': 'https://checkout.stripe.com/c/synthetic'}}
         def writer_transport(method, url, headers=None, body=None):
@@ -315,6 +319,21 @@ class FreeLifecycle(unittest.TestCase):
         with connection() as db:
             self.assertEqual(db.execute('SELECT price_variant_id,provider_subscription_id FROM pr_subscriptions WHERE workspace_id=%s', (self.wid,)).fetchone(), ('creator-49-v1', 'sub_new_' + self.wid))
             self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 0)
+
+    def test_reenrollment_waits_until_stripe_confirms_the_earlier_subscription_ended(self):
+        """Rafii can mark a subscription ended itself (past-due grace ran out; Stripe `unpaid` maps to expired) while Stripe
+        still collects its open invoice. Checkout reopens only when Stripe says the earlier subscription is canceled."""
+        self.seed_creator(status='cancelled', variant='49')
+        self.service.usage(self.wid, 'fixture')
+        for open_status in ('past_due', 'unpaid', 'active'):
+            self.stripe_subscription = open_status
+            with self.subTest(stripe=open_status), self.assertRaises(AlphaError) as caught:
+                self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')
+            self.assertEqual((caught.exception.status, caught.exception.code), (409, 'earlier_subscription_open'))
+        self.assertEqual(self.stripe_calls, [])   # no checkout session was created while Stripe could still collect
+        self.assertTrue(self.stripe_reads and all(url.endswith('/subscriptions/sub_old_' + self.wid) for url in self.stripe_reads), self.stripe_reads)
+        self.stripe_subscription = 'canceled'
+        self.assertEqual(self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')['sessionId'], 'cs_task4')
 
     def test_active_grace_past_due_replacement_denied(self):
         self.seed_creator()

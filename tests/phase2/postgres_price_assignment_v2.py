@@ -34,6 +34,8 @@ class Transport:
         self.headers = []
 
     def __call__(self, method, url, headers=None, form=None):
+        if method == 'GET' and '/subscriptions/' in url:   # the earlier subscription, as Stripe reports it (read-only)
+            return {'status': 200, 'body': {'id': url.rsplit('/', 1)[1], 'status': 'canceled'}}
         self.calls.append((url, form))
         self.headers.append(headers or {})
         return {'status': 200, 'body': {'id': 'cs_synthetic', 'url': 'https://checkout.stripe.com/c/synthetic'}}

@@ -168,7 +168,15 @@ class AC30MigrationTest(Base):
 
     def test_members_never_learn_the_webhook_endpoint(self):
         t = tenant("editor")
-        connect(t)
+        conn, secret = connect(t)
+        self.assertEqual(deliver(conn["id"], secret, ev("member-check-1"))[0], 200)
+        # Through the API: only the owner's ledger carries the connection id (the webhook endpoint).
+        self.assertIsNone(RESULTS.events(t.wid, t.editor)["items"][0]["connectionId"])
+        self.assertEqual(RESULTS.events(t.wid, t.owner)["items"][0]["connectionId"], conn["id"])
+        with connection() as db:   # audit rows (readable by admins) never carry it either
+            subjects = [r[0] for r in db.execute("SELECT subject FROM public.pr_audit_events WHERE workspace_id=%s AND kind LIKE 'result_connection.%%'",
+                                                (t.wid,)).fetchall()]
+        self.assertTrue(subjects and all(s.startswith("conn_") and conn["id"] not in s for s in subjects), subjects)
         with connection(autocommit=True) as db:
             db.execute("SET ROLE authenticated")
             db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (USERS[t.editor],))
@@ -283,6 +291,21 @@ class AC17ReceiverTest(Base):
             db.execute("UPDATE public.pr_auth_throttle SET count=5000 WHERE bucket=%s", (bucket(results_service._unverified_scope(conn["id"])),))
         shown = RESULTS.connections(t.wid, t.owner)["connections"][0]["health"]
         self.assertEqual((shown["unverified"]["refused"], shown["unverified"]["capped"], shown["dataState"]), (results_service.UNVERIFIED_SHOWN_MAX, True, "available"))
+
+    def test_replayed_stale_signatures_are_rate_limited_without_touching_health(self):
+        t = tenant()
+        conn, secret = connect(t, ratePerMinute=1)          # abuse budget: 3 refused deliveries a minute
+        raw = json.dumps(ev("replay-1")).encode()
+        captured = signing.sign(secret, CLOCK[0] - signing.REPLAY_WINDOW_SECONDS - 60, raw)   # a genuine but old delivery
+        codes = [RESULTS.ingest(conn["id"], captured, raw) for _ in range(5)]
+        self.assertEqual([(o.status, o.body["code"]) for o in codes],
+                         [(401, "result_timestamp_stale")] * 3 + [(429, "result_rate_limited")] * 2)
+        with connection() as db:
+            first_error = db.execute("SELECT extract(epoch from last_error_at) FROM public.pr_result_connections WHERE id=%s", (conn["id"],)).fetchone()[0]
+        CLOCK[0] += 5
+        self.assertEqual(RESULTS.ingest(conn["id"], captured, raw).status, 429)   # still limited, and health is not rewritten
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT extract(epoch from last_error_at) FROM public.pr_result_connections WHERE id=%s", (conn["id"],)).fetchone()[0], first_error)
 
     def test_ac17_body_cap_and_unknown_connections(self):
         t = tenant()

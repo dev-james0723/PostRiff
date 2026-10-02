@@ -161,9 +161,9 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'trial',
       tone: 'info',
       title: trialDays > 0 ? `Trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}` : 'Trial has ended',
-      // Under Pricing v2 an ended trial continues on Free (drafts and publishing stay); only the legacy catalog stops.
+      // Under Pricing v2 an ended trial moves to Free: drafts and exports stay, publishing pauses (Free cannot publish).
       description: usageData?.catalogVersion === V2_CATALOG_VERSION
-        ? 'When it ends, this workspace continues on Free and keeps your drafts. See what Creator adds.'
+        ? 'When it ends, publishing pauses and this workspace moves to Free; your drafts stay. Creator keeps publishing on.'
         : 'Choose a plan to keep publishing.',
       href: '/app/account/billing',
       action: 'See plans'

@@ -201,7 +201,8 @@ def week_completion(week, first_week=None, variants=None):
     non-rejected slots. A slot is delivered by a verified publication or a confirmed, current assisted handoff: the
     person confirmed using the export of the revision its draft still has. An edit after the export means the
     exported text is not this one (stale), exactly as the first-week view decides it. `variants` are the workspace's
-    drafts ({id: draft} or a list); without them no handoff can be shown to be current, so none counts."""
+    drafts ({id: draft} or a list). Without them, or when a handoff's draft is not among them, the handoff's currency
+    is unknown: it neither counts nor reads as stale (`unknownHandoffs`), and the week cannot be complete."""
     scope = (first_week or {}).get("scope") or {}
     handoffs = (first_week or {}).get("handoffs") or {}
     if scope and scope.get("weekId") == week.get("id"):
@@ -215,14 +216,19 @@ def week_completion(week, first_week=None, variants=None):
     def confirmed(slot):
         return slot.get("status") != "published" and (handoffs.get(slot["id"]) or {}).get("state") == "user_confirmed_used"
 
-    def current(slot):
+    def currency(slot):
+        """'current', 'stale' or 'unknown' for a confirmed handoff (unknown: no drafts given, or its draft is not there)."""
         if variants is None:
-            return False
-        draft = drafts.get(slot.get("variantId"))
-        return draft is None or (handoffs.get(slot["id"]) or {}).get("variantRevision") == draft.get("revision")
+            return "unknown"
+        handoff = handoffs.get(slot["id"]) or {}
+        draft = drafts.get(slot.get("variantId") or handoff.get("variantId"))
+        if draft is None:
+            return "unknown"
+        return "current" if handoff.get("variantRevision") == draft.get("revision") else "stale"
 
+    states = [currency(s) for s in committed if confirmed(s)]
     verified = sum(1 for s in committed if s.get("status") == "published")
-    assisted = sum(1 for s in committed if confirmed(s) and current(s))
-    stale = sum(1 for s in committed if confirmed(s) and not current(s))
+    assisted = states.count("current")
     complete = bool(committed) and verified + assisted == len(committed)
-    return complete, {"basis": basis, "committed": len(committed), "verified": verified, "assisted": assisted, "staleHandoffs": stale}
+    return complete, {"basis": basis, "committed": len(committed), "verified": verified, "assisted": assisted,
+                      "staleHandoffs": states.count("stale"), "unknownHandoffs": states.count("unknown")}

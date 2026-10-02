@@ -593,6 +593,14 @@ class HostedWorkspaceService:
             existing = cur.fetchone()
             if existing and existing[1] in ("active", "past_due", "grace"):
                 raise AlphaError("This workspace already has a subscription. Change it from the billing portal.", 409)
+            if existing and existing[2] and existing[1] in ("cancelled", "expired"):
+                # Rafii marks a subscription ended on its own when past-due grace runs out, and maps Stripe's `unpaid`
+                # to expired while its invoice stays payable: a second subscription could then collect twice. Only an
+                # end Stripe confirms reopens checkout (providers without this read, i.e. dev fixtures, skip it).
+                confirm = getattr(provider, "subscription_status", None)
+                if confirm is not None and confirm(existing[2]) not in ("canceled", "incomplete_expired", "missing"):
+                    raise AlphaError("The earlier subscription is still open with Stripe. Settle or cancel it in the billing portal first.", 409,
+                                     code="earlier_subscription_open")
             # Rollback must not offer a legacy checkout that the retained Creator binding cannot fulfill.
             if existing and existing[3] == "creator-v1" and plan_terms_id != existing[3]:
                 raise AlphaError("Reenroll with this workspace's existing Creator package and paid variant.", 409)

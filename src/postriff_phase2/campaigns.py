@@ -550,7 +550,8 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     include = normalize_include(payload.get("include"))
     if ((include or {}).get("evergreen") or {}).get("seriesId"):
         from .series import model as series_model
-        series_model.followable(state, include["evergreen"]["seriesId"])
+        kept = (((existing or {}).get("include") or {}).get("evergreen") or {}).get("seriesId")
+        series_model.followable(state, include["evergreen"]["seriesId"], kept=kept)
     destinations = normalize_destinations(state, payload.get("destinations"))
     content = normalize_content_type(state, payload.get("contentType"))
     content_label, library = _content_display(payload.get("contentType"))

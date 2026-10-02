@@ -871,12 +871,13 @@ def mark_drafting(state, series_id, episode_id, task_id, occurrence_id, now):
     return True
 
 
-def followable(state, series_id):
+def followable(state, series_id, kept=None):
     """An automation may follow an existing, unarchived series (validated when the automation is saved). With the
-    series feature off (D-012: admission stops) a new follow is refused, but a follow an automation already has is
-    kept, so saving that automation still works while the person can clear the follow."""
+    series feature off (D-012: admission stops) a new follow is refused, but the follow *this* automation already has
+    (`kept`, its saved seriesId) is kept, so saving it still works while the person can clear the follow. Another
+    automation following the same series never lets a new one start."""
     if not enabled():
-        if followers(state, series_id):
+        if kept == series_id and followers(state, series_id):
             return find(state, series_id, required=False)
         require_enabled()
     campaign = find(state, series_id, required=False)

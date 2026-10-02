@@ -389,6 +389,19 @@ class StripePaymentProvider:
             raise AlphaError(failure + self._summary(body), 502)
         return body
 
+    def subscription_status(self, subscription_id):
+        """Stripe's own status for one subscription (read-only), or "missing" when Stripe has no such subscription."""
+        if not isinstance(subscription_id, str) or not re.fullmatch(r"sub_[A-Za-z0-9_-]{1,250}", subscription_id):
+            raise AlphaError("Unknown earlier subscription.", 409)
+        from urllib.parse import quote
+        response = self.transport("GET", API + "/subscriptions/" + quote(subscription_id, safe=""), headers={"Authorization": "Bearer " + self.secret_key})
+        body = response.get("body")
+        if response.get("status") == 404:
+            return "missing"
+        if response.get("status") != 200 or not isinstance(body, dict) or not isinstance(body.get("status"), str):
+            raise AlphaError("Stripe could not confirm the earlier subscription has ended." + self._summary(body), 502)
+        return body["status"]
+
     @staticmethod
     def _summary(body):
         """Short, safe hint: Stripe's error code/type only — never its message, never request data."""

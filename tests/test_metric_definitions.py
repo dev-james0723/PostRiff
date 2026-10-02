@@ -128,7 +128,8 @@ class WeekCompletionTest(unittest.TestCase):
         first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]},
                       "handoffs": {"b": {"state": "user_confirmed_used", "variantId": "v-b", "variantRevision": 3}}}
         complete, parts = m.week_completion(self.week, first_week, self.drafts)
-        self.assertEqual((complete, parts), (True, {"basis": "frozen_scope", "committed": 2, "verified": 1, "assisted": 1, "staleHandoffs": 0}))
+        self.assertEqual((complete, parts), (True, {"basis": "frozen_scope", "committed": 2, "verified": 1, "assisted": 1, "staleHandoffs": 0,
+                                                     "unknownHandoffs": 0}))
 
     def test_an_export_alone_never_completes_a_week(self):
         first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]}, "handoffs": {"b": {"state": "export_ready", "variantId": "v-b", "variantRevision": 3}}}
@@ -142,8 +143,10 @@ class WeekCompletionTest(unittest.TestCase):
         complete, parts = m.week_completion(self.week, first_week, self.drafts)
         self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"]), (False, 0, 1))
         self.assertTrue(m.week_completion(self.week, first_week, {"v-b": {"id": "v-b", "revision": 2}})[0])
-        complete, parts = m.week_completion(self.week, first_week)                       # drafts unknown: not counted
-        self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"]), (False, 0, 1))
+        complete, parts = m.week_completion(self.week, first_week)                       # drafts unknown: unknown, not stale
+        self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"], parts["unknownHandoffs"]), (False, 0, 0, 1))
+        complete, parts = m.week_completion(self.week, first_week, {"v-other": {"id": "v-other", "revision": 2}})   # its draft is gone
+        self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"], parts["unknownHandoffs"]), (False, 0, 0, 1))
 
 
 if __name__ == "__main__":

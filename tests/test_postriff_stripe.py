@@ -40,6 +40,35 @@ def provider(transport=None, tolerance=300):
     return StripePaymentProvider("sk_test_x", SECRET, transport=transport, clock=lambda: NOW, tolerance=tolerance)
 
 
+class EarlierSubscriptionStatus(unittest.TestCase):
+    """Re-enrollment reads the earlier subscription from Stripe (GET only) so a second one never collects twice."""
+
+    def provider(self, response):
+        seen = []
+        def transport(method, url, headers=None, form=None):
+            seen.append((method, url, form))
+            return response
+        return StripePaymentProvider("sk_test_x", "whsec_x", transport=transport), seen
+
+    def test_reads_stripe_status_and_treats_unknown_subscriptions_as_ended(self):
+        provider, seen = self.provider({"status": 200, "body": {"id": "sub_1", "status": "past_due"}})
+        self.assertEqual(provider.subscription_status("sub_1"), "past_due")
+        self.assertEqual(seen, [("GET", "https://api.stripe.com/v1/subscriptions/sub_1", None)])
+        missing, _ = self.provider({"status": 404, "body": {"error": {"code": "resource_missing"}}})
+        self.assertEqual(missing.subscription_status("sub_gone"), "missing")
+
+    def test_failure_or_bad_id_never_reads_as_ended(self):
+        failing, _ = self.provider({"status": 500, "body": {}})
+        with self.assertRaises(AlphaError) as caught:
+            failing.subscription_status("sub_1")
+        self.assertEqual(caught.exception.status, 502)
+        provider, seen = self.provider({"status": 200, "body": {"status": "canceled"}})
+        for bad in ("cus_1", "sub_../x", "", None):
+            with self.assertRaises(AlphaError):
+                provider.subscription_status(bad)
+        self.assertEqual(seen, [])
+
+
 class Signatures(unittest.TestCase):
     body = stripe_event("invoice.paid", {"subscription_details": {"metadata": {"workspace_id": "w"}}})
 

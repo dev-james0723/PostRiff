@@ -265,7 +265,12 @@ _EVENT_JOINS = (f"FROM public.pr_result_events e {_VERSION} {_REVERSAL} "
                 "LEFT JOIN public.pr_tracking_links l ON l.workspace_id=e.workspace_id AND l.id=v.link_id")
 
 
-def _event_view(r):
+def _audit_ref(connection_id):
+    """A stable, non-reversible reference for audit rows: admins can follow one connection's history, never its endpoint."""
+    return "conn_" + hashlib.sha256(str(connection_id).encode()).hexdigest()[:16]
+
+
+def _event_view(r, show_connection=False):
     (ident, provenance, connection_id, received, test, rtype, occurred, minor, currency, quantity, link_id, campaign, attribution,
      definition, note, amendments, reversal_id, reversed_at, original_occurred, connection_label, producer, link_label, slug) = r
     return {"id": ident, "provenance": provenance, "type": rtype, "occurredAt": float(occurred), "receivedAt": float(received),
@@ -273,7 +278,9 @@ def _event_view(r):
             "amount": {"minor": int(minor), "currency": currency} if minor is not None else None, "quantity": quantity,
             "linkId": link_id, "link": {"label": link_label, "slug": slug} if link_id and slug else None, "campaignRef": campaign,
             "attribution": attribution, "attributionDefinition": definition, "note": note if provenance == "user_declared" else None,
-            "connectionId": connection_id, "connection": {"label": connection_label, "producer": producer} if connection_id else None,
+            # The connection id is the webhook endpoint (contract §1): only the owner may learn it.
+            "connectionId": connection_id if show_connection else None,
+            "connection": {"label": connection_label, "producer": producer} if connection_id else None,
             "test": bool(test), "revision": 1 + int(amendments), "amended": int(amendments) > 0,
             "status": "reversed" if reversal_id else "active", "reversedAt": _num(reversed_at), "reversalId": reversal_id,
             "editable": provenance == "user_declared" and not reversal_id}
@@ -536,7 +543,7 @@ class ResultsService:
             cur.execute(f"SELECT {_EVENT_COLUMNS} {_EVENT_JOINS} WHERE e.workspace_id=%s AND e.kind='event'{where} "
                         "ORDER BY v.occurred_at DESC,e.id DESC LIMIT %s", (workspace_id, *params, limit + 1))
             rows = cur.fetchall()
-        items = [_event_view(r) for r in rows[:limit]]
+        items = [_event_view(r, show_connection=member.allows("owner")) for r in rows[:limit]]
         cursor = encode_cursor(items[-1]["occurredAt"], items[-1]["id"]) if len(rows) > limit else None
         return {"items": items, "nextCursor": cursor, "limit": limit, "asOf": self.clock(), "definition": model.ASSOCIATION_DEFINITION,
                 "canEdit": member.allows("edit")}
@@ -733,7 +740,7 @@ class ResultsService:
             ident = cur.fetchone()[0]
             self._remember(cur, workspace_id, key, "result_connection_create", digest, ident)
             from ..hosted import audit
-            audit(cur, workspace_id, principal, "result_connection.created", ident, {"producer": producer})
+            audit(cur, workspace_id, principal, "result_connection.created", _audit_ref(ident), {"producer": producer})
             return {"connection": self._connection(cur, workspace_id, ident, now), "secret": secret, "secretShown": True, "replayed": False}
 
     def connection_action(self, workspace_id, token, connection_id, action, payload):
@@ -784,7 +791,7 @@ class ResultsService:
                             "updated_at=to_timestamp(%s),revision=revision+1 WHERE workspace_id=%s AND id=%s", (_ms(now), _ms(now), workspace_id, ident))
             self._remember(cur, workspace_id, key, operation, digest, ident)
             from ..hosted import audit
-            audit(cur, workspace_id, principal, f"result_connection.{action}d" if action != "rotate" else "result_connection.rotated", ident, {})
+            audit(cur, workspace_id, principal, f"result_connection.{action}d" if action != "rotate" else "result_connection.rotated", _audit_ref(ident), {})
             return {"connection": self._connection(cur, workspace_id, ident, now), "secret": secret, "secretShown": secret is not None, "replayed": False}
 
     # -- tracking links --------------------------------------------------------------------------------------------------
@@ -983,14 +990,25 @@ class ResultsService:
             accepted.append(self._decrypt(previous, previous_key))
         accepted = [s for s in accepted if s]
         if not accepted:   # the connection can't verify anything: a real problem for its owner, whoever sent this
-            return _refused(503, "results_unavailable", "This connection can't verify deliveries right now.", "secret_unavailable")
+            return self._limited(cur, connection_id, per_minute) or _refused(
+                503, "results_unavailable", "This connection can't verify deliveries right now.", "secret_unavailable")
         try:
             signing.verify(header, raw, accepted, now)
         except signing.SignatureError as error:
             if error.code == "timestamp_outside_window":   # signed with the secret, outside the window: the producer's clock (or a replay)
-                return _refused(401, "result_timestamp_stale", "The signature timestamp is outside the five-minute window.", error.code)
+                return self._limited(cur, connection_id, per_minute) or _refused(
+                    401, "result_timestamp_stale", "The signature timestamp is outside the five-minute window.", error.code)
             return self._unverified(cur, connection_id, per_minute)
         return None
+
+    @staticmethod
+    def _limited(cur, connection_id, per_minute):
+        """The abuse budget for refusals that are not proof of a current delivery (a replayed or stale signature, a
+        connection that can't verify): over it, a plain 429 that never touches the connection's health."""
+        if _budget(cur, f"results:unverified:{connection_id}", per_minute * DELIVERY_BUDGET_FACTOR, 60):
+            return None
+        return Delivery(429, {"error": "Too many refused deliveries for this connection. Retry in a minute.", "code": "result_rate_limited"},
+                        [("Retry-After", "60")])
 
     @staticmethod
     def _unverified(cur, connection_id, per_minute):
