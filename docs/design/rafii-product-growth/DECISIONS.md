@@ -84,3 +84,9 @@ Until decided, the results flag (`RAFII_RESULTS_ENABLED`) stays off in productio
 - **Semantic merge fixes:** Founder's valued price fields and Pricing v2's `priceId` in `billing_stripe` were reconciled. `growth_events` now delegates to Founder's `product_events` writer, which refuses non-UUID workspaces and writes to `pr_product_events` (025, already in production).
 - **Pending migrations:** Founder's 049 and 051–070 are files that no database has applied yet. The program's migration runner refuses any pending file it has not reviewed, so in production either Founder's migrations are applied first by their owner, or James approves one combined allowed set.
 - **Rollback target:** now `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c`.
+
+**D-029 · What the agent may record for a person (review follow-up).** After the review, no agent tool records a person's acceptance, approval or decision. `visual_pack_export` no longer accepts, `strategy_decide` is read-only, and `brief_action` refuses `accept`; each returns `approval_required` with the place to act. Two tools still write on the person's instruction, and are kept deliberately:
+- `result_declare` records only a result the person states (type, time, amount if said). It is labelled "You reported", reversible from Analytics and audited.
+- `first_week_start` passes `consent: true`, because the person handed the agent the text and asked to start from it.
+
+Both act on an explicit instruction rather than deciding for the person. The existing production tool `trend_opportunity_accept` records acceptance the same way. It predates this program and is not changed here; its owner should review it against the same rule.

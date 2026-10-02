@@ -19,7 +19,6 @@ import { settingsOf } from '@/features/agent/use-channel-languages';
 import { useModelChoice } from '@/features/agent/use-model';
 import { ChannelBloomDialog, toFolderAccounts } from '@/features/channels/channel-bloom';
 import { SeriesFollowSelect } from '@/features/library/series/series-follow-select';
-import { GrowthFeatureGate } from '@/lib/growth-v2/features';
 import { ApiError } from '@/lib/api/client';
 import { useModels, useSnapshot } from '@/lib/api/hooks';
 import type { AutomationWorkflow, RaffiCampaign, RecurringDestination, RecurringSchedule, Snapshot } from '@/lib/api/types';
@@ -571,11 +570,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         old, never the same one twice
                       </label>
                     )}
-                    {evergreenDays !== null && (
-                      <GrowthFeatureGate feature='series'>
-                        <SeriesFollowSelect value={evergreenSeriesId} onChange={setEvergreenSeriesId} />
-                      </GrowthFeatureGate>
-                    )}
+                    {/* Not gated: it gates itself, so a follow saved earlier can still be cleared while Series is off. */}
+                    {evergreenDays !== null && <SeriesFollowSelect value={evergreenSeriesId} onChange={setEvergreenSeriesId} />}
                   </div>
                 )}
                 {sources.length > 0 && (
