@@ -88,6 +88,23 @@ is active until its row has an approval reference.
 | Visual packs (export only) | production | internal workspace first | none (server rendering) | — | not_started |
 | Carousel queueing | production | — | a verified multi-image publisher | — | blocked (no verified provider) |
 
+## 4a. Authorization requests (each one exact; nothing here runs until James approves it)
+
+Each request names what would run. An approval covers only that request. All flags stay off unless a later request
+turns one on.
+
+| # | Request | What would run | Reversible by |
+|---|---|---|---|
+| A1 | Staging migrations | `RAFII_GROWTH_MIGRATION_DSN=<staging migration DSN> python scripts/product_growth_release_migrate.py plan --target staging --plan staging-plan.json`, review the plan, then `apply` with that plan. It covers 047, 048, 050, 080, 081, 083, 084, 087. Founder's 049 and 051–070 must be applied first by their owner, or approved as one combined set. | Additive only. Flags off keeps every reader inert. |
+| A2 | Staging bucket | Create the private Supabase Storage bucket `rafii-source-uploads` (≤ 30 MB; PDF/WAV/MP3/M4A/OGG) in the staging project. | Delete the empty bucket. |
+| A3 | Staging acceptance run | On staging, with the flags turned on one at a time: the slice journeys against the real staging database, plus the R-NFR-04 bounded-read measurement (p95 at 10 concurrent sessions). | Flags off. |
+| A4 | Production deploy of PR #87 | Merge PR #87 into `consumer-saas` and let Vercel deploy production, with every program flag off and `NEXT_PUBLIC_PRICING_CATALOG` unset. This ships Pricing v2 and Inbox v1 code, both dark. | Roll back to `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c`. |
+| A5 | Production migrations | The same runner with `--target production`, after A1–A4. | Additive. Flags off. |
+| A6 | Production bucket | As A2, in production. | Delete the empty bucket. |
+| A7+ | Per-capability activation | One request per row of §4 (environment, allowlist, flags, budget/consent references). Examples: First Week Ready for an internal workspace; results for one customer-like workspace. | That row's flags off. |
+| C1 | Commercial | Live Stripe Prices and Creator checkout (Pricing v2 runbook), `POSTRIFF_CREDITS_ENABLED`, the static catalog update and redeploy, and the Free platform-preview policy. Also needs product decisions: image pricing in credits (D-026), Creator chat credit authority, and the failed-preview rule (D-008). | Checkout off. Existing subscribers keep their terms. |
+| P1 | Providers | A transcription route (provider, model, budget) for raw audio (D-014). The tracking-link destination policy (D-027). | Route unset. Results flag off. |
+
 ## 5. Rollback
 
 1. Disable admission of new affected work with the flags above; never erase pending jobs, ledger holds, webhook events,
