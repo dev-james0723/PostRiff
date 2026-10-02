@@ -21,7 +21,7 @@ const read = (path) => readFileSync(join(SRC, path), 'utf8');
 /** Load a TypeScript module with chosen imports replaced (`stubs[spec]`); everything else resolves like the app. */
 function load(file, stubs = {}, cache = new Map()) {
   if (cache.has(file)) return cache.get(file).exports;
-  const out = ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, jsx: ts.JsxEmit.ReactJSX } });
+  const out = ts.transpileModule(readFileSync(file, 'utf8'), { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, jsx: ts.JsxEmit.ReactJSX } });
   const mod = { exports: {} };
   cache.set(file, mod);
   const local = (spec) => {

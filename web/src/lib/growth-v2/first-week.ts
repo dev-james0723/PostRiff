@@ -28,3 +28,85 @@ export function createFirstWeekApi(getToken: TokenSource) {
 }
 
 export type FirstWeekApi = ReturnType<typeof createFirstWeekApi>;
+
+/* ---------- pure helpers for the first-week panel ---------- */
+
+/** The languages a first-week draft is saved in (`first_week/service.py LANGUAGES`). */
+export const DRAFT_LANGUAGES = ['en', 'zh-HK', 'zh-TW', 'zh-CN', 'other'] as const;
+export type DraftLanguage = (typeof DRAFT_LANGUAGES)[number];
+
+export const LANGUAGE_LABELS: Record<DraftLanguage, string> = {
+  en: 'English',
+  'zh-HK': '繁體中文（香港）',
+  'zh-TW': '繁體中文（台灣）',
+  'zh-CN': '简体中文',
+  other: 'Another language'
+};
+
+// Common characters written differently in Simplified and Traditional Chinese: enough to tell a draft's script.
+const SIMPLIFIED = new Set('这们说时会为来个对过后么还没发学问题实现让经关开国东车长门见头话认识从样点气体进动种爱书买卖写读钱练习乐听讲课师边总给办专业让'.split(''));
+const TRADITIONAL = new Set('這們說時會為來個對過後麼還沒發學問題實現讓經關開國東車長門見頭話認識從樣點氣體進動種愛書買賣寫讀錢練習樂聽講課師邊總給辦專業讓'.split(''));
+const ENGLISH = /\b(the|and|to|of|is|are|you|your|for|in|with|my|it|this|that|on|i|we|a|an|be|not|but|how|what)\b/gi;
+
+/**
+ * The language a pasted draft is written in: the text decides first (Chinese script, Simplified or Traditional;
+ * Japanese and Korean are "other"), then the person's own language tag, never a fixed English default.
+ */
+/** A person's language tag as a draft language (`zh-Hant-HK`, `yue` → zh-HK; `zh-TW` → zh-TW; `zh-Hans`, `zh` → zh-CN). */
+export function languageFromTag(preferred?: string | null): DraftLanguage {
+  const tag = (preferred ?? '').trim().toLowerCase();
+  if (!tag || /^en\b/.test(tag)) return 'en';
+  if (/^zh-(hant-)?tw\b/.test(tag)) return 'zh-TW';
+  if (/^(zh-(hant|hk|mo)|yue)\b/.test(tag)) return 'zh-HK';
+  if (/^zh\b/.test(tag)) return 'zh-CN';
+  return 'other';
+}
+
+export function draftLanguage(text: string, preferred?: string | null): DraftLanguage {
+  const own = languageFromTag(preferred);
+  const chars = Array.from(text);
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text)) return 'other';
+  const han = chars.filter((c) => /\p{Script=Han}/u.test(c)).length;
+  const latin = chars.filter((c) => /\p{Script=Latin}/u.test(c)).length;
+  if (han > 0 && han * 2 >= latin) {
+    const simplified = chars.filter((c) => SIMPLIFIED.has(c)).length;
+    const traditional = chars.filter((c) => TRADITIONAL.has(c)).length;
+    if (simplified > traditional) return 'zh-CN';
+    if (traditional > simplified) return own === 'zh-TW' ? 'zh-TW' : 'zh-HK';
+    return own === 'zh-CN' || own === 'zh-TW' ? own : 'zh-HK';
+  }
+  if (latin === 0) return own;   // nothing written yet (or no letters): the person's own language
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const english = (text.match(ENGLISH) ?? []).length;
+  if (english >= Math.max(1, Math.round(words * 0.08))) return 'en';
+  // Latin script without English function words: another language for someone whose own language is neither
+  // English nor Chinese; otherwise English (Rafii's draft languages offer no other Latin-script choice).
+  return own === 'other' ? 'other' : 'en';
+}
+
+/**
+ * True when a request ended without the server's answer (the client timeout, an abort or a dropped connection): the
+ * server may still be working, so the UI must check again instead of saying it stopped.
+ */
+export function unknownOutcome(error: unknown): boolean {
+  const name = error instanceof Error || (typeof DOMException !== 'undefined' && error instanceof DOMException) ? (error as Error).name : '';
+  return name === 'TimeoutError' || name === 'AbortError' || name === 'TypeError';
+}
+
+/** What a slot will cost or cost, in words (R-FWR-02: every slot shows its cost state). Null: nothing to say. */
+export function slotCostText(
+  slot: { costState: string | null; status: string; committed: boolean; draft: { origin: string | null } | null },
+  billingMode: 'free_preview' | 'managed_credits' | 'legacy_allowances'
+): string | null {
+  if (slot.costState === 'requires_upgrade') return 'Free: write it yourself, or upgrade to have it drafted';
+  if (slot.costState === 'over_limit') return 'Over this week’s credit limit';
+  if (slot.costState === 'insufficient_credits') return 'Not enough credits; nothing was charged';
+  if (slot.draft) {
+    const origin = slot.draft.origin ?? '';
+    return origin.startsWith('continuation:') || origin.startsWith('first_week:') ? 'Your words · no cost' : 'Drafted by Rafii';
+  }
+  if (!slot.committed || slot.status !== 'planned') return null;
+  if (billingMode === 'managed_credits') return 'Drafting uses credits within this week’s limit';
+  if (billingMode === 'legacy_allowances') return 'Drafting uses your plan’s writing allowance';
+  return 'Free: write it yourself, or upgrade to have it drafted';
+}

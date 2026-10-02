@@ -34,7 +34,7 @@ const STUB = new Proxy(function stub() {}, { get: (_target, key) => (key === '__
 /** Load a TypeScript module the way the app sees it; `stub(spec)` may replace an import the checks never call. */
 function load(file, stub = () => false, cache = new Map()) {
   if (cache.has(file)) return cache.get(file).exports;
-  const out = ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, jsx: ts.JsxEmit.ReactJSX } });
+  const out = ts.transpileModule(readFileSync(file, 'utf8'), { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, jsx: ts.JsxEmit.ReactJSX } });
   const mod = { exports: {} };
   cache.set(file, mod);
   const local = (spec) => {

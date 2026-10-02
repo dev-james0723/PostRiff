@@ -43,8 +43,11 @@ export interface FirstWeekView {
   revision: number;
   step: FirstWeekStep;
   billingMode: BillingMode;
-  missingContext: ('purpose' | 'audience')[];
-  context: { purpose: string | null; audience: string | null; mode: string | null };
+  /** `subject`: a niche, business or hybrid brand must say what the posts draw from (the server refuses without it). */
+  missingContext: ('purpose' | 'audience' | 'subject')[];
+  context: { purpose: string | null; audience: string | null; mode: string | null; subject?: string | null };
+  /** `first_week_only`: the first week's limit drafts this week once; later weeks wait until weekly drafting is turned on. */
+  weeklyDrafting?: 'first_week_only' | 'recurring' | null;
   source: { id: string; origin: string | null } | null;
   draft: { variantId: string; revision: number; text: string; platform: string; language: string; accepted: boolean; acceptedRevision: number | null } | null;
   week: { id: string; weekOf: string; state: string; blockedReason: string | null } | null;
