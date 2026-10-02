@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from postriff_phase2.agent_runtime_v2.contracts import ToolSpec, READ, CREATE_DRAFT, empty_result, new_trace_id
 from .auth import CAPABILITIES, ControlError
 from .investigations import effective_quality, evaluate_checks, plan_intent, ADAPTER_VERSION
+from . import ci_evidence
 
 # The runtime pack ships inside the package; the tech-pack docs copy remains the fallback for older checkouts.
 PACK_CANDIDATES = (Path(__file__).resolve().parent / 'pack',
@@ -106,6 +107,28 @@ def engineering_state(rows, sha, required_count=0):
     if all(row.get('exact_sha') == sha and row.get('attested') is True and row.get('conclusion') == 'success' for row in checks):
         return 'checks_passed'
     return 'suspected'
+
+
+# Required-check manifests an Engineering verdict may count: an operator-admitted manual capture (052, local) or the CI
+# collector's attested manifest (071, ci_evidence). Synthetic and unadmitted provider captures never supply a count.
+# web/src/features/founder/advanced/engineering-model.ts mirrors this list.
+TRUSTED_MANIFEST_PROVENANCE = ('admitted_operational', ci_evidence.PROVENANCE)
+
+
+def manifest_count(summary):
+    """The required count a trusted manifest summary supplies, or None."""
+    count = (summary.get('qualification') or {}).get('requiredCount') if summary and summary.get('trusted') else None
+    return count if type(count) is int and count > 0 else None
+
+
+def observed_epoch(row):
+    """A row's observed_at as epoch seconds, 0 when absent or unreadable (the web's `Date.parse(...) || 0`)."""
+    value = row.get('observed_at')
+    try:
+        stamp = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return 0
+    return (stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)).timestamp()
 
 
 class QueryService:
@@ -204,10 +227,69 @@ class QueryService:
     def snapshots(self):
         return self.store.check_snapshots() if hasattr(self.store,'check_snapshots') else []
 
+    def snapshot_summary(self, row):
+        """One GET /engineering/checks entry. A CI manifest (071) is re-derived from its per-check entries by
+        ci_evidence.summarize; a manual capture (052) keeps evaluate_checks. `trusted`: engineering_state may use the
+        manifest's required count (trusted provenance and, for CI, a payload that re-derives cleanly)."""
+        payload=row['payload']
+        if row['provenance']==ci_evidence.PROVENANCE or (isinstance(payload,dict) and payload.get('adapterVersion')==ci_evidence.ADAPTER_VERSION):
+            qualification=ci_evidence.summarize(payload,row['exact_sha'])
+            trusted=qualification.pop('valid') and row['provenance']==ci_evidence.PROVENANCE
+            coverage=payload.get('coverage') if isinstance(payload,dict) else None
+        else:
+            qualification=evaluate_checks(payload['workflowRuns'],payload['requiredManifest'],payload['coverage']['complete'])
+            trusted,coverage=row['provenance']=='admitted_operational',payload['coverage']
+        return dict(id=row['id'],exactSha=row['exact_sha'],provenance=row['provenance'],observedAt=row['observed_at'],trusted=trusted,qualification=qualification,coverage=coverage)
+
+    def safe_summary(self, row):
+        """snapshot_summary for the verdict: a malformed manual capture supplies no count instead of failing the read."""
+        try: return self.snapshot_summary(row)
+        except (ControlError, KeyError, TypeError, ValueError, AttributeError):
+            return dict(id=row.get('id'),exactSha=row.get('exact_sha'),provenance=row.get('provenance'),observedAt=row.get('observed_at'),trusted=False,
+                        qualification={'qualification':'invalid_manifest','requiredCount':None},coverage=None)
+
+    @staticmethod
+    def manifest_for(sha, summaries):
+        """The newest manifest of a trusted provenance for this exact SHA (summaries are newest first), or None. An
+        invalid newest manifest is not skipped for an older one: it supplies no count, so the SHA stays 'suspected'."""
+        return next((item for item in summaries if item['exactSha']==sha and item['provenance'] in TRUSTED_MANIFEST_PROVENANCE),None)
+
+    def engineering(self):
+        """GET /engineering. A stage claim survives only on a check row of a SHA whose newest trusted manifest qualifies it
+        under engineering_state; every other claim reads 'suspected' with the stage it claimed. `verdict` is that rule
+        for the newest exact SHA a required check was observed on (the web's engineeringVerdict mirrors it)."""
+        rows=self.store.read('engineering')
+        summaries=[self.safe_summary(row) for row in self.snapshots()]
+        verdicts={}
+        for row in rows:
+            sha=row.get('exact_sha')
+            if row.get('kind')!='check' or not row.get('required') or not isinstance(sha,str) or sha in verdicts: continue
+            manifest=self.manifest_for(sha,summaries)
+            count=manifest_count(manifest)
+            on_sha=[item for item in rows if item.get('exact_sha')==sha]
+            verdicts[sha]=dict(sha=sha,state=engineering_state(on_sha,sha,count or 0),requiredCount=count,
+                               observedRequired=sum(1 for item in on_sha if item.get('kind')=='check' and item.get('required')),
+                               manifestId=manifest['id'] if manifest else None,manifestProvenance=manifest['provenance'] if manifest else None)
+        for row in rows:
+            if row['state'] in ('checks_passed','merged','deployed','production_verified'):
+                if row['state']=='checks_passed' and row['kind']=='check' and verdicts.get(row.get('exact_sha'),{}).get('state')=='checks_passed':
+                    row['qualification']='trusted_required_check_manifest_qualified'
+                    continue
+                row['observed_stage']=row['state']
+                row['state']='suspected'
+                row['qualification']='trusted_required_check_manifest_not_qualified' if row['kind']=='check' else 'trusted_stage_evidence_not_qualified'
+        required=sorted((row for row in rows if row.get('kind')=='check' and row.get('required')),key=observed_epoch,reverse=True)
+        verdict=verdicts.get(required[0].get('exact_sha')) if required else None
+        return dict(evidence=rows,verdict=verdict or dict(sha=required[0].get('exact_sha') if required else None,state='suspected',requiredCount=None,
+                                                          observedRequired=0,manifestId=None,manifestProvenance=None),
+                    stages=['suspected','reproduced','candidate_fix','checks_passed','merged','deployed','production_verified'],checksDispatchEnabled=False,patchEnabled=False,_dataState='partial')
+
     def snapshot_rows(self, snapshot_id, query, principal):
         self.require(principal,'engineering.read')
         capture=self.store.check_snapshot(identifier(snapshot_id))
         if not capture: raise ControlError('SOURCE_UNAVAILABLE',404)
+        # A CI manifest (071) holds per-check verdicts, not the workflow-run list this metric is computed from.
+        if not isinstance(capture,dict) or capture.get('adapterVersion')!=ADAPTER_VERSION: raise ControlError('VALIDATION_FAILED',400)
         if query['metricIds']!=['check_failures'] or query['comparison']!='none' or query['groupBy']!=['suite','failure_class']: raise ControlError('VALIDATION_FAILED',400)
         if capture['provenance']=='synthetic' and (not self.synthetic or principal['session']['environment']!='local'): raise ControlError('SCOPE_DENIED')
         observed=datetime.fromisoformat(capture['observedAt'])
@@ -242,8 +324,8 @@ class QueryService:
             return self.metric_query(body['query'],principal,request_id,body['snapshotId'])
         if path == '/engineering/checks':
             self.require(principal,'engineering.read')
-            snapshots=[dict(id=row['id'],exactSha=row['exact_sha'],provenance=row['provenance'],observedAt=row['observed_at'],qualification=evaluate_checks(row['payload']['workflowRuns'],row['payload']['requiredManifest'],row['payload']['coverage']['complete']),coverage=row['payload']['coverage']) for row in self.snapshots()]
-            return dict(snapshots=snapshots,delivery=self.delivery,_dataState='partial',readOnly=True)
+            snapshots=[self.snapshot_summary(row) for row in self.snapshots()]
+            return dict(snapshots=snapshots,trustedProvenance=list(TRUSTED_MANIFEST_PROVENANCE),delivery=self.delivery,_dataState='partial',readOnly=True)
         if path == '/copilot/turns': return self.copilot_turn(body, principal)
         if path == '/sources/health':
             self.require(principal,'control.read')
@@ -270,13 +352,7 @@ class QueryService:
             return dict(workspaces=self.store.read('workspaces'), limit=200, scope='safe_metadata',coverage={'complete':False,'populationTotal':None},_dataState='partial')
         if path == '/engineering':
             self.require(principal, 'engineering.read')
-            rows=self.store.read('engineering')
-            for row in rows:
-                if row['state'] in ('checks_passed','merged','deployed','production_verified'):
-                    row['observed_stage']=row['state']
-                    row['state']='suspected'
-                    row['qualification']='trusted_required_check_manifest_not_qualified' if row['kind']=='check' else 'trusted_stage_evidence_not_qualified'
-            return dict(evidence=rows, stages=['suspected','reproduced','candidate_fix','checks_passed','merged','deployed','production_verified'], checksDispatchEnabled=False, patchEnabled=False, _dataState='partial')
+            return self.engineering()
         if path.startswith('/metrics/receipts/'):
             self.require(principal, 'metrics.query')
             receipt=self.authorized_receipt(path.removeprefix('/metrics/receipts/'),principal)

@@ -1,0 +1,69 @@
+name: Founder engineering evidence
+# Records exact-SHA CI evidence for Founder Admin › Advanced › Engineering (migration 071). Each run judges the current tip
+# of consumer-saas (the commit Vercel deploys to production) with src/rafii_control/ci_evidence.py and writes
+# rafii_control.engineering_evidence rows plus a 'ci_attested' required-check manifest through a dedicated login whose DSN
+# is the repository secret RAFII_ENGINEERING_INGEST_DSN. That login is a NOINHERIT member of the NOLOGIN role
+# rafii_control_ingest, which may only write check evidence and CI manifests in its session environment.
+# - Secret absent: a "not configured" notice and a read-only dry run; the job passes.
+# - Secret present: the job fails when GitHub cannot be read, the login is privileged or inherits the role, or the write
+#   fails. Only fixed codes and exception classes are printed, never the DSN, the token or a server message.
+#
+# Trust boundary (the repository is public):
+# - Evidence is read only from GitHub's REST API with this job's GITHUB_TOKEN, which is read-only (permissions below). The
+#   job never checks out, downloads, or executes anything from a triggering run or pull request: no artifacts, logs,
+#   outputs, PR text or caches. Checkout is consumer-saas itself (the merged commit on push, the default branch otherwise).
+# - It never runs for pull_request events. workflow_run executes this default-branch definition with secrets even when the
+#   finished run came from a fork, so the job proceeds only for a same-repository push run on consumer-saas; fork and pull
+#   request runs are skipped before any step, so they never reach the secret. workflow_dispatch from another branch is
+#   skipped too, and ci_evidence refuses to write outside consumer-saas runs of this repository.
+# - A check is attested only for the exact SHA, or for the same-repository merged PR head whose tree GitHub shows is
+#   identical to the exact SHA's and already contained consumer-saas as it was before the merge. Workflows are pinned by
+#   file path and job id, Vercel by its own bot's status. See the ci_evidence module docstring for the full rule.
+# - Repository secrets are readable by any workflow a collaborator with write access pushes; scoping the secret to a
+#   GitHub environment limited to consumer-saas is a further hardening step outside this file.
+on:
+  push:
+    branches: [consumer-saas]
+  workflow_run:
+    workflows: ['Rafii local release gates', 'Rafii Control foundation', 'Rafii browser scenes', 'Founder admin browser']
+    types: [completed]
+    branches: [consumer-saas]
+  schedule:
+    # Vercel's production status and late check runs arrive after the push; the tip is re-judged every 15 minutes.
+    - cron: '4,19,34,49 * * * *'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  statuses: read
+concurrency:
+  group: founder-engineering-evidence
+  cancel-in-progress: false
+jobs:
+  record:
+    if: >-
+      github.repository == 'dev-james0723/PostRiff' &&
+      github.ref == 'refs/heads/consumer-saas' &&
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.event == 'push' &&
+         github.event.workflow_run.head_branch == 'consumer-saas' &&
+         github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - name: Install the pinned PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]==3.3.5'
+      - name: Record exact-SHA CI evidence for the consumer-saas tip
+        env:
+          RAFII_ENGINEERING_INGEST_DSN: ${{ secrets.RAFII_ENGINEERING_INGEST_DSN }}
+          RAFII_ENGINEERING_ENVIRONMENT: production
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONPATH: src
+        run: python -m rafii_control.ci_evidence
