@@ -31,7 +31,8 @@ class CatalogGate(unittest.TestCase):
         self.assertEqual((shown['monthlyCredits'],shown['entitlements']['monthlyCredits'],shown['checkout']),(3500,3500,'available'))
     def test_rollback_catalog_does_not_reopen_migrated_legacy_sale(self):
         shown=plan_pricing.public_catalog(Cursor(True),False)
-        self.assertEqual(shown['plans'][0]['checkout'],'not_yet_available')
+        self.assertEqual([p['plan'] for p in shown['plans']],['free','creator'])
+        self.assertEqual(shown['plans'][1]['checkout'],'not_yet_available')
 
 class PaymentCursor:
     def __init__(self, sale): self.sale=sale;self.row=None;self.queries=[]

@@ -319,32 +319,28 @@ def _plan_view(row, *, v2, variant=None, credits_enabled=None):
 
 
 def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
-    """The plans a new customer may see for sale, projected from the server catalog rows.
+    """Public display stays Free + Creator while activation independently gates purchases.
 
-    Under v2 only `catalog_state='public'` terms appear (Free + Creator); hidden (Starter, Studio v2) and legacy
-    packages never do, and Creator shows the default variant's amount. Under legacy the existing new-sale packages
-    appear exactly as the current checkout sells them. No client value can change an amount or a Price id.
-    `credits_enabled=False` (POSTRIFF_CREDITS_ENABLED off) keeps a credit plan out of sale; None means not known here."""
-    if pricing_v2_enabled:
-        cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
-        if not cur.fetchone()[0]:   # flag on before migration 048: say so rather than show a wrong catalog
-            raise AlphaError('The pricing catalog is not available yet.', 503, code='catalog_unavailable')
-        cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
-                    "WHERE catalog_state='public' AND status IN ('active','proposed') ORDER BY price_cents,id")
-        rows = cur.fetchall()
-        default = PlanPricing.variant(cur, DEFAULT_VARIANT)
-        plans = [_plan_view(r, v2=True, variant=default if r[1] == 'creator' else None, credits_enabled=credits_enabled) for r in rows]
-        return {'catalogVersion': CATALOG_VERSION_V2, 'pricing': 'v2', 'creditsPerUsd': CREDITS_PER_USD,
-                'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
-                'notes': ['Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis.',
-                          'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
-    # Migration 048 may not be applied where legacy pricing runs (it adds new_checkout_enabled): read it only if present.
+    Before additive migration 048 the new public catalog fails closed. Existing
+    subscriber billing, invoices and portal use their retained authenticated data.
+    No client value can select an amount, variant or provider Price.
+    """
     cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
-    checkout_column = "new_checkout_enabled" if cur.fetchone()[0] else "true"
-    cur.execute(f"SELECT id,plan,label,price_cents,currency,status,{checkout_column},entitlements,provider_price_id FROM public.pr_plan_terms "
-                "WHERE id IN ('trial-v1','studio-v1','assist-v1') ORDER BY price_cents,id")
-    return {'catalogVersion': CATALOG_VERSION_LEGACY, 'pricing': 'legacy', 'plans': [_plan_view(r, v2=False) for r in cur.fetchall()],
-            'topUps': {'available': False, 'reason': 'not_offered'}}
+    if not cur.fetchone()[0]:
+        raise AlphaError('The pricing catalog is not available yet.', 503, code='catalog_unavailable')
+    cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
+                "WHERE catalog_state='public' AND plan IN ('free','creator') AND status IN ('active','proposed') ORDER BY price_cents,id")
+    rows = cur.fetchall()
+    default = PlanPricing.variant(cur, DEFAULT_VARIANT)
+    spend_enabled = bool(pricing_v2_enabled) and credits_enabled is not False
+    plans = [_plan_view(r, v2=True, variant=default if r[1] == 'creator' else None,
+                       credits_enabled=spend_enabled) for r in rows]
+    for plan in plans:
+        plan['checkoutAvailable'] = plan['checkout'] == 'available'
+    return {'catalogVersion': CATALOG_VERSION_V2, 'pricing': 'v2', 'creditsPerUsd': CREDITS_PER_USD,
+            'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
+            'notes': ['Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis when available.',
+                      'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
 
 
 def billing_mode(growth_mode):

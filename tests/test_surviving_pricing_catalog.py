@@ -34,9 +34,11 @@ class PublicCatalog(unittest.TestCase):
         fn=getattr(pricing,'public_catalog',None)
         self.assertTrue(callable(fn),'The surviving server-owned public catalog must be available')
         return fn(cur,enabled,credits_enabled=credits_enabled)
-    def test_pre048_legacy_does_not_read_new_columns(self):
-        result=self.catalog(Cursor(False),False)
-        self.assertEqual((result['pricing'],result['plans'][0]['priceCents']),('legacy',1900))
+    def test_pre048_public_off_refuses_without_reading_new_columns(self):
+        cur=Cursor(False)
+        with self.assertRaises(AlphaError) as caught:self.catalog(cur,False)
+        self.assertEqual((caught.exception.status,caught.exception.code),(503,'catalog_unavailable'))
+        self.assertEqual(len(cur.calls),1)
     def test_v2_before048_refuses_cleanly(self):
         with self.assertRaises(AlphaError) as caught:self.catalog(Cursor(False),True)
         self.assertEqual((caught.exception.status,caught.exception.code),(503,'catalog_unavailable'))
