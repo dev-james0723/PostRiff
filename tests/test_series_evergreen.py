@@ -124,6 +124,24 @@ class FollowingASeriesTest(Base):
             self.save(seriesId=self.campaign["id"])
         self.assertEqual(caught.exception.code, "feature_disabled")
 
+    def test_d012_an_existing_follow_stays_saveable_with_the_feature_off(self):
+        """With the feature off a new follow is refused, but an automation that already follows a series can still be
+        saved (D-012 stops admission only) and the follow can be cleared; re-adding it is then a new follow, refused."""
+        task = self.save(seriesId=self.campaign["id"])
+        payload = {"taskId": task["id"], "name": "Evergreen", "goal": "Studio notes, edited", "audience": "Students", "schedule": WEEKLY,
+                   "include": {"evergreen": {"minAgeDays": 30, "seriesId": self.campaign["id"]}},
+                   "destinations": [{"platform": "Threads", "language": "en", "channelId": "acct-threads"}], "route": "deterministic-preview"}
+        tasks = lambda: {t["id"]: t for t in self.state["raffi"]["campaignPlanning"]["recurringTasks"]}  # noqa: E731
+        with Flags(RAFII_SERIES_ENABLED=False):
+            saved = campaigns.apply_action(self.state, "raffi_recurrence_save", payload, "editor", NOW)   # kept: not refused
+            self.assertEqual(saved["taskId"], task["id"])
+            self.assertEqual(tasks()[task["id"]]["include"]["evergreen"]["seriesId"], self.campaign["id"])
+            campaigns.apply_action(self.state, "raffi_recurrence_save", {**payload, "include": {"evergreen": {"minAgeDays": 30}}}, "editor", NOW)
+            self.assertNotIn("seriesId", tasks()[task["id"]]["include"]["evergreen"])
+            with self.assertRaises(AlphaError) as caught:
+                campaigns.apply_action(self.state, "raffi_recurrence_save", payload, "editor", NOW)
+        self.assertEqual(caught.exception.code, "feature_disabled")
+
     def test_a_series_is_not_a_brief_to_schedule(self):
         payload = {"name": "X", "goal": "G", "audience": "A", "schedule": WEEKLY, "campaignId": self.campaign["id"],
                    "destinations": [{"platform": "Threads", "language": "en"}], "route": "deterministic-preview"}
