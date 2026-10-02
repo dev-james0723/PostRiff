@@ -274,7 +274,7 @@ const EN: SeriesCopy = {
   },
   followArchived: 'This series is archived, so this automation can’t be saved while it follows it. Choose another series or stop following it.',
   followMissing: 'This series is no longer available. Stop following it to save this automation.',
-  followOff: 'Signature Series isn’t available here right now, so this automation can’t follow a series. Stop following it to save this automation.',
+  followOff: 'Signature Series isn’t available here right now. This automation keeps the series it follows and can still be saved, but no episodes are drafted from it until Signature Series is back. You can stop following it.',
   followUnknown: 'Couldn’t check the series this automation follows. You can stop following it.',
   followChecking: 'Checking the series this automation follows…',
   stopFollowing: 'Stop following',
@@ -434,7 +434,7 @@ const ZH: SeriesCopy = {
   },
   followArchived: '這個系列已封存，跟隨它時無法儲存這個自動化。請選擇其他系列，或停止跟隨。',
   followMissing: '這個系列已無法使用。請停止跟隨，才能儲存這個自動化。',
-  followOff: '這裏暫時無法使用招牌系列，自動化不能跟隨系列。請停止跟隨，才能儲存這個自動化。',
+  followOff: '這裏暫時無法使用招牌系列。這個自動化會保留已儲存的跟隨，仍可照常儲存，但在招牌系列恢復前，不會從這個系列草擬任何一集。你也可以停止跟隨。',
   followUnknown: '未能檢查這個自動化跟隨的系列。你可以停止跟隨。',
   followChecking: '正在檢查這個自動化跟隨的系列…',
   stopFollowing: '停止跟隨',
@@ -515,6 +515,14 @@ export function seriesEpisodeOf(evergreen: unknown): { index: number; role: stri
 
 export function percent(similarity: number): number {
   return Math.round(Math.max(0, Math.min(1, similarity)) * 100);
+}
+
+/**
+ * The near-duplicate warnings an acknowledgement was given for, as one value. When the set changes (a re-check after a
+ * conflict, another draft linked meanwhile), the key changes and the earlier tick no longer covers what is shown.
+ */
+export function warningSetKey(warnings: readonly { id: string; code: string; refId: string; similarity: number }[]): string {
+  return JSON.stringify(warnings.map((w) => [w.id, w.code, w.refId, w.similarity]).toSorted((a, b) => (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0)));
 }
 
 /* --- pickers ------------------------------------------------------------------------------------------------------ */
@@ -631,8 +639,10 @@ export type FollowState = 'none' | 'ok' | 'archived' | 'missing' | 'off' | 'unkn
 
 /**
  * Whether an automation can keep following `value`: listed among the workspace's series, or read on its own (an archived,
- * paused or older series is not on the list's first page). Archived, missing or switched-off series make the automation
- * unsaveable until the follow is removed, so the select must say so and offer a way out.
+ * paused or older series is not on the list's first page). Archived or missing series make the automation unsaveable
+ * until the follow is removed, so the select must say so and offer a way out. With Signature Series switched off ('off')
+ * the server keeps a follow saved earlier (no episodes are drafted meanwhile, and no new follow can be added): the select
+ * says so and still offers "Stop following".
  */
 export function followState(value: string | null, listedStatus: SeriesStatus | null | undefined, detail: { status?: SeriesStatus | null; error?: unknown } = {}): FollowState {
   if (!value) return 'none';

@@ -12,9 +12,11 @@ import { useSeriesCopy, useSeriesLang } from './use-series-copy';
  * The Evergreen option's series choice (`include.evergreen.seriesId`): with a series chosen, each run drafts that
  * series' approved episode once; without one, Evergreen refreshes an older post exactly as before.
  *
- * The server refuses to save an automation that follows an archived, missing or switched-off series, so a follow saved
- * earlier is never hidden: its state is said in words and "Stop following" clears it, even while the feature is off
- * (then no series request is made at all). With nothing chosen and nothing to choose, it renders nothing.
+ * The server refuses to save an automation that follows an archived or missing series, so a follow saved earlier is
+ * never hidden: its state is said in words and "Stop following" clears it. With Signature Series switched off the server
+ * keeps a follow saved earlier (the automation still saves; no episodes are drafted meanwhile), so that is said as a
+ * note, not an error, with the same way out (then no series request is made at all). With nothing chosen and nothing to
+ * choose, it renders nothing.
  */
 export function SeriesFollowSelect({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) {
   const copy = useSeriesCopy();
@@ -31,7 +33,7 @@ export function SeriesFollowSelect({ value, onChange }: { value: string | null; 
   };
   if (features.isPending) return null;
   if (features.data?.series !== true) {
-    if (value) return <FollowProblem copy={copy} lang={lang} text={copy.followOff} onClear={clear} />;
+    if (value) return <FollowProblem copy={copy} lang={lang} text={copy.followOff} onClear={clear} tone='note' />;
     return cleared ? <FollowCleared copy={copy} lang={lang} /> : null;
   }
   return <FollowChooser copy={copy} lang={lang} value={value} onChange={choose} onClear={clear} cleared={cleared} />;
@@ -57,7 +59,7 @@ function FollowChooser({ copy, lang, value, onChange, onClear, cleared }: {
   }, [cleared, value]);
 
   if (seriesOff(list)) {
-    if (value) return <FollowProblem copy={copy} lang={lang} text={copy.followOff} onClear={onClear} />;
+    if (value) return <FollowProblem copy={copy} lang={lang} text={copy.followOff} onClear={onClear} tone='note' />;
     return cleared ? <FollowCleared copy={copy} lang={lang} /> : null;
   }
   if (list.isError) return value ? <FollowProblem copy={copy} lang={lang} text={copy.followUnknown} onClear={onClear} /> : null;
@@ -68,12 +70,14 @@ function FollowChooser({ copy, lang, value, onChange, onClear, cleared }: {
   const currentLabel = !title ? (state === 'checking' ? '…' : copy.unavailableSeries)
     : status === 'archived' ? fill(copy.archivedTitle, { title })
     : status && status !== 'active' ? `${title} · ${copy.status[status]}` : title;
-  const problem = state === 'archived' ? copy.followArchived : state === 'missing' ? copy.followMissing : state === 'off' ? copy.followOff : state === 'unknown' ? copy.followUnknown : null;
+  // Switched off is not a problem to fix: the follow is kept and the automation still saves (said, with the way out).
+  const problem = state === 'archived' ? copy.followArchived : state === 'missing' ? copy.followMissing : state === 'unknown' ? copy.followUnknown : null;
+  const note = state === 'off' ? copy.followOff : null;
   return (
     <div lang={lang} className='flex flex-col gap-1 pl-7'>
       <label htmlFor={id} className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
         {copy.follow}
-        <NativeSelect ref={selectRef} id={id} value={value ?? ''} aria-describedby={problem ? `${id}-problem` : undefined} aria-invalid={problem ? true : undefined}
+        <NativeSelect ref={selectRef} id={id} value={value ?? ''} aria-describedby={problem || note ? `${id}-problem` : undefined} aria-invalid={problem ? true : undefined}
                       onChange={(event) => onChange(event.target.value || null)}>
           <NativeSelectOption value=''>{copy.followNone}</NativeSelectOption>
           {value && !options.some((item) => item.id === value) && <NativeSelectOption value={value}>{currentLabel}</NativeSelectOption>}
@@ -81,9 +85,9 @@ function FollowChooser({ copy, lang, value, onChange, onClear, cleared }: {
         </NativeSelect>
       </label>
       {state === 'checking' && <p role='status' className='text-muted-foreground text-xs'>{copy.followChecking}</p>}
-      {problem ? (
+      {problem || note ? (
         <div className='flex flex-col gap-1.5'>
-          <p id={`${id}-problem`} className='text-destructive text-xs'>{problem}</p>
+          <p id={`${id}-problem`} className={problem ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{problem ?? note}</p>
           <Button type='button' variant='quiet' size='lg' className='min-h-11 self-start' onClick={onClear}>{copy.stopFollowing}</Button>
         </div>
       ) : (
@@ -93,11 +97,11 @@ function FollowChooser({ copy, lang, value, onChange, onClear, cleared }: {
   );
 }
 
-/** A follow that can't be read or used: said in words, with the one way out. */
-function FollowProblem({ copy, lang, text, onClear }: { copy: SeriesCopy; lang: SeriesLocale; text: string; onClear: () => void }) {
+/** A follow that can't be read or used (or, as a `note`, is kept while Series is off): said in words, with the way out. */
+function FollowProblem({ copy, lang, text, onClear, tone = 'problem' }: { copy: SeriesCopy; lang: SeriesLocale; text: string; onClear: () => void; tone?: 'problem' | 'note' }) {
   return (
     <div lang={lang} className='flex flex-col gap-1.5 pl-7'>
-      <p className='text-destructive text-xs'>{text}</p>
+      <p className={tone === 'note' ? 'text-muted-foreground text-xs' : 'text-destructive text-xs'}>{text}</p>
       <Button type='button' variant='quiet' size='lg' className='min-h-11 self-start' onClick={onClear}>{copy.stopFollowing}</Button>
     </div>
   );
