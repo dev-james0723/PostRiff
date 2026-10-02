@@ -34,9 +34,12 @@ const COPY = {
   unavailable: 'Passkey sign-in is unavailable here. Use your password and authenticator app instead.'
 };
 
+function cancelled(name?: string): boolean {
+  return name === 'NotAllowedError' || name === 'AbortError';
+}
+
 function passkeyFailure(error: unknown, fallback = COPY.identity): FounderSignInError {
   const value = error as { name?: string; code?: string; cause?: { name?: string } } | null;
-  const cancelled = (name?: string) => ['NotAllowedError', 'AbortError'].includes(name ?? '');
   if (cancelled(value?.name) || value?.code === 'ERROR_CEREMONY_ABORTED' || (value?.code === 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY' && cancelled(value.cause?.name))) {
     return new FounderSignInError(COPY.cancelled, 'cancelled');
   }
