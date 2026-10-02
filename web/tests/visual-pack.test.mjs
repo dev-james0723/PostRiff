@@ -13,9 +13,11 @@ const revision = (state, extra = {}) => ({ state, sourceStatus: 'current', check
 const slides = ['s1', 's2', 's3', 's4', 's5', 's6'].map((key, i) => ({ key, position: i + 1, role: i === 0 ? 'hook' : i === 5 ? 'close' : 'point', text: `Text ${i + 1}`,
   altText: `Slide ${i + 1} of 6. Text: Text ${i + 1}`, imageAssetId: null, plannedRole: 'point', altCustom: false }));
 
-test('Traditional Chinese for zh-Hant, zh-TW, zh-HK and zh-MO; English otherwise', () => {
-  for (const locale of ['zh-Hant', 'zh-Hant-HK', 'zh-TW', 'zh-HK', 'zh-MO', 'ZH-hant-tw']) assert.equal(langFor(locale), 'zh-Hant', locale);
-  for (const locale of ['en', 'en-GB', 'zh-Hans', 'zh-CN', 'ja', '', null, undefined]) assert.equal(langFor(locale), 'en', String(locale));
+test('Traditional Chinese for zh-Hant, zh-TW, zh-HK, zh-MO and Cantonese (D-022); English otherwise', () => {
+  for (const locale of ['zh-Hant', 'zh-Hant-HK', 'zh-TW', 'zh-HK', 'zh-MO', 'ZH-hant-tw', 'yue', 'yue-Hant-HK', 'YUE-HK']) assert.equal(langFor(locale), 'zh-Hant', locale);
+  for (const locale of ['en', 'en-GB', 'zh-Hans', 'zh-CN', 'zh', 'ja', '', null, undefined]) assert.equal(langFor(locale), 'en', String(locale));
+  assert.equal(copyFor('yue').lang, 'zh-Hant', 'the copy carries the language its containers declare');
+  assert.equal(copyFor('en').lang, 'en');
   assert.equal(copyFor('zh-TW').title, '輪播圖組');
   assert.equal(copyFor('en-US').title, 'Carousels');
 });

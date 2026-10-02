@@ -136,6 +136,9 @@ export interface PackView {
   options: { palettes: PackPalette[]; weights: PackWeight[]; slides: number; size: [number, number]; limits: { text: number; altText: number; caption: number } };
   replayed?: boolean;
   unchanged?: boolean;
+  /** Export of an already-exported revision whose archive could no longer be reproduced: rebuilt from the
+   *  hash-checked slides and re-recorded (the earlier record no longer matched). */
+  rebuilt?: boolean;
 }
 
 export interface PackListItem {
