@@ -1,15 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Panel } from '@/features/workspace/rafii-parts';
 import { isFeatureDisabled } from '@/lib/coworker/api';
 import { useCoworkerAttention } from '@/lib/coworker/hooks';
 import { safeAppHref } from '@/lib/coworker/safe-href';
 import { cn } from '@/lib/utils';
-import { FollowUpAttentionItem } from '@/features/inbox/follow-up/follow-up-attention';
+import { currentCopy, currentLang, describeProblem } from '@/features/inbox/follow-up/copy';
+import { FollowUpAttentionItem, type AttentionUndo } from '@/features/inbox/follow-up/follow-up-attention';
 import { eventLabel } from './notifications/labels';
 
 const ACTION: Record<string, string> = {
@@ -39,10 +42,13 @@ function titleOf(item: { type: string; title: string }) {
 /**
  * “What needs my attention?” (coworker spec §12, §19): Rafii's ordered list from the workspace's authoritative
  * state, each item with why it matters and one link. Hidden when the deployment has no coworker routes; nothing
- * is shown while there is nothing to do (the Overview's own panel already says “All clear”).
+ * is shown while there is nothing to do (the Overview's own panel already says “All clear”). A follow-up reminder
+ * dismissed here leaves the list, so its Undo stays here in place (not only in a passing toast).
  */
 export function CoworkerAttention({ className }: { className?: string }) {
   const attention = useCoworkerAttention();
+  const [undo, setUndo] = useState<AttentionUndo | null>(null);
+  const [undoing, setUndoing] = useState(false);
   if (attention.isPending || isFeatureDisabled(attention.error)) return null;
   if (attention.isError && !attention.data) {
     return (
@@ -52,8 +58,23 @@ export function CoworkerAttention({ className }: { className?: string }) {
     );
   }
   const items = attention.data?.items ?? [];
-  if (items.length === 0) return null;
+  if (items.length === 0 && !undo) return null;
   const urgent = attention.data?.counts.urgent ?? 0;
+  const followUpCopy = currentCopy();
+
+  async function runUndo(offer: AttentionUndo) {
+    setUndoing(true);
+    try {
+      await offer.run();
+      setUndo(null);
+    } catch (error) {
+      const problem = describeProblem(error, followUpCopy);
+      toast.error(<span lang={problem.lang}>{problem.message}</span>);
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   return (
     <Panel
       className={className}
@@ -61,9 +82,17 @@ export function CoworkerAttention({ className }: { className?: string }) {
       titleId='coworker-attention-heading'
       description={urgent > 0 ? `${urgent} urgent, then the rest in order. Rafii orders these by fixed rules, not by guesswork.` : 'In order of what matters most. Rafii orders these by fixed rules, not by guesswork.'}
     >
+      {undo && (
+        <p role='status' lang={currentLang()} className='rafii-glass flex flex-wrap items-center gap-2 rounded-[var(--rafii-radius-control)] px-3 py-1.5 text-sm'>
+          <span className='min-w-0 flex-1'>{undo.message}</span>
+          <Button variant='quiet' size='sm' className='min-h-11' disabled={undoing} onClick={() => void runUndo(undo)}>
+            {followUpCopy.undo}
+          </Button>
+        </p>
+      )}
       <ol aria-labelledby='coworker-attention-heading' className='flex flex-col gap-2'>
         {items.slice(0, 8).map((item) => item.type === 'relationship.follow_up_due' ? (
-          <FollowUpAttentionItem key={item.id} item={item} />
+          <FollowUpAttentionItem key={item.id} item={item} onUndoable={setUndo} />
         ) : (
           <li key={item.id} data-attention-type={item.type} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4 sm:flex-row sm:items-center sm:justify-between'>
             <div className='flex min-w-0 items-start gap-3'>

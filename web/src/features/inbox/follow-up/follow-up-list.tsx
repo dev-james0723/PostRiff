@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { errorMessage } from '@/lib/growth-v2/request';
-import { useRelationshipList, useRelationshipsApi } from '@/lib/growth-v2/relationships-hooks';
+import { useRelationshipPages } from '@/lib/growth-v2/relationships-hooks';
 import { followUpLine, platformName, stateTone } from '@/lib/growth-v2/relationships-model';
 import type { Relationship } from '@/lib/growth-v2/relationships-types';
 import { cn } from '@/lib/utils';
-import { currentCopy, when } from './copy';
+import { currentCopy, currentLang, describeProblem, when } from './copy';
 import { FollowUpCard } from './follow-up-card';
 import { FollowUpCreate } from './follow-up-section';
+import { useReturnFocus } from './focus';
 
 /**
  * The "Follow-ups" view of the Inbox: open follow-ups, due first (the server's deterministic order), one row each with
- * its stage, reminder and next step. Pages of 25, "Load more" for the rest; nothing is fetched beyond what is shown.
+ * its stage, reminder and next step. Pages of 25, "Load more" for the rest. Every loaded page refreshes together after
+ * a change, so the list never collapses back to its first page; a list that couldn't load says so (never "no
+ * follow-ups"), and a failed refresh keeps the last rows with a notice.
  */
 export function FollowUpList({
   selectedId,
@@ -28,70 +30,61 @@ export function FollowUpList({
   canEdit: boolean;
 }) {
   const copy = currentCopy();
-  const { api, w } = useRelationshipsApi();
-  const first = useRelationshipList({ state: 'open' });
-  const [extra, setExtra] = useState<Relationship[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const lang = currentLang();
+  const list = useRelationshipPages({ state: 'open' });
   const [creating, setCreating] = useState(false);
+  const newButton = useRef<HTMLButtonElement>(null);
+  useReturnFocus(creating, newButton);
 
-  useEffect(() => {
-    setExtra([]);
-    setCursor(first.data?.nextCursor ?? null);
-  }, [first.data]);
-
-  if (first.isPending) return <StateMessage kind='loading' layout='inline' title={copy.loading} className='px-3 py-4' />;
-  if (first.isError || !first.data) {
+  if (list.isPending) return <StateMessage kind='loading' layout='inline' title={copy.loading} className='px-3 py-4' />;
+  if (!list.data) {
     return (
-      <StateMessage
-        kind='error'
-        layout='inline'
-        title={errorMessage(first.error, copy.failed)}
-        action={<Button variant='glass' size='sm' className='h-9' onClick={() => void first.refetch()}>{copy.reload}</Button>}
-        className='px-3 py-4'
-      />
+      <div lang={lang}>
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title={copy.listFailed}
+          description={<span lang={describeProblem(list.error, copy).lang}>{describeProblem(list.error, copy).message}</span>}
+          action={<Button variant='glass' size='sm' className='h-9' onClick={() => void list.refetch()}>{copy.reload}</Button>}
+          className='px-3 py-4'
+        />
+      </div>
     );
   }
-  const rows = [...first.data.relationships, ...extra.filter((item) => !first.data.relationships.some((known) => known.id === item.id))];
-
-  async function loadMore() {
-    if (!cursor || loadingMore) return;
-    setLoadingMore(true);
-    setProblem(null);
-    try {
-      const page = await api.list(w, { state: 'open', cursor });
-      setExtra((current) => [...current, ...page.relationships.filter((item) => !current.some((known) => known.id === item.id))]);
-      setCursor(page.nextCursor);
-    } catch (error) {
-      setProblem(errorMessage(error, copy.failed));
-    } finally {
-      setLoadingMore(false);
-    }
-  }
+  const pages = list.data.pages;
+  const rows = pages.flatMap((page) => page.relationships).filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index);
+  const counts = pages[0]?.counts;
 
   const start = canEdit ? (
     creating ? (
       <FollowUpCreate onCreated={(created) => { setCreating(false); onSelect(created); }} onCancel={() => setCreating(false)} />
     ) : (
-      <Button variant='glass' size='sm' className='h-9 w-fit' onClick={() => setCreating(true)}>
+      <Button ref={newButton} variant='glass' size='sm' className='h-9 w-fit' onClick={() => setCreating(true)}>
         <Icons.add className='size-4' aria-hidden />
         {copy.newFollowUp}
       </Button>
     )
   ) : null;
+  const stale = list.isRefetchError && (
+    <p role='status' className='text-muted-foreground flex flex-wrap items-center gap-2 px-3 text-xs'>
+      {copy.staleNotice}
+      <Button variant='quiet' size='sm' className='h-9' onClick={() => void list.refetch()}>{copy.reload}</Button>
+    </p>
+  );
   if (rows.length === 0) {
     return (
-      <div className='flex flex-col gap-2 p-1.5'>
+      <div lang={lang} className='flex flex-col gap-2 p-1.5'>
+        {stale}
         <StateMessage kind='empty' layout='inline' title={copy.empty} description={copy.emptyHint} className='px-3 py-4' />
         {start}
       </div>
     );
   }
   return (
-    <div className='flex flex-col gap-2'>
+    <div lang={lang} className='flex flex-col gap-2'>
       {start && <div className='px-1.5 pt-1.5'>{start}</div>}
-      {first.data.counts.dueNow === 0 && <p className='text-muted-foreground px-3 pt-2 text-xs'>{copy.nothingDue}</p>}
+      {stale}
+      {counts?.dueNow === 0 && <p className='text-muted-foreground px-3 pt-2 text-xs'>{copy.nothingDue}</p>}
       <ul className='flex flex-col gap-1' aria-label={copy.tab}>
         {rows.map((item) => {
           const selected = item.id === selectedId;
@@ -115,30 +108,61 @@ export function FollowUpList({
                 </span>
                 <span className={cn('text-xs', item.followUp.dueNow ? 'text-foreground' : 'text-muted-foreground')}>{followUpLine(item, copy, when)}</span>
                 {item.nextAction && <span className='text-muted-foreground line-clamp-2 text-sm break-words'>{copy.nextAction}: {item.nextAction}</span>}
-                {item.contact && <span className='text-muted-foreground truncate text-xs'>{platformName(item.contact.provider)}{item.contact.ref ? ` · ${item.contact.ref}` : ''}</span>}
+                {item.contact && <span className='text-muted-foreground truncate text-xs'>{platformName(item.contact.provider, copy.thePlatform)}{item.contact.ref ? ` · ${item.contact.ref}` : ''}</span>}
               </button>
             </li>
           );
         })}
       </ul>
-      {problem && <p role='alert' className='text-destructive px-3 text-sm'>{problem}</p>}
-      {cursor && (
-        <Button variant='quiet' size='sm' disabled={loadingMore} onClick={() => void loadMore()}>
-          {loadingMore ? copy.loading : copy.loadMore}
+      {list.isFetchNextPageError && (
+        <p role='alert' className='text-destructive px-3 text-sm'>
+          <span lang={describeProblem(list.error, copy).lang}>{describeProblem(list.error, copy).message}</span>
+        </p>
+      )}
+      {list.hasNextPage && (
+        <Button variant='quiet' size='sm' disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+          {list.isFetchingNextPage ? copy.loading : copy.loadMore}
         </Button>
       )}
     </div>
   );
 }
 
-/** The follow-up on its own (no conversation open beside it): the same card, with the reply route it allows. */
-export function FollowUpPanel({ relationshipId, canEdit }: { relationshipId: string; canEdit: boolean }) {
+/** Where the Inbox stands on loading the conversation a follow-up's Reply asked for (see `InboxView`). */
+export type ConversationSeek = 'idle' | 'seeking' | 'more' | 'missing';
+
+/**
+ * The follow-up on its own (no conversation open beside it): the same card, keyed by its id so nothing typed for one
+ * follow-up survives a switch to another. Reply opens the conversation's composer; while the Inbox is still loading an
+ * older conversation it says so here, with a way to keep looking.
+ */
+export function FollowUpPanel({
+  relationshipId,
+  canEdit,
+  onReply,
+  seek = 'idle',
+  onKeepLooking
+}: {
+  relationshipId: string;
+  canEdit: boolean;
+  onReply?: (threadId: string) => void;
+  seek?: ConversationSeek;
+  onKeepLooking?: () => void;
+}) {
   const copy = currentCopy();
+  const lang = currentLang();
   return (
-    <div className='flex flex-col gap-3'>
+    <div lang={lang} className='flex flex-col gap-3'>
       <h2 className='text-muted-foreground text-xs font-medium'>{copy.section}</h2>
-      <FollowUpCard relationshipId={relationshipId} canEdit={canEdit} focusOnLoad />
+      {seek === 'seeking' && <StateMessage kind='loading' layout='inline' title={copy.findingConversation} />}
+      {seek === 'more' && (
+        <p role='status' className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
+          {copy.conversationOlder}
+          {onKeepLooking && <Button variant='glass' size='sm' className='h-9' onClick={onKeepLooking}>{copy.keepLooking}</Button>}
+        </p>
+      )}
+      {seek === 'missing' && <p role='status' className='text-muted-foreground text-sm'>{copy.conversationMissing}</p>}
+      <FollowUpCard key={relationshipId} relationshipId={relationshipId} canEdit={canEdit} focusOnLoad onReply={onReply} />
     </div>
   );
 }
-

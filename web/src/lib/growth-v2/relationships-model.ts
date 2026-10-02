@@ -8,7 +8,9 @@ import type {
   FollowUpStatus,
   OpenRelationshipState,
   Relationship,
+  RelationshipEditInput,
   RelationshipFilters,
+  RelationshipHistoryItem,
   RelationshipState,
   ReplyRoute
 } from './relationships-types';
@@ -111,11 +113,61 @@ const EN = {
   snoozedToast: 'Follow-up snoozed.',
   closedToast: 'Follow-up closed.',
   dismissedToast: 'Reminder dismissed.',
+  thePlatform: 'the platform',
+  changeStage: 'Change stage',
+  chooseStage: 'Choose a stage',
+  assign: 'Assign',
+  membersLoading: 'Loading members…',
+  membersFailed: "Members couldn't load, so the owner can't be changed right now.",
+  staleNotice: "Couldn't refresh. Showing what was last loaded.",
+  listFailed: "Follow-ups couldn't load.",
+  chooseOccurrence: 'Choose the first or the second time before saving.',
+  editConflict: 'Someone changed this follow-up while you were editing, so nothing was saved. Reload to see their changes, then edit again.',
+  followUpWith: (name: string) => `Follow up with ${name}`,
+  attentionWhy: 'A follow-up you planned is due. Reminders never contact anyone; a reply still needs your exact approval.',
+  wonRefused: "That result can't mark this follow-up as won: it was reversed, or isn't a current result of this workspace. Choose another one.",
+  wonWithdrawn: 'Result withdrawn',
+  wonWithdrawnHint: 'The result this follow-up was marked won with was reversed later. The stage stays as you set it: reopen it, then mark it won with a current result.',
+  findingConversation: 'Loading this conversation…',
+  conversationOlder: 'This conversation is older than the comments loaded so far.',
+  keepLooking: 'Keep looking',
+  conversationMissing: "This conversation isn't in the Inbox any more.",
   provenance: {
     user_declared: 'You reported this result.',
     first_party_reported: 'Reported by your connected source.',
     provider_native: 'Platform-reported result.',
     unknown: 'Result recorded.'
+  } as Record<string, string>,
+  historyKinds: {
+    created: 'Started',
+    updated: 'Edited',
+    state: 'Stage changed',
+    snoozed: 'Snoozed',
+    unsnoozed: 'Unsnoozed',
+    closed: 'Closed',
+    reopened: 'Reopened',
+    assigned: 'Owner changed',
+    thread_linked: 'Conversation linked',
+    thread_unlinked: 'Conversation unlinked',
+    note_added: 'Note added',
+    note_removed: 'Note removed',
+    due_changed: 'Follow-up time changed',
+    followup_dismissed: 'Reminder dismissed',
+    followup_restored: 'Reminder restored',
+    suggestion_dismissed: 'Suggestion dismissed',
+    other: 'Changed'
+  } as Record<string, string>,
+  replyStatus: {
+    draft: 'Draft',
+    approved: 'Approved · not sent',
+    submitting: 'Sending',
+    submitted: 'Sent · awaiting confirmation',
+    verified: 'Posted',
+    uncertain: 'Outcome unclear · not resent',
+    held: 'Held · not sent',
+    failed: 'Held · not sent',
+    cancelled: 'Cancelled',
+    other: 'Reply'
   } as Record<string, string>,
   reasons: {
     reply_sent: 'a reply was sent',
@@ -212,11 +264,61 @@ const ZH: FollowUpCopy = {
   snoozedToast: '已暫緩提醒。',
   closedToast: '跟進事項已結束。',
   dismissedToast: '已略過提醒。',
+  thePlatform: '該平台',
+  changeStage: '變更階段',
+  chooseStage: '選擇階段',
+  assign: '指派',
+  membersLoading: '正在載入成員…',
+  membersFailed: '無法載入成員，所以暫時不能變更負責人。',
+  staleNotice: '未能重新整理，正在顯示上次載入的內容。',
+  listFailed: '無法載入跟進事項。',
+  chooseOccurrence: '儲存前請選擇第一次或第二次。',
+  editConflict: '你編輯期間有人修改了這個跟進事項，所以沒有儲存任何內容。請重新載入查看最新內容，再重新編輯。',
+  followUpWith: (name: string) => `跟進 ${name}`,
+  attentionWhy: '你計劃的跟進已到期。提醒不會聯絡任何人；回覆仍需你確認完全相同的內容。',
+  wonRefused: '這項成果不能用來標記為已成交：它已被撤銷，或不是此工作區目前有效的成果。請選擇另一項。',
+  wonWithdrawn: '成果已撤銷',
+  wonWithdrawnHint: '這個跟進事項標記為已成交時所用的成果之後被撤銷了。階段會保持你設定的樣子：請重新開啟，再以目前有效的成果標記為已成交。',
+  findingConversation: '正在載入這則對話…',
+  conversationOlder: '這則對話比目前載入的留言更早。',
+  keepLooking: '繼續尋找',
+  conversationMissing: '收件匣中已沒有這則對話。',
   provenance: {
     user_declared: '這是你記錄的結果。',
     first_party_reported: '由你已連結的來源回報。',
     provider_native: '平台回報的結果。',
     unknown: '已記錄結果。'
+  },
+  historyKinds: {
+    created: '已建立',
+    updated: '已編輯',
+    state: '階段已變更',
+    snoozed: '已暫緩提醒',
+    unsnoozed: '已取消暫緩',
+    closed: '已結束',
+    reopened: '已重新開啟',
+    assigned: '負責人已變更',
+    thread_linked: '已連結對話',
+    thread_unlinked: '已取消連結對話',
+    note_added: '已新增備註',
+    note_removed: '已刪除備註',
+    due_changed: '跟進時間已變更',
+    followup_dismissed: '已略過提醒',
+    followup_restored: '已恢復提醒',
+    suggestion_dismissed: '已略過建議',
+    other: '已變更'
+  },
+  replyStatus: {
+    draft: '草稿',
+    approved: '已核准 · 未發出',
+    submitting: '發送中',
+    submitted: '已發出 · 等待確認',
+    verified: '已發佈',
+    uncertain: '結果未明 · 不會重發',
+    held: '已暫停 · 未發出',
+    failed: '已暫停 · 未發出',
+    cancelled: '已取消',
+    other: '回覆'
   },
   reasons: {
     reply_sent: '已發出回覆',
@@ -328,15 +430,53 @@ function zoneOffset(epoch: number, timeZone: string): number {
   return asUtc - Math.floor(epoch);
 }
 
-export function platformName(provider: string | null | undefined): string {
-  if (!provider) return 'the platform';
+/** A provider's own name; `unknown` (the copy's "the platform", in the person's language) when there is none. */
+export function platformName(provider: string | null | undefined, unknown = EN.thePlatform): string {
+  if (!provider) return unknown;
   const known: Record<string, string> = { threads: 'Threads', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', x: 'X', whatsapp: 'WhatsApp', tiktok: 'TikTok', youtube: 'YouTube' };
   return known[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
+/** One history row in words: what happened, and the stage move when there was one. Unknown kinds stay generic. */
+export function historyLine(item: Pick<RelationshipHistoryItem, 'kind' | 'from' | 'to'>, copy: FollowUpCopy): string {
+  const kind = copy.historyKinds[item.kind] ?? copy.historyKinds.other;
+  if (!item.from && !item.to) return kind;
+  return `${kind} · ${item.from ? copy.states[item.from] : '—'} → ${item.to ? copy.states[item.to] : '—'}`;
+}
+
+/** A reply's status in the prior exchange, in the person's language (never a raw status code). */
+export function replyStatusLabel(status: string | null | undefined, copy: FollowUpCopy): string {
+  return copy.replyStatus[status ?? ''] ?? copy.replyStatus.other;
+}
+
+export interface EditorValues {
+  displayName: string;
+  interest: string;
+  nextAction: string;
+}
+
+const tidy = (value: string) => value.split(/\s+/).filter(Boolean).join(' ');
+
+/**
+ * Only the fields the person changed since the edit started, normalized like the server (whitespace collapsed; an emptied
+ * optional field clears). Sent with the revision the edit started from, so another member's change is never undone.
+ */
+export function editChanges(initial: EditorValues, current: EditorValues): RelationshipEditInput {
+  const out: RelationshipEditInput = {};
+  if (tidy(current.displayName) !== tidy(initial.displayName)) out.displayName = tidy(current.displayName);
+  if (tidy(current.interest) !== tidy(initial.interest)) out.interest = tidy(current.interest) || null;
+  if (tidy(current.nextAction) !== tidy(initial.nextAction)) out.nextAction = tidy(current.nextAction) || null;
+  return out;
+}
+
+/** Results "won" may point at: the person's own current declarations (never reversed, never test traffic). */
+export function pickableResults<T extends { status: string; provenance: string; test?: boolean }>(items: readonly T[]): T[] {
+  return items.filter((item) => item.status === 'active' && item.provenance === 'user_declared' && !item.test);
+}
+
 /** How a reply can happen, in words. Assisted routes are never presented as a direct, successful reply. */
 export function replyRouteView(route: ReplyRoute | null | undefined, copy: FollowUpCopy) {
-  const platform = platformName(route?.provider);
+  const platform = platformName(route?.provider, copy.thePlatform);
   if (route?.kind === 'direct') return { kind: 'direct' as const, label: copy.reply, hint: copy.directHint, href: null };
   const href = route?.href?.startsWith('https://') ? route.href : null;
   return { kind: 'assisted' as const, label: copy.assisted(platform), hint: copy.assistedHint(platform), href };

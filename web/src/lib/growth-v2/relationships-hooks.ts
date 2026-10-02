@@ -7,7 +7,7 @@
  * unless the server returned it.
  */
 import { useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/session';
 import { coworkerKeys } from '@/lib/coworker/hooks';
 import { useWorkspace } from '@/lib/workspace/provider';
@@ -18,6 +18,8 @@ import type { RelationshipFilters, RelationshipWrite } from './relationships-typ
 export const relationshipKeys = {
   all: (w: string) => ['growth-v2', w, 'relationships'] as const,
   list: (w: string, filters: RelationshipFilters) => ['growth-v2', w, 'relationships', 'list', filters] as const,
+  /** Every loaded page of a list (refetched together, so a change never collapses it back to the first page). */
+  pages: (w: string, filters: Omit<RelationshipFilters, 'cursor'>) => ['growth-v2', w, 'relationships', 'list', 'pages', filters] as const,
   detail: (w: string, id: string) => ['growth-v2', w, 'relationships', 'detail', id] as const
 };
 
@@ -39,6 +41,23 @@ export function useRelationshipList(filters: RelationshipFilters, options: { ena
     queryKey: relationshipKeys.list(w, filters),
     queryFn: () => api.list(w, filters),
     enabled: enabled && options.enabled !== false,
+    retry: shouldRetry,
+    staleTime: 15_000
+  });
+}
+
+/**
+ * A list read page by page ("Load more"). After any change the loaded pages refetch together from the first, so the list
+ * stays as long as the person made it and every row is current (a closed follow-up leaves, a moved due time reorders).
+ */
+export function useRelationshipPages(filters: Omit<RelationshipFilters, 'cursor'>) {
+  const { api, w, enabled } = useRelationshipsApi();
+  return useInfiniteQuery({
+    queryKey: relationshipKeys.pages(w, filters),
+    queryFn: ({ pageParam }) => api.list(w, pageParam ? { ...filters, cursor: pageParam } : filters),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
     retry: shouldRetry,
     staleTime: 15_000
   });

@@ -1,5 +1,24 @@
-import { followUpCopy, type FollowUpCopy } from '@/lib/growth-v2/relationships-model';
+import { errorCode, errorMessage } from '@/lib/growth-v2/request';
+import { followUpCopy, followUpLocale, isConflict, type FollowUpCopy, type FollowUpLocale } from '@/lib/growth-v2/relationships-model';
 import { formatDateTime, timeDefaults } from '@/lib/time';
+
+export interface FollowUpProblem {
+  message: string;
+  /** Someone changed the follow-up meanwhile: offer to reload it. */
+  conflict: boolean;
+  /** Our own wording is in the person's language; a server refusal is English. */
+  lang: string;
+}
+
+/** A refused change in words: conflicts and refused "won" results in the person's language, anything else as the
+ * server said it (English, marked so), and our own fallback when the server said nothing. */
+export function describeProblem(cause: unknown, copy: FollowUpCopy = currentCopy(), conflict = copy.conflict): FollowUpProblem {
+  const code = errorCode(cause);
+  if (isConflict(code)) return { message: conflict, conflict: true, lang: currentLang() };
+  if (code === 'result_required') return { message: copy.wonRefused, conflict: false, lang: currentLang() };
+  const message = errorMessage(cause, '');
+  return message ? { message, conflict: false, lang: 'en' } : { message: copy.failed, conflict: false, lang: currentLang() };
+}
 
 /**
  * Follow-up wording in the person's language: the same preference that writes their dates and numbers
@@ -7,6 +26,12 @@ import { formatDateTime, timeDefaults } from '@/lib/time';
  */
 export function currentCopy(): FollowUpCopy {
   return followUpCopy(timeDefaults().locale);
+}
+
+/** The `lang` of that wording, set on every follow-up container (and on toasts and portalled panels) so assistive
+ * technology reads Traditional Chinese as Chinese inside an English page, and English as English. */
+export function currentLang(): FollowUpLocale {
+  return followUpLocale(timeDefaults().locale);
 }
 
 /**

@@ -243,11 +243,43 @@ export function ThreadDetail({
   );
 }
 
-/** Shown in the side pane before a comment is picked, or when the linked one is not in the list. */
-export function NoThreadSelected({ missing, onClear }: { missing: boolean; onClear: () => void }) {
+/**
+ * Shown in the side pane before a comment is picked, or while a linked one that isn't loaded yet is looked for (older
+ * pages load one after another), with a way to keep looking, or when it isn't in the Inbox at all.
+ */
+export function NoThreadSelected({
+  missing,
+  seeking = false,
+  onKeepLooking,
+  onClear
+}: {
+  missing: boolean;
+  seeking?: boolean;
+  onKeepLooking?: () => void;
+  onClear: () => void;
+}) {
   return (
     <div className='text-muted-foreground flex h-full min-h-48 flex-col items-center justify-center gap-3 p-6 text-center text-sm'>
-      {missing ? (
+      {seeking ? (
+        <StateMessage kind='loading' layout='inline' title='Loading this comment…' className='max-w-sm' />
+      ) : onKeepLooking ? (
+        <StateMessage
+          kind='stale'
+          layout='inline'
+          title='This comment is older than the comments loaded so far.'
+          action={
+            <span className='flex flex-wrap justify-center gap-2'>
+              <Button variant='glass' size='control' onClick={onKeepLooking}>
+                Keep looking
+              </Button>
+              <Button variant='quiet' size='control' onClick={onClear}>
+                Close
+              </Button>
+            </span>
+          }
+          className='max-w-sm'
+        />
+      ) : missing ? (
         <StateMessage
           kind='stale'
           layout='inline'
