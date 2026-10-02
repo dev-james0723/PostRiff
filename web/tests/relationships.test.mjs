@@ -197,7 +197,9 @@ test('history, reply status and platform words follow the person’s language', 
   assert.equal(replyStatusLabel('something_else', ZH), ZH.replyStatus.other);
   assert.equal(replyStatusLabel(undefined, EN), EN.replyStatus.other);
   assert.equal(platformName(null, ZH.thePlatform), '該平台');
-  assert.equal(replyRouteView({ kind: 'assisted', provider: null, href: null, reason: 'no_thread' }, ZH).label, '在 該平台 開啟 · 協助');
+  // No conversation and no contact platform: there is nowhere to open, so it says so (never "open on the platform").
+  assert.equal(replyRouteView({ kind: 'assisted', provider: null, href: null, reason: 'no_thread' }, ZH).label, ZH.noConversation);
+  assert.equal(replyRouteView({ kind: 'assisted', provider: 'whatsapp', href: null }, ZH).label, '在 WhatsApp 開啟 · 協助');
   assert.doesNotMatch(replyRouteView({ kind: 'assisted', provider: null, href: null }, ZH).hint, /the platform/);
   assert.equal(ZH.followUpWith('Mei'), '跟進 Mei');
   assert.match(EN.wonWithdrawnHint, /reopen it/);
