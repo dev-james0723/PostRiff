@@ -43,6 +43,7 @@ export type FounderVoiceApi = Pick<AgentApi, 'turn' | 'conversationState' | 'voi
 export const VOICE_BLOCKER_COPY: Record<string, string> = {
   founder_voice_disabled: 'Founder voice is switched off here (the server flag RAFII_FOUNDER_VOICE_ENABLED is not set).',
   ops_workspace_not_configured: 'No founder workspace is set yet. Create one in Settings → Contact & calls → Founder workspace.',
+  founder_voice_policy_unavailable: 'Your saved voice limits could not be verified. Retry once Settings is available.',
   consumer_runtime_unavailable: 'Control runs without the Rafii app runtime here, so it cannot open a voice session.',
   agent_runtime_off: 'Rafii’s agent runtime is off here, so spoken questions would have nothing to answer them.',
   voice_route_unavailable: 'GPT-Live is not configured here (no OpenAI key for the live route).',

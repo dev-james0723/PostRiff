@@ -65,11 +65,11 @@ function TicketSourceState({ rows, demo }: { rows: readonly MetricRow[]; demo: b
   return (
     <StateMessage
       kind='unsupported'
-      title='In-app ticket source is not yet qualified'
+      title='In-app support'
       description={
         demo
-          ? 'Demo shows sandbox requests. Customer conversations and replies are not collected until a support source is chosen (decision D7).'
-          : 'In-app support is the selected primary source. Apply its schema and verify a fresh ticket journey to qualify its measured coverage. Business-time SLA and CSAT require their own source contracts.'
+          ? 'Demo shows sandbox requests. Open Live to see customer tickets and reply.'
+          : 'Tickets and replies stay in their customer workspace. The inbox shows available response and resolution times. Business-hour targets and satisfaction surveys have not been configured.'
       }
     />
   );

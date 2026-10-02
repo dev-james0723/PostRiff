@@ -6,11 +6,12 @@ In-memory founder store, fake consumer connection and FakeCalls (real planner + 
 import os
 import types
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 os.environ.setdefault('RAFII_PHONE_PROVIDER', 'fake')
 
-from rafii_control import founder_briefings, founder_cron, founder_schedules
+from rafii_control import founder_briefings, founder_cron, founder_schedules, founder_policy
 from rafii_control.auth import ControlError
 from rafii_control.founder_contact import FLAG
 from rafii_control.founder_schedules import LATE_SECONDS, LEASE_SECONDS, claim_due, local_slot, next_occurrence, validate_schedule
@@ -166,8 +167,11 @@ class CronBriefingPathTests(unittest.TestCase):
 
     def tick(self, at, observe=None):
         self.now = at
-        return founder_cron.tick(self.service, VALUES, fstore=self.fstore, calls_factory=lambda operator: self.calls, clock=lambda: at,
-                                 observe=observe or (lambda fstore, service, values, now: observations(now)), lease_owner='test-cron')
+        # This fixture models schedule/contact storage, not the separately tested
+        # PostgreSQL Ops marker and policy-sync transactions.
+        with patch.object(founder_policy, 'sync_stage', return_value={'status': 'not_applicable', 'reason': 'schedule_fixture'}):
+            return founder_cron.tick(self.service, VALUES, fstore=self.fstore, calls_factory=lambda operator: self.calls, clock=lambda: at,
+                                     observe=observe or (lambda fstore, service, values, now: observations(now)), lease_owner='test-cron')
 
     def test_disabled_control_or_missing_store_is_a_no_op(self):
         self.assertEqual(founder_cron.tick(self.service, {}), {'status': 'disabled'})
