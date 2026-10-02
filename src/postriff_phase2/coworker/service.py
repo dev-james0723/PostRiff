@@ -213,6 +213,12 @@ class CoworkerService:
         if recipe is None:
             raise AlphaError("This weekly recipe is not active.", 409)
         planned = weekly_operator.plan_week(state, recipe, now, week_of)
+        if weekly_operator.first_week_only(recipe) and planned["id"] != weekly_operator.first_week_id(state, recipe):
+            # The first week's limit authorised that one frozen week. Nothing else is planned, drafted or spent until the
+            # owner turns on weekly drafting by saving this plan in Weekly plan (cron, the agent tool and this route alike).
+            raise AlphaError("Your first week’s limit covered that week only, so Rafii won’t plan or draft another week from it. "
+                             "To have Rafii prepare every week, review the accounts and weekly limit in Weekly plan and save it.",
+                             409, code="weekly_drafting_not_enabled")
         if any((source.get("origin") or {}).get("trendLineage") and source.get("id") in recipe.get("sourceIds", []) for source in state.get("sources", [])):
             from ..growth.trends.opportunities import attach_weekly_intent
             attach_weekly_intent(state, recipe, planned, now)

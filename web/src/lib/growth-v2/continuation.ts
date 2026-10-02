@@ -46,7 +46,12 @@ export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /** Enumeration (as `Storage` has it), used to clear every kept record; without it only the known keys are cleared. */
+  readonly length?: number;
+  key?(index: number): string | null;
 }
+
+const FAMILY = 'rafii.continue';
 
 export type ReadOutcome =
   | { status: 'ready'; record: ContinuationRecord }
@@ -117,9 +122,11 @@ export function buildRecord(input: {
   };
 }
 
-/** Save the consented record. Returns false (and stores nothing) when the browser blocks storage. */
+/** Save the consented record. Returns false (and stores nothing) when the browser blocks storage. A new record
+ *  replaces any earlier one kept in this tab (going back and continuing again leaves no orphaned draft). */
 export function saveContinuation(storage: StorageLike | null | undefined, record: ContinuationRecord): boolean {
   if (!storage) return false;
+  clearAllContinuations(storage);
   try {
     storage.setItem(PREFIX + record.nonce, JSON.stringify(record));
     storage.setItem(PENDING, record.nonce);
@@ -199,6 +206,29 @@ export function clearContinuation(storage: StorageLike | null | undefined, nonce
   try {
     storage.removeItem(PREFIX + nonce);
     if (storage.getItem(PENDING) === nonce) storage.removeItem(PENDING);
+  } catch {
+    /* storage went away; nothing to clear */
+  }
+}
+
+/**
+ * Every `rafii.continue*` record this tab holds (each kept draft and the pending pointer), not only the one in hand:
+ * a person who went back and continued again left earlier nonces behind. Used on import and discard.
+ */
+export function clearAllContinuations(storage: StorageLike | null | undefined, nonce?: string | null): void {
+  if (!storage) return;
+  try {
+    const keys: string[] = [];
+    if (typeof storage.length === 'number' && typeof storage.key === 'function') {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        if (key && key.startsWith(FAMILY)) keys.push(key);
+      }
+    }
+    const pending = storage.getItem(PENDING);
+    for (const known of [nonce, pending]) if (known) keys.push(PREFIX + known);
+    keys.push(PENDING);
+    for (const key of new Set(keys)) storage.removeItem(key);
   } catch {
     /* storage went away; nothing to clear */
   }

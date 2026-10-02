@@ -53,6 +53,18 @@ def credit_request(body):
     return {k:v for k,v in body.items() if k!='creditQuoteId'}
 
 
+ABANDONED_RUN_SECONDS=900   # well past any Growth request's own time limits (Genome stops at 220 s)
+
+
+class RefusedBeforeDispatch(RouterError):
+    """A permission, consent or input recheck refused the next model call before it was sent. No attempt exists, so the
+    router records none: a refusal is never an unknown paid attempt (the platform-preview router behaves the same)."""
+
+    def __init__(self, refusal):
+        super().__init__(str(refusal), getattr(refusal,'code',None) or 'refused_before_dispatch')
+        self.refusal = refusal
+
+
 def credit_authority(kind,body):
     from ..credit_wallet import request_digest
     quote=body.get('creditQuoteId')
@@ -235,16 +247,21 @@ class GrowthService:
     def _guard_router(router,guard,reconcile_unknown=False):
         router.reconcile_unknown=reconcile_unknown
         if guard is None:return router
+        def check():
+            try:guard()
+            except AlphaError as error:
+                # Refused before dispatch: the router must not book this as an attempt with an unknown cost.
+                raise RefusedBeforeDispatch(error) from error
         if router.jev:
             evaluate=router.jev.evaluate
             def guarded_evaluate(*args,**kwargs):
-                guard()
+                check()
                 return evaluate(*args,**kwargs)
             router.jev=SimpleNamespace(evaluate=guarded_evaluate)
         if router.chat:
             chat=router.chat
             def guarded_chat(*args,**kwargs):
-                guard()
+                check()
                 return chat(*args,**kwargs)
             guarded_chat.enforces_timeout=getattr(chat,'enforces_timeout',False)
             router.chat=guarded_chat
@@ -418,14 +435,16 @@ class GrowthService:
             raise AlphaError('A request key is required.')
         if body.get('confirmed') is not True:
             raise AlphaError('Confirm the shown AI use before continuing.')
-        fingerprint=digest(body)
+        # The request key names the request, not its payment: a retry after a lost response may resend the key with or
+        # without the quote it confirmed (the quote binds the request digest separately), and gets the same run back.
+        fingerprint=digest(credit_request(body))
         with self.repository.transaction(token,workspace_id) as (cur,row,principal):
             require(_membership(row),requirement)
             state=copy.deepcopy(row[1]);self._consent(state)
             cur.execute('SELECT id::text,status,fingerprint,body,context_fingerprint FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND request_key=%s',(workspace_id,key))
             old=cur.fetchone()
             if old:
-                if old[2]!=fingerprint:
+                if old[2] not in (fingerprint,digest(body)):   # digest(body): runs recorded before the quote id was excluded
                     raise AlphaError('That request key belongs to another input.',409,code='growth_key_conflict')
                 if old[1]=='completed':
                     draft=old[3].get('draft')
@@ -501,6 +520,17 @@ class GrowthService:
 
     def _finish(self,workspace_id,token,run,sink,result,error=None,store=None):
         from ..hosted import _membership
+        if isinstance(error,RefusedBeforeDispatch):error=error.refusal   # the recheck's own answer (e.g. 409 input changed)
+        costs=[event.cost_usd_micro() for event in sink.events]
+        unknown=any(cost is None for cost in costs)
+        credit=run.get('creditReservationId')
+
+        def settle_credit(cur,outcome):
+            # The credit bridge settles exactly once (one idempotency key): the verified cost of a result the person
+            # receives, capped by the quote; released when the task failed or its result is discarded, with the provider
+            # cost still booked (platform cost, as Radar does); held for reconciliation when any attempt's cost is unknown.
+            self.hosted.ledger.settle(cur,workspace_id,credit,'unknown' if unknown else outcome,None if unknown else sum(costs),
+                                      idempotency_key='growth-credit:settle:'+run['id'])
         # Cost/event finalization is independent of changed membership/consent and exactly once per run.
         with self.hosted.connection_factory() as db,db.cursor() as cur:
             cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(workspace_id,))
@@ -511,30 +541,20 @@ class GrowthService:
                 for event in sink.events:
                     PostgresUsageSink(cur).record(event)
                 if run.get('funding'):
-                    costs=[event.cost_usd_micro() for event in sink.events]
-                    unknown=any(cost is None for cost in costs)
                     outcome='unknown' if unknown else 'failed' if error else 'completed'
                     self.hosted.ledger.settle(cur,workspace_id,run['reservationId'],outcome,
                         None if unknown else sum(costs),idempotency_key='platform-preview:settle:'+run['id'])
-                elif run.get('creditReservationId'):
-                    # The credit bridge settles exactly once: actual verified cost (capped by the quote), released on a known
-                    # failure, held for reconciliation when any attempt's cost is unknown.
-                    costs=[event.cost_usd_micro() for event in sink.events]
-                    unknown=any(cost is None for cost in costs)
-                    outcome='unknown' if unknown else 'failed' if error else 'completed'
-                    self.hosted.ledger.settle(cur,workspace_id,run['creditReservationId'],outcome,
-                        None if unknown else sum(costs),idempotency_key='growth-credit:settle:'+run['id'])
+                elif credit and (error or unknown):
+                    settle_credit(cur,'failed')   # nothing will be delivered, or the cost must first be reconciled
                 cur.execute("UPDATE public.pr_post_doctor_runs SET body=body||%s::jsonb WHERE workspace_id=%s AND id=%s",(json.dumps({"_usageRecorded":True}),workspace_id,run['id']))
+        # A completed credit task is charged only together with the result it delivers (one transaction): a result
+        # discarded because the input, consent, permission or evidence changed after the last call is released instead.
+        deliver=bool(credit) and not error and not unknown
         try:
             with self.repository.transaction(token,workspace_id) as (cur,row,principal):
                 require(_membership(row),run.get('requirement','edit'))
                 current=row[1]
-                valid=self._context(current)==run['context']
-                draft=(run.get('prepared') or {}).get('draft')
-                if draft and draft.get('id'):
-                    candidate=next((v for v in current.get('variants',[]) if v['id']==draft['id']),{})
-                    valid=valid and self._draft_matches(current,draft)
-                unknown=any(event.cost_usd_micro() is None for event in sink.events)
+                valid=self._still_current(current,run)
                 status='cancelled' if not valid else 'unknown' if error and unknown else 'failed' if error else 'completed'
                 if status=='completed' and store:
                     result=store(cur,current,principal,result)
@@ -545,9 +565,14 @@ class GrowthService:
                 saved.update(metadata)
                 cur.execute('UPDATE public.pr_post_doctor_runs SET status=%s,body=%s::jsonb WHERE workspace_id=%s AND id=%s AND status=\'running\'',
                             (status,json.dumps(saved),workspace_id,run['id']))
+                if deliver:
+                    settle_credit(cur,'completed' if status=='completed' else 'failed')
         except Exception:
             with self.hosted.connection_factory() as db,db.cursor() as cur:
+                cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(workspace_id,))
                 cur.execute("UPDATE public.pr_post_doctor_runs SET status='cancelled' WHERE workspace_id=%s AND id=%s AND status='running'",(workspace_id,run['id']))
+                if deliver:
+                    settle_credit(cur,'failed')   # the result was not stored: release, never charge for it
             raise
         if not valid:
             raise AlphaError('The draft, voice, history or consent changed. Discard this result and check the current version.',409,code='growth_input_changed')
@@ -555,6 +580,13 @@ class GrowthService:
             if isinstance(error,AlphaError):raise error
             raise AlphaError('Growth AI could not complete this request. Your normal draft flow is available.',503,code='growth_ai_unavailable') from error
         return client_result(saved)
+
+    def _still_current(self,state,run):
+        """The run's result still belongs to the workspace as it is now: same context fingerprint and draft revision."""
+        if self._context(state)!=run['context']:
+            return False
+        draft=(run.get('prepared') or {}).get('draft')
+        return not (draft and draft.get('id')) or self._draft_matches(state,draft)
 
     def _check(self,router,workspace_id,state,draft,posts):
         creator={}
@@ -951,10 +983,40 @@ class GrowthService:
                     'readings':[performance.compare(post,posts,h) for h in performance.HORIZONS],
                     'notice':'Observed outcomes are associations. No Genome rule changes without your approval.'}
 
+    def settle_abandoned(self,limit=200):
+        """Runs whose process stopped between _begin and _finish keep an open reservation (customer credits or the platform
+        preview hold) that nothing would ever settle. Hold each as `estimated_unknown`, so `unknown_reservations` lists it
+        for reconciliation: never recorded as zero, never silently released. The run becomes `unknown` (a replay of its key
+        asks for reconciliation instead of running again). Workspace lock first, then the run, as everywhere else."""
+        with self.hosted.connection_factory() as db,db.cursor() as cur:
+            cur.execute("SELECT id::text,workspace_id::text FROM public.pr_post_doctor_runs WHERE status='running' AND created_at<now()-make_interval(secs=>%s) "
+                        "AND (body ? '_creditReservationId' OR body ? '_reservationId') ORDER BY created_at LIMIT %s",(ABANDONED_RUN_SECONDS,int(limit)))
+            rows=cur.fetchall()
+        settled=0
+        for run_id,workspace_id in rows:
+            with self.hosted.connection_factory() as db,db.cursor() as cur:
+                cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(workspace_id,))
+                if not cur.fetchone():continue
+                cur.execute("SELECT body FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id=%s AND status='running' AND created_at<now()-make_interval(secs=>%s) FOR UPDATE",
+                            (workspace_id,run_id,ABANDONED_RUN_SECONDS))
+                row=cur.fetchone()
+                if not row:continue
+                body=row[0]
+                credit=body.get('_creditReservationId')
+                reservation=credit or body.get('_reservationId')
+                key=('growth-credit:settle:' if credit else 'platform-preview:settle:')+run_id   # the key _finish would have used
+                self.hosted.ledger.settle(cur,workspace_id,reservation,'unknown',None,idempotency_key=key)
+                cur.execute("UPDATE public.pr_post_doctor_runs SET status='unknown',body=body||%s::jsonb WHERE workspace_id=%s AND id=%s",
+                            (json.dumps({'_usageRecorded':True,'_abandoned':True}),workspace_id,run_id))
+                settled+=1
+        return settled
+
     def sweep(self):
         with self.hosted.connection_factory() as db,db.cursor() as cur:
             cur.execute("SELECT to_regclass('public.pr_public_checks')")
             if cur.fetchone()[0] is None:return {'status':'not_migrated'}
+        abandoned=self.settle_abandoned()
+        with self.hosted.connection_factory() as db,db.cursor() as cur:
             cur.execute('DELETE FROM public.pr_public_checks WHERE id IN (SELECT id FROM public.pr_public_checks WHERE expires_at<=now() LIMIT 500)')
             public=cur.rowcount
             # Keep only opaque check/Genome tombstones so retention cannot renew a lifetime preview.
@@ -967,4 +1029,4 @@ class GrowthService:
                     cur.execute(f'DELETE FROM public.{table} WHERE id IN (SELECT id FROM public.{table} WHERE expires_at<=now() LIMIT 500)')
                 cur.execute('DELETE FROM public.pr_comment_judgments WHERE (workspace_id,thread_id) IN (SELECT workspace_id,thread_id FROM public.pr_comment_judgments WHERE expires_at<=now() LIMIT 500)')
                 cur.execute("UPDATE public.pr_post_doctor_runs SET body='{}',status='cancelled' WHERE id IN (SELECT id FROM public.pr_post_doctor_runs WHERE kind='audience' AND created_at<now()-interval '90 days' AND body<>'{}'::jsonb LIMIT 500)")
-        return {'status':'complete','publicChecksRemoved':public}
+        return {'status':'complete','publicChecksRemoved':public,'abandonedReservationsHeld':abandoned}

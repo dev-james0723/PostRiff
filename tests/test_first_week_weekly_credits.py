@@ -112,5 +112,81 @@ class FirstWeekRecipeTest(unittest.TestCase):
         self.assertTrue(all("publishBlocker" not in s for s in week["slots"]))
 
 
+class FirstWeekAuthorityTest(unittest.TestCase):
+    """The first week's limit authorises one frozen week, never a weekly habit (PRD R-COM-02; R-FWR-02)."""
+
+    def state(self):
+        return {"phase2": {"channels": [{"id": "ch1", "platform": "Threads", "account": "A"}]}, "sources": []}
+
+    def first_week(self, state):
+        payload = {"goals": ["Teach one skill"], "timeZone": "UTC", "firstWeek": True, "maxCostUsdMicroPerWeek": 1_000_000,
+                   "destinations": [{"channelId": None, "platform": "Threads", "postsPerWeek": 3}]}
+        return weekly_operator.save_recipe(state, payload, "owner", NOW)
+
+    def test_a_first_week_recipe_is_never_due_however_late(self):
+        state = self.state()
+        recipe = self.first_week(state)
+        self.assertEqual(recipe["status"], "active")
+        for later in (0, 2, 9, 30, 365):   # NOW is a Thursday; +2 and +9 days are past Friday's planning moment
+            self.assertFalse(weekly_operator.due(recipe, NOW + later * 86400))
+        ordinary = weekly_operator.save_recipe(state, {"goals": ["Teach"], "timeZone": "UTC", "destinations": [{"channelId": "ch1", "postsPerWeek": 2}]}, "owner", NOW)
+        self.assertTrue(weekly_operator.due(ordinary, NOW + 2 * 86400))
+
+    def test_it_stays_one_time_until_the_owner_saves_it_in_weekly_plan(self):
+        state = self.state()
+        recipe = self.first_week(state)
+        recipe["firstWeekId"] = "wk_first"
+        # First Week Ready re-saving its own recipe (planning again, setting this week's limit) keeps it one-time.
+        weekly_operator.save_recipe(state, {"goals": ["Teach"], "timeZone": "UTC", "firstWeek": True, "maxCostUsdMicroPerWeek": 2_000_000,
+                                            "destinations": [{"channelId": None, "platform": "Threads", "postsPerWeek": 3}]}, "owner", NOW, recipe["id"])
+        self.assertEqual((recipe["firstWeek"], recipe["firstWeekId"]), (True, "wk_first"))
+        self.assertEqual(weekly_operator.first_week_id(state, recipe), "wk_first")
+        self.assertFalse(weekly_operator.due(recipe, NOW + 30 * 86400))
+        # Pausing and resuming is not a choice to draft every week.
+        weekly_operator.set_recipe_status(state, recipe["id"], "paused", NOW)
+        weekly_operator.set_recipe_status(state, recipe["id"], "active", NOW)
+        self.assertTrue(weekly_operator.first_week_only(recipe))
+        # The Weekly plan form (which never sends `firstWeek`) saved by the owner turns on recurring drafting.
+        weekly_operator.save_recipe(state, {"goals": ["Teach"], "timeZone": "UTC", "maxCostUsdMicroPerWeek": 1_500_000,
+                                            "destinations": [{"channelId": "ch1", "postsPerWeek": 3}]}, "owner", NOW, recipe["id"])
+        self.assertNotIn("firstWeek", recipe)
+        self.assertNotIn("firstWeekId", recipe)
+        self.assertTrue(weekly_operator.due(recipe, NOW + 2 * 86400))
+
+    def test_the_journey_names_the_week_for_recipes_saved_before_the_week_id_was_kept(self):
+        state = self.state()
+        recipe = self.first_week(state)
+        state["coworker"]["firstWeek"] = {"recipeId": recipe["id"], "weekId": "wk_journey"}
+        self.assertEqual(weekly_operator.first_week_id(state, recipe), "wk_journey")
+        state["coworker"]["firstWeek"] = {"recipeId": "wr_other", "weekId": "wk_journey"}
+        self.assertIsNone(weekly_operator.first_week_id(state, recipe))
+
+
+class WeeklyPrepareFirstWeekGuardTest(unittest.TestCase):
+    """`weekly_prepare` (the Weekly route, the agent tool and cron) never plans another week from a first-week recipe."""
+
+    def test_only_the_first_week_is_prepared(self):
+        from unittest import mock
+        state = {"phase2": {"channels": []}, "sources": []}
+        recipe = weekly_operator.save_recipe(state, {"goals": ["Teach"], "timeZone": "UTC", "firstWeek": True,
+                                                     "destinations": [{"channelId": None, "platform": "Threads", "postsPerWeek": 2}]}, "owner", NOW)
+        first = weekly_operator.plan_week(state, recipe, NOW)
+        recipe["firstWeekId"] = first["id"]
+        repo = types.SimpleNamespace(get=lambda wid, token: {"state": state, "revision": 1}, effects=[])
+        svc = CoworkerService.__new__(CoworkerService)
+        svc.hosted, svc.values, svc.clock = types.SimpleNamespace(repository=repo), {}, lambda: NOW + 14 * 86400
+        advanced = []
+        with mock.patch.object(CoworkerService, "_require", lambda self, flag: None), \
+                mock.patch.object(CoworkerService, "_command_as", lambda *a, **k: advanced.append("planned")), \
+                mock.patch.object(CoworkerService, "_advance", lambda self, *a, **k: advanced.append("advanced") or {"week": first}):
+            with self.assertRaises(AlphaError) as caught:
+                svc.weekly_prepare("w", "tok", recipe["id"])   # two weeks later: "next week" is not the first week
+            self.assertEqual((caught.exception.status, caught.exception.code), (409, "weekly_drafting_not_enabled"))
+            self.assertEqual(advanced, [])
+            import datetime
+            svc.weekly_prepare("w", "tok", recipe["id"], week_of=datetime.date.fromisoformat(first["weekOf"]))
+            self.assertEqual(advanced, ["planned", "advanced"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -225,6 +225,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
             >
               <Icons.media aria-hidden className='size-4' />
               <span className='@max-xl/composer:sr-only'>{imageGeneration.enabled ? 'Image on' : 'Generate image'}</span>
+              {/* Off for this plan or route: the reason is read with the button, not only shown on hover. */}
+              {!imageGeneration.available && <span className='sr-only'>{` — ${imageGeneration.detail}`}</span>}
             </button>
           )}
         </div>

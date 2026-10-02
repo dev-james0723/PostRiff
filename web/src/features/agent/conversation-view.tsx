@@ -71,7 +71,7 @@ import { navigationId } from '@/features/context-navigation/markers';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import type { MediaMoment, NavigationItem } from '@/lib/api/types';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
-import { billingModeOf, imageCostHint } from '@/lib/billing/mode';
+import { billingModeOf, imageCostHint, imageToggle } from '@/lib/billing/mode';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
@@ -314,6 +314,11 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const imageCapability = models.data?.imageGeneration;
+  // The toggle follows this workspace's plan (D-026: no images on plan credits or Free), not the catalog's legacy wording.
+  const imageState = imageToggle(imageCapability, usage.data, usage.isLoading);
+  useEffect(() => {
+    if (imageRequested && !imageState.available) setImageRequested(false);
+  }, [imageRequested, imageState.available]);
   const running = ['running', 'queued'].includes(run?.status ?? '');
   const streamed = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'message.delta').map((e) => e.text ?? '').join(''), [run?.events]);
   const stage = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'progress.updated').at(-1)?.stage ?? null, [run?.events]);
@@ -726,8 +731,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               voiceAvailable={voiceAvailable}
               imageGeneration={{
                 enabled: imageRequested,
-                available: !creditMode && Boolean(imageCapability?.available),
-                detail: imageCapability?.detail ?? 'Checking…',
+                available: !creditMode && imageState.available,
+                detail: imageState.detail,
                 onChange: setImageRequested
               }}
               hint={(imageRequested && imageCostHint(billingModeOf(usage.data))) || '⌘↵ to send'}

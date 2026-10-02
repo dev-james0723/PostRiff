@@ -529,7 +529,7 @@ class Billing:
         self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(clock=clock, pricing_v2_enabled=pricing_v2_enabled), clock, on_applied
 
         self.pricing_v2_enabled = pricing_v2_enabled
-        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort)
+        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort, ledger=self.ledger)
 
     def assign_creator_price(self, cur, workspace_id):
         return self.pricing.assign(cur, workspace_id)
@@ -653,20 +653,31 @@ class Billing:
 
     def availability(self, cur, workspace_id):
         """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.
-        Checkout needs the live provider plus at least one 'active' terms row bound to a provider price (D3)."""
+        Checkout needs the live provider plus at least one 'active' terms row bound to a provider price (D3). Under
+        Pricing v2 it is exactly what `billing_checkout` would accept for Creator, and `checkoutReason` says why not
+        (e.g. `credits_unavailable`: Creator is never sold while this server cannot spend its credits)."""
         live = self.provider.id == "stripe"
+        reason = None
         if self.pricing_v2_enabled:
             try:
                 self.pricing.checkout(cur, workspace_id, "creator-v1")
                 purchasable = True
-            except AlphaError:
-                purchasable = False
+            except AlphaError as error:
+                purchasable, reason = False, getattr(error, "code", None) or "not_for_sale"
         else:
             cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' LIMIT 1")
             purchasable = cur.fetchone() is not None
+            reason = None if purchasable else "not_for_sale"
+            cur.execute("SELECT plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
+            held = cur.fetchone()
+            if purchasable and held and held[0] == "creator-v1":
+                # Rollback keeps a Creator binding: legacy checkout refuses it (billing_checkout), so none is offered.
+                purchasable, reason = False, "creator_reenroll_only"
         cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
         row = cur.fetchone()
-        return {"provider": self.provider.id, "checkoutAvailable": live and purchasable, "portalAvailable": live and bool(row and row[0])}
+        available = live and purchasable
+        return {"provider": self.provider.id, "checkoutAvailable": available, "portalAvailable": live and bool(row and row[0]),
+                "checkoutReason": None if available else (reason or "provider_unavailable")}
 
     @staticmethod
     def _reconcile_entitlement(cur, workspace_id, terms_id, ent, period_end):

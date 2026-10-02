@@ -44,6 +44,37 @@ export function imageCostHint(mode: BillingMode | null): string | null {
   return null;
 }
 
+/** What the chat's "Generate image" toggle may offer here, and the reason it shows (tooltip and screen readers). */
+export interface ImageToggle {
+  available: boolean;
+  detail: string;
+}
+
+export const IMAGE_CREDITS_UNAVAILABLE = 'Images are not part of plan credits yet. Nothing is made or charged.';
+export const IMAGE_FREE_UNAVAILABLE = 'Images are not included in Free. Drafts, edits and exports stay available.';
+
+/**
+ * The image toggle in this workspace's billing words (R-COM-04; DECISIONS D-026). The model catalog's `detail`
+ * ("one managed media credit") is the same for every workspace and true only for legacy allowances, so the plan
+ * decides: on a credit plan (Creator, or any wallet with an active credit policy) or on Free the server refuses every
+ * image, so the toggle is off and says why instead of letting each send fail. While the plan is loading the toggle
+ * waits; if it can't be read, the server still decides on send and nothing claims a cost.
+ */
+export function imageToggle(
+  capability: { available?: boolean; detail?: string } | null | undefined,
+  usage: { billingMode?: unknown; credits?: unknown } | null | undefined,
+  loading = false
+): ImageToggle {
+  if (!capability) return { available: false, detail: 'Checking…' };
+  if (!capability.available) return { available: false, detail: capability.detail || 'Image generation isn’t available yet.' };
+  const mode = billingModeOf(usage);
+  if (usage?.credits || mode === 'managed_credits') return { available: false, detail: IMAGE_CREDITS_UNAVAILABLE };
+  if (mode === 'free_preview') return { available: false, detail: IMAGE_FREE_UNAVAILABLE };
+  if (mode === 'legacy_allowances') return { available: true, detail: capability.detail || 'Uses 1 media credit.' };
+  if (loading) return { available: false, detail: 'Checking your plan…' };
+  return { available: true, detail: 'Generates one image for you to review. Whether your plan includes images is checked when you send.' };
+}
+
 export const CREDIT_WARN_RATIO = 0.1;
 /** Credits that expire within three days are called out; unused credits do not roll over. */
 export const EXPIRING_SOON_SECONDS = 3 * 86400;
@@ -137,6 +168,13 @@ const OPEN_STATUSES: readonly string[] = ['active', 'past_due', 'grace'];
  */
 export type V2Offer = 'current' | 'owner_only' | 'checkout' | 'not_open' | 'none';
 
+/**
+ * Why a `not_open` card can't be bought, from the server's `billing.checkoutReason` (`billing.py availability`):
+ * `credits_off` when Creator would be sold while this server cannot spend managed credits (credits switched off or
+ * Creator's credit policy inactive); `not_open` for every other reason, said as "checkout isn't open yet".
+ */
+export type V2OfferReason = 'credits_off' | 'not_open';
+
 export interface V2PlanCardModel {
   terms: PlanTerms;
   current: boolean;
@@ -144,6 +182,19 @@ export interface V2PlanCardModel {
   priceCents: number | null;
   currency: string;
   offer: V2Offer;
+  /** Set only for `not_open`. */
+  reason: V2OfferReason | null;
+}
+
+/** The server's reason checkout is closed for this workspace (`billing.checkoutReason`), when it sent one. */
+export function checkoutReasonOf(usage: Pick<Usage, 'billing'>): string | null {
+  const reason = (usage.billing as { checkoutReason?: unknown } | undefined)?.checkoutReason;
+  return typeof reason === 'string' && reason ? reason : null;
+}
+
+function offerReason(usage: Pick<Usage, 'billing'>): V2OfferReason {
+  const reason = checkoutReasonOf(usage);
+  return reason === 'credits_unavailable' || reason === 'credit_policy_inactive' ? 'credits_off' : 'not_open';
 }
 
 type PlanInput = Pick<Usage, 'planTerms' | 'entitlement' | 'subscription' | 'creatorOffer' | 'lifecycle' | 'billing'>;
@@ -178,15 +229,31 @@ export function v2PlanCardModels(usage: PlanInput, isOwner: boolean): V2PlanCard
       else if (terms.plan === 'free' || open) offer = 'none';
       else if (terms.status === 'active' && terms.newCheckoutEnabled && usage.billing?.checkoutAvailable === true) offer = priceCents !== null ? 'checkout' : 'none';
       else offer = 'not_open';
-      return { terms, current, priceCents, currency, offer };
+      return { terms, current, priceCents, currency, offer, reason: offer === 'not_open' ? offerReason(usage) : null };
     });
 }
 
-/** A paid legacy package (Studio, Studio Assist) kept for this workspace while v2 sells something else. */
-export function isLegacyPlanUnderV2(usage: Pick<Usage, 'catalogVersion' | 'billingMode' | 'planTerms' | 'entitlement'>): boolean {
+type LegacyInput = Pick<Usage, 'catalogVersion' | 'billingMode' | 'planTerms' | 'entitlement'> & Partial<Pick<Usage, 'lifecycle'>>;
+
+function heldLegacyPackage(usage: LegacyInput): boolean {
   if (planListKind(usage) !== 'v2' || billingModeOf(usage) !== 'legacy_allowances') return false;
   const held = usage.planTerms.find((row) => row.id === usage.entitlement?.planTermsId);
   return Boolean(held && held.catalogState === 'legacy' && held.plan !== 'trial');
+}
+
+const ENDED_STATUSES: readonly string[] = ['cancelled', 'expired'];
+
+/**
+ * A paid legacy package (Studio, Studio Assist) kept for this workspace while v2 sells something else: its price and
+ * allowances stay as they are. Only while its subscription is still open: an ended one is `legacyPlanEnded`.
+ */
+export function isLegacyPlanUnderV2(usage: LegacyInput): boolean {
+  return heldLegacyPackage(usage) && !ENDED_STATUSES.includes(usage.lifecycle?.status ?? '');
+}
+
+/** A legacy package whose subscription has ended under v2: legacy plans are not sold again, Creator may be (checkout). */
+export function legacyPlanEnded(usage: LegacyInput): boolean {
+  return heldLegacyPackage(usage) && ENDED_STATUSES.includes(usage.lifecycle?.status ?? '');
 }
 
 /* ---------- work surfaces ---------- */

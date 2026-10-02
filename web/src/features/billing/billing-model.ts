@@ -121,13 +121,16 @@ export function allowanceTotal(terms: Pick<PlanTerms, 'entitlements'> | null | u
 export type PlanOffer = 'current' | 'owner_only' | 'switch_in_portal' | 'not_available' | 'checkout';
 
 export function planOffer(input: {
-  terms: Pick<PlanTerms, 'id' | 'status'>;
+  terms: Pick<PlanTerms, 'id' | 'status'> & Partial<Pick<PlanTerms, 'plan'>>;
   currentTermsId: string | null | undefined;
   lifecycleStatus: string | null | undefined;
   checkoutAvailable: boolean | undefined;
   isOwner: boolean;
 }): PlanOffer {
   const open = hasOpenSubscription(input.lifecycleStatus);
+  // Free is never bought: a workspace is on it (it has no subscription to be "open") or returns to it when a plan ends.
+  // With Pricing v2 rolled back, a Free workspace still sees its Free row in the legacy list, never a Choose button.
+  if (input.terms.plan === 'free') return input.terms.id === input.currentTermsId ? 'current' : 'not_available';
   if (input.terms.id === input.currentTermsId && open) return 'current';
   if (!input.isOwner) return 'owner_only';
   if (open) return 'switch_in_portal';

@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { cents } from '@/lib/api/client';
 import type { Usage } from '@/lib/api/types';
-import { billingModeOf, isLegacyPlanUnderV2, planListKind, v2PlanCardModels } from '@/lib/billing/mode';
+import { billingModeOf, isLegacyPlanUnderV2, legacyPlanEnded, planListKind, v2PlanCardModels } from '@/lib/billing/mode';
+import { billingCopy } from '@/lib/billing/mode-copy';
 import { formatDate } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { planSummary, type PlanSummary } from './billing-copy';
@@ -25,14 +26,19 @@ import { PORTAL, type BillingRedirect } from './use-billing-redirect';
  * variant, and a Studio / Studio Assist package kept after v2 launched is labelled as a legacy plan.
  */
 export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect; now: number }) {
-  const v2Copy = useBillingCopy().summary;
+  const copy = useBillingCopy();
+  const v2Copy = copy.summary;
   const sub = usage.subscription;
   const status = usage.lifecycle?.status;
   const mode = billingModeOf(usage);
   const trial = mode !== 'free_preview' && isTrial(usage);
   const legacyPlan = isLegacyPlanUnderV2(usage);
+  const legacyEnded = legacyPlanEnded(usage);
+  const v2List = planListKind(usage) === 'v2';
   // "Choose a plan" only when the plan list below really offers a checkout (no anchor to a list without one).
-  const canChoose = planListKind(usage) === 'v2' ? v2PlanCardModels(usage, isOwner).some((card) => card.offer === 'checkout') : usage.billing?.checkoutAvailable === true;
+  const canChoose = v2List ? v2PlanCardModels(usage, isOwner).some((card) => card.offer === 'checkout') : usage.billing?.checkoutAvailable === true;
+  // A Creator card speaks the person's billing language; legacy plans keep their own (English) words.
+  const words = mode === 'managed_credits' ? copy.planSummary : billingCopy('en').planSummary;
 
   let summary: PlanSummary;
   if (mode === 'free_preview') {
@@ -43,23 +49,28 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
       line: ended ?? v2Copy.freeLine,
       exactDate: null,
       action: canChoose && isOwner ? 'plans' : null,
-      actionLabel: canChoose && isOwner ? v2Copy.seeCreator : null,
+      // With Pricing v2 rolled back the list below sells legacy plans, not Creator: the button says what it opens.
+      actionLabel: canChoose && isOwner ? (v2List ? v2Copy.seeCreator : v2Copy.seePlans) : null,
       urgent: false
     };
   } else {
-    summary = planSummary({
-      timeline: planTimeline(usage, now),
-      planLabel: sub?.label ?? currentTerms(usage)?.label,
-      trial,
-      status,
-      isOwner,
-      portalAvailable: usage.billing?.portalAvailable === true,
-      checkoutAvailable: canChoose
-    });
+    summary = planSummary(
+      {
+        timeline: planTimeline(usage, now),
+        planLabel: sub?.label ?? currentTerms(usage)?.label,
+        trial,
+        status,
+        isOwner,
+        portalAvailable: usage.billing?.portalAvailable === true,
+        checkoutAvailable: canChoose
+      },
+      words
+    );
   }
   const portalError = redirect.errorFor(PORTAL);
+  const perMonth = mode === 'managed_credits' ? ` ${copy.plans.perMonth}` : ' / month';
   const price =
-    mode === 'free_preview' || !sub ? null : `${cents(sub.priceCents, sub.currency)}${trial ? '' : ' / month'}${!trial && sub.priceStatus !== 'active' ? ' · proposed price' : ''}`;
+    mode === 'free_preview' || !sub ? null : `${cents(sub.priceCents, sub.currency)}${trial ? '' : perMonth}${!trial && sub.priceStatus !== 'active' ? ` · ${words.proposedPrice}` : ''}`;
 
   return (
     <Surface
@@ -88,10 +99,11 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
         )}
         {!trial && price && <p className='text-muted-foreground text-sm tabular-nums'>{price}</p>}
         {legacyPlan && <p className='text-muted-foreground text-sm'>{v2Copy.legacyNote}</p>}
+        {legacyEnded && <p className='text-muted-foreground text-sm'>{canChoose && isOwner ? v2Copy.legacyEndedChoose : v2Copy.legacyEndedNote}</p>}
         {trial && (price || summary.exactDate) && (
           <details className='group text-muted-foreground mt-1 text-sm'>
             <summary className='rafii-focus hover:text-foreground w-fit cursor-pointer list-none rounded-md underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden'>
-              Details
+              {words.details}
             </summary>
             <p className='mt-1 tabular-nums'>{[price, summary.exactDate].filter(Boolean).join(' · ')}</p>
           </details>
@@ -106,8 +118,8 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
               className={ACTION_STATEFUL}
               state={redirect.stateFor(PORTAL)}
               disabled={redirect.busy}
-              loadingText='Opening…'
-              errorText='Try again'
+              loadingText={words.opening}
+              errorText={words.tryAgain}
               onClick={redirect.openPortal}
             >
               {summary.actionLabel}

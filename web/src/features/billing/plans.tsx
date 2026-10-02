@@ -80,28 +80,32 @@ function V2Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boolean;
   const copy = useBillingCopy().plans;
   const cards = v2PlanCardModels(usage, isOwner);
   if (cards.length === 0) return null;
-  const note = isOwner && cards.some((card) => card.offer === 'checkout') ? checkoutNote(usage.billing?.provider) : null;
+  const note = isOwner && cards.some((card) => card.offer === 'checkout') && usage.billing?.provider === 'stripe' ? copy.stripeNote : null;
   const firstValue = catalogPlan('free')?.firstValue;
+  const value = (terms: PlanTerms, key: string) => {
+    const total = allowanceTotal(terms, key);
+    return total === null ? '—' : total === 0 ? copy.notIncluded : formatNumber(total);
+  };
 
   return (
     <section id='plans' className='flex scroll-mt-4 flex-col gap-3' aria-labelledby='plans-heading' data-tour='billing-plans'>
       <div className='flex flex-col gap-0.5 px-1'>
         <h2 id='plans-heading' className='text-foreground text-lg font-medium tracking-tight'>
-          Plans
+          {copy.heading}
         </h2>
-        {!isOwner && <p className='text-muted-foreground text-sm'>Only the owner can change plans.</p>}
+        {!isOwner && <p className='text-muted-foreground text-sm'>{copy.ownerOnly}</p>}
         {note && <p className='text-muted-foreground text-sm'>{note}</p>}
       </div>
       <div className='grid gap-4 md:grid-cols-2'>
-        {cards.map(({ terms, current, priceCents, currency, offer }) => {
+        {cards.map(({ terms, current, priceCents, currency, offer, reason }) => {
           const credits = allowanceTotal(terms, 'monthlyCredits');
           const free = terms.plan === 'free';
           const rows = [
             ...(free && firstValue ? [{ label: copy.firstLook, value: copy.firstLookValue(formatNumber(firstValue.genomeMaxPosts)) }] : []),
             { label: copy.managedCredits, value: credits ? formatNumber(credits) : copy.none },
-            { label: copy.connectedAccounts, value: allowanceValue(terms, 'connectedAccounts') },
-            { label: copy.brands, value: allowanceValue(terms, 'brands') },
-            { label: copy.seats, value: allowanceValue(terms, 'members') }
+            { label: copy.connectedAccounts, value: value(terms, 'connectedAccounts') },
+            { label: copy.brands, value: value(terms, 'brands') },
+            { label: copy.seats, value: value(terms, 'members') }
           ];
           const error = redirect.errorFor(terms.id);
           return (
@@ -109,7 +113,7 @@ function V2Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boolean;
               <div className='flex flex-col gap-2'>
                 {current && (
                   <div className='flex flex-wrap items-center gap-2'>
-                    <Badge>Current</Badge>
+                    <Badge>{copy.current}</Badge>
                   </div>
                 )}
                 <h3 id={`plan-${terms.id}-name`} className='flex flex-wrap items-baseline gap-x-2 text-xl font-medium tracking-tight'>
@@ -140,8 +144,8 @@ function V2Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boolean;
                         className={ACTION_STATEFUL}
                         state={redirect.stateFor(terms.id)}
                         disabled={redirect.busy}
-                        loadingText='Opening checkout…'
-                        errorText='Try again'
+                        loadingText={copy.opening}
+                        errorText={copy.tryAgain}
                         onClick={() => redirect.startCheckout(terms.id)}
                       >
                         {copy.choose(terms.label)}
@@ -153,7 +157,7 @@ function V2Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boolean;
                       )}
                     </>
                   ) : (
-                    <span className='text-muted-foreground text-xs'>{copy.notOpen}</span>
+                    <span className='text-muted-foreground text-xs'>{reason === 'credits_off' ? copy.creditsOff(terms.label) : copy.notOpen}</span>
                   )}
                 </div>
               )}
@@ -205,7 +209,10 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
                 )}
                 <h3 className='flex flex-wrap items-baseline gap-x-2 text-xl font-medium tracking-tight'>
                   <span className='text-foreground'>{terms.label}</span>
-                  <span className='text-muted-foreground text-base font-normal'>{cents(terms.priceCents, terms.currency)} / month</span>
+                  <span className='text-muted-foreground text-base font-normal'>
+                    {cents(terms.priceCents, terms.currency)}
+                    {terms.plan === 'free' ? '' : ' / month'}
+                  </span>
                 </h3>
               </div>
               <dl className='grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm'>

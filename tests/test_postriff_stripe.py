@@ -310,19 +310,27 @@ class Availability(unittest.TestCase):
     def test_stripe_with_active_bound_terms_and_customer(self):
         cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_1",)]})
         block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": True, "portalAvailable": True})
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": True, "portalAvailable": True, "checkoutReason": None})
         self.assertIn(("ws-1", "stripe"), [p for _, p in cur.executed])
 
     def test_stripe_without_active_terms_or_customer(self):
         cur = StubCursor({"SELECT provider_customer_id FROM public.pr_subscriptions": [(None,)]})
         block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False})
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False, "checkoutReason": "not_for_sale"})
 
     def test_fixture_provider_never_offers_checkout(self):
         cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_fixture",)]})
         block = Billing(ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "fixture", "checkoutAvailable": False, "portalAvailable": False})
+        self.assertEqual(block, {"provider": "fixture", "checkoutAvailable": False, "portalAvailable": False, "checkoutReason": "provider_unavailable"})
 
+
+
+    def test_rollback_offers_no_legacy_checkout_to_a_retained_creator_binding(self):
+        # Pricing v2 off again: billing_checkout refuses legacy packages to a Creator binding, so none is offered.
+        cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT plan_terms_id FROM public.pr_subscriptions": [("creator-v1",)],
+                          "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_1",)]})
+        block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": True, "checkoutReason": "creator_reenroll_only"})
 
 
 class VariantMetadata(unittest.TestCase):

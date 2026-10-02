@@ -61,6 +61,10 @@ const en = {
     note: 'Free has no monthly credits, so nothing is charged. Drafts, edits and exports stay available.'
   },
   plans: {
+    heading: 'Plans',
+    ownerOnly: 'Only the owner can change plans.',
+    current: 'Current',
+    notIncluded: 'Not included',
     managedCredits: 'Managed credits each month',
     firstLook: 'Included once',
     firstLookValue: (posts: string) => `1 Post Doctor check · 1 analysis of up to ${posts} recent posts`,
@@ -71,7 +75,11 @@ const en = {
     perMonth: '/ month',
     ownerSeesPrice: 'The owner sees this workspace’s price.',
     choose: (label: string) => `Choose ${label}`,
+    opening: 'Opening checkout…',
+    tryAgain: 'Try again',
+    stripeNote: 'Checkout by Stripe. Nothing is charged until you confirm.',
     notOpen: 'Checkout isn’t open yet.',
+    creditsOff: (label: string) => `${label} can’t be bought yet: managed credits aren’t switched on here.`,
     noSilentOverage: 'Stops at your limit — no silent overage.'
   },
   summary: {
@@ -79,8 +87,37 @@ const en = {
     freeLine: 'Nothing is charged on Free.',
     ended: (label: string, date: string) => `${label} ended ${date}`,
     seeCreator: 'See Creator',
+    seePlans: 'See plans',
     legacyBadge: 'Legacy plan',
-    legacyNote: 'Kept for you: your price and allowances stay as they are.'
+    legacyNote: 'Kept for you: your price and allowances stay as they are.',
+    legacyEndedNote: 'Legacy plans aren’t offered again. Your drafts and exports stay available.',
+    legacyEndedChoose: 'Legacy plans aren’t offered again. Choose Creator below to keep using managed AI work; your drafts stay.'
+  },
+  planSummary: {
+    trial: 'Trial',
+    planUnavailable: 'Plan unavailable',
+    daysLeft: (n: string) => `${n} left`,
+    day: (n: number) => (n === 1 ? 'day' : 'days'),
+    publishingPaused: 'Publishing is paused',
+    renews: (date: string) => `Renews ${date}`,
+    ends: (date: string) => `Ends ${date} · won’t renew`,
+    endsExact: (date: string) => `Ends ${date}`,
+    endedExact: (date: string) => `Ended ${date}`,
+    ended: (date: string) => `Ended ${date}`,
+    endedNoDate: 'Ended',
+    updatePaymentBy: (date: string) => `Update payment by ${date}`,
+    updatePaymentMethod: 'Update your payment method',
+    manage: 'Manage plan',
+    choose: 'Choose a plan',
+    updatePayment: 'Update payment',
+    badgeEnded: 'Ended',
+    badgePaymentFailed: 'Payment failed',
+    statuses: { trial: 'Trial', active: 'Active', past_due: 'Payment failed', grace: 'Payment failed', cancelled: 'Cancelled', expired: 'Expired' } as Record<string, string>,
+    statusUnavailable: 'Status unavailable',
+    proposedPrice: 'proposed price',
+    details: 'Details',
+    opening: 'Opening…',
+    tryAgain: 'Try again'
   },
   work: {
     creditsLeft: (n: string) => `${n} credits left`,
@@ -177,6 +214,10 @@ const zhHant: BillingCopy = {
     note: 'Free 方案沒有每月點數，因此不會收費。草稿、編輯與匯出照常可用。'
   },
   plans: {
+    heading: '方案',
+    ownerOnly: '只有擁有者可以更改方案。',
+    current: '目前方案',
+    notIncluded: '不包含',
     managedCredits: '每月代管點數',
     firstLook: '一次性提供',
     firstLookValue: (posts) => `1 次 Post Doctor 檢查 · 1 次近期貼文分析（最多 ${posts} 篇）`,
@@ -187,7 +228,11 @@ const zhHant: BillingCopy = {
     perMonth: '／月',
     ownerSeesPrice: '價格只向工作區擁有者顯示。',
     choose: (label) => `選擇 ${label}`,
+    opening: '正在開啟結帳…',
+    tryAgain: '再試一次',
+    stripeNote: '由 Stripe 處理結帳。你確認之前不會收費。',
     notOpen: '尚未開放結帳。',
+    creditsOff: (label) => `暫時無法購買 ${label}：這裡尚未啟用代管點數。`,
     noSilentOverage: '用完即停，不會悄悄超額收費。'
   },
   summary: {
@@ -195,8 +240,37 @@ const zhHant: BillingCopy = {
     freeLine: 'Free 方案不會收費。',
     ended: (label, date) => `${label} 已於 ${date} 結束`,
     seeCreator: '查看 Creator',
+    seePlans: '查看方案',
     legacyBadge: '舊方案',
-    legacyNote: '為你保留：價格與額度維持不變。'
+    legacyNote: '為你保留：價格與額度維持不變。',
+    legacyEndedNote: '舊方案不再提供。你的草稿與匯出仍可使用。',
+    legacyEndedChoose: '舊方案不再提供。在下方選擇 Creator，即可繼續使用代管 AI 工作；草稿會保留。'
+  },
+  planSummary: {
+    trial: '試用',
+    planUnavailable: '無法讀取方案',
+    daysLeft: (n) => `剩餘 ${n}`,
+    day: () => '天',
+    publishingPaused: '發佈已暫停',
+    renews: (date) => `${date} 續訂`,
+    ends: (date) => `${date} 結束 · 不會續訂`,
+    endsExact: (date) => `${date} 結束`,
+    endedExact: (date) => `已於 ${date} 結束`,
+    ended: (date) => `已於 ${date} 結束`,
+    endedNoDate: '已結束',
+    updatePaymentBy: (date) => `請在 ${date} 前更新付款資料`,
+    updatePaymentMethod: '請更新付款方式',
+    manage: '管理方案',
+    choose: '選擇方案',
+    updatePayment: '更新付款資料',
+    badgeEnded: '已結束',
+    badgePaymentFailed: '付款失敗',
+    statuses: { trial: '試用', active: '使用中', past_due: '付款失敗', grace: '付款失敗', cancelled: '已取消', expired: '已到期' },
+    statusUnavailable: '無法讀取狀態',
+    proposedPrice: '建議價格',
+    details: '詳情',
+    opening: '正在開啟…',
+    tryAgain: '再試一次'
   },
   work: {
     creditsLeft: (n) => `剩餘 ${n} 點`,

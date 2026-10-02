@@ -11,6 +11,7 @@ two happen here. Scheduling and publication states are always read back from Que
 from __future__ import annotations
 
 import copy
+import datetime
 import hashlib
 import json
 import os
@@ -186,8 +187,12 @@ class FirstWeekService:
             journey["revision"] += 1
             return {**record, "replayed": False}
 
+        # Product events dedupe globally on (event, entity, revision): the entity is this workspace's claim, so the same
+        # continuation imported into two workspaces is two claims, and a replay in one workspace stays one.
+        claim_id = hashlib.sha256(f"continuation:{workspace_id}:{key}".encode()).hexdigest()[:32]
+
         def emitted(cur, state, principal):
-            growth_events.emit(cur, workspace_id=workspace_id, event="continuation.claimed", entity_id=key_hash, revision=0, user_id=principal,
+            growth_events.emit(cur, workspace_id=workspace_id, event="continuation.claimed", entity_id=claim_id, revision=0, user_id=principal,
                                values={"source": "post_doctor", "selection": "-".join(k for k, _ in selected), "outcome": "imported"})
 
         result = self._command(workspace_id, token, change, "edit", "first_week.continuation_imported", key_hash, {"items": len(selected)}, after=emitted)
@@ -275,6 +280,9 @@ class FirstWeekService:
         _expected(journey, body)
         if not journey.get("accepted"):
             raise AlphaError("Accept one draft before planning the week.", 409, code="approval_required")
+        if journey.get("scope"):
+            # The committed week is frozen; planning again would re-save its recipe (and limit) behind the person's back.
+            raise AlphaError("Your first week is already committed. Change its posts instead of planning again.", 409, code="approval_required")
         posts = body.get("postsPerWeek", DEFAULT_POSTS)
         if not isinstance(posts, int) or isinstance(posts, bool) or not 1 <= posts <= MAX_POSTS:
             raise AlphaError(f"Your first week plans 1–{MAX_POSTS} posts.", 400, code="unsupported_input")
@@ -318,6 +326,10 @@ class FirstWeekService:
                     if channel_id and not draft.get("channelId"):
                         draft["channelId"] = channel_id   # a destination binding, not content: no revision change
                 weekly["weeks"] = weekly["weeks"][-11:] + [week]
+                weekly["revision"] += 1
+            stored = next((r for r in weekly["recipes"] if r["id"] == recipe["id"]), None)
+            if stored is not None and weekly_operator.first_week_only(stored) and stored.get("firstWeekId") != week["id"]:
+                stored["firstWeekId"] = week["id"]   # the one week this recipe may plan and draft (never due for cron)
                 weekly["revision"] += 1
             current.update({"recipeId": recipe["id"], "weekId": week["id"], "platform": platform, "language": language,
                             "channelId": channel_id, "plannedAt": current.get("plannedAt") or now})
@@ -380,8 +392,11 @@ class FirstWeekService:
         return self.view(workspace_id, token)
 
     def draft_week(self, workspace_id, token, body):
-        """Draft the remaining committed posts. Managed credits: the owner confirms a weekly credit limit and every post is
-        drafted against its own quote inside it. Free: no managed writing — write the posts yourself or upgrade."""
+        """Draft the remaining committed posts of the first week, once. Managed credits: the owner confirms a credit limit
+        for this week and every post is drafted against its own quote inside it. Legacy: the plan's writing allowance,
+        within the Weekly Operator's default cost limit for this week. Free: no managed writing — write the posts yourself
+        or upgrade. The limit covers this frozen week only: the recipe stays one-time (never due for cron, refused for any
+        other week) until the owner turns on weekly drafting in Weekly plan."""
         self._require()
         if body.get("confirmed") is not True:
             raise AlphaError("Confirm the credit limit before drafting.", 400, code="approval_required")
@@ -396,13 +411,16 @@ class FirstWeekService:
                              code="insufficient_budget")
         coworker = self._coworker()
         recipe = next((r for r in weekly_operator.view(state)["recipes"] if r["id"] == journey.get("recipeId")), None)
-        if recipe is None:
+        week = next((w for w in weekly_operator.view(state)["weeks"] if w["id"] == journey.get("weekId")), None)
+        if recipe is None or week is None:
             raise AlphaError("Plan the week first.", 409, code="approval_required")
-        if mode == "legacy" and not int(recipe.get("maxCostUsdMicroPerWeek") or 0):
+        # A recipe the owner has since made recurring keeps the owner's own weekly limit; it is never turned back.
+        one_time = weekly_operator.first_week_only(recipe)
+        if one_time and mode == "legacy" and not int(recipe.get("maxCostUsdMicroPerWeek") or 0):
             payload = {k: recipe[k] for k in ("name", "goals", "destinations", "contentMix", "sourceIds", "planningDay", "planningHour", "timeZone", "voiceMode", "model")}
-            payload.update(firstWeek=True, maxCostUsdMicroPerWeek=2_000_000)   # the Weekly Operator's own default limit
+            payload.update(firstWeek=True, maxCostUsdMicroPerWeek=2_000_000)   # the Weekly Operator's own default limit, this week only
             coworker.weekly_save_recipe(workspace_id, token, payload, recipe["id"])
-        if mode == "managed_credits":
+        if one_time and mode == "managed_credits":
             limit = body.get("maxCredits")
             if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 3500:
                 raise AlphaError("Set this week's credit limit (1–3,500 credits).", 400, code="insufficient_budget")
@@ -410,7 +428,8 @@ class FirstWeekService:
             payload = {k: recipe[k] for k in ("name", "goals", "destinations", "contentMix", "sourceIds", "planningDay", "planningHour", "timeZone", "voiceMode", "model")}
             payload.update(firstWeek=True, maxCostUsdMicroPerWeek=usd_micro)
             coworker.weekly_save_recipe(workspace_id, token, payload, recipe["id"])
-        result = coworker.weekly_prepare(workspace_id, token, recipe["id"], max_slots=2)
+        # Always the committed week (its own Monday), even after the calendar has moved on: never "next week".
+        result = coworker.weekly_prepare(workspace_id, token, recipe["id"], max_slots=2, week_of=datetime.date.fromisoformat(week["weekOf"]))
         return {"prepare": {k: result.get(k) for k in ("advanced", "drafted", "draftedSlotIds")}, "journey": self.view(workspace_id, token)}
 
     def write_slot(self, workspace_id, token, body):
@@ -512,11 +531,18 @@ class FirstWeekService:
         delivered = [s for s in committed if s["status"] == "published" or (s["handoff"] or {}).get("state") == "user_confirmed_used" and not (s["handoff"] or {}).get("stale")]
         complete = bool(committed) and len(delivered) == len(committed)
         missing = [k for k in ("purpose", "audience") if not (brand.get(k) or "").strip()]
+        if brand.get("mode") in ("niche", "business", "hybrid") and not (brand.get("subject") or "").strip():
+            missing.append("subject")   # set_context refuses these modes without the subject the posts draw from
+        recipe = next((r for r in weekly_operator.view(state)["recipes"] if r.get("id") == journey.get("recipeId")), None)
+        weekly_drafting = None if recipe is None else "first_week_only" if weekly_operator.first_week_only(recipe) else "recurring"
         step = ("source" if not draft else "context" if missing else "accept" if not accepted_current else "plan" if not journey.get("weekId")
                 else "scope" if not scope else "review" if any(s["status"] in ("planned", "needs_input", "needs_source", "drafted", "needs_revision", "ready") for s in committed)
                 else "deliver" if not complete else "complete")
         return {"enabled": True, "revision": journey.get("revision", 0), "step": step, "billingMode": {"free": "free_preview", "managed_credits": "managed_credits"}.get(mode, "legacy_allowances"),
-                "missingContext": missing, "context": {"purpose": brand.get("purpose") or None, "audience": brand.get("audience") or None, "mode": brand.get("mode") or None},
+                "missingContext": missing, "context": {"purpose": brand.get("purpose") or None, "audience": brand.get("audience") or None, "mode": brand.get("mode") or None,
+                                                       "subject": brand.get("subject") or None},
+                # "first_week_only": the first week's limit drafts that one week; later weeks wait for Weekly plan.
+                "weeklyDrafting": weekly_drafting,
                 "source": {"id": journey.get("sourceId"), "origin": (journey.get("continuation") or {}).get("origin")} if journey.get("sourceId") else None,
                 "draft": ({"variantId": draft["id"], "revision": draft.get("revision"), "text": draft.get("text"), "platform": draft.get("platform"),
                            "language": draft.get("language"), "accepted": accepted_current, "acceptedRevision": (accepted or {}).get("revision")} if draft else None),

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { parseAsString, useQueryState } from 'nuqs';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
@@ -13,10 +13,12 @@ import { Panel } from '@/features/workspace/rafii-parts';
 import { useChannels } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { queueDraftHref } from '@/lib/coworker/safe-href';
-import { clearContinuation, importBody, readContinuation, type ReadOutcome } from '@/lib/growth-v2/continuation';
-import { firstWeekKey, useFirstWeek, useFirstWeekAction, useFirstWeekApi } from '@/lib/growth-v2/first-week-hooks';
-import type { FirstWeekSlot, FirstWeekView } from '@/lib/growth-v2/first-week-types';
+import { clearAllContinuations, importBody, readContinuation, type ReadOutcome } from '@/lib/growth-v2/continuation';
+import { DRAFT_LANGUAGES, LANGUAGE_LABELS, draftLanguage, slotCostText, unknownOutcome, type DraftLanguage } from '@/lib/growth-v2/first-week';
+import { firstWeekKey, refreshAfterFirstWeek, useFirstWeek, useFirstWeekAction, useFirstWeekApi } from '@/lib/growth-v2/first-week-hooks';
+import type { FirstWeekSlot, FirstWeekStep, FirstWeekView } from '@/lib/growth-v2/first-week-types';
 import { errorCode, errorMessage, idempotencyKey, isFeatureDisabled } from '@/lib/growth-v2/request';
+import { usePreferences } from '@/lib/preferences';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -39,6 +41,10 @@ function browserZone(): string {
   }
 }
 
+function languageLabel(tag: string): string {
+  return (LANGUAGE_LABELS as Record<string, string>)[tag] ?? tag;
+}
+
 /**
  * First Week Ready inside Weekly (PRD R-FWR-01..03): import a consented Post Doctor draft, answer only what is missing,
  * accept one draft, plan up to three posts on one platform, commit the scope, then write/draft and deliver each post.
@@ -51,7 +57,16 @@ export function FirstWeekPanel({ canEdit }: { canEdit: boolean }) {
   if (journey.isPending) return <StateMessage kind='loading' layout='inline' title='Loading your first week…' />;
   if (journey.error) return <StateMessage kind='error' layout='inline' title='Your first week couldn’t load' description={errorMessage(journey.error)} />;
   const view = journey.data;
-  if (!view || (view.complete && !continueParam)) return view?.complete ? <Delivered view={view} /> : null;
+  if (!view) return null;
+  if (view.complete) {
+    // A draft kept from Post Doctor is still offered after the first week is done: import it as a new draft, or discard.
+    return (
+      <div className='flex flex-col gap-3'>
+        <ContinuationImport nonce={continueParam} onDone={() => void setContinueParam(null)} canEdit={canEdit} complete />
+        <Delivered view={view} />
+      </div>
+    );
+  }
   return (
     <Panel title='Your first week' description='From your own words to a reviewed week. Nothing is scheduled or published until you approve each post in Queue.'>
       <div className='flex flex-col gap-4'>
@@ -62,20 +77,36 @@ export function FirstWeekPanel({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function ContinuationImport({ nonce, onDone, canEdit }: { nonce: string | null; onDone: () => void; canEdit: boolean }) {
+function ContinuationImport({ nonce, onDone, canEdit, complete = false }: { nonce: string | null; onDone: () => void; canEdit: boolean; complete?: boolean }) {
   const { user } = useAuth();
   const { workspaceId, workspaces } = useWorkspace();
   const { api, w } = useFirstWeekApi();
   const client = useQueryClient();
   const [outcome, setOutcome] = useState<ReadOutcome | null>(null);
+  // A nonce arrived in the link: the person expects their kept draft, so "missing" is said, never shown as nothing.
+  const [requested, setRequested] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const read = readContinuation(tabStorage(), nonce, Date.now());
     setOutcome(read);
-    if (nonce) onDone(); // the nonce has been read; keep the URL clean (the tab's pending record survives a refresh)
+    if (nonce) {
+      setRequested(true);
+      onDone(); // the nonce has been read; keep the URL clean (the tab's pending record survives a refresh)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce]);
-  if (!outcome || outcome.status === 'missing') return null;
+  if (!outcome) return null;
+  if (outcome.status === 'missing') {
+    if (!requested) return null;
+    return (
+      <StateMessage
+        kind='empty'
+        layout='inline'
+        title='Your Post Doctor draft isn’t in this tab'
+        description={`A kept draft stays only in the browser tab where you checked it, for up to 24 hours. ${complete ? 'Paste it into a new draft instead.' : 'Paste it below to start, or check it again in Post Doctor.'}`}
+      />
+    );
+  }
   if (outcome.status !== 'ready') {
     const text =
       outcome.status === 'expired'
@@ -91,10 +122,12 @@ function ContinuationImport({ nonce, onDone, canEdit }: { nonce: string | null; 
     setBusy(true);
     try {
       const result = await api.importContinuation(w, importBody(record));
-      clearContinuation(tabStorage(), record.nonce);
+      clearAllContinuations(tabStorage(), record.nonce);
       client.setQueryData(firstWeekKey(w), result.journey);
+      refreshAfterFirstWeek(client, w);
       setOutcome({ status: 'missing' });
-      toast.success(result.replayed ? 'Already imported — here it is.' : 'Draft imported');
+      setRequested(false);
+      toast.success(result.replayed ? 'Already imported — here it is.' : complete ? 'Draft imported. Find it in Queue → Drafts.' : 'Draft imported');
     } catch (error) {
       toast.error('The draft wasn’t imported', { description: errorMessage(error) });
     } finally {
@@ -102,12 +135,13 @@ function ContinuationImport({ nonce, onDone, canEdit }: { nonce: string | null; 
     }
   }
   function discard() {
-    clearContinuation(tabStorage(), record.nonce);
+    clearAllContinuations(tabStorage(), record.nonce);
     setOutcome({ status: 'missing' });
+    setRequested(false);
   }
   return (
     <div className='flex flex-col gap-3 rounded-xl border border-(--rafii-border-subtle) p-4' role='region' aria-label='Import your Post Doctor draft'>
-      <p className='text-sm font-medium'>Import the draft you kept from Post Doctor?</p>
+      <p className='text-sm font-medium'>{complete ? 'Your first week is done. Import the draft you kept from Post Doctor as a new draft?' : 'Import the draft you kept from Post Doctor?'}</p>
       <p className='text-muted-foreground text-sm'>
         It goes into <strong>{name}</strong>, signed in as {user?.email ?? user?.name ?? 'you'}. Wrong account or workspace? Switch first — the draft stays in this
         tab until you import or discard it (up to 24 hours).
@@ -131,32 +165,81 @@ function ContinuationImport({ nonce, onDone, canEdit }: { nonce: string | null; 
   );
 }
 
+/** Each step's heading: focus moves to it and it is announced when the journey moves on (keyboard and screen readers). */
+const STEP_TITLES: Record<FirstWeekStep, string> = {
+  source: 'Start with your own words',
+  context: 'What the posts are for',
+  accept: 'Accept your first draft',
+  plan: 'Plan your week',
+  scope: 'Choose this week’s posts',
+  review: 'Review your week',
+  deliver: 'Deliver your week',
+  complete: 'Your first week is delivered'
+};
+
 function Steps({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(view.step);
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    if (shown.current === view.step) return;
+    shown.current = view.step;
+    setAnnouncement(`Next step: ${STEP_TITLES[view.step] ?? view.step}`);
+    heading.current?.focus();
+  }, [view.step]);
+  let body: ReactNode;
   switch (view.step) {
     case 'source':
-      return <StartFromText canEdit={canEdit} />;
+      body = <StartFromText canEdit={canEdit} />;
+      break;
     case 'context':
-      return <Context view={view} canEdit={canEdit} />;
+      body = <Context view={view} canEdit={canEdit} />;
+      break;
     case 'accept':
-      return <AcceptDraft view={view} canEdit={canEdit} />;
+      body = <AcceptDraft view={view} canEdit={canEdit} />;
+      break;
     case 'plan':
-      return <PlanWeek view={view} canEdit={canEdit} />;
+      body = <PlanWeek view={view} canEdit={canEdit} />;
+      break;
     default:
-      return <WeekSlots view={view} canEdit={canEdit} />;
+      body = <WeekSlots view={view} canEdit={canEdit} />;
   }
+  return (
+    <div className='flex flex-col gap-3'>
+      <h3 ref={heading} tabIndex={-1} className='rafii-focus text-sm font-medium'>
+        {STEP_TITLES[view.step] ?? ''}
+      </h3>
+      <p role='status' aria-live='polite' className='sr-only'>
+        {announcement}
+      </p>
+      {body}
+    </div>
+  );
 }
 
 function StartFromText({ canEdit }: { canEdit: boolean }) {
   const { api, w } = useFirstWeekApi();
   const client = useQueryClient();
+  const prefs = usePreferences();
   const [text, setText] = useState('');
   const [platform, setPlatform] = useState('Threads');
+  // Detected from the text and the person's own language until they choose one; never a fixed English.
+  const [chosen, setChosen] = useState<DraftLanguage | null>(null);
+  const language = chosen ?? draftLanguage(text, prefs.locale);
   const [busy, setBusy] = useState(false);
+  // One key per input until it is saved: a retry after a lost answer returns the same draft instead of a second one.
+  const key = useRef<string | null>(null);
+  const changed = () => {
+    key.current = null;
+  };
   async function start() {
     setBusy(true);
+    key.current ??= idempotencyKey('fw-start');
     try {
-      const result = await api.start(w, { idempotencyKey: idempotencyKey('fw-start'), consent: true, text, platform, language: 'en' });
+      const result = await api.start(w, { idempotencyKey: key.current, consent: true, text, platform, language });
+      key.current = null;
       client.setQueryData(firstWeekKey(w), result.journey);
+      refreshAfterFirstWeek(client, w);
     } catch (error) {
       toast.error('Couldn’t save your draft', { description: errorMessage(error) });
     } finally {
@@ -166,13 +249,48 @@ function StartFromText({ canEdit }: { canEdit: boolean }) {
   return (
     <div className='flex flex-col gap-2'>
       <Label htmlFor='fw-start'>Start with something you wrote</Label>
-      <Textarea id='fw-start' rows={6} maxLength={8000} value={text} onChange={(e) => setText(e.target.value)} placeholder='Paste a draft, a note or an idea in your own words.' />
+      <Textarea
+        id='fw-start'
+        rows={6}
+        maxLength={8000}
+        value={text}
+        lang={language === 'other' ? undefined : language}
+        onChange={(e) => {
+          setText(e.target.value);
+          changed();
+        }}
+        placeholder='Paste a draft, a note or an idea in your own words.'
+      />
       <div className='flex flex-wrap items-end gap-3'>
         <label className='flex flex-col gap-1 text-sm'>
           Platform
-          <select className={FIELD} value={platform} onChange={(e) => setPlatform(e.target.value)}>
+          <select
+            className={FIELD}
+            value={platform}
+            onChange={(e) => {
+              setPlatform(e.target.value);
+              changed();
+            }}
+          >
             {PLATFORMS.map((p) => (
               <option key={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+        <label className='flex flex-col gap-1 text-sm'>
+          Language
+          <select
+            className={FIELD}
+            value={language}
+            onChange={(e) => {
+              setChosen(e.target.value as DraftLanguage);
+              changed();
+            }}
+          >
+            {DRAFT_LANGUAGES.map((tag) => (
+              <option key={tag} value={tag}>
+                {LANGUAGE_LABELS[tag]}
+              </option>
             ))}
           </select>
         </label>
@@ -188,7 +306,11 @@ function StartFromText({ canEdit }: { canEdit: boolean }) {
 function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
   const [purpose, setPurpose] = useState(view.context.purpose ?? '');
   const [audience, setAudience] = useState(view.context.audience ?? '');
-  const save = useFirstWeekAction((api, w, revision, _: void) => api.setContext(w, { purpose, audience, expectedRevision: revision }));
+  const [subject, setSubject] = useState(view.context.subject ?? '');
+  const needsSubject = view.missingContext.includes('subject');
+  const save = useFirstWeekAction((api, w, revision, _: void) =>
+    api.setContext(w, { purpose, audience, ...(needsSubject ? { subject } : {}), expectedRevision: revision })
+  );
   return (
     <form
       className='flex flex-col gap-3'
@@ -197,7 +319,7 @@ function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
         save.mutate(undefined, { onError: (error) => toast.error('Not saved', { description: errorMessage(error) }) });
       }}
     >
-      <p className='text-sm'>Two quick answers so the week fits what you do. Rafii only asks what it doesn’t already know.</p>
+      <p className='text-sm'>A few quick answers so the week fits what you do. Rafii only asks what it doesn’t already know.</p>
       {view.missingContext.includes('purpose') && (
         <label className='flex flex-col gap-1 text-sm'>
           What should these posts do?
@@ -210,7 +332,21 @@ function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
           <input className={FIELD} aria-label='Who are they for?' required maxLength={300} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Busy small-business owners' />
         </label>
       )}
-      <Button type='submit' variant='action' className='self-start' disabled={!canEdit || save.isPending}>
+      {needsSubject && (
+        <label className='flex flex-col gap-1 text-sm'>
+          {view.context.mode === 'business' ? 'What is your business?' : 'What do your posts draw on?'}
+          <input
+            className={FIELD}
+            aria-label={view.context.mode === 'business' ? 'What is your business?' : 'What do your posts draw on?'}
+            required
+            maxLength={300}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder={view.context.mode === 'business' ? 'A bakery that runs weekend classes' : 'Home cooking on a budget'}
+          />
+        </label>
+      )}
+      <Button type='submit' variant='action' className='self-start' disabled={!canEdit || save.isPending || (needsSubject && !subject.trim())}>
         {save.isPending ? 'Saving…' : 'Continue'}
       </Button>
     </form>
@@ -308,33 +444,52 @@ const STATUS: Record<string, string> = {
   approval_expired: 'Approval expired'
 };
 
+/** The first week's limit is one-time: said wherever drafting is offered, so it never reads as a weekly habit. */
+const ONE_TIME = 'This covers this week’s posts only. Rafii won’t plan or draft later weeks unless you turn on weekly drafting in Weekly plan.';
+
 function WeekSlots({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
+  const { w } = useFirstWeekApi();
+  const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>(view.scope?.slotIds ?? view.slots.map((s) => s.id));
   const [reason, setReason] = useState('');
   const [credits, setCredits] = useState(300);
+  // The request ended without an answer (the 150 s client limit or a dropped connection): drafting may be going on.
+  const [uncertain, setUncertain] = useState(false);
   const scope = useFirstWeekAction((api, w, revision, _: void) => api.scope(w, { slotIds: selected, reason: reason || undefined, expectedRevision: revision }));
   const draft = useFirstWeekAction(async (api, w, revision, _: void) =>
     (await api.draft(w, { confirmed: true, ...(view.billingMode === 'managed_credits' ? { maxCredits: credits } : {}), expectedRevision: revision })).journey
   );
   const toDraft = view.slots.filter((s) => s.committed && s.status === 'planned').length;
+  useEffect(() => {
+    if (toDraft === 0) setUncertain(false);
+  }, [toDraft]);
+  function checkAgain() {
+    void client.invalidateQueries({ queryKey: firstWeekKey(w) });
+    refreshAfterFirstWeek(client, w);
+  }
+  const oneTime = view.weeklyDrafting === 'first_week_only' ? ` ${ONE_TIME}` : '';
   return (
     <div className='flex flex-col gap-4'>
       {!view.scope && <p className='text-sm'>Choose the posts this week commits to. Changing it later needs a reason, so the week’s progress stays honest.</p>}
       <ul className='flex flex-col gap-3'>
-        {view.slots.map((slot) => (
-          <li key={slot.id} className='rounded-xl border border-(--rafii-border-subtle) p-3'>
-            <div className='flex flex-wrap items-center justify-between gap-2'>
-              <Label className='flex items-center gap-2 text-sm'>
-                {!view.scope && (
-                  <Checkbox checked={selected.includes(slot.id)} onCheckedChange={(on) => setSelected((cur) => (on === true ? [...cur, slot.id] : cur.filter((id) => id !== slot.id)))} />
-                )}
-                {slot.day} · {slot.platform}
-              </Label>
-              <span className='text-muted-foreground text-xs'>{STATUS[slot.status] ?? slot.status}</span>
-            </div>
-            <SlotBody slot={slot} view={view} canEdit={canEdit} />
-          </li>
-        ))}
+        {view.slots.map((slot) => {
+          const cost = slotCostText(slot, view.billingMode);
+          return (
+            <li key={slot.id} className='rounded-xl border border-(--rafii-border-subtle) p-3'>
+              <div className='flex flex-wrap items-center justify-between gap-2'>
+                <Label className='flex items-center gap-2 text-sm'>
+                  {!view.scope && (
+                    <Checkbox checked={selected.includes(slot.id)} onCheckedChange={(on) => setSelected((cur) => (on === true ? [...cur, slot.id] : cur.filter((id) => id !== slot.id)))} />
+                  )}
+                  {slot.day} · {slot.platform} · {languageLabel(slot.language)}
+                </Label>
+                <span className='text-muted-foreground text-xs'>{STATUS[slot.status] ?? slot.status}</span>
+              </div>
+              {cost && <p className='text-muted-foreground mt-1 text-xs'>{cost}</p>}
+              <SlotBody slot={slot} view={view} canEdit={canEdit} />
+            </li>
+          );
+        })}
       </ul>
       {!view.scope ? (
         <Button variant='action' className='self-start' disabled={!canEdit || !selected.length || scope.isPending}
@@ -359,22 +514,37 @@ function WeekSlots({ view, canEdit }: { view: FirstWeekView; canEdit: boolean })
           </div>
         </details>
       )}
+      {uncertain && (
+        <div role='status' className='flex flex-wrap items-center gap-2 rounded-xl border border-(--rafii-border-subtle) p-3 text-sm'>
+          <span>The connection ended before Rafii answered, so these posts may still be drafting. Check again in a moment to see what is ready.</span>
+          <Button variant='glass' size='sm' onClick={checkAgain}>
+            Check again
+          </Button>
+        </div>
+      )}
       {view.scope && toDraft > 0 && view.billingMode !== 'free_preview' && (
         <div className='flex flex-wrap items-end gap-3'>
-          {view.billingMode === 'managed_credits' && (
+          {view.billingMode === 'managed_credits' && view.weeklyDrafting !== 'recurring' && (
             <label className='flex flex-col gap-1 text-sm'>
               Credit limit for this week
               <input className={FIELD} aria-label='Credit limit for this week' type='number' min={1} max={3500} value={credits} onChange={(e) => setCredits(Math.max(1, Math.min(3500, Number(e.target.value) || 1)))} />
             </label>
           )}
-          <Button variant='action' disabled={!canEdit || draft.isPending}
-            onClick={() => draft.mutate(undefined, { onError: (error) => toast.error('Drafting stopped', { description: errorMessage(error) }) })}>
+          <Button variant='action' disabled={!canEdit || draft.isPending || uncertain}
+            onClick={() =>
+              draft.mutate(undefined, {
+                onSuccess: () => setUncertain(false),
+                onError: (error) => (unknownOutcome(error) ? setUncertain(true) : toast.error('Drafting stopped', { description: errorMessage(error) }))
+              })
+            }>
             {draft.isPending ? 'Drafting…' : `Draft the remaining ${toDraft} post${toDraft === 1 ? '' : 's'}`}
           </Button>
           <p className='text-muted-foreground w-full text-xs'>
-            {view.billingMode === 'managed_credits'
-              ? 'Each post is drafted against its own quote inside this limit. Paid work stops at the limit — no silent overage.'
-              : 'Uses your plan’s writing allowance.'}
+            {view.weeklyDrafting === 'recurring'
+              ? 'Weekly drafting is on: these posts use your Weekly plan’s limit.'
+              : view.billingMode === 'managed_credits'
+                ? `Each post is drafted against its own quote inside this limit. Paid work stops at the limit — no silent overage.${oneTime}`
+                : `Uses your plan’s writing allowance.${oneTime}`}
           </p>
         </div>
       )}
@@ -398,6 +568,17 @@ function SlotBody({ slot, view, canEdit }: { slot: FirstWeekSlot; view: FirstWee
     api.handoff(w, slot.id, { weekId: view.week!.id, action, expectedRevision: revision })
   );
   const fail = (title: string) => (error: unknown) => toast.error(title, { description: errorCode(error) === 'revision_conflict' ? 'This changed in another tab. Reload and try again.' : errorMessage(error) });
+  async function copyToPost(textToCopy: string) {
+    // The handoff says the text was taken; it is recorded only when the copy really happened.
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(textToCopy);
+    } catch {
+      toast.error('Couldn’t copy the post', { description: 'Select the text and copy it yourself, then choose “I posted it” once it’s posted.' });
+      return;
+    }
+    handoff.mutate('export_ready', { onError: fail('Not recorded') });
+  }
   if (slot.status === 'rejected') return null;
   return (
     <div className='mt-2 flex flex-col gap-2'>
@@ -419,7 +600,7 @@ function SlotBody({ slot, view, canEdit }: { slot: FirstWeekSlot; view: FirstWee
             <Label htmlFor={`fw-write-${slot.id}`} className='text-sm'>
               Write it yourself
             </Label>
-            <Textarea id={`fw-write-${slot.id}`} rows={4} maxLength={8000} value={text} onChange={(e) => setText(e.target.value)} />
+            <Textarea id={`fw-write-${slot.id}`} rows={4} maxLength={8000} value={text} lang={slot.language === 'other' ? undefined : slot.language} onChange={(e) => setText(e.target.value)} />
             <Button variant='glass' className='self-start' disabled={!canEdit || !text.trim() || write.isPending} onClick={() => write.mutate(undefined, { onError: fail('Not saved') })}>
               Save this post
             </Button>
@@ -435,15 +616,7 @@ function SlotBody({ slot, view, canEdit }: { slot: FirstWeekSlot; view: FirstWee
           ) : null}
           {(view.billingMode === 'free_preview' || slot.publishBlocker) && slot.status !== 'published' && (
             <>
-              <Button
-                variant='ghost'
-                size='control'
-                disabled={!canEdit || handoff.isPending}
-                onClick={() => {
-                  void navigator.clipboard?.writeText(slot.draft!.text).catch(() => undefined);
-                  handoff.mutate('export_ready', { onError: fail('Not recorded') });
-                }}
-              >
+              <Button variant='ghost' size='control' disabled={!canEdit || handoff.isPending} onClick={() => void copyToPost(slot.draft!.text)}>
                 Copy to post myself
               </Button>
               <Button variant='ghost' size='control' disabled={!canEdit || handoff.isPending} onClick={() => handoff.mutate('user_confirmed_used', { onError: fail('Not recorded') })}>
@@ -468,12 +641,16 @@ function SlotBody({ slot, view, canEdit }: { slot: FirstWeekSlot; view: FirstWee
 function Delivered({ view }: { view: FirstWeekView }) {
   const published = view.slots.filter((s) => s.committed && s.status === 'published').length;
   const assisted = view.delivered - published;
+  const next =
+    view.weeklyDrafting === 'first_week_only'
+      ? 'Rafii won’t plan or draft another week until you turn on weekly drafting in Weekly plan.'
+      : 'Your weekly plan keeps going from here.';
   return (
     <StateMessage
       kind='success'
       layout='inline'
       title='Your first week is delivered'
-      description={`${published} published through Rafii (confirmed by the platform)${assisted ? `, ${assisted} posted by you` : ''}. Your weekly plan keeps going from here.`}
+      description={`${published} published through Rafii (confirmed by the platform)${assisted ? `, ${assisted} posted by you` : ''}. ${next}`}
     />
   );
 }
