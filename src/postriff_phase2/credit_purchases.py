@@ -8,7 +8,8 @@ import re
 import time
 from postriff_alpha.domain import AlphaError
 from .credit_wallet import amount
-from .credit_meter import POLICY_VERSION
+# Retain the historical import for existing preview/fixture consumers.
+from .credit_meter import POLICY_VERSION, SUPPORTED_POLICY_VERSIONS
 
 
 def _money(value):
@@ -91,12 +92,14 @@ class CreditPurchases:
         self.live = provider.live
 
     def packs(self, cur, workspace_id):
-        if not self.book.policy(cur, workspace_id): return []
-        cur.execute("SELECT id,label,amount_cents,currency,millicredits FROM public.pr_credit_packs WHERE active AND policy_id=%s AND livemode=%s ORDER BY amount_cents,id",(POLICY_VERSION,self.live))
+        policy = self.book.policy(cur, workspace_id)
+        if not policy: return []
+        cur.execute("SELECT id,label,amount_cents,currency,millicredits FROM public.pr_credit_packs WHERE active AND policy_id=%s AND livemode=%s ORDER BY amount_cents,id",(policy,self.live))
         return [dict(zip(('id','label','amountCents','currency','milliCredits'),row)) for row in cur.fetchall()]
 
     def prepare_order(self, cur, workspace_id, actor, pack_id, request_id):
-        if not self.book.policy(cur,workspace_id): raise AlphaError('This workspace uses its existing plan.',409)
+        policy = self.book.policy(cur,workspace_id)
+        if not policy: raise AlphaError('This workspace uses its existing plan.',409)
         if not isinstance(request_id,str) or not re.fullmatch('[A-Za-z0-9_-]{16,80}',request_id):
             raise AlphaError('A unique checkout request is required.',400)
         cur.execute('SELECT id::text,pack_id,actor::text,checkout_url,status FROM public.pr_credit_orders WHERE workspace_id=%s AND request_id=%s',(workspace_id,request_id))
@@ -106,10 +109,10 @@ class CreditPurchases:
             if prior[4] in ('expired','failed'): raise AlphaError('This checkout ended without payment. Start a new purchase.',409)
             if prior[4]=='funded': return {'orderId':prior[0],'url':None,'status':'funded','duplicate':True}
             return {'orderId':prior[0],'url':prior[3],'status':prior[4],'duplicate':True}
-        cur.execute('SELECT price_id,amount_cents,currency,millicredits FROM public.pr_credit_packs WHERE id=%s AND active AND policy_id=%s AND livemode=%s',(pack_id,POLICY_VERSION,self.live))
+        cur.execute('SELECT price_id,amount_cents,currency,millicredits FROM public.pr_credit_packs WHERE id=%s AND active AND policy_id=%s AND livemode=%s',(pack_id,policy,self.live))
         pack=cur.fetchone()
         if not pack: raise AlphaError('This credit pack is not available.',409)
-        cur.execute('INSERT INTO public.pr_credit_orders(workspace_id,actor,pack_id,request_id,policy_id,price_id,amount_cents,currency,millicredits,livemode) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',(workspace_id,actor,pack_id,request_id,POLICY_VERSION,*pack,self.live))
+        cur.execute('INSERT INTO public.pr_credit_orders(workspace_id,actor,pack_id,request_id,policy_id,price_id,amount_cents,currency,millicredits,livemode) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',(workspace_id,actor,pack_id,request_id,policy,*pack,self.live))
         return {'orderId':cur.fetchone()[0],'priceId':pack[0],'url':None,'duplicate':False}
 
     def attach_checkout(self, cur, workspace_id, order_id, session):
@@ -184,12 +187,15 @@ class CreditPurchases:
         if not found: raise AlphaError('No authorized order matches this payment.',409)
         workspace=found[0]
         if event.get('workspaceId') and event['workspaceId']!=workspace: raise AlphaError('Payment names another workspace than its order.',409)
-        self.book.policy(cur,workspace)
+        # Current active terms remain the first funding gate, including grant replays.
+        if not self.book.policy(cur,workspace):
+            raise AlphaError('This workspace uses its existing allowance plan.',409)
         cur.execute('SELECT actor::text,session_id,payment_intent_id,amount_cents,currency,millicredits,livemode,grant_id::text,policy_id FROM public.pr_credit_orders WHERE id::text=%s FOR UPDATE',(event['orderId'],))
         actor,session,payment,cents,currency,milli,live,grant,policy=cur.fetchone()
-        if session not in (None,event['sessionId']) or payment not in (None,event['paymentIntentId']) or cents!=event['amount'] or currency!=event['currency'] or live!=event['live'] or policy!=POLICY_VERSION:
+        if session not in (None,event['sessionId']) or payment not in (None,event['paymentIntentId']) or cents!=event['amount'] or currency!=event['currency'] or live!=event['live'] or policy not in SUPPORTED_POLICY_VERSIONS:
             raise AlphaError('Payment does not match the authorized order.',409)
         if grant: return
+        # The signed event proves payment; the locked server order supplies its policy.
         funded=self.book.grant(cur,workspace,actor,'credit-order:'+event['orderId'],milli,source='verified-stripe-checkout',policy_version=policy)
         cur.execute("UPDATE public.pr_credit_orders SET status='funded',session_id=%s,payment_intent_id=%s,grant_id=%s WHERE id::text=%s",(event['sessionId'],event['paymentIntentId'],funded['entryId'],event['orderId']))
 

@@ -1,5 +1,5 @@
 """Signed synthetic payment events on disposable PostgreSQL; no network access."""
-import hashlib,hmac,json,time,uuid
+import hashlib,hmac,json,os,time,uuid
 from pathlib import Path
 import psycopg
 from postriff_alpha.domain import AlphaError
@@ -8,7 +8,10 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.credit_meter import POLICY_VERSION
 
 ROOT=Path(__file__).resolve().parents[2]
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+TEST_PG_PORT = int(os.environ.get('POSTRIFF_TEST_PG_PORT', '55438'))
+if not 1024 <= TEST_PG_PORT <= 65535:
+    raise ValueError('Disposable PostgreSQL port must be between 1024 and 65535.')
+DSN = f'host=127.0.0.1 port={TEST_PG_PORT} dbname=postgres'
 NOW=int(time.time());ACTOR=str(uuid.uuid4());SECRET='synthetic-webhook-only'
 def connection(): return psycopg.connect(DSN,client_encoding='utf8')
 def verify(token):
@@ -22,7 +25,7 @@ def transport(method,url,headers=None,form=None):
     return {'status':200,'body':{'id':sid,'url':'https://checkout.stripe.com/c/pay/'+sid}}
 provider=StripePaymentProvider('sk_test_fixture',SECRET,transport=transport,clock=lambda:NOW)
 with connection() as db:
-    assert db.info.host == '127.0.0.1' and db.info.port == 55438, 'Synthetic fixture must remain in disposable PostgreSQL'
+    assert db.info.host == '127.0.0.1' and db.info.port == TEST_PG_PORT, 'Synthetic fixture must remain in disposable PostgreSQL'
     db.execute('INSERT INTO auth.users(id) VALUES(%s)', (ACTOR,))
     for file in ('020_credit_quotes.sql','021_credit_purchases.sql'):
         db.execute((ROOT/'migrations/postriff'/file).read_text())
