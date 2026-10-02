@@ -480,6 +480,13 @@ class HostedWorkspaceService:
         return preview
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
+    def plans(self):
+        """Server-owned public offers; reads no workspace, session, or private provider data."""
+        from .plan_pricing import public_catalog as pricing_catalog
+        with self.connection_factory() as db, db.cursor() as cur:
+            return pricing_catalog(cur, self.billing.pricing_v2_enabled,
+                                   credits_enabled=self.ledger.credits is not None)
+
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
             lifecycle = self.billing.lifecycle(cur, workspace_id, self.clock())

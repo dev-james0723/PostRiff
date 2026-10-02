@@ -501,6 +501,8 @@ class HostedApplication:
             if method == "GET" and path in ("/api/content-types", "/api/content-formats", "/api/content-type-packs"):
                 response = {"/api/content-types": public_catalog, "/api/content-formats": formats, "/api/content-type-packs": public_packs}[path]()
                 return self._json(start_response, 200, response)
+            if path == "/api/plans" and method == "GET":
+                return self._json(start_response, 200, self._runtime().plans())
             if path == "/api/auth/config" and method == "GET":
                 self._runtime()
                 return self._json(start_response, 200, self.public_auth)

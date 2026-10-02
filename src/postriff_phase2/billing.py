@@ -476,7 +476,7 @@ class Billing:
         self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(clock=clock, pricing_v2_enabled=pricing_v2_enabled), clock, on_applied
 
         self.pricing_v2_enabled = pricing_v2_enabled
-        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort)
+        self.pricing = PlanPricing(pricing_v2_enabled and creator_experiment_enabled, creator_experiment_cohort, ledger=self.ledger)
 
     def assign_creator_price(self, cur, workspace_id):
         return self.pricing.assign(cur, workspace_id)
