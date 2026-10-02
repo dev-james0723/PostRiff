@@ -638,6 +638,7 @@ class WatchdogTests(unittest.TestCase):
         self.assertIn('workflow_dispatch:', workflow)
         self.assertIn('permissions:\n  contents: read', workflow)
         self.assertIn('RAFII_WATCHDOG_DSN: ${{ secrets.RAFII_WATCHDOG_DSN }}', workflow)
+        self.assertNotIn('persist-credentials: false', workflow)
         self.assertIn('from rafii_control.founder_sources import watchdog_main', workflow)
         self.assertEqual(workflow.count('secrets.'), 1)
         self.assertNotIn('vercel', workflow.lower().replace('vercel sso', ''))
