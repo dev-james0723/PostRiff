@@ -602,7 +602,7 @@ class Billing:
             except AlphaError:
                 purchasable = False
         else:
-            cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' LIMIT 1")
+            cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' AND coalesce((to_jsonb(pr_plan_terms)->>'new_checkout_enabled')::boolean,true) LIMIT 1")
             purchasable = cur.fetchone() is not None
         cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
         row = cur.fetchone()

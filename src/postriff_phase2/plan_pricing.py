@@ -287,27 +287,28 @@ _PUBLIC_ENTITLEMENTS = ('members', 'connectedAccounts', 'brands', 'storageMb', '
 
 def _plan_view(row, *, v2, variant=None, credits_enabled=None):
     terms_id, plan, label, price_cents, currency, status, checkout_enabled, entitlements, provider_price = row
-    entitlements = entitlements or {}
+    entitlements = entitlements if isinstance(entitlements, dict) else {}
     from .billing import customer_entitlements
     safe_entitlements = customer_entitlements(entitlements)
     view = {'id': terms_id, 'plan': plan, 'label': label, 'priceCents': variant['amountCents'] if variant else price_cents,
             'currency': (variant['currency'] if variant else currency) or 'USD', 'interval': None if plan in ('free', 'trial') else 'month',
             'entitlements': {k: safe_entitlements[k] for k in _PUBLIC_ENTITLEMENTS if k in safe_entitlements}}
     if v2:
-        view['monthlyCredits'] = int(entitlements.get('monthlyCredits') or 0)
+        view['monthlyCredits'] = 0 if plan == 'free' else safe_entitlements.get('monthlyCredits')
         if plan == 'free':
             view['firstValue'] = dict(FREE_FIRST_VALUE)
             view['checkout'] = 'not_applicable'
         else:
             # Same gates as PlanPricing.checkout: a monthly-credit plan is for sale only with its credit policy active and
             # (when the caller knows it) this server able to spend credits.
-            spendable = entitlements.get('creditPolicy') == V2_POLICY_VERSION and credits_enabled is not False
+            spendable = (entitlements.get('creditPolicy') == V2_POLICY_VERSION and credits_enabled is not False
+                         and type(view['monthlyCredits']) is int and view['monthlyCredits'] > 0)
             purchasable = (status == 'active' and checkout_enabled and variant is not None and variant['status'] == 'active'
                            and bool((variant['priceId'] or '').strip()) and spendable)
             view['checkout'] = 'available' if purchasable else 'not_yet_available'
             view['priceVariantId'] = variant['priceVariantId'] if variant else None
     else:
-        view['checkout'] = 'legacy_flow' if status == 'active' and (provider_price or '').strip() else 'not_yet_available'
+        view['checkout'] = 'legacy_flow' if status == 'active' and checkout_enabled is True and (provider_price or '').strip() else 'not_yet_available'
     return view
 
 
@@ -333,7 +334,7 @@ def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
                           'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
     # Migration 048 may not be applied where legacy pricing runs (it adds new_checkout_enabled): read it only if present.
     cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
-    checkout_column = "new_checkout_enabled" if cur.fetchone()[0] else "false"
+    checkout_column = "new_checkout_enabled" if cur.fetchone()[0] else "true"
     cur.execute(f"SELECT id,plan,label,price_cents,currency,status,{checkout_column},entitlements,provider_price_id FROM public.pr_plan_terms "
                 "WHERE id IN ('trial-v1','studio-v1','assist-v1') ORDER BY price_cents,id")
     return {'catalogVersion': CATALOG_VERSION_LEGACY, 'pricing': 'legacy', 'plans': [_plan_view(r, v2=False) for r in cur.fetchall()],

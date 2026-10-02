@@ -572,9 +572,9 @@ class HostedWorkspaceService:
                 price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
                 variant_id, price_id = price["priceVariantId"], price["priceId"]
             else:
-                cur.execute("SELECT status,provider_price_id,plan FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
+                cur.execute("SELECT status,provider_price_id,plan,coalesce((to_jsonb(pr_plan_terms)->>'new_checkout_enabled')::boolean,true) FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
                 terms = cur.fetchone()
-                if not terms or terms[0] != "active" or not terms[1] or terms[2] in ("creator", "starter", "free") or plan_terms_id == "studio-v2":
+                if not terms or terms[0] != "active" or not terms[1] or terms[2] in ("creator", "starter", "free") or plan_terms_id == "studio-v2" or terms[3] is not True:
                     raise AlphaError("This plan is not yet available for purchase.", 409)
                 price_id = terms[1]
             cur.execute("SELECT provider_customer_id,status,provider_subscription_id,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
