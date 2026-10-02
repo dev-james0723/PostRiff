@@ -68,3 +68,30 @@ Slice merges:
 - Switched-off features were queried from shared pages, producing a console 404 on every visit. A feature gate now prevents the requests.
 - The anonymous Post Doctor offered the first week where the feature is off. The offer now appears only when the feature is on.
 - Proof counted canceled approvals because of a `cancelled`/`canceled` spelling mismatch. This bug is present in production too.
+
+## Later on 2026-10-01 / 2026-10-02 (after the review fixes)
+
+- **Production moved** to `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e`, which includes Founder Admin #86/#88. This branch merged it in at `2a6c13ef`. PR #87 now targets `consumer-saas`.
+- **Review rounds:**
+  - The first whole-branch review used four reviewers.
+  - The verification review of the fixes found 6 medium and 12 low issues.
+  - All findings are fixed and merged, through `rpg-fix-relationships`, `rpg-fix-slices`, `rpg-fix-billing`, `rpg-fix-web-2` and the coordinator commits.
+- **Local, on the merged branch:**
+  - Python unit suite: 3,987 OK.
+  - PostgreSQL groups: every group for the touched areas passes, including all eight Stripe-provider groups and the new pre-048, replay-limit, ended-legacy, re-enrollment and endpoint-privacy tests.
+  - Web node tests: 819/819.
+  - oxlint: 0 errors.
+- **CI on `054feb10`:**
+  - Release gates passed in full: Python, every PG group, web contracts, types/lint/isolated production build, copy audit, function archive, secret scan, dependency audits, and the real local browser/API/DB run.
+  - Preview window, Founder Control and Founder admin browser passed.
+- **CI on `ceff036c`:**
+  - `Rafii browser scenes` passed in full (run 36956968532), including the Product Growth journeys.
+  - Preview window, Founder Control and Founder admin browser passed.
+  - Release gates were still running when recorded here.
+- **Defects found by the browser journeys and fixed:**
+  - no way into Follow-ups from an empty Inbox;
+  - first-week posts the planner couldn't draft had no "write it yourself";
+  - the no-conversation follow-up wording;
+  - proof correction overflow at 768/390;
+  - a reduced-motion pricing FAQ that stayed blurred (a hydration mismatch);
+  - an ASCII colon in zh-Hant.
