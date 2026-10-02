@@ -8,9 +8,12 @@ import hashlib
 import json
 
 WINDOW = 24 * 3600
+# PostgreSQL stores timestamp values to microseconds. Refuse at the boundary
+# conservatively even when rounding the committed dispatch time up by 0.5 us.
+TIMESTAMP_MARGIN = 0.000001
 
 
-def admit(factory, rows, contexts, message, *, now, channel='email', reserve=None):
+def admit(factory, rows, contexts, message, *, now, channel='email', reserve=None, linked_delivery_id='row'):
     if channel not in ('email', 'push'):
         return {'state': 'config', 'detail': 'delivery_cutover_channel_invalid'}
     if not rows or len(rows) != len(contexts):
@@ -42,7 +45,7 @@ def admit(factory, rows, contexts, message, *, now, channel='email', reserve=Non
                         "WHERE provider=%s AND event_id=%s", (provider, key))
             old = cur.fetchone()
             if old:
-                if channel == 'push' or now - float(old[0]) >= WINDOW or old[1] != digest:
+                if channel == 'push' or now - float(old[0]) >= WINDOW - TIMESTAMP_MARGIN or old[1] != digest:
                     return {'state': 'uncertain', 'detail': channel + '_reconciliation_required'}
             else:
                 cur.execute("SELECT count(*) FROM public.pr_notification_provider_events WHERE provider=%s AND kind=%s", (provider, audience + ':' + ref))
@@ -50,7 +53,7 @@ def admit(factory, rows, contexts, message, *, now, channel='email', reserve=Non
                     return {'state': 'config', 'detail': 'delivery_cutover_cap_reached'}
                 cur.execute("INSERT INTO public.pr_notification_provider_events(provider,event_id,delivery_id,kind,event_at,payload_digest,outcome) "
                             "VALUES(%s,%s,%s,%s,to_timestamp(%s),%s,'applied') ON CONFLICT DO NOTHING",
-                            (provider, key, rows[0]['id'], audience + ':' + ref, now, digest))
+                            (provider, key, rows[0]['id'] if linked_delivery_id == 'row' else linked_delivery_id, audience + ':' + ref, now, digest))
             if reserve:
                 reserve(cur)
             db.commit()

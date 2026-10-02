@@ -209,6 +209,9 @@ class Mailer:
             # templates, retries); sending here too would email the person twice.
             return {"sent": False, "kind": kind, "reason": "routed_to_notifications_v2"}
         if getattr(self.transport, 'requires_cutover', False):
+            queue = getattr(self, 'enqueue_legacy', None)
+            if callable(queue):
+                return queue(kind, to, ctx)
             # Legacy callers have no durable dispatch lease. Do not accidentally
             # replay trial/billing backlog or send unapproved synchronous mail.
             return {'sent': False, 'kind': kind, 'reason': 'legacy_delivery_requires_cutover_outbox'}

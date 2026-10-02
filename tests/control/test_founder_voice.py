@@ -89,9 +89,10 @@ class VoiceCursor(FakeCursor):
             self.rows = [(run['conversation_id'], run['status'])] if run and run['workspace_id'] == params[1] else []
         elif text.startswith('SELECT id::text,artifact FROM public.pr_agent_runs') and 'idempotency_key LIKE' in text:
             self.rows = []   # nothing older than the cap to reap
-        elif text.startswith('SELECT count(*) FROM public.pr_agent_runs') and "LIKE 'voice:%%'" in text:
-            self.rows = [(sum(1 for r in db.runs.values() if r['workspace_id'] == params[0] and r['actor'] == params[1] and str(r['key']).startswith('voice:')
-                              and r['status'] == 'running'),)]
+        elif text.startswith('SELECT (SELECT count(*) FROM public.pr_phone_calls'):
+            self.rows = [(getattr(db, 'phone_contacts', 0) + sum(1 for r in db.runs.values()
+                         if r['workspace_id'] == params[4] and r['actor'] == params[5] and str(r['key']).startswith('voice:')
+                         and not str(r['key']).startswith('voice:phone:') and r['status'] == 'running'),)]
         elif text.startswith('SELECT role,body FROM public.pr_messages') and 'LIMIT 16' in text:
             self.rows = [(m['role'], m['body']) for m in db.messages if m['conversation_id'] == params[0]][::-1][:16]
         else:
@@ -278,6 +279,14 @@ class VoiceSessionTests(unittest.TestCase):
         with self.assertRaises(founder_agent.PolicyDisabled) as caught:
             founder_voice.start(self.service, principal(), {'sdp': SDP}, str(uuid.uuid4()), mode='live', control=self.control, values=values, base=base(), transport=self.transport)
         self.assertEqual(caught.exception.blocker, 'ops_workspace_not_configured', 'no variable and no stored workspace')
+
+    def test_an_active_phone_call_uses_the_same_slot_before_browser_provider_egress(self):
+        self.db.phone_contacts = 1
+        with self.assertRaises(ControlError) as caught:
+            self.start()
+        self.assertEqual(caught.exception.blocker, 'voice_busy')
+        self.assertEqual(self.transport.calls, [])
+        self.assertEqual(self.service.ledger.reserved, [])
 
     def test_conversation_must_belong_to_the_session_namespace(self):
         live_session = self.start()

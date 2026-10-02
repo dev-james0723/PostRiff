@@ -12,6 +12,28 @@ def day_start(now, time_zone):
     return local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
+def founder_scope(flags):
+    """Server-only scope; ordinary preferences and request bodies cannot set it."""
+    scope = flags.get('founder') if isinstance(flags, dict) else None
+    if not isinstance(scope, dict):
+        return None
+    key, workspace, ops = scope.get('reasonKey'), scope.get('workspaceId'), scope.get('opsWorkspaceId')
+    parts = key.split(':') if isinstance(key, str) else []
+    if not (workspace and workspace == ops and len(parts) == 3 and parts[0] == FOUNDER_REASON_PREFIX.rstrip(':')
+            and parts[1] in ('incident', 'briefing', 'test') and parts[2]):
+        return None
+    return scope
+
+
+def effective_preferences(prefs, flags):
+    scope = founder_scope(flags)
+    if scope is None:
+        return prefs
+    return {**prefs, 'maxCallsPerDay': scope.get('automaticCallsDaily', 2),
+            'quietStart': scope.get('quietStart', 1320), 'quietEnd': scope.get('quietEnd', 480),
+            'timeZone': scope.get('timeZone', 'America/Indiana/Indianapolis')}
+
+
 def founder_event(flags, event_type):
     """The founder call event a proactive request may use, or None (Founder Admin, CONTRACTS §5).
 
@@ -21,8 +43,8 @@ def founder_event(flags, event_type):
     the reason key carries the founder prefix and names a founder purpose, and the request targets the configured ops
     workspace. A customer request never carries this scope, and no preference allowlist can admit a founder event.
     """
-    scope = flags.get('founder') if isinstance(flags, dict) else None
-    if not isinstance(scope, dict):
+    scope = founder_scope(flags)
+    if scope is None:
         return None
     key, workspace, ops = scope.get('reasonKey'), scope.get('workspaceId'), scope.get('opsWorkspaceId')
     if not (isinstance(key, str) and key.startswith(FOUNDER_REASON_PREFIX) and workspace and ops and workspace == ops):
@@ -35,14 +57,19 @@ def founder_event(flags, event_type):
 
 
 def eligibility(kind, prefs, *, now, verified, membership, configured, live_configured, flags, event_type=None,
-                daily_calls=0, recent_equivalent=False, active=False, reserved_cost=0, estimate=0, daily_budget=0, direction='outbound', custom_rule_ref=None):
+                daily_calls=0, recent_equivalent=False, active=False, active_calls=None, reserved_cost=0, estimate=0, daily_budget=0, direction='outbound', custom_rule_ref=None):
     inbound = direction == 'inbound'
+    scope = founder_scope(flags) if not inbound else None
+    prefs = effective_preferences(prefs, flags) if scope else prefs
+    active_count = int(active) if active_calls is None else active_calls
+    capacity = scope.get('concurrentCalls', 1) if scope else 1
     checks = [(flags.get('RAFII_PHONE_ENABLED'), 'phone_disabled'),
               (flags.get('RAFII_PHONE_INBOUND_ENABLED' if inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'), 'inbound_disabled' if inbound else 'outbound_disabled'),
               (verified, 'phone_unverified'), (inbound or prefs['enabled'], 'calling_off'), (membership, 'membership'),
               (configured, 'provider_unavailable'), (live_configured, 'live_unavailable'),
-              (not active, 'call_active'), (kind == 'explicit' or not recent_equivalent, 'recent_equivalent'),
-              (estimate > 0 and (kind == 'explicit' or reserved_cost + estimate <= daily_budget), 'phone_budget')]
+              (scope is None or scope.get('callingAllowed', True), 'calling_off'),
+              (active_count < capacity, 'call_active'), (kind == 'explicit' or not recent_equivalent, 'recent_equivalent'),
+              (estimate > 0 and (kind == 'explicit' or daily_budget is None or reserved_cost + estimate <= daily_budget), 'phone_budget')]
     if kind != 'explicit':
         checks += [(not in_quiet_hours(now, {'quiet_start': prefs['quietStart'], 'quiet_end': prefs['quietEnd'], 'time_zone': prefs['timeZone']}), 'quiet_hours'),
                    (daily_calls < prefs['maxCallsPerDay'], 'daily_limit')]

@@ -175,8 +175,9 @@ def renew(phone, call_id):
             prefs = store.prefs(cur, value['user_id'], value['workspace_id'])
             cur.execute(f'SELECT coalesce(sum({DAILY_COST_SQL}),0) FROM public.pr_phone_calls '
                         'WHERE user_id=%s AND requested_at>=to_timestamp(%s)',
-                        (value['user_id'], planner.day_start(phone.clock(),prefs['timeZone'])))
-            if int(cur.fetchone()[0])+sum(costs) > phone.config.daily_budget:
+                        (value['user_id'], planner.day_start(phone.clock(),planner.effective_preferences(prefs,phone.config.public())['timeZone'])))
+            reserved = int(cur.fetchone()[0])
+            if phone.config.daily_budget is not None and reserved+sum(costs) > phone.config.daily_budget:
                 raise AlphaError('The phone spending allowance is exhausted.',402,code='phone_budget')
         maximum = voice.get('creditLimitMilliCredits')
         if credit and not voice.get('useAvailableCredits'):

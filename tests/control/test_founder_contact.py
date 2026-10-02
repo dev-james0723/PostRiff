@@ -265,6 +265,10 @@ class FakeCalls:
         self.values = {**{flag: '1' for flag in contracts.FLAGS}, 'RAFII_FOUNDER_OPS_WORKSPACE_ID': ops_workspace_id, **(values or {})}
         self.workspace_id = workspace_id or ops_workspace_id
         self.prefs = {**contracts.DEFAULTS, 'enabled': True, 'proactiveCalls': True, 'scheduledCalls': True, 'timeZone': 'UTC', **(prefs or {})}
+        # Mirror the adapter's server-loaded policy in this synthetic phone scope.
+        self.values = {**self.values, 'RAFII_FOUNDER_PHONE_QUIET_START': self.prefs['quietStart'],
+                       'RAFII_FOUNDER_PHONE_QUIET_END': self.prefs['quietEnd'], 'RAFII_FOUNDER_PHONE_TIME_ZONE': self.prefs['timeZone'],
+                       **(values or {})}
         self.verified, self.estimate, self.clock, self.crash_after_create = verified, estimate, clock, crash_after_create
         self.calls, self.by_key, self.requests = {}, {}, []
 
@@ -358,6 +362,10 @@ class ContactPolicyTests(unittest.TestCase):
         self.assertEqual(plan_contact(policy, 'test', T0, ready_state(daily_calls=2))['reason'], 'OK')
         self.assertEqual(plan_contact(policy, 'incident', T0, ready_state(active_calls=1))['reason'], 'CALL_ACTIVE')
         self.assertEqual(plan_contact(policy, 'incident', T0, ready_state())['reason'], 'OK')
+        unlimited = enabled_policy(budgetUsdMicroDaily=None, dailyCap=5, concurrentCap=3)
+        self.assertEqual(plan_contact(unlimited, 'incident', T0, ready_state(daily_calls=4, active_calls=2,
+                         reserved_usd_micro=20_000_000_000))['reason'], 'OK')
+        self.assertEqual(plan_contact(unlimited, 'incident', T0, ready_state(active_calls=3))['reason'], 'CALL_ACTIVE')
         with self.assertRaises(ControlError):
             plan_contact(policy, 'marketing', T0, ready_state())
 
@@ -432,6 +440,24 @@ class FounderCallEventsTests(unittest.TestCase):
             contracts.preferences({'eventAllowlist': ['founder.incident']})
         self.assertTrue(contracts.FOUNDER_CALL_EVENTS.isdisjoint(contracts.CALL_EVENTS))
 
+    def test_only_server_scoped_founder_calls_use_configured_limits_and_unlimited_budget(self):
+        values = {**{flag: '1' for flag in contracts.FLAGS}, 'RAFII_FOUNDER_OPS_WORKSPACE_ID': OPS,
+                  'RAFII_FOUNDER_PHONE_AUTOMATIC_DAILY': 5, 'RAFII_FOUNDER_PHONE_CONCURRENT': 3,
+                  'RAFII_FOUNDER_PHONE_QUIET_START': 0, 'RAFII_FOUNDER_PHONE_QUIET_END': 0,
+                  'RAFII_FOUNDER_PHONE_TIME_ZONE': 'UTC', 'RAFII_FOUNDER_PHONE_DAILY_USD_MICRO': None}
+        scoped = FounderPhoneConfig(values, OPS, 'founder:incident:abc')
+        self.assertIsNone(scoped.daily_budget)
+        args = dict(now=T0, verified=True, membership=True, configured=True, live_configured=True,
+                    event_type='founder.incident', daily_calls=4, active_calls=2,
+                    reserved_cost=20_000_000_000, estimate=1, daily_budget=scoped.daily_budget)
+        self.assertIsNone(planner.eligibility('proactive', self.prefs(), flags=scoped.public(), **args))
+        self.assertEqual(planner.eligibility('proactive', self.prefs(), flags=scoped.public(), **{**args, 'daily_calls': 5}), 'daily_limit')
+        self.assertEqual(planner.eligibility('proactive', self.prefs(), flags=scoped.public(), **{**args, 'active_calls': 3}), 'call_active')
+        self.assertEqual(planner.eligibility('proactive', self.prefs(), flags=PhoneConfig(values).public(), **args), 'call_active')
+        self.assertEqual(planner.eligibility('proactive', {**self.prefs(), 'enabled': False}, flags=scoped.public(), **args), 'calling_off')
+        disabled = FounderPhoneConfig({**values, 'RAFII_FOUNDER_PHONE_CONTACT_ALLOWED': False}, OPS, 'founder:incident:abc')
+        self.assertEqual(planner.eligibility('proactive', self.prefs(), flags=disabled.public(), **args), 'calling_off')
+
     @unittest.skipUnless(importlib.util.find_spec("cryptography"), "cryptography (consumer requirements) required for the phone credential vault")
     def test_principal_phone_passthrough_attaches_scope_only_on_request(self):
         key = 'founder:briefing:' + str(uuid.uuid4())
@@ -444,7 +470,9 @@ class FounderCallEventsTests(unittest.TestCase):
             with self.assertRaises(AlphaError):
                 principal_phone(phone, OPS, OPERATOR, founder_reason_key='schedule:' + key)
         self.assertEqual(repo.call_args_list[0].args[1:], (OPS, OPERATOR, 'edit'))
-        self.assertEqual(scoped.config.public()['founder'], {'workspaceId': OPS, 'opsWorkspaceId': OPS, 'reasonKey': key})
+        self.assertEqual(scoped.config.public()['founder'], {'workspaceId': OPS, 'opsWorkspaceId': OPS, 'reasonKey': key,
+                         'automaticCallsDaily': 2, 'concurrentCalls': 1, 'quietStart': 1320, 'quietEnd': 480,
+                         'timeZone': 'America/Indiana/Indianapolis', 'callingAllowed': True})
         self.assertNotIn('founder', plain.config.public())
         self.assertTrue(scoped.config.enabled('RAFII_PHONE_ENABLED'))
 

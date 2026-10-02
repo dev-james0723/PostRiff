@@ -96,7 +96,8 @@ def default_calls_factory(service, values, fstore=None):
 
     def calls(operator_id):
         ops, _source = resolve(values, getattr(fstore, 'store', None), operator_id)
-        return founder_contact.PhoneCalls(phone, ops, operator_id) if ops else None
+        return founder_contact.PhoneCalls(phone, ops, operator_id,
+            policy_loader=(lambda: founder_contact.load_policy(fstore, operator_id)) if fstore else None) if ops else None
     return calls
 
 

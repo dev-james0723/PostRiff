@@ -221,7 +221,7 @@ export function useDeleteBriefingSchedule() {
 /** Always answers 409 `POLICY_DISABLED` in this release (CONTRACTS §3); the page shows that refusal as the result. */
 export function useTestCall() {
   const scope = useFounderScope();
-  return useMutation({ mutationFn: () => scope.api.testCall({}) });
+  return useMutation({ mutationFn: (requestId: string) => scope.api.testCall({ requestId }) });
 }
 
 /* ---------- usage reconcile queue, source health, audit, receipts ---------- */

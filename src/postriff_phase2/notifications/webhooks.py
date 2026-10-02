@@ -113,6 +113,11 @@ def ingest(cur, msg_id, event, raw_body, now=None):
             if mapped == "clicked":
                 cur.execute("UPDATE public.pr_notification_deliveries SET read_at=coalesce(read_at, now()), updated_at=now() WHERE id::text=%s", (delivery,))
             outcome = "applied"
+    if row is None and tags.get('legacy_delivery_id'):
+        from .legacy_outbox import ingest as ingest_legacy
+        # A legacy source has its own original-tenant row, never a fabricated
+        # notification delivery. The shared signed event journal still dedupes.
+        outcome = ingest_legacy(cur, tags['legacy_delivery_id'], str(provider_ref)[:200] if provider_ref else None, mapped) or 'unmatched'
     try:
         provider_time = datetime.fromisoformat(str(event.get('created_at')).replace('Z', '+00:00'))
         event_time = provider_time.timestamp() if provider_time.tzinfo else None

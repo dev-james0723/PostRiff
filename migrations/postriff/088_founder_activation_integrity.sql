@@ -8,6 +8,7 @@ alter table rafii_control.founder_contact_policy add constraint founder_contact_
 alter table rafii_control.founder_contact_policy drop constraint if exists founder_contact_policy_concurrent_cap_check;
 alter table rafii_control.founder_contact_policy add constraint founder_contact_policy_concurrent_cap_check check(concurrent_cap between 0 and 10);
 alter table rafii_control.founder_contact_policy drop constraint if exists founder_contact_policy_budget_usd_micro_daily_check;
+alter table rafii_control.founder_contact_policy alter column budget_usd_micro_daily drop not null;
 alter table rafii_control.founder_contact_policy add constraint founder_contact_policy_budget_usd_micro_daily_check check(budget_usd_micro_daily between 0 and 10000000000);
 
 -- Legacy observations are unknown. Do not fabricate their availability time.
@@ -174,5 +175,27 @@ do $$ declare n text; begin
    execute format('create trigger financial_history_capture after insert or update or delete on public.%I for each row execute function public.pr_financial_history_capture()',n);
   end if;
  end loop;
+end $$;
+-- The three direct account templates without V2 equivalents use an encrypted
+-- original-tenant outbox. No raw mail body or destination reaches Control.
+create table if not exists public.pr_transactional_mail (
+ id uuid primary key,workspace_id uuid references public.pr_workspaces(id) on delete cascade,
+ user_id uuid references public.pr_profiles(user_id) on delete cascade,kind text not null check(kind in ('invitation','welcome','trial_ended')),
+ semantic_key text not null unique check(semantic_key ~ '^[a-f0-9]{64}$'),
+ recipient_hash text not null check(recipient_hash ~ '^[a-f0-9]{64}$'),
+ payload_cipher text not null,key_id text not null,
+ occurred_at timestamptz not null,expires_at timestamptz not null,
+ status text not null default 'queued' check(status in ('queued','dispatching','provider_accepted','delivered','uncertain','suppressed','cancelled','failed','bounced','complained')),
+ lease_until timestamptz,provider_ref text,failure_code text,delivered_at timestamptz,
+ created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+alter table public.pr_transactional_mail enable row level security;
+alter table public.pr_transactional_mail force row level security;
+revoke all on public.pr_transactional_mail from public,anon,authenticated;
+grant select,insert,update,delete on public.pr_transactional_mail to service_role;
+do $$ begin
+ if not exists(select 1 from pg_policies where schemaname='public' and tablename='pr_transactional_mail' and policyname='service_only') then
+  create policy service_only on public.pr_transactional_mail for all to service_role using(true) with check(true);
+ end if;
 end $$;
 commit;

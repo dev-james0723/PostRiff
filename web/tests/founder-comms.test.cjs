@@ -36,6 +36,7 @@ function load(relative) {
 
 const voice = load('features/founder/agent/voice-api.ts');
 const comms = load('features/founder/settings/comms.ts');
+const contact = load('features/founder/settings/contact-policy.ts');
 const nav = load('config/founder-nav.ts');
 const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
@@ -248,6 +249,24 @@ test('the contact policy channel list is read as the server sends it', () => {
   assert.equal(comms.channelListed({ phone: true }, 'call'), true);
   assert.equal(comms.channelListed({ email: 'yes' }, 'email'), false);
   assert.equal(comms.channelListed(null, 'email'), false);
+});
+
+test('contact edits preserve consent, allow configured limits and represent Unlimited explicitly', () => {
+  const policy = { revision: 8, liveDeliveryEnabled: true, channels: ['call', 'email'], destinationRef: 'verified',
+    quietStart: 1320, quietEnd: 480, timeZone: 'America/Indiana/Indianapolis', dailyCap: 2, concurrentCap: 1,
+    eventAllowlist: ['founder.incident'], budgetUsdMicroDaily: 50_000_000 };
+  const draft = contact.draftFromPolicy(policy);
+  const saved = contact.policyFromDraft(policy, { ...draft, dailyCap: '5', concurrentCap: '3', budgetMode: 'unlimited' }).policy;
+  assert.equal(saved.liveDeliveryEnabled, true);
+  assert.deepEqual(saved.channels, policy.channels);
+  assert.equal(saved.revision, 8);
+  assert.equal(saved.budgetUsdMicroDaily, null);
+  assert.equal(saved.dailyCap, 5); assert.equal(saved.concurrentCap, 3);
+  assert.equal(contact.draftFromPolicy(saved).budgetMode, 'unlimited');
+  assert.match(contact.policyFromDraft(policy, { ...draft, dailyCap: '' }).error, /whole number/);
+  assert.match(contact.policyFromDraft(policy, { ...draft, concurrentCap: '11' }).error, /0 to 10/);
+  assert.match(contact.policyFromDraft(policy, { ...draft, budgetUsd: '-1' }).error, /Unlimited/);
+  assert.match(contact.policyFromDraft(policy, { ...draft, timeZone: 'Mars/Olympus' }).error, /IANA/);
 });
 
 // --- briefing versions ------------------------------------------------------------------------------------------------------

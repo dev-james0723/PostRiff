@@ -32,7 +32,7 @@ def sync_defaults(app, workspace, operator, settings, now):
                         'quiet_start=excluded.quiet_start,quiet_end=excluded.quiet_end,time_zone=excluded.time_zone,daily_cap=excluded.daily_cap,'
                         'concurrent_cap=excluded.concurrent_cap,budget_usd_micro_daily=excluded.budget_usd_micro_daily,revision=founder_contact_policy.revision+1,updated_at=now()',
                         (operator, store.environment, settings['quietStart'], settings['quietEnd'], settings['timeZone'], settings['automaticCallAttemptsDaily'],
-                         settings['concurrentCalls'], settings['dailySpendUsdMicro'] if settings['dailySpendMode'] == 'limited' else 10_000_000_000))
+                         settings['concurrentCalls'], settings['dailySpendUsdMicro'] if settings['dailySpendMode'] == 'limited' else None))
             for kind, local_time, weekdays in (('daily', settings['dailyBriefingTime'], list(range(7))),
                                                ('weekly', settings['weeklyReviewTime'], [settings['weeklyReviewDay']])):
                 schedule_id = str(uuid.uuid5(uuid.UUID(workspace), 'founder-default:' + kind))

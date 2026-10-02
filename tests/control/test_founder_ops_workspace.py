@@ -275,6 +275,41 @@ class OpsWorkspacePostgresTests(unittest.TestCase):
         founder_policy.save_policy(app, self.principal, {'body': {'mode': 'live', 'revision': 2, 'changes': {'dailySpendMode': 'unlimited'}}})
         self.assertEqual(reserve('synthetic:unlimited'), 'reserved')
 
+    def test_browser_and_phone_contacts_share_one_owner_slot_without_double_counting_phone_runs(self):
+        import psycopg
+        from concurrent.futures import ThreadPoolExecutor
+        from postriff_phase2.phone.store import active_founder_contacts
+        wid = founder_ops.create_ops(self.app(), self.principal, {'mode': 'live'})['workspaceId']
+        def claim(key):
+            with psycopg.connect(self.dsn) as db:
+                with db.cursor() as cur:
+                    cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('phone:' + self.user,))
+                    if active_founder_contacts(cur, self.user, wid) >= 1:
+                        return 'blocked'
+                    cur.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,'Synthetic contact') RETURNING id", (wid, self.user))
+                    conversation = cur.fetchone()[0]
+                    cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact) "
+                                "VALUES(%s,%s,%s,'running','synthetic','quick',repeat('a',64),repeat('b',64),%s,'{\"voice\":{\"capSeconds\":600}}') RETURNING id",
+                                (conversation, wid, self.user, key))
+                    run = cur.fetchone()[0]
+                    if key.startswith('voice:phone:'):
+                        cur.execute("INSERT INTO public.pr_phone_calls(user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,max_seconds,reserved_usd_micro) "
+                                    "VALUES(%s,%s,%s,%s,'explicit','synthetic','fake','requested',%s,'synthetic',600,0)", (self.user, wid, conversation, run, key))
+            return 'admitted'
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            self.assertEqual(sorted(workers.map(claim, ['voice:founder:synthetic', 'voice:phone:synthetic'])), ['admitted', 'blocked'])
+        with psycopg.connect(self.dsn) as db, db.cursor() as cur:
+            self.assertEqual(active_founder_contacts(cur, self.user, wid), 1)
+            cur.execute('DELETE FROM public.pr_phone_calls WHERE workspace_id=%s', (wid,))
+            cur.execute('DELETE FROM public.pr_agent_runs WHERE workspace_id=%s', (wid,))
+        self.assertEqual(claim('voice:phone:synthetic'), 'admitted')
+        self.assertEqual(claim('voice:founder:synthetic'), 'blocked')
+        with psycopg.connect(self.dsn) as db, db.cursor() as cur:
+            self.assertEqual(active_founder_contacts(cur, self.user, wid), 1)
+            cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE workspace_id=%s', (wid,))
+            call_id = cur.fetchone()[0]
+            self.assertEqual(active_founder_contacts(cur, self.user, wid, exclude_call_id=call_id), 0)
+
     def test_create_commits_a_classified_internal_workspace_and_bootstrap_keeps_the_trial_workspace(self):
         import psycopg
 

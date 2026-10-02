@@ -171,6 +171,9 @@ class NotificationService:
         except Exception as error:  # noqa: BLE001
             result["security"] = {"error": type(error).__name__}
         worker = self.worker()
+        legacy = getattr(self.hosted, 'legacy_mail_outbox', None)
+        if legacy is not None:
+            result['accountMail'] = legacy.tick(limit=min(max_items, 10))
         try:
             result["delivery"] = worker.tick(max_items=max_items, max_seconds=max_seconds)
         except Exception as error:  # noqa: BLE001

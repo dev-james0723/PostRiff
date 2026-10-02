@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
@@ -11,17 +11,14 @@ import { Switch } from '@/components/ui/switch';
 import { Band, FIELD_CLASS, StatusChip } from '@/features/workspace/rafii-parts';
 import { cn } from '@/lib/utils';
 import { failureOf, useCapability, useContactPolicy, useSaveContactPolicy, useTestCall } from '../customers/kit/api';
-import { clockToMinutes, minutesToClock, usdMicro, whenDateTime } from '../customers/kit/format';
+import { usdMicro, whenDateTime } from '../customers/kit/format';
 import { QueryState } from '../customers/kit/page-frame';
 import type { ContactPolicy } from '../customers/kit/types';
 import { channelListed } from './comms';
+import { draftFromPolicy, policyFromDraft, type ContactDraft } from './contact-policy';
 
 /**
- * Contact & calls policy (CONTRACTS §5, PRD §6.6–§6.7). Every switch that would cause a real call, email or push
- * is disabled with its reason: live delivery is off in this release and the provider is not configured, so the
- * switches are read-only truth, not controls. Quiet hours, caps, allowlist and budget are saved with the policy
- * revision; a stale revision is refused by the server. The test call always comes back 409 POLICY_DISABLED and
- * the page shows that refusal as the result.
+ * Fresh-MFA, revision-checked consent. Provider readiness and the shared spend policy are enforced by the server.
  */
 /** The policy's channel ids (`founder_contact.CHANNELS`) and their labels. */
 const CHANNELS = [
@@ -30,58 +27,7 @@ const CHANNELS = [
   { id: 'push', label: 'Push' }
 ] as const;
 const EVENTS = ['founder.incident', 'founder.briefing'] as const;
-const LIVE_DELIVERY_REASON = 'Real calls, email and push stay off in this release (liveDeliveryEnabled = false; provider flags default to 0). Enabling them needs a configured provider and a separate enablement, not this form.';
-
-interface Draft {
-  quietStart: string;
-  quietEnd: string;
-  timeZone: string;
-  dailyCap: string;
-  concurrentCap: string;
-  eventAllowlist: string[];
-  budgetUsd: string;
-}
-
-function draftFrom(policy: ContactPolicy): Draft {
-  return {
-    quietStart: minutesToClock(policy.quietStart),
-    quietEnd: minutesToClock(policy.quietEnd),
-    timeZone: policy.timeZone,
-    dailyCap: String(policy.dailyCap),
-    concurrentCap: String(policy.concurrentCap),
-    eventAllowlist: [...policy.eventAllowlist],
-    budgetUsd: String(policy.budgetUsdMicroDaily / 1_000_000)
-  };
-}
-
-/** The policy to save, or the first validation message; the server validates again. */
-export function policyFromDraft(policy: ContactPolicy, draft: Draft): { policy: ContactPolicy } | { error: string } {
-  const quietStart = clockToMinutes(draft.quietStart);
-  const quietEnd = clockToMinutes(draft.quietEnd);
-  if (quietStart === null || quietEnd === null) return { error: 'Quiet hours need a start and an end time (HH:MM).' };
-  const dailyCap = Number(draft.dailyCap);
-  const concurrentCap = Number(draft.concurrentCap);
-  if (!Number.isInteger(dailyCap) || dailyCap < 0 || dailyCap > 2) return { error: 'Daily cap must be 0, 1 or 2 calls.' };
-  if (!Number.isInteger(concurrentCap) || concurrentCap < 0 || concurrentCap > 1) return { error: 'At most one call at a time (0 or 1).' };
-  const budget = Number(draft.budgetUsd);
-  if (!Number.isFinite(budget) || budget < 0) return { error: 'Daily budget must be zero or more.' };
-  if (!draft.timeZone.trim()) return { error: 'A time zone is required.' };
-  return {
-    policy: {
-      ...policy,
-      liveDeliveryEnabled: false,
-      quietStart,
-      quietEnd,
-      timeZone: draft.timeZone.trim(),
-      dailyCap,
-      concurrentCap,
-      eventAllowlist: draft.eventAllowlist,
-      budgetUsdMicroDaily: Math.round(budget * 1_000_000)
-    }
-  };
-}
-
-function LockedSwitch({ label, description, checked, reason }: { label: string; description?: string; checked: boolean; reason: string }) {
+function PolicySwitch({ label, description, checked, disabled, onChange }: { label: string; description?: string; checked: boolean; disabled: boolean; onChange: (checked: boolean) => void }) {
   const id = useId();
   return (
     <div className='flex items-start justify-between gap-3'>
@@ -90,11 +36,8 @@ function LockedSwitch({ label, description, checked, reason }: { label: string; 
           {label}
         </Label>
         {description && <p className='text-muted-foreground text-xs'>{description}</p>}
-        <p id={`${id}-reason`} className='text-muted-foreground text-xs italic'>
-          {reason}
-        </p>
       </div>
-      <Switch id={id} checked={checked} disabled aria-describedby={`${id}-reason`} />
+      <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
   );
 }
@@ -113,20 +56,23 @@ function TestCallButton({ policy }: { policy: ContactPolicy }) {
   const test = useTestCall();
   const canSettings = useCapability('control.settings');
   const [outcome, setOutcome] = useState<ReactNode>(null);
+  const requestId = useRef<string | null>(null);
   async function run() {
     setOutcome(null);
     try {
-      const result = await test.mutateAsync();
-      setOutcome(<StateMessage kind='success' layout='inline' title='Test call accepted' description={result.data.attemptId ? `Attempt ${result.data.attemptId} was recorded.` : 'The server accepted the request.'} />);
+      requestId.current ??= crypto.randomUUID();
+      const result = await test.mutateAsync(requestId.current);
+      const attempt = result.data.attempt;
+      setOutcome(<StateMessage kind={attempt.state === 'ambiguous' ? 'unsupported' : 'success'} layout='inline' title={`Call request: ${attempt.state}`} description={`Attempt ${attempt.id} was recorded. This does not confirm connection or audio. Checking again reuses this request.`} />);
     } catch (error) {
       const failure = failureOf(error);
-      const disabled = failure.code === 'POLICY_DISABLED' || failure.status === 409;
+      const disabled = failure.code === 'POLICY_DISABLED';
       setOutcome(
         <StateMessage
           kind={disabled ? 'unsupported' : failure.status === 403 ? 'permission' : 'error'}
           layout='inline'
-          title={disabled ? 'The server refused the test call: POLICY_DISABLED' : 'The test call could not be placed'}
-          description={disabled ? 'Live delivery is off and no telephony provider is configured, so Control refuses every call request before it reaches a provider. That is the expected state in this release; nothing was dialled.' : failure.message}
+          title={disabled ? 'Test call is not ready' : `Call request refused${failure.code ? ': ' + failure.code : ''}`}
+          description={failure.message}
         />
       );
     }
@@ -151,14 +97,14 @@ export function ContactPolicyForm() {
   const query = useContactPolicy();
   const save = useSaveContactPolicy();
   const canSettings = useCapability('control.settings');
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<ContactDraft | null>(null);
   const [revision, setRevision] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const policy = query.data?.policy ?? null;
 
   useEffect(() => {
     if (policy && policy.revision !== revision) {
-      setDraft(draftFrom(policy));
+      setDraft(draftFromPolicy(policy));
       setRevision(policy.revision);
     }
   }, [policy, revision]);
@@ -174,7 +120,7 @@ export function ContactPolicyForm() {
     setError(null);
     try {
       await save.mutateAsync(next.policy);
-      toast.success('Contact policy saved. Live delivery stays off.');
+      toast.success('Contact policy saved. Delivery remains subject to provider readiness and the shared spend policy.');
     } catch (cause) {
       const failure = failureOf(cause);
       setError(failure.status === 409 ? 'The policy changed since this page loaded. It has been refreshed; review and save again.' : failure.message ?? 'The policy could not be saved.');
@@ -189,11 +135,11 @@ export function ContactPolicyForm() {
         draft && (
           <form onSubmit={(event) => void submit(event)} className='flex flex-col gap-5' aria-describedby='contact-policy-live'>
             <Band>
-              <LockedSwitch label='Live delivery' description='Allow Control to place real calls and send real messages.' checked={policy.liveDeliveryEnabled} reason={LIVE_DELIVERY_REASON} />
+              <PolicySwitch label='Live delivery' description='Allow the selected channels after provider and canary checks pass.' checked={draft.liveDeliveryEnabled} disabled={!canSettings} onChange={(checked) => setDraft({ ...draft, liveDeliveryEnabled: checked })} />
               {policy.liveDeliveryBlockers && policy.liveDeliveryBlockers.length > 0 && <p className='text-muted-foreground text-xs'>Blockers reported by the server: {policy.liveDeliveryBlockers.join(', ')}.</p>}
               <div className='grid gap-3 sm:grid-cols-3'>
                 {CHANNELS.map((channel) => (
-                  <LockedSwitch key={channel.id} label={channel.label} checked={channelListed(policy.channels, channel.id)} reason='Listed in the policy; used only while live delivery is on.' />
+                  <PolicySwitch key={channel.id} label={channel.label} checked={channelListed(draft.channels, channel.id)} disabled={!canSettings} onChange={(checked) => setDraft({ ...draft, channels: checked ? [...draft.channels, channel.id] : draft.channels.filter((id) => id !== channel.id) })} />
                 ))}
               </div>
             </Band>
@@ -211,20 +157,21 @@ export function ContactPolicyForm() {
               <Field label='Quiet hours end'>
                 <Input type='time' value={draft.quietEnd} onChange={(event) => setDraft({ ...draft, quietEnd: event.target.value })} className={FIELD_CLASS} />
               </Field>
-              <Field label='Daily cap' hint='Contact attempts per day, 0–2.'>
-                <Input type='number' inputMode='numeric' min={0} max={2} value={draft.dailyCap} onChange={(event) => setDraft({ ...draft, dailyCap: event.target.value })} className={FIELD_CLASS} />
+              <Field label='Daily cap' hint='Automatic call attempts per day. Explicit test calls are separate.'>
+                <Input type='number' inputMode='numeric' min={0} max={100} value={draft.dailyCap} onChange={(event) => setDraft({ ...draft, dailyCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
-              <Field label='Concurrent cap' hint='Calls in flight at once, 0 or 1.'>
-                <Input type='number' inputMode='numeric' min={0} max={1} value={draft.concurrentCap} onChange={(event) => setDraft({ ...draft, concurrentCap: event.target.value })} className={FIELD_CLASS} />
+              <Field label='Concurrent cap' hint='Calls in flight at once. Zero pauses new calls.'>
+                <Input type='number' inputMode='numeric' min={0} max={10} value={draft.concurrentCap} onChange={(event) => setDraft({ ...draft, concurrentCap: event.target.value })} className={FIELD_CLASS} />
               </Field>
-              <Field label='Daily budget (USD)' hint={`Stored as USD micro; currently ${usdMicro(policy.budgetUsdMicroDaily)} per day.`}>
-                <Input type='number' inputMode='decimal' min={0} step='0.01' value={draft.budgetUsd} onChange={(event) => setDraft({ ...draft, budgetUsd: event.target.value })} className={FIELD_CLASS} />
+              <Field label='Daily call budget (USD)' hint={`Currently ${policy.budgetUsdMicroDaily === null ? 'Unlimited' : usdMicro(policy.budgetUsdMicroDaily)}. The shared Founder spend cap applies to all paid actions.`}>
+                <span className='flex items-center gap-2'><input type='checkbox' aria-label='Unlimited call budget' checked={draft.budgetMode === 'unlimited'} onChange={(event) => setDraft({ ...draft, budgetMode: event.target.checked ? 'unlimited' : 'limited' })} /> Unlimited call budget</span>
+                <Input type='number' inputMode='decimal' min={0} max={10_000} step='0.01' disabled={draft.budgetMode === 'unlimited'} value={draft.budgetUsd} onChange={(event) => setDraft({ ...draft, budgetUsd: event.target.value })} className={FIELD_CLASS} />
               </Field>
             </div>
 
             <fieldset className='flex flex-col gap-2'>
               <legend className='text-foreground text-sm font-medium'>Event allowlist</legend>
-              <p className='text-muted-foreground text-xs'>Only these founder events may plan a contact attempt once live delivery exists.</p>
+              <p className='text-muted-foreground text-xs'>Only these Founder events may plan automatic contact attempts.</p>
               <div className='flex flex-wrap gap-3'>
                 {EVENTS.map((event) => {
                   const checked = draft.eventAllowlist.includes(event);
@@ -245,7 +192,7 @@ export function ContactPolicyForm() {
               </Button>
               <span id='contact-policy-live' className='text-muted-foreground text-xs'>
                 Revision {policy.revision}
-                {policy.updatedAt && ` · updated ${whenDateTime(policy.updatedAt)}`} · saving never turns live delivery on.
+                {policy.updatedAt && ` · updated ${whenDateTime(policy.updatedAt)}`} · changes require a fresh second factor.
               </span>
             </div>
             <TestCallButton policy={policy} />

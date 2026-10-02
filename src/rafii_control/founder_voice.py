@@ -155,6 +155,9 @@ def voice_sessions_class():
                 marker = ops_metadata(cur, workspace_id)
                 if not marker or marker['operatorId'] != str(principal):
                     raise AlphaError('Founder voice requires the verified internal owner.', 403)
+                # Phone admission uses this same owner lock, so a browser and a
+                # phone request cannot both take the last configured call slot.
+                cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('phone:' + principal,))
                 policy = policy_from_marker(marker)
                 self._founder_cap_seconds = policy['maxCallSeconds']
                 style = agent_style.load(cur, principal)
@@ -171,9 +174,8 @@ def voice_sessions_class():
                                 (workspace_id, principal, founder_agent.conversation_title(self.namespace, 'Voice conversation')))
                     conversation_id = cur.fetchone()[0]
                 self._reap(cur, workspace_id, principal)
-                cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
-                            "AND created_at>now()-make_interval(mins=>%s)", (workspace_id, principal, self._cap_minutes()))
-                if cur.fetchone()[0] >= policy['concurrentCalls']:
+                from postriff_phase2.phone.store import active_founder_contacts
+                if active_founder_contacts(cur, principal, workspace_id) >= policy['concurrentCalls']:
                     raise AlphaError('Voice is already on in another tab. End it there first.', 429, code='voice_busy')
                 history = self._history(cur, workspace_id, conversation_id)
                 estimate = self.cfg.live_usd_micro_per_minute * self._cap_minutes()

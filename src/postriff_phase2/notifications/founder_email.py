@@ -16,7 +16,7 @@ def context(worker, user):
     with worker.connection_factory() as db, db.cursor() as cur:
         cur.execute("SELECT w.id::text FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id "
                     "JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.role='owner' AND m.status='active' "
-                    "AND p.deleted_at IS NULL AND w.name LIKE 'Rafii Ops (founder)%%' AND w.state->'founderOps'->>'operatorId'=%s "
+                    "AND p.deleted_at IS NULL AND w.state->'workspace'->>'name' LIKE 'Rafii Ops (founder)%%' AND w.state->'founderOps'->>'operatorId'=%s "
                     "AND w.state->'founderOps'->>'environment'=%s LIMIT 2", (user, user, worker.environment))
         rows = cur.fetchall()
         if len(rows) != 1:

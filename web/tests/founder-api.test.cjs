@@ -40,6 +40,19 @@ function fakeFetch(script) {
 const session = { requestId: 'r1', environment: 'staging', asOf: '2026-10-01T00:00:00Z', dataState: 'measured', receiptIds: [], data: { assurance: 'aal2', capabilities: ['control.read'], csrfToken: 'csrf-123' } };
 const envelope = (data) => ({ requestId: 'r2', environment: 'staging', asOf: '2026-10-01T00:00:00Z', dataState: 'measured', receiptIds: [], data });
 
+test('an uncertain test call retry carries the same explicit request identity and the actual attempt shape', async () => {
+  const attempt = { id: 'attempt-1', state: 'ambiguous', phoneCallId: 'call-1' };
+  const { fetch, calls } = fakeFetch((url) => ({ body: url.endsWith('/session') ? session : envelope({ attempt, replayed: true }) }));
+  const client = api.createFounderApi({ fetch, onUnauthorized: () => assert.fail('no 401 here') });
+  const body = { requestId: '11111111-1111-4111-8111-111111111111' };
+  await client.testCall(body);
+  const result = await client.testCall(body);
+  assert.deepEqual(result.data.attempt, attempt);
+  const actions = calls.filter((call) => call.url.endsWith('/calls/test'));
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0].body, body); assert.deepEqual(actions[1].body, body);
+});
+
 test('GET reads carry the cookie, no CSRF token, and never cache', async () => {
   const { fetch, calls } = fakeFetch(() => ({ body: envelope({ pulse: [] }) }));
   const client = api.createFounderApi({ fetch, onUnauthorized: () => assert.fail('no 401 here') });
