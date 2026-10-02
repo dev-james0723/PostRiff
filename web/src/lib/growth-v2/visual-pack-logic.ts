@@ -76,7 +76,7 @@ const EN = {
   loadLatest: 'Load version {n}',
   updatedElsewhere: 'This carousel changed elsewhere. Showing version {n}.',
   integrityTitle: 'The download didn’t match the recorded export.',
-  integrityHint: 'Export the files again: Rafii rebuilds them from the checked slides, then downloads them.',
+  integrityHint: 'Export again: Rafii checks the files once more from the stored slides and downloads them. If they still don’t match, edit the carousel to make a new version.',
   exportAgain: 'Export again and download',
   states: { draft: 'Draft', rendered: 'Rendered', accepted: 'Accepted', export_ready: 'Files ready', downloaded: 'Downloaded',
             user_confirmed_used: 'You posted it', queued: 'In Queue', superseded: 'Earlier version' } as Record<PackState, string>,
@@ -181,7 +181,7 @@ const ZH: Copy = {
   loadLatest: '載入第 {n} 版',
   updatedElsewhere: '這組輪播圖已在別處更新，現在顯示第 {n} 版。',
   integrityTitle: '下載的檔案與記錄的匯出不符。',
-  integrityHint: '請重新匯出：Rafii 會用已核對的投影片重建檔案，然後下載。',
+  integrityHint: '請重新匯出：Rafii 會用儲存的投影片再核對一次檔案，然後下載。如果仍然不符，請修改輪播圖以建立新版本。',
   exportAgain: '重新匯出並下載',
   states: { draft: '草稿', rendered: '已產生', accepted: '已確認', export_ready: '檔案已備妥', downloaded: '已下載',
             user_confirmed_used: '你已發佈', queued: '已排入佇列', superseded: '舊版本' },
@@ -459,6 +459,10 @@ const ZH_SERVER: Record<string, string> = {
   'A Library image changed in storage. Replace it on the slide and render again.': '媒體庫中的一張圖片在儲存空間裡被更改了。請在投影片上更換它，再產生一次。',
   'A new order lists each of the six slides once.': '新的順序必須列出六張投影片各一次。',
   'A rendered slide no longer matches its recorded hash. Render the pack again.': '一張已產生的投影片與記錄的雜湊值不符。請重新產生這組投影片。',
+  'A rendered slide file is missing or changed in storage. Edit the carousel to make a new version, then render, accept and export that version.':
+    '儲存空間中有一張已產生的投影片遺失或被更改。請修改輪播圖以建立新版本，然後產生、確認並匯出該版本。',
+  "These files can't be rebuilt exactly as they were exported. Edit the carousel to make a new version, then render, accept and export that version.":
+    '這些檔案無法完全照匯出時的樣子重建。請修改輪播圖以建立新版本，然後產生、確認並匯出該版本。',
   'Accept this exact revision before exporting it.': '請先確認這個版本，再匯出。',
   'An image on these slides was deleted from the Library. Replace it and render again.': '這組投影片用到的圖片已從媒體庫刪除。請更換後再產生一次。',
   'An image on these slides was deleted from the Library. Replace or remove it.': '這組投影片用到的圖片已從媒體庫刪除。請更換或移除它。',

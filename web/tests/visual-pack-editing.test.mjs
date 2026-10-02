@@ -131,6 +131,12 @@ test('receipts, palettes and server errors read in the person’s language; Engl
   assert.equal(serverText('revision_conflict', sentence, 'en'), sentence);
   assert.match(serverText('revision_conflict', sentence, 'zh-Hant'), CJK);
   assert.equal(serverText('integrity_failed', 'The export no longer matches what was recorded. Export the pack again.', 'zh-Hant'), '匯出的檔案與記錄不符。請重新匯出。');
+  // The server's recovery answers (an export that can't be rebuilt, a slide changed in storage) say: make a new version.
+  for (const sentence of ["These files can't be rebuilt exactly as they were exported. Edit the carousel to make a new version, then render, accept and export that version.",
+    'A rendered slide file is missing or changed in storage. Edit the carousel to make a new version, then render, accept and export that version.']) {
+    assert.equal(serverText('integrity_failed', sentence, 'en'), sentence);
+    assert.match(serverText('integrity_failed', sentence, 'zh-Hant'), /建立新版本/);
+  }
   assert.match(serverText('revision_conflict', 'A sentence the web has not seen.', 'zh-Hant'), CJK, 'a known code still reads in Chinese');
   const detail = 'The slides could not be rendered safely: font missing U+1F4A1.';
   assert.equal(serverText('unsupported_input', detail, 'zh-Hant'), detail, 'a detail is never replaced by a vaguer line');

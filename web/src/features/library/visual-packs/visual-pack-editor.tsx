@@ -381,7 +381,8 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
     }
   }
 
-  /** The recorded export can't be reproduced: export again (the server rebuilds it from the checked slides), then download. */
+  /** The download didn't match: export again (the server re-checks the recorded files from the stored slides), then download.
+   *  If they can't be rebuilt exactly, the server's answer says to make a new version, and it is shown here. */
   async function exportAgain() {
     setRecovery('running');
     setNotice(null);

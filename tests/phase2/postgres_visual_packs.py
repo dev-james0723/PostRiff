@@ -267,11 +267,14 @@ check("accept once, one product event", accepted["revision"]["state"] == "accept
       and rows("SELECT count(*) FROM public.pr_product_events WHERE workspace_id=%s AND event='visual_pack.accepted'", wid)[0][0] == 1)
 refused(lambda: packs.download(wid, "one", pack_id, 4), 409, "approval_required")
 exported = packs.export(wid, "one", pack_id, {"expectedRevision": 4})
-reads = sum(1 for m, _ in objects.calls if m == "GET")
+writes_before = objects.writes()
+recorded = rows("SELECT export_sha256,export_digest,state FROM public.pr_visual_pack_revisions WHERE pack_id=%s AND revision_no=4", pack_id)
 replay_export = packs.export(wid, "one", pack_id, {"expectedRevision": 4})
-check("export once: export_ready, replay rebuilds nothing", exported["revision"]["state"] == "export_ready" and replay_export.get("replayed")
-      and sum(1 for m, _ in objects.calls if m == "GET") == reads and exported["revision"]["export"]["handoff"] == "assisted_export"
-      and "has not published" in exported["receipt"])
+check("export once: export_ready; exporting again re-checks the recorded files and records nothing new", exported["revision"]["state"] == "export_ready"
+      and replay_export.get("replayed") and replay_export.get("verified") and objects.writes() == writes_before
+      and rows("SELECT export_sha256,export_digest,state FROM public.pr_visual_pack_revisions WHERE pack_id=%s AND revision_no=4", pack_id) == recorded
+      and rows("SELECT count(*) FROM public.pr_visual_pack_events WHERE pack_id=%s AND kind='export_ready'", pack_id)[0][0] == 1
+      and exported["revision"]["export"]["handoff"] == "assisted_export" and "has not published" in exported["receipt"])
 archive, filename = packs.download(wid, "one", pack_id, 4)
 second_copy, _ = packs.download(wid, "one", pack_id, 4)
 with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
@@ -285,6 +288,19 @@ check("export PNGs are the rendered files", [hashlib.sha256(p).hexdigest() for p
 check("export manifest has no storage locations and says not published", "storagePath" not in json.dumps(exported_manifest)
       and exported_manifest["publication"] == "not_published_by_rafii" and exported_manifest["handoff"] == "assisted_export")
 check("alt text and caption exported", all(s["altText"] in alt for s in ready["revision"]["slides"]) and caption.strip() == ready["revision"]["caption"])
+check("new exports use format 2: every entry stored (no zlib dependence), the manifest names its format", exported_manifest.get("exportFormat") == 2
+      and all(info.compress_type == zipfile.ZIP_STORED for info in zipfile.ZipFile(io.BytesIO(archive)).infolist()))
+# A slide changed in storage can't be rebuilt into the recorded export (its sha256 is append-only): both the download
+# and exporting again say so, with the way on (a new version), and record nothing; restored bytes download again.
+slide_key = f"postriff-private/{wid}/visual-pack/{manifest['slides'][0]['objectName']}"
+good_slide = objects.objects[slide_key]
+objects.objects[slide_key] = good_slide[:-1] + bytes([good_slide[-1] ^ 1])
+broken = refused(lambda: packs.download(wid, "one", pack_id, 4), 502, "integrity_failed")
+broken_again = refused(lambda: packs.export(wid, "one", pack_id, {"expectedRevision": 4}), 502, "integrity_failed")
+objects.objects[slide_key] = good_slide
+check("an export that can't be rebuilt says how to recover; nothing is re-recorded", "make a new version" in str(broken) and "make a new version" in str(broken_again)
+      and rows("SELECT export_sha256,export_digest,state FROM public.pr_visual_pack_revisions WHERE pack_id=%s AND revision_no=4", pack_id)[0][:2] == recorded[0][:2]
+      and packs.export(wid, "one", pack_id, {"expectedRevision": 4}).get("verified"))
 check("downloads are byte-identical and counted once as a fact", archive == second_copy and filename.endswith("-r4.zip")
       and rows("SELECT state,download_count FROM public.pr_visual_pack_revisions WHERE pack_id=%s AND revision_no=4", pack_id)[0] == ("downloaded", 2)
       and rows("SELECT count(*) FROM public.pr_visual_pack_events WHERE pack_id=%s AND kind='downloaded'", pack_id)[0][0] == 1)

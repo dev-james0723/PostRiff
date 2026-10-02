@@ -39,12 +39,28 @@ ACCEPTED = ("accepted",) + EXPORTED + ("queued",)
 _KEY = re.compile(r"^[A-Za-z0-9_.:-]{8,80}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _REF = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
-HANDOFF = ("Rafii Visual Pack · assisted export\n"
-           "These files were prepared for you to post yourself. Rafii has not published them, and this export is not a "
-           "publication receipt.\nUpload slide-01.png to slide-06.png in this order, use caption.txt as the caption and "
-           "alt-text.txt for each image's alt text.\n\n"
-           "這些檔案由 Rafii 準備，請你自行發佈。Rafii 沒有發佈它們，這份匯出也不是發佈證明。\n"
-           "請依序上傳 slide-01.png 至 slide-06.png，以 caption.txt 作為貼文文字，並以 alt-text.txt 填寫每張圖片的替代文字。\n")
+# The export's handoff note, by version. A recorded export is re-served byte for byte (its sha256 is fixed in the
+# database), so a version is never edited in place: new wording is a new version used by a new export format.
+HANDOFF_TEXTS = {
+    1: ("Rafii Visual Pack · assisted export\n"
+        "These files were prepared for you to post yourself. Rafii has not published them, and this export is not a "
+        "publication receipt.\nUpload slide-01.png to slide-06.png in this order, use caption.txt as the caption and "
+        "alt-text.txt for each image's alt text.\n\n"
+        "這些檔案由 Rafii 準備，請你自行發佈。Rafii 沒有發佈它們，這份匯出也不是發佈證明。\n"
+        "請依序上傳 slide-01.png 至 slide-06.png，以 caption.txt 作為貼文文字，並以 alt-text.txt 填寫每張圖片的替代文字。\n"),
+}
+HANDOFF = HANDOFF_TEXTS[1]
+# Every zip layout an export may have been recorded with. Each pins its handoff text, manifest shape and compression,
+# so a later deploy rebuilds an earlier export exactly. Format 1 deflated its text files (bytes then depend on the zlib
+# build); format 2 stores every entry, so its bytes depend only on the revision. Add a format; never change one.
+EXPORT_FORMATS = {1: {"handoff": 1, "deflate": True, "manifestFormat": False},
+                  2: {"handoff": 1, "deflate": False, "manifestFormat": True}}
+EXPORT_FORMAT = 2
+NOT_REBUILDABLE = ("These files can't be rebuilt exactly as they were exported. Edit the carousel to make a new version, then render, "
+                   "accept and export that version.")
+# One render per revision: a slide file missing or changed in storage is recovered through a new version, not a re-render.
+SLIDE_CHANGED = ("A rendered slide file is missing or changed in storage. Edit the carousel to make a new version, then render, "
+                 "accept and export that version.")
 RECEIPTS = {
     "draft": "Draft: nothing is rendered, exported or published.",
     "rendered": "Six slides rendered for review. Nothing is exported or published.",
@@ -184,30 +200,54 @@ def queue_capability(channel) -> dict:
     return {"supported": False, "reason": f"{platform or 'This account'} can't receive a six-image carousel from Rafii: no publisher has verified multi-image support."}
 
 
-def build_zip(manifest: dict, files: dict) -> bytes:
-    """The assisted export, byte-identical for the same revision: six PNGs in order, caption, alt text, manifest."""
+def build_zip(manifest: dict, files: dict, fmt: int | None = None) -> bytes:
+    """The assisted export, byte-identical for the same revision and format: six PNGs in order, caption, alt text,
+    manifest and the handoff note, laid out as export format `fmt` pins them."""
+    fmt = EXPORT_FORMAT if fmt is None else fmt   # the current format, read when called
+    spec = EXPORT_FORMATS[fmt]
+    deflate = spec["deflate"]
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w") as archive:
-        def put(name, data, deflate):
+        def put(name, data, compress):
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED if deflate else zipfile.ZIP_STORED
+            info.compress_type = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
             info.create_system = 3
             info.external_attr = 0o644 << 16
-            archive.writestr(info, data, compresslevel=9 if deflate else None)
+            archive.writestr(info, data, compresslevel=9 if compress else None)
         for slide in manifest["slides"]:
             put(slide["file"], files[slide["position"]], False)
-        put("caption.txt", (manifest["caption"] + "\n").encode(), True)
-        put("alt-text.txt", "".join(f"{slide['file']}\n{slide['altText']}\n\n" for slide in manifest["slides"]).encode(), True)
-        put("manifest.json", (json.dumps(public_manifest(manifest), ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(), True)
-        put("HANDOFF.txt", HANDOFF.encode(), True)
+        put("caption.txt", (manifest["caption"] + "\n").encode(), deflate)
+        put("alt-text.txt", "".join(f"{slide['file']}\n{slide['altText']}\n\n" for slide in manifest["slides"]).encode(), deflate)
+        put("manifest.json", (json.dumps(public_manifest(manifest, fmt), ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(), deflate)
+        put("HANDOFF.txt", HANDOFF_TEXTS[spec["handoff"]].encode(), deflate)
     return out.getvalue()
 
 
-def public_manifest(manifest: dict) -> dict:
-    """The manifest as exported: storage locations removed; the handoff and its meaning stated."""
+def public_manifest(manifest: dict, fmt: int | None = None) -> dict:
+    """The manifest as exported: storage locations removed; the handoff and its meaning stated (and, from format 2 on,
+    the export format)."""
+    fmt = EXPORT_FORMAT if fmt is None else fmt
     slides = [{k: v for k, v in slide.items() if k not in ("objectName", "storagePath")} for slide in manifest["slides"]]
-    return {**{k: v for k, v in manifest.items() if k != "slides"}, "slides": slides, "handoff": "assisted_export",
-            "publication": "not_published_by_rafii"}
+    out = {**{k: v for k, v in manifest.items() if k != "slides"}, "slides": slides, "handoff": "assisted_export",
+           "publication": "not_published_by_rafii"}
+    if EXPORT_FORMATS[fmt]["manifestFormat"]:
+        out["exportFormat"] = fmt
+    return out
+
+
+def export_digest(approval_digest, sha256, size, fmt) -> str:
+    """What the revision records about its export. From format 2 on it names the format, so a download rebuilds with
+    exactly the layout that was recorded (format 1 predates the field)."""
+    record = {"approvalDigest": approval_digest, "sha256": sha256, "bytes": size}
+    return digest(record if fmt == 1 else {**record, "format": fmt})
+
+
+def recorded_format(rev):
+    """The export format a revision's export was built with (read from its export digest), or None."""
+    for fmt in EXPORT_FORMATS:
+        if rev.get("exportDigest") == export_digest(rev.get("approvalDigest"), rev.get("exportSha256"), rev.get("exportBytes"), fmt):
+            return fmt
+    return None
 
 
 def handoff_counts(cur, workspace_id, start, end) -> dict:
@@ -657,21 +697,38 @@ class VisualPackService:
         for slide in manifest["slides"]:
             raw = storage.get(workspace_id, "visual-pack", slide["objectName"])
             if hashlib.sha256(raw).hexdigest() != slide["sha256"]:
-                raise AlphaError("A rendered slide no longer matches its recorded hash. Render the pack again.", 502, code="integrity_failed")
+                raise AlphaError(SLIDE_CHANGED, 502, code="integrity_failed")
             files[slide["position"]] = raw
         return files
+
+    def _rebuild(self, workspace_id, rev) -> bytes:
+        """The recorded export, rebuilt from the hash-checked slides with the format it was recorded with; integrity_failed
+        when that is no longer possible (the recorded hash can't change, so the way on is a new version)."""
+        fmt = recorded_format(rev)
+        if fmt is None:
+            raise AlphaError(NOT_REBUILDABLE, 502, code="integrity_failed")
+        archive = build_zip(rev["manifest"], self._slide_files(workspace_id, rev["manifest"]), fmt)
+        if hashlib.sha256(archive).hexdigest() != rev["exportSha256"] or len(archive) != rev["exportBytes"]:
+            raise AlphaError(NOT_REBUILDABLE, 502, code="integrity_failed")
+        return archive
 
     def export(self, workspace_id, token, pack_id, body):
         expected = _expected(body)
         with self._tx(token, workspace_id, "edit") as (cur, _principal, state):
             pack, rev = self._load(cur, workspace_id, pack_id)
             self._current(pack, rev, expected)
-            if rev["state"] in EXPORTED:
-                return {**self._view(cur, workspace_id, state, pack["id"]), "replayed": True}   # exported once; downloads reuse it
-            if rev["state"] != "accepted":
-                raise AlphaError("Accept this exact revision before exporting it.", 409, code="approval_required")
-            self._ready_inputs(state, rev)
-        archive = build_zip(rev["manifest"], self._slide_files(workspace_id, rev["manifest"]))
+            again = rev["state"] in EXPORTED
+            if not again:
+                if rev["state"] != "accepted":
+                    raise AlphaError("Accept this exact revision before exporting it.", 409, code="approval_required")
+                self._ready_inputs(state, rev)
+        if again:
+            # Exporting again re-checks that the recorded files can still be rebuilt exactly, which every download
+            # depends on; nothing new is recorded. When they can't be, the answer says how to make a new version.
+            self._rebuild(workspace_id, rev)
+            with self._tx(token, workspace_id, "read") as (cur, _principal, state):
+                return {**self._view(cur, workspace_id, state, pack["id"]), "replayed": True, "verified": True}
+        archive = build_zip(rev["manifest"], self._slide_files(workspace_id, rev["manifest"]), EXPORT_FORMAT)
         sha = hashlib.sha256(archive).hexdigest()
         with self._tx(token, workspace_id, "edit") as (cur, principal, state):
             pack2, rev2 = self._load(cur, workspace_id, pack["id"], lock=True)
@@ -683,7 +740,7 @@ class VisualPackService:
             self._ready_inputs(state, rev2)
             cur.execute("UPDATE public.pr_visual_pack_revisions SET state='export_ready',export_digest=%s,export_sha256=%s,export_bytes=%s,export_ready_at=now(),exported_by=%s "
                         "WHERE workspace_id=%s AND pack_id=%s AND revision_no=%s AND state='accepted'",
-                        (digest({"approvalDigest": rev["approvalDigest"], "sha256": sha, "bytes": len(archive)}), sha, len(archive), principal, workspace_id, pack["id"], rev["revision"]))
+                        (export_digest(rev["approvalDigest"], sha, len(archive), EXPORT_FORMAT), sha, len(archive), principal, workspace_id, pack["id"], rev["revision"]))
             self._fact(cur, workspace_id, pack["id"], rev["revision"], "export_ready", principal, {"bytes": len(archive)})
             growth_events.emit(cur, workspace_id=workspace_id, event="visual_pack.exported", entity_id=pack["id"], revision=rev["revision"], user_id=principal,
                                values={"handoff": "assisted_export", "slides": checks.SLIDES, "revision": rev["revision"]})
@@ -698,9 +755,7 @@ class VisualPackService:
         with self._tx(token, workspace_id, "edit") as (cur, _principal, state):
             pack, rev = self._load(cur, workspace_id, pack_id, revision)
             self._downloadable(state, pack, rev)
-        archive = build_zip(rev["manifest"], self._slide_files(workspace_id, rev["manifest"]))
-        if hashlib.sha256(archive).hexdigest() != rev["exportSha256"] or len(archive) != rev["exportBytes"]:
-            raise AlphaError("The export no longer matches what was recorded. Export the pack again.", 502, code="integrity_failed")
+        archive = self._rebuild(workspace_id, rev)   # the recorded format, so a later deploy's wording never breaks it
         with self._tx(token, workspace_id, "edit") as (cur, principal, state):
             pack, rev = self._load(cur, workspace_id, pack["id"], revision, lock=True)
             self._downloadable(state, pack, rev)
@@ -760,7 +815,7 @@ class VisualPackService:
         slide = rev["manifest"]["slides"][position - 1]
         raw = self._storage().get(workspace_id, "visual-pack", slide["objectName"])
         if hashlib.sha256(raw).hexdigest() != slide["sha256"]:
-            raise AlphaError("A rendered slide no longer matches its recorded hash. Render the pack again.", 502, code="integrity_failed")
+            raise AlphaError(SLIDE_CHANGED, 502, code="integrity_failed")
         return raw, slide["sha256"]
 
     # --- deletion propagation --------------------------------------------------------------------------------------

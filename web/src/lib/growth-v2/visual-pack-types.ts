@@ -136,9 +136,9 @@ export interface PackView {
   options: { palettes: PackPalette[]; weights: PackWeight[]; slides: number; size: [number, number]; limits: { text: number; altText: number; caption: number } };
   replayed?: boolean;
   unchanged?: boolean;
-  /** Export of an already-exported revision whose archive could no longer be reproduced: rebuilt from the
-   *  hash-checked slides and re-recorded (the earlier record no longer matched). */
-  rebuilt?: boolean;
+  /** Export of an already-exported revision: the recorded files were checked again and still rebuild exactly (the
+   *  recorded export can't change; when it no longer rebuilds the server answers integrity_failed: make a new version). */
+  verified?: boolean;
 }
 
 export interface PackListItem {
