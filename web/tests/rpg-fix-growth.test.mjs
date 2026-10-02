@@ -115,7 +115,7 @@ test('a lost response is retried with the same key and the confirmed quote: repl
   assert.equal(await render().run('check', body, send), null, 'parked until the person confirms');
   const pending = render();
   assert.equal(pending.pending.quoteId, 'q-1');
-  await assert.rejects(pending.confirm(), TypeError);
+  await assert.rejects(pending.confirm(body), TypeError);
   assert.deepEqual(await render().run('check', body, send), { runId: 'run-1' });
   assert.deepEqual(sent.map((b) => b.creditQuoteId ?? null), [null, 'q-1', 'q-1'], 'the retry resends the confirmed quote with the same key');
   assert.ok(sent.every((b) => b.requestKey === body.requestKey));
@@ -138,10 +138,10 @@ test('a quote the server calls used or expired is priced again; other refusals p
   };
   const body = { confirmed: true, requestKey: 'key-abcdefabcdef1234' };
   await render().run('genome', body, send);
-  await assert.rejects(render().confirm(), TypeError);
+  await assert.rejects(render().confirm(body), TypeError);
   assert.equal(await render().run('genome', body, send), null, 'asks again instead of failing forever');
   assert.equal(render().pending.quoteId, 'q-2');
-  assert.deepEqual(await render().confirm(), { ok: 'q-2' });
+  assert.deepEqual(await render().confirm(body), { ok: 'q-2' });
   assert.equal(quotes.length, 2);
   const conflict = async () => {
     throw new ApiError('That request key belongs to another input.', 409, 'growth_key_conflict');
@@ -155,7 +155,9 @@ test('helpers: the confirmed quote rides only with its own key; legacy consent w
   assert.deepEqual(credits.withConfirmedQuote({ requestKey: 'key-a', x: 1 }, confirmed), { requestKey: 'key-a', x: 1, creditQuoteId: 'q-a' });
   const other = { requestKey: 'key-b' };
   assert.equal(credits.withConfirmedQuote(other, confirmed), other);
-  assert.equal(credits.staleCreditApproval(new ApiError('used', 409)), true);
+  // Only the server's own stale-quote sentences (rpg-fix-web-2 L5); a bare 409 is its own error.
+  assert.equal(credits.staleCreditApproval(new ApiError('Credit approval is used or expired. Review it again.', 409, 'conflict')), true);
+  assert.equal(credits.staleCreditApproval(new ApiError('used', 409)), false);
   assert.equal(credits.staleCreditApproval(new ApiError('pending', 409, 'growth_request_pending')), false);
   const sentence = 'Analyze these eligible comments with the allowed AI models';
   assert.equal(credits.growthUseConsent(sentence, 'legacy_allowances'), 'Analyze these eligible comments with the allowed AI models within my daily allowance.');
@@ -175,7 +177,7 @@ test('Genome, postmortem and Audience Miner pay through the confirmed credit lim
     assert.ok(source.includes(run), `${file} sends through the credit approval`);
     assert.ok(source.includes('useGrowthCreditApproval'), file);
     assert.match(source, /<GrowthCreditConfirm quote=\{credits\.pending\}/, `${file} shows the shared confirmation`);
-    assert.match(source, /credits\.confirm\(\)/, file);
+    assert.match(source, /credits\.confirm\(requestBody\(\)\)/, `${file} confirms the request as the screen shows it now`);
     const direct = source.split(`${call}(`).length - 1;
     assert.equal(direct, 1, `${file} calls ${call} only inside credits.run`);
   }
