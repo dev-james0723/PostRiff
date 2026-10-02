@@ -6,7 +6,7 @@ plus `blocked` / `failed` / `not_run` with a reason. Data mode (`demo|synthetic|
 means: focused unit tests + disposable PostgreSQL 17 groups on a private port, synthetic providers, Python 3.12, on the
 integrated branch unless a row says "worker branch". Web TypeScript is checked only in CI on this machine (D-017).
 
-Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft, base `consumer-saas`) · pushed head `8b04c02a`; production `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e` merged in (`2a6c13ef`).
+Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (draft, base `consumer-saas`) · integrated head `5471accb`; production `dpl_4F4d2CNxXqh37viSo2gTDBYZDb5c` @ `047d024e` merged in (`2a6c13ef`).
 
 ## Program gates
 
@@ -19,8 +19,8 @@ Last update: 2026-10-01 · branch `claude/rafii-product-growth-v2` · PR #87 (dr
 | PR #87 CI on `6db0b877` | **release gates passed in full** (Python 3,128+ tests, every PG group, web contracts, types/lint/isolated production build, copy audit, function archive, secret scan, dependency audits, real local browser/API/DB integration — run 36937116339); preview window passed; browser scenes fail only at the growth harness start (below) |
 | PR #87 CI on `d2469a9f` | typecheck + lint + preview window: **passed**; browser scenes: Automations now passes, but the growth harness step fails because Next 16 refuses a second `next dev` in `web/` (W-BROWSER fixing via `POSTRIFF_DIST_DIR`); release gates: running | GitHub Actions runs 36934793626, 36934793633, 36934793624 |
 | Vercel preview | `dpl_2xQHeEv1XfQenwPaWepNQFN59Lr6` @ `d2469a9f` READY (staging-isolated); pricing page legacy and unchanged; `/api/growth-features` → `{"firstWeek": false}`; found and fixed `/api/plans` 500 on a pre-048 database (`c8ccf2a6`) | `vercel curl`, runtime log `UndefinedColumn` |
-| Whole-branch review | completed and fixed: billing 2 high/5 medium/4 low; backend 3 medium/9 low; web 3 high/29 medium/~50 low; briefs/proof 3 medium/4 low. Fix branches merged: `claude/rpg-fix-relationships` (`763ef98e`), `claude/rpg-fix-slices` (`bb0fad5c`), `claude/rpg-fix-billing` (`dbb2f7e4`), plus coordinator follow-ups (080 owner-only endpoint, ended-legacy offer, credits-aware catalog, D-029) | merged head `8b04c02a`: unit 3,984 OK; PG groups for every touched area pass; web node 795/795; oxlint 0 errors |
-| Browser journeys for slices (AC37/AC39) | in progress (W-BROWSER) | `web/tests/growth-v2-browser.cjs` |
+| Whole-branch review | completed, fixed, and the fixes re-reviewed (6 medium / 12 low found in the fixes, all fixed: `84a52f4a`, `rpg-fix-web-2` `8b7da243`, `5471accb`) — first review: billing 2 high/5 medium/4 low; backend 3 medium/9 low; web 3 high/29 medium/~50 low; briefs/proof 3 medium/4 low. Fix branches merged: `claude/rpg-fix-relationships` (`763ef98e`), `claude/rpg-fix-slices` (`bb0fad5c`), `claude/rpg-fix-billing` (`dbb2f7e4`), plus coordinator follow-ups (080 owner-only endpoint, ended-legacy offer, credits-aware catalog, D-029) | merged head `8b04c02a`: unit 3,984 OK; PG groups for every touched area pass; web node 795/795; oxlint 0 errors |
+| Browser journeys for slices (AC37/AC39) | local_verified in CI (branch run): 194 checks, 0 failures — first week, results, follow-ups, series, visual packs, intake, proof, brief, pricing v2 at 1440/768/390, EN + zh-Hant, keyboard-only step, axe (no serious/critical), no horizontal scroll (`rafii-browser.yml` run 36949865902 on `claude/rpg-browser`); merged `d6a25e28`; first integrated run on `bc153698` in progress. Not run: Creator credits (harness has no managed-credit path), brief item actions (no seeded evidence), zh-Hant pricing (English-only page) | `web/tests/growth-v2-browser.cjs` |
 
 ## Requirements
 
