@@ -6,21 +6,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import { errorMessage } from '@/lib/growth-v2/request';
 import { useSeriesCandidates, useSeriesChange, type SeriesChange } from '@/lib/growth-v2/series-hooks';
 import type { CandidatePost, CandidateSource } from '@/lib/growth-v2/series-types';
 import { cn } from '@/lib/utils';
-import { fill } from './series-copy';
-import { useSeriesCopy } from './use-series-copy';
+import { fill, seriesErrorText } from './series-copy';
+import { useSeriesCopy, useSeriesLang } from './use-series-copy';
 
 const AGES = [30, 60, 90, 180, 365];
 const COUNTS = [2, 3, 4, 5, 6];
 const FIELD = 'rafii-field h-12 rounded-[var(--rafii-radius-control)] px-3.5 text-base md:h-11 md:text-sm';
 
 /** Pick an eligible original (an old published post or a source with approved facts), ask the audience question and
- *  the goal, and plan 2–6 episodes. Planning is deterministic: nothing is written and no credit is used. */
+ *  the goal, and plan 2–6 episodes. Planning is deterministic: nothing is written and no credit is used. Every opening
+ *  starts empty (nothing from an earlier series carries over); the dialog stays open, with the error in place, until the
+ *  server saved the series. */
 export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (id: string) => void }) {
   const copy = useSeriesCopy();
+  const lang = useSeriesLang();
   const ids = useId();
   const [kind, setKind] = useState<'post' | 'source'>('post');
   const [minAge, setMinAge] = useState(30);
@@ -30,6 +32,22 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
   const [title, setTitle] = useState('');
   const [count, setCount] = useState(3);
   const [intent, setIntent] = useState<SeriesChange | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setKind('post');
+      setMinAge(30);
+      setOrigin(null);
+      setQuestion('');
+      setGoal('');
+      setTitle('');
+      setCount(3);
+      setIntent(null);
+      setError(null);
+    }
+  }
   const candidates = useSeriesCandidates(kind, minAge, open);
   const change = useSeriesChange();
   const items = (candidates.data?.pages.flatMap((page) => page.items) ?? []) as (CandidatePost | CandidateSource)[];
@@ -43,7 +61,11 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
       input: { origin: { kind, id: origin }, audienceQuestion: question.trim(), goal: goal.trim(), episodeCount: count, ...(title.trim() ? { title: title.trim() } : {}), ...(kind === 'post' ? { minAgeDays: minAge } : {}) }
     };
     setIntent(next);   // a retry of this same submission reuses its idempotency key
-    change.mutate(next, { onSuccess: (data) => { setIntent(null); onCreated(data.series.id); } });
+    setError(null);
+    change.mutate(next, {
+      onSuccess: (data) => { setIntent(null); onCreated(data.series.id); },
+      onError: (failure) => setError(seriesErrorText(copy, failure))
+    });
   }
 
   function reset(next: Partial<{ kind: 'post' | 'source'; minAge: number }>) {
@@ -51,11 +73,12 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
     if (next.minAge) setMinAge(next.minAge);
     setOrigin(null);
     setIntent(null);
+    setError(null);
   }
 
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
-      <RafiiDialogContent size='lg'>
+      <RafiiDialogContent size='lg' lang={lang}>
         <form onSubmit={submit} className='flex min-h-0 flex-1 flex-col'>
           <RafiiDialogHeader title={copy.createTitle} intro={copy.createIntro} closeLabel={copy.cancel} />
           <RafiiDialogBody className='flex flex-col gap-4'>
@@ -73,7 +96,7 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
             <fieldset className='flex flex-col gap-2'>
               <legend className='mb-1 text-sm font-medium'>{kind === 'post' ? copy.sourcePost : copy.sourceSource}</legend>
               {candidates.isError ? (
-                <StateMessage kind='error' layout='inline' title={errorMessage(candidates.error)} />
+                <StateMessage kind='error' layout='inline' title={seriesErrorText(copy, candidates.error, copy.loadError)} />
               ) : candidates.isPending ? (
                 <p className='text-muted-foreground text-sm' role='status'>…</p>
               ) : items.length === 0 ? (
@@ -126,7 +149,7 @@ export function SeriesCreateDialog({ open, onOpenChange, onCreated }: { open: bo
                 </NativeSelect>
               </label>
             </div>
-            {change.isError && <p role='alert' className='text-destructive text-sm'>{errorMessage(change.error, copy.changeFailed)}</p>}
+            {error && <p role='alert' className='text-destructive text-sm'>{error}</p>}
           </RafiiDialogBody>
           <RafiiDialogFooter className='flex-row justify-end'>
             <Button type='button' variant='quiet' size='control' onClick={() => onOpenChange(false)}>{copy.cancel}</Button>

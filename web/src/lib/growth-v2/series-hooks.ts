@@ -5,14 +5,19 @@
  * with the feature off answers 404 `feature_disabled`; `seriesOff(query)` lets a surface hide itself. A change writes the
  * re-read series into the cache only after the server answered (never an optimistic success), and one idempotency key
  * is minted per intent and reused if the same intent is retried.
+ *
+ * A series lives in the workspace (its campaign, the drafts it links and the gates it sets), so every saved change also
+ * marks the workspace snapshot stale. A `revision_conflict` re-reads the series, so the next try is made against the
+ * current revision instead of failing again with the same stale one.
  */
-import { useMemo } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { keys as apiKeys } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { idempotencyKey, isFeatureDisabled, shouldRetry } from './request';
-import { createSeriesApi, type SeriesApi } from './series';
-import type { CandidatePost, CandidateSource, CandidatesPage, ClaimAction, CreateSeriesInput, DecisionKind, DecisionLevel, SeriesDetail, SeriesMutation, SeriesStatus } from './series-types';
+import { createSeriesApi, isRevisionConflict, type SeriesApi } from './series';
+import type { CandidatePost, CandidateSource, CandidatesPage, ClaimAction, CreateSeriesInput, DecisionKind, DecisionLevel, DraftCheck, SeriesDetail, SeriesMutation, SeriesStatus } from './series-types';
 
 export const seriesKeys = {
   all: (w: string) => ['growth-v2', w, 'series'] as const,
@@ -76,6 +81,17 @@ export function useDraftCheck(seriesId: string, episodeId: string, variantId: st
   });
 }
 
+/** The duplicate check on demand (a suggested draft is checked when the person asks to add it), sharing the check's cache. */
+export function useFetchDraftCheck() {
+  const client = useQueryClient();
+  const { api, w } = useSeriesApi();
+  return useCallback(
+    (seriesId: string, episodeId: string, variantId: string): Promise<DraftCheck> =>
+      client.fetchQuery({ queryKey: seriesKeys.check(w, seriesId, episodeId, variantId), queryFn: () => api.checkDraft(w, seriesId, episodeId, variantId), staleTime: 0, retry: shouldRetry }),
+    [client, api, w]
+  );
+}
+
 /** One user intent against one series. `revision` is the series revision the person was looking at. */
 export type SeriesChange =
   | { kind: 'create'; input: CreateSeriesInput }
@@ -120,10 +136,14 @@ function run(api: SeriesApi, w: string, change: SeriesChange, key: string): Prom
 /** The key one intent keeps across retries: the same change object, the same key. */
 const keysByIntent = new WeakMap<SeriesChange, string>();
 
-export function useSeriesChange() {
-  const client = useQueryClient();
-  const { api, w } = useSeriesApi();
-  return useMutation({
+/**
+ * What one change does to the cache, as plain mutation options (unit-tested without React): on success the re-read
+ * series replaces the detail, lists refresh and the workspace snapshot is marked stale; on a revision conflict the
+ * series and its lists are read again, so the next try carries the current revision.
+ */
+export function seriesChangeOptions(client: Pick<QueryClient, 'setQueryData' | 'invalidateQueries'>, api: SeriesApi, w: string) {
+  const lists = { queryKey: seriesKeys.all(w), predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[3] !== 'detail' };
+  return {
     mutationFn: (change: SeriesChange) => {
       let key = keysByIntent.get(change);
       if (!key) {
@@ -132,10 +152,22 @@ export function useSeriesChange() {
       }
       return run(api, w, change, key);
     },
-    onSuccess: (data) => {
+    onSuccess: (data: SeriesMutation) => {
       const detail: SeriesDetail = { series: data.series, canEdit: data.canEdit, isOwner: data.isOwner };
       client.setQueryData(seriesKeys.detail(w, data.series.id), detail);
-      void client.invalidateQueries({ queryKey: seriesKeys.all(w), predicate: (query) => query.queryKey[3] !== 'detail' });
+      void client.invalidateQueries(lists);
+      void client.invalidateQueries({ queryKey: apiKeys.snapshot(w) });
+    },
+    onError: (error: Error, change: SeriesChange) => {
+      if (change.kind === 'create' || !isRevisionConflict(error)) return;
+      void client.invalidateQueries({ queryKey: seriesKeys.detail(w, change.id) });
+      void client.invalidateQueries(lists);
     }
-  });
+  };
+}
+
+export function useSeriesChange() {
+  const client = useQueryClient();
+  const { api, w } = useSeriesApi();
+  return useMutation(seriesChangeOptions(client, api, w));
 }

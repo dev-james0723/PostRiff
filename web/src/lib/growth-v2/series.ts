@@ -69,3 +69,9 @@ export function createSeriesApi(getToken: TokenSource) {
 }
 
 export type SeriesApi = ReturnType<typeof createSeriesApi>;
+
+/** 409 `revision_conflict`: the series changed since it was read, so the change must be made again on the current revision. */
+export function isRevisionConflict(error: unknown): boolean {
+  const failure = error && typeof error === 'object' ? (error as { status?: unknown; code?: unknown }) : {};
+  return failure.status === 409 && failure.code === 'revision_conflict';
+}

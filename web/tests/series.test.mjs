@@ -43,9 +43,10 @@ test('every role, state, reason, status, decision and next action has words', ()
   }
 });
 
-test('Chinese preferences get Traditional Chinese, everything else English', () => {
-  for (const tag of ['zh-Hant', 'zh-Hant-HK', 'zh-TW', 'zh-HK', 'yue', 'yue-Hant-HK', 'zh']) assert.equal(seriesLocale(tag), 'zh-Hant', tag);
-  for (const tag of ['en', 'en-GB', 'fr', '', null, undefined]) assert.equal(seriesLocale(tag), 'en', String(tag));
+test('Traditional Chinese only for zh-Hant, zh-TW, zh-HK, zh-MO and Cantonese; everything else English (D-022)', () => {
+  for (const tag of ['zh-Hant', 'zh-Hant-HK', 'zh-hant-tw', 'zh-TW', 'zh-HK', 'zh-MO', 'zh_TW', 'yue', 'yue-Hant-HK', ' ZH-HANT ']) assert.equal(seriesLocale(tag), 'zh-Hant', tag);
+  // Simplified Chinese and a bare `zh` are not Traditional Chinese; neither is a tag that only starts with the same letters.
+  for (const tag of ['zh', 'zh-Hans', 'zh-CN', 'zh-SG', 'zh-Hans-HK', 'zh-TWX', 'yuex', 'en', 'en-GB', 'fr', '', null, undefined]) assert.equal(seriesLocale(tag), 'en', String(tag));
 });
 
 test('tones are honest: a fact check outranks progress, only Queue-verified publication is success', () => {
