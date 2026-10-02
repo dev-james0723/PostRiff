@@ -14,11 +14,15 @@ import {
   countPhrase,
   currencyDigits,
   duration,
+  isoToLocal,
+  linkResultsText,
+  localToIso,
   moneyLines,
   parseAmount,
   pickLanguage,
   problemText,
-  stateSentence
+  stateSentence,
+  unverifiedText
 } from '../src/features/growth/results/present.ts';
 
 const en = COPY.en;
@@ -122,11 +126,66 @@ test('durations, health codes and click wording', () => {
   assert.equal(duration(3 * 86_400 + 5, en), '3 days');
   assert.equal(duration(7200, zh), '2 小時');
   assert.equal(problemText('signature_mismatch', en), 'the signature didn’t match');
-  assert.equal(problemText('something_new', en), 'something new');
+  // A code this version doesn't know reads as a plain sentence, never as the raw code.
+  assert.equal(problemText('something_new', en), en.errors.unknown);
+  assert.equal(problemText('something_new', zh), zh.errors.unknown);
+  for (const code of ['reversal_test_mismatch', 'result_time_future', 'result_event_id_invalid', 'timestamp_outside_window', 'rate_limited', 'conflicting_payload']) {
+    assert.notEqual(problemText(code, en), en.errors.unknown, code);
+    assert.doesNotMatch(problemText(code, zh), /_/, code);
+  }
   assert.match(en.clicksNotPeople, /not per person/);
   assert.match(en.links.note, /not per person/);
   assert.match(zh.links.note, /不代表人數/);
   assert.equal(en.links.clicks(1), '1 click');
+});
+
+test('a source never set up reads as not connected / nothing recorded, not as an empty period', () => {
+  const none = { connections: { active: 0, paused: 0, removed: 0, errored: 0 }, declarations: false };
+  assert.equal(classView('first_party_reported', null, en, 'en', none).headline, en.notConnected);
+  assert.equal(classView('user_declared', null, en, 'en', none).headline, en.noneRecorded);
+  assert.equal(classView('user_declared', null, zh, 'zh-Hant', none).headline, zh.noneRecorded);
+  const used = { connections: { active: 0, paused: 0, removed: 1, errored: 0 }, declarations: true };
+  assert.equal(classView('first_party_reported', null, en, 'en', used).headline, en.noResults);   // a tool was connected once
+  assert.equal(classView('user_declared', null, en, 'en', used).headline, en.noResults);
+  assert.equal(classView('provider_native', null, en, 'en', used).headline, en.notConnected);
+  for (const view of [classView('first_party_reported', null, en, 'en', none), classView('user_declared', null, en, 'en', none)]) assert.equal(view.available, false);
+});
+
+test('a link’s results are told per source and never added together', () => {
+  assert.equal(linkResultsText({}, en), null);
+  assert.equal(linkResultsText(undefined, en), null);
+  assert.equal(linkResultsText({ first_party_reported: 3 }, en), 'Results through this link: 3 reported by your connected tools');
+  const both = linkResultsText({ first_party_reported: 1, user_declared: 2 }, en);
+  assert.equal(both, 'Results through this link: 2 you reported · 1 reported by your connected tools');
+  assert.doesNotMatch(both, /\b3\b/);                                   // never a blended total
+  assert.equal(linkResultsText({ user_declared: 2, first_party_reported: 1 }, zh), '經由此連結的成果：你自行記錄 2 項 · 由你連接的工具回報 1 項');
+});
+
+test('unsigned deliveries are a bounded, labelled count apart from health', () => {
+  assert.equal(unverifiedText(null, 'x', en), null);
+  assert.equal(unverifiedText({ refused: 0, capped: false }, 'x', en), null);
+  assert.match(unverifiedText({ refused: 7, capped: false }, '1 Oct', en), /^Refused 7 deliveries since 1 Oct/);
+  assert.match(unverifiedText({ refused: 999, capped: true }, '1 Oct', en), /Refused 999\+ deliveries/);
+  assert.match(unverifiedText({ refused: 5, capped: false }, '1 Oct', en), /can’t add results or change this connection’s status/);
+  assert.match(unverifiedText({ refused: 5, capped: false }, '10月1日', zh), /已拒絕 5 個/);
+});
+
+test('the declaration form reads and writes times in the person’s zone, like the ledger', () => {
+  const at = Date.UTC(2026, 9, 1, 15, 30) / 1000;   // 15:30 UTC = 23:30 in Hong Kong, 11:30 in New York (EDT)
+  assert.equal(isoToLocal(at, 'Asia/Hong_Kong'), '2026-10-01T23:30');
+  assert.equal(isoToLocal(at, 'America/New_York'), '2026-10-01T11:30');
+  assert.equal(localToIso('2026-10-01T23:30', 'Asia/Hong_Kong'), '2026-10-01T15:30:00.000Z');
+  assert.equal(localToIso('2026-10-01T11:30', 'America/New_York'), '2026-10-01T15:30:00.000Z');
+  assert.equal(localToIso('2026-11-01T09:00', 'America/New_York'), '2026-11-01T14:00:00.000Z');   // after clocks go back (EST)
+  for (const zone of ['Asia/Hong_Kong', 'America/New_York', 'Europe/London', 'UTC']) {
+    assert.equal(localToIso(isoToLocal(at, zone), zone), new Date(at * 1000).toISOString(), zone);   // round trip
+  }
+  assert.equal(localToIso('not a time', 'Asia/Hong_Kong'), null);
+  assert.equal(isoToLocal(at, 'Not/AZone'), isoToLocal(at));               // an unknown zone falls back to the browser's
+  const ok = checkDeclaration({ type: 'lead', occurredAt: '2026-10-01T23:30', amount: '', currency: '', quantity: '1', note: '', linkId: '', campaignRef: '' },
+    en, (local) => localToIso(local, 'Asia/Hong_Kong'));
+  assert.equal(ok.ok && ok.value.occurredAt, '2026-10-01T15:30:00.000Z');
+  assert.match(en.form.zone('Asia/Hong_Kong'), /Asia\/Hong_Kong/);
 });
 
 test('no customer-facing string hides behind implementation words or blends sources', () => {

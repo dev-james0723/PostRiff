@@ -103,7 +103,8 @@ export function BusinessResultsSection() {
 }
 
 function Summary({ data, copy, locale }: { data: ResultsSummary; copy: ResultsCopy; locale: string }) {
-  const views = ORDER.map((provenance) => classView(provenance, data.classes[provenance], copy, locale));
+  // Coverage tells "never set up" (Not connected / Nothing recorded yet) apart from "nothing in this period".
+  const views = ORDER.map((provenance) => classView(provenance, data.classes[provenance], copy, locale, data.coverage));
   const hasMoney = views.some((view) => view.money.length > 0);
   return (
     <div className='flex flex-col gap-3'>

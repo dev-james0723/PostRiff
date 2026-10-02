@@ -57,6 +57,7 @@ const en = {
     provider_native: 'Platform numbers aren’t connected to business results yet.'
   } as Record<Provenance, string>,
   noResults: 'No results in this period',
+  noneRecorded: 'Nothing recorded yet',
   notConnected: 'Not connected',
   kinds: EN_KINDS,
   kindNames: { lead: 'Lead', booking: 'Booking', newsletter_signup: 'Newsletter sign-up', sale: 'Sale', click: 'Click' } as Record<Kind, string>,
@@ -143,7 +144,8 @@ const en = {
     currencyInvalid: 'Use a three-letter currency code such as USD or TWD.',
     dateInvalid: 'Choose when it happened.',
     quantityInvalid: 'Enter a number from 1 to 1,000.',
-    campaignInvalid: 'Use letters, numbers, - _ or : (up to 80).'
+    campaignInvalid: 'Use letters, numbers, - _ or : (up to 80).',
+    zone: (zone: string) => `Times are in ${zone}, as in your results.`
   },
   reverse: {
     title: 'Reverse this result?',
@@ -175,6 +177,8 @@ const en = {
     problem: (text: string) => `Last problem: ${text}`,
     counts: (accepted: number, reversals: number, tests: number) => `Last 24 hours: ${accepted} results · ${reversals} reversals · ${tests} tests`,
     held: (n: number) => `${n} held back`,
+    unverified: (n: string, since: string) =>
+      `Refused ${n} deliveries since ${since} that weren’t signed with this connection’s secret. They can’t add results or change this connection’s status.`,
     rotate: 'Rotate secret',
     pause: 'Pause',
     resume: 'Resume',
@@ -219,7 +223,9 @@ const en = {
     emptyDescription: 'Create one for a page you share, like a booking page.',
     clicks: (n: number) => plural(n, 'click', 'clicks'),
     bots: (n: number) => plural(n, 'likely bot visit', 'likely bot visits'),
-    results: (n: number) => `${plural(n, 'result', 'results')} through this link`,
+    results: (parts: string) => `Results through this link: ${parts}`,
+    resultPart: (n: number, source: string) => `${n} ${source}`,
+    sources: { user_declared: 'you reported', first_party_reported: 'reported by your connected tools', provider_native: 'platform-reported' } as Record<Provenance, string>,
     off: 'Off',
     on: 'On',
     turnOff: 'Turn off',
@@ -239,7 +245,18 @@ const en = {
     reversal_duplicate: 'a second reversal of the same result',
     secret_unavailable: 'the secret needs rotating',
     result_reversal_unknown: 'a reversal arrived before its original',
-    result_reversal_invalid: 'a reversal didn’t match its original'
+    result_reversal_invalid: 'a reversal didn’t match its original',
+    reversal_test_mismatch: 'a test reversal aimed at a real result (or a real one at a test), not applied',
+    result_payload_invalid: 'an unreadable event',
+    result_event_id_invalid: 'an event without a usable eventId',
+    result_type_invalid: 'an event of an unknown type',
+    result_time_invalid: 'an event with an unreadable time',
+    result_time_future: 'an event dated in the future',
+    result_amount_invalid: 'an unreadable amount',
+    result_amount_not_allowed: 'an amount on a result that can’t carry one',
+    result_currency_invalid: 'an unknown currency',
+    result_campaign_invalid: 'an unreadable campaign label',
+    unknown: 'a delivery Rafii couldn’t accept'
   } as Record<string, string>,
   time: {
     justNow: 'just now',
@@ -268,6 +285,7 @@ const zh: ResultsCopy = {
     provider_native: '平台數據尚未連接到業務成果。'
   },
   noResults: '這段期間沒有成果',
+  noneRecorded: '尚未記錄任何成果',
   notConnected: '未連接',
   kinds: ZH_KINDS,
   kindNames: { lead: '潛在客戶', booking: '預約', newsletter_signup: '電子報訂閱', sale: '銷售', click: '點擊' },
@@ -354,7 +372,8 @@ const zh: ResultsCopy = {
     currencyInvalid: '請使用三個字母的幣別代碼，例如 USD 或 TWD。',
     dateInvalid: '請選擇發生時間。',
     quantityInvalid: '請輸入 1 至 1,000 的數字。',
-    campaignInvalid: '請使用英文字母、數字、- _ 或 :（最多 80 個）。'
+    campaignInvalid: '請使用英文字母、數字、- _ 或 :（最多 80 個）。',
+    zone: (zone: string) => `時間以 ${zone} 為準，與你的成果紀錄一致。`
   },
   reverse: {
     title: '要撤銷這項成果嗎？',
@@ -386,6 +405,7 @@ const zh: ResultsCopy = {
     problem: (text: string) => `最近的問題：${text}`,
     counts: (accepted: number, reversals: number, tests: number) => `過去 24 小時：成果 ${accepted} 項 · 撤銷 ${reversals} 項 · 測試 ${tests} 項`,
     held: (n: number) => `已擱置 ${n} 項`,
+    unverified: (n: string, since: string) => `自 ${since} 起，已拒絕 ${n} 個沒有以此連接密鑰簽署的傳送。這些傳送不會新增成果，也不會改變這個連接的狀態。`,
     rotate: '輪換密鑰',
     pause: '暫停',
     resume: '恢復',
@@ -430,7 +450,9 @@ const zh: ResultsCopy = {
     emptyDescription: '為你常分享的網頁建立一個，例如預約頁。',
     clicks: (n: number) => `${n} 次點擊`,
     bots: (n: number) => `${n} 次疑似機器人造訪`,
-    results: (n: number) => `經由此連結的成果 ${n} 項`,
+    results: (parts: string) => `經由此連結的成果：${parts}`,
+    resultPart: (n: number, source: string) => `${source} ${n} 項`,
+    sources: { user_declared: '你自行記錄', first_party_reported: '由你連接的工具回報', provider_native: '平台回報' },
     off: '已關閉',
     on: '開啟中',
     turnOff: '關閉',
@@ -450,7 +472,18 @@ const zh: ResultsCopy = {
     reversal_duplicate: '同一項成果被撤銷第二次',
     secret_unavailable: '密鑰需要輪換',
     result_reversal_unknown: '撤銷比原始事件先送達',
-    result_reversal_invalid: '撤銷與原始事件不相符'
+    result_reversal_invalid: '撤銷與原始事件不相符',
+    reversal_test_mismatch: '測試撤銷指向真實成果（或真實撤銷指向測試事件），沒有套用',
+    result_payload_invalid: '無法讀取的事件',
+    result_event_id_invalid: '事件缺少可用的 eventId',
+    result_type_invalid: '事件類型不明',
+    result_time_invalid: '事件時間無法讀取',
+    result_time_future: '事件時間在未來',
+    result_amount_invalid: '金額無法讀取',
+    result_amount_not_allowed: '不能填寫金額的成果帶有金額',
+    result_currency_invalid: '幣別不明',
+    result_campaign_invalid: '活動標籤無法讀取',
+    unknown: 'Rafii 無法接受的傳送'
   },
   time: {
     justNow: '剛剛',
@@ -525,11 +558,28 @@ export interface ClassView {
   notes: string[];
 }
 
-/** What one source card says. `null` (no data) reads "No results in this period" or "Not connected", never 0. */
-export function classView(provenance: Provenance, summary: ClassSummary | null, copy: ResultsCopy, locale: string): ClassView {
+/** What the summary knows about where results can come from (`ResultsSummary.coverage`). */
+export interface SourceCoverage {
+  connections: { active: number; paused: number; removed: number; errored: number };
+  declarations: boolean;
+}
+
+/**
+ * What one source card says. `null` (no data) is never 0: it reads "Not connected" when the source was never set up (no
+ * platform metrics, no tool ever connected), "Nothing recorded yet" before the first declaration, and otherwise "No
+ * results in this period".
+ */
+export function classView(provenance: Provenance, summary: ClassSummary | null, copy: ResultsCopy, locale: string, coverage?: SourceCoverage): ClassView {
   const base = { provenance, label: copy.classes[provenance], hint: copy.classHints[provenance] };
   if (!summary) {
-    return { ...base, available: false, headline: provenance === 'provider_native' ? copy.notConnected : copy.noResults, money: [], notes: [] };
+    const tools = coverage ? coverage.connections.active + coverage.connections.paused + coverage.connections.removed : null;
+    const headline =
+      provenance === 'provider_native' || (provenance === 'first_party_reported' && tools === 0)
+        ? copy.notConnected
+        : provenance === 'user_declared' && coverage && !coverage.declarations
+          ? copy.noneRecorded
+          : copy.noResults;
+    return { ...base, available: false, headline, money: [], notes: [] };
   }
   const headline = countPhrase(summary.counts, copy) || copy.allWithdrawn;
   const notes = [
@@ -564,9 +614,25 @@ export function ago(at: number, now: number, copy: ResultsCopy): string {
   return text === copy.time.justNow ? text : copy.time.ago(text);
 }
 
-/** A stored health code in words; unknown codes stay readable instead of hidden. */
+/** A stored health code in words. A code this version doesn't know reads as a plain sentence, never as the raw code. */
 export function problemText(code: string, copy: ResultsCopy): string {
-  return copy.errors[code] ?? code.replaceAll('_', ' ');
+  return copy.errors[code] ?? copy.errors.unknown;
+}
+
+/**
+ * A link's associated results, one part per source and never added together ("Results through this link: 2 you
+ * reported · 1 reported by your connected tools"); `null` when none.
+ */
+export function linkResultsText(associated: Partial<Record<Provenance, number>> | null | undefined, copy: ResultsCopy): string | null {
+  const order: Provenance[] = ['user_declared', 'first_party_reported', 'provider_native'];
+  const parts = order.filter((source) => (associated?.[source] ?? 0) > 0).map((source) => copy.links.resultPart(associated![source]!, copy.links.sources[source]));
+  return parts.length ? copy.links.results(parts.join(' · ')) : null;
+}
+
+/** The owner's "unverified deliveries refused" line: a bounded count ("999+" past the cap), apart from health. */
+export function unverifiedText(unverified: { refused: number; capped: boolean } | null | undefined, since: string, copy: ResultsCopy): string | null {
+  if (!unverified || unverified.refused <= 0) return null;
+  return copy.connections.unverified(unverified.capped ? `${unverified.refused}+` : String(unverified.refused), since);
 }
 
 export interface DeclarationForm {
@@ -606,17 +672,52 @@ export function checkDeclaration(form: DeclarationForm, copy: ResultsCopy, toIso
   return { ok: true, value: { type: form.type, occurredAt, amount, quantity, note: note || null, linkId: form.linkId || null, campaignRef: campaignRef || null } };
 }
 
-/** A `datetime-local` value as an ISO instant (the browser's zone decides the offset). */
-export function localToIso(local: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(local)) return null;
+/** The wall-clock parts of an instant in `zone` (throws for an unknown zone). */
+function zoneParts(ms: number, zone: string): Record<string, number> {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date(ms))
+    .reduce<Record<string, number>>((acc, part) => (part.type === 'literal' ? acc : { ...acc, [part.type]: Number(part.value) }), {});
+  return parts;
+}
+
+/**
+ * A `datetime-local` value as an ISO instant, read in `zone`: the person's saved zone, so a result entered at 10:00 is
+ * listed at 10:00 in the ledger (which shows times in that zone). Without a zone the browser's decides.
+ */
+export function localToIso(local: string, zone?: string | null): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(local);
+  if (!match) return null;
+  if (zone) {
+    try {
+      const [year, month, day, hour, minute, second] = match.slice(1).map((part) => Number(part ?? 0));
+      const guess = Date.UTC(year, month - 1, day, hour, minute, second);
+      // Correct the guess by the zone's offset at that moment (twice, for an offset change nearby).
+      let at = guess;
+      for (let i = 0; i < 2; i++) {
+        const seen = zoneParts(at, zone);
+        at = guess - (Date.UTC(seen.year, seen.month - 1, seen.day, seen.hour, seen.minute, seen.second) - Math.floor(at / 1000) * 1000);
+      }
+      return Number.isNaN(at) ? null : new Date(at).toISOString();
+    } catch {
+      /* an unknown zone: fall back to the browser's */
+    }
+  }
   const date = new Date(local);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-/** An instant as a `datetime-local` value in the browser's zone (to prefill an edit). */
-export function isoToLocal(seconds: number): string {
-  const date = new Date(seconds * 1000);
+/** An instant as a `datetime-local` value in `zone` (the person's saved zone, as the ledger shows it; else the browser's). */
+export function isoToLocal(seconds: number, zone?: string | null): string {
   const pad = (n: number) => String(n).padStart(2, '0');
+  if (zone) {
+    try {
+      const p = zoneParts(seconds * 1000, zone);
+      return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+    } catch {
+      /* an unknown zone: fall back to the browser's */
+    }
+  }
+  const date = new Date(seconds * 1000);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 

@@ -44,7 +44,7 @@ export function createResultsApi(getToken: TokenSource) {
     createConnection: (w: string, body: Keyed & { label: string; producer: ResultProducer }) => r.send<ConnectionSecret>('POST', `${base(w)}/connections`, body),
     connectionAction: (w: string, id: string, action: ConnectionAction, body: Revised) =>
       r.send<ConnectionSecret>('POST', `${base(w)}/connections/${seg(id)}/${action}`, body),
-    links: (w: string, cursor?: string) => r.get<TrackingLinks>(`${base(w)}/links${query({ cursor })}`),
+    links: (w: string, cursor?: string, limit?: number) => r.get<TrackingLinks>(`${base(w)}/links${query({ cursor, limit })}`),
     createLink: (w: string, body: TrackingLinkInput & Keyed) => r.send<{ link: TrackingLink; replayed: boolean }>('POST', `${base(w)}/links`, body),
     linkAction: (w: string, id: string, action: LinkAction, body: Revised) =>
       r.send<{ link: TrackingLink; replayed: boolean }>('POST', `${base(w)}/links/${seg(id)}/${action}`, body)

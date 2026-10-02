@@ -14,7 +14,7 @@ import { errorMessage, idempotencyKey } from '@/lib/growth-v2/request';
 import { useConnectionAction, useCreateConnection, useResultConnections } from '@/lib/growth-v2/results-hooks';
 import type { ConnectionSecret, ResultConnection, ResultProducer } from '@/lib/growth-v2/results-types';
 import { formatDateTime, relativeTime } from '@/lib/time';
-import { duration, problemText, type ResultsCopy } from './present';
+import { duration, problemText, unverifiedText, type ResultsCopy } from './present';
 import { useResultsCopy } from './use-results-copy';
 
 const PRODUCERS: ResultProducer[] = ['form', 'booking', 'newsletter', 'store', 'other'];
@@ -39,7 +39,7 @@ export function ResultConnectionsView() {
 }
 
 function OwnerConnections() {
-  const { copy } = useResultsCopy();
+  const { copy, lang } = useResultsCopy();
   const query = useResultConnections();
   const [creating, setCreating] = useState(false);
   const [issued, setIssued] = useState<ConnectionSecret | null>(null);
@@ -82,8 +82,9 @@ function OwnerConnections() {
           ))}
         </ul>
       )}
+      {/* Dialogs are portalled outside the panel, so each carries the panel's language itself. */}
       <RafiiDialog open={creating} onOpenChange={setCreating}>
-        <RafiiDialogContent size='sm'>
+        <RafiiDialogContent size='sm' lang={lang}>
           {creating && (
             <CreateConnection
               onCreated={(result) => {
@@ -95,15 +96,18 @@ function OwnerConnections() {
         </RafiiDialogContent>
       </RafiiDialog>
       <RafiiDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
-        <RafiiDialogContent size='sm'>
+        <RafiiDialogContent size='sm' lang={lang}>
           {confirming && (
             <ConfirmAction
               key={`${confirming.connection.id}-${confirming.action}`}
               connection={confirming.connection}
               action={confirming.action}
               onDone={(result) => {
+                const rotated = confirming.action === 'rotate';
                 setConfirming(null);
-                if (result?.secretShown) setIssued(result);
+                // A new secret is shown once; a replayed rotate (the same request again) says the secret was already
+                // shown instead of closing silently.
+                if (result && (result.secretShown || (rotated && result.replayed))) setIssued(result);
               }}
             />
           )}
@@ -111,7 +115,7 @@ function OwnerConnections() {
       </RafiiDialog>
       {/* The secret lives only in this component's state, and only until the dialog closes. */}
       <RafiiDialog open={issued !== null} onOpenChange={(open) => !open && setIssued(null)} disablePointerDismissal>
-        <RafiiDialogContent size='sm'>{issued && <SecretOnce issued={issued} onDone={() => setIssued(null)} />}</RafiiDialogContent>
+        <RafiiDialogContent size='sm' lang={lang}>{issued && <SecretOnce issued={issued} onDone={() => setIssued(null)} />}</RafiiDialogContent>
       </RafiiDialog>
     </>
   );
@@ -136,6 +140,8 @@ function ConnectionRow({ connection, copy, canManage, onConfirm }: { connection:
     health.lastReceivedAt ? copy.connections.lastEvent(relativeTime(health.lastReceivedAt)) : copy.connections.never,
     health.lagSeconds !== null && health.lagSeconds >= 60 ? copy.connections.lag(duration(health.lagSeconds, copy)) : ''
   ].filter(Boolean);
+  // Unsigned traffic is counted apart: it never changes this connection's state or its last problem.
+  const refused = unverifiedText(health.unverified, health.unverified ? formatDateTime(health.unverified.since) : '', copy);
   return (
     <li>
       <Band className='gap-2'>
@@ -177,6 +183,7 @@ function ConnectionRow({ connection, copy, canManage, onConfirm }: { connection:
             {health.lastErrorCode && health.dataState !== 'available' && (
               <p className='text-foreground text-xs'>{copy.connections.problem(problemText(health.lastErrorCode, copy))}</p>
             )}
+            {refused && <p className='text-muted-foreground text-xs leading-relaxed'>{refused}</p>}
             {connection.fingerprint && (
               <p className='text-muted-foreground font-mono text-xs'>
                 {copy.connections.fingerprint(connection.fingerprint)}
@@ -188,7 +195,7 @@ function ConnectionRow({ connection, copy, canManage, onConfirm }: { connection:
           </>
         )}
         {problem && (
-          <p role='alert' className='text-destructive text-sm'>
+          <p role='alert' lang='en' className='text-destructive text-sm'>
             {problem}
           </p>
         )}
@@ -234,7 +241,7 @@ function CreateConnection({ onCreated }: { onCreated: (result: ConnectionSecret)
           ))}
         </SelectField>
         {problem && (
-          <p role='alert' className='text-destructive text-sm'>
+          <p role='alert' lang='en' className='text-destructive text-sm'>
             {problem}
           </p>
         )}
@@ -277,7 +284,7 @@ function ConfirmAction({ connection, action, onDone }: { connection: ResultConne
       <RafiiDialogBody>
         <p className='text-foreground text-sm font-medium'>{connection.label}</p>
         {problem && (
-          <p role='alert' className='text-destructive mt-2 text-sm'>
+          <p role='alert' lang='en' className='text-destructive mt-2 text-sm'>
             {problem}
           </p>
         )}
@@ -293,13 +300,13 @@ function ConfirmAction({ connection, action, onDone }: { connection: ResultConne
 }
 
 function SecretOnce({ issued, onDone }: { issued: ConnectionSecret; onDone: () => void }) {
-  const { copy } = useResultsCopy();
+  const { copy, lang } = useResultsCopy();
   const id = useId();
   const url = endpointUrl(issued.connection);
   const copyText = (text: string, done: string) =>
     navigator.clipboard.writeText(text).then(
-      () => toast.success(done),
-      () => toast.error(copy.secret.copyFailed)
+      () => toast.success(<span lang={lang}>{done}</span>),
+      () => toast.error(<span lang={lang}>{copy.secret.copyFailed}</span>)
     );
   return (
     <>
