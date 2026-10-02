@@ -7,12 +7,12 @@ Maintenance is independent of rollout switches, including after rollback.
 from __future__ import annotations
 
 from dataclasses import fields
-from decimal import Decimal
 import logging
 import random
 import time
 import urllib.error
 import uuid
+from postriff_alpha.domain import AlphaError
 
 from . import config, retention, source_health, analytics_runtime, frontier_runtime
 from .contracts import ContractError, digest, instant
@@ -25,6 +25,7 @@ from .policy import SourcePolicy, admit
 from .providers.base import Batch
 from .providers.registry import ProviderRegistry
 from .store import TrendStore, row, rows, utcnow
+from . import credit_admission
 
 LOG = logging.getLogger('postriff.trends')
 
@@ -176,9 +177,12 @@ class TrendWorker:
                 break
             try:
                 cap, policy, adapter, amount, budget_keys = self._admission(candidate, registry)
+                credit_admission.require_provider_dispatch(self.store, candidate['scope_key'], cap, amount)
                 if 'frontier' in candidate['payload']:
                     frontier.dispatch_context(candidate)
-            except ContractError:
+            except (ContractError, AlphaError) as exc:
+                if getattr(exc, 'code', None) == credit_admission.UNAVAILABLE:
+                    result.update(status='funding_unavailable', reason_code=exc.code)
                 result['blocked'] += 1
                 continue
             operation_seconds = cap.timeout_seconds
@@ -211,6 +215,7 @@ class TrendWorker:
                 self._admission(claim, registry)
                 if 'frontier' in claim['payload']:
                     frontier.dispatch_context(claim)
+                credit_admission.require_provider_dispatch(self.store, claim['scope_key'], cap, amount)
                 dispatched = True
                 result['dispatched'] += 1
                 # start() has committed. Adapter I/O is bounded and outside all locks.
@@ -229,7 +234,7 @@ class TrendWorker:
                     task='trend.ingest', model='source/' + cap.provider_id, route='primary', status='ok',
                     provider=cap.provider_id, latency_ms=max(0, round((self.monotonic()-attempt_started)*1000)),
                     workspace_id=claim['scope_key'][10:] if claim['scope_key'].startswith('workspace:') else None,
-                    cost_usd=Decimal(batch.cost_microusd) / Decimal(1_000_000) if batch.cost_microusd is not None else None,
+                    cost_usd=batch.cost_microusd / 1_000_000 if batch.cost_microusd is not None else None,
                     cost_source='table:trend-provider-contract-v1' if batch.cost_microusd is not None else 'unknown'))
                 self._admission(claim, registry)
                 completeness = 'gap' if batch.quarantined else batch.completeness
@@ -259,7 +264,9 @@ class TrendWorker:
                 result['completed'] += 1
             except Exception as exc:
                 # Never log provider response text, URLs, account IDs or evidence.
-                code = exc.code if isinstance(exc, ContractError) else 'provider_or_commit_failure'
+                code = exc.code if isinstance(exc, (ContractError, AlphaError)) else 'provider_or_commit_failure'
+                if code == credit_admission.UNAVAILABLE:
+                    result.update(status='funding_unavailable', reason_code=code)
                 LOG.warning('trend.job_failed code=%s dispatched=%s', code, dispatched)
                 try:
                     unmetered = cap.billable_unit == 'unmetered_live_bytes_bounded' and amount == 0
