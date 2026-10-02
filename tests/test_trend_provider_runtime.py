@@ -21,8 +21,13 @@ class Store:
     @contextmanager
     def transaction(self):
         cursor = Mock(description=[])
-        cursor.execute.side_effect = lambda sql, args=None: self.queries.append((sql, args))
-        cursor.fetchone.return_value = {'state':self.state} if self.state is not None else None
+        def execute(sql, args=None):
+            self.queries.append((sql, args))
+            if '/* trends:funding */' in sql:
+                cursor.fetchone.return_value = {'plan':'studio', 'credit_policy':'credits-candidate-2026-09-23-v1'}
+            else:
+                cursor.fetchone.return_value = {'state':self.state} if self.state is not None else None
+        cursor.execute.side_effect = execute
         cursor.fetchall.return_value = self.policies
         yield cursor
 

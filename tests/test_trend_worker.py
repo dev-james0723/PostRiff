@@ -65,7 +65,9 @@ class ProbeCursor:
 
     def execute(self, sql, params=None):
         self.store.queries.append((sql, params))
-        if "to_regclass" in sql:
+        if "/* trends:funding */" in sql:
+            self.result = [copy.deepcopy(self.store.terms)]
+        elif "to_regclass" in sql:
             self.result = [{"ready": self.store.ready}]
         elif "FROM public.pr_trend_jobs" in sql:
             self.result = copy.deepcopy(self.store.candidates)
@@ -97,6 +99,8 @@ class ProbeStore:
         self.queries = []
         self.active_cursor = None
         self.health = None
+        # Existing dispatch tests cover grandfathered allowance customers.
+        self.terms = {"plan": "studio", "credit_policy": "credits-candidate-2026-09-23-v1"}
 
     @contextmanager
     def transaction(self, cursor=None):

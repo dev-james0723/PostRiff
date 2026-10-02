@@ -13,6 +13,7 @@ from postriff_phase2.growth.judgments import validate_answers
 from postriff_phase2.growth.jev import JevService,DEFAULT_MODEL,EVALUATE_ENDPOINT
 import test_trend_generation as generation_tests
 import test_trend_enrichment as enrichment_tests
+from test_trend_worker import ProbeStore
 
 
 def sample_pack():
@@ -66,7 +67,7 @@ class LabEnrichmentUnitTests(unittest.TestCase):
         def transport(method,url,*,headers,body,timeout):
             calls.append(body)
             return {"status":200,"body":{"model":DEFAULT_MODEL,"answers":raw,"providerMetadata":{"gateway":{"cost":"0.0001","routing":{"finalProvider":"synthetic"}}}}}
-        worker=lab_enrichment.TrendLabEnrichment(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)))
+        worker=lab_enrichment.TrendLabEnrichment(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)),store=ProbeStore([]))
         model=JevService("synthetic",transport=transport);sink=MemoryUsageSink()
         old={"dimension":"originality","evidence_refs":["e1"],"suggested_edit":{"id":"remove-copy","before":pack["evidence"][0]["text"],"after":"","reason":"Remove literal copy"}}
         loaded={"pack":pack,"config":{"model":DEFAULT_MODEL},"receipt":{"object_id":"receipt"},"lab":{"object_id":"run","payload":{"frozen_run":{"diagnostics":[old]}}}}
