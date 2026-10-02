@@ -171,12 +171,25 @@ async function firstWeekJourney(browser, viewport, draft, language) {
   await page.screenshot({ path: resolve(out, `${label.replace('/', '-')}-3-week.png`), fullPage: true });
   await axeCheck(page, `first week ${label}`);
   await noHorizontalScroll(page, `first week ${label}`);
-  // "I posted it" stays beside a recorded handoff (with Undo), so each post's own button is used once.
+  // "I posted it" stays beside a recorded handoff (with Undo), so each post's own button is used once; the server's
+  // answer to each handoff is checked, so a refusal says why.
   const used = page.getByRole('button', { name: 'I posted it' });
   const handoffs = await used.count();
   for (let i = 0; i < handoffs; i += 1) {
+    const answered = page.waitForResponse((response) => /\/first-week\/slots\/[^/]+\/handoff$/.test(new URL(response.url()).pathname), { timeout: 20000 }).catch(() => null);
     await used.nth(i).click();
-    await until(async () => (await page.getByText('You posted it yourself.').count()) > i, 'the handoff is recorded');
+    const response = await answered;
+    const body = response ? await response.json().catch(() => null) : null;
+    const toasts = await page.locator('[data-sonner-toast]').allInnerTexts().catch(() => []);
+    if (!response || !response.ok()) {
+      await page.screenshot({ path: resolve(out, `FAIL-first-week-${label.replace('/', '-')}.png`), fullPage: true }).catch(() => undefined);
+      throw new Error(`handoff ${i + 1}: ${response ? response.status() : 'no request'} ${JSON.stringify(body).slice(0, 300)} toasts ${JSON.stringify(toasts).slice(0, 300)}`);
+    }
+    const slots = (body?.slots ?? []).map((s) => ({ status: s.status, handoff: s.handoff && { state: s.handoff.state, stale: Boolean(s.handoff.stale) } }));
+    await until(async () => (await page.getByText('You posted it yourself.').count()) > i, 'the handoff is recorded').catch(async (error) => {
+      await page.screenshot({ path: resolve(out, `FAIL-first-week-${label.replace('/', '-')}.png`), fullPage: true }).catch(() => undefined);
+      throw new Error(`${error.message}; server step ${body?.step}, delivered ${body?.delivered}/${body?.committed}, slots ${JSON.stringify(slots)}, toasts ${JSON.stringify(toasts).slice(0, 200)}`);
+    });
   }
   await page.getByText('Your first week is delivered').waitFor();
   const view = await page.evaluate(async () => {
@@ -317,6 +330,19 @@ async function tabTo(page, target, { back = 4, max = 30 } = {}) {
   throw new Error(`keyboard: Tab never reached ${await target.evaluate((node) => node.outerHTML.slice(0, 160))}`);
 }
 
+/**
+ * Wait until `locator`'s element survives a second: the preferences provider re-keys the app when the person's saved
+ * language or the browser's zone arrives, which remounts the page once after it first appears.
+ */
+async function stable(page, locator, ms = 1000) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const handle = await locator.elementHandle();
+    await page.waitForTimeout(ms);
+    if (await handle.evaluate((node) => node.isConnected).catch(() => false)) return;
+  }
+  throw new Error('the page kept re-rendering');
+}
+
 /** From the current focus, Tab forward until `target` has focus (a form's own submit button). */
 async function tabForward(page, target, max = 12) {
   for (let presses = 0; presses <= max; presses += 1) {
@@ -385,6 +411,7 @@ async function resultsJourney(env, { label, zh, entry }) {
   await page.goto(base + '/app/analytics');
   const region = page.getByRole('region', { name: copy.title, exact: true });
   await region.waitFor({ timeout: 120000 });
+  await stable(page, region);
   await region.scrollIntoViewIfNeeded();
   await region.getByText(copy.ledger.empty, { exact: true }).waitFor();
 
@@ -516,6 +543,7 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
   // No comments in this workspace (the harness has no Inbox thread here): the manual, no-thread path.
   await page.goto(base + '/app/inbox');
   await page.getByRole('heading', { name: 'Inbox', level: 1 }).waitFor({ timeout: 120000 });
+  await stable(page, page.getByRole('heading', { name: 'Inbox', level: 1 }));
   const openView = page.getByRole('button', { name: copy.tab, exact: true });
   const presses = await tabTo(page, openView);
   await page.keyboard.press('Enter');
@@ -642,6 +670,7 @@ async function seriesJourney(env, { label, zh }) {
   await page.goto(base + '/app/library');
   const section = page.getByRole('region', { name: copy.sectionTitle, exact: true });
   await section.waitFor({ timeout: 120000 });
+  await stable(page, section);
   await section.scrollIntoViewIfNeeded();
   await section.getByText(copy.emptyTitle, { exact: true }).waitFor();
   const startButton = section.getByRole('button', { name: copy.newSeries, exact: true });
@@ -695,6 +724,7 @@ async function seriesJourney(env, { label, zh }) {
   if (!gated) throw new Error('no planned episode carries a claim to re-check');
   await page.reload();
   await section.waitFor({ timeout: 120000 });
+  await stable(page, section);
   await section.scrollIntoViewIfNeeded();
   const row = section.getByRole('button', { name: new RegExp(escapeRe(question)) });
   await row.getByText(copy.needsReview.split('{n}')[1].trim(), { exact: false }).waitFor();
@@ -798,6 +828,7 @@ async function visualPackJourney(env, { label, zh, entry }) {
   await page.goto(base + '/app/library');
   const section = page.getByRole('region', { name: copy.title, exact: true });
   await section.waitFor({ timeout: 120000 });
+  await stable(page, section);
   await section.scrollIntoViewIfNeeded();
   await section.getByText(copy.empty, { exact: true }).waitFor();
   const newButton = section.getByRole('button', { name: copy.newCarousel, exact: true });
@@ -958,6 +989,7 @@ async function intakeJourney(env, { label, zh }) {
   await page.goto(base + '/app/ideas');
   const panel = page.getByRole('region', { name: copy.title, exact: true });
   await panel.waitFor({ timeout: 120000 });
+  await stable(page, panel);
   await panel.scrollIntoViewIfNeeded();
   await panel.getByText(copy.audioOff, { exact: true }).waitFor();
   const choose = panel.getByRole('button', { name: copy.choose, exact: true });
@@ -1023,6 +1055,7 @@ async function proofJourney(env, { label, zh, entry }) {
   await page.goto(base + '/app/analytics');
   const section = page.getByRole('region', { name: copy.title, exact: true });
   await section.waitFor({ timeout: 120000 });
+  await stable(page, section);
   await section.scrollIntoViewIfNeeded();
   await section.getByText(copy.empty, { exact: true }).waitFor();
   // Keyboard only: Tab to the owner's "Recompute last week", Enter records revision 1 from stored records.
@@ -1076,6 +1109,7 @@ async function briefJourney(env, { label, zh, entry }) {
   await page.goto(base + '/app/weekly');
   const panel = page.getByRole('region', { name: copy.title, exact: true });
   await panel.waitFor({ timeout: 120000 });
+  await stable(page, panel);
   await panel.scrollIntoViewIfNeeded();
   const chips = await panel.getByRole('list', { name: copy.coverage, exact: true }).getByRole('listitem').allInnerTexts();
   const expected = current.coverage.map((source) => `${copy.source[source.source]}: ${copy.sourceState[source.state]}`);
@@ -1167,7 +1201,7 @@ async function pricingJourney(browser, viewport) {
     await faq.getByRole('button').first().waitFor({ state: 'visible', timeout: 15000 });
     record(`pricing: the FAQ shows when scrolled to — ${label}`, (await faq.getByRole('button').count()) > 0, { questions: await faq.getByRole('button').count() });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1200);   // let each section's reveal finish before the capture
     await page.evaluate(() => window.scrollTo(0, 0));
     await shot(page, `pricing-v2-${viewport.name}`, true);
     await axeCheck(page, `pricing ${label}`);
