@@ -10,7 +10,7 @@ import { useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { CreatorGenome, GenomeResponse } from '@/lib/growth/types';
 import { GrowthConsent, useGrowthCatalog } from './shared';
-import { growthAvailability } from './availability';
+import { genomeAvailability } from './availability';
 
 export function GenomePanel() {
   const { api, workspaceId } = useWorkspaceApi();
@@ -18,12 +18,11 @@ export function GenomePanel() {
   const access = useWorkspaceAccess();
   const snapshot = useSnapshot();
   const usage = useUsage();
-  const availability = growthAvailability(usage.data, 'genome');
   const act = useAct();
   const query = useQuery({
     queryKey: ['creator-genome', workspaceId],
     queryFn: () => api.creatorGenome(workspaceId),
-    enabled: catalog.data?.genome === true,
+    enabled: Boolean(workspaceId),
     retry: false
   });
   const [data, setData] = useState('');
@@ -36,38 +35,71 @@ export function GenomePanel() {
   const [selected, setSelected] = useState<string[]>([]);
   const [sharePath, setSharePath] = useState('');
   const key = useRef<string | null>(null);
-  if (!catalog.data?.genome) return null;
+  const inputRevision = useRef(0);
+  const analysisPending = useRef(false);
+  const currentContext = useRef('');
   const owner = access.role === 'owner';
+  const catalogReady = catalog.isSuccess === true && catalog.isError === false && catalog.isStale === false;
+  const availability = genomeAvailability(usage.data, catalog.data, catalogReady, Boolean(data));
+  const csvAvailability = genomeAvailability(usage.data, catalog.data, catalogReady, true);
   const samples =
     snapshot.data?.state.sources?.filter(
       (s) => s.kind === 'voice_sample' && s.active && s.selected
     ) ?? [];
   const version = query.data?.versions.find((v) => v.id === versionId) ?? query.data?.versions[0];
+  const inputReady = confirmed && (data
+    ? owner && Boolean(account.trim())
+    : sourceIds.length > 0 && sourceIds.every((id) => samples.some((sample) => sample.id === id)));
+  currentContext.current = JSON.stringify({
+    workspaceId, role: access.role, billingMode: usage.data?.billingMode,
+    data, account, sourceIds, confirmed, grants: samples.map((sample) => sample.id)
+  });
   function changed() {
+    inputRevision.current += 1;
     key.current = null;
     setConfirmed(false);
   }
 
   async function analyze() {
-    if (!availability.available || busy) { setError(availability.detail); return; }
+    if (analysisPending.current) return;
+    if (!availability.available || !inputReady) {
+      setError(availability.available ? 'Select your currently allowed owned posts and confirm their analysis and retention.' : availability.detail);
+      return;
+    }
+    analysisPending.current = true;
     setBusy(true);
     setError('');
     key.current ??= crypto.randomUUID();
+    const revision = inputRevision.current;
+    const context = currentContext.current;
+    const body = {
+      ...(data ? { data, account } : { sourceIds: [...sourceIds] }),
+      ownContent: confirmed,
+      retainText: confirmed,
+      confirmed,
+      requestKey: key.current
+    };
     try {
-      const result = await api.analyzeHistory(workspaceId, {
-        ...(data ? { data, account } : { sourceIds }),
-        ownContent: confirmed,
-        retainText: confirmed,
-        confirmed,
-        requestKey: key.current
-      });
+      const fresh = await catalog.refetch();
+      if (revision !== inputRevision.current || context !== currentContext.current) {
+        setError('Your workspace, owned history or consent changed. Review and confirm it again.');
+        return;
+      }
+      const freshAvailability = genomeAvailability(usage.data, fresh.data,
+        fresh.isSuccess === true && fresh.isError === false && fresh.isStale === false, Boolean(data));
+      if (!freshAvailability.available) { setError(freshAvailability.detail); return; }
+      const result = await api.analyzeHistory(workspaceId, body);
       setVersionId(result.genome.id);
       await query.refetch();
       await snapshot.refetch();
       await usage.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
+      if (err && typeof err === 'object' && 'status' in err && (err.status === 402 || err.status === 409)) {
+        await Promise.allSettled([catalog.refetch(), usage.refetch()]);
+      }
     } finally {
+      analysisPending.current = false;
       setBusy(false);
     }
   }
@@ -99,8 +131,8 @@ export function GenomePanel() {
           drafts back for review.
         </p>
       </div>
-      <GrowthConsent catalog={catalog.data} onChange={() => void catalog.refetch()} />
-      {catalog.data.consented && (
+      {catalog.data && <GrowthConsent catalog={catalog.data} onChange={() => void catalog.refetch()} />}
+      {catalog.data?.consented && (
         <>
           {owner && (
             <>
@@ -110,15 +142,23 @@ export function GenomePanel() {
                   aria-label='Owned history CSV'
                   type='file'
                   accept='.csv,text/csv'
+                  disabled={busy || !csvAvailability.available}
                   onChange={async (e) => {
-                    changed();
+                    if (!owner || busy || !csvAvailability.available) { setError(csvAvailability.detail); return; }
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    changed();
+                    const revision = inputRevision.current;
                     if (file.size > 100_000) {
                       setError('Choose a CSV of at most 100 KB.');
                       return;
                     }
-                    setData(await file.text());
+                    try {
+                      const text = await file.text();
+                      if (revision === inputRevision.current) setData(text);
+                    } catch {
+                      setError('This CSV could not be read.');
+                    }
                   }}
                 />
               </label>
@@ -130,6 +170,7 @@ export function GenomePanel() {
                     className='rafii-field rounded-xl p-3'
                     value={account}
                     maxLength={80}
+                    disabled={busy}
                     onChange={(e) => {
                       setAccount(e.target.value);
                       changed();
@@ -158,6 +199,7 @@ export function GenomePanel() {
                     aria-label={`Analyze ${s.title || s.id}`}
                     type='checkbox'
                     checked={sourceIds.includes(s.id)}
+                    disabled={busy}
                     onChange={(e) => {
                       changed();
                       setSourceIds((ids) =>
@@ -176,7 +218,12 @@ export function GenomePanel() {
               type='checkbox'
               className='mt-1'
               checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
+              disabled={busy}
+              onChange={(e) => {
+                inputRevision.current += 1;
+                key.current = null;
+                setConfirmed(e.target.checked);
+              }}
             />
             These are my own posts. Retain their text in my voice corpus and analyze selected
             samples with the allowed AI routes.
@@ -184,18 +231,21 @@ export function GenomePanel() {
           <Button
             variant='glass'
             disabled={
-              !confirmed ||
+              !inputReady ||
               !availability.available ||
-              busy ||
-              (!data && !sourceIds.length) ||
-              (Boolean(data) && !account.trim())
+              busy
             }
             onClick={() => void analyze()}
           >
             {busy ? 'Analyzing your history…' : 'Propose my Genome'}
           </Button>
-          <p role='status' className='text-muted-foreground text-sm'>{availability.detail}</p>
         </>
+      )}
+      <p role='status' className='text-muted-foreground text-sm'>{availability.detail}</p>
+      {!catalogReady && (
+        <Button variant='quiet' size='sm' disabled={busy || catalog.isFetching} onClick={() => void catalog.refetch()}>
+          Refresh Genome availability
+        </Button>
       )}
       {query.isError && (
         <p role='alert' className='text-destructive text-sm'>

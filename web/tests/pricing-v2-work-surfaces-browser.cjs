@@ -30,6 +30,10 @@ function usage() { return {
   subscription: null, budget: null, overage: 'off', ledger: [], planTerms: [], note: '', lifecycle: { status: 'active' }, billing: { provider: 'synthetic', checkoutAvailable: false, portalAvailable: false }, membership
 }; }
 const snapshot = () => ({ revision: 7, state: { workspace: { id: wid, name: 'Synthetic Task 9', sample: false }, writerDefaults: { model: activeModel() }, speaker: { label: 'Synthetic author', activeRevision: 'voice1', revisions: [], proposals: [], interviews: [] }, sources: [], variants: [], approvals: [], skills: [], contentTypes: { installedPacks: [] }, brandHub: {}, mediaEgress: { cloud: true, processors: [{ id: 'synthetic-reader' }] }, phase2: { channels: [], jobs: [], assets: mediaScene ? [{ id: assetId, hash: 'synthetic-hash', mime: 'image/png', width: 1, height: 1, deleted: false, processing: 'decoded' }] : [], channelFolders: [], automations: [] }, coworker: {} } });
+const genomeCatalog = () => {
+  const available = mode === 'legacy_allowances' || mode === 'free_preview' && previewEligible;
+  return { billingMode: mode === 'free_preview' ? 'free' : mode === 'legacy_allowances' ? 'legacy' : 'managed_credits', available, reason: available ? null : 'funding_unavailable', maxPosts: 20, csvImport: { available, reason: available ? null : 'funding_unavailable' } };
+};
 const catalog = { radar: true, postDoctor: true, postDoctorV2: true, genome: true, consented: true, routes: ['synthetic:rubric'], allowedRoutes: ['synthetic:rubric', 'synthetic:summary'], writer: 'cloud/writer', writerRoute: 'synthetic:writer', maxHistoryPosts: 20, checksPerDay: 10, rewritesPerDay: 1, postmortem: true, audienceMiner: true, summaryRoute: 'synthetic:summary', audienceConsent: true };
 const run = () => ({ runId: 'synthetic-run', conversationId: 'synthetic-conversation', status: 'completed', events: [], cursor: 0, artifact: { variants: [] }, artifactHash: 'synthetic-artifact', revision: 7 });
 async function response(route) {
@@ -53,7 +57,7 @@ async function response(route) {
   else if (p.endsWith('/ideas/conversations') && req.method() === 'POST') json = { conversationId: 'synthetic-conversation' };
   else if (p.endsWith('/ideas/conversations') || p.endsWith('/navigation/conversations')) json = { conversations: [], items: [] };
   else if (p.endsWith('/messages')) json = { messages: [], nextCursor: null };
-  else if (p.endsWith('/growth/catalog')) json = catalog;
+  else if (p.endsWith('/growth/catalog')) json = { ...catalog, genomeAnalysis: genomeCatalog() };
   else if (p.endsWith('/growth/overview')) json = { posts: [], reports: [], calibration: { versions: [], largestCohort: 0, minimumPosts: 20, available: false, notice: '' }, coverage: { maximumPosts: 20, loadedPosts: 0 }, notice: 'Synthetic saved results' };
   else if (p.endsWith('/growth/audience')) json = { conversion: { suggestedTopics: 0, savedTopics: 0, writtenTopics: 0, rate: null, basis: 'synthetic' }, clusters: [], eligibleComments: 1, maximumPerRun: 20, audienceConsent: true, coverage: 'Synthetic comments', notice: '' };
   else if (p.endsWith('/growth/genome')) json = { active: null, versions: [], shares: [], evidence: {} };

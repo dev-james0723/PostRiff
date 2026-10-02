@@ -43,3 +43,30 @@ export function baseCheckAvailability(usage: Usage | null | undefined, catalog: 
   }
   return { available: true, detail: 'Platform-funded check; no customer credits charged. Availability is rechecked before submission.' };
 }
+
+export function genomeAvailability(usage: Usage | null | undefined, catalog: GrowthCatalog | null | undefined, catalogReady: boolean, csvImport = false) {
+  const lifetime = usage?.billingMode === 'free_preview'
+    ? `${usage.freePreview.genome.remaining} lifetime recent-20 Genome analysis remaining. `
+    : '';
+  const unavailable = (detail = 'Genome availability must be refreshed before analysis.') => ({
+    available: false,
+    detail: `${lifetime}${detail} Saved results and manual review remain available.`
+  });
+  if (!usage || !catalogReady || catalog?.genome !== true || catalog.consented !== true) return unavailable();
+  if (usage.billingMode === 'legacy_allowances') return growthAvailability(usage, 'genome');
+  if (usage.billingMode !== 'managed_credits' && usage.billingMode !== 'free_preview') return unavailable();
+  const projection = catalog.genomeAnalysis;
+  const mode = usage.billingMode === 'managed_credits' ? 'managed_credits' : 'free';
+  if (projection?.billingMode !== mode || projection.available !== true || projection.maxPosts !== 20) {
+    return unavailable(projection?.reason === 'funding_unavailable'
+      ? 'Platform funding is unavailable.'
+      : reasons[projection?.reason ?? ''] ?? 'This analysis is unavailable until server funding is qualified.');
+  }
+  if (csvImport && projection.csvImport?.available !== true) {
+    return unavailable(projection.csvImport?.reason === 'permission_required'
+      ? 'Ask the workspace owner to import owned CSV history.'
+      : reasons[projection.csvImport?.reason ?? ''] ?? 'CSV import is unavailable for this workspace.');
+  }
+  if (usage.billingMode === 'free_preview') return growthAvailability(usage, 'genome');
+  return { available: true, detail: 'Platform-funded analysis of up to 20 owned posts; no customer credits charged. Availability is rechecked before submission.' };
+}

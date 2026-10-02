@@ -1,5 +1,13 @@
 export type AdviceGoal = 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
 export interface GrowthCatalog {
+  /** Independent server platform-funding authority; CSV also requires its own permission. */
+  genomeAnalysis?: {
+    billingMode: 'free' | 'managed_credits' | 'legacy';
+    available: boolean;
+    reason: string | null;
+    maxPosts: 20;
+    csvImport: { available: boolean; reason: string | null };
+  };
   /** Server funding/readiness projection; managed checks require explicit true. */
   baseChecks?: {
     billingMode: 'free' | 'managed_credits' | 'legacy';
