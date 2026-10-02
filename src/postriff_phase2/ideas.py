@@ -280,11 +280,13 @@ class IdeasService:
             "agents": agents,
             "imageGeneration": {
                 "available": image_available,
+                # Task9 must qualify the actual image cost/estimate bridge first.
+                "creditEstimateAvailable": False,
                 "model": self.image_runtime.model if self.image_runtime is not None else None,
                 "provider": self.image_runtime.provider if self.image_runtime is not None else None,
                 "costClass": "paid",
                 "independentOfWritingModel": True,
-                "detail": "Uses one managed media credit and the approved image budget, independently of the selected writing model or local CLI." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
+                "detail": "Uses the managed image route, independently of the selected writing model or local CLI. Availability and payment depend on this workspace's plan and approved cost limits." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
             },
             "attachments": self.attachments_catalog(),
         }

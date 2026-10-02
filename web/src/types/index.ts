@@ -13,8 +13,8 @@ export type WorkspacePermission =
 
 export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'approver' | 'viewer';
 
-/** Plan ids from migrations/postriff/007_consumer_web_billing.sql. */
-export type WorkspacePlan = 'trial' | 'studio' | 'assist';
+/** Effective workspace plan identities, including v2 Free and Creator. */
+export type WorkspacePlan = 'trial' | 'free' | 'creator' | 'studio' | 'assist';
 
 /**
  * Access requirements for a navigation item or page. All present keys must

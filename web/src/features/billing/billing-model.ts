@@ -109,7 +109,7 @@ export function currentTerms(usage: Pick<Usage, 'planTerms' | 'entitlement'>): P
 
 /** A plan allowance from `entitlements` jsonb: a finite, non-negative number, or null when missing or malformed. Never a fallback constant. */
 export function allowanceTotal(terms: Pick<PlanTerms, 'entitlements'> | null | undefined, key: string): number | null {
-  const value = terms?.entitlements?.[key];
+  const value = terms?.entitlements?.[key as keyof PlanTerms['entitlements']];
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 

@@ -13,6 +13,7 @@ import type {
   Audience,
   AuditEvent,
   Bootstrap,
+  BootstrapPlan,
   Catalog,
   ChannelDestination,
   ChannelView,
@@ -169,7 +170,7 @@ export function createApi(getToken: TokenSource) {
     revokeToken: (w: string, id: string) => send<{ tokenId: string; revoked: boolean }>('DELETE', `${ws(w)}/tokens/${encodeURIComponent(id)}`),
 
     /* account & workspaces */
-    bootstrap: (plan: string) => send<Bootstrap>('POST', '/api/auth/verify', { plan }),
+    bootstrap: (plan: BootstrapPlan = 'free') => send<Bootstrap>('POST', '/api/auth/verify', { plan }),
     logout: () => send<{ signedOut: boolean }>('POST', '/api/auth/logout'),
     workspaces: () => get<{ workspaces: WorkspaceListItem[] }>('/api/workspaces'),
     sessions: () => get<{ sessions: SessionInfo[] }>('/api/auth/sessions'),

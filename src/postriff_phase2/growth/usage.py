@@ -10,6 +10,20 @@ import math
 from dataclasses import asdict, dataclass
 
 STATUSES_OK = ("ok",)
+MAX_USD_MICRO = 2**63 - 1  # PostgreSQL signed bigint, shared by events/ledger/budgets.
+
+
+def cost_usd_micro(cost):
+    """A reported charge is known only when its rounded-up microdollars fit storage."""
+    if type(cost) not in (int, float): return None
+    try:
+        if not math.isfinite(cost) or cost < 0: return None
+        scaled = cost * 1_000_000
+        if not math.isfinite(scaled): return None
+        amount = math.ceil(scaled)
+    except (ValueError, OverflowError):
+        return None
+    return amount if amount <= MAX_USD_MICRO else None
 
 
 @dataclass(frozen=True)
@@ -29,10 +43,13 @@ class UsageEvent:
     workspace_id: str | None = None
     subject: str | None = None
 
+    def __post_init__(self):
+        if cost_usd_micro(self.cost_usd) is None:
+            object.__setattr__(self, 'cost_usd', None)
+            object.__setattr__(self, 'cost_source', 'unknown')
+
     def cost_usd_micro(self):
-        if self.cost_usd is None or not math.isfinite(self.cost_usd) or self.cost_usd < 0:
-            return None
-        return math.ceil(self.cost_usd * 1_000_000)
+        return cost_usd_micro(self.cost_usd)
 
 
 class MemoryUsageSink:

@@ -22,6 +22,7 @@ from .source_policy import exclusion_message
 from .fencing import writer_fields
 from . import locale_lint, locales
 from .text_measure import over_by
+from .growth.usage import cost_usd_micro
 from .voice_sources import bounded_style_directives
 
 DEFAULT_ENDPOINT = "https://ai-gateway.vercel.sh/v1/chat/completions"
@@ -295,17 +296,21 @@ def provider_map(values):
         raise ValueError("POSTRIFF_MODEL_PROVIDERS must be a JSON object of model → [provider slugs].") from error
 
 
+def _gateway_metadata(data):
+    meta = (data.get("providerMetadata") or data.get("provider_metadata") or {}) if isinstance(data, dict) else {}
+    return meta.get("gateway") if isinstance(meta, dict) and isinstance(meta.get("gateway"), dict) else {}
+
+
 def gateway_routing(data):
     """Gateway routing metadata (who served the call, what it cost in USD), when the response carries it."""
-    meta = (data.get("providerMetadata") or data.get("provider_metadata") or {}) if isinstance(data, dict) else {}
-    gateway = meta.get("gateway") if isinstance(meta, dict) and isinstance(meta.get("gateway"), dict) else {}
+    gateway = _gateway_metadata(data)
     routing = gateway.get("routing") if isinstance(gateway.get("routing"), dict) else {}
     provider = routing.get("finalProvider") if isinstance(routing.get("finalProvider"), str) and routing.get("finalProvider") else None
     try:
-        cost = float(gateway["cost"]) if gateway.get("cost") is not None else None
-    except (TypeError, ValueError):
+        cost = float(gateway["cost"]) if gateway.get("cost") is not None and not isinstance(gateway["cost"], bool) else None
+    except (TypeError, ValueError, OverflowError):
         cost = None
-    return provider, cost if cost is not None and 0 <= cost < float("inf") else None
+    return provider, cost if cost_usd_micro(cost) is not None else None
 
 
 class ServerModelRuntime(AgentRuntime):
@@ -575,16 +580,25 @@ class ServerModelRuntime(AgentRuntime):
             rejected = _Rejected("The AI writer couldn't take this request. Try again.", 502)
             rejected.http_status = status   # kept for callers that must tell auth/budget from a bad request (growth router)
             raise rejected
-        try:
-            content = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as error:
-            raise _Retry("The model provider returned an unexpected shape.") from error
+        # Read accounting metadata before validating content: a bad envelope can still be billed.
         usage = dict(data.get("usage")) if isinstance(data.get("usage"), dict) else {}
+        usage.pop("gatewayCost", None)
+        usage.pop("gatewayCostRejected", None)
+        usage.pop("executionProvider", None)
         final_provider, gateway_cost = gateway_routing(data)
         if final_provider:
             usage["executionProvider"] = final_provider
         if gateway_cost is not None:
             usage["gatewayCost"] = gateway_cost
+        elif "cost" in _gateway_metadata(data):
+            # Explicit unusable accounting is unknown, not permission to substitute overlapping usage.
+            usage["gatewayCostRejected"] = True
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            failed = _Retry("The model provider returned an unexpected shape.")
+            failed.usage = usage
+            raise failed from error
         finish = data["choices"][0].get("finish_reason") if isinstance(data["choices"][0], dict) else None
         if isinstance(finish, str):
             usage["finishReason"] = finish
@@ -654,6 +668,8 @@ class ServerModelRuntime(AgentRuntime):
 
         def cost_of(usage):
             import math
+            if usage.get('gatewayCostRejected') is True:
+                return None
             if type(usage.get('gatewayCost')) is float:
                 return usage['gatewayCost']
             value = usage.get('cost')
@@ -678,7 +694,7 @@ class ServerModelRuntime(AgentRuntime):
                 reasoning_tokens += spent
             else:
                 reasoning_known = False
-            if type(usage.get("gatewayCost")) is float or isinstance(usage.get("cost"), (int, float)):
+            if usage.get("gatewayCostRejected") is not True and (type(usage.get("gatewayCost")) is float or isinstance(usage.get("cost"), (int, float))):
                 reported_cost = (reported_cost or 0) + (usage["gatewayCost"] if type(usage.get("gatewayCost")) is float else float(usage["cost"]))
             served_by = usage.get("executionProvider") or served_by
 

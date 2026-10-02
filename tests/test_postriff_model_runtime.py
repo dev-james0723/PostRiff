@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.model_runtime import MAX_CONTEXT_BYTES, MAX_MEMORY_BYTES, MAX_SKILLS_BYTES, SYSTEM_PROMPT, ServerModelRuntime, resolve_source_ids
+from postriff_phase2.model_runtime import MAX_CONTEXT_BYTES, MAX_MEMORY_BYTES, MAX_SKILLS_BYTES, SYSTEM_PROMPT, ProviderFailure, ServerModelRuntime, resolve_source_ids
 from postriff_phase2.hosted_app import ideas_runtime_from_environment
 
 
@@ -180,6 +180,90 @@ class Requests(unittest.TestCase):
         self.assertEqual(first["sourceIds"], ["s1"], "a cited fact resolves to its source, once")
         self.assertTrue(any("invented-id" in w for w in first["warnings"]))
         self.assertEqual(second["sourceIds"], [])
+
+
+class GatewayAccounting(unittest.TestCase):
+    @staticmethod
+    def response(cost, usage=None):
+        response = completion(GOOD, usage)
+        response["body"]["providerMetadata"] = {"gateway": {"cost": cost, "routing": {"finalProvider": "anthropic"}}}
+        return response
+
+    @staticmethod
+    def draft(responses, reasoning="quick", emit=None):
+        transport = Recording(responses)
+        events = []
+        result = ServerModelRuntime("synthetic", transport=transport).start_turn(
+            {"context": context(), "idea": "Seed swap", "destinations": DESTS, "reasoning": reasoning},
+            emit or events.append)
+        return result["usage"], transport, events
+
+    def test_rejected_gateway_cost_does_not_substitute_overlapping_usage_cost(self):
+        for cost in (1e308, "1e308", 1e13, "1e13", "invalid", None, True):
+            with self.subTest(cost=cost):
+                usage, transport, events = self.draft([self.response(cost, {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400})])
+                self.assertEqual((usage["costUsd"], usage["provenance"]), (None, "unknown"))
+                self.assertEqual((len(transport.calls), usage["modelRequests"], usage["promptTokens"], usage["completionTokens"]), (1, 1, 1000, 400))
+                self.assertEqual(events[-1]["usage"], usage)
+                self.assertNotIn("priceBasis", usage)
+
+    def test_rejected_gateway_cost_does_not_substitute_token_estimate(self):
+        usage, _, _ = self.draft([self.response("1e13", {"prompt_tokens": 1000, "completion_tokens": 400})])
+        self.assertEqual((usage["costUsd"], usage["provenance"]), (None, "unknown"))
+        self.assertNotIn("priceBasis", usage)
+
+    def test_missing_gateway_cost_preserves_both_legitimate_fallbacks(self):
+        for routing_only in (False, True):
+            for reported in (False, True):
+                with self.subTest(routing_only=routing_only, reported=reported):
+                    raw = {"prompt_tokens": 1000, "completion_tokens": 400,
+                           "gatewayCostRejected": True, "gatewayCost": 1e13}
+                    if reported:
+                        raw["cost"] = .99
+                    response = completion(GOOD, raw)
+                    if routing_only:
+                        response["body"]["provider_metadata"] = {"gateway": {"routing": {"finalProvider": "anthropic"}}}
+                    usage, _, _ = self.draft([response])
+                    self.assertEqual((usage["costUsd"], usage["provenance"]),
+                                     (.99, "provider_reported") if reported else (.006, "estimated_from_tokens"))
+                    self.assertEqual("priceBasis" in usage, not reported)
+
+    def test_known_gateway_zero_and_representable_cost_win_without_overlap(self):
+        for cost in (0, "0", .0042, "0.0042", 9e12):
+            with self.subTest(cost=cost):
+                usage, _, _ = self.draft([self.response(cost, {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400})])
+                self.assertEqual((usage["costUsd"], usage["provenance"]), (float(cost), "provider_reported"))
+
+    def test_mixed_revise_responses_keep_rejected_cost_unknown_in_either_order(self):
+        for costs in ((1e308, .0042), (.0042, "1e13")):
+            with self.subTest(costs=costs):
+                usage, transport, _ = self.draft(
+                    [self.response(cost, {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400}) for cost in costs], "deep")
+                self.assertEqual((usage["costUsd"], usage["provenance"]), (None, "unknown"))
+                self.assertEqual((len(transport.calls), usage["modelRequests"], usage["promptTokens"], usage["completionTokens"]), (2, 2, 2000, 800))
+
+    def test_retry_cannot_replace_rejected_cost_with_a_later_known_charge(self):
+        first = self.response("1e308", {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400})
+        first["body"]["choices"][0]["message"]["content"] = "not json"
+        usage, transport, _ = self.draft([first, self.response(.0042)])
+        self.assertEqual((usage["costUsd"], usage["provenance"], len(transport.calls)), (None, "unknown", 2))
+
+    def test_failure_after_rejected_gateway_cost_remains_unknown(self):
+        first = self.response(1e13, {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400})
+        first["body"]["choices"][0]["message"]["content"] = "not json"
+        with self.assertRaises(ProviderFailure) as caught:
+            self.draft([first, {"status": 400, "body": {}}])
+        self.assertEqual((caught.exception.dispatched, caught.exception.cost_usd), (True, None))
+
+    def test_cancel_after_rejected_gateway_cost_remains_unknown_without_retry(self):
+        first = self.response(1e308, {"cost": .99, "prompt_tokens": 1000, "completion_tokens": 400})
+        first["body"]["choices"][0]["message"]["content"] = "not json"
+        transport = Recording([first])
+        runtime = ServerModelRuntime("synthetic", transport=transport)
+        with self.assertRaises(ProviderFailure) as caught:
+            runtime.start_turn({"context": context(), "idea": "Seed swap", "destinations": DESTS, "reasoning": "quick"},
+                               lambda event: False if event["type"] == "progress.updated" and event.get("percent") == 21 else None)
+        self.assertEqual((caught.exception.dispatched, caught.exception.cost_usd, len(transport.calls)), (True, None, 1))
 
 
 class EnvWiring(unittest.TestCase):

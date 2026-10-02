@@ -16,7 +16,8 @@ from .contracts import digest
 from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
 from .developer_usage import ai_usage_exempt
-from .plan_pricing import PlanPricing
+from .plan_pricing import DEFAULT_VARIANT, PlanPricing
+from .growth.usage import MAX_USD_MICRO
 
 USD = 1_000_000  # micro-dollars
 
@@ -30,6 +31,17 @@ def plan_display_label(label):
         if shown:
             return shown
     return text or "Rafii"
+
+
+def customer_entitlements(raw):
+    """Catalog limits only; operator/provider fields never cross the customer boundary."""
+    limits = ('writingBatches', 'mediaCredits', 'members', 'connectedAccounts', 'brands', 'storageMb', 'monthlyCredits')
+    shown = {key: raw[key] for key in limits if type(raw.get(key)) is int and raw[key] >= 0}
+    if isinstance(raw.get('creditPolicy'), str) and raw['creditPolicy'] in SUPPORTED_POLICY_VERSIONS:
+        shown['creditPolicy'] = raw['creditPolicy']
+    if raw.get('overage') == 'stop':
+        shown['overage'] = 'stop'
+    return shown
 
 # Candidate ceilings from improvement SPEC §6 — "待價格與品質評估修正的候選上限", flagged 'candidate' in data.
 CANDIDATE_BUDGETS = {
@@ -101,10 +113,10 @@ class Ledger:
         self._credit_book = CreditBook(clock)
         self.credits = self._credit_book if credits_enabled else None
 
-    def _budget(self, cur, scope, kind=None, policy=None):
+    def _budget(self, cur, scope, kind=None, policy=None, *, approve_candidate=True):
         spec = (policy or {}).get(_budget_key(scope)) or CANDIDATE_BUDGETS[_budget_key(scope)]
         cur.execute(f"INSERT INTO public.pr_budgets(scope,window_kind,window_start,warn_usd_micro,stop_usd_micro,status) VALUES(%s,%s,{_window_start_sql(spec['window_kind'])},%s,%s,%s) ON CONFLICT(scope) DO NOTHING", (scope, spec["window_kind"], spec["warn"], spec["stop"], "approved" if policy else "candidate"))
-        if policy:
+        if policy and approve_candidate:
             # The policy approves a budget still waiting for a decision, with the policy's caps; one already approved keeps its caps.
             cur.execute("UPDATE public.pr_budgets SET status='approved',window_kind=%s,warn_usd_micro=%s,stop_usd_micro=%s,updated_at=now() WHERE scope=%s AND status='candidate'", (spec["window_kind"], spec["warn"], spec["stop"], scope))
         cur.execute("SELECT window_kind,window_start,warn_usd_micro,stop_usd_micro,spent_usd_micro,reserved_usd_micro,status FROM public.pr_budgets WHERE scope=%s FOR UPDATE", (scope,))
@@ -143,35 +155,48 @@ class Ledger:
         cur.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,%s,'trial',to_timestamp(%s)) ON CONFLICT(workspace_id) DO NOTHING", (workspace_id, terms_id, resets))
         return self.ensure_entitlement(cur, workspace_id, plan)
 
-    def reserve(self, cur, workspace_id, member_id, dimension, estimated_usd_micro, idempotency_key, *, charge_batch, provider="", model="", run_id=None, job_id=None, meta=None, credit_authority=None):
+    def growth_mode(self, cur, workspace_id):
+        """Effective server entitlement, never a client plan/classification or quota exemption."""
+        cur.execute("SELECT p.plan,p.entitlements->>'creditPolicy' FROM public.pr_entitlements e JOIN public.pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace_id,))
+        row = cur.fetchone()
+        if row and row[0] == 'free': return 'free'
+        if row and row[1] == V2_POLICY_VERSION: return 'managed_credits'
+        return 'legacy'
+
+    def reserve(self, cur, workspace_id, member_id, dimension, estimated_usd_micro, idempotency_key, *, charge_batch, provider="", model="", run_id=None, job_id=None, meta=None, credit_authority=None, platform_preview=None):
         """Lock budgets → check ceilings and entitlement → insert reservation → return it. Same key returns the same row."""
         if dimension not in ("text_model", "image_generation", "tool", "storage", "action") or type(estimated_usd_micro) is not int or estimated_usd_micro < 0:
             raise AlphaError("Invalid usage reservation.", 400)
         if self.credits:
             cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
-        exempt = ai_usage_exempt(member_id)
-        if not exempt and entitlement["planTermsId"] == "free-v1" and (charge_batch or estimated_usd_micro > 0):
+        preview = platform_preview
+        if preview is not None:
+            from .growth.preview import PreviewAuthority, unavailable
+            if not isinstance(preview, PreviewAuthority): raise unavailable()
+            preview.validate(cur, workspace_id, dimension, estimated_usd_micro, provider, model, run_id, charge_batch)
+        exempt = ai_usage_exempt(member_id) and preview is None
+        if preview is None and entitlement["planTermsId"] == "free-v1" and (estimated_usd_micro > 0 or (charge_batch and not exempt)):
             raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
-        fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model})
+        fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model, **({"platformPreview":preview.record()} if preview else {})})
         cur.execute("SELECT id::text,reservation_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, idempotency_key))
         existing = cur.fetchone()
         if existing:
             if (existing[2] or {}).get("fingerprint") != fingerprint:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
-        policy = active_budget_policy() if estimated_usd_micro > 0 else None
+        policy = active_budget_policy() if estimated_usd_micro > 0 and preview is None else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
         if policy and not exempt and estimated_usd_micro > policy["requestMax"]:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
-        if not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
+        if not preview and not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
             if plan_policy and plan_policy[0]:
                 raise AlphaError("Credit billing is paused; no provider request was made.", 503)
-        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if not exempt and self.credits and (charge_batch or estimated_usd_micro > 0) else None
+        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if not preview and not exempt and self.credits and (charge_batch or estimated_usd_micro > 0) else None
         if credit or exempt: charge_batch = False
         cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.charge_batch AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (workspace_id,))
         pending_batches = cur.fetchone()[0]
@@ -185,7 +210,17 @@ class Ledger:
                 raise AlphaError(f"You have reached the AI spending limit for one person over 24 hours (US${policy['personDayStop'] / USD:.2f} of provider cost). "
                                  "Nothing was sent or charged; it frees up as the day's earlier requests age out. Drafts, edits and publishing still work.", 402)
         scopes = [("workspace", f"workspace:{workspace_id}", "month"), ("global", "global", "day")] + ([("global-month", "global-month", "month")] if policy else [])
-        budgets = [(label, scope, self._budget(cur, scope, kind, policy)) for label, scope, kind in scopes]
+        if preview:
+            from .growth.preview import SCOPES
+            scopes = [('platform', SCOPES[0], 'day'), ('platform', SCOPES[1], 'month')]
+            budgets = [(label, scope, self._budget(cur, scope, kind, {'workspace': {'window_kind':kind,
+                       'warn':stop, 'stop':stop}}, approve_candidate=False)) for (label, scope, kind), stop in zip(scopes,
+                       (preview.policy.dailyUsdMicro, preview.policy.monthlyUsdMicro))]
+            # An older approved budget can only tighten the currently approved preview policy.
+            for (_, _, budget), stop in zip(budgets, (preview.policy.dailyUsdMicro, preview.policy.monthlyUsdMicro)):
+                budget['stop'] = min(budget['stop'], stop)
+        else:
+            budgets = [(label, scope, self._budget(cur, scope, kind, policy)) for label, scope, kind in scopes]
         for label, _, budget in budgets:
             if estimated_usd_micro > 0 and budget['status'] != 'approved':
                 raise AlphaError("Paid AI drafting is not switched on yet. Nothing was sent or charged.", 402)
@@ -194,7 +229,7 @@ class Ledger:
         # Developer costs remain in the immutable ledger, without consuming other
         # members' shared budgets or plan allowances.
         charged = [] if exempt else [scope for _, scope, _ in budgets]
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k not in ("credits", "budgetScopes", "aiUsageExempt")}, "fingerprint": fingerprint, "budgetScopes": charged, **({"aiUsageExempt": True} if exempt else {}), **({"credits":credit} if credit else {})})))
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k not in ("credits", "budgetScopes", "aiUsageExempt", "platformPreview")}, "fingerprint": fingerprint, "budgetScopes": charged, **({"platformPreview":preview.record(),"userCreditDebit":0} if preview else {}), **({"aiUsageExempt": True} if exempt else {}), **({"credits":credit} if credit else {})})))
         reservation_id = cur.fetchone()[0]
         if credit: self.credits.claim(cur, workspace_id, reservation_id, credit)
         cur.execute("UPDATE public.pr_usage_ledger SET reservation_id=id WHERE id::text=%s", (reservation_id,))
@@ -206,6 +241,26 @@ class Ledger:
             # Operators' signal in the function logs (no workspace or person identifiers): a warning line was just crossed.
             print(json.dumps({"event": "budget.warning_crossed", "scopes": crossed, "policy": (policy or {}).get("id")}), flush=True)
         return {"reservationId": reservation_id, "duplicate": False, "warnings": warnings, "entitlement": entitlement}
+
+    def revalidate_preview(self, cur, workspace_id, reservation_id, preview):
+        """Recheck the original hold and current shared approval under short locks, before each I/O."""
+        from .growth.preview import unavailable, SCOPES
+        preview.validate(cur, workspace_id, 'tool', preview.maximum_micro, preview.policy.provider,
+                         preview.policy.model, preview.run_id, False)
+        cur.execute("SELECT dimension,estimated_usd_micro,charge_batch,provider,model,run_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve' FOR UPDATE", (workspace_id, reservation_id))
+        original = cur.fetchone()
+        if (not original or original[:6] != ('tool', preview.maximum_micro, False, preview.policy.provider,
+                preview.policy.model, preview.run_id) or original[6].get('platformPreview') != preview.record()
+                or original[6].get('budgetScopes') != list(SCOPES)):
+            raise unavailable()
+        cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind IN ('settle','release') LIMIT 1", (workspace_id, reservation_id))
+        if cur.fetchone(): raise unavailable()
+        for scope, kind, cap in zip(SCOPES, ('day','month'), (preview.policy.dailyUsdMicro, preview.policy.monthlyUsdMicro)):
+            cur.execute("SELECT status,window_kind,stop_usd_micro,reserved_usd_micro,CASE WHEN window_start>=date_trunc(window_kind,now()) THEN spent_usd_micro ELSE 0 END FROM public.pr_budgets WHERE scope=%s FOR UPDATE", (scope,))
+            budget = cur.fetchone()
+            if (not budget or budget[0] != 'approved' or budget[1] != kind
+                    or budget[3] < preview.maximum_micro or budget[3]+budget[4] > min(budget[2],cap)):
+                raise unavailable()
 
     def settle(self, cur, workspace_id, reservation_id, outcome, actual_usd_micro=None, idempotency_key=None):
         """completed → actual cost, batch consumed; failed → provider cost still booked, batch refunded;
@@ -233,6 +288,21 @@ class Ledger:
         if not reservation:
             raise AlphaError("Reservation unavailable.", 404)
         dimension, estimate, charge_batch, provider, model, run_id, job_id, member_id = reservation
+        # Individual events may fit while their sum, or the budget total, cannot fit bigint.
+        # Retain the original hold and record unknown instead of rolling back all accounting.
+        scopes = (original[0] or {}).get("budgetScopes") if original else None
+        if scopes is None:
+            scopes = [f"workspace:{workspace_id}", "global"]
+        if actual_usd_micro is not None and actual_usd_micro > MAX_USD_MICRO:
+            outcome = "unknown"
+        if outcome != "unknown":
+            actual = int(actual_usd_micro or 0)
+            for scope in scopes:
+                cur.execute("SELECT spent_usd_micro FROM public.pr_budgets WHERE scope=%s FOR UPDATE", (scope,))
+                budget = cur.fetchone()
+                if budget and budget[0] + actual > MAX_USD_MICRO:
+                    outcome = "unknown"
+                    break
         key = idempotency_key or f"settle:{reservation_id}:{outcome}"
         cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
         if cur.fetchone():
@@ -244,10 +314,7 @@ class Ledger:
         credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
         kind = "settle" if outcome == "completed" else "release"
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
-        # Exactly the budgets this reservation held (older reservations predate the record: workspace and global).
-        scopes = (original[0] or {}).get("budgetScopes") if original else None
-        if scopes is None:
-            scopes = [f"workspace:{workspace_id}", "global"]
+        # Exactly the budgets this reservation held, already locked/checked above.
         for scope in scopes:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=greatest(reserved_usd_micro-%s,0),spent_usd_micro=spent_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimate, actual, scope))
         if outcome == "completed" and charge_batch:
@@ -285,25 +352,72 @@ class Ledger:
                     (workspace_id, str(reservation_id)[:200], json.dumps({"outcome": outcome, "actualUsdMicro": actual_usd_micro, "operator": operator.strip()[:80], "evidence": evidence.strip()[:200]})))
         return result
 
-    def usage_view(self, cur, workspace_id, member_id=None):
+    def usage_view(self, cur, workspace_id, member_id=None, *, pricing=None):
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        cur.execute("SELECT p.plan,p.entitlements->>'creditPolicy',p.status FROM public.pr_entitlements e JOIN public.pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace_id,))
+        plan, policy, policy_status = cur.fetchone()
+        entitlement['plan'] = plan
+        mode = 'free_preview' if plan == 'free' else 'managed_credits' if policy in SUPPORTED_POLICY_VERSIONS else 'legacy_allowances'
         credits = None
-        if not ai_usage_exempt(member_id) and self.credits and self.credits.policy(cur, workspace_id):
-            wallet = self.credits.view(cur, workspace_id)
-            credits = {k:v for k,v in wallet.items() if k != "lots"}
-            credits.update(mode="credits", quoteType="spending_limit", textOnly=True)
+        # Reading immutable balances is independent of spend/checkout activation. In
+        # particular policy() is a spend guard and raises for inactive terms.
+        if mode == 'managed_credits' and not ai_usage_exempt(member_id):
+            credits = self._credit_book.view(cur, workspace_id)
+            cur.execute("SELECT id::text,meta->'credits'->>'source' FROM public.pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (workspace_id,))
+            sources = dict(cur.fetchall())
+            for lot in credits['lots']:
+                source = sources.get(lot['grantId'])
+                lot['kind'] = 'subscription' if source == 'verified-stripe-invoice' else 'purchased' if source == 'verified-stripe-checkout' else 'other'
+            reason = ('credits_disabled' if self.credits is None else 'policy_inactive' if policy_status != 'active'
+                      else 'ai_paused' if ai_paused() else 'credit_debt' if credits['debtMilliCredits'] else None)
+            # Existing qualified media-notes also use credits. This does not qualify
+            # image/video generation or the forthcoming Growth rewrite bridge.
+            credits.update(mode="credits", policy=policy, quoteType="spending_limit", textOnly=False,
+                           spendAvailable=reason is None, spendUnavailableReason=reason)
+        cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
+        catalog_v2 = cur.fetchone()[0]
         cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
         sub = cur.fetchone()
+        subscription = None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture", "priceVariantId": None}
+        creator_price = None
+        if catalog_v2:
+            pricing = pricing or PlanPricing()
+            cur.execute('SELECT price_variant_id FROM public.pr_subscriptions WHERE workspace_id=%s', (workspace_id,))
+            bound = cur.fetchone()
+            if bound and bound[0]:
+                variant = pricing.variant(cur, bound[0])
+                if subscription and variant['planTermsId'] == subscription['planTermsId']:
+                    subscription.update(priceVariantId=variant['priceVariantId'], priceCents=variant['amountCents'], currency=variant['currency'])
+            try:
+                creator_price = pricing.assign(cur, workspace_id)
+            except AlphaError:
+                # A legacy subscriber keeps their current terms; the public Creator
+                # reference remains default, with checkout unavailable to that user.
+                creator_price = pricing.variant(cur, DEFAULT_VARIANT)
         cur.execute("SELECT kind,dimension,cost_state,estimated_usd_micro,actual_usd_micro,extract(epoch from at),provider,model,charge_batch,reservation_id::text,run_id::text,job_id::text FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at DESC LIMIT 100", (workspace_id,))
         ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7], "chargeBatch": r[8], "reservationId": r[9], "runId": r[10], "jobId": r[11]} for r in cur.fetchall()]
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
-        cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements FROM public.pr_plan_terms ORDER BY plan,version")
-        terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": plan_display_label(r[3]), "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
+        if catalog_v2:
+            cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,catalog_state,new_checkout_enabled FROM public.pr_plan_terms WHERE (catalog_state='public' AND plan IN ('free','creator')) OR id=%s ORDER BY plan,version", (sub[0] if sub else entitlement['planTermsId'],))
+        else:
+            cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,'legacy',(status='active' AND nullif(btrim(provider_price_id),'') IS NOT NULL) FROM public.pr_plan_terms ORDER BY plan,version")
+        terms = []
+        for r in cur.fetchall():
+            effective = creator_price if r[0] == 'creator-v1' else None
+            terms.append({"id": r[0], "plan": r[1], "version": r[2], "label": plan_display_label(r[3]),
+                          "priceCents": effective['amountCents'] if effective else r[4], "defaultPriceCents": r[4],
+                          "currency": effective['currency'] if effective else r[5], "status": r[6],
+                          "priceVariantId": effective['priceVariantId'] if effective else None,
+                          "catalogState": r[8], "newCheckoutEnabled": bool(r[9] and (r[8] == 'public' and r[0] == 'creator-v1' if catalog_v2 else r[1] != 'trial')),
+                          "checkoutAvailable": False, "current": r[0] == entitlement['planTermsId'],
+                          "entitlements": customer_entitlements(r[7]), "priceLabel": "proposed" if r[6] != "active" else "active"})
         return {
+            "billingMode": mode,
+            "freePreview": None,
             "entitlement": entitlement,
             "credits": credits,
             "aiUsageExempt": ai_usage_exempt(member_id),
-            "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
+            "subscription": subscription,
             "budget": {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
             "ledger": ledger,

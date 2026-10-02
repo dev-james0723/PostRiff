@@ -483,7 +483,7 @@ class HostedWorkspaceService:
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
             lifecycle = self.billing.lifecycle(cur, workspace_id, self.clock())
-            view = self.ledger.usage_view(cur, workspace_id, actor)
+            view = self.ledger.usage_view(cur, workspace_id, actor, pricing=self.billing.pricing)
             view["lifecycle"] = lifecycle
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
@@ -494,7 +494,14 @@ class HostedWorkspaceService:
                     entry.pop("actualUsdMicro", None)
                 view["billing"]["checkoutAvailable"] = False
                 view["billing"]["portalAvailable"] = False
-            return view
+            for terms in view['planTerms']:
+                terms['checkoutAvailable'] = bool(terms['newCheckoutEnabled'] and terms['status'] == 'active' and view['billing']['checkoutAvailable'])
+        # The stable Growth helper owns its workspace transaction. Calling it while
+        # holding this workspace lock would block its second connection.
+        if view['billingMode'] == 'free_preview':
+            from .growth.http import ensure
+            view['freePreview'] = ensure(self).preview_status(workspace_id, token)
+        return view
 
     def billing_webhook(self, signature, body):
         notice = None

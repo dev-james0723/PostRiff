@@ -1051,6 +1051,8 @@ export interface ModelCatalog {
   agents?: AgentInfo[];
   imageGeneration?: {
     available: boolean;
+    /** Server-qualified credit estimate bridge; independent of legacy image availability. */
+    creditEstimateAvailable: boolean;
     model: string | null;
     provider: string | null;
     costClass: 'paid';
@@ -1504,6 +1506,8 @@ export interface OAuthComplete {
 
 export interface Entitlement {
   planTermsId: string;
+  /** Actual effective entitlement after lifecycle reconciliation. */
+  plan: string;
   writingBatchesRemaining: number;
   mediaCreditsRemaining: number;
   connectedAccounts: number;
@@ -1524,6 +1528,7 @@ export interface SubscriptionView {
   plan: string;
   label: string;
   priceCents: number;
+  priceVariantId: string | null;
   currency: string;
   priceStatus: string;
   termsVersion: number;
@@ -1536,10 +1541,27 @@ export interface PlanTerms {
   version: number;
   label: string;
   priceCents: number;
+  defaultPriceCents: number;
+  priceVariantId: string | null;
+  catalogState: 'public' | 'hidden' | 'legacy';
+  current: boolean;
+  /** Catalog permission, independent of provider readiness and the member's role. */
+  newCheckoutEnabled: boolean;
+  checkoutAvailable: boolean;
   currency: string;
   status: string;
   priceLabel: string;
-  entitlements: Record<string, unknown>;
+  entitlements: {
+    writingBatches?: number;
+    mediaCredits?: number;
+    members?: number;
+    connectedAccounts?: number;
+    brands?: number;
+    storageMb?: number;
+    creditPolicy?: string;
+    monthlyCredits?: number;
+    overage?: string;
+  };
 }
 
 export interface LedgerEntry {
@@ -1559,16 +1581,50 @@ export interface LedgerEntry {
 
 export interface CreditBalance {
   mode: "credits";
+  policy: string;
   availableMilliCredits: number;
   heldMilliCredits: number;
+  /** Lifetime settled usage; never a current-period usage counter. */
   usedMilliCredits: number;
+  /** GROSS verified linked grant for the current period; null without evidence. */
+  currentPeriodGrantMilliCredits: number | null;
+  currentPeriodExpiresAt: number | null;
   debtMilliCredits: number;
+  lots: CreditLot[];
+  spendAvailable: boolean;
+  spendUnavailableReason: 'credits_disabled' | 'policy_inactive' | 'ai_paused' | 'credit_debt' | null;
   quoteType: "spending_limit";
   textOnly: boolean;
 }
 
-export interface Usage {
-  credits?: CreditBalance | null;
+export interface CreditLot {
+  grantId: string;
+  kind: 'subscription' | 'purchased' | 'other';
+  milli: number;
+  expiresAt: number | null;
+  used: number;
+  held: number;
+  reversed: number;
+  available: number;
+}
+
+/** Transport intents only. The server selects Free in v2 and owns paid entitlement. */
+export type BootstrapPlan = 'free' | 'studio' | 'assist';
+export type BillingMode = 'free_preview' | 'managed_credits' | 'legacy_allowances';
+export type PreviewUnavailableReason = 'used' | 'plan_unavailable' | 'permission_required' | 'feature_disabled' | 'consent_required' | 'funding_unavailable' | 'rate_limited';
+export interface PreviewAction {
+  /** Lifetime action count, never a fungible credit balance. */
+  remaining: 0 | 1;
+  eligible: boolean;
+  reason: PreviewUnavailableReason | null;
+}
+export interface FreePreview {
+  postDoctor: PreviewAction;
+  genome: PreviewAction & { maxPosts: 20 };
+}
+
+interface UsageBase {
+  aiUsageExempt: boolean;
   entitlement: Entitlement;
   subscription: SubscriptionView | null;
   budget: {
@@ -1587,6 +1643,13 @@ export interface Usage {
   billing?: { provider: string; checkoutAvailable: boolean; portalAvailable: boolean };
   membership: Membership;
 }
+
+/** Mode comes from server entitlement; flag OFF/exemption can leave managed credits null. */
+export type Usage = UsageBase & (
+  | { billingMode: 'free_preview'; credits: null; freePreview: FreePreview }
+  | { billingMode: 'managed_credits'; credits: CreditBalance | null; freePreview: null }
+  | { billingMode: 'legacy_allowances'; credits: CreditBalance | null; freePreview: null }
+);
 
 /* ---------- time back (time_savings.py) ---------- */
 

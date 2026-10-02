@@ -22,7 +22,7 @@ export const ALL_PERMISSIONS: WorkspacePermission[] = [
 ];
 
 /** Plans ordered by tier. A requirement of `studio` is satisfied by `assist`. */
-const PLAN_ORDER: WorkspacePlan[] = ['trial', 'studio', 'assist'];
+const PLAN_ORDER: WorkspacePlan[] = ['trial', 'free', 'studio', 'creator', 'assist'];
 
 export interface WorkspaceAccess {
   role: WorkspaceRole;
