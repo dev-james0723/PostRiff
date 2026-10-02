@@ -16,6 +16,8 @@ export interface RadarScan {
   steps: { id: string; status: string }[]; usage: { costsVisible?: boolean; knownUsdMicro: number; actualUsdMicro: number | null; unknownAttempts: number };
 }
 export interface RadarCatalog {
+  paidScanAvailable?: boolean;
+  aiAnalysisAvailable?: boolean;
   sources: { id: string; name: string; status: string; note?: string }[];
   consent: { sources?: string[]; ai?: boolean };
   monitor: { enabled: boolean; query?: string; timezone?: string };

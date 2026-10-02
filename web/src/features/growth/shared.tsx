@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { useAct, useSnapshot } from '@/lib/api/hooks';
+import { useAct, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { Button } from '@/components/ui/button';
 import type { GrowthCatalog, PostCheck } from '@/lib/growth/types';
@@ -27,6 +27,7 @@ export function GrowthConsent({
 }) {
   const access = useWorkspaceAccess();
   const snapshot = useSnapshot();
+  const usage = useUsage();
   const act = useAct();
   const [confirmed, setConfirmed] = useState(false);
   const [audience, setAudience] = useState(catalog.audienceConsent ?? false);
@@ -61,9 +62,9 @@ export function GrowthConsent({
   return (
     <div className='flex flex-col gap-3 text-sm'>
       <p>
-        AI analysis sends selected drafts to Jev, with Gemini Flash Lite as a fallback. Rewrites use
-        your current writer. Each run uses the configured daily allowance.
-        {(catalog.postmortem || catalog.audienceMiner || catalog.radar) && ' Growth reviews, audience topics and Radar angles also use Claude Haiku.'}
+        {usage.data?.billingMode === 'legacy_allowances'
+          ? 'AI analysis uses the allowed routes listed below. Rewrites use your current writer. Each run uses the configured legacy daily allowance.'
+          : 'Permission allows the listed models to read selected material. Each task also needs server-qualified funding; permission alone does not authorize spending.'}
       </p>
       <details>
         <summary className='cursor-pointer text-muted-foreground'>Review AI models</summary>

@@ -32,11 +32,11 @@ test('leaving the conversation while approving does not submit into the old view
  assert.equal(await load()({...base,api,maxMilliCredits:12000,isCurrent:()=>current}),null);
  assert.equal(calls.some(c=>c[0]==='turn'),false);
 });
-test('invalid limits and unapproved media/research are rejected before transport',async()=>{
+test('invalid limits and unsupported research are rejected before transport',async()=>{
  for(const value of [0,-1,NaN,1.2,100000001]){
   const {api,calls}=fixture();await assert.rejects(load()({...base,api,maxMilliCredits:value}));assert.deepEqual(calls,[]);
  }
- for(const request of [{...base.request,research:true},{...base.request,imageGeneration:{enabled:true}}]){
+ for(const request of [{...base.request,research:true}]){
   const {api,calls}=fixture();await assert.rejects(load()({...base,request,api,maxMilliCredits:12000}));assert.deepEqual(calls,[]);
  }
 });

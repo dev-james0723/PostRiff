@@ -1,5 +1,13 @@
 export type AdviceGoal = 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
 export interface GrowthCatalog {
+  /** Server funding/readiness projection; managed checks require explicit true. */
+  baseChecks?: {
+    billingMode: 'free' | 'managed_credits' | 'legacy';
+    available: boolean;
+    reason: null | 'used' | 'permission_required' | 'feature_disabled' | 'consent_required' | 'funding_unavailable' | 'rate_limited';
+  };
+  /** Sanitized server readiness; consent alone does not fund a rewrite. */
+  rewriteCredits?: { billingMode: 'free' | 'legacy' | 'managed_credits'; available: boolean; estimateAvailable: boolean; reason: string | null };
   radar?: boolean;
   postDoctor: boolean;
   postDoctorV2?: boolean;
@@ -118,6 +126,9 @@ export interface AudienceInsights {
   notice: string;
 }
 export interface PostRewrite {
+  /** Actual durable customer debit; unknown must never be displayed as zero. */
+  userMilliCreditsCharged?: number | null;
+  userCreditsCharged?: number | null;
   comparison?: PostComparison;
   runId: string;
   original: string;

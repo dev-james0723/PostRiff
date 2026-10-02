@@ -5,17 +5,20 @@ import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Surface } from '@/components/rafii';
-import { useAct, useSnapshot } from '@/lib/api/hooks';
+import { useAct, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { CreatorGenome, GenomeResponse } from '@/lib/growth/types';
 import { GrowthConsent, useGrowthCatalog } from './shared';
+import { growthAvailability } from './availability';
 
 export function GenomePanel() {
   const { api, workspaceId } = useWorkspaceApi();
   const catalog = useGrowthCatalog();
   const access = useWorkspaceAccess();
   const snapshot = useSnapshot();
+  const usage = useUsage();
+  const availability = growthAvailability(usage.data, 'genome');
   const act = useAct();
   const query = useQuery({
     queryKey: ['creator-genome', workspaceId],
@@ -46,6 +49,7 @@ export function GenomePanel() {
   }
 
   async function analyze() {
+    if (!availability.available || busy) { setError(availability.detail); return; }
     setBusy(true);
     setError('');
     key.current ??= crypto.randomUUID();
@@ -60,6 +64,7 @@ export function GenomePanel() {
       setVersionId(result.genome.id);
       await query.refetch();
       await snapshot.refetch();
+      await usage.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
     } finally {
@@ -180,6 +185,7 @@ export function GenomePanel() {
             variant='glass'
             disabled={
               !confirmed ||
+              !availability.available ||
               busy ||
               (!data && !sourceIds.length) ||
               (Boolean(data) && !account.trim())
@@ -188,6 +194,7 @@ export function GenomePanel() {
           >
             {busy ? 'Analyzing your history…' : 'Propose my Genome'}
           </Button>
+          <p role='status' className='text-muted-foreground text-sm'>{availability.detail}</p>
         </>
       )}
       {query.isError && (
