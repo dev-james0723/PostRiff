@@ -97,7 +97,7 @@ const en = {
     trial: 'Trial',
     planUnavailable: 'Plan unavailable',
     daysLeft: (n: string) => `${n} left`,
-    day: (n: number) => (n === 1 ? 'day' : 'days'),
+    day: (n: number): string => (n === 1 ? 'day' : 'days'),
     publishingPaused: 'Publishing is paused',
     renews: (date: string) => `Renews ${date}`,
     ends: (date: string) => `Ends ${date} · won’t renew`,
