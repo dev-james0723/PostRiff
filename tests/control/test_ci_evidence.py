@@ -396,7 +396,10 @@ class DriftTests(unittest.TestCase):
                       "github.event.workflow_run.event == 'push'", "github.event.workflow_run.head_branch == 'consumer-saas'",
                       'github.event.workflow_run.head_repository.full_name == github.repository'):
             self.assertIn(guard, text)
-        self.assertIn('persist-credentials: false', text)
+        # This repository contains a historical gitlink without a .gitmodules URL. actions/checkout's
+        # persist-credentials:false path performs an immediate submodule credential-cleanup pass and fails before
+        # the collector can run. The workflow token is read-only and the job executes only trusted consumer-saas.
+        self.assertNotIn('persist-credentials: false', text)
         self.assertNotRegex(text, r'download-artifact|actions/cache|cache:|head_sha|head_commit|ref: \$\{\{')
         self.assertIn('run: python -m rafii_control.ci_evidence', text)
         self.assertIn('cancel-in-progress: false', text)
