@@ -242,8 +242,10 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
   const [notice, setNotice] = useState<number | null>(null);
   // The version this editor's own save will create: adopting it needs no "changed elsewhere" note.
   const [ownRevision, setOwnRevision] = useState<number | null>(null);
-  const [reviewed, setReviewed] = useState(false);
-  const [posted, setPosted] = useState(false);
+  // "I reviewed these six slides" and "I posted these myself" are said about one version: each tick records the version
+  // it was given on, so a newer version (adopted, loaded or kept on top of) is shown unticked.
+  const [reviewedOn, setReviewedOn] = useState<number | null>(null);
+  const [postedOn, setPostedOn] = useState<number | null>(null);
   const [recovery, setRecovery] = useState<Recovery>('idle');
   // One idempotency key per distinct request: a retry of the same save replays; a different save is a new request.
   const pending = useRef<{ body: string; key: string } | null>(null);
@@ -283,6 +285,8 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
   }, [focusNext]);
 
   const revision = base.revision;
+  const reviewed = reviewedOn === revision.revision;
+  const posted = postedOn === revision.revision;
   const slides = local.slides;
   const input: PackEditInput = useMemo(() => editInput(revision, local), [revision, local]);
   const dirty = hasEdits(input);
@@ -363,8 +367,14 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
     setOwnRevision(revision.revision + 1);
     setNotice(null);
     try {
-      await edit.mutateAsync({ expectedRevision: revision.revision, input: extra, key: request.key });
+      const saved = await edit.mutateAsync({ expectedRevision: revision.revision, input: extra, key: request.key });
       pending.current = null;
+      if (saved.unchanged) {
+        // As the server saves text (trimmed, NFC, …) the edit equals this version: no new version was made. What is on
+        // screen is saved, so the edit is dropped and the next step (Render) is offered instead of Save again.
+        setOwnRevision(null);
+        setLocal(localPack(saved.revision));
+      }
     } catch (error) {
       setOwnRevision(null);
       // Shown below with role=alert; a retry replays the same key. A newer version elsewhere: load it, keep the edits.
@@ -434,7 +444,7 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
       primary = (
         <>
           <label className='flex min-h-11 items-start gap-3 text-sm'>
-            <input type='checkbox' aria-label={copy.acceptConfirm} checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
+            <input type='checkbox' aria-label={copy.acceptConfirm} checked={reviewed} onChange={(e) => setReviewedOn(e.target.checked ? revision.revision : null)} className='mt-0.5 size-4 shrink-0' />
             {copy.acceptConfirm}
           </label>
           <Button variant='action' size='control' disabled={blocked || !reviewed} onClick={() => void act('accept', true)}>
@@ -468,7 +478,7 @@ function EditorBody({ view, copy, canEdit, images, onConflict }: { view: PackVie
     primary = (
       <>
         <label className='flex min-h-11 items-start gap-3 text-sm'>
-          <input type='checkbox' aria-label={copy.confirmUsed} checked={posted} onChange={(e) => setPosted(e.target.checked)} className='mt-0.5 size-4 shrink-0' />
+          <input type='checkbox' aria-label={copy.confirmUsed} checked={posted} onChange={(e) => setPostedOn(e.target.checked ? revision.revision : null)} className='mt-0.5 size-4 shrink-0' />
           <span className='flex flex-col gap-0.5'>
             {copy.confirmUsed}
             <span className='text-muted-foreground text-xs'>{copy.confirmUsedHint}</span>

@@ -396,6 +396,37 @@ export function rebase(base: RevisionContent, latest: RevisionContent, local: Lo
   };
 }
 
+// Python's str.strip() whitespace once control characters are gone: what the server trims from both ends.
+const EDGE_SPACE = /^[\n \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\n \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point: the server removes them (Unicode Cc but the newline)
+const CONTROL = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g;
+
+/**
+ * The server's text normalization for slide text, alt text and captions (`visual_pack/checks.py normalize_text`, without
+ * its length check): NFC, Unix newlines, tabs as spaces, no other control characters, no spaces before a line break, at
+ * most one blank line in a row, trimmed. What the person typed is saved as this.
+ */
+export function normalizeText(value: string): string {
+  return value
+    .normalize('NFC')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(CONTROL, '')
+    .replace(/[ \u00a0]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(EDGE_SPACE, '');
+}
+
+function normalized<T extends { slides: { text: string; altText: string }[]; caption: string }>(content: T): T {
+  return { ...content, slides: content.slides.map((s) => ({ ...s, text: normalizeText(s.text), altText: normalizeText(s.altText) })), caption: normalizeText(content.caption) };
+}
+
+/** Whether `saved` already holds what the person typed, once the server's normalization is applied to both (M5). */
+export function sameAsSaved(saved: RevisionContent, local: LocalPack): boolean {
+  return !hasEdits(editInput(normalized(saved), normalized(local)));
+}
+
 export type Reconcile =
   | { kind: 'ignore' }
   | { kind: 'refresh' }
@@ -406,13 +437,14 @@ export type Reconcile =
  * What the editor does when the server's view of the pack changes while it is open. An older version is ignored; the
  * same version (a new state) refreshes in place; a newer version is adopted when there are no unsaved edits (with a
  * notice unless it is the version this editor just saved) or when it already holds exactly what the person typed (their
- * own save landed). Otherwise it is a conflict: the edits stay and the person decides.
+ * own save landed). Otherwise it is a conflict: the edits stay and the person decides. "What the person typed" is
+ * compared as the server saves it (trimmed, NFC, …), so their own save is never mistaken for a change made elsewhere.
  */
 export function reconcile(base: RevisionContent & { revision: number }, next: RevisionContent & { revision: number }, local: LocalPack, ownRevision: number | null): Reconcile {
   if (next.revision < base.revision) return { kind: 'ignore' };
   if (next.revision === base.revision) return { kind: 'refresh' };
-  if (!hasEdits(editInput(base, local))) return { kind: 'adopt', notice: next.revision !== ownRevision };
-  if (!hasEdits(editInput(next, local))) return { kind: 'adopt', notice: false };
+  if (sameAsSaved(base, local)) return { kind: 'adopt', notice: next.revision !== ownRevision };
+  if (sameAsSaved(next, local)) return { kind: 'adopt', notice: false };
   return { kind: 'conflict' };
 }
 
