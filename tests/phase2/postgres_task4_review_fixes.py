@@ -66,7 +66,8 @@ class ReviewFixes(unittest.TestCase):
         captured = []
         transport = self.provider.transport
         def record(method, url, headers=None, form=None):
-            captured.append(headers)
+            if method != 'GET':   # checkout sessions only; the earlier-subscription status read carries no key
+                captured.append(headers)
             return transport(method, url, headers=headers, form=form)
         self.provider.transport = record
         return captured
