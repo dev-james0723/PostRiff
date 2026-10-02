@@ -53,7 +53,7 @@ class Ideas:
     def __init__(self, repository):
         from postriff_phase2.credit_requests import CreditRequests
         self.repository = repository
-        self.ledger = type("Ledger", (), {"credits": Book()})()
+        self.ledger = type("Ledger", (), {"credits": Book(), "ensure_entitlement": lambda *_args: None})()
         self.credit_requests = CreditRequests(self)
 
     def _member(self, _row):
