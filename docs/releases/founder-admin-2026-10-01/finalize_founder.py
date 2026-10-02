@@ -99,6 +99,8 @@ def probe(con, environment, dsn, environ):
         cur.execute("SELECT c.relname, array(SELECT g FROM unnest(%s::text[]) g WHERE has_table_privilege(g,c.oid,'SELECT')) "
                     "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='rafii_control' AND c.relkind='v' ORDER BY 1", (list(SERVING_ROLES),))
         views = cur.fetchall()
+        cur.execute("SELECT g,pg_has_role(current_user,g,'SET') FROM unnest(%s::text[]) g", (list(SERVING_ROLES),))
+        a.say(step='probe_role_memberships', memberships=cur.fetchall(), database_host=conninfo_to_dict(dsn).get('host'))
         reads = 0
         for view, roles in views:
             if not roles:
