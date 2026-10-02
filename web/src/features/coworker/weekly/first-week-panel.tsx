@@ -342,7 +342,7 @@ function Context({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
             maxLength={300}
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder={view.context.mode === 'business' ? 'A piano studio for adult beginners' : 'Piano teaching and practice'}
+            placeholder={view.context.mode === 'business' ? 'A bakery that runs weekend classes' : 'Home cooking on a budget'}
           />
         </label>
       )}
