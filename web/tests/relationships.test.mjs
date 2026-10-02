@@ -127,6 +127,20 @@ test('reply routes are honest: only direct is a reply; assisted links are https 
   assert.equal(platformName(null), 'the platform');
 });
 
+test('a follow-up with no conversation and no contact platform says so, in its own language', () => {
+  for (const copy of [EN, ZH]) {
+    for (const route of [null, { kind: 'assisted', provider: null, href: null, reason: 'no_thread' }]) {
+      const view = replyRouteView(route, copy);
+      assert.deepEqual([view.kind, view.label, view.hint, view.href], ['assisted', copy.noConversation, copy.noConversationHint, null]);
+    }
+  }
+  // No English fallback inside the Traditional Chinese wording (it read "Rafii 無法在 the platform 回覆"): the only
+  // Latin word left is the product name.
+  const zhHint = replyRouteView({ kind: 'assisted', provider: null, href: null, reason: 'no_thread' }, ZH).hint;
+  assert.doesNotMatch(zhHint, /the platform/);
+  assert.match(zhHint, /^[^A-Za-z]*Rafii[^A-Za-z]*$/);
+});
+
 test('compact link ids (immune to phone-number redaction) come back as uuids', () => {
   assert.equal(canonicalId('u11111111111141118111111111111111'), '11111111-1111-4111-8111-111111111111');
   assert.equal(canonicalId('3F2A0000123445678901ABCDEFABCDEF'), '3f2a0000-1234-4567-8901-abcdefabcdef');

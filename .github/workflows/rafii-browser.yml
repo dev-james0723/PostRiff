@@ -134,22 +134,30 @@ jobs:
       - name: Start a growth v2 harness and a development build (first week, intake, relationships, results, series, visual packs, briefs, proof)
         # Its own API/web/database ports, so every other scene keeps the servers it expects. Deterministic growth models
         # (--growth-fixture), synthetic identity; the program's flags are on only here. Nothing reaches a provider.
+        # Its own dist dir: Next 16 refuses a second `next dev` with the same one ("Another next dev server is already
+        # running"; the voice scenes' server on 4441 holds the lock under `.next`). The public pages build the Pricing v2
+        # catalog (NEXT_PUBLIC_PRICING_CATALOG=v2) for the pricing page check. It runs even when an earlier, unrelated
+        # scene failed: it has its own servers, and its evidence is still worth having (the job fails either way).
+        if: ${{ !cancelled() }}
         run: |
           RAFII_WEEKLY_OPERATOR_ENABLED=1 RAFII_FIRST_WEEK_ENABLED=1 RAFII_SOURCE_UPLOADS_ENABLED=1 RAFII_RELATIONSHIPS_ENABLED=1 RAFII_RESULTS_ENABLED=1 \
           RAFII_SERIES_ENABLED=1 RAFII_VISUAL_PACK_ENABLED=1 RAFII_OPPORTUNITY_BRIEF_ENABLED=1 RAFII_PROOF_V2_ENABLED=1 \
           POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4443 nohup python scripts/postriff_dev_hosted.py --port 4442 --pg-port 55481 --growth-fixture > growth-harness.log 2>&1 &
-          (cd web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4442 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4443 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev -p 4443 -H 127.0.0.1 > ../growth-web.log 2>&1 &)
+          (cd web && POSTRIFF_DIST_DIR=.next-growth NEXT_PUBLIC_PRICING_CATALOG=v2 POSTRIFF_API_ORIGIN=http://127.0.0.1:4442 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4443 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev -p 4443 -H 127.0.0.1 > ../growth-web.log 2>&1 &)
           for i in $(seq 1 150); do
             if curl -sf http://127.0.0.1:4442/api/health > /dev/null && curl -s -o /dev/null --max-time 120 http://127.0.0.1:4443/; then
-              for page in /post-doctor /auth/sign-up /app/weekly; do curl -s -o /dev/null --max-time 300 -b 'postriff_dev=1' "http://127.0.0.1:4443$page" || true; done
+              for page in /post-doctor /auth/sign-up /app/weekly /app/analytics /app/inbox /app/library /app/ideas /pricing; do curl -s -o /dev/null --max-time 300 -b 'postriff_dev=1' "http://127.0.0.1:4443$page" || true; done
               echo ready; exit 0
             fi
             sleep 2
           done
           echo "growth harness or development web server did not start"; tail -n 60 growth-harness.log growth-web.log; exit 1
-      - name: Growth v2 journeys, Chromium (desktop, tablet, phone; EN + zh-Hant; axe; storage privacy)
+      - name: Growth v2 journeys, Chromium (first week, results, follow-ups, series, visual packs, intake, proof, brief, Pricing v2; desktop, tablet, phone; EN + zh-Hant; keyboard; axe)
+        if: ${{ !cancelled() }}
         env:
           RAFII_GROWTH_WEB_URL: http://127.0.0.1:4443
+          RAFII_GROWTH_API_URL: http://127.0.0.1:4442
+          RAFII_GROWTH_PRICING_CATALOG: v2
         run: node web/tests/growth-v2-browser.cjs --out=docs/design/rafii-product-growth/evidence/ci-browser
       - name: Install WebKit for Playwright
         # Linux WebKit: the pinned Playwright's macOS WebKit build needs macOS 15.4 or later.
