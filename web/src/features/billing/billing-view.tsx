@@ -10,10 +10,11 @@ import { useChannels, useMembers, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { relativeTime } from '@/lib/time';
-import { Allowances } from './allowances';
+import { Allowances, CostGuard } from './allowances';
 import { CreditBalance } from './credit-balance';
 import { CreditPacks } from './credit-packs';
-import { PAGE, infoContent } from './billing-copy';
+import { PAGE, billingInfoContent } from './billing-copy';
+import { FreePreview } from './free-preview';
 import { Ledger } from './ledger';
 import { GLASS_STATEFUL } from './lifecycle-alert';
 import { PlanCard } from './plan-card';
@@ -100,9 +101,10 @@ export function BillingView() {
   useEffect(() => setNow(Date.now() / 1000), [usage.dataUpdatedAt]);
 
   const data = usage.data;
+  const usageReadSucceeded = usage.isSuccess && !usage.isError;
 
   return (
-    <PageContainer pageTitle={PAGE.title} infoContent={infoContent}>
+    <PageContainer pageTitle={PAGE.title} infoContent={billingInfoContent(data?.billingMode)}>
       {!data ? (
         usage.isError ? (
           <LoadError error={usage.error} hasData={false} updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />
@@ -113,12 +115,23 @@ export function BillingView() {
         <div className='flex flex-col gap-8'>
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
-          <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-          {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
-          <Plans usage={data} isOwner={isOwner} redirect={redirect} />
-          {data.credits && isOwner && <CreditPacks />}
+          <PlanCard usage={data} usageReadSucceeded={usageReadSucceeded} isOwner={isOwner} redirect={redirect} now={now} />
+          {data.billingMode === 'managed_credits' && <CreditBalance balance={data.credits} exempt={data.aiUsageExempt} />}
+          {data.billingMode === 'free_preview' && <FreePreview preview={data.freePreview} />}
+          {data.billingMode === 'legacy_allowances' && <Allowances usage={data} channels={channels} members={members} now={now} />}
+          <Plans usage={data} usageReadSucceeded={usageReadSucceeded} isOwner={isOwner} redirect={redirect} />
+          {data.billingMode === 'managed_credits' && isOwner && <CreditPacks />}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
-          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
+          {isOwner && (data.budget || data.ledger.length > 0) && (
+            <details className='rafii-quiet rounded-[var(--rafii-radius-card)] p-5'>
+              <summary className='rafii-focus cursor-pointer rounded-md text-sm font-medium'>Advanced usage · USD costs</summary>
+              <div className='mt-5 flex flex-col gap-6'>
+                <p className='text-muted-foreground text-sm'>Platform costs in USD are separate from your managed credits and preview actions.</p>
+                {data.budget && <CostGuard budget={data.budget} />}
+                <Ledger entries={data.ledger} canEdit={canEdit} />
+              </div>
+            </details>
+          )}
         </div>
       )}
     </PageContainer>

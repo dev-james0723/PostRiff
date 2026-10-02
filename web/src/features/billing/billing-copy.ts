@@ -5,6 +5,7 @@
  * API returns or the backend enforces.
  */
 import type { InfobarContent } from '@/components/ui/infobar';
+import type { BillingMode, PreviewUnavailableReason } from '@/lib/api/types';
 import { formatDate } from '@/lib/time';
 import { humanize, type PlanTimeline } from './billing-model';
 
@@ -36,6 +37,22 @@ export const infoContent: InfobarContent = {
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+export function billingInfoContent(mode: BillingMode | undefined): InfobarContent {
+  if (mode === 'legacy_allowances') return infoContent;
+  return { title: 'Billing', sections: [
+    { title: 'No silent overage', description: 'Paid tasks pause when credits run out. Extra credits require a separate confirmed purchase.' },
+    { title: 'Held credits', description: 'Held credits are reserved for tasks in progress, not used credits. Unused holds return when the task finishes.' },
+    { title: 'Free preview', description: 'Preview actions have their own limits and availability. They are separate from managed credits.' },
+    { title: 'Cancelling', description: 'Your drafts stay available to read and export.' }
+  ] };
+}
+
+export const PREVIEW_REASON: Record<PreviewUnavailableReason, string> = {
+  used: 'Used', plan_unavailable: 'Preview unavailable', permission_required: 'Permission required',
+  feature_disabled: 'Preview unavailable', consent_required: 'Consent required',
+  funding_unavailable: 'Preview unavailable', rate_limited: 'Try again later'
+};
 
 export const LIFECYCLE_LABELS: Record<string, string> = {
   trial: 'Trial',
@@ -85,6 +102,7 @@ export function planSummary(
     isOwner: boolean;
     portalAvailable: boolean;
     checkoutAvailable: boolean;
+    billingMode?: BillingMode;
   }
 ): PlanSummary {
   const { timeline, trial, status, isOwner } = input;
@@ -95,6 +113,8 @@ export function planSummary(
   const base = { title, badge: trial ? null : unusual, exactDate: null, urgent: false };
   const manage = portal ? ({ action: 'portal', actionLabel: 'Manage plan' } as const) : ({ action: null, actionLabel: null } as const);
   const choose = plans ? ({ action: 'plans', actionLabel: 'Choose a plan' } as const) : ({ action: null, actionLabel: null } as const);
+
+  if (input.billingMode === 'free_preview') return { ...base, title: 'Free', badge: null, line: 'Free preview', ...choose };
 
   switch (timeline.kind) {
     case 'trial_left':
@@ -144,6 +164,9 @@ export const PLAN_ALLOWANCES: readonly { key: string; label: string; unit?: stri
   { key: 'members', label: 'Members' },
   { key: 'storageMb', label: 'Storage', unit: 'MB' }
 ];
+
+export const CAPACITY_PLAN_ALLOWANCES = PLAN_ALLOWANCES.filter(item => !['writingBatches', 'mediaCredits'].includes(item.key));
+export const MANAGED_PLAN_ALLOWANCES = [{ key: 'monthlyCredits', label: 'Managed credits per paid month' }, ...CAPACITY_PLAN_ALLOWANCES];
 
 export const PRICE_STATUS: Record<string, string> = {
   proposed: 'Proposed price',
