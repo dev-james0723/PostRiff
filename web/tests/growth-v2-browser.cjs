@@ -202,6 +202,8 @@ async function firstWeekJourney(browser, viewport, draft, language) {
   });
   record(`AC10 delivered by assisted handoff, never "published" — ${label}`, view.complete === true && view.slots.every((s) => s.status !== 'published'),
     { delivered: view.delivered, committed: view.committed, step: view.step });
+  // The delivered summary itself is the evidence: bring it into view (a phone is scrolled down by the handoffs).
+  await page.getByText('Your first week is delivered').first().scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve(out, `${label.replace('/', '-')}-4-delivered.png`) });
   await ctx.close();
 }
@@ -256,6 +258,22 @@ async function loadCopy() {
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const fileLabel = (label) => label.replaceAll('/', '-');
 const shot = (page, name, fullPage = false) => page.screenshot({ path: resolve(out, `${name}.png`), fullPage }).catch(() => undefined);
+
+/**
+ * Before a full-page capture of a page whose sections reveal on scroll: scroll through it a part of a screen at a time,
+ * pausing long enough for each section to be seen in a rendered frame, then let the last reveals finish. A jump to
+ * the bottom skips them (an IntersectionObserver only sees what a frame painted), and so does the capture itself.
+ */
+async function revealAll(page) {
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  const step = Math.max(200, Math.floor((page.viewportSize()?.height || 800) * 0.6));
+  for (let top = 0; top <= height; top += step) {
+    await page.evaluate((y) => window.scrollTo(0, y), top);
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(1000);   // a reveal lasts 0.6 s, plus a short stagger between cards
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
 
 /** The harness API as this synthetic principal (same session rules as the app: bearer + guard header + origin). */
 function apiFor(ctx, principal) {
@@ -972,7 +990,7 @@ function makeWav(seconds = 0.5, rate = 8000) {
  * A record of the upload panel over time, for the keyboard step's evidence: which heading, button and file input are
  * on the page (each new element gets a number, so a re-render that replaces them shows), where focus is, what Enter
  * and Space did (keydown, keypress, whether anything prevented them) and which clicks reached the button and the input.
- * It observes only; nothing here decides pass or fail.
+ * It only observes; the keyboard step reads it to tell the page's part of a press from the browser automation's.
  */
 async function installIntakeProbe(page, copy, startedAt) {
   await page.evaluate(({ title, choose, startedAt }) => {
@@ -1016,6 +1034,11 @@ async function installIntakeProbe(page, copy, startedAt) {
 async function intakeJourney(env, { label, zh, entry }) {
   const { page, wid, must, call, ctx } = env;
   const copy = C.intake[zh ? 'zh-Hant' : 'en'];
+  // Playwright intercepts file pickers only while a 'filechooser' listener exists, and the one a waitForEvent adds is
+  // switched on in the same instant as the key press after it. On a busy page Chromium can run that queued key press
+  // first, and the picker it opens is then not intercepted: CI run 36948678363 recorded the page clicking the file
+  // input on Enter with no picker event. Interception is therefore on for this whole journey, before the page loads.
+  page.on('filechooser', () => {});
   // Evidence for the keyboard step: the person's saved preferences as the app read them, and Chromium's own notes.
   const startedAt = Date.now();
   const preferences = [];
@@ -1055,22 +1078,26 @@ async function intakeJourney(env, { label, zh, entry }) {
   const choose = panel.getByRole('button', { name: copy.choose, exact: true });
 
   // Keyboard only: Tab to "Choose a file", Enter opens the picker. A recording is refused before anything uploads.
-  // Every Enter press is recorded with the probe's account of it; a press that opens nothing is kept as evidence.
-  let presses = 0;
-  let audioPicker = null;
-  const attempts = [];
-  for (let attempt = 1; attempt <= 2 && !audioPicker; attempt += 1) {
-    presses += await tabTo(page, choose);
-    const pressedAt = Date.now() - startedAt;
-    const opened = page.waitForEvent('filechooser', { timeout: 10000 }).catch(() => null);
-    await page.keyboard.press('Enter');
-    audioPicker = await opened;
-    attempts.push({ pressedAt, opened: Boolean(audioPicker) });
+  const presses = await tabTo(page, choose);
+  const pressedAt = Date.now() - startedAt;
+  let [audioPicker] = await Promise.all([page.waitForEvent('filechooser', { timeout: 10000 }).catch(() => null), page.keyboard.press('Enter')]);
+  entry.keyboardPicker = { pressedAt, opened: Boolean(audioPicker) };
+  if (!audioPicker) {
+    // The product's part of this step is Enter → a trusted click on the button → the button clicks the connected file
+    // input. Only when the probe shows all of that for this press, and still no picker reached Playwright, is Enter
+    // pressed once more; that is reported as a warning with the probe. Anything less fails the journey.
+    const probe = await page.evaluate(() => window.__intakeProbe).catch(() => []);
+    const after = (event) => event.t >= pressedAt;
+    const pageOpenedInput = Array.isArray(probe) && probe.some((event) => after(event) && event.click === 'button' && event.trusted)
+      && probe.some((event) => after(event) && event.click === 'input' && event.connected);
+    Object.assign(entry.keyboardPicker, { pageOpenedInput, preferences, notes, probe });
+    if (!pageOpenedInput) throw new Error(`keyboard: Enter on the focused "${copy.choose}" button did not open the file input (probe in the summary)`);
+    warnings.push(`intake ${label}: Enter opened the file input but no picker reached Playwright; Enter was pressed once more (probe in the summary)`);
+    await tabTo(page, choose);
+    [audioPicker] = await Promise.all([page.waitForEvent('filechooser', { timeout: 10000 }).catch(() => null), page.keyboard.press('Enter')]);
+    entry.keyboardPicker.secondPressOpened = Boolean(audioPicker);
+    if (!audioPicker) throw new Error(`keyboard: Enter on the focused "${copy.choose}" button opened the file input twice and no picker came (probe in the summary)`);
   }
-  entry.keyboardPicker = {
-    attempts, preferences, notes, probe: await page.evaluate(() => window.__intakeProbe).catch((error) => `unavailable: ${error.message.slice(0, 80)}`)
-  };
-  if (!audioPicker) throw new Error(`keyboard: Enter on the focused "${copy.choose}" button never opened the file picker (${attempts.length} presses; probe in the summary)`);
   const wav = makeWav();
   await audioPicker.setFiles({ name: 'lesson-recording.wav', mimeType: 'audio/wav', buffer: wav });
   await panel.getByRole('alert').filter({ hasText: copy.audioOff }).waitFor();
@@ -1269,14 +1296,19 @@ async function pricingJourney(browser, viewport) {
     record(`pricing: keyboard reaches and follows Creator's action — ${label}`, true, { tabPresses: presses, landed: new URL(page.url()).pathname });
     await page.goto(base + '/pricing', { timeout: 180000 });
     await free.waitFor();
-    // The FAQ reveals on scroll: bring it into view as a reader would, then capture the whole page.
+    // The FAQ reveals on scroll: bring it into view as a reader would. Shown means its reveal finished (every ancestor
+    // fully opaque), not only laid out: Playwright counts an element at opacity 0 as visible.
     const faq = page.locator('#faq');
     await faq.scrollIntoViewIfNeeded();
-    await faq.getByRole('button').first().waitFor({ state: 'visible', timeout: 15000 });
-    record(`pricing: the FAQ shows when scrolled to — ${label}`, (await faq.getByRole('button').count()) > 0, { questions: await faq.getByRole('button').count() });
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(1200);   // let each section's reveal finish before the capture
-    await page.evaluate(() => window.scrollTo(0, 0));
+    const question = faq.getByRole('button').first();
+    await question.waitFor({ state: 'visible', timeout: 15000 });
+    const opaque = () => question.evaluate((node) => {
+      for (let element = node; element; element = element.parentElement) if (Number(getComputedStyle(element).opacity) < 0.99) return false;
+      return true;
+    });
+    const shown = await until(opaque, 'the FAQ finishes revealing', 6000).then(() => true, () => false);
+    record(`pricing: the FAQ shows when scrolled to — ${label}`, shown && (await faq.getByRole('button').count()) > 0, { questions: await faq.getByRole('button').count(), opaque: shown });
+    await revealAll(page);
     await shot(page, `pricing-v2-${viewport.name}`, true);
     await axeCheck(page, `pricing ${label}`);
     await noHorizontalScroll(page, `pricing ${label}`);
