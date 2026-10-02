@@ -74,6 +74,27 @@ class BoundaryTests(unittest.TestCase):
         self.assertEqual(fresh_mfa({'iat': NOW, 'amr': [{'method': 'password', 'timestamp': NOW}]}), 0)
         self.assertEqual(fresh_mfa({'amr': [{'method': 'totp', 'timestamp': NOW - 301}]}), NOW - 301)
 
+    def test_primary_passkey_is_never_a_fresh_second_factor(self):
+        for assurance in ('aal1', 'aal2'):
+            with self.subTest(assurance=assurance):
+                mfa_at = fresh_mfa({'aal': assurance, 'iat': NOW, 'amr': [{'method': 'passkey', 'timestamp': NOW}]})
+                self.assertEqual(mfa_at, 0)
+                self.identity = VerifiedIdentity(USER, assurance, 's' * 32, mfa_at)
+                with self.assertRaisesRegex(ControlError, 'STEP_UP_REQUIRED'):
+                    self.exchange()
+                self.assertEqual(self.store.sessions, {})
+
+    def test_verified_webauthn_mfa_still_needs_aal2_and_the_operator_row(self):
+        mfa_at = fresh_mfa({'amr': [{'method': 'mfa/webauthn', 'timestamp': NOW}]})
+        self.assertEqual(mfa_at, NOW)
+        self.identity = VerifiedIdentity(USER, 'aal1', 's' * 32, mfa_at)
+        with self.assertRaisesRegex(ControlError, 'STEP_UP_REQUIRED'):
+            self.exchange()
+        self.identity = VerifiedIdentity('10000000-0000-4000-8000-000000000099', 'aal2', 's' * 32, mfa_at)
+        with self.assertRaisesRegex(ControlError, 'FOUNDER_REQUIRED'):
+            self.exchange()
+        self.assertEqual(self.store.sessions, {})
+
     def test_revocation_and_epoch_change_take_effect_next_request(self):
         token, _ = self.exchange()
         for changes in [dict(status='revoked'), dict(auth_epoch=2), dict(capabilities=[])]:

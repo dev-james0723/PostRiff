@@ -1,14 +1,11 @@
 'use client';
 
 /**
- * Founder sign-in (CONTRACTS §6): Supabase password, then a verified authenticator code, then the bearer token is
- * exchanged once for the `__Host-rafii-control` cookie (`POST /session/exchange` with `X-Control-Exchange: 1`).
- * The Supabase client here keeps nothing: `persistSession: false`, so the founder identity never lands in the
- * consumer app's storage, and the password is cleared from state the moment it has been sent. Errors show fixed copy.
+ * Same Rafii account, isolated Founder login. A primary passkey does not bypass the server's fresh-MFA/operator checks.
+ * Supabase identity stays memory-only; after exchange the __Host-rafii-control cookie owns the Founder session.
  */
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { Icons } from '@/components/icons';
 import { StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -16,51 +13,25 @@ import { Input } from '@/components/ui/input';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
 import { FIELD_CLASS } from '@/features/workspace/rafii-parts';
-import { listFactors, verifyTotp } from '@/lib/auth/mfa';
-import { CONTROL_EXCHANGE_HEADER, FOUNDER_API_BASE, safeFounderNext } from '@/lib/founder/api';
-import { founderErrorMessage } from '@/lib/founder/errors';
-import { getSupabaseEnv, hasSupabaseEnv } from '@/lib/supabase/env';
+import { passkeysSupported } from '@/lib/auth/mfa';
+import { passkeySignInEnabled } from '@/lib/auth/passkeys';
+import { safeFounderNext } from '@/lib/founder/api';
+import {
+  beginFounderSignIn, discardFounderIdentity, exchangeFounderToken, FounderSignInError,
+  notYetFounder, registerFounderPasskey, verifyFounderFactor, type FounderIdentity
+} from '@/lib/founder/sign-in';
+import { hasSupabaseEnv } from '@/lib/supabase/env';
 
 type Step =
   | { kind: 'password' }
-  | { kind: 'code'; client: SupabaseClient; factorId: string }
-  // The second factor passed but this identity is not (yet) the founder operator here. Enrolment is a reviewed server step;
-  // the page keeps retrying the same verified session while its second factor is still fresh enough for Control (300 s).
-  | { kind: 'waiting'; token: string; verifiedAt: number };
+  | { kind: 'code' | 'passkey'; identity: FounderIdentity }
+  | { kind: 'waiting'; identity: FounderIdentity; token: string; verifiedAt: number }
+  | { kind: 'setup'; identity: FounderIdentity; verifiedAt: number };
 
-/** Control accepts an exchange only within 300 s of the second factor; stop retrying a little before that. */
 const WAIT_LIMIT_MS = 270_000;
 const WAIT_EVERY_MS = 15_000;
-
-const COPY = {
-  notConfigured: 'Founder identity is not configured for this deployment.', // copy-audit: allow — founder-only sign-in
-  signIn: 'Sign-in could not be verified.',
-  noFactor: 'A verified authenticator app is required. Enrol one through Account security first.',
-  code: 'Second-factor verification failed.',
-  noToken: 'The second factor was accepted but no session token came back. Sign in again.',
-  expired: 'The second factor is no longer fresh enough to finish. Start over to sign in again.'
-};
-
-async function exchange(accessToken: string): Promise<void> {
-  const response = await fetch(`${FOUNDER_API_BASE}/session/exchange`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, ...CONTROL_EXCHANGE_HEADER },
-    body: '{}',
-    cache: 'no-store',
-    credentials: 'same-origin'
-  });
-  if (!response.ok) {
-    const safe = (await response.json().catch(() => ({}))) as { code?: string };
-    const error = new Error(founderErrorMessage(response.status, safe.code)) as Error & { code?: string };
-    error.name = response.status === 401 || response.status === 403 ? 'ExchangeRefused' : 'ExchangeFailed';
-    error.code = typeof safe.code === 'string' ? safe.code : undefined;
-    throw error;
-  }
-}
-
-function notYetFounder(failure: unknown): boolean {
-  return failure instanceof Error && failure.name === 'ExchangeRefused' && (failure as Error & { code?: string }).code === 'FOUNDER_REQUIRED';
-}
+const NOT_CONFIGURED = 'Founder identity is not configured for this deployment.'; // copy-audit: allow — founder-only sign-in
+const EXPIRED = 'The second factor is no longer fresh enough to finish. Start over to sign in again.';
 
 export function FounderSignInForm() {
   const params = useSearchParams();
@@ -71,152 +42,209 @@ export function FounderSignInForm() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ message: string; notice: boolean } | null>(null);
+  const [supportsPasskey, setSupportsPasskey] = useState(false);
+  const inFlight = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  const currentIdentity = useRef<FounderIdentity | null>(null);
+  const exchanged = useRef(false);
+  const mounted = useRef(true);
+  const offerPasskey = passkeySignInEnabled() && supportsPasskey;
 
-  async function submitPassword() {
-    const { url, key } = getSupabaseEnv();
-    const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-    const signed = await client.auth.signInWithPassword({ email, password });
+  useEffect(() => {
+    mounted.current = true;
+    setSupportsPasskey(passkeysSupported());
+    return () => {
+      mounted.current = false;
+      controller.current?.abort();
+      // Revoking the accepted upstream session would invalidate the new Founder cookie. Only abandon unused identities.
+      if (currentIdentity.current && !exchanged.current) void discardFounderIdentity(currentIdentity.current);
+    };
+  }, []);
+
+  const startOver = useCallback(() => {
+    // A server refusal resets the form inside run(); preserve its error instead of marking that completed request cancelled.
+    if (!inFlight.current) controller.current?.abort();
+    if (currentIdentity.current && !exchanged.current) void discardFounderIdentity(currentIdentity.current);
+    currentIdentity.current = null;
+    exchanged.current = false;
     setPassword('');
-    if (signed.error) throw new Error(COPY.signIn);
-    const totp = (await listFactors(client)).find((factor) => factor.kind === 'totp' && factor.verified);
-    if (!totp) throw new Error(COPY.noFactor);
-    setStep({ kind: 'code', client, factorId: totp.id });
+    setCode('');
+    setFeedback(null);
+    setStep({ kind: 'password' });
+  }, []);
+
+  const complete = useCallback((identity: FounderIdentity, verifiedAt: number) => {
+    exchanged.current = true;
+    if (!mounted.current) return;
+    // Registration is optional, user-initiated, and offered only AFTER the server accepts Founder authority.
+    if (offerPasskey && identity.method === 'password') setStep({ kind: 'setup', identity, verifiedAt });
+    else window.location.assign(next);
+  }, [next, offerPasskey]);
+
+  async function run(action: (signal: AbortSignal) => Promise<void>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setFeedback(null);
+    const pending = new AbortController();
+    controller.current = pending;
+    try {
+      if (!configured) throw new FounderSignInError(NOT_CONFIGURED);
+      await action(pending.signal);
+    } catch (error) {
+      if (mounted.current && !pending.signal.aborted) {
+        const known = error instanceof FounderSignInError || (error instanceof Error && ['ExchangeRefused', 'ExchangeFailed'].includes(error.name));
+        setFeedback({ message: known ? (error as Error).message : 'Sign-in could not be verified. Try again.', notice: error instanceof FounderSignInError && error.kind === 'cancelled' });
+      }
+    } finally {
+      inFlight.current = false;
+      if (mounted.current) setBusy(false);
+    }
   }
 
-  async function submitCode(current: Extract<Step, { kind: 'code' }>) {
+  async function signIn(method: 'password' | 'passkey', signal: AbortSignal) {
+    const secret = password;
+    setPassword('');
+    const identity = await beginFounderSignIn(method === 'password' ? { method, email, password: secret } : { method }, signal);
+    if (!mounted.current || signal.aborted) { await discardFounderIdentity(identity); return; }
+    currentIdentity.current = identity;
+    setEmail(identity.email);
+    if (identity.passkeyFactorId && supportsPasskey) setStep({ kind: 'passkey', identity });
+    else if (identity.totpFactorId) setStep({ kind: 'code', identity });
+    else {
+      startOver();
+      throw new FounderSignInError('Your enrolled second factor is not available in this browser. Use a supported device or Account security.');
+    }
+  }
+
+  async function verify(current: Extract<Step, { kind: 'code' | 'passkey' }>, signal: AbortSignal) {
+    let token: string;
     try {
-      await verifyTotp(current.client, code, current.factorId);
-    } catch {
-      throw new Error(COPY.code);
+      token = await verifyFounderFactor(current.identity, current.kind === 'code' ? { kind: 'totp', code } : { kind: 'webauthn' });
     } finally {
       setCode('');
     }
-    const { data } = await current.client.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error(COPY.noToken);
+    if (!mounted.current || signal.aborted) return;
+    const verifiedAt = Date.now();
     try {
-      await exchange(token);
-    } catch (failure) {
-      if (notYetFounder(failure)) {
-        setStep({ kind: 'waiting', token, verifiedAt: Date.now() });
-        return;
-      }
-      // Any other refusal starts over rather than retrying the same token.
-      if (failure instanceof Error && failure.name === 'ExchangeRefused') setStep({ kind: 'password' });
-      throw failure;
+      await exchangeFounderToken(token);
+    } catch (error) {
+      if (notYetFounder(error)) { setStep({ kind: 'waiting', identity: current.identity, token, verifiedAt }); return; }
+      if (error instanceof Error && error.name === 'ExchangeRefused') startOver();
+      throw error;
     }
-    window.location.assign(next);
+    complete(current.identity, verifiedAt);
   }
 
-  // Waiting for enrolment: retry the exchange with the same verified session until it succeeds or the factor goes stale.
   useEffect(() => {
     if (step.kind !== 'waiting') return;
     let stopped = false;
+    let pending = false;
     const attempt = async () => {
-      if (stopped) return;
+      if (stopped || pending) return;
       if (Date.now() - step.verifiedAt > WAIT_LIMIT_MS) {
-        setStep({ kind: 'password' });
-        setError(COPY.expired);
+        startOver();
+        setFeedback({ message: EXPIRED, notice: false });
         return;
       }
+      pending = true;
       try {
-        await exchange(step.token);
-        if (!stopped) window.location.assign(next);
-      } catch (failure) {
-        if (stopped) return;
-        if (!notYetFounder(failure) && failure instanceof Error && failure.name === 'ExchangeRefused') {
-          setStep({ kind: 'password' });
-          setError(failure.message);
+        await exchangeFounderToken(step.token);
+        if (!stopped) complete(step.identity, step.verifiedAt);
+      } catch (error) {
+        if (!stopped && !notYetFounder(error) && error instanceof Error && error.name === 'ExchangeRefused') {
+          startOver();
+          setFeedback({ message: error.message, notice: false });
         }
-      }
+      } finally { pending = false; }
     };
     const timer = window.setInterval(() => void attempt(), WAIT_EVERY_MS);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [step, next]);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [step, startOver, complete]);
 
-  async function onSubmit(event: FormEvent) {
+  function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (!configured) throw new Error(COPY.notConfigured);
-      if (step.kind === 'password') await submitPassword();
-      else if (step.kind === 'code') await submitCode(step);
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : COPY.signIn);
-    } finally {
-      setBusy(false);
-    }
+    if (step.kind === 'password') void run((signal) => signIn('password', signal));
+    else if (step.kind === 'code' || step.kind === 'passkey') void run((signal) => verify(step, signal));
   }
+
+  const heading = step.kind === 'password' ? 'Sign in as the founder'
+    : step.kind === 'code' ? 'Enter your authenticator code'
+      : step.kind === 'passkey' ? 'Verify your second factor'
+        : step.kind === 'setup' ? 'Set up faster sign-in' : 'Waiting for founder enrollment';
 
   return (
     <Surface material='glass' radius='dialog' padding='lg' className='flex flex-col gap-6'>
       <div className='flex flex-col gap-1.5'>
         <span className='rafii-eyebrow'>Rafii · Founder admin</span>
-        <h1 className='text-foreground text-[1.625rem] leading-[1.15] font-medium tracking-[-0.02em]'>{step.kind === 'password' ? 'Sign in as the founder' : step.kind === 'code' ? 'Enter your authenticator code' : 'Waiting for founder enrollment'}</h1>
+        <h1 className='text-foreground text-[1.625rem] leading-[1.15] font-medium tracking-[-0.02em]'>{heading}</h1>
         <p className='text-muted-foreground text-sm leading-relaxed'>
           {step.kind === 'password'
-            ? 'Your founder identity, then a second factor. Customer workspace roles do not grant access here.'
+            ? 'Use your existing Rafii account. Founder access and a fresh second factor are checked separately.'
             : step.kind === 'code'
-              ? 'The six-digit code from your authenticator app. It is checked once and never stored.'
-              : 'Your sign-in and second factor are verified, but this account is not enrolled as the founder here yet. Keep this page open: it finishes by itself within about four minutes once enrollment is done.'}
+              ? 'Enter the six-digit code from your authenticator app. A passkey sign-in does not replace this second-factor check.'
+              : step.kind === 'passkey'
+                ? 'Confirm with your enrolled second-factor passkey. Your device may use Face ID, Touch ID or a security key.'
+                : step.kind === 'setup'
+                  ? 'Your Founder session is verified. Save a passkey on this device to replace the password next time. Your second factor still applies.'
+                  : 'Your identity and second factor are verified. This account still needs approved Founder enrollment. This page retries for about four minutes.'}
         </p>
+        {step.kind !== 'password' && <p className='text-muted-foreground break-all text-xs'>Account: {step.identity.email}</p>}
       </div>
-      {!configured ? (
-        <StateMessage kind='unsupported' title='Identity source unavailable' description={COPY.notConfigured} />
-      ) : step.kind === 'waiting' ? (
-        <div className='flex flex-col gap-4' role='status' aria-live='polite'>
-          <StateMessage kind='loading' title='Checking enrollment every 15 seconds' description='Nothing else is needed from you while this page is open.' />
-          <Button type='button' variant='quiet' size='sm' onClick={() => setStep({ kind: 'password' })} className='self-center'>
-            Start over
-          </Button>
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} aria-busy={busy} className='flex flex-col gap-4' noValidate>
-          {step.kind === 'password' ? (
-            <>
+      {feedback && <p role={feedback.notice ? 'status' : 'alert'} className={`${feedback.notice ? 'text-muted-foreground' : 'text-destructive'} flex items-start gap-2 text-sm`}>
+        {!feedback.notice && <Icons.warning className='mt-0.5 size-4 shrink-0' aria-hidden />}<span>{feedback.message}</span>
+      </p>}
+      {!configured ? <StateMessage kind='unsupported' title='Identity source unavailable' description={NOT_CONFIGURED} />
+        : step.kind === 'waiting' ? (
+          <div className='flex flex-col gap-4' role='status' aria-live='polite'>
+            <StateMessage kind='loading' title='Checking enrollment every 15 seconds' description='Keep this page open while your account is enrolled. No new account is created.' />
+            <Button type='button' variant='quiet' size='sm' onClick={startOver} className='self-center'>Use a different account</Button>
+          </div>
+        ) : step.kind === 'setup' ? (
+          <div className='flex flex-col gap-3' aria-busy={busy}>
+            <Button type='button' variant='action' size='control' disabled={busy} onClick={() => void run(async () => {
+              if (Date.now() - step.verifiedAt > WAIT_LIMIT_MS) throw new FounderSignInError('Sign in again to add a passkey. You can continue to Founder without adding one.');
+              await registerFounderPasskey(step.identity);
+              if (mounted.current) window.location.assign(next);
+            })}>
+              <Icons.key className='size-4' aria-hidden />{busy ? 'Waiting for your device…' : 'Set up Face ID / Passkey'}
+            </Button>
+            <Button type='button' variant='quiet' size='control' disabled={busy} onClick={() => window.location.assign(next)}>Continue to Founder</Button>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} aria-busy={busy} className='flex flex-col gap-4' noValidate>
+            {step.kind === 'password' ? <>
+              {offerPasskey && <>
+                <Button type='button' variant='action' size='control' disabled={busy} className='w-full' onClick={() => void run((signal) => signIn('passkey', signal))}>
+                  <Icons.key className='size-4' aria-hidden />{busy ? 'Verifying…' : 'Sign in with Face ID / Passkey'}
+                </Button>
+                <p className='text-muted-foreground text-center text-xs'>Or use your password</p>
+              </>}
               <div className='flex flex-col gap-2'>
                 <Label htmlFor='founder-email'>Founder email</Label>
-                <Input id='founder-email' type='email' autoComplete='username' required value={email} onChange={(event) => setEmail(event.target.value)} className={FIELD_CLASS} />
+                <Input id='founder-email' type='email' autoComplete='username' required disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} className={FIELD_CLASS} />
               </div>
               <div className='flex flex-col gap-2'>
                 <Label htmlFor='founder-password'>Password</Label>
-                <Input id='founder-password' type='password' autoComplete='current-password' required value={password} onChange={(event) => setPassword(event.target.value)} className={FIELD_CLASS} />
+                <Input id='founder-password' type='password' autoComplete='current-password' required disabled={busy} value={password} onChange={(event) => setPassword(event.target.value)} className={FIELD_CLASS} />
               </div>
-            </>
-          ) : (
-            <div className='flex flex-col gap-2'>
+            </> : step.kind === 'code' ? <div className='flex flex-col gap-2'>
               <Label htmlFor='founder-code'>Authenticator code</Label>
-              <InputOTP id='founder-code' maxLength={6} value={code} onChange={setCode} autoComplete='one-time-code'>
-                <InputOTPGroup>
-                  {Array.from({ length: 6 }, (_, index) => (
-                    <InputOTPSlot key={index} index={index} />
-                  ))}
-                </InputOTPGroup>
+              <InputOTP id='founder-code' maxLength={6} value={code} disabled={busy} onChange={setCode} autoComplete='one-time-code'>
+                <InputOTPGroup>{Array.from({ length: 6 }, (_, index) => <InputOTPSlot key={index} index={index} />)}</InputOTPGroup>
               </InputOTP>
-            </div>
-          )}
-          {error && (
-            <p role='alert' className='text-destructive flex items-start gap-2 text-sm'>
-              <Icons.warning className='mt-0.5 size-4 shrink-0' aria-hidden />
-              <span>{error}</span>
-            </p>
-          )}
-          <Button type='submit' variant='action' size='control' disabled={busy || (step.kind === 'password' ? !email || !password : code.length < 6)} className='w-full'>
-            {busy ? 'Verifying…' : step.kind === 'password' ? 'Continue' : 'Verify founder session'}
-          </Button>
-          {step.kind === 'code' && (
-            <Button type='button' variant='quiet' size='sm' onClick={() => setStep({ kind: 'password' })} disabled={busy} className='self-center'>
-              Start over
+            </div> : null}
+            <Button type='submit' variant={step.kind === 'password' && offerPasskey ? 'glass' : 'action'} size='control' disabled={busy || (step.kind === 'password' ? !email || !password : step.kind === 'code' && code.length < 6)} className='w-full'>
+              {busy ? 'Verifying…' : step.kind === 'password' ? 'Continue' : step.kind === 'passkey' ? 'Verify with Face ID / Passkey' : 'Verify founder session'}
             </Button>
-          )}
-        </form>
-      )}
+            {step.kind !== 'password' && <>
+              {step.kind === 'passkey' && step.identity.totpFactorId && <Button type='button' variant='quiet' size='sm' disabled={busy} onClick={() => { setFeedback(null); setStep({ kind: 'code', identity: step.identity }); }}>Use authenticator code instead</Button>}
+              {step.kind === 'code' && supportsPasskey && step.identity.passkeyFactorId && <Button type='button' variant='quiet' size='sm' disabled={busy} onClick={() => { setCode(''); setFeedback(null); setStep({ kind: 'passkey', identity: step.identity }); }}>Use second-factor passkey instead</Button>}
+              <Button type='button' variant='quiet' size='sm' onClick={startOver} disabled={busy} className='self-center'>Use a different account</Button>
+            </>}
+          </form>
+        )}
       <p className='text-muted-foreground text-xs leading-relaxed'>Sessions last eight hours and end on sign out. Real calls, emails and pushes stay off regardless of who signs in.</p>
     </Surface>
   );

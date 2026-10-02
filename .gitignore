@@ -56,3 +56,4 @@ control-web/tsconfig.tsbuildinfo
 control-web/.env*
 !control-web/.env.example
 docs/rafii-control-v2/evidence/raw/
+/.founder-signin-evidence/

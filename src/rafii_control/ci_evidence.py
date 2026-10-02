@@ -95,7 +95,7 @@ REQUIRED_CHECKS = (
     dict(key='founder-browser/founder', provider='github', workflowPath='.github/workflows/founder-browser.yml',
          workflowName='Founder admin browser', job='founder',
          paths=('web/**', 'src/rafii_control/**', 'src/postriff_phase2/**', 'migrations/postriff/**', 'scripts/postriff_dev_hosted.py',
-                'tests/founder_browser_fixture.py', 'tests/phase2/rls.sql', '.github/workflows/founder-browser.yml'),
+                'scripts/founder_signin_web.py', 'tests/founder_browser_fixture.py', 'tests/phase2/rls.sql', '.github/workflows/founder-browser.yml'),
          why='End-to-end founder surface on a production build; GitHub runs it when a web, Control, runtime or migration path changes.'),
     dict(key='vercel/production', provider='vercel', context='Vercel', creator='vercel[bot]', paths=None,
          why='Vercel builds production from consumer-saas; its own commit status on the exact SHA says whether that build succeeded.'),
