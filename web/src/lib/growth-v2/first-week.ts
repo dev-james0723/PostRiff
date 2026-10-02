@@ -93,6 +93,47 @@ export function unknownOutcome(error: unknown): boolean {
   return name === 'TimeoutError' || name === 'AbortError' || name === 'TypeError';
 }
 
+/** The server's note on a post whose writer was still running when its drafting call ended (coworker `_draft_slot`). */
+export const WRITER_STILL_WORKING = 'The writer is still working on this post.';
+/** The API's own time limit (vercel.json `maxDuration`): a drafting call has ended by then, answered or not. */
+export const DRAFT_CALL_LIMIT_MS = 300_000;
+/** One drafting call drafts at most this many posts (`draft_week` → `weekly_prepare(max_slots=2)`). */
+export const DRAFTS_PER_CALL = 2;
+
+/** A drafting request that ended without an answer: when it was sent and the posts that call works on. */
+export interface UnansweredDraft {
+  sentAt: number;
+  batch: string[];
+}
+
+type SlotState = { id: string; committed: boolean; status: string; reason?: string | null };
+
+/** The posts one drafting call works on: the first committed posts still planned, in week order, two at most. */
+export function draftBatch(slots: SlotState[]): string[] {
+  return slots.filter((s) => s.committed && s.status === 'planned').slice(0, DRAFTS_PER_CALL).map((s) => s.id);
+}
+
+/**
+ * M6: whether an unanswered drafting call may still be running, as a read of the journey taken at `readAt` shows it.
+ * The call is over once nothing is left to draft, once every post it was drafting has an outcome (drafted, a question,
+ * or the writer's still-working note), or once the API's time limit had passed when the read was taken. Then the posts
+ * that remain can be drafted again: a call drafts at most two, so "nothing left" is not the only way it ends.
+ */
+export function draftingMayContinue(unanswered: UnansweredDraft, slots: SlotState[], readAt: number): boolean {
+  const open = slots.filter((s) => s.committed && s.status === 'planned');
+  if (open.length === 0 || readAt >= unanswered.sentAt + DRAFT_CALL_LIMIT_MS) return false;
+  return open.some((s) => unanswered.batch.includes(s.id) && s.reason !== WRITER_STILL_WORKING);
+}
+
+/**
+ * L11: whether a new journey step takes keyboard focus. Only when the person's own control went with the old step —
+ * focus was last in this panel, that element is gone and focus fell back to the page. A background refetch (another tab,
+ * Queue, a stale cached view replaced on load) announces the step but never pulls focus from where the person is.
+ */
+export function stepTakesFocus(active: unknown, body: unknown, lastFocused: { isConnected: boolean } | null): boolean {
+  return (active === null || active === body) && lastFocused !== null && !lastFocused.isConnected;
+}
+
 /** What a slot will cost or cost, in words (R-FWR-02: every slot shows its cost state). Null: nothing to say. */
 export function slotCostText(
   slot: { costState: string | null; status: string; committed: boolean; draft: { origin: string | null } | null },
