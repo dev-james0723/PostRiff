@@ -196,9 +196,12 @@ def window_conversion(metric_id, cohort, *, now, watermark, window_days=30):
 
 
 # --- product: completed work week -------------------------------------------------------------------------------------
-def week_completion(week, first_week=None):
+def week_completion(week, first_week=None, variants=None):
     """(complete, subtypes) for one week. Committed slots: the frozen first-week scope when this week has one, else the
-    non-rejected slots. A slot is delivered by a verified publication or a confirmed, current assisted handoff."""
+    non-rejected slots. A slot is delivered by a verified publication or a confirmed, current assisted handoff: the
+    person confirmed using the export of the revision its draft still has. An edit after the export means the
+    exported text is not this one (stale), exactly as the first-week view decides it. `variants` are the workspace's
+    drafts ({id: draft} or a list); without them no handoff can be shown to be current, so none counts."""
     scope = (first_week or {}).get("scope") or {}
     handoffs = (first_week or {}).get("handoffs") or {}
     if scope and scope.get("weekId") == week.get("id"):
@@ -207,7 +210,19 @@ def week_completion(week, first_week=None):
     else:
         committed = [s for s in week.get("slots") or [] if s.get("status") not in ("rejected",)]
         basis = "non_rejected_slots"
+    drafts = variants if isinstance(variants, dict) else {v.get("id"): v for v in variants or [] if isinstance(v, dict)}
+
+    def confirmed(slot):
+        return slot.get("status") != "published" and (handoffs.get(slot["id"]) or {}).get("state") == "user_confirmed_used"
+
+    def current(slot):
+        if variants is None:
+            return False
+        draft = drafts.get(slot.get("variantId"))
+        return draft is None or (handoffs.get(slot["id"]) or {}).get("variantRevision") == draft.get("revision")
+
     verified = sum(1 for s in committed if s.get("status") == "published")
-    assisted = sum(1 for s in committed if s.get("status") != "published" and (handoffs.get(s["id"]) or {}).get("state") == "user_confirmed_used")
+    assisted = sum(1 for s in committed if confirmed(s) and current(s))
+    stale = sum(1 for s in committed if confirmed(s) and not current(s))
     complete = bool(committed) and verified + assisted == len(committed)
-    return complete, {"basis": basis, "committed": len(committed), "verified": verified, "assisted": assisted}
+    return complete, {"basis": basis, "committed": len(committed), "verified": verified, "assisted": assisted, "staleHandoffs": stale}

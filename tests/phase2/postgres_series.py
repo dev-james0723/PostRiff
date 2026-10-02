@@ -281,5 +281,20 @@ with connection() as db:
     assert db.execute("SELECT count(*) FROM public.pr_campaigns WHERE workspace_id=%s AND body->>'kind'='series'", (wa,)).fetchone()[0] == 2
 checks.append("an evergreen automation following the series drafts its approved episode through the real worker, once")
 
+# 9. RAFII_SERIES_ENABLED off (D-012): new series work stops, but the sweep still gates a draft already linked to a
+# series once a claim behind it expires (the gate protects published facts; it is not new work).
+flags.attach({"RAFII_ADAPTIVE_SKILLS_ENABLED": "1"})
+try:
+    denied(lambda: series.create(wa, "one", {"origin": {"kind": "post", "id": "job-other"}, "audienceQuestion": "How do restarts work?", "goal": "Restarts",
+                                             "idempotencyKey": "pg-create-off-0001"}), 404, "feature_disabled")
+    clock[0] += 400 * DAY
+    swept = jobs.tick(service, time.monotonic() + 10)
+    assert swept["status"] == "ok" and swept["workspaces"] == 1 and swept["gatedDrafts"] >= 1, swept
+    near = next(v for v in state_a()["variants"] if v["id"] == "near")
+    assert near["needsReview"] and any(u.startswith(m.UNKNOWN_PREFIX) for u in near["unknowns"]), near
+finally:
+    flags.attach({"RAFII_SERIES_ENABLED": "1", "RAFII_ADAPTIVE_SKILLS_ENABLED": "1"})
+checks.append("with the series flag off, new series work is refused but the sweep still gates linked drafts whose facts expired")
+
 print(json.dumps({"execution": "disposable PostgreSQL; synthetic writer; no provider or network", "checks": checks}, indent=1))
 print(f"PASS: {len(checks)} Signature Series checks")

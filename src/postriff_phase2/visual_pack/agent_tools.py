@@ -3,8 +3,10 @@
 `visual_pack_prepare` (CREATE_DRAFT): a six-slide 1080×1350 pack from one of this workspace's drafts.
 `visual_pack_edit` (MUTATE_REVERSIBLE): slide text, alt text, images, order, palette, weight → a new revision; the
 previous revision stays intact.
-`visual_pack_export` (MUTATE_REVERSIBLE): render, accept only when the person explicitly asked for this exact
-revision, and export files for the person to download. It never publishes and never hands anything to Queue.
+`visual_pack_export` (MUTATE_REVERSIBLE): render, then export files for the person to download once the person has
+accepted this exact revision in the carousel editor. Accepting is the person's own act (it records them as the one who
+accepted): no tool here accepts, so a rendered revision comes back as `approval_required` with the editor's link. It
+never publishes and never hands anything to Queue.
 
 All three need `edit`, go through VisualPackService (flag gate, membership re-check, revision and idempotency rules,
 read-back) and behave identically by voice and text. `register()` is idempotent; the coordinator adds it to
@@ -16,6 +18,7 @@ import hashlib
 
 TOOL_SCOPES = {"visual_pack_prepare": ["creative", "content"], "visual_pack_edit": ["creative"], "visual_pack_export": ["creative"]}
 PALETTES = ["rafii_light", "rafii_dark", "rafii_violet", "rafii_paper"]
+HREF = "/app/library#visual-packs"   # Library's carousel section: the editor where the person accepts a revision
 WEIGHTS = ["regular", "bold"]
 _REGISTERED = False
 
@@ -119,11 +122,12 @@ def register():
         return {"ok": True, "verified": True, "unchanged": bool(view.get("unchanged")), **_summary(view)}
 
     @tool_adapter.register(contracts.ToolSpec("visual_pack_export", contracts.MUTATE_REVERSIBLE, "edit",
-                                              "Prepare a carousel's files for the person to download and post themselves: renders the six PNGs, accepts "
-                                              "the current revision only when accept is true because the person explicitly asked to accept it, then "
-                                              "exports a zip (PNGs, caption, alt text, manifest). Never publishes and never queues anything.",
+                                              "Prepare a carousel's files for the person to download and post themselves: renders the six PNGs, then "
+                                              "exports a zip (PNGs, caption, alt text, manifest) once the person has accepted that exact revision in the "
+                                              "carousel editor. Rafii never accepts a revision for them; a rendered revision returns approval_required "
+                                              "with the editor link. Never publishes and never queues anything.",
                                               idempotent=True, voice=True),
-                           {"packId": {"type": "string", "maxLength": 40, "required": True}, "accept": {"type": "boolean"}}, "Exported the carousel files")
+                           {"packId": {"type": "string", "maxLength": 40, "required": True}}, "Exported the carousel files")
     def visual_pack_export(ctx, args):
         service = ensure(ctx.service)
         try:
@@ -132,11 +136,11 @@ def register():
             if view["revision"]["state"] == "draft":
                 view = service.render(ctx.workspace_id, ctx.token, args["packId"], {"expectedRevision": number})
             if view["revision"]["state"] == "rendered":
-                if args.get("accept") is not True:
-                    _record(ctx, view, "carousel rendered for review")
-                    return {"ok": False, "verified": True, "code": "approval_required", **_summary(view),
-                            "message": "The six slides are rendered. The person reviews and accepts this exact revision (in the editor, or by asking you to accept it) before files are exported."}
-                view = service.accept(ctx.workspace_id, ctx.token, args["packId"], {"expectedRevision": number, "confirmed": True})
+                _record(ctx, view, "carousel rendered for review")
+                return {"ok": False, "verified": True, "code": "approval_required", "needsUser": True, "href": HREF,
+                        **_summary(view),
+                        "message": ("The six slides are rendered. Only the person can accept this exact revision, in the carousel editor "
+                                    "(Library); Rafii can export the files after that. Nothing was accepted, exported or published.")}
             if view["revision"]["state"] == "accepted":
                 view = service.export(ctx.workspace_id, ctx.token, args["packId"], {"expectedRevision": number})
         except AlphaError as error:

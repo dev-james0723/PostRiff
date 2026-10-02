@@ -2,7 +2,7 @@
  * Signature Series words (English and Traditional Chinese) and the small pure rules the Library panel shows them by.
  * No React and no `@/` imports, so `node --test web/tests/series.test.mjs` checks them directly.
  */
-import type { DecisionKind, EpisodeState, FactReason, NextActionKind, SeriesEpisode, SeriesRole, SeriesStatus, SeriesView } from '@/lib/growth-v2/series-types';
+import type { DecisionKind, EpisodeState, FactReason, NextActionKind, SeriesDraft, SeriesEpisode, SeriesRole, SeriesStatus, SeriesView } from '@/lib/growth-v2/series-types';
 
 export type SeriesLocale = 'en' | 'zh-Hant';
 export type SeriesTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
@@ -106,6 +106,29 @@ export interface SeriesCopy {
   noImages: string;
   images: string;
   imageGone: string;
+  imageNoSize: string;
+  imageAdded: string;
+  searchDrafts: string;
+  searchHint: string;
+  pickerCount: string;
+  noMatches: string;
+  checking: string;
+  conflict: string;
+  warningsRequired: string;
+  featureOff: string;
+  copyFailed: string;
+  briefText: string;
+  close: string;
+  draftState: { missing: string; changed: string; needsReview: string; blocked: string; unknowns: string; notQueued: string; approved: string; scheduled: string; claimed: string; held: string };
+  followArchived: string;
+  followMissing: string;
+  followOff: string;
+  followUnknown: string;
+  followChecking: string;
+  stopFollowing: string;
+  followCleared: string;
+  archivedTitle: string;
+  unavailableSeries: string;
   brief: { intro: string; role: string; question: string; angle: string; facts: string; noFacts: string; rules: string };
 }
 
@@ -224,6 +247,40 @@ const EN: SeriesCopy = {
   noImages: 'No images in Library yet.',
   images: '{n} image(s) from Library',
   imageGone: 'An image was deleted from Library.',
+  imageNoSize: 'Image',
+  imageAdded: 'added {date}',
+  searchDrafts: 'Find a draft',
+  searchHint: 'Words, platform or language',
+  pickerCount: 'Showing {shown} of {total}, newest first',
+  noMatches: 'Nothing matches that search.',
+  checking: 'Checking this draft…',
+  conflict: 'This series changed since you opened it. The latest version is shown now: check it and try again.',
+  warningsRequired: 'Review the similarity warnings for this draft, then confirm them.',
+  featureOff: 'Signature Series isn’t available here right now.',
+  copyFailed: 'Couldn’t copy the brief. Select the text below and copy it yourself.',
+  briefText: 'Episode brief',
+  close: 'Close',
+  draftState: {
+    missing: 'Draft deleted',
+    changed: 'Edited since it was added',
+    needsReview: 'Needs review',
+    blocked: 'Blocked',
+    unknowns: '{n} detail(s) to confirm',
+    notQueued: 'Not in Queue yet',
+    approved: 'Approved in Queue',
+    scheduled: 'Scheduled',
+    claimed: 'Publishing',
+    held: 'Held in Queue'
+  },
+  followArchived: 'This series is archived, so this automation can’t be saved while it follows it. Choose another series or stop following it.',
+  followMissing: 'This series is no longer available. Stop following it to save this automation.',
+  followOff: 'Signature Series isn’t available here right now, so this automation can’t follow a series. Stop following it to save this automation.',
+  followUnknown: 'Couldn’t check the series this automation follows. You can stop following it.',
+  followChecking: 'Checking the series this automation follows…',
+  stopFollowing: 'Stop following',
+  followCleared: 'No longer following a series. Save the automation to keep this.',
+  archivedTitle: '{title} (archived)',
+  unavailableSeries: 'Unavailable series',
   brief: {
     intro: 'Draft episode {n} of my series “{title}” for review.',
     role: 'Role: {role}.',
@@ -350,6 +407,40 @@ const ZH: SeriesCopy = {
   noImages: '媒體庫暫時沒有圖片。',
   images: '{n} 張媒體庫圖片',
   imageGone: '有圖片已從媒體庫刪除。',
+  imageNoSize: '圖片',
+  imageAdded: '{date} 加入',
+  searchDrafts: '搜尋草稿',
+  searchHint: '字詞、平台或語言',
+  pickerCount: '顯示 {shown}／{total} 項，最新的排在前面',
+  noMatches: '沒有符合的項目。',
+  checking: '正在檢查這份草稿…',
+  conflict: '你打開後，這個系列有更改。現已顯示最新版本，請檢查後再試。',
+  warningsRequired: '請先查看這份草稿的相似度提示，然後確認。',
+  featureOff: '這裏暫時無法使用招牌系列。',
+  copyFailed: '未能複製簡介。請選取下面的文字自行複製。',
+  briefText: '集數簡介',
+  close: '關閉',
+  draftState: {
+    missing: '草稿已刪除',
+    changed: '加入後曾修改',
+    needsReview: '需要審閱',
+    blocked: '已暫停',
+    unknowns: '{n} 項細節待確認',
+    notQueued: '未加入佇列',
+    approved: '已在佇列批准',
+    scheduled: '已排程',
+    claimed: '發布中',
+    held: '佇列暫停中'
+  },
+  followArchived: '這個系列已封存，跟隨它時無法儲存這個自動化。請選擇其他系列，或停止跟隨。',
+  followMissing: '這個系列已無法使用。請停止跟隨，才能儲存這個自動化。',
+  followOff: '這裏暫時無法使用招牌系列，自動化不能跟隨系列。請停止跟隨，才能儲存這個自動化。',
+  followUnknown: '未能檢查這個自動化跟隨的系列。你可以停止跟隨。',
+  followChecking: '正在檢查這個自動化跟隨的系列…',
+  stopFollowing: '停止跟隨',
+  followCleared: '已停止跟隨系列。儲存自動化後才會生效。',
+  archivedTitle: '{title}（已封存）',
+  unavailableSeries: '無法使用的系列',
   brief: {
     intro: '請為我的系列「{title}」草擬第 {n} 集，供我審閱。',
     role: '類型：{role}。',
@@ -363,10 +454,13 @@ const ZH: SeriesCopy = {
 
 export const COPY: Record<SeriesLocale, SeriesCopy> = { en: EN, 'zh-Hant': ZH };
 
-/** Traditional Chinese for any Chinese or Cantonese preference; English otherwise. */
+/**
+ * Traditional Chinese only for a saved language of zh-Hant, zh-TW, zh-HK, zh-MO or Cantonese (yue), with any further
+ * subtags; everything else, Simplified Chinese and a bare `zh` included, reads English (D-022, as in Results).
+ */
 export function seriesLocale(locale: string | null | undefined): SeriesLocale {
-  const tag = (locale ?? '').toLowerCase();
-  return tag.startsWith('zh') || tag.startsWith('yue') ? 'zh-Hant' : 'en';
+  const tag = (locale ?? '').trim().toLowerCase().replace(/_/g, '-');
+  return /^(zh-hant|zh-tw|zh-hk|zh-mo|yue)(-|$)/.test(tag) ? 'zh-Hant' : 'en';
 }
 
 export function fill(template: string, values: Record<string, string | number>): string {
@@ -421,4 +515,134 @@ export function seriesEpisodeOf(evergreen: unknown): { index: number; role: stri
 
 export function percent(similarity: number): number {
   return Math.round(Math.max(0, Math.min(1, similarity)) * 100);
+}
+
+/* --- pickers ------------------------------------------------------------------------------------------------------ */
+
+export const DRAFT_PAGE = 50;
+export const IMAGE_PAGE = 12;
+
+/** Drafts that can be offered for an episode, newest first: not set aside, not already in this series, with text. The
+ *  workspace keeps drafts in creation order, so the newest are at the end. */
+export function newestDrafts<T extends { id: string; text?: string | null; rejected?: boolean }>(variants: readonly T[], excluded: ReadonlySet<string> = new Set()): T[] {
+  return variants.filter((variant) => !variant.rejected && !excluded.has(variant.id) && Boolean(variant.text?.trim())).toReversed();
+}
+
+const instant = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY);
+
+/** Library images (never videos or deleted ones) not yet on the episode, newest first: by when they were added, then by
+ *  their place in the Library (later first) when that time is missing or equal. */
+export function newestImages<T extends { id: string; deleted?: boolean; mime?: string | null; kind?: string | null; createdAt?: number | null }>(
+  assets: readonly T[],
+  excluded: readonly string[] = []
+): T[] {
+  return assets
+    .map((asset, index) => ({ asset, index }))
+    .filter(({ asset }) => !asset.deleted && asset.kind !== 'video' && !(asset.mime ?? '').startsWith('video/') && !excluded.includes(asset.id))
+    .toSorted((a, b) => instant(b.asset.createdAt) - instant(a.asset.createdAt) || b.index - a.index)
+    .map(({ asset }) => asset);
+}
+
+export function normalizeSearch(value: string): string {
+  return value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Every word of the query appears in the text (case- and width-insensitive; works for Chinese, which has no spaces). */
+export function matchesSearch(text: string, query: string): boolean {
+  const haystack = normalizeSearch(text);
+  return normalizeSearch(query).split(' ').filter(Boolean).every((word) => haystack.includes(word));
+}
+
+/** The first `limit` items matching the query, how many match in all, and whether there are more to show. */
+export function pickPage<T>(items: readonly T[], query: string, text: (item: T) => string, limit: number): { items: T[]; total: number; more: boolean } {
+  const found = query.trim() ? items.filter((item) => matchesSearch(text(item), query)) : [...items];
+  return { items: found.slice(0, Math.max(0, limit)), total: found.length, more: found.length > limit };
+}
+
+/** The shown page, with the chosen item kept in it (first) when a search or the page size would hide it. */
+export function withSelected<T extends { id: string }>(shown: readonly T[], all: readonly T[], selectedId: string | null): T[] {
+  if (!selectedId || shown.some((item) => item.id === selectedId)) return [...shown];
+  const selected = all.find((item) => item.id === selectedId);
+  return selected ? [selected, ...shown] : [...shown];
+}
+
+const oneLine = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim();
+
+export function draftSearchText(draft: { platform?: string | null; language?: string | null; text?: string | null }): string {
+  return `${draft.platform ?? ''} ${draft.language ?? ''} ${draft.text ?? ''}`;
+}
+
+export function draftOptionLabel(draft: { platform?: string | null; language?: string | null; text?: string | null }): string {
+  return [draft.platform, draft.language, oneLine(draft.text).slice(0, 60)].filter(Boolean).join(' · ');
+}
+
+/** A calendar day (UTC) for a time the server keeps in seconds (or, from older records, milliseconds). */
+export function isoDay(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return new Date(value > 1e12 ? value : value * 1000).toISOString().slice(0, 10);
+}
+
+export function imageOptionLabel(copy: SeriesCopy, asset: { width?: number | null; height?: number | null; createdAt?: number | null }): string {
+  const size = asset.width && asset.height ? `${asset.width}×${asset.height}` : copy.imageNoSize;
+  const day = isoDay(asset.createdAt);
+  return day ? `${size} · ${fill(copy.imageAdded, { date: day })}` : size;
+}
+
+/* --- linked drafts ------------------------------------------------------------------------------------------------ */
+
+/** Where each linked draft stands, as chips: deleted, Queue's state (publication only when Queue verified it), blocked,
+ *  held for facts, needing review, details to confirm, edited since it was added; "not in Queue yet" when nothing applies. */
+export function draftChips(copy: SeriesCopy, draft: Pick<SeriesDraft, 'missing' | 'published' | 'queued' | 'blocked' | 'factGate' | 'needsReview' | 'unknowns' | 'changedSinceLinked'>): { key: string; label: string; tone: SeriesTone }[] {
+  if (draft.missing) return [{ key: 'missing', label: copy.draftState.missing, tone: 'danger' }];
+  const chips: { key: string; label: string; tone: SeriesTone }[] = [];
+  if (draft.published) chips.push({ key: 'published', label: copy.published, tone: 'success' });
+  else if (draft.queued === 'approved' || draft.queued === 'scheduled' || draft.queued === 'claimed' || draft.queued === 'held') {
+    chips.push({ key: 'queued', label: copy.draftState[draft.queued], tone: draft.queued === 'held' ? 'warning' : 'info' });
+  }
+  if (draft.blocked) chips.push({ key: 'blocked', label: copy.draftState.blocked, tone: 'danger' });
+  if (draft.factGate && !draft.published) chips.push({ key: 'factGate', label: copy.factNeeds, tone: 'warning' });
+  if (draft.needsReview && !draft.published) chips.push({ key: 'needsReview', label: copy.draftState.needsReview, tone: 'warning' });
+  if (draft.unknowns && draft.unknowns > 0 && !draft.published) chips.push({ key: 'unknowns', label: fill(copy.draftState.unknowns, { n: draft.unknowns }), tone: 'warning' });
+  if (draft.changedSinceLinked) chips.push({ key: 'changed', label: copy.draftState.changed, tone: 'neutral' });
+  if (!chips.length) chips.push({ key: 'notQueued', label: copy.draftState.notQueued, tone: 'neutral' });
+  return chips;
+}
+
+/* --- errors and conflicts ----------------------------------------------------------------------------------------- */
+
+function fields(error: unknown): { status?: unknown; code?: unknown; message?: unknown } {
+  return error && typeof error === 'object' ? (error as { status?: unknown; code?: unknown; message?: unknown }) : {};
+}
+
+/** What to say when a change failed: the known refusals in the person's language (a 409 revision_conflict says the
+ *  latest version is now shown, because the hooks re-read it), otherwise the server's own words, and the fallback for
+ *  anything that never reached the server. */
+export function seriesErrorText(copy: SeriesCopy, error: unknown, fallback: string = copy.changeFailed): string {
+  const { status, code, message } = fields(error);
+  if (status === 409 && code === 'revision_conflict') return copy.conflict;
+  if (code === 'warnings_unacknowledged') return copy.warningsRequired;
+  if (code === 'feature_disabled') return copy.featureOff;
+  return typeof status === 'number' && typeof message === 'string' && message.trim() ? message : fallback;
+}
+
+/* --- automations following a series -------------------------------------------------------------------------------- */
+
+export type FollowState = 'none' | 'ok' | 'archived' | 'missing' | 'off' | 'unknown' | 'checking';
+
+/**
+ * Whether an automation can keep following `value`: listed among the workspace's series, or read on its own (an archived,
+ * paused or older series is not on the list's first page). Archived, missing or switched-off series make the automation
+ * unsaveable until the follow is removed, so the select must say so and offer a way out.
+ */
+export function followState(value: string | null, listedStatus: SeriesStatus | null | undefined, detail: { status?: SeriesStatus | null; error?: unknown } = {}): FollowState {
+  if (!value) return 'none';
+  if (listedStatus) return listedStatus === 'archived' ? 'archived' : 'ok';
+  if (detail.status) return detail.status === 'archived' ? 'archived' : 'ok';
+  if (detail.error) {
+    const { status, code } = fields(detail.error);
+    if (status === 404 && code === 'feature_disabled') return 'off';
+    if (status === 404) return 'missing';
+    return 'unknown';
+  }
+  return 'checking';
 }

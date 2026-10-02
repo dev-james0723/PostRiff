@@ -70,6 +70,10 @@ def coverage(source, state, reason=None, considered=0):
 
 
 # --- Social Trend Intelligence -----------------------------------------------------------------------------------------
+def _angle_text(angle, projection):
+    return " ".join(str(angle.get("title") or angle.get("contribution") or projection.get("contribution") or "").split())[:240]
+
+
 def trend_candidates(envelope):
     cov = envelope.get("coverage") or {}
     latest = epoch(cov.get("latest_successful_read"))
@@ -93,6 +97,8 @@ def trend_candidates(envelope):
                     "fit": {k: fit.get(k) for k in ("audience", "brand", "risk", "trend_relevance", "timing", "originality") if isinstance(fit.get(k), dict)},
                     "interests": [], "matchText": p.get("contribution") or "",
                     "action": {"kind": "accept", "requires": ["angleId", "channelId"], "angleIds": [a["id"] for a in angles if a.get("id")][:3],
+                               # Each choosable angle with its own words, so the accept form never shows a bare id.
+                               "angles": [{"id": a["id"], "text": _angle_text(a, p)} for a in angles if a.get("id")][:3],
                                "revision": p.get("revision"), "platforms": list(p.get("platform_targets") or [])[:6]},
                     "limitations": [p.get("uncertainty")] if p.get("uncertainty") else [],
                     "href": f"/app/trends?opportunity={p['id']}"})

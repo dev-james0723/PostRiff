@@ -37,6 +37,18 @@ export function useGrowthFeature(feature: GrowthFeature): boolean {
   return useGrowthFeatures().data?.[feature] === true;
 }
 
+export type GrowthFeatureState = 'loading' | 'on' | 'off';
+
+/**
+ * The same answer with "not known yet" kept apart, for a surface that still shows earlier work while a feature is off
+ * (it must neither flash an "off" note nor ask the switched-off routes while the answer is loading). Failed: off.
+ */
+export function useGrowthFeatureState(feature: GrowthFeature): GrowthFeatureState {
+  const features = useGrowthFeatures();
+  if (features.isPending && features.fetchStatus !== 'idle') return 'loading';
+  return features.data?.[feature] === true ? 'on' : 'off';
+}
+
 /** Renders its children only while the feature is on; nothing (and no request) otherwise. */
 export function GrowthFeatureGate({ feature, children }: { feature: GrowthFeature; children: ReactNode }) {
   return useGrowthFeature(feature) ? <>{children}</> : null;

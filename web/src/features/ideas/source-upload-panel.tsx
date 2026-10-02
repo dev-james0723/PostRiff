@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useGrowthFeatureState } from '@/lib/growth-v2/features';
 import { errorCode, errorMessage, isFeatureDisabled } from '@/lib/growth-v2/request';
+import { wasStopped } from '@/lib/growth-v2/source-uploads';
 import {
   useAcceptQuote,
   useCreateSourceFromUpload,
@@ -31,6 +33,9 @@ import {
   formatDuration,
   formatMegabytes,
   languageFor,
+  pageRangeProblem,
+  panelMode,
+  pickerFor,
   presentState,
   tooLong,
   type Lang,
@@ -49,7 +54,6 @@ const TONE: Record<Tone, string> = {
   error: 'text-destructive',
   muted: 'text-muted-foreground'
 };
-const ACCEPT = '.pdf,application/pdf,.m4a,.mp3,.wav,.ogg,.opus,audio/mp4,audio/x-m4a,audio/mpeg,audio/wav,audio/ogg,.srt,.vtt,.txt,text/plain,text/vtt';
 
 interface SourceUploadPanelProps {
   canEdit: boolean;
@@ -72,8 +76,8 @@ function measureAudio(file: File): Promise<number | undefined> {
     };
     const timer = window.setTimeout(() => finish(undefined), 5000);
     audio.preload = 'metadata';
-    audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? audio.duration : undefined);
-    audio.onerror = () => finish(undefined);
+    audio.addEventListener('loadedmetadata', () => finish(Number.isFinite(audio.duration) ? audio.duration : undefined), { once: true });
+    audio.addEventListener('error', () => finish(undefined), { once: true });
     audio.src = url;
   });
 }
@@ -82,36 +86,64 @@ function failure(error: unknown, lang: Lang): string {
   return errorText(errorCode(error), errorMessage(error), lang);
 }
 
+/** True while the person is still in `root` (or nowhere in particular): only then may something there take focus. */
+function focusIsWithin(root: Element | null | undefined): boolean {
+  const active = typeof document === 'undefined' ? null : document.activeElement;
+  return !active || active === document.body || Boolean(root?.contains(active));
+}
+
 /**
  * Raw-file intake inside Ideas (PRD R-FWR-04): limits are shown before a file is chosen, the file goes straight to
  * private storage, and its text is read (or, with an accepted quote, transcribed), reviewed and corrected before it
- * becomes a source. Every state shown is the server's; nothing is published.
+ * becomes a source. Every state shown is the server's; nothing is published. With the feature off (D-012: admission
+ * of new work stops) earlier uploads stay listed, readable, cancellable and deletable, and no switched-off route is
+ * asked; with none, nothing renders. Only formats this deployment can read are offered.
  */
 export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPanelProps) {
   const { locale } = usePreferences();
   const lang = languageFor(locale);
   const copy = copyFor(locale);
-  const limits = useSourceUploadLimits();
+  const feature = useGrowthFeatureState('sourceUploads');
+  const limits = useSourceUploadLimits(feature === 'on');
   const list = useSourceUploads();
   const start = useStartSourceUpload();
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Whether opening the detail may move focus: always when the person opened it, after an upload only if they are
+  // still in this panel (an upload finishing never pulls focus from what they moved on to).
+  const [takeFocus, setTakeFocus] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ fraction: number; stage: 'uploading' | 'checking' | 'reading' } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const chooseButton = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const rows = useRef(new Map<string, HTMLButtonElement>());
   const headingId = useId();
   const items = list.data?.items ?? [];
+  // A deployment whose limits route is off although the features list said on: treat it as off (manage only).
+  const mode = panelMode(feature === 'on' && isFeatureDisabled(limits.error) ? 'off' : feature, canEdit, items.length);
 
-  // Off in this deployment (or a viewer) with nothing from before to show: the panel isn't rendered at all.
-  if ((isFeatureDisabled(limits.error) || !canEdit) && items.length === 0) return null;
+  if (mode === 'hidden') return null;
   const view = limits.data;
+  const picker = pickerFor(view, lang);
+  const uploading = mode === 'full';
   const stageLabel = !progress ? '' : progress.stage === 'uploading' ? copy.uploading(Math.round(progress.fraction * 100)) : progress.stage === 'checking' ? copy.checking : copy.reading;
+
+  /** Closing the detail returns focus to the upload's row (or, if it is gone, to the panel). */
+  function closeDetail() {
+    const id = activeId;
+    setActiveId(null);
+    const target = (id && rows.current.get(id)) || chooseButton.current || heading.current;
+    target?.focus();
+  }
 
   async function choose(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !view) return;
     setProblem(null);
+    setNotice(null);
     const choice = classifyFile(file, view, lang);
     if (!choice.ok) {
       setProblem(choice.message);
@@ -125,20 +157,27 @@ export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPane
         return;
       }
     }
-    abort.current = new AbortController();
+    const controller = new AbortController();
+    abort.current = controller;
     setProgress({ fraction: 0, stage: 'uploading' });
     start.mutate(
       {
         file,
         choice: choice.kind === 'transcript' ? { kind: 'transcript', format: choice.format } : { kind: choice.kind, mime: choice.mime },
         durationSeconds: durationSeconds === undefined ? undefined : Math.round(durationSeconds * 10) / 10,
-        signal: abort.current.signal,
+        signal: controller.signal,
         onProgress: (fraction) => setProgress((current) => ({ fraction, stage: current?.stage ?? 'uploading' })),
         onStage: (stage) => setProgress((current) => ({ fraction: current?.fraction ?? 0, stage }))
       },
       {
-        onSuccess: (uploaded) => setActiveId(uploaded.id),
-        onError: (error) => setProblem(abort.current?.signal.aborted ? null : failure(error, lang)),
+        onSuccess: (uploaded) => {
+          setTakeFocus(focusIsWithin(heading.current?.closest('section')));
+          setActiveId(uploaded.id);
+        },
+        onError: (error) => {
+          if (wasStopped(error, controller.signal)) setNotice(copy.stopped);
+          else setProblem(failure(error, lang));
+        },
         onSettled: () => {
           setProgress(null);
           abort.current = null;
@@ -148,34 +187,41 @@ export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPane
   }
 
   return (
-    <Surface as='section' material='quiet' radius='card' padding='none' aria-labelledby={headingId} className='flex flex-col gap-4 p-4 sm:p-5'>
+    <Surface as='section' lang={lang} material='quiet' radius='card' padding='none' aria-labelledby={headingId} className='flex flex-col gap-4 p-4 sm:p-5'>
       <div className='flex flex-col gap-1'>
-        <h2 id={headingId} className='text-foreground text-base font-medium'>
-          {copy.title}
+        <h2 id={headingId} ref={heading} tabIndex={-1} className='text-foreground text-base font-medium outline-none'>
+          {mode === 'manage' ? copy.titleManage : picker.title}
         </h2>
-        <p className='text-muted-foreground text-sm text-pretty'>{copy.intro}</p>
+        <p className='text-muted-foreground text-sm text-pretty'>{mode === 'manage' ? copy.offNote : copy.intro}</p>
       </div>
 
-      {limits.isLoading ? (
-        <StateMessage kind='loading' layout='inline' title={lang === 'zh-Hant' ? '正在載入上限…' : 'Loading limits…'} />
-      ) : view ? (
-        <Limits view={view} copy={copy} lang={lang} />
-      ) : limits.error && !isFeatureDisabled(limits.error) ? (
-        <StateMessage kind='error' layout='inline' title={failure(limits.error, lang)} />
-      ) : (
-        <StateMessage kind='unsupported' layout='inline' title={errorText('feature_disabled', '', lang)} />
-      )}
+      {feature === 'on' &&
+        (limits.isLoading ? (
+          <StateMessage kind='loading' layout='inline' title={copy.loadingLimits} />
+        ) : view ? (
+          <Limits view={view} copy={copy} lang={lang} />
+        ) : limits.error && !isFeatureDisabled(limits.error) ? (
+          <StateMessage kind='error' layout='inline' title={failure(limits.error, lang)} />
+        ) : null)}
 
-      {view && canEdit && (
+      {view && uploading && (
         <div className='flex flex-col gap-2'>
           {/* The button is the one control; the native picker stays out of the tab order. */}
-          <input ref={input} type='file' accept={ACCEPT} className='sr-only' tabIndex={-1} aria-hidden onChange={(event) => void choose(event)} disabled={Boolean(progress)} />
-          <Button variant='glass' size='control' className='w-full sm:w-fit' disabled={Boolean(progress)} onClick={() => input.current?.click()} aria-describedby={`${headingId}-hint`}>
+          <input ref={input} type='file' accept={picker.accept} className='sr-only' tabIndex={-1} aria-hidden onChange={(event) => void choose(event)} disabled={Boolean(progress)} />
+          <Button
+            ref={chooseButton}
+            variant='glass'
+            size='control'
+            className='w-full sm:w-fit'
+            disabled={Boolean(progress)}
+            onClick={() => input.current?.click()}
+            aria-describedby={`${headingId}-hint`}
+          >
             <Icons.upload aria-hidden className='size-4' />
             {copy.choose}
           </Button>
           <p id={`${headingId}-hint`} className='text-muted-foreground text-xs'>
-            {copy.chooseHint}
+            {picker.hint}
           </p>
         </div>
       )}
@@ -195,8 +241,25 @@ export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPane
       )}
 
       {problem && <StateMessage kind='error' layout='inline' title={problem} />}
+      {notice && !problem && (
+        <p role='status' className='text-muted-foreground text-sm'>
+          {notice}
+        </p>
+      )}
 
-      {activeId && <UploadDetail key={activeId} id={activeId} lang={lang} copy={copy} canEdit={canEdit} onSourceCreated={onSourceCreated} onClose={() => setActiveId(null)} />}
+      {activeId && (
+        <UploadDetail
+          key={activeId}
+          id={activeId}
+          lang={lang}
+          copy={copy}
+          canEdit={canEdit}
+          canStartWork={uploading}
+          takeFocus={takeFocus}
+          onSourceCreated={onSourceCreated}
+          onClose={closeDetail}
+        />
+      )}
 
       {items.length > 0 && (
         <div className='flex flex-col gap-2'>
@@ -204,7 +267,20 @@ export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPane
           <ul className='flex flex-col gap-1'>
             {items.map((item) => (
               <li key={item.id}>
-                <UploadRow item={item} lang={lang} selected={item.id === activeId} onOpen={() => setActiveId(item.id)} />
+                <UploadRow
+                  item={item}
+                  lang={lang}
+                  copy={copy}
+                  selected={item.id === activeId}
+                  onOpen={() => {
+                    setTakeFocus(true);
+                    setActiveId(item.id);
+                  }}
+                  register={(node) => {
+                    if (node) rows.current.set(item.id, node);
+                    else rows.current.delete(item.id);
+                  }}
+                />
               </li>
             ))}
           </ul>
@@ -217,7 +293,7 @@ export function SourceUploadPanel({ canEdit, onSourceCreated }: SourceUploadPane
 function Limits({ view, copy, lang }: { view: LimitsView; copy: Copy; lang: Lang }) {
   const audio = view.formats.audio;
   return (
-    <ul className='text-muted-foreground flex flex-col gap-1 text-sm' aria-label={lang === 'zh-Hant' ? '上載上限' : 'Upload limits'}>
+    <ul className='text-muted-foreground flex flex-col gap-1 text-sm' aria-label={copy.limitsLabel}>
       <li>{view.formats.pdf.supported ? copy.limitsPdf(formatMegabytes(view.limits.pdf.maxBytes), view.limits.pdf.maxPages, formatCount(view.limits.pdf.maxCharacters, lang)) : copy.pdfOff}</li>
       <li>{audio.supported ? copy.limitsAudio(formatMegabytes(view.limits.audio.maxBytes), Math.floor(view.limits.audio.maxSeconds / 60)) : copy.audioOff}</li>
       {audio.supported && audio.synthetic && <li className='text-foreground'>{copy.audioSynthetic}</li>}
@@ -226,11 +302,12 @@ function Limits({ view, copy, lang }: { view: LimitsView; copy: Copy; lang: Lang
   );
 }
 
-function UploadRow({ item, lang, selected, onOpen }: { item: UploadView; lang: Lang; selected: boolean; onOpen: () => void }) {
+function UploadRow({ item, lang, copy, selected, onOpen, register }: { item: UploadView; lang: Lang; copy: Copy; selected: boolean; onOpen: () => void; register: (node: HTMLButtonElement | null) => void }) {
   const said = presentState(item, lang);
   const Mark = item.kind === 'pdf' ? Icons.fileTypePdf : item.kind === 'audio' ? Icons.music : Icons.text;
   return (
     <button
+      ref={register}
       type='button'
       onClick={onOpen}
       aria-pressed={selected}
@@ -238,7 +315,7 @@ function UploadRow({ item, lang, selected, onOpen }: { item: UploadView; lang: L
     >
       <Mark aria-hidden className='text-muted-foreground size-4 shrink-0' />
       <span className='flex min-w-0 flex-1 flex-col'>
-        <span className='truncate text-sm'>{item.name ?? (lang === 'zh-Hant' ? '已刪除的上載' : 'Deleted upload')}</span>
+        <span className='truncate text-sm'>{item.name ?? copy.deletedUpload}</span>
         <span className={cn('text-xs', TONE[said.tone])}>{said.label}</span>
       </span>
     </button>
@@ -250,27 +327,38 @@ interface DetailProps {
   lang: Lang;
   copy: Copy;
   canEdit: boolean;
+  /** Whether steps that start or change work (quote, pages, corrections, "use as source", process) are available:
+   *  false while the feature is off, when only reading, cancelling and deleting remain. */
+  canStartWork: boolean;
+  /** Move focus to the detail when it opens (the person's own action), not when it merely appears. */
+  takeFocus: boolean;
   onSourceCreated: (sourceId: string) => void;
   onClose: () => void;
 }
 
-function UploadDetail({ id, lang, copy, canEdit, onSourceCreated, onClose }: DetailProps) {
+function UploadDetail({ id, lang, copy, canEdit, canStartWork, takeFocus, onSourceCreated, onClose }: DetailProps) {
   const status = useSourceUpload(id);
   const action = useUploadAction();
   const [problem, setProblem] = useState<string | null>(null);
   const [opened] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const heading = useRef<HTMLHeadingElement>(null);
+  const focused = useRef(false);
   const titleId = useId();
   const view = status.data;
   const said = view ? presentState(view, lang) : null;
   const waiting = Boolean(view?.job && ['queued', 'running'].includes(view.job.state));
   // Status polling stops after three minutes; this local clock (no requests) is what shows the "still working" note.
   const stalled = waiting && now - opened > 180_000;
+  const ready = Boolean(view);
 
+  // Focus moves here once, when the person opens the detail (or their upload finishes); later step changes from polling
+  // are announced by the status line, never by moving focus away from what the person is doing.
   useEffect(() => {
-    heading.current?.focus();
-  }, [view?.next]);
+    if (!ready || focused.current) return;
+    focused.current = true;
+    if (takeFocus) heading.current?.focus();
+  }, [ready, takeFocus]);
 
   useEffect(() => {
     if (!waiting) return;
@@ -280,18 +368,26 @@ function UploadDetail({ id, lang, copy, canEdit, onSourceCreated, onClose }: Det
 
   const run = (kind: 'cancel' | 'process' | 'delete') => {
     setProblem(null);
-    action.mutate({ id, action: kind }, { onError: (error) => setProblem(failure(error, lang)) });
+    action.mutate(
+      { id, action: kind },
+      {
+        // The button just pressed disappears with the new state: keep focus in the detail, on its title.
+        onSuccess: () => heading.current?.focus(),
+        onError: (error) => setProblem(failure(error, lang))
+      }
+    );
   };
 
   if (status.isLoading) return <StateMessage kind='loading' layout='inline' title={copy.checking} />;
   if (!view) return status.error ? <StateMessage kind='error' layout='inline' title={failure(status.error, lang)} /> : null;
+  const working = canEdit && canStartWork;
 
   return (
     <Surface as='section' material='glass' radius='card' padding='none' aria-labelledby={titleId} className='flex flex-col gap-3 p-4'>
       <div className='flex items-start justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
           <h3 id={titleId} ref={heading} tabIndex={-1} className='truncate text-sm font-medium outline-none'>
-            {view.name ?? (lang === 'zh-Hant' ? '已刪除的上載' : 'Deleted upload')}
+            {view.name ?? copy.deletedUpload}
           </h3>
           <p className={cn('text-sm', said ? TONE[said.tone] : '')} role={said?.tone === 'error' ? 'alert' : 'status'}>
             {waiting && <Icons.spinner aria-hidden className='mr-1 inline size-3.5 animate-spin motion-reduce:animate-none' />}
@@ -300,7 +396,7 @@ function UploadDetail({ id, lang, copy, canEdit, onSourceCreated, onClose }: Det
           </p>
           {said?.detail && <p className='text-muted-foreground text-sm text-pretty'>{said.detail}</p>}
         </div>
-        <Button variant='quiet' size='icon-control' aria-label={lang === 'zh-Hant' ? '關閉' : 'Close'} onClick={onClose}>
+        <Button variant='quiet' size='icon-control' aria-label={copy.close} onClick={onClose}>
           <Icons.close className='size-4' />
         </Button>
       </div>
@@ -309,10 +405,10 @@ function UploadDetail({ id, lang, copy, canEdit, onSourceCreated, onClose }: Det
         <StateMessage kind='stale' layout='inline' title={copy.stillWorking} action={<Button variant='quiet' size='sm' onClick={() => void status.refetch()}>{copy.refresh}</Button>} />
       )}
 
-      {canEdit && view.next === 'accept_quote' && <QuoteCard id={id} copy={copy} lang={lang} />}
-      {canEdit && view.next === 'select_pages' && <PagesForm view={view} copy={copy} lang={lang} />}
+      {working && view.next === 'accept_quote' && <QuoteCard id={id} copy={copy} lang={lang} />}
+      {working && view.next === 'select_pages' && <PagesForm view={view} copy={copy} lang={lang} />}
       {(view.next === 'review' || view.next === 'done') && (
-        <ReviewEditor id={id} view={view} copy={copy} lang={lang} canEdit={canEdit && view.next === 'review'} onSourceCreated={onSourceCreated} />
+        <ReviewEditor id={id} view={view} copy={copy} lang={lang} canEdit={working && view.next === 'review'} onSourceCreated={onSourceCreated} />
       )}
       {view.next === 'upload_transcript' && <StateMessage kind='unsupported' layout='inline' title={copy.audioOff} />}
 
@@ -325,7 +421,7 @@ function UploadDetail({ id, lang, copy, canEdit, onSourceCreated, onClose }: Det
               {copy.cancel}
             </Button>
           )}
-          {view.job?.state === 'queued' && (
+          {working && view.job?.state === 'queued' && (
             <Button variant='quiet' size='sm' disabled={action.isPending} onClick={() => run('process')}>
               {copy.refresh}
             </Button>
@@ -405,7 +501,9 @@ function PagesForm({ view, copy, lang }: { view: UploadView; copy: Copy; lang: L
   const [problem, setProblem] = useState<string | null>(null);
   const fromId = useId();
   const toId = useId();
-  const invalid = !(from >= 1 && to >= from && to <= total && to - from + 1 <= maxPages);
+  const rangeId = useId();
+  // Said in place, before anything is sent: which limit the range breaks and how to fix it.
+  const invalid = pageRangeProblem({ from, to }, { total, maxPages, maxChars, pages: progress.pages }, lang);
   return (
     <form
       className='flex flex-col gap-3'
@@ -423,15 +521,40 @@ function PagesForm({ view, copy, lang }: { view: UploadView; copy: Copy; lang: L
       <div className='grid grid-cols-2 gap-3 sm:max-w-sm'>
         <div className='flex flex-col gap-1'>
           <Label htmlFor={fromId}>{copy.from}</Label>
-          <Input id={fromId} type='number' inputMode='numeric' min={1} max={total} value={from} onChange={(event) => setFrom(Number(event.target.value))} aria-invalid={invalid} />
+          <Input
+            id={fromId}
+            type='number'
+            inputMode='numeric'
+            min={1}
+            max={total}
+            value={from}
+            onChange={(event) => setFrom(Number(event.target.value))}
+            aria-invalid={Boolean(invalid)}
+            aria-describedby={invalid ? rangeId : undefined}
+          />
         </div>
         <div className='flex flex-col gap-1'>
           <Label htmlFor={toId}>{copy.to}</Label>
-          <Input id={toId} type='number' inputMode='numeric' min={1} max={total} value={to} onChange={(event) => setTo(Number(event.target.value))} aria-invalid={invalid} />
+          <Input
+            id={toId}
+            type='number'
+            inputMode='numeric'
+            min={1}
+            max={total}
+            value={to}
+            onChange={(event) => setTo(Number(event.target.value))}
+            aria-invalid={Boolean(invalid)}
+            aria-describedby={invalid ? rangeId : undefined}
+          />
         </div>
       </div>
+      {invalid && (
+        <p id={rangeId} role='alert' className='text-destructive text-sm'>
+          {invalid}
+        </p>
+      )}
       {problem && <StateMessage kind='error' layout='inline' title={problem} />}
-      <Button type='submit' variant='action' size='control' className='w-full sm:w-fit' disabled={invalid || select.isPending}>
+      <Button type='submit' variant='action' size='control' className='w-full sm:w-fit' disabled={Boolean(invalid) || select.isPending}>
         {copy.readPages}
       </Button>
     </form>

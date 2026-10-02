@@ -222,7 +222,8 @@ export function IdeasView() {
               </Surface>
             )}
             {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='Only editors can add sources.' />}
-            {/* PDF / recording / transcript intake (RAFII_SOURCE_UPLOADS_ENABLED); hidden when the deployment has it off. */}
+            {/* PDF / recording / transcript intake, gated by the sourceUploads growth feature (RAFII_SOURCE_UPLOADS_ENABLED):
+                when it is off no switched-off route is asked, earlier uploads stay manageable, and with none nothing renders. */}
             <SourceUploadPanel canEdit={canEdit} onSourceCreated={select} />
             <SourceList selectedId={sourceId} onSelect={select} useApprovals={useApprovals} />
           </div>

@@ -13,10 +13,13 @@ import { appliedSummary, correctionText, decisionActions, evidenceGroups, figure
 const item = (extra = {}) => ({ id: 'bi_1', source: 'listening', kind: 'question', title: 'How do adults keep a routine?', publishedAt: null, retrievedAt: 1_790_000_000,
   coverage: { availability: 'available', completeness: 'partial' }, decision: null, ...extra });
 
-test('locale: English by default, Traditional Chinese for every Chinese variant', () => {
+test('locale (D-022): Traditional Chinese only for zh-Hant, zh-TW, zh-HK, zh-MO and Cantonese; other Chinese reads English', () => {
   assert.equal(loopLocale('en-GB'), 'en');
   assert.equal(loopLocale(undefined), 'en');
-  for (const tag of ['zh-Hant', 'zh-Hant-HK', 'zh-TW', 'yue', 'zh']) assert.equal(loopLocale(tag), 'zh-Hant');
+  for (const tag of ['zh-Hant', 'zh-Hant-HK', 'zh-TW', 'zh-HK', 'zh-MO', 'zh_TW', 'yue', 'yue-Hant-HK']) assert.equal(loopLocale(tag), 'zh-Hant', tag);
+  for (const tag of ['zh', 'zh-Hans', 'zh-CN', 'zh-SG', 'zh-Hans-HK', 'zh-twx', 'yuez']) assert.equal(loopLocale(tag), 'en', tag);
+  assert.equal(proofCopy('zh').title, proofCopy('en').title);
+  assert.equal(proofCopy('zh-CN').figure.assistedExports, 'Assisted exports (separate)');
   assert.equal(briefCopy('zh-Hant-HK').title, '機會簡報');
   assert.equal(proofCopy('zh-TW').figure.assistedExports, '輔助匯出（另計）');
   for (const copy of [briefCopy('en'), briefCopy('zh-Hant')]) assert.equal(Object.keys(copy.reasons).length, 8);
@@ -84,7 +87,9 @@ test('proof figures: unavailable is never zero, exports stay separate, time clas
   assert.equal(figureText('providerCost', { value: { actualUsdMicro: 1200, actualEntries: 1, unknownEntries: 1, unknownReservedEstimateUsdMicro: 5000 }, dataState: 'partial', evidence: {} }, copy),
                'US$0.0012 actual (1 entry) · 1 unknown (US$0.0050 reserved estimate, not actual)');
   assert.match(figureText('outcomes', { value: { provider_native: null, first_party_reported: { counts: { lead: 2 } }, user_declared: { counts: {} } }, dataState: 'partial', evidence: {} }, copy),
-               /^Platform-reported: Unavailable · Your site or form: 2 lead · You declared: 0$/);
+               /^Platform-reported: Unavailable · Your site or form: 2 leads · You declared: 0$/);
+  assert.match(figureText('outcomes', { value: { provider_native: null, first_party_reported: { counts: { newsletter_signup: 1 } }, user_declared: null }, dataState: 'partial', evidence: {} }, proofCopy('zh-Hant')),
+               /你的網站或表格: 電子報訂閱 1/);
   assert.equal(usd(2_500_000), 'US$2.50');
   assert.deepEqual(FIGURE_ORDER.slice(0, 3), ['acceptedWork', 'verifiedPublications', 'assistedExports']);
 });

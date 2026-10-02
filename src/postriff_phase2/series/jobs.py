@@ -1,7 +1,9 @@
 """Bounded fact-expiry sweep (growth_v2_routes.CRON): when a claim behind a linked draft passes its review-by day, or a
 watched source is withdrawn, deleted or re-approved, the draft gets Queue's blockers within a cron minute — not only
 at the next series edit. It reads and writes only workspaces with such a series (row-locked, SKIP LOCKED), changes
-nothing else, and reports counts. Flag-gated; never raises (growth_v2_routes isolates failures)."""
+nothing else, and reports counts. It runs whether or not RAFII_SERIES_ENABLED is on: turning the flag off stops new
+series work (D-012), never the protection of drafts already linked to a series. It starts no work of its own (no
+model, no draft, no notification). Never raises (growth_v2_routes isolates failures)."""
 from __future__ import annotations
 
 import json
@@ -37,8 +39,6 @@ def _due(campaign, state, now):
 
 
 def tick(hosted, deadline):
-    if not m.enabled():
-        return {"status": "disabled"}
     from ..hosted import audit
     from ..planning_store import sync
     clock = getattr(hosted, "clock", None) or time.time

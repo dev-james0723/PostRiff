@@ -220,12 +220,29 @@ class SourcesTest(unittest.TestCase):
                               "angles": [{"id": "ang-1", "title": "Your own 7-day streak", "factual_requirements": []}], "uncertainty": "Fit is a hypothesis."}],
                     "coverage": {"latest_successful_read": "2026-10-06T10:00:00+00:00", "completeness": "complete_within_scope"}}
         [item] = sources.trend_candidates(envelope)
-        self.assertEqual(item["action"], {"kind": "accept", "requires": ["angleId", "channelId"], "angleIds": ["ang-1"], "revision": 3, "platforms": ["threads"]})
+        self.assertEqual(item["action"], {"kind": "accept", "requires": ["angleId", "channelId"], "angleIds": ["ang-1"],
+                                          "angles": [{"id": "ang-1", "text": "Your own 7-day streak"}], "revision": 3, "platforms": ["threads"]})
         self.assertEqual(item["evidence"][0]["ref"], "r-1")
         self.assertEqual(item["retrievedAt"], at("UTC", 2026, 10, 6, 10, 0))
         self.assertEqual(item["freshnessBasis"], "verified_unexpired_projection")
         brief = composer.compose([item], {"goals": [], "material": []}, [], NOW)["items"][0]
         self.assertEqual(brief["effort"], "quick")
+        self.assertEqual(brief["action"]["angles"], item["action"]["angles"])
+
+    def test_every_trend_angle_option_carries_its_own_words(self):
+        """The accept form offers up to three angles; each comes with text (title, else its contribution), aligned with
+        angleIds, so no option is a bare id. Angle text never enters the material digest."""
+        angles = [{"id": "ang-1", "title": "Your own 7-day streak"}, {"id": "ang-2", "contribution": "  A  student's\nfirst month  "},
+                  {"id": "ang-3"}, {"id": "ang-4", "title": "A fourth angle"}, {"title": "no id"}]
+        envelope = {"data": [{"id": "22222222-2222-4222-8222-222222222222", "revision": 1, "title": "Streaks", "contribution": "Show the routine",
+                              "verification_state": "verified", "angles": angles}], "coverage": {}}
+        [item] = sources.trend_candidates(envelope)
+        self.assertEqual(item["action"]["angleIds"], ["ang-1", "ang-2", "ang-3"])
+        self.assertEqual(item["action"]["angles"], [{"id": "ang-1", "text": "Your own 7-day streak"}, {"id": "ang-2", "text": "A student's first month"},
+                                                    {"id": "ang-3", "text": "Show the routine"}])
+        [renamed] = sources.trend_candidates({**envelope, "data": [{**envelope["data"][0], "angles": [{**angles[0], "title": "Renamed"}] + angles[1:]}]})
+        self.assertNotEqual(renamed["action"]["angles"][0]["text"], item["action"]["angles"][0]["text"])
+        self.assertEqual(composer.material_digest([{**item, "effort": "quick"}]), composer.material_digest([{**renamed, "effort": "quick"}]))
 
     def test_listening_reads_open_stored_opportunities_only(self):
         state = {"coworker": {"listening": {"watchlists": [{"id": "wl1", "query": "adult piano", "goal": "students"}], "opportunities": [

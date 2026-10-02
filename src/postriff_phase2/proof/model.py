@@ -18,7 +18,7 @@ from datetime import date, datetime, time as dtime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-DEFINITION_VERSION = "rafii.proof.v2.2026-10-01"
+DEFINITION_VERSION = "rafii.proof.v2.2026-10-01.1"   # .1: outcome and assisted-export figures carry their evidence ids
 MATURITY_SECONDS = 72 * 3600           # late Queue read-backs, provider metrics and cost settlements usually land by then
 FREQUENCIES = ("weekly", "monthly")
 EVIDENCE_LIMIT = 100                   # ids shown per evidence list (totals stay exact; truncation is flagged)

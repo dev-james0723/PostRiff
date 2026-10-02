@@ -40,9 +40,10 @@ export function useVisualPacks() {
   });
 }
 
-export function useVisualPack(id: string | null) {
+/** One pack. `active: false` (a closing editor) stops fetching but keeps the cached view, so nothing flickers on close. */
+export function useVisualPack(id: string | null, active = true) {
   const { api, w, enabled } = useVisualPackApi();
-  return useQuery({ queryKey: visualPackKeys.pack(w, id ?? ''), queryFn: () => api.get(w, id as string), enabled: enabled && Boolean(id), retry: shouldRetry });
+  return useQuery({ queryKey: visualPackKeys.pack(w, id ?? ''), queryFn: () => api.get(w, id as string), enabled: enabled && Boolean(id) && active, retry: shouldRetry });
 }
 
 /** One server-rendered file as a Blob. A slide's bytes never change for its revision, so it is fetched once. */
@@ -87,7 +88,10 @@ export function usePackAction(id: string) {
   });
 }
 
-/** Downloads the assisted export, then re-reads the pack: the server records the download, the browser doesn't guess it. */
+/**
+ * Downloads the assisted export, then re-reads the pack and the list: the server records the download (and may move the
+ * state to "Downloaded"), the browser doesn't guess it. Slide files are not re-fetched: their bytes never change.
+ */
 export function useDownloadPack(id: string) {
   const { api, w } = useVisualPackApi();
   const client = useQueryClient();
@@ -95,6 +99,7 @@ export function useDownloadPack(id: string) {
     mutationFn: async ({ href, filename }: { href: string; filename: string }) => {
       downloadBlob(await api.file(href), filename);
     },
-    onSettled: () => client.invalidateQueries({ queryKey: visualPackKeys.pack(w, id) })
+    onSettled: () =>
+      Promise.all([client.invalidateQueries({ queryKey: visualPackKeys.pack(w, id) }), client.invalidateQueries({ queryKey: visualPackKeys.list(w) })])
   });
 }

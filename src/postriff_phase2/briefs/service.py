@@ -178,6 +178,13 @@ class BriefService:
         row = cur.fetchone()
         return _edition(row) if row else None
 
+    def _by_digest(self, cur, workspace_id, user_id, digest):
+        """The recipient's latest stored edition with exactly this material digest, or None."""
+        cur.execute(f"""SELECT {EDITION_COLUMNS} FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s AND material_digest=%s
+                        ORDER BY created_at DESC, id DESC LIMIT 1""", (workspace_id, user_id, digest))
+        row = cur.fetchone()
+        return _edition(row) if row else None
+
     def _by_id(self, cur, workspace_id, user_id, edition_id):
         if not isinstance(edition_id, str) or not UUID.match(edition_id):
             return None
@@ -373,10 +380,14 @@ class BriefService:
             if edition is None:
                 raise AlphaError("Brief unavailable.", 404)
         else:
-            composed = self._compose(cur, workspace_id, principal, state, trends, now)
-            if composed["materialDigest"] != request["materialDigest"]:
-                raise AlphaError("The brief changed since you opened it. Review the current version.", 409, code="revision_conflict")
-            edition, _created = self._persist(cur, workspace_id, principal, composed, now)
+            # The version the person saw may already be stored: acting on one card stores it, and that action changes
+            # the composition, so a second card opened from the same page would otherwise get a spurious conflict.
+            edition = self._by_digest(cur, workspace_id, principal, request["materialDigest"])
+            if edition is None:
+                composed = self._compose(cur, workspace_id, principal, state, trends, now)
+                if composed["materialDigest"] != request["materialDigest"]:
+                    raise AlphaError("The brief changed since you opened it. Review the current version.", 409, code="revision_conflict")
+                edition, _created = self._persist(cur, workspace_id, principal, composed, now)
         item = next((i for i in edition["items"] if i["id"] == request["itemId"]), None)
         if item is None:
             raise AlphaError("Brief item unavailable.", 404)
@@ -508,6 +519,10 @@ class BriefService:
     def _deliver(self, cur, workspace_id, user_id, edition, now):
         if edition["deliveredAt"] is not None:
             return {"delivered": False, "reason": "already_delivered"}
+        # One opportunity alert per recipient per local day across all their workspaces. Each cron run holds only its own
+        # workspace's row lock, so runs for the same person in two workspaces are serialized here (until commit): the
+        # second one then sees the first one's delivery and stops at the daily cap.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("brief-recipient-day:" + str(user_id),))
         cur.execute("""SELECT items FROM public.pr_brief_editions WHERE workspace_id=%s AND recipient_user_id=%s AND edition_key=%s AND delivered_at IS NOT NULL""",
                     (workspace_id, user_id, edition["editionKey"]))
         told = {item["id"] for (items,) in cur.fetchall() for item in _json(items)}

@@ -227,20 +227,42 @@ def delete_derived(cur, workspace_id, job_id):
 
 
 # --- storage deletion queue ------------------------------------------------------------------------------------------------
-def queue_purge(cur, upload_row, reason, *, after_token=False):
-    """Mark the object for deletion and queue it (twice for a still-valid signed URL: now, and once it has expired)."""
+def queue_purge(cur, upload_row, reason):
+    """Mark the object for deletion and queue it now — and, while a signed upload URL for it can still write
+    (token_expires_at in the future, whatever the upload's state), once more an hour after that URL expires. A URL
+    can't replace an existing object, but it can re-create one that was already deleted; the second deletion removes
+    it, and nothing can write after that."""
     if not upload_row.get("objectName") or upload_row.get("objectState") in ("none", "deleted"):
         return False
     cur.execute("INSERT INTO public.pr_source_upload_purges(workspace_id,upload_id,bucket,object_name,reason) VALUES(%s,%s,%s,%s,%s)",
                 (upload_row["workspaceId"], upload_row["id"], upload_row["bucket"], upload_row["objectName"], reason))
-    if after_token:
-        cur.execute("INSERT INTO public.pr_source_upload_purges(workspace_id,upload_id,bucket,object_name,reason,not_before) "
-                    "SELECT %s,%s,%s,%s,%s,token_expires_at+interval '1 hour' FROM public.pr_source_uploads "
-                    "WHERE workspace_id=%s AND id=%s AND token_expires_at > now()",
-                    (upload_row["workspaceId"], upload_row["id"], upload_row["bucket"], upload_row["objectName"], reason,
-                     upload_row["workspaceId"], upload_row["id"]))
+    queue_after_token(cur, upload_row, reason)
     update_upload(cur, upload_row["workspaceId"], upload_row["id"], objectState="deleting")
     return True
+
+
+def queue_after_token(cur, upload_row, reason):
+    """Queue the object's deletion for an hour after its latest signed upload URL expires (nothing when every URL has
+    already expired). Returns whether a row was queued."""
+    if not upload_row.get("objectName"):
+        return False
+    cur.execute("INSERT INTO public.pr_source_upload_purges(workspace_id,upload_id,bucket,object_name,reason,not_before) "
+                "SELECT %s,%s,%s,%s,%s,token_expires_at+interval '1 hour' FROM public.pr_source_uploads "
+                "WHERE workspace_id=%s AND id=%s AND token_expires_at > now()",
+                (upload_row["workspaceId"], upload_row["id"], upload_row["bucket"], upload_row["objectName"], reason,
+                 upload_row["workspaceId"], upload_row["id"]))
+    return cur.rowcount > 0
+
+
+def renew_token(cur, workspace_id, upload_id, seconds):
+    """Record the lifetime of a newly signed upload URL before it is handed out, so the post-expiry purge and the
+    expiry sweep cover every URL ever issued. Only a pending upload within its first window can get one (a replay of
+    `begin` can't keep renewing an upload forever). The new expiry, or None."""
+    cur.execute("UPDATE public.pr_source_uploads SET token_expires_at=greatest(token_expires_at, now()+make_interval(secs=>%s)), updated_at=now() "
+                "WHERE workspace_id=%s AND id=%s AND state='pending' AND created_at > now()-make_interval(secs=>%s) "
+                "RETURNING extract(epoch from token_expires_at)::float8", (seconds, workspace_id, upload_id, seconds))
+    row = cur.fetchone()
+    return row[0] if row else None
 
 
 def installed(cur):

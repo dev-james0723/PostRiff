@@ -119,18 +119,31 @@ class DefinitionsTest(unittest.TestCase):
 
 
 class WeekCompletionTest(unittest.TestCase):
-    week = {"id": "wk_1", "slots": [{"id": "a", "status": "published"}, {"id": "b", "status": "ready"}, {"id": "c", "status": "rejected"}]}
+    week = {"id": "wk_1", "slots": [{"id": "a", "status": "published"}, {"id": "b", "status": "ready", "variantId": "v-b"}, {"id": "c", "status": "rejected"}]}
+    drafts = [{"id": "v-b", "revision": 3}]
 
     def test_assisted_and_verified_are_separate_and_scope_is_explicit(self):
         complete, parts = m.week_completion(self.week)
         self.assertEqual((complete, parts["basis"], parts["committed"]), (False, "non_rejected_slots", 2))
-        first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]}, "handoffs": {"b": {"state": "user_confirmed_used"}}}
-        complete, parts = m.week_completion(self.week, first_week)
-        self.assertEqual((complete, parts), (True, {"basis": "frozen_scope", "committed": 2, "verified": 1, "assisted": 1}))
+        first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]},
+                      "handoffs": {"b": {"state": "user_confirmed_used", "variantId": "v-b", "variantRevision": 3}}}
+        complete, parts = m.week_completion(self.week, first_week, self.drafts)
+        self.assertEqual((complete, parts), (True, {"basis": "frozen_scope", "committed": 2, "verified": 1, "assisted": 1, "staleHandoffs": 0}))
 
     def test_an_export_alone_never_completes_a_week(self):
-        first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]}, "handoffs": {"b": {"state": "export_ready"}}}
-        self.assertFalse(m.week_completion(self.week, first_week)[0])
+        first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]}, "handoffs": {"b": {"state": "export_ready", "variantId": "v-b", "variantRevision": 3}}}
+        self.assertFalse(m.week_completion(self.week, first_week, self.drafts)[0])
+
+    def test_a_handoff_of_an_earlier_revision_is_stale_and_never_completes_a_week(self):
+        """As in the first-week view: the person confirmed using the export of revision 2, then the draft was edited to
+        revision 3, so what was posted is not this draft. Without the drafts no handoff can be shown current."""
+        first_week = {"scope": {"weekId": "wk_1", "slotIds": ["a", "b"]},
+                      "handoffs": {"b": {"state": "user_confirmed_used", "variantId": "v-b", "variantRevision": 2}}}
+        complete, parts = m.week_completion(self.week, first_week, self.drafts)
+        self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"]), (False, 0, 1))
+        self.assertTrue(m.week_completion(self.week, first_week, {"v-b": {"id": "v-b", "revision": 2}})[0])
+        complete, parts = m.week_completion(self.week, first_week)                       # drafts unknown: not counted
+        self.assertEqual((complete, parts["assisted"], parts["staleHandoffs"]), (False, 0, 1))
 
 
 if __name__ == "__main__":

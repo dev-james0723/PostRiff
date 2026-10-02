@@ -348,6 +348,16 @@ ran = intake.process(wid, OWNER, stopped["id"])
 check("AC12 a cancelled intake never runs", ran["job"]["state"] == "cancelled" and ran["job"]["reason"] == "user_cancelled" and results(stopped["id"]) == 0 and ran["objectState"] == "deleted", ran["job"])
 refused("AC12 a cancelled intake has no text to leak", lambda: intake.text(wid, OWNER, stopped["id"]), 409, "not_ready")
 refused("AC12 a cancelled intake can't become a source", lambda: intake.create_source(wid, OWNER, stopped["id"], {"idempotencyKey": key(), "expectedRevision": 0, "confirmReviewed": True}), 409)
+# A committed upload's signed URL can still write until it expires: after the immediate deletion, one more is queued for
+# an hour after that URL expires, so an object re-created through the URL is deleted too and nothing can write after.
+stopped_object = f"{uuid.UUID(stopped['id']).hex}.pdf"
+later = sql("SELECT reason, not_before > now() + interval '2 hours' FROM public.pr_source_upload_purges WHERE upload_id=%s", (stopped["id"],))
+check("a stop queues a second deletion for after the signed URL expires (any upload state)", later == [("user_cancelled", True)], later)
+storage.put(wid, stopped_object, b"%PDF-1.4 written again through the still-valid URL", "application/pdf")
+sql("UPDATE public.pr_source_upload_purges SET not_before=now() WHERE upload_id=%s", (stopped["id"],))   # time passes: the URL has expired
+jobs.drain(intake)
+check("an object re-created after its deletion is deleted by the post-expiry purge", (wid, stopped_object) not in storage.objects
+      and not sql("SELECT 1 FROM public.pr_source_upload_purges WHERE upload_id=%s", (stopped["id"],)))
 racing = upload("pdf", pdf_bytes([PARAGRAPH]), name="race.pdf")
 claimed = jobs.claim(intake, job_id=racing["job"]["id"])
 intake.cancel(wid, OWNER, racing["id"])
@@ -418,6 +428,16 @@ begin_key = key()
 first_begin = intake.begin(wid, OWNER, {"kind": "pdf", "name": "same.pdf", "mime": "application/pdf", "bytes": 1234, "idempotencyKey": begin_key})
 second_begin = intake.begin(wid, OWNER, {"kind": "pdf", "name": "same.pdf", "mime": "application/pdf", "bytes": 1234, "idempotencyKey": begin_key})
 check("AC29 a repeated begin returns the same upload", first_begin["upload"]["id"] == second_begin["upload"]["id"])
+# A replay signs a fresh URL that storage keeps valid for two hours from now: its lifetime is recorded before it is
+# handed out (so every later purge covers it), and only within the upload's first window.
+sql("UPDATE public.pr_source_uploads SET token_expires_at=now()+interval '10 minutes' WHERE id=%s", (first_begin["upload"]["id"],))
+third_begin = intake.begin(wid, OWNER, {"kind": "pdf", "name": "same.pdf", "mime": "application/pdf", "bytes": 1234, "idempotencyKey": begin_key})
+left = float(sql("SELECT extract(epoch from token_expires_at - now()) FROM public.pr_source_uploads WHERE id=%s", (first_begin["upload"]["id"],))[0][0])
+check("a replayed begin records its fresh URL's lifetime before handing it out", third_begin["transfer"] and left > 7000
+      and third_begin["transfer"]["expiresAt"] - time.time() > 7000, (left, third_begin["transfer"]))
+sql("UPDATE public.pr_source_uploads SET created_at=now()-interval '3 hours' WHERE id=%s", (first_begin["upload"]["id"],))
+refused("a replay after the upload's first window gets no new URL", lambda: intake.begin(wid, OWNER, {"kind": "pdf", "name": "same.pdf", "mime": "application/pdf", "bytes": 1234,
+                                                                                                    "idempotencyKey": begin_key}), 409, "upload_expired")
 refused("AC29 a begin key reused for another file conflicts", lambda: intake.begin(wid, OWNER, {"kind": "pdf", "name": "other.pdf", "mime": "application/pdf", "bytes": 99, "idempotencyKey": begin_key}), 409, "idempotency_conflict")
 refused("AC36 another workspace can't read this upload by id", lambda: intake.status(other_wid, OTHER, pdf["id"]), 404)
 refused("AC36 nor cancel it", lambda: intake.cancel(other_wid, OTHER, pdf["id"]), 404)
@@ -479,7 +499,8 @@ sql("UPDATE public.pr_source_uploads SET retain_until=now()-interval '1 minute' 
 storage.fail_delete = True
 jobs.sweep(intake)
 failing = jobs.drain(intake)
-purge_row = sql("SELECT attempts, last_error FROM public.pr_source_upload_purges WHERE upload_id=%s", (pdf["id"],))
+# The immediate deletion (the second row waits for the signed URL to expire).
+purge_row = sql("SELECT attempts, last_error FROM public.pr_source_upload_purges WHERE upload_id=%s ORDER BY not_before LIMIT 1", (pdf["id"],))
 check("R-NFR-02 a failed storage deletion is visible and kept for retry", failing["failed"] >= 1 and purge_row and purge_row[0][0] == 1 and "could not delete" in purge_row[0][1]
       and intake.status(wid, OWNER, pdf["id"])["objectState"] == "deleting", (failing, purge_row))
 storage.fail_delete = False

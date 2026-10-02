@@ -872,8 +872,13 @@ def mark_drafting(state, series_id, episode_id, task_id, occurrence_id, now):
 
 
 def followable(state, series_id):
-    """An automation may follow an existing, unarchived series (validated when the automation is saved)."""
-    require_enabled()
+    """An automation may follow an existing, unarchived series (validated when the automation is saved). With the
+    series feature off (D-012: admission stops) a new follow is refused, but a follow an automation already has is
+    kept, so saving that automation still works while the person can clear the follow."""
+    if not enabled():
+        if followers(state, series_id):
+            return find(state, series_id, required=False)
+        require_enabled()
     campaign = find(state, series_id, required=False)
     if campaign is None or campaign["series"].get("status") == "archived":
         raise AlphaError("Choose a series from this workspace.", 409)

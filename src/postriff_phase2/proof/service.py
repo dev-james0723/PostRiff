@@ -116,6 +116,27 @@ def _scope_label(scope):
     return "format" if scope.get("contentType") else "language" if scope.get("language") else "account" if scope.get("channelId") else "goal" if scope.get("goalId") else "workspace"
 
 
+def _weeks(dates):
+    return dates[0] if len(dates) == 1 else ", ".join(dates[:-1]) + " and " + dates[-1]
+
+
+def planning_note(status, applies_date, already_planned=()):
+    """What the decision does to weekly planning, stated exactly: the first week it reaches, and the weeks that were
+    already planned (a stored week is never re-planned, so they do not get it)."""
+    if status in strategy.IN_EFFECT:
+        note = f"Applies to weekly plans from the week of {applies_date} on."
+        if already_planned:
+            plural = len(already_planned) > 1
+            note += (f" The week{'s' if plural else ''} of {_weeks(list(already_planned))} {'were' if plural else 'was'} already planned, so "
+                     f"{'they do' if plural else 'it does'} not use this decision.")
+        return note + " It never changes your voice or approves anything."
+    if status == "revoked":
+        return "Revoked: weekly plans and drafts not yet written stop using it now. It never changed your voice or approved anything."
+    if status == "rejected":
+        return "Rejected: it is not proposed again."
+    return "Not decided yet."
+
+
 class ProofService:
     def __init__(self, hosted):
         self.hosted = hosted
@@ -167,6 +188,35 @@ class ProofService:
             log.warning(json.dumps({"event": "proof.source_unreadable", "source": name, "reason": type(error).__name__}))
             return fallback
 
+    @staticmethod
+    def _table(cur, name):
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (f"public.{name}",))
+        return bool(cur.fetchone()[0])
+
+    def _pack_evidence(self, cur, workspace_id, start, end):
+        """The packs behind the assisted-export counts: every pack with an export-ready, downloaded or confirmed-used
+        fact in the period (handoff_counts returns counts only). Bounded; truncation is flagged by model.figure."""
+        if not self._table(cur, "pr_visual_pack_events"):
+            return []
+        cur.execute("""SELECT DISTINCT pack_id::text FROM public.pr_visual_pack_events WHERE workspace_id=%s AND occurred_at>=to_timestamp(%s)
+                       AND occurred_at<to_timestamp(%s) AND kind = ANY(%s) ORDER BY 1 LIMIT %s""",
+                    (workspace_id, start, end, ["export_ready", "downloaded", "user_confirmed_used"], model.EVIDENCE_LIMIT + 1))
+        return [r[0] for r in cur.fetchall()]
+
+    def _result_evidence(self, cur, workspace_id, start, end):
+        """The result events behind the outcome figures, selected as results.period_summary selects them: original,
+        non-test events whose current version (the latest amendment, else the event) occurred in the period, reversed
+        ones included (they are counted as reversed). period_summary returns summaries only. Bounded and flagged."""
+        if not self._table(cur, "pr_result_events"):
+            return []
+        cur.execute("""SELECT e.id::text FROM public.pr_result_events e
+                       CROSS JOIN LATERAL (SELECT x.occurred_at FROM public.pr_result_events x WHERE x.workspace_id=e.workspace_id
+                                           AND (x.id=e.id OR (x.corrects_id=e.id AND x.kind='amendment'))
+                                           ORDER BY (x.kind='amendment') DESC, x.created_at DESC, x.id DESC LIMIT 1) v
+                       WHERE e.workspace_id=%s AND e.kind='event' AND NOT e.test AND v.occurred_at>=to_timestamp(%s) AND v.occurred_at<to_timestamp(%s)
+                       ORDER BY 1 LIMIT %s""", (workspace_id, start, end, model.EVIDENCE_LIMIT + 1))
+        return [r[0] for r in cur.fetchall()]
+
     def _assisted(self, cur, workspace_id, start, end):
         definition = "Assisted exports (export ready, downloaded, confirmed used), counted apart from verified publications and never added to them."
         module = self._optional("postriff_phase2.visual_pack.service")
@@ -178,8 +228,9 @@ class ProofService:
             value = {k: int(raw[k]) for k in ("exportReady", "downloaded", "userConfirmedUsed") if isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool)}
             if not value:
                 return model.unavailable(definition, "visual_pack_no_counts")
-            evidence = {"packIds": raw.get("packIds") or raw.get("evidenceIds") or []}
-            return model.figure(value, definition=definition, evidence=evidence, data_state=raw.get("dataState") if raw.get("dataState") in ("available", "partial") else "available",
+            packs = raw.get("packIds") or raw.get("evidenceIds") or self._pack_evidence(cur, workspace_id, start, end)
+            return model.figure(value, definition=definition, evidence={"packIds": packs},
+                                data_state=raw.get("dataState") if raw.get("dataState") in ("available", "partial") else "available",
                                 evidenceQuery={"resource": "visual-packs", "from": start, "to": end})
         return self._savepoint(cur, "proof_assisted", read, model.unavailable(definition, "visual_pack_unreadable"))
 
@@ -193,8 +244,9 @@ class ProofService:
             raw = module.period_summary(cur, workspace_id, start, end) or {}
             value = {p: model.jsonable(raw.get(p)) for p in ("provider_native", "first_party_reported", "user_declared")}
             state = raw.get("dataState") if raw.get("dataState") in ("available", "partial", "unavailable") else "partial"
+            results = raw.get("evidenceIds") or raw.get("resultIds") or self._result_evidence(cur, workspace_id, start, end)
             return model.figure(value, definition=raw.get("definition") and f"{definition} Association: {raw['definition']}." or definition,
-                                evidence={"resultIds": raw.get("evidenceIds") or raw.get("resultIds") or []}, data_state=state,
+                                evidence={"resultIds": results}, data_state=state,
                                 asOf=model.jsonable(raw.get("asOf")), evidenceQuery={"resource": "results", "from": start, "to": end})
         return self._savepoint(cur, "proof_outcomes", read, model.unavailable(definition, "results_unreadable"))
 
@@ -376,16 +428,27 @@ class ProofService:
         return ([{"figure": "providerCost", "restricted": True} if entry.get("figure") == "providerCost" else entry for entry in correction or []],
                 {k: v for k, v in (watermark or {}).items() if k != "usage"})
 
-    def _decision_view(self, decision):
+    def _decision_view(self, decision, applies_date=None):
+        """`appliesFromDate` is the local Monday (workspace zone) the decision first applies to; clients show it as
+        it is instead of formatting the `appliesFrom` instant in the viewer's own zone."""
         return {k: decision[k] for k in ("id", "revision", "status", "kind", "statement", "scope", "appliesFrom", "createdAt")} | {
+            "appliesFromDate": applies_date,
             "basis": {k: v for k, v in decision["basis"].items() if k in ("experimentId", "sourceId", "briefActionId", "proofId", "supportedFactor", "dimension")},
             "inEffect": decision["status"] in strategy.IN_EFFECT,
             "actions": sorted(strategy.TRANSITIONS.get(decision["status"], {}))}
 
-    def _proof_view(self, cur, workspace_id, revisions, member, now, legacy_ids):
+    @staticmethod
+    def _applies_dates(state, decisions, zone_name):
+        """{decision id: local applies-from date}: the date recorded when it was adopted (in the planning projection)
+        while it is in effect, else its instant read in the workspace zone."""
+        projected = {d.get("id"): d.get("appliesFromDate") for d in strategy.active(state or {})}
+        return {d["id"]: projected.get(d["id"]) or (model.local_date(d["appliesFrom"], zone_name) if d.get("appliesFrom") else None) for d in decisions}
+
+    def _proof_view(self, cur, workspace_id, revisions, member, now, legacy_ids, state=None):
         latest = revisions[0]
         owner = member.role == "owner"
         decisions = self._latest_decisions(cur, workspace_id, proof_revision_ids=[r["id"] for r in revisions])
+        dates = self._applies_dates(state, decisions, latest["timeZone"])
         correction, watermark = self._redact_meta(latest["correction"], latest["sourceWatermark"], owner)
         return {"proofId": latest["proofId"], "frequency": latest["frequency"], "periodStart": latest["periodStart"], "periodEnd": latest["periodEnd"],
                 "timeZone": latest["timeZone"], "timeZoneSource": latest["timeZoneSource"], "legacyRecap": latest["proofId"] in legacy_ids,
@@ -394,7 +457,7 @@ class ProofService:
                            "correction": correction, "sourceWatermark": watermark, "counts": self._redact(latest["counts"], owner)},
                 "revisions": [{**{k: r[k] for k in ("id", "revision", "asOf", "dataState", "reason", "createdAt", "definitionVersion")},
                                "correction": self._redact_meta(r["correction"], {}, owner)[0]} for r in revisions],
-                "nextStep": {"proposals": [self._decision_view(d) for d in sorted(decisions, key=lambda d: (d["createdAt"], d["id"]))],
+                "nextStep": {"proposals": [self._decision_view(d, dates.get(d["id"])) for d in sorted(decisions, key=lambda d: (d["createdAt"], d["id"]))],
                              "rule": "Deterministic proposals from measured experiments and ideas saved from your brief; no model call. Rejected or revoked proposals do not return."}}
 
     @staticmethod
@@ -420,8 +483,9 @@ class ProofService:
             cur.execute(sql + " ORDER BY period_start DESC, proof_id DESC LIMIT %s", params + [size + 1])
             found = cur.fetchall()
             page, more = found[:size], len(found) > size
-            legacy = self._legacy_ids(_state(row))
-            proofs = [self._proof_view(cur, workspace_id, self._revisions(cur, workspace_id, proof_id, 20), member, now, legacy) for proof_id, _start in page]
+            state = _state(row)
+            legacy = self._legacy_ids(state)
+            proofs = [self._proof_view(cur, workspace_id, self._revisions(cur, workspace_id, proof_id, 20), member, now, legacy, state) for proof_id, _start in page]
             return {"proofs": proofs, "definitionVersion": model.DEFINITION_VERSION, "asOf": now,
                     "nextCursor": encode_cursor(page[-1][1], page[-1][0]) if more and page else None}
 
@@ -436,7 +500,7 @@ class ProofService:
             revisions = self._revisions(cur, workspace_id, proof_id)
             if not revisions:
                 raise AlphaError("Proof unavailable.", 404)
-            return {"proof": self._proof_view(cur, workspace_id, revisions, member, self.clock(), self._legacy_ids(_state(row)))}
+            return {"proof": self._proof_view(cur, workspace_id, revisions, member, self.clock(), self._legacy_ids(_state(row)), _state(row))}
 
     def revision(self, workspace_id, token, proof_id, number):
         require_enabled()
@@ -493,7 +557,7 @@ class ProofService:
                 from ..hosted import audit
                 audit(cur, workspace_id, principal, "proof.revised", revision["proofId"], {"revision": revision["revision"], "reason": revision["reason"], "frequency": frequency})
             revisions = self._revisions(cur, workspace_id, revision["proofId"], 20)
-            view = self._proof_view(cur, workspace_id, revisions, member, now, self._legacy_ids(state))
+            view = self._proof_view(cur, workspace_id, revisions, member, now, self._legacy_ids(state), state)
             return {"proof": view, "appended": appended, "revision": revision["revision"], "verified": view["latest"]["id"] == revision["id"]}
 
     # --- strategy decisions -------------------------------------------------------------------------------------------
@@ -523,8 +587,12 @@ class ProofService:
                                WHERE workspace_id=%s AND decision_id = ANY(%s) ORDER BY decision_id, revision""", (workspace_id, [d["id"] for d in page]))
                 for decision_id, number, state_name, decided_by, at in cur.fetchall():
                     history.setdefault(decision_id, []).append({"revision": number, "status": state_name, "decidedBy": decided_by, "at": float(at)})
-            projection = strategy.active(_state(row))
-            return {"decisions": [{**self._decision_view(d), "versions": history.get(d["id"], [])[-20:]} for d in page],
+            state = _state(row)
+            projection = strategy.active(state)
+            dates = {}
+            if any(d.get("appliesFrom") for d in page):
+                dates = self._applies_dates(state, page, self._zone(cur, workspace_id, state)[0])
+            return {"decisions": [{**self._decision_view(d, dates.get(d["id"])), "versions": history.get(d["id"], [])[-20:]} for d in page],
                     "inEffect": [{k: d.get(k) for k in ("id", "revision", "kind", "statement", "scope", "appliesFromDate")} for d in projection],
                     "canDecide": member.role == "owner",
                     "nextCursor": encode_cursor(last_at, page[-1]["id"]) if more and page else None}
@@ -567,7 +635,8 @@ class ProofService:
                 prior = _decision(prior)
                 if prior["decidedBy"] != principal or prior["requestDigest"] != request["requestDigest"]:
                     raise AlphaError("This request key already belongs to a different decision.", 409, code="idempotency_conflict")
-                return {"decision": self._decision_view(prior), "replayed": True, "verified": True}
+                projected = next((d for d in strategy.active(_state(row)) if d["id"] == decision_id and d.get("revision") == prior["revision"]), None)
+                return {"decision": self._decision_view(prior, (projected or {}).get("appliesFromDate")), "replayed": True, "verified": True}
             latest = (self._latest_decisions(cur, workspace_id, [decision_id]) or [None])[0]
             if latest is None:
                 raise AlphaError("Decision unavailable.", 404)
@@ -582,13 +651,15 @@ class ProofService:
                 if statement == latest["statement"] and scope == latest["scope"]:
                     raise AlphaError("Change the wording or narrow the scope, or accept it as it is.", 400)
             applies_from = latest["appliesFrom"]
-            applies_date = None
+            applies_date, already_planned = None, []
             if target in strategy.IN_EFFECT:
                 zone_name, _source = self._zone(cur, workspace_id, state)
                 if latest["status"] == "proposed" or applies_from is None:
-                    applies_from, applies_date = strategy.next_week_start(now, zone_name)
+                    # A week already planned is never planned again, so adoption starts at the first week not planned yet.
+                    applies_from, applies_date, already_planned = strategy.first_unplanned_week(state, now, zone_name)
                 else:
-                    applies_date = model.local_date(applies_from, zone_name)
+                    projected_before = next((d for d in strategy.active(state) if d["id"] == decision_id), None)
+                    applies_date = (projected_before or {}).get("appliesFromDate") or model.local_date(applies_from, zone_name)
             cur.execute(f"""INSERT INTO public.pr_strategy_decisions(workspace_id,decision_id,revision,status,kind,statement,scope,basis,proof_revision_id,
                                        applies_from,decided_by,idempotency_key,request_digest,created_at)
                             VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,to_timestamp(%s),%s,%s,%s,to_timestamp(%s)) RETURNING {DECISION_COLUMNS}""",
@@ -607,9 +678,9 @@ class ProofService:
                                values={"decision": request["action"], "scope": _scope_label(scope)})
             projected = next((d for d in strategy.active(state) if d["id"] == decision_id), None)
         verified = (projected is not None) == (target in strategy.IN_EFFECT) and (projected is None or projected["revision"] == record["revision"])
-        return {"decision": self._decision_view(record), "replayed": False, "verified": verified,
-                "planning": {"inEffect": projected is not None, "appliesFromDate": applies_date,
-                             "note": "Applies to weekly plans from that week on; it never changes your voice or approves anything."}}
+        return {"decision": self._decision_view(record, applies_date), "replayed": False, "verified": verified,
+                "planning": {"inEffect": projected is not None, "appliesFromDate": applies_date, "alreadyPlanned": already_planned,
+                             "note": planning_note(target, applies_date, already_planned)}}
 
     # --- cron ---------------------------------------------------------------------------------------------------------
     def cron(self, deadline, max_workspaces=10):

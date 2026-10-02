@@ -13,7 +13,7 @@ import type { SeriesSummary } from '@/lib/growth-v2/series-types';
 import { coverageLine, fill, type SeriesCopy } from './series-copy';
 import { SeriesCreateDialog } from './series-create';
 import { SeriesDetailDialog } from './series-detail';
-import { useSeriesCopy } from './use-series-copy';
+import { useSeriesCopy, useSeriesLang } from './use-series-copy';
 
 function SeriesRow({ item, copy, onOpen }: { item: SeriesSummary; copy: SeriesCopy; onOpen: () => void }) {
   const origin = item.origin.kind === 'post'
@@ -44,6 +44,7 @@ function SeriesRow({ item, copy, onOpen }: { item: SeriesSummary; copy: SeriesCo
  */
 export function SeriesSection() {
   const copy = useSeriesCopy();
+  const lang = useSeriesLang();
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const [archived, setArchived] = useState(false);
@@ -53,7 +54,7 @@ export function SeriesSection() {
   if (seriesOff(list)) return null;
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   return (
-    <Surface as='section' material='quiet' radius='card' padding='md' aria-labelledby='series-heading' className='flex flex-col gap-3'>
+    <Surface as='section' lang={lang} material='quiet' radius='card' padding='md' aria-labelledby='series-heading' className='flex flex-col gap-3'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='flex min-w-0 flex-[1_1_18rem] flex-col gap-1'>
           <h2 id='series-heading' className='text-base font-medium'>{copy.sectionTitle}</h2>

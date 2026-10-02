@@ -158,6 +158,25 @@ class SeriesLifecycleTest(Base):
         self.assertEqual(draft["unknowns"], [])
         self.assertEqual(self.service.get("w1", "owner", series["id"])["series"]["episodes"][0]["factState"], "ok")
 
+    def test_d012_the_sweep_keeps_gating_linked_drafts_with_the_flag_off(self):
+        """Turning RAFII_SERIES_ENABLED off stops new series work, never the protection of drafts already linked: the
+        sweep still gates a draft whose claim expired, while creating a series stays refused."""
+        series = self.create()["series"]
+        first = series["episodes"][0]["id"]
+        self.act("approve", series["id"], first)
+        self.repo.workspaces["w1"]["state"]["variants"].append(variant("d1", "Five focused minutes: a drill you can do tonight."))
+        self.act("link", series["id"], first, variantId="d1", acknowledgedWarnings=[])
+        self.clock[0] = NOW + 400 * DAY
+        with Flags(RAFII_SERIES_ENABLED=False):
+            swept = jobs_tick(self)
+            with self.assertRaises(AlphaError) as caught:
+                self.create()
+        self.assertEqual(caught.exception.code, "feature_disabled")
+        self.assertEqual((swept["status"], swept["workspaces"], swept["gatedDrafts"]), ("ok", 1, 1))
+        draft = next(v for v in self.state()["variants"] if v["id"] == "d1")
+        self.assertTrue(draft["needsReview"])
+        self.assertTrue(draft["unknowns"][0].startswith(m.UNKNOWN_PREFIX))
+
     def test_ac21_deleted_source_propagates_to_episodes_drafts_and_evergreen(self):
         series = self.create(origin={"kind": "source", "id": "s1"})["series"]
         first = series["episodes"][0]["id"]

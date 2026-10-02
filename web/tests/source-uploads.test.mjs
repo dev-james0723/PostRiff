@@ -108,8 +108,11 @@ test('known error codes are said in the person’s language; others keep the ser
   assert.equal(errorText('review_required', 'Review the text first: nothing becomes a source until a person has read it.', 'zh-Hant'), '請先檢查文字。');
   assert.equal(errorText('insufficient_budget', 'This transcription can use up to 1.2 credits.', 'en'), 'This transcription can use up to 1.2 credits.');
   assert.equal(errorText('something_else', 'Server words.', 'zh-Hant'), 'Server words.');
-  // AC11: a limit refusal keeps the measured value from the server in every language.
-  assert.equal(errorText('over_limit', 'This recording is 10:01 long; the limit is 10:00.', 'zh-Hant'), 'This recording is 10:01 long; the limit is 10:00.');
+  // AC11: a limit refusal keeps the measured value from the server in every language: as sent in English, said again
+  // with the same numbers in Traditional Chinese, and left as sent when its shape is new.
+  assert.equal(errorText('over_limit', 'This recording is 10:01 long; the limit is 10:00.', 'en'), 'This recording is 10:01 long; the limit is 10:00.');
+  assert.equal(errorText('over_limit', 'This recording is 10:01 long; the limit is 10:00.', 'zh-Hant'), '這段錄音長 10:01，上限是 10:00。');
+  assert.equal(errorText('over_limit', 'A limit sentence of a new shape: 7 MB.', 'zh-Hant'), 'A limit sentence of a new shape: 7 MB.');
   assert.equal(errorText(undefined, 'Fallback.', 'en'), 'Fallback.');
 });
 

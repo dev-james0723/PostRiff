@@ -84,6 +84,67 @@ class Export(unittest.TestCase):
             self.assertEqual(bundle.read("caption.txt").decode(), "Caption text\n")
 
 
+class ExportFormats(unittest.TestCase):
+    """A recorded export's sha256 can never change (the database keeps it append-only), so a download rebuilds it with
+    the exact format it was recorded with: each format pins its handoff text, manifest shape and compression."""
+
+    # Changing a recorded handoff version breaks every earlier export: add a version instead (and a new format).
+    PINNED_HANDOFF = {1: "126c4c73967a0c4a"}
+
+    def test_handoff_versions_are_never_edited_in_place(self):
+        import hashlib
+        for version, prefix in self.PINNED_HANDOFF.items():
+            self.assertTrue(hashlib.sha256(service.HANDOFF_TEXTS[version].encode()).hexdigest().startswith(prefix),
+                            f"handoff v{version} changed; add a new version and export format instead")
+        for fmt, spec in service.EXPORT_FORMATS.items():
+            self.assertIn(spec["handoff"], service.HANDOFF_TEXTS, fmt)
+        self.assertIn(service.EXPORT_FORMAT, service.EXPORT_FORMATS)
+
+    def test_each_format_lays_the_zip_out_as_pinned(self):
+        record, files = manifest()
+        legacy, current = service.build_zip(record, files, 1), service.build_zip(record, files, 2)
+        self.assertEqual(service.build_zip(record, files), current)                       # new exports use format 2
+        with zipfile.ZipFile(io.BytesIO(legacy)) as old, zipfile.ZipFile(io.BytesIO(current)) as new:
+            self.assertEqual(old.namelist(), new.namelist())
+            self.assertEqual(old.getinfo("HANDOFF.txt").compress_type, zipfile.ZIP_DEFLATED)   # format 1 depended on zlib
+            self.assertTrue(all(info.compress_type == zipfile.ZIP_STORED for info in new.infolist()))   # format 2 never does
+            self.assertNotIn("exportFormat", json.loads(old.read("manifest.json")))
+            self.assertEqual(json.loads(new.read("manifest.json"))["exportFormat"], 2)
+            self.assertEqual(old.read("HANDOFF.txt"), new.read("HANDOFF.txt"))
+
+    def test_the_recorded_digest_names_the_format(self):
+        for fmt in service.EXPORT_FORMATS:
+            rev = {"approvalDigest": "a" * 64, "exportSha256": "b" * 64, "exportBytes": 1234,
+                   "exportDigest": service.export_digest("a" * 64, "b" * 64, 1234, fmt)}
+            self.assertEqual(service.recorded_format(rev), fmt)
+        self.assertIsNone(service.recorded_format({"approvalDigest": "a" * 64, "exportSha256": "b" * 64, "exportBytes": 1234, "exportDigest": "c" * 64}))
+
+    def test_a_later_wording_change_never_breaks_an_earlier_export(self):
+        record, files = manifest()
+        hosted = type("Hosted", (), {"assets": type("Assets", (), {"storage": type("S", (), {
+            "get": staticmethod(lambda workspace_id, category, name: files[next(s["position"] for s in record["slides"] if s["objectName"] == name)])})()})()})()
+        svc = service.VisualPackService(hosted)
+        archive = service.build_zip(record, files)
+        import hashlib
+        sha = hashlib.sha256(archive).hexdigest()
+        rev = {"manifest": record, "approvalDigest": "a" * 64, "exportSha256": sha, "exportBytes": len(archive),
+               "exportDigest": service.export_digest("a" * 64, sha, len(archive), service.EXPORT_FORMAT)}
+        self.assertEqual(svc._rebuild(WID, rev), archive)
+        # A later deploy rewords the handoff note as a new version and a new format: the recorded export still rebuilds.
+        from unittest import mock
+        with mock.patch.dict(service.HANDOFF_TEXTS, {2: "Reworded handoff note.\n"}), \
+                mock.patch.dict(service.EXPORT_FORMATS, {3: {"handoff": 2, "deflate": False, "manifestFormat": True}}), \
+                mock.patch.object(service, "EXPORT_FORMAT", 3):
+            self.assertNotEqual(service.build_zip(record, files), archive)
+            self.assertEqual(svc._rebuild(WID, rev), archive)
+        # Bytes that really differ from the record (or an unknown digest) are refused with the way on: a new version.
+        for broken in ({**rev, "exportSha256": "0" * 64}, {**rev, "exportDigest": "0" * 64}):
+            with self.assertRaises(AlphaError) as caught:
+                svc._rebuild(WID, broken)
+            self.assertEqual((caught.exception.status, caught.exception.code), (502, "integrity_failed"))
+            self.assertIn("make a new version", str(caught.exception))
+
+
 class App:
     def __init__(self, body=None, query=None):
         self.body, self.query, self.sent = body or {}, query or {}, None

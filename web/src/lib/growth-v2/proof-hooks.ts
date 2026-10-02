@@ -6,7 +6,7 @@
  * strategy list and the Weekly plan (the next plan reads accepted decisions).
  */
 import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { createProofApi } from './proof';
@@ -15,9 +15,13 @@ import type { DecideInput } from './proof-types';
 
 export const proofKeys = {
   all: (w: string) => ['growth-v2', w, 'proof'] as const,
-  list: (w: string, frequency: string) => ['growth-v2', w, 'proof', 'list', frequency] as const,
+  /** Paged (nextCursor) proofs of one frequency. */
+  pages: (w: string, frequency: string) => ['growth-v2', w, 'proof', 'pages', frequency] as const,
+  one: (w: string, proofId: string) => ['growth-v2', w, 'proof', 'one', proofId] as const,
   strategy: (w: string) => ['growth-v2', w, 'proof', 'strategy'] as const
 };
+
+const PAGE_SIZE = 6;
 
 export function useProofApi() {
   const { getToken } = useAuth();
@@ -26,9 +30,24 @@ export function useProofApi() {
   return { api, w: workspaceId as string, enabled: Boolean(workspaceId) };
 }
 
+/** Proofs of one frequency, newest period first, a page at a time: `fetchNextPage` follows the server's nextCursor. */
 export function useProofs(frequency: 'weekly' | 'monthly' = 'weekly') {
   const { api, w, enabled } = useProofApi();
-  return useQuery({ queryKey: proofKeys.list(w, frequency), queryFn: () => api.list(w, frequency, null, 6), enabled, retry: shouldRetry, staleTime: 60_000 });
+  return useInfiniteQuery({
+    queryKey: proofKeys.pages(w, frequency),
+    queryFn: ({ pageParam }) => api.list(w, frequency, pageParam, PAGE_SIZE),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
+    retry: shouldRetry,
+    staleTime: 60_000
+  });
+}
+
+/** One proof by id (a proof link may name a period that isn't on the first page, or the other frequency). */
+export function useProof(proofId: string | null) {
+  const { api, w, enabled } = useProofApi();
+  return useQuery({ queryKey: proofKeys.one(w, proofId ?? ''), queryFn: () => api.get(w, proofId as string), enabled: enabled && Boolean(proofId), retry: shouldRetry, staleTime: 60_000 });
 }
 
 export function useStrategy(enabledByCaller = true) {
