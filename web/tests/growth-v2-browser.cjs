@@ -463,14 +463,19 @@ async function resultsJourney(env, { label, zh, entry }) {
   await declaredCard.getByText(copy.count(1, 'booking'), { exact: true }).waitFor();
   const connectedCard = cards.filter({ hasText: copy.classes.first_party_reported });
   const platformCard = cards.filter({ hasText: copy.classes.provider_native });
-  const separate = (await connectedCard.getByText(copy.noResults, { exact: true }).count()) === 1 && (await platformCard.getByText(copy.notConnected, { exact: true }).count()) === 1
-    && !(await connectedCard.innerText()).includes('45.50') && !(await platformCard.innerText()).includes('45.50');
   let summary = await must('GET', `/api/workspaces/${wid}/results/summary`);
+  // A source with no data never reads as 0 or borrows the declared amount: it says why it is empty. This workspace has
+  // never connected a tool (the API's own coverage says so), so both other sources read "Not connected".
+  const tools = summary.coverage.connections.active + summary.coverage.connections.paused + summary.coverage.connections.removed;
+  const connectedState = tools === 0 ? copy.notConnected : copy.noResults;
+  const separate = (await connectedCard.getByText(connectedState, { exact: true }).count()) === 1 && (await platformCard.getByText(copy.notConnected, { exact: true }).count()) === 1
+    && !(await connectedCard.innerText()).includes('45.50') && !(await platformCard.innerText()).includes('45.50');
   const blended = Object.keys(summary).filter((key) => /total|combined|sum/i.test(key));
   record(`results: provenance classes are never summed (three separate sources, no blended total) — ${label}`,
-    separate && blended.length === 0 && summary.classes.first_party_reported === null && summary.classes.provider_native === null
+    separate && tools === 0 && summary.coverage.declarations === true && summary.coverage.providerNative === 'not_connected' && blended.length === 0
+    && summary.classes.first_party_reported === null && summary.classes.provider_native === null
     && summary.classes.user_declared.counts.booking === 1 && summary.classes.user_declared.money.usd?.minor === 4550,
-    { classes: summary.classes, blendedKeys: blended });
+    { classes: summary.classes, coverage: summary.coverage, connectedState, blendedKeys: blended });
   await shot(page, `${fileLabel(label)}-1-declared`);
 
   // Amend: a new version of the same result (it still counts once).
@@ -618,8 +623,15 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
   detail = (await must('GET', `/api/workspaces/${wid}/relationships/${relationshipId}`)).relationship;
   record(`follow-ups: snooze and undo — ${label}`, snoozed && detail.snoozedUntil === null && detail.followUp.status === 'scheduled', { followUp: detail.followUp, undo: entry.undo });
 
-  // Won, by picking the declared result.
-  await card.getByRole('combobox', { name: copy.state, exact: true }).selectOption('won');
+  // Won, by picking the declared result. Choosing a stage changes nothing until "Change stage" applies it.
+  const stageChoice = card.getByRole('combobox', { name: copy.chooseStage, exact: true });
+  const applyStage = card.getByRole('button', { name: copy.changeStage, exact: true });
+  await stageChoice.selectOption('won');
+  const pickerBeforeApply = await card.getByText(copy.wonPick, { exact: true }).count();
+  detail = (await must('GET', `/api/workspaces/${wid}/relationships/${relationshipId}`)).relationship;
+  record(`follow-ups: choosing a stage saves nothing until "${copy.changeStage}" — ${label}`,
+    pickerBeforeApply === 0 && detail.state === 'new' && await applyStage.isEnabled(), { state: detail.state, pickerBeforeApply });
+  await applyStage.click();
   await card.getByText(copy.wonPick, { exact: true }).waitFor();
   await card.getByRole('radio', { name: new RegExp(escapeRe(seedNote)) }).check();
   await card.getByRole('button', { name: copy.confirm, exact: true }).click();
@@ -630,10 +642,11 @@ async function followUpJourney(env, { label, zh, viewport, entry }) {
 
   // Reopen, then won again by recording the result in place.
   await card.getByRole('button', { name: copy.reopen, exact: true }).click();
-  await card.getByRole('combobox', { name: copy.state, exact: true }).waitFor();
+  await stageChoice.waitFor();
   detail = (await must('GET', `/api/workspaces/${wid}/relationships/${relationshipId}`)).relationship;
   const reopened = detail.state === 'new' && detail.won === null;
-  await card.getByRole('combobox', { name: copy.state, exact: true }).selectOption('won');
+  await stageChoice.selectOption('won');
+  await applyStage.click();
   await card.getByRole('button', { name: resultsCopy.form.title, exact: true }).click();
   const inPlace = card.locator('form').filter({ hasText: resultsCopy.form.intro });
   await inPlace.getByLabel(resultsCopy.form.type, { exact: true }).selectOption('booking');
@@ -992,7 +1005,7 @@ function makeWav(seconds = 0.5, rate = 8000) {
  * and Space did (keydown, keypress, whether anything prevented them) and which clicks reached the button and the input.
  * It only observes; the keyboard step reads it to tell the page's part of a press from the browser automation's.
  */
-async function installIntakeProbe(page, copy, startedAt) {
+async function installIntakeProbe(page, copy /* { title, choose } */, startedAt) {
   await page.evaluate(({ title, choose, startedAt }) => {
     const log = [];
     let count = 0;
@@ -1069,13 +1082,23 @@ async function intakeJourney(env, { label, zh, entry }) {
   });
 
   await page.goto(base + '/app/ideas');
-  await installIntakeProbe(page, copy, startedAt);
-  const panel = page.getByRole('region', { name: copy.title, exact: true });
+  // Without a transcription route the panel offers what it can read: "Upload a PDF or transcript".
+  const title = copy.titleNoAudio;
+  await installIntakeProbe(page, { title, choose: copy.choose }, startedAt);
+  const panel = page.getByRole('region', { name: title, exact: true });
   await panel.waitFor({ timeout: 120000 });
   await stable(page, panel);
   await panel.scrollIntoViewIfNeeded();
   await panel.getByText(copy.audioOff, { exact: true }).waitFor();
   const choose = panel.getByRole('button', { name: copy.choose, exact: true });
+  // Recordings are offered only where they can be transcribed: neither the picker nor its hint names an audio format.
+  const accept = (await panel.locator('input[type=file]').getAttribute('accept')) || '';
+  const hintId = await choose.getAttribute('aria-describedby');
+  const hint = hintId ? await page.locator(`[id="${hintId}"]`).innerText() : '';
+  const offersAudio = /audio\/|\.(wav|mp3|m4a|ogg|opus|webm)\b/i.test(accept) || /\b(WAV|MP3|M4A|Ogg)\b/i.test(hint);
+  record(`intake: recordings aren't offered while transcription is off (picker and hint: PDF and transcripts) — ${label}`,
+    !offersAudio && accept.includes('.pdf') && ['.srt', '.vtt', '.txt'].every((type) => accept.includes(type)) && hint.includes('PDF'),
+    { accept, hint });
 
   // Keyboard only: Tab to "Choose a file", Enter opens the picker. A recording is refused before anything uploads.
   const presses = await tabTo(page, choose);
