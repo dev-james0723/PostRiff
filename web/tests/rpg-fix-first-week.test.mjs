@@ -152,7 +152,7 @@ test('L5: an unanswered drafting request is checked again, not called stopped', 
   assert.equal(fw.unknownOutcome(answered), false);
   assert.equal(fw.unknownOutcome(undefined), false);
   const panel = read('features/coworker/weekly/first-week-panel.tsx');
-  assert.match(panel, /onError: \(error\) => \(unknownOutcome\(error\) \? setUncertain\(true\) : toast\.error\('Drafting stopped'/);
+  assert.match(panel, /onError: \(error\) => \(unknownOutcome\(error\) \? setUnanswered\(sent\) : toast\.error\('Drafting stopped'/);
   assert.match(panel, /may still be drafting/);
 });
 

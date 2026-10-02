@@ -57,19 +57,23 @@ export function GenomePanel() {
     await snapshot.refetch();
   }
 
+  /** The request exactly as the screen shows it now (Propose sends it; Confirm checks the priced one still matches). */
+  function requestBody(): Record<string, unknown> {
+    return {
+      ...(data ? { data, account } : { sourceIds }),
+      ownContent: confirmed,
+      retainText: confirmed,
+      confirmed,
+      requestKey: key.current
+    };
+  }
+
   async function analyze() {
     setBusy(true);
     setError('');
     key.current ??= crypto.randomUUID();
     try {
-      const body = {
-        ...(data ? { data, account } : { sourceIds }),
-        ownContent: confirmed,
-        retainText: confirmed,
-        confirmed,
-        requestKey: key.current
-      };
-      await analyzed(await credits.run('genome', body, (b) => api.analyzeHistory(workspaceId, b as unknown as Parameters<typeof api.analyzeHistory>[1])));
+      await analyzed(await credits.run('genome', requestBody(), (b) => api.analyzeHistory(workspaceId, b as unknown as Parameters<typeof api.analyzeHistory>[1])));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
     } finally {
@@ -81,7 +85,7 @@ export function GenomePanel() {
     setBusy(true);
     setError('');
     try {
-      await analyzed(await credits.confirm());
+      await analyzed(await credits.confirm(requestBody()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'History could not be analyzed.');
     } finally {
@@ -193,7 +197,10 @@ export function GenomePanel() {
               type='checkbox'
               className='mt-1'
               checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
+              onChange={(e) => {
+                setConfirmed(e.target.checked);
+                credits.cancel(); // a limit shown for the request with the earlier consent never runs this one
+              }}
             />
             These are my own posts. Retain their text in my voice corpus and analyze selected
             samples with the allowed AI routes.

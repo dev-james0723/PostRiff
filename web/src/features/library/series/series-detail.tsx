@@ -40,6 +40,7 @@ import {
   pickPage,
   seriesErrorText,
   stateTone,
+  warningSetKey,
   withSelected,
   type SeriesCopy,
   type SeriesLocale
@@ -98,11 +99,14 @@ function DraftPicker({ copy, series, episode, run, busy, onClose, returnFocus }:
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(DRAFT_PAGE);
   const [variantId, setVariantId] = useState<string | null>(null);
-  const [acknowledged, setAcknowledged] = useState(false);
+  // The warning set the person acknowledged; a different set (a re-check after a conflict) shows unticked.
+  const [acknowledgedSet, setAcknowledgedSet] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const check = useDraftCheck(series.id, episode.id, variantId);
   const warnings = check.data?.variantId === variantId ? check.data?.warnings ?? [] : [];
+  const warningKey = warningSetKey(warnings);
+  const acknowledged = acknowledgedSet === warningKey;
   const page = useMemo(() => pickPage(drafts, query, draftSearchText, limit), [drafts, query, limit]);
   const options = withSelected(page.items, drafts, variantId);
   const { formRef, firstRef } = useInlineForm<HTMLInputElement>(true, onClose, { returnFocus, containEscape: true });
@@ -125,7 +129,7 @@ function DraftPicker({ copy, series, episode, run, busy, onClose, returnFocus }:
       setError(seriesErrorText(copy, failure));
       if (errorCode(failure) === 'warnings_unacknowledged') {
         // The warnings changed since they were shown: show the current ones to acknowledge again.
-        setAcknowledged(false);
+        setAcknowledgedSet(null);
         void check.refetch();
       }
     }
@@ -148,7 +152,7 @@ function DraftPicker({ copy, series, episode, run, busy, onClose, returnFocus }:
             <>
               <label htmlFor={`${id}-draft`} className='text-sm font-medium'>{copy.chooseDraft}</label>
               <NativeSelect id={`${id}-draft`} value={variantId ?? ''} aria-describedby={`${id}-count`}
-                            onChange={(event) => { setVariantId(event.target.value || null); setAcknowledged(false); setError(null); }} className='w-full'>
+                            onChange={(event) => { setVariantId(event.target.value || null); setAcknowledgedSet(null); setError(null); }} className='w-full'>
                 <NativeSelectOption value=''>—</NativeSelectOption>
                 {options.map((draft) => <NativeSelectOption key={draft.id} value={draft.id}>{draftOptionLabel(draft)}</NativeSelectOption>)}
               </NativeSelect>
@@ -160,7 +164,7 @@ function DraftPicker({ copy, series, episode, run, busy, onClose, returnFocus }:
               )}
             </>
           )}
-          {variantId && <CheckResult copy={copy} check={check} warnings={warnings} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />}
+          {variantId && <CheckResult copy={copy} check={check} warnings={warnings} acknowledged={acknowledged} onAcknowledge={(value) => setAcknowledgedSet(value ? warningKey : null)} />}
         </>
       )}
       {error && <p role='alert' className='text-destructive text-sm'>{error}</p>}
@@ -329,7 +333,10 @@ function CandidateConfirm({ id, copy, series, episode, variantId, check, run, bu
   onClose: () => void; onRecheck: () => void; returnFocus: FocusTarget;
 }) {
   const ackId = useId();
-  const [acknowledged, setAcknowledged] = useState(false);
+  // The warning set the person acknowledged; a re-checked set with anything new shows unticked.
+  const [acknowledgedSet, setAcknowledgedSet] = useState<string | null>(null);
+  const warningKey = warningSetKey(check.warnings);
+  const acknowledged = acknowledgedSet === warningKey;
   const [error, setError] = useState<string | null>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const { formRef, firstRef } = useInlineForm<HTMLButtonElement>(true, onClose, { returnFocus, containEscape: true });
@@ -353,7 +360,7 @@ function CandidateConfirm({ id, copy, series, episode, variantId, check, run, bu
     } catch (failure) {
       setError(seriesErrorText(copy, failure));
       if (errorCode(failure) === 'warnings_unacknowledged') {
-        setAcknowledged(false);
+        setAcknowledgedSet(null);
         onRecheck();
       }
     }
@@ -366,7 +373,7 @@ function CandidateConfirm({ id, copy, series, episode, variantId, check, run, bu
       ) : needsAck ? (
         <>
           <WarningList copy={copy} warnings={check.warnings} />
-          <Checkbox id={ackId} checked={acknowledged} onCheckedChange={(value) => setAcknowledged(Boolean(value))} label={copy.acknowledge} className='min-h-11 gap-2.5 [&>span]:text-sm' />
+          <Checkbox id={ackId} checked={acknowledged} onCheckedChange={(value) => setAcknowledgedSet(value ? warningKey : null)} label={copy.acknowledge} className='min-h-11 gap-2.5 [&>span]:text-sm' />
         </>
       ) : null}
       {error && <p role='alert' className='text-destructive text-sm'>{error}</p>}

@@ -39,16 +39,18 @@ export function AudienceMiner() {
     setSummary(`${result.analyzed} of ${result.available} eligible comments analyzed. ${result.withheld} held out for sensitivity or uncertainty.${result.partial ? ' This is a bounded sample, not the full audience.' : ''}`);
     await query.refetch();
   }
+  /** The request exactly as the screen shows it now (Find sends it; Confirm checks the priced one still matches). */
+  const requestBody = (): Record<string, unknown> => ({ days, confirmed, requestKey: request.current });
   async function analyze() {
     setBusy(true); setError(''); request.current ??= crypto.randomUUID();
     try {
-      await finished(await credits.run('audience', { days, confirmed, requestKey: request.current }, (b) => api.analyzeAudience(workspaceId, b as unknown as Parameters<typeof api.analyzeAudience>[1])));
+      await finished(await credits.run('audience', requestBody(), (b) => api.analyzeAudience(workspaceId, b as unknown as Parameters<typeof api.analyzeAudience>[1])));
     } catch (err) { setError(err instanceof Error ? err.message : 'Audience analysis could not be completed.'); }
     finally { setBusy(false); }
   }
   async function confirmCredits() {
     setBusy(true); setError('');
-    try { await finished(await credits.confirm()); }
+    try { await finished(await credits.confirm(requestBody())); }
     catch (err) { setError(err instanceof Error ? err.message : 'Audience analysis could not be completed.'); }
     finally { setBusy(false); }
   }
@@ -61,7 +63,7 @@ export function AudienceMiner() {
     {query.isError && <p role='alert' className='growth-error'>Comments could not be loaded. <Button variant='quiet' onClick={() => void query.refetch()}>Try again</Button></p>}
     {query.data && <>
       <div className='growth-audience-controls'><label>Look back<select aria-label='Audience window' value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value)); request.current = null; setConfirmed(false); credits.cancel(); }}>{[7,14,30].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></label><p>Up to {query.data.maximumPerRun} comments per analysis.<br />Two analyses per workspace each day.</p></div>
-      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label={consentText} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />{consentText}</label><Button className='growth-primary' disabled={busy || credits.quoting || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button><GrowthCreditConfirm quote={credits.pending} busy={busy} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} /></>}
+      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label={consentText} checked={confirmed} onChange={(e) => { setConfirmed(e.target.checked); credits.cancel(); }} />{consentText}</label><Button className='growth-primary' disabled={busy || credits.quoting || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button><GrowthCreditConfirm quote={credits.pending} busy={busy} onConfirm={() => void confirmCredits()} onCancel={credits.cancel} /></>}
       {!query.data.audienceConsent && <p className='growth-footnote'>The owner must allow comment analysis in AI permissions above.</p>}
       <p className='growth-footnote'>{query.data.coverage}</p>
       {summary && <p role='status' className='growth-success'>{summary}</p>}

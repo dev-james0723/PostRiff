@@ -14,7 +14,18 @@ import { useChannels } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { queueDraftHref } from '@/lib/coworker/safe-href';
 import { clearAllContinuations, importBody, readContinuation, type ReadOutcome } from '@/lib/growth-v2/continuation';
-import { DRAFT_LANGUAGES, LANGUAGE_LABELS, draftLanguage, slotCostText, unknownOutcome, type DraftLanguage } from '@/lib/growth-v2/first-week';
+import {
+  DRAFT_LANGUAGES,
+  LANGUAGE_LABELS,
+  draftBatch,
+  draftLanguage,
+  draftingMayContinue,
+  slotCostText,
+  stepTakesFocus,
+  unknownOutcome,
+  type DraftLanguage,
+  type UnansweredDraft
+} from '@/lib/growth-v2/first-week';
 import { firstWeekKey, refreshAfterFirstWeek, useFirstWeek, useFirstWeekAction, useFirstWeekApi } from '@/lib/growth-v2/first-week-hooks';
 import type { FirstWeekSlot, FirstWeekStep, FirstWeekView } from '@/lib/growth-v2/first-week-types';
 import { canWriteYourself } from '@/lib/growth-v2/first-week-slots';
@@ -70,10 +81,9 @@ export function FirstWeekPanel({ canEdit }: { canEdit: boolean }) {
   }
   return (
     <Panel title='Your first week' description='From your own words to a reviewed week. Nothing is scheduled or published until you approve each post in Queue.'>
-      <div className='flex flex-col gap-4'>
+      <Steps view={view} canEdit={canEdit} readAt={journey.dataUpdatedAt}>
         <ContinuationImport nonce={continueParam} onDone={() => void setContinueParam(null)} canEdit={canEdit} />
-        <Steps view={view} canEdit={canEdit} />
-      </div>
+      </Steps>
     </Panel>
   );
 }
@@ -178,15 +188,22 @@ const STEP_TITLES: Record<FirstWeekStep, string> = {
   complete: 'Your first week is delivered'
 };
 
-function Steps({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
+/**
+ * The journey's current step. `readAt` is when the shown journey was read (a refetch moves it on even when nothing
+ * changed). A new step is always announced; it takes focus only when the control the person used went with the old step
+ * (`stepTakesFocus`), so a background refetch never pulls focus away from where they are.
+ */
+function Steps({ view, canEdit, readAt, children }: { view: FirstWeekView; canEdit: boolean; readAt: number; children?: ReactNode }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const shown = useRef(view.step);
+  // The element in this panel that last had focus; forgotten when focus moves on to something outside it.
+  const lastFocused = useRef<Element | null>(null);
   const [announcement, setAnnouncement] = useState('');
   useEffect(() => {
     if (shown.current === view.step) return;
     shown.current = view.step;
     setAnnouncement(`Next step: ${STEP_TITLES[view.step] ?? view.step}`);
-    heading.current?.focus();
+    if (stepTakesFocus(document.activeElement, document.body, lastFocused.current)) heading.current?.focus();
   }, [view.step]);
   let body: ReactNode;
   switch (view.step) {
@@ -203,17 +220,28 @@ function Steps({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
       body = <PlanWeek view={view} canEdit={canEdit} />;
       break;
     default:
-      body = <WeekSlots view={view} canEdit={canEdit} />;
+      body = <WeekSlots view={view} canEdit={canEdit} readAt={readAt} />;
   }
   return (
-    <div className='flex flex-col gap-3'>
-      <h3 ref={heading} tabIndex={-1} className='rafii-focus text-sm font-medium'>
-        {STEP_TITLES[view.step] ?? ''}
-      </h3>
-      <p role='status' aria-live='polite' className='sr-only'>
-        {announcement}
-      </p>
-      {body}
+    <div
+      className='flex flex-col gap-4'
+      onFocus={(event) => {
+        lastFocused.current = event.target;
+      }}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) lastFocused.current = null;
+      }}
+    >
+      {children}
+      <div className='flex flex-col gap-3'>
+        <h3 ref={heading} tabIndex={-1} className='rafii-focus text-sm font-medium'>
+          {STEP_TITLES[view.step] ?? ''}
+        </h3>
+        <p role='status' aria-live='polite' className='sr-only'>
+          {announcement}
+        </p>
+        {body}
+      </div>
     </div>
   );
 }
@@ -448,22 +476,29 @@ const STATUS: Record<string, string> = {
 /** The first week's limit is one-time: said wherever drafting is offered, so it never reads as a weekly habit. */
 const ONE_TIME = 'This covers this week’s posts only. Rafii won’t plan or draft later weeks unless you turn on weekly drafting in Weekly plan.';
 
-function WeekSlots({ view, canEdit }: { view: FirstWeekView; canEdit: boolean }) {
+function WeekSlots({ view, canEdit, readAt }: { view: FirstWeekView; canEdit: boolean; readAt: number }) {
   const { w } = useFirstWeekApi();
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>(view.scope?.slotIds ?? view.slots.map((s) => s.id));
   const [reason, setReason] = useState('');
   const [credits, setCredits] = useState(300);
-  // The request ended without an answer (the 150 s client limit or a dropped connection): drafting may be going on.
-  const [uncertain, setUncertain] = useState(false);
+  // The request ended without an answer (the 150 s client limit or a dropped connection): drafting may be going on until
+  // a read shows that call over (draftingMayContinue). Then the posts still left can be drafted (two per call at most).
+  const [unanswered, setUnanswered] = useState<UnansweredDraft | null>(null);
+  const uncertain = unanswered !== null && draftingMayContinue(unanswered, view.slots, readAt);
+  const draftButton = useRef<HTMLButtonElement>(null);
+  const wasUncertain = useRef(uncertain);
+  useEffect(() => {
+    // The note (and its "Check again") goes once that call is over: focus that fell to the page moves to Draft.
+    const active = document.activeElement;
+    if (wasUncertain.current && !uncertain && (active === null || active === document.body)) draftButton.current?.focus();
+    wasUncertain.current = uncertain;
+  }, [uncertain]);
   const scope = useFirstWeekAction((api, w, revision, _: void) => api.scope(w, { slotIds: selected, reason: reason || undefined, expectedRevision: revision }));
   const draft = useFirstWeekAction(async (api, w, revision, _: void) =>
     (await api.draft(w, { confirmed: true, ...(view.billingMode === 'managed_credits' ? { maxCredits: credits } : {}), expectedRevision: revision })).journey
   );
   const toDraft = view.slots.filter((s) => s.committed && s.status === 'planned').length;
-  useEffect(() => {
-    if (toDraft === 0) setUncertain(false);
-  }, [toDraft]);
   function checkAgain() {
     void client.invalidateQueries({ queryKey: firstWeekKey(w) });
     refreshAfterFirstWeek(client, w);
@@ -531,13 +566,14 @@ function WeekSlots({ view, canEdit }: { view: FirstWeekView; canEdit: boolean })
               <input className={FIELD} aria-label='Credit limit for this week' type='number' min={1} max={3500} value={credits} onChange={(e) => setCredits(Math.max(1, Math.min(3500, Number(e.target.value) || 1)))} />
             </label>
           )}
-          <Button variant='action' disabled={!canEdit || draft.isPending || uncertain}
-            onClick={() =>
+          <Button ref={draftButton} variant='action' disabled={!canEdit || draft.isPending || uncertain}
+            onClick={() => {
+              const sent: UnansweredDraft = { sentAt: Date.now(), batch: draftBatch(view.slots) };
               draft.mutate(undefined, {
-                onSuccess: () => setUncertain(false),
-                onError: (error) => (unknownOutcome(error) ? setUncertain(true) : toast.error('Drafting stopped', { description: errorMessage(error) }))
-              })
-            }>
+                onSuccess: () => setUnanswered(null),
+                onError: (error) => (unknownOutcome(error) ? setUnanswered(sent) : toast.error('Drafting stopped', { description: errorMessage(error) }))
+              });
+            }}>
             {draft.isPending ? 'Drafting…' : `Draft the remaining ${toDraft} post${toDraft === 1 ? '' : 's'}`}
           </Button>
           <p className='text-muted-foreground w-full text-xs'>
