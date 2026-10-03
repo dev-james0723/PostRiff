@@ -199,6 +199,8 @@ def denied(call, status=None):
 
 # --- setup ---------------------------------------------------------------------------------------------------------------------
 with connection() as db:
+    # This runtime fixture predates Founder attempt instrumentation; use its real migration for failure-cost assertions.
+    db.execute((ROOT / "migrations/postriff/058_founder_ai_usage.sql").read_text())
     db.execute("INSERT INTO auth.users VALUES(%s),(%s) ON CONFLICT DO NOTHING", (THREE, TWO))
     wid = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s", (ONE,)).fetchone()[0])
     db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (wid,))
@@ -1341,6 +1343,40 @@ def _():
     status = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert status == "failed" and "went wrong" in result["result"]["answerText"] and result["result"]["errors"][0]["code"] == "internal_error", (status, result["result"])
     return {"actual": result["result"]["answerText"]}
+
+
+@scenario("R18-cost", "Abort retains a timed-out provider's unknown spend, while an explicit refusal can release its hold",
+          "(abort after provider failure)", "failed run/message; unknown cost stays held; observed refusal is actual zero; no duplicate settlement")
+def _():
+    from postriff_phase2.agent_runtime_v2 import manager
+
+    outcomes = []
+    for refused in (False, True):
+        conversation = fresh_conversation("abort provider cost")
+        run = running_run(conversation)
+        with service.repository.transaction(OWNER, wid) as (cur, row, principal):
+            reservation = service.ledger.reserve(cur, wid, principal, "text_model", 50_000, "agent:" + run, charge_batch=False,
+                                                 provider="openai", model="gpt-6-sol", run_id=run)
+            ctx = runtime_service.RafiiRunContext(service=service, workspace_id=wid, token=OWNER, principal=principal, membership=service.ideas._member(row),
+                                                 conversation_id=conversation, trace_id=contracts.new_trace_id(), run_id=run, now=lambda: clock[0], config=runtime.cfg)
+        class RefusedError(Exception):
+            status_code = 429
+        error = RefusedError() if refused else TimeoutError()
+        manager._note_failure(ctx.ledger, error, workload="standard_reasoning", route={"provider": "openai", "model": "gpt-6-sol"},
+                              started=time.monotonic(), wall=clock[0])
+        before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+        for _repeat in range(2):
+            out = runtime._abort_run(wid, OWNER, conversation, run, reservation, ctx.trace_id, "text", RuntimeError("synthetic abort"), ctx)
+        settled = one("SELECT cost_state,actual_usd_micro,estimated_usd_micro FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", reservation["reservationId"])
+        assert settled == (("actual", 0, 50_000) if refused else ("estimated_unknown", None, 50_000)), settled
+        assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", reservation["reservationId"])[0] == 1
+        assert out["status"] == "failed" and message_body(out["messageId"])["siteAgent"]["status"] == "failed"
+        if not refused:
+            assert before == rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope"), "unknown spend keeps its original hold"
+        attempt = one("SELECT status,cost_usd_micro FROM public.pr_ai_call_events WHERE run_id::text=%s", run)
+        assert attempt == (("rate_limited", 0) if refused else ("timeout", None)), attempt
+        outcomes.append({"providerStatus": attempt[0], "costState": settled[0], "actualUsdMicro": settled[1]})
+    return {"actual": outcomes}
 
 
 @scenario("MM16", "Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once",

@@ -374,6 +374,7 @@ class FounderAgentRuntime(AgentRuntimeService):
         self.followup_transport = None
         self._founder_ctx: RafiiRunContext | None = None
         self._founder_reply = None
+        self._founder_failure = None
 
     # --- front door: the founder never reaches the customer site agent ---------------------------------------------------------
     def _front_door(self, cur, state, workspace_id, conversation_id, member, text, page, modality) -> dict:
@@ -458,14 +459,17 @@ class FounderAgentRuntime(AgentRuntimeService):
         except asyncio.TimeoutError:
             fallback_reason = "timeout"
             note = "This took longer than one turn allows, so I stopped. Here is exactly where things stand."
+            self._founder_failure = {"code": fallback_reason, "message": note}
         except AlphaError as error:
             fallback_reason = error.code or "error"
             note = "You cancelled this, so I stopped. Here is what had already finished." if error.code == "run_cancelled" else f"I stopped: {error}"
         except Exception as error:  # noqa: BLE001 — a model or provider failure never becomes a success claim
             import logging
-            logging.getLogger("postriff.agent_runtime").error(json.dumps({"event": "founder_turn.failed", "errorClass": type(error).__name__, "traceId": trace_id}))
+            diagnostic = manager_mod.failure_diagnostic(error)
+            logging.getLogger("postriff.agent_runtime").error(json.dumps({"event": "founder_turn.failed", "traceId": trace_id, **diagnostic}))
             fallback_reason = "model_error"
-            note = "Rafii's reasoning model didn't answer, so nothing more was done. Here is exactly where things stand."
+            note = provider_failure_message(diagnostic)
+            self._founder_failure = {"code": fallback_reason, "message": note, "providerFailure": diagnostic}
         self._founder_reply = reply
         elapsed = round((time.monotonic() - started) * 1000)
         return self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
@@ -481,11 +485,37 @@ class FounderAgentRuntime(AgentRuntimeService):
         drafts) and the panel gets the receipt and draft blocks; everything else is the base runtime's own persistence."""
         section = founder_section(self._founder_ctx, self._founder_reply, self.founder)
         result["founder"] = section
+        if self._founder_failure is not None:
+            if status != "cancelled":
+                status = "failed"
+            result["errors"] = [*(result.get("errors") or [])[:5], {key: self._founder_failure[key] for key in ("code", "message")}]
+            diagnostic = self._founder_failure.get("providerFailure")
+            if diagnostic is not None:
+                result["providerFailure"] = diagnostic
+                trace = {**trace, "providerFailure": diagnostic}
         blocks.extend(founder_blocks(section))
         trace = {**trace, "founder": {"mode": section["mode"], "environment": section["environment"], "namespace": section["namespace"], "runtime": RUNTIME_VERSION,
                                       "receipts": len(section["receiptIds"]), "factsKept": len(section["facts"]), "factsDropped": section.get("factsDropped", 0)}}
         return super()._persist(cur, workspace_id, conversation_id, run_id, result, blocks, proposals, refs, trace=trace, status=status, usage=usage, pending=pending,
                                 language=language, follow_ups=follow_ups, site_extra=site_extra)
+
+
+def provider_failure_message(diagnostic: dict) -> str:
+    """Actionable fixed copy from bounded evidence; never repeat the provider's free-text message."""
+    category, code = diagnostic.get("errorCategory"), diagnostic.get("errorCode")
+    if category in {"quota", "credits_exhausted", "spend_limit", "usage_limit"}:
+        reason = "The provider refused Rafii's reasoning request because of its account quota or spend limit. Check the existing provider account's quota and billing settings."
+    elif category == "rate_limit":
+        reason = "The provider rate-limited Rafii's reasoning request. Wait for its rate window to reset before trying again."
+    elif code in {"invalid_api_key", "authentication_error", "permission_denied"} or diagnostic.get("httpStatus") in {401, 403}:
+        reason = "The provider refused access to Rafii's reasoning model. Check the existing provider account's credentials and model permissions."
+    elif category == "model_not_found":
+        reason = "The configured reasoning model is unavailable to this provider account. Check its model access."
+    elif diagnostic.get("httpStatus") == 429:
+        reason = "The provider refused Rafii's reasoning request with HTTP 429. This alone does not identify a temporary rate limit or an account quota limit. Check the existing provider account's limits."
+    else:
+        reason = "Rafii's reasoning model didn't answer."
+    return reason + " This turn stopped. Here is exactly where things stand."
 
 
 # --- building the founder Manager -----------------------------------------------------------------------------------------------------
@@ -687,7 +717,10 @@ def turn(service, control_principal, body, request_id, *, control=None, values=N
     except AlphaError as error:
         _audit_turn(control, principal, founder["request_id"], "denied", error_code=str(getattr(error, "code", None) or "turn_refused")[:64])
         raise control_error(error) from None
-    _audit_turn(control, principal, founder["request_id"], "succeeded")
+    failed = out.get("status") in {"failed", "cancelled"}
+    errors = (out.get("result") or {}).get("errors") or []
+    code = "run_cancelled" if out.get("status") == "cancelled" else (errors[-1].get("code", "turn_failed") if errors else "turn_failed")
+    _audit_turn(control, principal, founder["request_id"], "failed" if failed else "succeeded", error_code=code if failed else None)
     return {**_envelope(out, payload["mode"], environment), "requestId": founder["request_id"]}
 
 

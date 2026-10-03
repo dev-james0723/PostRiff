@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from postriff_phase2.agent_runtime_v2.manager import ModelNotDispatched  # noqa: E402
+
 
 def blocked(check: str, reason: str) -> dict:
     return {"check": check, "result": "BLOCKED", "reason": reason}
@@ -42,7 +44,7 @@ MAX_TURNS = 6
 MAX_OUTPUT_TOKENS = 4000
 
 
-class BudgetReached(RuntimeError):
+class BudgetReached(ModelNotDispatched):
     pass
 
 

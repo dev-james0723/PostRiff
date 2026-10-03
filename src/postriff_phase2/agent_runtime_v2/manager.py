@@ -22,6 +22,11 @@ import time
 from . import answer_policy, config as runtime_config, specialists, style as agent_style
 from .context import RafiiRunContext
 
+
+class ModelNotDispatched(RuntimeError):
+    """A local admission guard refused before the provider was called; no attempt or spend is implied."""
+
+
 MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
                  "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
@@ -124,7 +129,9 @@ def provider_model(cfg: runtime_config.RuntimeConfig, workload: str):
     route = cfg.route(workload, reason="agent model")
     if not route.available:
         raise RuntimeError(route.blocker or "No model route.")
-    client = AsyncOpenAI(api_key=cfg.credential(route.provider), base_url=cfg.base_url, max_retries=1, timeout=90)
+    # One metered call must be one physical attempt. A hidden retry can bill an earlier timed-out request without
+    # an attempt record, then incorrectly turn its unknown cost into the later response's known cost.
+    client = AsyncOpenAI(api_key=cfg.credential(route.provider), base_url=cfg.base_url, max_retries=0, timeout=90)
     sink = _CLIENTS.get()
     if sink is not None:
         # The run that is being built closes it inside its own event loop (`drive`).
@@ -156,7 +163,7 @@ async def drive(ctx: RafiiRunContext, run, timeout: float):
 def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
     """Wrap any Agents SDK Model: count calls and tokens into the ledger (Manager and nested specialists alike). Each answered
     call is a span (priced for the turn's spend); a call that failed is kept apart in `ledger.calls` for pr_ai_call_events
-    only (record_calls), so failures never change what a turn is charged."""
+    (record_calls). Unknown provider outcome retains the turn's hold; separately reserved image attempts settle elsewhere."""
     from agents.models.interface import Model
 
     class MeteredModel(Model):
@@ -165,6 +172,9 @@ def metered(model, ledger, *, agent: str, workload: str, route: dict | None):
             try:
                 response = await model.get_response(*args, **kwargs)
             except BaseException as error:
+                if isinstance(error, ModelNotDispatched):
+                    raise
+                ledger.model_requests += 1
                 _note_failure(ledger, error, workload=workload, route=route, started=started, wall=wall)
                 raise
             usage = getattr(response, "usage", None)
@@ -204,6 +214,18 @@ def _attempt_detail(response, usage, route, wall) -> dict:
         return detail
     except Exception:  # noqa: BLE001
         return {}
+
+
+def failure_diagnostic(error) -> dict:
+    """Allowlisted provider failure fields only; HTTP 429 alone does not prove exhausted quota.
+
+    Reuse the bounded SDK-error parser without phone phases, request IDs, exception text or provider payloads.
+    """
+    from ..phone.diagnostics import metadata
+
+    details = metadata("unknown", error)
+    return {key: value for key, value in details.items()
+            if key in {"errorClass", "errorCode", "errorType", "errorCategory", "reasonBasis", "httpStatus"}}
 
 
 def failure_status(error) -> tuple[str, int | None]:

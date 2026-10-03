@@ -919,13 +919,15 @@
     }
   ],
   "remainingAcceptance": [
-    "Fresh owner MFA and contact/briefing synchronization",
     "Authenticated source/projection/receipt/UI/agent canaries and responsive Live/Demo checks",
+    "Successful reasoning request after provider HTTP 429; exact quota versus rate-limit cause unclassified",
     "Verified intended sender and owner device delivery/audio qualification",
     "Source/definition/history gates",
     "24-hour actual observation"
   ],
   "realChannelCanaries": "not_run",
+  "settingsSynchronization": {"observedAt": "2026-10-03T20:32:16Z", "opsPolicyRevision": 2, "controlSyncRevision": 2, "state": "verified_production"},
+  "authenticatedBrowserValidation": {"state": "owner_sign_in_required", "browserControl": "recovered_in_fresh_Chrome_tab", "settingsAction": "complete"},
   "providerInvoiceCostUsd": null,
   "observation24Hours": "not_started"
 }
