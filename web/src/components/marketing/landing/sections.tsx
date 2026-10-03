@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ChannelIcon } from '@/components/channel-icon';
 import { CAPABILITY_LEVELS, CapabilityBadge } from '@/components/marketing/capability-badge';
-import { PlanCard } from '@/components/marketing/plan-card';
+import { V2PlanCardView } from '@/components/marketing/plan-card';
 import { Section } from '@/components/marketing/section';
 import { BouncyAccordion, type BouncyAccordionClassNames } from '@/components/motion/bouncy-accordion';
 import { Marquee } from '@/components/motion/marquee';
@@ -10,7 +10,8 @@ import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { channels, hostedChannels, localChannels } from '@/config/channels';
-import { TRIAL, plans } from '@/config/plans';
+import { PRICING_CATALOG, v2PlanCards } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 
@@ -142,29 +143,34 @@ export function DesignPartners() {
   );
 }
 
+/** The plans for sale on the landing page: today's two legacy plans, or Free and Creator under Pricing v2. */
 export function PricingSummary() {
+  const copy = marketingCopy(PRICING_CATALOG).landingPricing;
   return (
-    <Section id='pricing' eyebrow='Pricing' title='Two plans.' accent='No surprises.' description={`${TRIAL.days}-day trial with ${TRIAL.connectedAccounts} connected accounts and ${TRIAL.writingBatches} writing batches. No card, no automatic conversion.`}>
+    <Section id='pricing' eyebrow='Pricing' title={copy.title} accent={copy.accent} description={copy.description}>
       <div className='grid gap-4 md:grid-cols-2'>
-        {plans.map((plan, index) => (
-          <ScrollReveal key={plan.id} {...REVEAL} delay={index * STAGGER} className='flex'>
-            <PlanCard plan={plan} />
+        {v2PlanCards().map((card, index) => (
+          <ScrollReveal key={card.id} {...REVEAL} delay={index * STAGGER} className='flex'>
+            <V2PlanCardView card={card} />
           </ScrollReveal>
         ))}
       </div>
       <Link href={siteConfig.links.pricing} className={LEARN_MORE}>
-        Compare plans in detail <LearnMoreChevron />
+        {copy.compareLink} <LearnMoreChevron />
       </Link>
     </Section>
   );
 }
+
+/** The Free plan answer retains the established position in the landing FAQ. */
+const PLAN_FAQ = marketingCopy(PRICING_CATALOG).landingFaqItem;
 
 export const FAQ_ITEMS = [
   { q: 'Do you ever post without my approval?', a: 'No. A review freezes the exact text, media, account and time; only approving that review creates a publication. There is no auto-post, auto-reply or bulk mode.' },
   { q: 'Which channels are direct today?', a: 'None yet. LinkedIn, Threads and Instagram are hosted connectors awaiting provider review; until each passes, publishing is Assisted (Rafii prepares the post, you complete the last step). Other platforms may offer assisted export or a separately verified desktop workflow; they are not promised as automatic publishing.' },
   { q: 'What happens while a platform review is pending?', a: 'The channel card says “Assisted · review pending”. You can still draft, schedule and export; direct publishing switches on for that platform when the review passes.' },
   { q: 'Can I export everything?', a: 'Yes — drafts, sources, approvals and receipts as a zip with a SHA-256 receipt, at any time, on any plan, including after cancellation.' },
-  { q: 'How does the trial work?', a: `${TRIAL.days} days, ${TRIAL.connectedAccounts} connected accounts, ${TRIAL.writingBatches} writing batches, no card. It never converts into a paid plan by itself.` },
+  PLAN_FAQ,
   { q: 'Do you train AI on my content?', a: 'No. Drafts come only from sources you select and approve, and our provider contracts will prohibit training. See the Privacy Policy.' }
 ];
 

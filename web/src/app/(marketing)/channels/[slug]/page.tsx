@@ -11,6 +11,8 @@ import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { channelBySlug, channels, type ChannelCapabilityKey } from '@/config/channels';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 
 const CAP_LABELS: Record<ChannelCapabilityKey, string> = {
@@ -132,7 +134,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
         </div>
         <div className='mt-6 flex flex-wrap gap-3'>
           <Link href={siteConfig.links.signUp} className={buttonVariants({ variant: 'action', size: 'control' })}>
-            Start free trial
+            {marketingCopy(PRICING_CATALOG).headerCta}
           </Link>
           <Link href={siteConfig.links.channels} className={buttonVariants({ variant: 'glass', size: 'control' })}>
             All channels

@@ -2002,3 +2002,40 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+
+/* ---------- public pricing catalog display contract ---------- */
+
+/** Presentation data only; checkout authorization remains on the server. */
+export type CatalogCheckout = 'available' | 'not_yet_available' | 'not_applicable' | 'legacy_flow';
+
+export interface CatalogFirstValue {
+  postDoctorRuns: number;
+  genomeAnalyses: number;
+  genomeMaxPosts: number;
+}
+
+export interface CatalogPlan {
+  id: string;
+  plan: string;
+  label: string;
+  priceCents: number;
+  currency: string;
+  interval: 'month' | null;
+  entitlements: Record<string, number | string>;
+  /** Authoritative quantity; null/omitted means unknown, never an entitlement fallback. */
+  monthlyCredits?: number | null;
+  firstValue?: CatalogFirstValue;
+  checkout: CatalogCheckout;
+  /** Explicit server-qualified checkout availability; omitted/false means unavailable. */
+  checkoutAvailable?: boolean;
+  priceVariantId?: string | null;
+}
+
+export interface PublicCatalog {
+  catalogVersion: 'pricing-v2-2026-09-28' | 'legacy-2026-09';
+  pricing: 'v2' | 'legacy';
+  creditsPerUsd?: number;
+  plans: CatalogPlan[];
+  topUps: { available: boolean; reason: string };
+  notes?: string[];
+}
