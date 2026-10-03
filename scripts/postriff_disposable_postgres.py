@@ -120,7 +120,10 @@ def child_environment(target, environ):
 
 # Parent-integrated catalogue fixture is absent at the worker's exact base.
 # Referencing its group name does not create/edit that concurrently owned file.
-GROWTH_PARENT_GROUPS = frozenset({'postgres_growth_credit_rewrite', 'postgres_growth_base_check_catalog'})
+GROWTH_PARENT_GROUPS = frozenset({
+    'postgres_growth_credit_rewrite', 'postgres_growth_base_check_catalog',
+    'postgres_growth_genome_catalog', 'postgres_pricing_beta_events',
+})
 GROWTH_SCHEMA = ('020_credit_quotes.sql', '021_credit_purchases.sql',
                  '022_credit_payment_lifecycle.sql', '048_pricing_credit_catalog_v2.sql',
                  '050_free_lifecycle_bootstrap.sql')

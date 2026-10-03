@@ -109,6 +109,9 @@ class LocalPGTarget:
         """Bind-only ownership preflight; never connect to a foreign listener."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                # Match the owned postmaster's bind policy: its stopped socket
+                # may remain in TIME_WAIT. A live listener still refuses bind.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind((HOST, self.port))
         except OSError as error:
             raise RuntimeError(f'selected local PostgreSQL target {self.label()} is occupied or unavailable') from error

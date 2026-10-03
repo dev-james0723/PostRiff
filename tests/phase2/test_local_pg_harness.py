@@ -92,6 +92,34 @@ class RunnerContracts(unittest.TestCase):
         self.sock.assert_not_called()
         self.run.assert_not_called()
 
+    def test_recently_stopped_cluster_time_wait_does_not_refuse_the_next_group(self):
+        # Same bind policy as the owned PostgreSQL listener. A live listener is
+        # still refused by the separate existing occupied-target regression.
+        from local_pg_target import selected_target
+        options = set()
+        self.binding.setsockopt.side_effect = lambda level, option, value: options.add((level, option, value))
+        def time_wait_binding(address):
+            if (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) not in options:
+                raise OSError('synthetic TIME_WAIT after verified owned stop')
+        self.binding.bind.side_effect = time_wait_binding
+        try:
+            selected_target().assert_available()
+        except RuntimeError as error:
+            self.fail(str(error))
+        self.binding.bind.assert_called_once_with(('127.0.0.1', 55439))
+        self.run.assert_not_called()
+
+    def test_new_genome_and_beta_parent_groups_require_the_actual_schema_before_children(self):
+        for name in ('postgres_growth_genome_catalog.py', 'postgres_pricing_beta_events.py'):
+            with self.subTest(script=name):
+                path = ROOT / 'tests/phase2' / name
+                with self.assertRaises(RuntimeError):
+                    disposable.group_migrations((path,), {})
+                setup = disposable.group_migrations((path,), {'POSTRIFF_TEST_OWNED_PG': 'task9-growth'})
+                self.assertEqual(tuple(p.name for p in setup), disposable.GROWTH_SCHEMA)
+        self.sock.assert_not_called()
+        self.run.assert_not_called()
+
     def test_occupied_target_refused_before_init_and_never_stopped(self):
         self.binding.bind.side_effect = OSError('occupied synthetic target')
         with self.assertRaises(RuntimeError):
