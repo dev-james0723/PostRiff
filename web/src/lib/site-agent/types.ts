@@ -168,7 +168,7 @@ export interface SiteAgentContextSummary {
 export interface SiteAgentBody {
   version: number;
   runId: string;
-  status: 'running' | 'completed' | 'cancelled';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
   intent: string;
   language?: string;
   blocks: SiteAgentBlock[];
