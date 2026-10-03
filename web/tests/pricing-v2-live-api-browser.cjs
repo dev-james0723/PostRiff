@@ -126,6 +126,8 @@ async function publicScene(width,motion) {
     const creator=catalog.plans.find(p=>p.plan==='creator');
     assert.equal(creator.priceCents,5900);assert.equal(creator.entitlements.monthlyCredits,3500);
     assert.equal(creator.checkout,'not_yet_available');assert.equal(catalog.topUps.available,false);
+    // The existing public JSON-LD is published by Home, using the same pricing catalog.
+    await scene.page.goto(base+'/');
     const ld=await scene.page.locator('script[type="application/ld+json"]').allTextContents();
     assert.ok(ld.length,'Actual public JSON-LD must be present');
     const structured=ld.map(v=>JSON.parse(v));
