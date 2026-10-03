@@ -287,6 +287,21 @@ async function billingScene(row,width,motion,member=false,work=false) {
         }
       }
     }
+    if(work) {
+      const modelBody=await visual(scene,'/app/account/models',row.scenario+'-models',width,motion);
+      await scene.page.getByRole('button',{name:'Show information',exact:true}).first().click();
+      await scene.page.getByText('Where drafts are written',{exact:true}).waitFor({state:'visible'});
+      assert.match(await scene.page.locator('body').innerText(),/approved task allowance/);
+      if(row.expectedMode!=='legacy_allowances') assert.doesNotMatch(await modelBody.innerText(),/writing batch|media credit/i);
+      assert.doesNotMatch(await scene.page.getByText('Three kinds of writer',{exact:true}).locator('..').innerText(),/writing batch|media credit/i);
+      await scene.page.screenshot({path:path.join(out,`${row.scenario}-models-information-${width}-${motion}.png`),fullPage:true});
+      for(const article of ['help_billing','help_privacy_models']) {
+        const doc=await send('GET',ws+'/site-agent/help/'+article);
+        assert.ok(Array.isArray(doc.sections)&&doc.sections.length>0);
+        assert.doesNotMatch(JSON.stringify(doc.sections),/writing batch|media credit/i);
+      }
+      pass(`${row.scenario} ${width} ${motion}: actual Models information and authenticated billing/model help corpus`);
+    }
     pass(`${row.scenario} ${member?'member':'owner'} ${width} ${motion}: actual Usage/plan and ${work?'work/Growth UI':'billing UI'}`);
     assert.deepEqual(scene.errors,[]);assert.deepEqual(scene.external,[]);
   } catch(e) {

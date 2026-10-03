@@ -575,7 +575,10 @@ def entitlements_summary(ctx):
     owner = ctx.membership.allows("owner")
     budget = view.get("budget") or {}
     subscription = view.get("subscription") or {}
-    data = {"plan": subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId"), "subscriptionStatus": subscription.get("status"),
+    balances = view.get("credits") or {}
+    credit_summary = {key: balances.get(key) for key in ("availableMilliCredits", "heldMilliCredits", "usedMilliCredits")} if view.get("credits") is not None else None
+    data = {"billingMode": view.get("billingMode"), "credits": credit_summary,
+            "plan": subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId"), "subscriptionStatus": subscription.get("status"),
             "aiUsageExempt": view.get("aiUsageExempt", False),
             "writingBatchesRemaining": entitlement.get("writingBatchesRemaining"), "mediaCreditsRemaining": entitlement.get("mediaCreditsRemaining"),
             "resetsAt": entitlement.get("resetsAt"), "canPublish": can_publish, "budgetStatus": budget.get("status"),

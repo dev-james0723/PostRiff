@@ -349,4 +349,20 @@ assert http("GET", f"/api/workspaces/{wid}/site-agent/help/nope")[0] == 404
 code, insights = http("GET", f"/api/workspaces/{wid}/site-agent/insights")
 assert code == 200 and insights["turns"] >= 10 and insights["feedback"].get("not_helpful") == 1 and insights["outcomes"].get("blocked", 0) >= 1, insights
 assert http("GET", f"/api/workspaces/{wid}/site-agent/insights", token=VIEWER)[0] == 403
+# Pricing v2: use the actual SQL-backed ledger mode; legacy zero counters cannot describe credits.
+from types import SimpleNamespace
+from postriff_phase2.site_agent import tools as site_tools, compose as site_compose
+for terms, expected_mode in (("free-v1", "free_preview"), ("creator-v1", "managed_credits")):
+    with service.repository.transaction(OWNER, wid) as (cur, row, principal):
+        cur.execute("UPDATE public.pr_entitlements SET plan_terms_id=%s WHERE workspace_id=%s", (terms, wid))
+        context = SimpleNamespace(cur=cur, workspace_id=wid, principal=principal, now=clock[0], service=service,
+                                  membership=SimpleNamespace(allows=lambda role: False))
+        view = service.ledger.usage_view(cur, wid, principal)
+        result = site_tools.entitlements_summary(context)
+        assert result["data"]["billingMode"] == expected_mode, result
+        assert result["data"]["spentUsdMicro"] is None and result["data"]["stopUsdMicro"] is None
+        if expected_mode == "managed_credits":
+            assert result["data"]["credits"] == {key: view["credits"][key] for key in ("availableMilliCredits", "heldMilliCredits", "usedMilliCredits")}
+        facts = str(site_compose.facts({"entitlements.summary": result})).lower()
+        assert "writing batches" not in facts and "media credits" not in facts, facts
 print("postgres_site_agent: ok")

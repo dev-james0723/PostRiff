@@ -12,7 +12,7 @@ const SPEND_REASON = {
 export function CreditBalance({ balance, exempt = false }: { balance: Balance | null; exempt?: boolean }) {
   const state = managedCreditState(balance);
   return (
-    <section className='rafii-glass rounded-[var(--rafii-radius-card)] p-5' aria-label='Managed credits'>
+    <section className='rafii-glass rounded-[var(--rafii-radius-card)] p-5' aria-label='Managed credits' data-tour='billing-credits'>
       <h2 className='text-lg font-medium'>Managed credits</h2>
       {state.kind === 'unavailable' ? (
         <p className='text-muted-foreground mt-3 text-sm'>{exempt ? 'Application usage quota exemption applies. Credit balance is unavailable.' : 'Credit balance unavailable.'}</p>
