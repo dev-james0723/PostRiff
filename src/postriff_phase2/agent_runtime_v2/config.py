@@ -18,7 +18,7 @@ import os
 from dataclasses import dataclass, field
 
 # --- feature flags (§41) ----------------------------------------------------------------------------------------------
-FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENABLED", "RAFII_SPECIALISTS_ENABLED", "RAFII_PROACTIVE_V2_ENABLED")
+FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENABLED", "RAFII_SPECIALISTS_ENABLED", "RAFII_PROACTIVE_V2_ENABLED", "RAFII_AGENT_THINKING_STATES_ENABLED")
 
 # --- model aliases (ADR-006) ------------------------------------------------------------------------------------------
 # Defaults are aliases for development. Pin dated snapshots in production only after the evals pass (ADR-006).

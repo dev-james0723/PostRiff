@@ -142,6 +142,8 @@ def direct(runtime, workspace_id, token, conversation_id, text, modality, run_ke
                           conversation_id=conversation_id, trace_id=trace_id, modality=modality, page=page, zone=zone, run_id=run_id, now=runtime.clock,
                           config=runtime.cfg, request_text=text, command=command)
     ctx.deadline = time.monotonic() + 30
+    ctx.thinking_emit = lambda event: runtime._emit_thinking(workspace_id, token, run_id, event)
+    ctx.thinking("working", "run", "run_open")
     args = {"place": live_tools.clean_place(command.get("args"))} if command.get("args") else {}
     outcome = tool_adapter.execute(ctx, tool_adapter.REGISTRY["weather_now"], args, scope=frozenset(manager.MANAGER_TOOLS))
     if outcome.get("ok"):

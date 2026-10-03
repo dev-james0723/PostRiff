@@ -1,8 +1,8 @@
 {
- "generatedAt": "2026-09-26T20:04:37Z",
+ "generatedAt": "2026-10-03T22:59:09Z",
  "execution": "local disposable PostgreSQL; real hosted services; ScriptedModel reasoning; fake Live/vision/image transports",
  "summary": {
-  "PASS": 53,
+  "PASS": 60,
   "PARTIAL": 0,
   "FAIL": 0
  },
@@ -14,13 +14,13 @@
    "expected": "server creates the Live session with the project key; browser gets only the SDP answer; allowlisted data channel; client delegation; store false",
    "result": "PASS",
    "actual": {
-    "voiceSessionId": "e5940c5d-8a50-4a9c-ba02-7b73278d5e1d",
+    "voiceSessionId": "b4fd1e9a-83bc-44b8-bfcb-8174d42771e4",
     "model": "gpt-live-1",
     "allowedClientEvents": 6,
     "reservedUsdMicro": 1500000
    },
    "evidence": "fake Live endpoint recorded the server request",
-   "ms": 23
+   "ms": 331
   },
   {
    "id": "VS02",
@@ -36,11 +36,27 @@
      "label": "Read the campaign",
      "effect": "READ",
      "status": "verified",
-     "latencyMs": 6.7,
+     "latencyMs": 82.8,
      "specialist": "campaign"
     }
    ],
-   "ms": 251
+   "ms": 15911
+  },
+  {
+   "id": "THINK02",
+   "title": "Real Manager + two specialists emits solving/searching/weaving from application-owned runtime phases",
+   "prompt": "Compare campaign evidence with Brand Brain",
+   "expected": "working at open; specialist retrieval; weaving only when Manager recombines two evidence channels",
+   "result": "PASS",
+   "actual": [
+    "working",
+    "solving",
+    "searching",
+    "solving",
+    "weaving"
+   ],
+   "events": 5,
+   "ms": 1350
   },
   {
    "id": "VS03",
@@ -50,7 +66,7 @@
    "result": "PASS",
    "actual": "It's a warm top-down keyboard shot; the headline reads well, but there is no call to action.",
    "visionModel": "gpt-6-sol",
-   "ms": 169
+   "ms": 2317
   },
   {
    "id": "MMC1",
@@ -60,7 +76,7 @@
    "result": "PASS",
    "actual": "I can't look at it until the owner allows photo reading.",
    "visionCalls": 0,
-   "ms": 114
+   "ms": 178
   },
   {
    "id": "VS04",
@@ -87,9 +103,9 @@
      "Waiting for you to apply the proposal."
     ]
    },
-   "asset": "f5d00302e1fa4c92a90dffc797dc666c",
-   "draft": "f6dc5807c03a4f3a86ae4ec15f20b161",
-   "ms": 395
+   "asset": "1e36c1221f1248ee96dc80e2cc42bd1a",
+   "draft": "2fee7288ce924104961532d8eb942983",
+   "ms": 1863
   },
   {
    "id": "VS05",
@@ -103,7 +119,7 @@
     "proposal_diff",
     "result_list"
    ],
-   "ms": 12
+   "ms": 9
   },
   {
    "id": "VS06",
@@ -112,7 +128,7 @@
    "expected": "the one presented proposal is applied by the site agent's apply path; a real review exists for Thu 18:00 with the image; nothing published; verified answer",
    "result": "PASS",
    "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.; prepare the exact Instagram post for @studio.i. The post now waits for approval of that exact post before it can publish.",
-   "review": "ec67f3d9fa9f4792a35d1f7698a6cdd2",
+   "review": "e8249dfca1a7444b8b653f3347ceb839",
    "taskSteps": [
     [
      "Generate the matching image",
@@ -131,7 +147,7 @@
      "done"
     ]
    ],
-   "ms": 112
+   "ms": 205
   },
   {
    "id": "VS07",
@@ -140,7 +156,7 @@
    "expected": "voice session settled on the server's clock (the client's 90 s is kept for reference); the text turn sees the same conversation, task and references",
    "result": "PASS",
    "actual": "The draft is in the campaign and its post waits for approval on Thursday at 18:00; that's the only open item.",
-   "ms": 100
+   "ms": 744
   },
   {
    "id": "V-A08",
@@ -149,7 +165,7 @@
    "expected": "a question naming both; nothing applied; revision unchanged",
    "result": "PASS",
    "actual": "There are several changes waiting for you. Which one do you mean?",
-   "ms": 75
+   "ms": 76
   },
   {
    "id": "V-A08b",
@@ -162,7 +178,7 @@
     "proposed",
     "superseded"
    ],
-   "ms": 63
+   "ms": 2859
   },
   {
    "id": "V-A08c",
@@ -171,7 +187,7 @@
    "expected": "only an explicit position selects a proposal; any other text goes on as conversation",
    "result": "PASS",
    "actual": "Two automation changes are still waiting for you.",
-   "ms": 132
+   "ms": 1257
   },
   {
    "id": "V-A07b",
@@ -180,7 +196,7 @@
    "expected": "restates the proposal and asks; nothing applied",
    "result": "PASS",
    "actual": "Just to be sure, do you want me to apply this: pause automation 1?",
-   "ms": 61
+   "ms": 267
   },
   {
    "id": "V-A07c",
@@ -190,7 +206,7 @@
    "result": "PASS",
    "actual": "Left it: pause automation 1. Nothing was changed.",
    "proposalStatus": "dismissed",
-   "ms": 59
+   "ms": 202
   },
   {
    "id": "S-MOD1",
@@ -199,7 +215,7 @@
    "expected": "the same proposal store and permission checks apply to every modality; a viewer's yes applies nothing",
    "result": "PASS",
    "actual": "I didn't apply it: This action needs the 'edit' permission in this workspace.",
-   "ms": 76
+   "ms": 634
   },
   {
    "id": "MM04",
@@ -208,8 +224,8 @@
    "expected": "Sunburst edit; lineage parent; original hash unchanged; ordinal resolved deterministically",
    "result": "PASS",
    "actual": "I made a new version with a quieter headline; the original is unchanged.",
-   "edited": "dc6fff14597e40a0ab0b3e0b86ef2e5b",
-   "ms": 151
+   "edited": "0de9c8c03e094ff39a6d37b1fb79f1c1",
+   "ms": 1922
   },
   {
    "id": "MM05",
@@ -218,8 +234,8 @@
    "expected": "Sunburst edit of image 1 (the person's upload); lineage parent = the upload; the upload's bytes and record unchanged",
    "result": "PASS",
    "actual": "Here's a portrait version; your upload is unchanged.",
-   "edit": "43605198cc104e11af36fbfc66addf5a",
-   "ms": 147
+   "edit": "32f13db64909496aabbe40bba5d30014",
+   "ms": 563
   },
   {
    "id": "MM06",
@@ -228,7 +244,7 @@
    "expected": "variant on gpt-image-2.5-flare, linked to its parent",
    "result": "PASS",
    "actual": "Here's a quick variant.",
-   "ms": 138
+   "ms": 455
   },
   {
    "id": "MM12",
@@ -238,7 +254,7 @@
    "result": "PASS",
    "actual": "I checked: Looked at the image. I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
    "composedBy": "deterministic",
-   "ms": 97
+   "ms": 207
   },
   {
    "id": "MM13",
@@ -247,7 +263,7 @@
    "expected": "provider 500 → failed step, no asset, ledger unknown",
    "result": "PASS",
    "actual": "Not done: The provider's outcome is unknown; usage is held until it is reconciled.",
-   "ms": 104
+   "ms": 248
   },
   {
    "id": "MM14",
@@ -256,7 +272,7 @@
    "expected": "404 for attach, analyze and media; nothing leaks",
    "result": "PASS",
    "actual": "404/403 everywhere",
-   "ms": 93
+   "ms": 203
   },
   {
    "id": "R01",
@@ -264,8 +280,8 @@
    "prompt": "What is scheduled this week?",
    "expected": "site agent run; no agent run; no model spend",
    "result": "PASS",
-   "actual": "This week: 1 scheduled or waiting, 0 published and verified.",
-   "ms": 52
+   "actual": "Here is the confirmed calendar state for this week.",
+   "ms": 363
   },
   {
    "id": "R02",
@@ -274,7 +290,7 @@
    "expected": "site agent path; no text_model reservation",
    "result": "PASS",
    "actual": "1 item(s) need you, and I noticed 1 pattern(s) worth a look.",
-   "ms": 33
+   "ms": 154
   },
   {
    "id": "R03",
@@ -283,7 +299,7 @@
    "expected": "the site agent's refusal; no model call",
    "result": "PASS",
    "actual": "I can't publish or approve anything from a chat. A post goes out only after someone with the approve permission approves that exact post.",
-   "ms": 28
+   "ms": 127
   },
   {
    "id": "R04",
@@ -291,8 +307,8 @@
    "prompt": "(retry)",
    "expected": "one run, one answer",
    "result": "PASS",
-   "actual": "e2f13e4a-bfa0-4d94-ad55-70c1863a579d",
-   "ms": 72
+   "actual": "284cb6cd-9aed-46b4-92a5-f0acd948bf10",
+   "ms": 402
   },
   {
    "id": "R05",
@@ -301,7 +317,7 @@
    "expected": "running agent run cancelled; open task steps cancelled; finished work untouched",
    "result": "PASS",
    "actual": "Stopped 1 request(s) that were still running. Anything already finished stays as it is; nothing more was changed.",
-   "ms": 67
+   "ms": 170
   },
   {
    "id": "R06",
@@ -310,7 +326,7 @@
    "expected": "the earlier running spoken request is cancelled before its next change and handed to the Manager as superseded; a typed turn still running is left alone",
    "result": "PASS",
    "actual": "superseded",
-   "ms": 94
+   "ms": 353
   },
   {
    "id": "R07",
@@ -320,7 +336,7 @@
    "result": "PASS",
    "actual": "I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
    "fallback": "guardrail_output",
-   "ms": 61
+   "ms": 253
   },
   {
    "id": "R08",
@@ -335,7 +351,7 @@
     "proposalIds",
     "writerModel"
    ],
-   "ms": 75
+   "ms": 396
   },
   {
    "id": "R09",
@@ -344,13 +360,13 @@
    "expected": "the client's trace id is the run's, the audit's and the lineage's",
    "result": "PASS",
    "actual": {
-    "traceId": "trace_c7d83741d1d66879e7155db7f51ebd76",
+    "traceId": "trace_59b225657967aa3a7299f0166b14bbfb",
     "audits": [
      "campaign.items_unlinked",
      "campaign.items_linked"
     ]
    },
-   "ms": 134
+   "ms": 2204
   },
   {
    "id": "R10",
@@ -359,7 +375,7 @@
    "expected": "truthful errors; nothing reserved on failure",
    "result": "PASS",
    "actual": "voice_disabled / 503 no key / viewer 403 / live_busy",
-   "ms": 30
+   "ms": 141
   },
   {
    "id": "R11",
@@ -368,7 +384,7 @@
    "expected": "stored text; no audio fields",
    "result": "PASS",
    "actual": "transcript stored as text; usage billed on the server clock",
-   "ms": 46
+   "ms": 86
   },
   {
    "id": "GAP-V04",
@@ -391,7 +407,7 @@
      "Measured · voice profile (revision 1)"
     ]
    ],
-   "ms": 99
+   "ms": 12108
   },
   {
    "id": "GAP-D04",
@@ -400,8 +416,8 @@
    "expected": "a writing run with the draft as material; proposedUpdate.runId on the same draft; current text unchanged; verified",
    "result": "PASS",
    "actual": "I wrote a shorter version as a proposed update on the draft; the current text stays until you accept it.",
-   "proposedRun": "f5dc8323-3ac5-432d-8437-d28b9fa27c1a",
-   "ms": 191
+   "proposedRun": "7bcdb536-005d-44fd-90f1-9578a478311c",
+   "ms": 2394
   },
   {
    "id": "GAP-H05",
@@ -413,7 +429,7 @@
    "evidence": [
     "Who acted on it (newest first)"
    ],
-   "ms": 93
+   "ms": 1468
   },
   {
    "id": "A01-agent",
@@ -426,7 +442,7 @@
     "Needs attention (stored state)",
     "Observations (derived from your data)"
    ],
-   "ms": 93
+   "ms": 369
   },
   {
    "id": "MM15",
@@ -436,7 +452,7 @@
    "result": "PASS",
    "actual": "I couldn't prepare that yet; the image needs a short description first.",
    "code": "needs_alt",
-   "ms": 92
+   "ms": 158
   },
   {
    "id": "MEM01",
@@ -445,7 +461,7 @@
    "expected": "memory_context returns layers; without cloud consent the content is withheld and said so",
    "result": "PASS",
    "actual": "Your Brand Brain content isn't shared with the agent model until an owner allows cloud memory; here is what exists.",
-   "ms": 76
+   "ms": 147
   },
   {
    "id": "S-MOD2",
@@ -454,8 +470,8 @@
    "expected": "the typed yes binds to the voice-presented proposal; applied through the site agent's path; verified",
    "result": "PASS",
    "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.; prepare the exact Instagram post for @studio.i. The post now waits for approval of that exact post before it can publish.",
-   "proposal": "2371edd4ff804e6aa56d9253fcea32fa",
-   "ms": 320
+   "proposal": "cb05fbaa91a04ff980f7aed2debe94cc",
+   "ms": 583
   },
   {
    "id": "S-MOD3",
@@ -464,7 +480,7 @@
    "expected": "restates the proposal and asks again; nothing applied",
    "result": "PASS",
    "actual": "Just to be sure, do you want me to apply this: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied?",
-   "ms": 224
+   "ms": 1997
   },
   {
    "id": "S-MOD5",
@@ -474,7 +490,7 @@
    "result": "PASS",
    "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual s",
    "voiceHistoryHasTask": true,
-   "ms": 332
+   "ms": 1520
   },
   {
    "id": "S-MOD4",
@@ -493,7 +509,7 @@
    ],
    "secondApply": "This proposal was already applied.",
    "state": true,
-   "ms": 284
+   "ms": 781
   },
   {
    "id": "R12",
@@ -502,7 +518,7 @@
    "expected": "another member can't write the transcript of, or end, my session (404); a third concurrent session is refused (429) with nothing reserved",
    "result": "PASS",
    "actual": "Voice Mode is already on in another tab. End it there first.",
-   "ms": 106
+   "ms": 312
   },
   {
    "id": "HTTP01",
@@ -512,10 +528,10 @@
    "result": "PASS",
    "actual": {
     "status": 404,
-    "turn": "5434627c-3f4a-428a-8ffc-69a38226d2d0",
-    "voice": "4af11c93-a986-4235-9782-06d15537deb5"
+    "turn": "2dc561ec-1611-435b-b832-a75411b6f4c8",
+    "voice": "5e6ff001-6d47-49a3-8632-26920fb3951a"
    },
-   "ms": 134
+   "ms": 645
   },
   {
    "id": "R13",
@@ -529,7 +545,21 @@
     "cost": "actual",
     "usdMicro": 62500
    },
-   "ms": 76
+   "ms": 112
+  },
+  {
+   "id": "THINK01",
+   "title": "Semantic ThinkingOps use the existing scoped run-event store",
+   "prompt": "active-run + events",
+   "expected": "latest active run only; fixed enum event; metadata-only response; another workspace cannot read either",
+   "result": "PASS",
+   "actual": {
+    "active": "running",
+    "op": "searching",
+    "eventCount": 1,
+    "crossWorkspace": "refused"
+   },
+   "ms": 35
   },
   {
    "id": "R08b",
@@ -539,7 +569,7 @@
    "result": "PASS",
    "actual": "Done. The post now waits for its own approval before it can publish.",
    "pausedSpoken": "This waits for your decision: prepare the exact Instagram post for @studio.ig at Friday 25 September at 09:00 (the panel lists what else you're confirming). Say yes to apply it, or no to leave it.",
-   "ms": 436
+   "ms": 975
   },
   {
    "id": "R14",
@@ -549,7 +579,7 @@
    "result": "PASS",
    "actual": "I didn't apply it: This action needs the 'approve' permission in this workspace.",
    "afterOwner": "done",
-   "ms": 342
+   "ms": 661
   },
   {
    "id": "R15",
@@ -561,7 +591,7 @@
     "afterOthers": "running",
     "afterMine": "cancelled"
    },
-   "ms": 120
+   "ms": 348
   },
   {
    "id": "R16",
@@ -573,13 +603,13 @@
     "billedSeconds": 135.0,
     "usdMicro": 112500
    },
-   "ms": 47
+   "ms": 86
   },
   {
    "id": "R17",
-   "title": "The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation",
+   "title": "The runtime closes its dead turn while retaining the unknown provider cost and reserved budget",
    "prompt": "(cron) recover stalled runs → (next turn) reap",
-   "expected": "an old writing run is recovered; task, voice and agent rows are not; the next turn fails the dead agent turn with a message and settles its reservation",
+   "expected": "an old writing run is recovered; task and voice rows are not; the dead agent fails with a message and an unknown cost hold",
    "result": "PASS",
    "actual": {
     "cron": {
@@ -589,9 +619,23 @@
      "voice": "running"
     },
     "reaped": "failed",
-    "settled": "actual"
+    "settled": "estimated_unknown"
    },
-   "ms": 172
+   "ms": 251
+  },
+  {
+   "id": "R17-cancelled",
+   "title": "Dead cancelled turns retain unknown cost; known settlements and fresh runs stay unchanged",
+   "prompt": "(cleanup after a cancelled function died)",
+   "expected": "unknown hold deduplicated with original attribution; no fabricated actual cost or active-run cancellation",
+   "result": "PASS",
+   "actual": {
+    "unknownHold": 50000,
+    "knownCost": 12345,
+    "duplicateSettlements": 0,
+    "providerCalls": 0
+   },
+   "ms": 82
   },
   {
    "id": "R18",
@@ -600,7 +644,27 @@
    "expected": "run failed; a plain answer says it stopped; the error is logged without content",
    "result": "PASS",
    "actual": "Something went wrong on Rafii's side before this finished, so I stopped. Anything already finished stays as it is; nothing more was changed.",
-   "ms": 66
+   "ms": 101
+  },
+  {
+   "id": "R18-cost",
+   "title": "Abort retains a timed-out provider's unknown spend, while an explicit refusal can release its hold",
+   "prompt": "(abort after provider failure)",
+   "expected": "failed run/message; unknown cost stays held; observed refusal is actual zero; no duplicate settlement",
+   "result": "PASS",
+   "actual": [
+    {
+     "providerStatus": "timeout",
+     "costState": "estimated_unknown",
+     "actualUsdMicro": null
+    },
+    {
+     "providerStatus": "rate_limited",
+     "costState": "actual",
+     "actualUsdMicro": 0
+    }
+   ],
+   "ms": 197
   },
   {
    "id": "MM16",
@@ -613,7 +677,45 @@
     "ledger": "actual",
     "basis": "configured per-image price"
    },
-   "ms": 163
+   "ms": 300
+  },
+  {
+   "id": "LA01",
+   "title": "Live agent: “How do I connect Instagram?” answers with a guide card that starts by itself; the screen's labels reach the Manager as data",
+   "prompt": "How do I connect my Instagram account? (on Channels, with the page outline)",
+   "expected": "a guide_card {connect_account, auto} on the answer; APP_STATE.screen holds the visible labels and drops the instruction-like one; the style block is in the instructions",
+   "result": "PASS",
+   "actual": {
+    "guide": "connect_account",
+    "auto": true,
+    "screenItems": 2
+   },
+   "ms": 98
+  },
+  {
+   "id": "LA02",
+   "title": "Live agent by voice: a style change reaches the panel (saved when migration 030 is applied, never a failed turn without it); goodbye ends the call",
+   "prompt": "Talk a bit slower please · ok bye for now",
+   "expected": "voice_command {style, pace slower}; saved and verified with the column, unsaved and unclaimed without it; voice_command {end_call}",
+   "result": "PASS",
+   "actual": {
+    "agentStyleColumn": true,
+    "styleSaved": true,
+    "endCall": true
+   },
+   "ms": 352
+  },
+  {
+   "id": "LA03",
+   "title": "Slash commands: /weather is answered without a model through the gate; /search reaches the Manager with its fixed instruction and the input fenced",
+   "prompt": "/weather Hong Kong · /search latest Instagram news · /dance",
+   "expected": "a deterministic weather answer (stand-in Open-Meteo), recorded like any turn; the Manager sees the command block; an unknown command is plain text",
+   "result": "PASS",
+   "actual": {
+    "weather": "In Hong Kong it's 27°C now (feels like 30°C), overcast. Today: 25°C to 29°C, 40% chance of rain. Source: Open-Meteo, observed at 10:00 local time.",
+    "weatherCalls": 2
+   },
+   "ms": 306
   },
   {
    "id": "R19",
@@ -622,7 +724,7 @@
    "expected": "speakable = the stored proposal's summary + how to answer; a 300-character follow-up is cut, not refused",
    "result": "PASS",
    "actual": "I've prepared this for your approval: prepare the exact Instagram post for @studio.ig at Thursday 24 September at 11:00 (the panel lists what else you're confirming). Say yes to apply it, or no to leave it.",
-   "ms": 168
+   "ms": 1112
   },
   {
    "id": "R20",
@@ -634,7 +736,7 @@
     "Draft the teaser",
     "What should the clip show?"
    ],
-   "ms": 79
+   "ms": 148
   }
  ]
 }

@@ -161,6 +161,7 @@ jobs:
             docs/design/site-agent/evidence/ci-browser-chromium/
             docs/design/site-agent/evidence/ci-browser-webkit/
             docs/design/rafii-live-agent/evidence/ci-browser-chromium/
+            docs/design/rafii-live-agent/evidence/ci-thinkingops-chromium/
             docs/design/rafii-live-agent/evidence/ci-guide-chromium/
             docs/design/rafii-live-agent/evidence/ci-browser-webkit/
             docs/design/rafii-live-agent/evidence/ci-guide-webkit/

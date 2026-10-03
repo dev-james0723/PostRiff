@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { useQueryClient } from '@tanstack/react-query';
 import { IconMicrophone } from '@tabler/icons-react';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
+import { RafiiThinkingStatus } from '@/components/agents/thinking/rafii-thinking-status';
 import { createImeGuard } from '@/lib/ime';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,8 @@ import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-ac
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
+import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
 import { useMotionPreference } from '@/lib/rafii/motion';
@@ -105,6 +108,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }, [workspaceId]);
   const conversationId = usePanel((s) => (workspaceId ? (s.conversations[workspaceId] ?? null) : null));
   const busy = usePanel((s) => Boolean(workspaceId && s.busy[workspaceId]));
+  const pendingThinking = useThinkingState(conversationId, busy && agentOn);
   // Added images wait for the next turn of this conversation in this workspace; they never follow a switch elsewhere.
   useEffect(() => {
     setImages([]);
@@ -413,9 +417,13 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             {optimistic && (
               <li className='flex flex-col items-end gap-1'>
                 <p className='rafii-glass max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap'>{optimistic}</p>
-                <span role='status' className='text-muted-foreground flex items-center gap-1.5 text-[11px]'>
-                  <ThinkingShimmer>Reading your question</ThinkingShimmer>
-                </span>
+                {thinkingOrbsEnabled() && agentOn ? (
+                  <RafiiThinkingStatus op={pendingThinking.op} startedAt={pendingThinking.startedAt} showElapsed={false} className='text-[11px]' />
+                ) : (
+                  <span role='status' className='text-muted-foreground flex items-center gap-1.5 text-[11px]'>
+                    <ThinkingShimmer>Reading your question</ThinkingShimmer>
+                  </span>
+                )}
               </li>
             )}
             {failure && (
