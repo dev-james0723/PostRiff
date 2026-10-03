@@ -1,17 +1,17 @@
 /**
- * Public prospects always see Free and proposed Creator. Legacy data below is retained
+ * Public prospects always see Free and proposed Starter, Creator and Studio. Legacy data below is retained
  * for compatibility; it is never a new-sale catalog or a public rollback destination.
  *
  * - Legacy data: the Studio / Studio Assist packages and the 14-day trial. Mirrors
  *   `migrations/postriff/007_consumer_web_billing.sql` (pr_plan_terms). `status` follows decision D3:
  *   'proposed' until the commercial decision flips the database row to 'active'
  *   (see docs/postriff-consumer-web/billing-and-email.md).
- * - `v2` (Pricing v2, `pricing-v2-2026-09-28`): Free and proposed Creator only. `V2_CATALOG`
+ * - `v2` (Pricing v2, `pricing-v2-2026-09-28`): Free and proposed Starter, Creator and Studio. `V2_CATALOG`
  *   follows the committed display fixture at
  *   `docs/design/rafii-product-growth/contracts/pricing-catalog-v2.json`.
  *
  * No public selector activates billing or provider work. OFF/rollback keeps Free available
- * and Creator unavailable; a qualified catalog may advertise a route to server-verified checkout.
+ * and paid plans unavailable; a qualified catalog may advertise a route to server-verified checkout.
  */
 export type PlanId = 'studio' | 'assist';
 export type PlanStatus = 'proposed' | 'active';
@@ -99,7 +99,7 @@ export function formatPrice(plan: { priceCents: number; currency: string }) {
 /* ---------- which catalog the site sells from ---------- */
 
 /**
- * Compatibility input only: unset, legacy, OFF and v2 all retain the approved Free/Creator
+ * Compatibility input only: unset, legacy, OFF and v2 all retain the approved four-plan
  * public surface. Production checkout flags belong to the server; rollback is unavailable/waitlist.
  */
 export type PricingCatalogId = 'legacy' | 'v2';
@@ -121,7 +121,7 @@ export const V2_CATALOG_VERSION = 'pricing-v2-2026-09-28';
 /**
  * The committed v2 display fixture: Free (US$0, no managed credits, one eligible
  * Post Doctor check and one recent-20 Genome analysis when available) and Creator (US$59 default variant, 3,500 managed
- * credits a month, checkout not open until activation). Starter, Studio and top-ups are never listed.
+ * credits a month, checkout not open until activation). Starter (US$29 / 1,000 credits) and Studio (US$149 / 8,000 credits) are also proposed. Top-ups are never listed.
  * It does not prove that a preview or purchase is enabled for a visitor.
  */
 export const V2_CATALOG: PublicCatalog = {
@@ -142,6 +142,17 @@ export const V2_CATALOG: PublicCatalog = {
       checkout: 'not_applicable'
     },
     {
+      "id": "starter-v1",
+      "plan": "starter",
+      "label": "Starter",
+      "priceCents": 2900,
+      "currency": "USD",
+      "interval": "month",
+      "entitlements": {"members": 1, "connectedAccounts": 3, "brands": 1, "storageMb": 1000, "monthlyCredits": 1000, "writingBatches": 0, "mediaCredits": 0, "overage": "stop"},
+      "monthlyCredits": 1000,
+      "checkout": "not_yet_available",
+    },
+    {
       id: 'creator-v1',
       plan: 'creator',
       label: 'Creator',
@@ -152,18 +163,34 @@ export const V2_CATALOG: PublicCatalog = {
       monthlyCredits: 3500,
       checkout: 'not_yet_available',
       priceVariantId: 'creator-59-v1'
-    }
+    },
+    {
+      "id": "studio-v2",
+      "plan": "studio",
+      "label": "Studio",
+      "priceCents": 14900,
+      "currency": "USD",
+      "interval": "month",
+      "entitlements": {"members": 3, "connectedAccounts": 10, "brands": 3, "storageMb": 1000, "monthlyCredits": 8000, "writingBatches": 0, "mediaCredits": 0, "overage": "stop"},
+      "monthlyCredits": 8000,
+      "checkout": "not_yet_available",
+    },
   ],
   topUps: { available: false, reason: 'not_activated' },
   notes: [
     'Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis.',
-    'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.'
+    'Paid plan credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.'
   ]
 };
 
-/** The v2 plan of one family ('free', 'creator'), or undefined when the catalog does not sell it. */
+/** The v2 plan of one family ('free', 'starter', 'creator', 'studio'), or undefined when the catalog does not sell it. */
 export function catalogPlan(plan: string, catalog: PublicCatalog = V2_CATALOG): CatalogPlan | undefined {
-  return catalog.plans.find((p) => p.plan === plan);
+  return catalog.plans.find((p) => p.plan === plan && isV2PublicPlan(p));
+}
+
+/** Only the approved v2 identities belong on the public surface; legacy Studio remains historical. */
+export function isV2PublicPlan(plan: Pick<CatalogPlan, 'id' | 'plan'>): boolean {
+  return ({ free: 'free-v1', starter: 'starter-v1', creator: 'creator-v1', studio: 'studio-v2' } as Record<string, string>)[plan.plan] === plan.id;
 }
 
 /** A safe quantity from the public projection; unknown monthly credits never fall back to entitlements. */
@@ -247,7 +274,7 @@ function creatorCard(plan: CatalogPlan): V2PlanCard {
     id: plan.id,
     plan: plan.plan,
     name: plan.label,
-    tagline: 'Rafii in your weekly routine.',
+    tagline: plan.plan === 'starter' ? 'Start your managed AI routine.' : plan.plan === 'studio' ? 'More room for your team’s work.' : 'Rafii in your weekly routine.',
     priceCents: plan.priceCents,
     currency: plan.currency,
     interval: plan.interval,
@@ -264,9 +291,9 @@ function creatorCard(plan: CatalogPlan): V2PlanCard {
   };
 }
 
-/** Free and Creator, cheapest first, in the words the public cards use; numbers come from the catalog. */
+/** Free, Starter, Creator and Studio, cheapest first, in the words the public cards use; numbers come from the catalog. */
 export function v2PlanCards(catalog: PublicCatalog = V2_CATALOG): V2PlanCard[] {
-  return catalog.plans.flatMap((plan) => (plan.plan === 'free' ? [freeCard(plan)] : plan.plan === 'creator' ? [creatorCard(plan)] : []));
+  return catalog.plans.filter(isV2PublicPlan).flatMap((plan) => (plan.plan === 'free' ? [freeCard(plan)] : ['starter', 'creator', 'studio'].includes(plan.plan) ? [creatorCard(plan)] : []));
 }
 
 /**
@@ -284,7 +311,7 @@ export function v2CardAction(card: Pick<V2PlanCard, 'plan' | 'name' | 'checkout'
   if (card.plan === 'creator' && typeof card.monthlyCredits === 'number' && Number.isSafeInteger(card.monthlyCredits) && card.monthlyCredits >= 0 && card.checkout === 'available' && card.checkoutAvailable === true) {
     return { label: `Get ${card.name}`, href: `${signUpHref}?next=${encodeURIComponent('/app/account/billing#plans')}`, note: 'Start free, then review Creator under Usage & plan. Checkout eligibility is verified by the server.' };
   }
-  return { label: 'Creator unavailable', href: null, note: `${card.name} is proposed; its beta price is still being validated and it is not available for purchase. You can start on Free.` };
+  return { label: `${card.name} unavailable`, href: null, note: `${card.name} is proposed and it is not available for purchase. You can start on Free.` };
 }
 
 /** schema.org: Free, plus the default Creator offer only with explicit qualified availability. */

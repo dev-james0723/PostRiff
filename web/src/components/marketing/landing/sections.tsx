@@ -143,12 +143,12 @@ export function DesignPartners() {
   );
 }
 
-/** The plans for sale on the landing page: today's two legacy plans, or Free and Creator under Pricing v2. */
+/** The plans for sale on the landing page: Free and proposed Starter, Creator and Studio under Pricing v2. */
 export function PricingSummary() {
   const copy = marketingCopy(PRICING_CATALOG).landingPricing;
   return (
     <Section id='pricing' eyebrow='Pricing' title={copy.title} accent={copy.accent} description={copy.description}>
-      <div className='grid gap-4 md:grid-cols-2'>
+      <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
         {v2PlanCards().map((card, index) => (
           <ScrollReveal key={card.id} {...REVEAL} delay={index * STAGGER} className='flex'>
             <V2PlanCardView card={card} />

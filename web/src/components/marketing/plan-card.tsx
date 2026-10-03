@@ -14,7 +14,7 @@ export function PlanCard({ plan }: { plan: Plan; priceSize?: 'inline' | 'large';
 }
 
 /**
- * A Pricing v2 plan (Free or proposed Creator) in the same glass recipe.
+ * A Pricing v2 plan (Free or a proposed paid plan) in the same glass recipe.
  * Free starts signup; Creator stays unavailable until explicit catalog qualification.
  * A navigation link never authorizes a purchase.
  */

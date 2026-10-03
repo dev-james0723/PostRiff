@@ -92,3 +92,25 @@ test('unavailable, empty, or failed pack catalog never exposes stale pack checko
     assert.doesNotMatch(html, /Add credits|1,000 credits|Confirm purchase/);
   }
 });
+
+test('four public plans retain exact credits and legacy Studio remains separately current', () => {
+  const publicTerms = [
+    creator(0, { id: 'free-v1', plan: 'free', label: 'Free', entitlements: { monthlyCredits: 0 }, priceVariantId: null }),
+    creator(2900, { id: 'starter-v1', plan: 'starter', label: 'Starter', entitlements: { monthlyCredits: 1000 }, priceVariantId: null }),
+    creator(),
+    creator(14900, { id: 'studio-v2', plan: 'studio', label: 'Studio', entitlements: { monthlyCredits: 8000 }, priceVariantId: null })
+  ];
+  const old = legacy(1900);
+  const current = old.planTerms[0];
+  const data = { ...old, planTerms: [...publicTerms, current] };
+  const visible = model.latestTermsPerPlan(data.planTerms, data.entitlement.planTermsId);
+  assert.deepEqual(visible.map(p => p.id).sort(), ['creator-v1', 'free-v1', 'legacy-v1', 'starter-v1', 'studio-v2']);
+  const html = environment(data).render('features/billing/plans.tsx', 'Plans', { usage: data, usageReadSucceeded: true, isOwner: true, redirect });
+  for (const amount of ['19', '29', '59', '149']) assert.ok(html.includes(amount));
+  for (const credits of ['1,000', '3,500', '8,000']) assert.ok(html.includes(credits));
+  assert.doesNotMatch(html, /Choose Starter|Choose Studio|Choose Creator/);
+  assert.match(html, /AI writing batches/);
+  for (const plan of publicTerms.filter(p => ['starter', 'studio'].includes(p.plan))) {
+    assert.equal(model.planOffer({ terms: { ...plan, status: 'active', checkoutAvailable: true, newCheckoutEnabled: true }, currentTermsId: 'free-v1', lifecycleStatus: 'free', checkoutAvailable: true, isOwner: true }), 'not_available');
+  }
+});

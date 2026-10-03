@@ -7,3 +7,4 @@
 \ir ../../migrations/postriff/022_credit_payment_lifecycle.sql
 \ir ../../migrations/postriff/048_pricing_credit_catalog_v2.sql
 \ir ../../migrations/postriff/050_free_lifecycle_bootstrap.sql
+\ir ../../migrations/postriff/051_pricing_public_four_plans.sql

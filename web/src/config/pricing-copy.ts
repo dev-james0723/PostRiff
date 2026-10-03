@@ -1,12 +1,12 @@
 /**
  * Every public sentence about plans and pricing, for both catalogs (spec §13.1–13.2; PRD R-COM-04).
  *
- * All public selector values present Free and proposed Creator: outcomes first, credits explained once,
+ * All public selector values present Free and proposed Starter, Creator and Studio: outcomes first, credits explained once,
  * a beta price still being validated, and no trial, writing batches or legacy prices.
  * Numbers come from the committed catalog fixture. Neither copy nor a public selector activates
  * paid work. Rollback is unavailable/waitlist, never legacy new sales. The preview uses draft outcomes.
  */
-import { PRICING_CATALOG, V2_CATALOG, catalogLimit, catalogPlan, countText, formatPrice, usdText, type CatalogPlan, type PricingCatalogId, type PublicCatalog } from './plans';
+import { PRICING_CATALOG, V2_CATALOG, catalogLimit, catalogPlan, isV2PublicPlan, countText, formatPrice, usdText, type CatalogPlan, type PricingCatalogId, type PublicCatalog } from './plans';
 
 export interface FaqItem {
   q: string;
@@ -53,7 +53,7 @@ export interface SignUpCopy {
   promise: string[] | null;
 }
 
-/* ---------- v2: Free and Creator ---------- */
+/* ---------- v2: four public plans ---------- */
 
 function required(plan: CatalogPlan | undefined, name: string): CatalogPlan {
   // A catalog without the plan the copy describes must fail the build, never print a wrong price.
@@ -82,7 +82,7 @@ function v2Numbers(catalog: PublicCatalog) {
 
 /** The comparison table under the v2 cards: one column per plan for sale, in catalog order. */
 export function v2CompareRows(catalog: PublicCatalog = V2_CATALOG): { label: string; values: string[] }[] {
-  const columns = catalog.plans.filter((plan) => plan.plan === 'free' || plan.plan === 'creator');
+  const columns = catalog.plans.filter(isV2PublicPlan);
   const limit = (plan: CatalogPlan, key: string) => {
     const value = catalogLimit(plan, key);
     if (value === null) return '—';
@@ -111,22 +111,26 @@ export function v2CompareRows(catalog: PublicCatalog = V2_CATALOG): { label: str
 }
 
 function v2Copy(catalog: PublicCatalog): MarketingCopy {
-  const { creator, first, price, credits, perUsd, freeAccounts } = v2Numbers(catalog);
+  const { creator, first, credits, perUsd, freeAccounts } = v2Numbers(catalog);
   const creditDescription = credits === null ? 'a managed credit allowance that is currently unavailable' : `${credits} managed credits`;
   const creditSummary = credits === null ? 'Managed credit allowance unavailable.' : `${credits} managed AI credits every month for the work Rafii runs for you, like drafting and rewriting in your voice.`;
   const creatorAccounts = catalogLimit(creator, 'connectedAccounts');
   const creatorBrands = catalogLimit(creator, 'brands');
+  const paidSummary = catalog.plans.filter(plan => isV2PublicPlan(plan) && plan.plan !== 'free').map(plan => {
+    const allowance = catalogLimit(plan, 'monthlyCredits');
+    return `${plan.label} ${usdText(plan.priceCents)}/month with ${allowance === null ? 'a managed credit allowance that is currently unavailable' : `${countText(allowance)} managed credits`}`;
+  }).join('; ');
   const firstLook = `one Post Doctor check and one analysis of up to ${countText(first.genomeMaxPosts)} recent posts, when available for eligible workspaces`;
   return {
     catalog: 'v2',
-    pricingMeta: { description: `Start free, no card. Proposed Creator is ${price} a month with ${creditDescription} and is not available for purchase. Paid work stops at your limit — never a surprise charge.` },
+    pricingMeta: { description: `Start free, no card. Proposed plans: ${paidSummary}. Paid plans are not available for purchase. Paid work stops at your limit — never a surprise charge.` },
     pricingHero: {
       eyebrow: 'Pricing',
       title: 'Start free.',
       accent: 'Upgrade when it’s worth it.',
-      description: `Start free with no card. Preview Rafii on your own writing with ${firstLook}. Proposed Creator would add managed AI work every month.`
+      description: `Start free with no card. Preview Rafii on your own writing with ${firstLook}. Proposed Starter, Creator and Studio would add managed AI work every month.`
     },
-    pricingFootnote: 'Prices are shown in USD. Creator is proposed; its beta price is still being validated and it is not available for purchase.',
+    pricingFootnote: 'Prices are shown in USD. Starter, Creator and Studio are proposed and not available for purchase. Creator’s beta price is still being validated.',
     pricingFaq: [
       {
         q: 'What can I do on Free?',
@@ -138,14 +142,14 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
       },
       {
         q: 'What are managed credits?',
-        a: `Credits pay for the AI and data work Rafii runs for you on Creator: ${perUsd} credits equal US$1 of a task’s verified model and tool cost, rounded once per task. You see each task’s credit limit before it runs; Rafii holds it, charges what the task used and returns the rest, and a failed task uses no credits. Unknown cost stays held until confirmed. When credits run out, paid work stops and nothing is charged silently. Credits reset each billing period; unused credits don’t roll over.`
+        a: `Credits pay for the AI and data work Rafii runs for you on paid plans: ${perUsd} credits equal US$1 of a task’s verified model and tool cost, rounded once per task. You see each task’s credit limit before it runs; Rafii holds it, charges what the task used and returns the rest, and a failed task uses no credits. Unknown cost stays held until confirmed. When credits run out, paid work stops and nothing is charged silently. Credits reset each billing period; unused credits don’t roll over.`
       },
       {
-        q: 'Is the Creator price final?',
-        a: 'Creator is proposed, its beta price is still being validated, and it is not available for purchase. If paid subscriptions are enabled later, the price shown at checkout is the price you pay, with at least 30 days’ notice by email before a renewal price changes.'
+        q: 'Are the paid plan prices final?',
+        a: 'Starter, Creator and Studio are proposed and not available for purchase; Creator’s beta price is still being validated. If paid subscriptions are enabled later, the price shown at checkout is the price you pay, with at least 30 days’ notice by email before a renewal price changes.'
       },
-      { q: 'When am I billed?', a: 'If paid subscriptions are enabled, monthly in advance from the day you subscribe to Creator. Free never asks for a card and never converts automatically.' },
-      { q: 'Can I cancel any time?', a: 'Yes, from the billing portal. Creator runs to the end of the paid period; then the workspace returns to Free, and your drafts stay readable and exportable.' },
+      { q: 'When am I billed?', a: 'If paid subscriptions are enabled, monthly in advance from the day you subscribe to a paid plan. Free never asks for a card and never converts automatically.' },
+      { q: 'Can I cancel any time?', a: 'Yes, from the billing portal. Your paid plan runs to the end of the paid period; then the workspace returns to Free, and your drafts stay readable and exportable.' },
       { q: 'I subscribed before Creator. What changes?', a: 'Nothing, unless you choose to. Earlier plans keep their price and what they include, and Usage & plan keeps showing them.' },
       { q: 'Refunds?', a: 'See the Terms of Service. Free never charges you, so you can see Rafii work before paying.' },
       { q: 'Taxes?', a: 'Shown at checkout where applicable, based on your billing address.' }
@@ -153,7 +157,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
     landingPricing: {
       title: 'Start free.',
       accent: 'No surprises.',
-      description: `Start free with no card. Proposed Creator is ${price} a month with ${creditDescription} and is not available for purchase. Paid work stops at your limit.`,
+      description: `Start free with no card. Proposed plans: ${paidSummary}. Paid plans are not available for purchase. Paid work stops at your limit.`,
       compareLink: 'Compare plans in detail'
     },
     landingFaqItem: {
@@ -170,7 +174,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
     previewStat: ['Drafts ready', '3'],
     terms: {
       title: 'Free plan, subscriptions and billing',
-      paragraph: `New workspaces start on Free. No payment method is required; Free includes ${firstLook} and has no monthly managed credits. Creator is a proposed monthly subscription with ${creditDescription}${credits === null ? '' : ' per billing period'}. Credits pay for the AI and data work Rafii runs for you: ${perUsd} credits correspond to US$1 of the verified cost of a task, rounded once per task, and a task’s credit limit is shown and held before it runs. Credits expire at the end of each billing period and do not roll over. Paid plans remain proposed until commercial approval and payment verification are complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Paid work stops when credits are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, after which the workspace returns to Free and your drafts stay readable and exportable. Workspaces that subscribed under an earlier plan keep that plan and its price until they change it, and a trial that is already running continues until it ends. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.`
+      paragraph: `New workspaces start on Free. No payment method is required; Free includes ${firstLook} and has no monthly managed credits. Proposed monthly subscriptions: ${paidSummary}. Credits pay for the AI and data work Rafii runs for you: ${perUsd} credits correspond to US$1 of the verified cost of a task, rounded once per task, and a task’s credit limit is shown and held before it runs. Credits expire at the end of each billing period and do not roll over. Paid plans remain proposed until commercial approval and payment verification are complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Paid work stops when credits are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, after which the workspace returns to Free and your drafts stay readable and exportable. Workspaces that subscribed under an earlier plan keep that plan and its price until they change it, and a trial that is already running continues until it ends. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.`
     },
     signUp: {
       metaTitle: 'Start free',
@@ -189,7 +193,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
         {
           heading: 'Managed credits',
           paragraphs: [
-            `Creator has ${creditDescription}${credits === null ? '' : ' each billing period'}. ${perUsd} credits equal US$1 of the verified model and tool cost of a task, rounded once per task.`,
+            `Proposed monthly plans: ${paidSummary}. ${perUsd} credits equal US$1 of the verified model and tool cost of a task, rounded once per task.`,
             'Before a task runs you see its credit limit. Rafii holds that amount, charges what the task used and returns the rest. A failed task uses no credits, and an unknown cost stays held until it is confirmed rather than counted as zero.'
           ]
         },

@@ -92,7 +92,7 @@ export function Plans({ usage, usageReadSucceeded, isOwner, redirect }: { usage:
           const offer = offerFor(terms);
           const current = terms.id === currentId;
           const receipt = current && usage.billingMode !== 'free_preview' && usage.subscription?.planTermsId === terms.id ? usage.subscription : null;
-          const allowances = current && usage.billingMode === 'legacy_allowances' ? PLAN_ALLOWANCES : terms.plan === 'creator' ? MANAGED_PLAN_ALLOWANCES : CAPACITY_PLAN_ALLOWANCES;
+          const allowances = current && usage.billingMode === 'legacy_allowances' ? PLAN_ALLOWANCES : ['starter', 'creator', 'studio'].includes(terms.plan) && terms.catalogState === 'public' ? MANAGED_PLAN_ALLOWANCES : CAPACITY_PLAN_ALLOWANCES;
           const error = redirect.errorFor(terms.id);
           return (
             <Surface key={terms.id} material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-4'>

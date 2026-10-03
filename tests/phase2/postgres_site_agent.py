@@ -349,6 +349,12 @@ assert http("GET", f"/api/workspaces/{wid}/site-agent/help/nope")[0] == 404
 code, insights = http("GET", f"/api/workspaces/{wid}/site-agent/insights")
 assert code == 200 and insights["turns"] >= 10 and insights["feedback"].get("not_helpful") == 1 and insights["outcomes"].get("blocked", 0) >= 1, insights
 assert http("GET", f"/api/workspaces/{wid}/site-agent/insights", token=VIEWER)[0] == 403
+# Pricing v2: retain the original legacy suite above, then install its actual required schema.
+from pathlib import Path
+with connection() as db:
+    for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
+                 '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql'):
+        db.execute((Path(__file__).resolve().parents[2] / 'migrations/postriff' / name).read_text())
 # Pricing v2: use the actual SQL-backed ledger mode; legacy zero counters cannot describe credits.
 from types import SimpleNamespace
 from postriff_phase2.site_agent import tools as site_tools, compose as site_compose

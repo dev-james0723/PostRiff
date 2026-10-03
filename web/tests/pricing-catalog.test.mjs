@@ -21,14 +21,14 @@ import {
 } from '../src/config/plans.ts';
 
 const FIXTURE = JSON.parse(readFileSync(new URL('../../docs/design/rafii-product-growth/contracts/pricing-catalog-v2.json', import.meta.url), 'utf8'));
-const STALE_V2 = [/writing batch/i, /\$19\b/, /\$39\b/, /US\$19/, /US\$39/, /\btrial\b/i, /Studio Assist/i, /\bStudio\b/, /\bStarter\b/, /media credit/i, /two plans/i];
+const STALE_V2 = [/writing batch/i, /\$19\b/, /\$39\b/, /US\$19/, /US\$39/, /\btrial\b/i, /Studio Assist/i, /media credit/i, /two plans/i];
 
 test('AC05: the web v2 catalog equals the contract fixture the database is tested against', () => {
   assert.deepStrictEqual(V2_CATALOG, FIXTURE);
 });
 
-test('AC01: v2 presents Free and proposed Creator only; Creator defaults to US$59 with 3,500 managed credits; no top-ups', () => {
-  assert.deepEqual(V2_CATALOG.plans.map((plan) => plan.id), ['free-v1', 'creator-v1']);
+test('AC01: v2 presents Free and proposed Starter, Creator and Studio; Creator defaults to US$59 with 3,500 managed credits; no top-ups', () => {
+  assert.deepEqual(V2_CATALOG.plans.map((plan) => plan.id), ['free-v1', 'starter-v1', 'creator-v1', 'studio-v2']);
   const free = catalogPlan('free');
   const creator = catalogPlan('creator');
   assert.equal(free.priceCents, 0);
@@ -38,7 +38,7 @@ test('AC01: v2 presents Free and proposed Creator only; Creator defaults to US$5
   assert.equal(usdText(creator.priceCents), 'US$59');
   assert.equal(V2_CATALOG.creditsPerUsd, 300);
   assert.equal(V2_CATALOG.topUps.available, false);
-  for (const hidden of ['starter', 'studio', 'assist', 'trial']) assert.equal(catalogPlan(hidden), undefined, `${hidden} is never for sale under v2`);
+  for (const hidden of ['assist', 'trial']) assert.equal(catalogPlan(hidden), undefined, `${hidden} is never for sale under v2`);
 });
 
 test('the public selector always keeps Free and Creator, including OFF/legacy rollback', () => {
@@ -49,8 +49,13 @@ test('the public selector always keeps Free and Creator, including OFF/legacy ro
 
 test('v2 public cards: outcomes and numbers from the catalog, never legacy sales language', () => {
   const cards = v2PlanCards();
-  assert.deepEqual(cards.map((card) => card.name), ['Free', 'Creator']);
-  const [free, creator] = cards;
+  assert.deepEqual(cards.map((card) => card.name), ['Free', 'Starter', 'Creator', 'Studio']);
+  const [free, starter, creator, studio] = cards;
+  assert.deepEqual([starter.priceCents, starter.monthlyCredits, studio.priceCents, studio.monthlyCredits], [2900, 1000, 14900, 8000]);
+  for (const paid of [starter, studio]) {
+    assert.equal(v2CardAction(paid, '/auth/sign-up').href, null);
+    assert.ok(paid.highlights.includes(`${paid.monthlyCredits.toLocaleString('en-US')} managed AI credits every month`));
+  }
   assert.equal(free.interval, null);
   assert.equal(creator.interval, 'month');
   assert.ok(free.highlights.includes('One Post Doctor check on a draft of yours, when available'));
@@ -66,7 +71,7 @@ test('v2 public cards: outcomes and numbers from the catalog, never legacy sales
 });
 
 test('v2 card actions stay Free-first; client checkout flags cannot authorize Creator purchase', () => {
-  const [free, creator] = v2PlanCards();
+  const [free, , creator] = v2PlanCards();
   const freeAction = v2CardAction(free, '/auth/sign-up');
   assert.deepEqual([freeAction.label, freeAction.href], ['Start free', '/auth/sign-up']);
   const closed = v2CardAction(creator, '/auth/sign-up');

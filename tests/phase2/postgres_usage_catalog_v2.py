@@ -44,7 +44,7 @@ class UsageCatalogV2(unittest.TestCase):
         with connection() as db:
             assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
-                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
+                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())
 
     def setUp(self):
@@ -110,7 +110,7 @@ class UsageCatalogV2(unittest.TestCase):
             db.execute("UPDATE pr_plan_terms SET entitlements=entitlements || %s::jsonb WHERE id='creator-v1'",
                        (json.dumps({'providerKey': 'private-marker', 'cohort': ['private-marker'], 'budgetUsdMicro': 123}),))
         view = self.view()
-        self.assertEqual({p['id'] for p in view['planTerms']}, {'free-v1', 'creator-v1'})
+        self.assertEqual({p['id'] for p in view['planTerms']}, {'free-v1', 'starter-v1', 'creator-v1', 'studio-v2'})
         creator = next(p for p in view['planTerms'] if p['id'] == 'creator-v1')
         self.assertEqual((creator['priceCents'], creator['defaultPriceCents'], creator['priceVariantId']), (5900, 5900, 'creator-59-v1'))
         self.assertEqual(creator['entitlements']['monthlyCredits'], 3500)
@@ -132,7 +132,7 @@ class UsageCatalogV2(unittest.TestCase):
                 self.assertEqual(view['subscription']['priceCents'], cents)
                 row = next(p for p in view['planTerms'] if p['id'] == terms)
                 self.assertEqual((row['priceCents'], row['catalogState'], row['current'], row['newCheckoutEnabled'], row['checkoutAvailable']), (cents, 'legacy', True, False, False))
-                self.assertEqual({p['id'] for p in view['planTerms']}, {'free-v1', 'creator-v1', terms})
+                self.assertEqual({p['id'] for p in view['planTerms']}, {'free-v1', 'starter-v1', 'creator-v1', 'studio-v2', terms})
 
     def test_managed_actual_variant_never_base_price_or_catalog_grant(self):
         self.paid()

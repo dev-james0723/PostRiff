@@ -103,6 +103,10 @@ async function visual(scene, url, label, width, motion) {
   if(url.includes('/billing')) {
     await page.getByRole('heading',{name:'Usage & plan',exact:true}).waitFor();
     await page.getByRole('status',{name:'Loading usage and plan',exact:true}).waitFor({state:'hidden'});
+    const plansText=await page.locator('#plans').innerText();
+    for(const label of ['Starter','Creator','Studio']) assert.ok(plansText.includes(label));
+    for(const credits of ['1,000','3,500','8,000']) assert.ok(plansText.includes(credits));
+    assert.doesNotMatch(plansText,/Choose Starter|Choose Studio/);
   }
   const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
   assert.ok(overflow.scroll<=overflow.width+1, `${label}: horizontal overflow ${JSON.stringify(overflow)}`);
@@ -120,19 +124,26 @@ async function publicScene(width,motion) {
     const text=await main.innerText();assert.match(text,/Free/);assert.match(text,/Creator/);
     assert.match(text,/\$59|US\$59|USD 59/);assert.match(text,/3,500|3500/);
     assert.doesNotMatch(text,/\$(19|39)(?:\D|$)/,'No legacy new-sale prices');
-    for(const name of ['Starter','Studio']) assert.equal(await main.getByRole('heading',{name,exact:true}).count(),0);
+    for(const name of ['Starter','Studio']) assert.equal(await main.getByRole('heading',{name,exact:true}).count(),1);
+    for(const amount of [29,149]) assert.ok(text.includes(`$${amount}`));
+    for(const credits of ['1,000','8,000']) assert.ok(text.includes(credits));
     const catalog=await parsed(await scene.context.request.get(base+'/api/plans',{timeout:ACTION_TIMEOUT_MS}));
-    assert.equal(catalog.pricing,'v2');assert.deepEqual(catalog.plans.map(p=>p.plan).sort(),['creator','free']);
+    assert.equal(catalog.pricing,'v2');assert.deepEqual(catalog.plans.map(p=>p.plan).sort(),['creator','free','starter','studio']);
     const creator=catalog.plans.find(p=>p.plan==='creator');
     assert.equal(creator.priceCents,5900);assert.equal(creator.entitlements.monthlyCredits,3500);
     assert.equal(creator.checkout,'not_yet_available');assert.equal(catalog.topUps.available,false);
+    for(const [id,price,credits] of [['starter-v1',2900,1000],['studio-v2',14900,8000]]) {
+      const plan=catalog.plans.find(p=>p.id===id);assert.equal(plan.priceCents,price);assert.equal(plan.monthlyCredits,credits);
+      assert.equal(plan.checkout,'not_yet_available');assert.equal(plan.checkoutAvailable,false);
+      assert.equal(await main.getByRole('button',{name:`${plan.label} unavailable`,exact:true}).isDisabled(),true);
+    }
     // The existing public JSON-LD is published by Home, using the same pricing catalog.
     await scene.page.goto(base+'/');
     const ld=await scene.page.locator('script[type="application/ld+json"]').allTextContents();
     assert.ok(ld.length,'Actual public JSON-LD must be present');
     const structured=ld.map(v=>JSON.parse(v));
     assert.doesNotMatch(JSON.stringify(structured),/studio-v1|assist-v1|price_local_synthetic/);
-    pass(`public ${width} ${motion}: Free + Creator $59 / 3500, inactive checkout, no overflow/errors`);
+    pass(`public ${width} ${motion}: Free + Starter $29 / 1000 + Creator $59 / 3500 + Studio $149 / 8000, inactive checkout, no overflow/errors`);
   } finally {await scene.context.close();}
 }
 

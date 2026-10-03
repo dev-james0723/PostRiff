@@ -319,7 +319,7 @@ def _plan_view(row, *, v2, variant=None, credits_enabled=None):
 
 
 def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
-    """Public display stays Free + Creator while activation independently gates purchases.
+    """Public display stays Free + Starter + Creator + Studio while activation independently gates purchases.
 
     Before additive migration 048 the new public catalog fails closed. Existing
     subscriber billing, invoices and portal use their retained authenticated data.
@@ -329,7 +329,7 @@ def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
     if not cur.fetchone()[0]:
         raise AlphaError('The pricing catalog is not available yet.', 503, code='catalog_unavailable')
     cur.execute("SELECT id,plan,label,price_cents,currency,status,new_checkout_enabled,entitlements,provider_price_id FROM public.pr_plan_terms "
-                "WHERE catalog_state='public' AND plan IN ('free','creator') AND status IN ('active','proposed') ORDER BY price_cents,id")
+                "WHERE catalog_state='public' AND id IN ('free-v1','starter-v1','creator-v1','studio-v2') AND status IN ('active','proposed') ORDER BY price_cents,id")
     rows = cur.fetchall()
     default = PlanPricing.variant(cur, DEFAULT_VARIANT)
     spend_enabled = bool(pricing_v2_enabled) and credits_enabled is not False
@@ -340,7 +340,7 @@ def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
     return {'catalogVersion': CATALOG_VERSION_V2, 'pricing': 'v2', 'creditsPerUsd': CREDITS_PER_USD,
             'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
             'notes': ['Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis when available.',
-                      'Creator credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
+                      'Paid plan credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently.']}
 
 
 def billing_mode(growth_mode):

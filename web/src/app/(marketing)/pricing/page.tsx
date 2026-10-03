@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   openGraph: { title: 'Pricing · Rafii', url: '/pricing' }
 };
 
-/** Comparison cells wrap so the three columns fit a 320px viewport without page scroll (DNA §19.3). */
+/** Comparison cells wrap so the comparison stays inside its keyboard-accessible scroll region on narrow viewports (DNA §19.3). */
 const CELL = 'px-4 py-3 align-top whitespace-normal';
 
 function CompareTable({ columns, rows }: { columns: string[]; rows: { label: string; values: string[] }[] }) {
@@ -51,13 +51,13 @@ function CompareTable({ columns, rows }: { columns: string[]; rows: { label: str
   );
 }
 
-/** Pricing v2: Free and Creator only, outcomes first; credits are explained once in the FAQ below. */
+/** Pricing v2: Free, Starter, Creator and Studio, outcomes first; credits are explained once in the FAQ below. */
 function V2Plans() {
   const cards = v2PlanCards();
   return (
     <>
       <Section className='pt-8 sm:pt-12'>
-        <div className='grid gap-4 md:grid-cols-2'>
+        <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
           {cards.map((card) => (
             <V2PlanCardView key={card.id} card={card} priceSize='large' />
           ))}

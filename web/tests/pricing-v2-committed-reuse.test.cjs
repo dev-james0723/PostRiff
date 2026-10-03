@@ -41,7 +41,7 @@ const presentation = {
 };
 
 test('client checkout/status changes cannot acquire public purchase authority', () => {
-  const model = load('config/plans.ts'); const [free, creator] = model.v2PlanCards();
+  const model = load('config/plans.ts'); const [free, , creator] = model.v2PlanCards();
   for (const checkout of ['not_yet_available', 'available', 'legacy_flow']) {
     const action = model.v2CardAction({ ...creator, checkout }, '/auth/sign-up');
     assert.equal(action.label, 'Creator unavailable'); assert.equal(action.href, null);
@@ -53,14 +53,14 @@ test('client checkout/status changes cannot acquire public purchase authority', 
   assert.doesNotMatch(JSON.stringify(model.jsonLdOffers('v2', forged)), /Creator|InStock|PreOrder|validFrom|availability/);
 });
 
-test('public selector always lists Free0 and Creator59/3500 with no hidden families', () => {
+test('public selector always lists the four approved public packages with no forged identities', () => {
   const model = load('config/plans.ts');
   for (const value of [undefined, '', 'true', 'legacy']) assert.equal(model.pricingCatalogId(value), 'v2');
   assert.equal(model.pricingCatalogId('v2'), 'v2');
-  assert.deepEqual(model.v2PlanCards().map((p) => [p.plan, p.priceCents]), [['free', 0], ['creator', 5900]]);
+  assert.deepEqual(model.v2PlanCards().map((p) => [p.plan, p.priceCents]), [['free', 0], ['starter', 2900], ['creator', 5900], ['studio', 14900]]);
   assert.equal(model.catalogLimit(model.catalogPlan('creator'), 'monthlyCredits'), 3500);
-  const injected = { ...model.V2_CATALOG, plans: [...model.V2_CATALOG.plans, ...['starter', 'studio', 'assist', 'trial'].map((p) => ({ ...model.V2_CATALOG.plans[1], plan: p }))] };
-  assert.deepEqual(model.v2PlanCards(injected).map((p) => p.plan), ['free', 'creator']);
+  const injected = { ...model.V2_CATALOG, plans: [...model.V2_CATALOG.plans, ...['starter', 'studio', 'assist', 'trial'].map((p) => ({ ...model.catalogPlan('creator'), id: 'forged-legacy', plan: p }))] };
+  assert.deepEqual(model.v2PlanCards(injected).map((p) => p.plan), ['free', 'starter', 'creator', 'studio']);
   assert.deepEqual(model.plans.map((p) => p.priceCents), [1900, 3900]);
 });
 
@@ -76,7 +76,7 @@ test('v2 acquisition and beta copy stays Free/no-card/proposed across five entry
   assert.deepEqual([v2.headerCta, v2.hero.primaryLabel, v2.ctaBand.primaryLabel], ['Start free', 'Start free', 'Start free']);
   assert.equal(v2.signUp.showPlanChooser, false); assert.equal(v2.signUp.chooser, null);
   const sales = JSON.stringify({ ...v2, terms: undefined, docs: undefined });
-  assert.doesNotMatch(sales, /14.day|free trial|after trial|writing batch|Studio|Starter|\$(?:19|39)\b|paid beta/i);
+  assert.doesNotMatch(sales, /14.day|free trial|after trial|writing batch|Studio Assist|\$(?:19|39)\b|paid beta/i);
   assert.match(v2.pricingFootnote, /proposed/i); assert.match(v2.pricingFootnote, /not available for purchase/i);
   assert.match(sales, /when available|eligib/i); assert.match(v2.ctaBand.note, /No card/i);
   assert.equal(legacy.signUp.showPlanChooser, false); assert.equal(legacy.headerCta, 'Start free');
@@ -213,15 +213,17 @@ test('rendered header/menu, hero, CTA and channel all route selected v2 acquisit
   assert.match(entry[0], /href="\/auth\/sign-in"/);
 });
 
-test('rendered pricing and landing cards show exactly Free and proposed Creator; JSON-LD only Free', () => {
+test('rendered pricing and landing cards show all four approved plans; JSON-LD only Free', () => {
   const scene = renderScene('v2');
   const pricing = scene.markup(scene.module('app/(marketing)/pricing/page.tsx').default);
   const landing = scene.markup(scene.module('components/marketing/landing/sections.tsx').PricingSummary);
   for (const html of [pricing, landing]) {
-    assert.equal((html.match(/<h3\b/g) ?? []).length, 2);
-    assert.match(html, /Free/); assert.match(html, /Creator/); assert.match(html, /\$59/); assert.match(html, /3,500 managed AI credits/);
+    assert.equal((html.match(/<h3\b/g) ?? []).length, 4);
+    assert.match(html, /Free/); assert.match(html, /Creator/); assert.match(html, /\$59/);
+    assert.match(html, /Starter/); assert.match(html, /\$29/); assert.match(html, /1,000/);
+    assert.match(html, /Studio/); assert.match(html, /\$149/); assert.match(html, /8,000/); assert.match(html, /3,500 managed AI credits/);
     assert.match(html, /not available for purchase/); assert.match(html, /when available/);
-    assert.doesNotMatch(html, /14.day|free trial|\$(?:19|39)\b|Studio|Starter|writing batch|Get Creator/i);
+    assert.doesNotMatch(html, /14.day|free trial|\$(?:19|39)\b|Studio Assist|writing batch|Get Creator/i);
     assert.doesNotMatch(html, /sign-up\?(?:plan|next)=/);
   }
   const json = scene.module('components/marketing/json-ld.tsx').JsonLd().props.dangerouslySetInnerHTML.__html;
@@ -253,7 +255,7 @@ test('authority: default and explicit legacy public selectors always present Fre
     const copy = load('config/pricing-copy.ts').marketingCopy(selector);
     assert.equal(copy.catalog, 'v2'); assert.equal(copy.signUp.showPlanChooser, false);
     assert.equal(copy.headerCta, 'Start free');
-    assert.doesNotMatch(JSON.stringify({ ...copy, terms: undefined, docs: undefined }), /14.day|free trial|writing batch|Studio|Starter|\$(?:19|39)\b/i);
+    assert.doesNotMatch(JSON.stringify({ ...copy, terms: undefined, docs: undefined }), /14.day|free trial|writing batch|Studio Assist|\$(?:19|39)\b/i);
   }
 });
 test('authority: runtime flags OFF or ON alone never restore legacy public sales or authorize Creator', () => {
@@ -261,15 +263,17 @@ test('authority: runtime flags OFF or ON alone never restore legacy public sales
     process.env.POSTRIFF_PRICING_V2_ENABLED = flag;
     const scene = renderScene(selector);
     const html = scene.markup(scene.module('app/(marketing)/pricing/page.tsx').default);
-    assert.match(html, /Free/); assert.match(html, /Creator/); assert.match(html, /\$59/); assert.match(html, /3,500/);
-    assert.doesNotMatch(html, /Studio|Starter|\$(?:19|39)\b|14.day|free trial|Get Creator/i);
+    assert.match(html, /Free/); assert.match(html, /Creator/); assert.match(html, /\$59/);
+    assert.match(html, /Starter/); assert.match(html, /\$29/); assert.match(html, /1,000/);
+    assert.match(html, /Studio/); assert.match(html, /\$149/); assert.match(html, /8,000/); assert.match(html, /3,500/);
+    assert.doesNotMatch(html, /Studio Assist|\$(?:19|39)\b|14.day|free trial|Get Creator/i);
     assert.match(html, /Creator unavailable/);
     assert.match(html, /<button[^>]*disabled/);
   }
   process.env.POSTRIFF_PRICING_V2_ENABLED = '0';
 });
 test('authority: Creator waits for explicit qualified catalog checkout; a status string alone is insufficient', () => {
-  const model = load('config/plans.ts'); const [, creator] = model.v2PlanCards();
+  const model = load('config/plans.ts'); const [, , creator] = model.v2PlanCards();
   for (const qualified of [undefined, false]) {
     const action = model.v2CardAction({ ...creator, checkout: 'available', checkoutAvailable: qualified }, '/auth/sign-up');
     assert.equal(action.label, 'Creator unavailable'); assert.equal(action.href, null);
@@ -301,19 +305,19 @@ test('quantity: malformed or unknown paid monthly credits never become zero or a
     assert.equal(model.catalogLimit(creator, 'monthlyCredits'), null, String(monthlyCredits));
     const card = model.v2PlanCards(catalog).find((plan) => plan.plan === 'creator');
     assert.ok(card.highlights.includes('Managed credit allowance unavailable'));
-    assert.doesNotMatch(JSON.stringify(card.highlights), /3,500|0 managed|NaN|Infinity|\[object Object\]/);
+    assert.doesNotMatch(JSON.stringify(card.highlights), /3,500|\b0 managed|NaN|Infinity|\[object Object\]/);
     assert.equal(model.v2CardAction(card, '/auth/sign-up').href, null);
-    assert.equal(copy.v2CompareRows(catalog).find((row) => row.label === 'Managed AI credits').values[1], 'Unavailable');
+    assert.equal(copy.v2CompareRows(catalog).find((row) => row.label === 'Managed AI credits').values[2], 'Unavailable');
     assert.deepEqual(model.jsonLdOffers('v2', catalog).map((offer) => offer.name), ['Free']);
     const html = scene.markup(V2PlanCardView, { card });
     assert.match(html, /Managed credit allowance unavailable/);
     assert.match(html, /<button[^>]*disabled[^>]*>Creator unavailable<\/button>/);
-    assert.doesNotMatch(html, /Get Creator|3,500|0 managed|NaN|Infinity|\[object Object\]/);
+    assert.doesNotMatch(html, /Get Creator|3,500|\b0 managed|NaN|Infinity|\[object Object\]/);
     const words = copy.marketingCopy('v2', catalog);
     assert.match(words.pricingFaq.find((item) => item.q === 'What does Creator add?').a, /Managed credit allowance unavailable/);
     for (const text of [words.pricingMeta.description, words.landingPricing.description, words.terms.paragraph, ...words.docs.usageSections.find((item) => item.heading === 'Managed credits').paragraphs]) {
       assert.match(text, /allowance.*unavailable|unknown cost/i);
-      assert.doesNotMatch(text, /3,500|0 managed|(?:null|undefined|NaN|Infinity) managed|\[object Object\]/);
+      assert.doesNotMatch(text, /3,500|\b0 managed|(?:null|undefined|NaN|Infinity) managed|\[object Object\]/);
     }
   }
 });
@@ -321,7 +325,7 @@ test('quantity: normal seeded Free0 and Creator3500 remain unchanged', () => {
   const model = load('config/plans.ts');
   assert.equal(model.catalogLimit(model.catalogPlan('free'), 'monthlyCredits'), 0);
   assert.equal(model.catalogLimit(model.catalogPlan('creator'), 'monthlyCredits'), 3500);
-  assert.ok(model.v2PlanCards()[1].highlights.includes('3,500 managed AI credits every month'));
+  assert.ok(model.v2PlanCards().find(p => p.id === 'creator-v1').highlights.includes('3,500 managed AI credits every month'));
 });
 
 

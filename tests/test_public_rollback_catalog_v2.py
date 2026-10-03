@@ -8,10 +8,10 @@ class RollbackCatalog(unittest.TestCase):
     def test_post048_off_displays_free_creator_even_if_persisted_sale_is_enabled(self):
         shown=public_catalog(Cursor(True),False,credits_enabled=True)
         self.assertEqual(shown['pricing'],'v2')
-        self.assertEqual([p['plan'] for p in shown['plans']],['free','creator'])
-        self.assertEqual([(p['priceCents'],p['monthlyCredits']) for p in shown['plans']],[(0,0),(5900,3500)])
-        self.assertEqual([p['checkout'] for p in shown['plans']],['not_applicable','not_yet_available'])
-        self.assertFalse(shown['plans'][1]['checkoutAvailable'])
+        self.assertEqual([p['plan'] for p in shown['plans']],['free','starter','creator','studio'])
+        self.assertEqual([(p['priceCents'],p['monthlyCredits']) for p in shown['plans']],[(0,0),(2900,1000),(5900,3500),(14900,8000)])
+        self.assertEqual([p['checkout'] for p in shown['plans']],['not_applicable','not_yet_available','not_yet_available','not_yet_available'])
+        self.assertFalse(shown['plans'][2]['checkoutAvailable'])
         self.assertFalse(shown['topUps']['available'])
     def test_pre048_public_off_is_unavailable_instead_of_old_new_sale(self):
         cur=Cursor(False)
@@ -20,8 +20,8 @@ class RollbackCatalog(unittest.TestCase):
         self.assertEqual(len(cur.calls),1)
     def test_qualified_public_creator_projection_has_explicit_purchase_permission(self):
         shown=public_catalog(Cursor(True),True,credits_enabled=True)
-        self.assertEqual(shown['plans'][1]['checkout'],'available')
-        self.assertIs(shown['plans'][1].get('checkoutAvailable'),True)
+        self.assertEqual(shown['plans'][2]['checkout'],'available')
+        self.assertIs(shown['plans'][2].get('checkoutAvailable'),True)
         self.assertIs(shown['plans'][0].get('checkoutAvailable'),False)
 
 if __name__=='__main__':unittest.main()

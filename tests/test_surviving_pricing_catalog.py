@@ -21,7 +21,7 @@ class Cursor:
             if not self.present:assert 'new_checkout_enabled' not in sql
             self.rows=[('studio-v1','studio','Studio',1900,'USD','active',False,{'writingBatches':10},'synthetic-legacy')]
         elif 'FROM public.pr_plan_terms' in sql and 'ORDER BY price_cents' in sql:
-            self.rows=[('free-v1','free','Free',0,'USD','active',False,{},''),('creator-v1','creator','Creator',5900,'USD','active',True,{'monthlyCredits':3500,'creditPolicy':V2_POLICY_VERSION,'members': {'secret':'private'} if self.malformed else 1,'providerSecret':'private'},'')]
+            self.rows=[('free-v1','free','Free',0,'USD','active',False,{},''),('starter-v1','starter','Starter',2900,'USD','proposed',False,{'monthlyCredits':1000,'creditPolicy':V2_POLICY_VERSION},''),('creator-v1','creator','Creator',5900,'USD','active',True,{'monthlyCredits':3500,'creditPolicy':V2_POLICY_VERSION,'members': {'secret':'private'} if self.malformed else 1,'providerSecret':'private'},''),('studio-v2','studio','Studio',14900,'USD','proposed',False,{'monthlyCredits':8000,'creditPolicy':V2_POLICY_VERSION},'')]
         elif 'SELECT plan,status,catalog_state,new_checkout_enabled' in sql:self.row=('creator','active','public',True,V2_POLICY_VERSION) if 'creditPolicy' in sql else ('creator','active','public',True)
         elif 'SELECT status,provider_subscription_id' in sql:self.row=None
         elif 'UNION ALL SELECT id FROM public.pr_plan_terms' in sql:self.rows=[('creator-59-v1',)]
@@ -44,13 +44,13 @@ class PublicCatalog(unittest.TestCase):
         self.assertEqual((caught.exception.status,caught.exception.code),(503,'catalog_unavailable'))
     def test_free_creator_and_disabled_credit_checkout(self):
         result=self.catalog(Cursor(),True)
-        self.assertEqual([p['plan'] for p in result['plans']],['free','creator'])
-        self.assertEqual((result['plans'][0]['priceCents'],result['plans'][1]['priceCents'],result['plans'][1]['monthlyCredits']),(0,5900,3500))
-        self.assertEqual([p['checkout'] for p in result['plans']],['not_applicable','not_yet_available'])
+        self.assertEqual([p['plan'] for p in result['plans']],['free','starter','creator','studio'])
+        self.assertEqual((result['plans'][0]['priceCents'],result['plans'][2]['priceCents'],result['plans'][2]['monthlyCredits']),(0,5900,3500))
+        self.assertEqual([p['checkout'] for p in result['plans']],['not_applicable','not_yet_available','not_yet_available','not_yet_available'])
         self.assertFalse(result['topUps']['available'])
     def test_customer_entitlements_reject_private_and_malformed_values(self):
         result=self.catalog(Cursor(malformed=True),True)
-        self.assertNotIn('members',result['plans'][1]['entitlements'])
+        self.assertNotIn('members',result['plans'][2]['entitlements'])
         self.assertNotIn('private',str(result))
     def test_public_api_uses_the_catalog_without_a_session(self):
         service=FakeService();service.plans=Mock(return_value={'pricing':'v2','plans':[]})

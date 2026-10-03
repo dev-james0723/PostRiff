@@ -97,9 +97,10 @@ export function latestTermsPerPlan(terms: readonly PlanTerms[], currentTermsId?:
   for (const row of terms) {
     if (row.plan === 'trial') continue;
     const current = row.id === currentTermsId;
-    if (!current && (row.catalogState !== 'public' || !['free', 'creator'].includes(row.plan) || row.status === 'retired')) continue;
-    const held = byPlan.get(row.plan);
-    if (!held || preferRow(row, held, currentTermsId)) byPlan.set(row.plan, row);
+    if (!current && (row.catalogState !== 'public' || !['free', 'starter', 'creator', 'studio'].includes(row.plan) || row.status === 'retired')) continue;
+    const key = row.id === 'studio-v2' && row.catalogState === 'public' ? row.id : row.plan;
+    const held = byPlan.get(key);
+    if (!held || preferRow(row, held, currentTermsId)) byPlan.set(key, row);
   }
   return [...byPlan.values()].toSorted((a, b) => a.priceCents - b.priceCents || a.plan.localeCompare(b.plan));
 }

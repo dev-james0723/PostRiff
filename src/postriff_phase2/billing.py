@@ -420,7 +420,7 @@ class Ledger:
         ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7], "chargeBatch": r[8], "reservationId": r[9], "runId": r[10], "jobId": r[11]} for r in cur.fetchall()]
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
         if catalog_v2:
-            cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,catalog_state,new_checkout_enabled FROM public.pr_plan_terms WHERE (catalog_state='public' AND plan IN ('free','creator')) OR id=%s ORDER BY plan,version", (sub[0] if sub else entitlement['planTermsId'],))
+            cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,catalog_state,new_checkout_enabled FROM public.pr_plan_terms WHERE (catalog_state='public' AND id IN ('free-v1','starter-v1','creator-v1','studio-v2')) OR id=%s ORDER BY plan,version", (sub[0] if sub else entitlement['planTermsId'],))
         else:
             cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements,'legacy',(status='active' AND nullif(btrim(provider_price_id),'') IS NOT NULL) FROM public.pr_plan_terms ORDER BY plan,version")
         terms = []
