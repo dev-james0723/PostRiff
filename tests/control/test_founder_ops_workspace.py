@@ -250,6 +250,35 @@ class OpsWorkspacePostgresTests(unittest.TestCase):
             self.assertEqual(cur.execute('SELECT count(*) FROM public.pr_subscriptions WHERE workspace_id=%s', (wid,)).fetchone()[0], 0)
             self.assertEqual(cur.execute('SELECT count(*) FROM public.pr_entitlements WHERE workspace_id=%s', (wid,)).fetchone()[0], 0)
 
+    def test_cancelled_dead_turn_keeps_founder_attribution_and_unknown_spend_hold(self):
+        import psycopg
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from postriff_phase2.agent_runtime_v2.config import RuntimeConfig
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+        from postriff_phase2.billing import Ledger
+        from postriff_phase2.founder_policy import policy_from_marker, spending
+        wid = founder_ops.create_ops(self.app(), self.principal, {'mode': 'live'})['workspaceId']
+        ledger = Ledger()
+        runtime = AgentRuntimeService(SimpleNamespace(ledger=ledger), RuntimeConfig.from_environment({}))
+        with patch.dict(os.environ, {'RAFII_AI_UNLIMITED_USER_IDS': self.user}), psycopg.connect(self.dsn) as db:
+            cur = db.cursor()
+            conversation = str(cur.execute('INSERT INTO public.pr_conversations(workspace_id,created_by) VALUES(%s,%s) RETURNING id', (wid, self.user)).fetchone()[0])
+            run = str(cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,updated_at) "
+                                  "VALUES(%s,%s,%s,'cancelled','rafii-agent','standard',%s,%s,%s,now()-interval '1 hour') RETURNING id",
+                                  (conversation, wid, self.user, 'a' * 64, 'b' * 64, 'agent:' + uuid.uuid4().hex)).fetchone()[0])
+            reservation = ledger.reserve(cur, wid, self.user, 'text_model', 50_000, 'agent:' + run,
+                                         charge_batch=True, provider='openai', model='gpt-6-sol', run_id=run)
+            marker = cur.execute("SELECT state->'founderOps' FROM public.pr_workspaces WHERE id=%s", (wid,)).fetchone()[0]
+            before = spending(cur, wid, policy_from_marker(marker))
+            runtime._reap_stale_turns(cur, wid)
+            runtime._reap_stale_turns(cur, wid)
+            entries = cur.execute("SELECT cost_state,actual_usd_micro,estimated_usd_micro,meta->>'actorClass',meta->>'costCenter',meta->>'aiUsageExempt' "
+                                  "FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", (reservation['reservationId'],)).fetchall()
+            self.assertEqual(entries, [('estimated_unknown', None, 50_000, 'founder', 'founder_ops', 'true')])
+            self.assertEqual(spending(cur, wid, policy_from_marker(marker)), before)
+            self.assertEqual((before['actualUsdMicro'], before['heldUsdMicro']), (0, 50_000))
+
     def test_settings_unlimited_mode_and_concurrent_cost_holds_are_serialized(self):
         import psycopg
         from concurrent.futures import ThreadPoolExecutor
