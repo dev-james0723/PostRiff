@@ -790,9 +790,24 @@ async function voiceSection(browser) {
     check('voice: the Rafii panel opens', await openPanel(page));
     if (!(await firstCall(page, who, net, 'explainer', 'voice', 'voice-desktop-1-first-call-style-picker.png'))) return;
     await instrument(page);
+    await page.evaluate(() => {
+      window.rafiiThinkingSeen = [];
+      const scan = () => {
+        for (const node of document.querySelectorAll('[data-rafii-thinking-op]')) {
+          const value = node.getAttribute('data-rafii-thinking-op');
+          if (value && window.rafiiThinkingSeen.at(-1) !== value) window.rafiiThinkingSeen.push(value);
+        }
+      };
+      const observer = new MutationObserver(scan);
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-rafii-thinking-op'] });
+      window.rafiiThinkingObserver = observer;
+      scan();
+    });
     const box = voiceBox(page);
     const listening = await until(async () => ((await voiceStatus(page).textContent()) ?? '').trim() === 'Listening', { timeout: 10000 });
     check('voice: the call is live and the status reads Listening', Boolean(listening), await voiceStatus(page).textContent().catch(() => null));
+    const readyThinking = await box.locator('[data-rafii-thinking-op]').getAttribute('data-rafii-thinking-op').catch(() => null);
+    check('voice ThinkingOps: a live call with no delegated work is the real idle/ready “breathing” state', readyThinking === 'breathing', readyThinking);
     const avatar = await until(async () => {
       const value = await avatarSnapshot(page);
       return value?.ready === 'ready' && value.canvases === 1 ? value : null;
@@ -905,6 +920,10 @@ async function voiceSection(browser) {
     const thatsAll = await liveLog(page);
     const working = thatsAll.log.filter((e) => e.kind === 'sent' && e.type === 'session.thinking.append' && /^Working on: That's all\b/.test(e.content));
     check('voice: “that’s all” alone goes to Rafii as a request (not a panel command) and is answered', answered && working.length === 1, { answered, working });
+    const thinkingSeen = await page.evaluate(() => window.rafiiThinkingSeen ?? []);
+    check('voice ThinkingOps: real speech and delegation drive listening plus backend work states (not a timed demo)',
+      thinkingSeen.includes('breathing') && thinkingSeen.includes('listening') && thinkingSeen.some((op) => ['working', 'solving', 'searching', 'weaving'].includes(op)),
+      thinkingSeen);
     check('voice: … and does not hang up: no “Ending the call…”, still live 3 s after the reply',
       !hungUp && !thatsAll.statuses.some((s) => s.at >= thatsAllAt && /Ending the call/.test(s.text ?? '')), { hungUp, statuses: thatsAll.statuses.filter((s) => s.at >= thatsAllAt) });
     await shot(page, 'voice-desktop-6-thats-all-keeps-call.png');

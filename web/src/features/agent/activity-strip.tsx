@@ -47,7 +47,9 @@ export function ActivityStrip({ run, plan, intent, destinations, skills, memory 
   const reduce = useReducedMotion();
   const logId = useId();
   // A warning about one chip belongs to "Used this time", which already says it (chat-context SPEC §4.8).
-  const events = run.events.filter((e) => !(e.type === 'warning.created' && e.reference));
+  const events = run.events.filter(
+    (e) => !(e.type === 'warning.created' && e.reference) && !(e.type === 'progress.updated' && e.thinkingOp)
+  );
   const sources = events.filter((e) => e.type === 'source.added').length;
   const warnings = events.filter((e) => e.type === 'warning.created').map((e) => e.message ?? '');
   const first = events[0]?.at;

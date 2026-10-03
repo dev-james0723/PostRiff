@@ -29,6 +29,8 @@ import { panelActions } from './panel-actions';
 import { confirmation, isFarewell, matchPanelCommand, styleInstructions, voiceCommandsIn, type PanelCommand, type VoiceCommand } from './panel-commands';
 import type { AgentStylePatch } from './style';
 import type { AgentResult, AgentTurnResponse } from './types';
+import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
+import { latestThinkingOp } from './thinking-state';
 import { applyTranscript, hangUpDue, lastUserLine, takeRequest, UTTERANCE_GAP_MS, type HangUp, type TranscriptEvent, type TranscriptLine } from './voice-transcript';
 
 export type { TranscriptLine } from './voice-transcript';
@@ -47,6 +49,8 @@ export interface Delegation {
   finishedAt?: number;
   /** Carried out in the browser as a panel command, without an agent turn. */
   local?: boolean;
+  /** Application-authored semantic state for the delegated backend run; never model prose. */
+  thinkingOp?: ThinkingOp;
 }
 
 export interface VoiceSnapshot {
@@ -434,21 +438,51 @@ function startProgress(delegationId: string, conversationId: string | null, owne
   let stopped = false;
   let seen = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let activeRunId: string | null = null;
+  let eventCursor = 0;
+  let taskTick = 0;
+  const discoveryStarted = Date.now();
+
   const poll = async () => {
     if (stopped || !canDelegate(owner) || !conversationId) return;
     try {
-      const state = await current.api.conversationState(current.workspaceId, conversationId);
-      const line = (state.task?.steps ?? []).map((s) => `${s.label}: ${s.state.replace('_', ' ')}`).join('; ');
-      if (!stopped && canDelegate(owner) && line && line !== seen) {
-        seen = line;
-        think(`Progress so far (not final): ${line}`, delegationId);
+      if (!activeRunId) {
+        const found = await current.api.activeRun(current.workspaceId, conversationId);
+        if (!stopped && canDelegate(owner) && found?.runId) {
+          activeRunId = found.runId;
+          updateDelegation(delegationId, { runId: activeRunId, thinkingOp: 'working' });
+        }
+      }
+      if (activeRunId && !stopped && canDelegate(owner)) {
+        const events = await current.api.runEvents(current.workspaceId, activeRunId, eventCursor);
+        if (!stopped && canDelegate(owner)) {
+          eventCursor = events.cursor;
+          const currentDelegation = snapshot.delegations.find((d) => d.id === delegationId);
+          const op = latestThinkingOp(events.events, currentDelegation?.thinkingOp ?? 'working');
+          if (currentDelegation?.thinkingOp !== op) updateDelegation(delegationId, { thinkingOp: op });
+        }
+      }
+
+      // Task-step wording is quiet GPT-Live context, not the visual semantic-state source.
+      taskTick += 1;
+      if (taskTick % 3 === 0 && !stopped && canDelegate(owner)) {
+        const state = await current.api.conversationState(current.workspaceId, conversationId);
+        const line = (state.task?.steps ?? []).map((step) => `${step.label}: ${step.state.replace('_', ' ')}`).join('; ');
+        if (!stopped && canDelegate(owner) && line && line !== seen) {
+          seen = line;
+          think(`Progress so far (not final): ${line}`, delegationId);
+        }
       }
     } catch {
-      /* progress is best effort; the result is what counts */
+      /* progress and semantic telemetry are best effort; the result is what counts */
     }
-    if (!stopped && canDelegate(owner)) timer = setTimeout(() => void poll(), 1500);
+    if (!stopped && canDelegate(owner)) {
+      const stillDiscovering = !activeRunId && Date.now() - discoveryStarted < 2000;
+      timer = setTimeout(() => void poll(), stillDiscovering ? 100 : 500);
+    }
   };
-  timer = setTimeout(() => void poll(), 1500);
+
+  void poll();
   const stops = progressStops;
   const stop = () => {
     stopped = true;

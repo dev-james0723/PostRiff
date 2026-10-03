@@ -235,12 +235,18 @@ async function axe(page) {
   const launchArgs = args.browser === 'webkit' ? [] : ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
   const browser = await engine.launch({ headless: true, executablePath, args: launchArgs });
   const voiceResponses = [];
+  const agentTurnResponses = [];
   try {
     // --- desktop: a full voice session in the panel ---------------------------------------------------------------------
     const desk = await context(browser, { width: 1440, height: 900 });
     const page = await desk.newPage();
     page.on('response', async (res) => {
-      if (new URL(res.url()).pathname.endsWith('/agent/voice/sessions')) voiceResponses.push(await res.text().catch(() => ''));
+      const pathname = new URL(res.url()).pathname;
+      if (pathname.endsWith('/agent/voice/sessions')) voiceResponses.push(await res.text().catch(() => ''));
+      if (res.request().method() === 'POST' && pathname.endsWith('/agent/turns')) {
+        const body = await res.json().catch(() => null);
+        if (body) agentTurnResponses.push(body);
+      }
     });
     await page.goto(`${base}/app/automations`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
@@ -254,6 +260,19 @@ async function axe(page) {
     check('V-A20: the voice session response carries no credential', voiceResponses.length > 0 && voiceResponses.every((t) => !/sk-|harness-placeholder|OPENAI_API_KEY/i.test(t)), voiceResponses.map((t) => t.slice(0, 120)));
     const status = page.locator('[data-rafii-voice-status]');
     check('status reads Listening, from session events', /Listening/.test(await status.innerText()));
+    await page.evaluate(() => {
+      window.rafiiThinkingSeen = [];
+      const scan = () => {
+        const value = document.querySelector('[data-rafii-thinking-op]')?.getAttribute('data-rafii-thinking-op');
+        if (value && window.rafiiThinkingSeen.at(-1) !== value) window.rafiiThinkingSeen.push(value);
+      };
+      new MutationObserver(scan).observe(document.documentElement, {
+        subtree: true, childList: true, attributes: true, attributeFilter: ['data-rafii-thinking-op']
+      });
+      scan();
+    });
+    check('ThinkingOps: Voice Mode is breathing while live and ready between turns',
+      (await page.locator('[data-rafii-thinking-op]').first().getAttribute('data-rafii-thinking-op')) === 'breathing');
 
     const first = await say(page, 'What is missing in the autumn launch campaign?');
     const firstText = first ? await first.innerText() : '';
@@ -305,6 +324,19 @@ async function axe(page) {
     const spokenProposal = (await sent(page)).filter((e) => e.type === 'session.commentary.append').at(-1)?.content ?? '';
     check('X04/MM03: the compound request made the image and the draft, linked them, and stopped at a proposal shown and spoken', Boolean(applyButton && (await applyButton.count())) && imageShown && /Thursday|apply/i.test(spokenProposal),
       { compoundText: compoundText.slice(0, 400), imageShown, spokenProposal });
+    const compoundRun = agentTurnResponses.at(-1);
+    const compoundEvents = compoundRun?.runId
+      ? await call('GET', `/api/workspaces/${seeded.workspaceId}/agent/runs/${compoundRun.runId}/events?cursor=0`)
+      : null;
+    const compoundOps = (compoundEvents?.events ?? []).filter((e) => e.thinkingOp).map((e) => e.thinkingOp);
+    check('ThinkingOps: the browser-driven real compound run recorded solving, shaping, composing, acting and weaving without model-prose classification',
+      ['solving', 'shaping', 'composing', 'acting', 'weaving'].every((op) => compoundOps.includes(op)) && compoundOps.length <= 32,
+      { runId: compoundRun?.runId, compoundOps });
+    const visuallySeen = await page.evaluate(() => window.rafiiThinkingSeen ?? []);
+    check('ThinkingOps: the real Voice UI visibly moved through ready/listening/backend-work states',
+      visuallySeen.includes('breathing') && visuallySeen.includes('listening') && visuallySeen.some((op) => ['working', 'solving', 'searching', 'shaping', 'composing', 'weaving', 'acting'].includes(op)),
+      visuallySeen);
+    await shot(page, 'voice-desktop-thinking-ops-compound.png');
     await shot(page, 'voice-desktop-proposal.png');
     const before = await call('GET', `/api/workspaces/${seeded.workspaceId}`);
     check('nothing is prepared before the person decides', before.state.phase2.reviews.length === 0);
@@ -325,6 +357,13 @@ async function axe(page) {
     check('V-A18/V-A07: after moving pages, the spoken “yes” applied exactly the presented proposal; a review now waits for approval at 18:00 with the image; nothing published',
       Boolean(review) && review.status === 'needs_review' && (review.manifest.media ?? []).length === 1 && after.state.phase2.jobs.length === 0 && /checked/i.test(yes ? await yes.innerText() : ''),
       { reviews: after.state.phase2.reviews.map((r) => [r.status, r.manifest?.timing?.local]) });
+    const applyRun = agentTurnResponses.at(-1);
+    const applyEvents = applyRun?.runId
+      ? await call('GET', `/api/workspaces/${seeded.workspaceId}/agent/runs/${applyRun.runId}/events?cursor=0`)
+      : null;
+    check('ThinkingOps: spoken approval shows acting only on the bound application run',
+      (applyEvents?.events ?? []).some((e) => e.thinkingOp === 'acting' && e.reasonCode === 'approval_apply'),
+      { runId: applyRun?.runId, events: (applyEvents?.events ?? []).filter((e) => e.thinkingOp) });
 
     // Type while the call is on: the typed turn is answered and Live gets it as context.
     const typedBefore = await answers(page).count();
