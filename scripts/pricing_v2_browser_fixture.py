@@ -460,7 +460,7 @@ class PricingV2Fixture:
             check_database(cur, self.database)
             for row in self.seeds.values():
                 wid = row['workspaceId']; shown = dict(row)
-                cur.execute('SELECT count(*),coalesce(sum(millicredits),0) FROM public.pr_credit_subscription_grants WHERE workspace_id=%s AND grant_id IS NOT NULL', (wid,))
+                cur.execute('SELECT count(*),coalesce(sum(millicredits),0)::bigint FROM public.pr_credit_subscription_grants WHERE workspace_id=%s AND grant_id IS NOT NULL', (wid,))
                 shown['periodGrants'] = list(cur.fetchone())
                 shown['wallet'] = self.service.ledger._credit_book.view(cur, wid)
                 cur.execute("SELECT kind,cost_state,actual_usd_micro,meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at,id", (wid,))
