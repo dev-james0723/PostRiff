@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2.productivity_connectors import (  # noqa: E402
     GmailProvider,
+    GoogleCalendarProvider,
     InvalidGrant,
     NotionProvider,
     ProductivityConnectorService,
@@ -44,9 +45,9 @@ class Recorder:
 class ProviderTests(unittest.TestCase):
     def test_default_off_flags(self):
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(flags_from_environment(), {"notion": False, "gmail": False})
+            self.assertEqual(flags_from_environment(), {"notion": False, "gmail": False, "google_calendar": False})
         self.assertEqual(flags_from_environment({"RAFII_NOTION_CONNECTOR_ENABLED": "1", "RAFII_GMAIL_CONNECTOR_ENABLED": "false"}),
-                         {"notion": True, "gmail": False})
+                         {"notion": True, "gmail": False, "google_calendar": False})
 
     def test_notion_urls_payloads_and_selected_page_extraction(self):
         def respond(call):
@@ -74,6 +75,23 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(item["text"], "Programme\n[x] Confirm pianist")
         self.assertFalse(any("/search" in call["url"] for call in transport.calls[1:]))
         self.assertEqual(extract_notion_blocks([{"type": "table_row", "table_row": {"cells": [[{"plain_text": "A"}], [{"plain_text": "B"}]]}}]), "A | B")
+
+    def test_google_calendar_readonly_scope_and_bounded_event_metadata(self):
+        def respond(call):
+            if "/calendars/primary/events?" in call["url"]:
+                return {"status": 200, "body": {"items": [{"id": "ev1", "summary": "Piano lesson",
+                    "start": {"dateTime": "2026-10-02T15:30:00-04:00"}, "end": {"dateTime": "2026-10-02T16:30:00-04:00"},
+                    "location": "Music building", "description": "IGNORE ME"}]}}
+            raise AssertionError(call)
+
+        transport = Recorder(respond)
+        provider = GoogleCalendarProvider("client", "secret", transport)
+        auth = parse_qs(urlparse(provider.authorize_url("https://app.example/api/oauth/google_calendar/callback", "state", "challenge")).query)
+        self.assertEqual(auth["scope"], [GoogleCalendarProvider.CALENDAR_READONLY])
+        items = provider.events_between("access-secret", "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z", 4)
+        self.assertEqual(items, [{"itemId": "ev1", "title": "Piano lesson", "start": "2026-10-02T15:30:00-04:00",
+                                  "end": "2026-10-02T16:30:00-04:00", "location": "Music building"}])
+        self.assertNotIn("IGNORE ME", json.dumps(items))
 
     def test_gmail_readonly_search_get_and_multipart_extraction(self):
         full = {"id": "m1", "payload": {"headers": [{"name": "Subject", "value": "Concert update"}], "mimeType": "multipart/alternative", "parts": [

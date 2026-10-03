@@ -237,6 +237,8 @@ def runtime_from_environment(environ=None):
     coworker_runtime.attach(service, values)
     from .phone.runtime import attach as attach_phone
     attach_phone(service, values)
+    from .james_daily_call import attach as attach_james_daily_call
+    attach_james_daily_call(service, values)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
 
 
@@ -642,6 +644,13 @@ class HostedApplication:
                 result["coworker"] = coworker_runtime.cron(service)
                 from .phone.runtime import cron as phone_cron
                 result['phone'] = phone_cron(service)
+                # James Daily Call runs after provider reconciliation so no-answer/retry decisions are based on
+                # authoritative phone state. Its result is counts/status only; no briefing text or destination is logged.
+                from .james_daily_call import cron as james_daily_call_cron
+                try:
+                    result['jamesDailyCall'] = james_daily_call_cron(service)
+                except Exception:
+                    result['jamesDailyCall'] = {'status':'unavailable'}
                 learning = getattr(service, "learning", None)
                 growth=getattr(service,'growth',None)
                 if growth is None and isinstance(service,HostedWorkspaceService):
@@ -685,7 +694,7 @@ class HostedApplication:
                 except Exception:
                     coworker_steps = {'status': 'unavailable'}
                 logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
-                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone']}))
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'], 'jamesDailyCall': result.get('jamesDailyCall',{}).get('status')}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)

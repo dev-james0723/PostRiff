@@ -47,6 +47,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
+\ir ../../migrations/postriff/072_james_daily_call.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset
@@ -86,7 +87,7 @@ do $$ declare t text; n integer; begin
    raise exception 'browser deletion accepted %',t;
   exception when insufficient_privilege then null; end;
  end loop;
- foreach t in array array['pr_media_uploads','pr_media_notes','pr_connector_oauth_transactions','pr_connector_credentials','pr_connector_selections','pr_connector_fetches'] loop
+ foreach t in array array['pr_media_uploads','pr_media_notes','pr_connector_oauth_transactions','pr_connector_credentials','pr_connector_selections','pr_connector_fetches','pr_james_daily_call_runs'] loop
   begin
    execute format('select count(*) from public.%I',t) into n;
    raise exception 'service-only chat media table readable %',t;

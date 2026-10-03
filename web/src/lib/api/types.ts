@@ -1196,7 +1196,7 @@ export interface PickerItem {
   height?: number;
   duration?: number;
   href?: string;
-  provider?: 'notion' | 'gmail' | string;
+  provider?: 'notion' | 'gmail' | 'google_calendar' | string;
   connectionId?: string;
   expiresAt?: number;
 }
@@ -1208,7 +1208,7 @@ export interface PickerSearchResult {
 }
 
 export interface ProductivityConnectorProvider {
-  id: 'notion' | 'gmail' | string;
+  id: 'notion' | 'gmail' | 'google_calendar' | string;
   enabled: boolean;
   configured: boolean;
   scopes: string[];
@@ -1216,7 +1216,7 @@ export interface ProductivityConnectorProvider {
 
 export interface ProductivityConnectorConnection {
   connectionId: string;
-  provider: 'notion' | 'gmail' | string;
+  provider: 'notion' | 'gmail' | 'google_calendar' | string;
   account: string;
   scopes: string[];
   expiresAt: number | null;

@@ -40,6 +40,38 @@ class PhoneService:
         # Serializes limits and idempotency across this person's workspaces and concurrent workers.
         cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('phone:' + principal,))
 
+    @staticmethod
+    def _system_ref(value):
+        return (value or {}).get('destination_ref') == 'james_env'
+
+    def _fingerprint_number(self, number):
+        # Same keyed fingerprint shape as verified phone identities: a raw destination is never persisted.
+        return hmac.new(self.vault.fernet._signing_key, number.encode(), hashlib.sha256).hexdigest()
+
+    def resolve_destination(self, cur, value):
+        """Return an outbound destination only while its server-side authority is still valid.
+
+        A James Daily Call stores only `destination_ref=james_env` + keyed hash. The raw E.164 value is re-read from
+        the process environment on every delivery/reconcile/guard and is never written to the database or a log.
+        """
+        if self._system_ref(value):
+            if str(self.config.values.get('JAMES_DAILY_CALL_ENABLED', '')).lower() not in ('1','true','yes','on'):
+                return None
+            if str(self.config.values.get('JAMES_DAILY_CALL_OUTBOUND_ENABLED', '')).lower() not in ('1','true','yes','on'):
+                return None
+            try:
+                number = contracts.phone_number(self.config.values.get('JAMES_PHONE_E164'))
+            except AlphaError:
+                return None
+            return number if hmac.compare_digest(self._fingerprint_number(number), value.get('number_hash') or '') else None
+        identity = store.number(cur, value['user_id'])
+        if not identity or not identity['verified'] or identity['hash'] != value['number_hash']:
+            return None
+        try:
+            return self.vault.decrypt(identity['ciphertext'], identity['key_id'])
+        except Exception:
+            return None
+
     def settings(self, workspace_id, token):
         with self.hosted.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self.hosted.ideas._member(row), 'read')
@@ -156,9 +188,17 @@ class PhoneService:
             cur.execute('DELETE FROM public.pr_phone_schedules WHERE user_id=%s', (principal,))
         return {'deleted': True}
 
-    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None, event_entity_id=None, _call_challenge=False):
+    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None, event_entity_id=None, _call_challenge=False, _destination=None, _destination_ref=None):
         self._require()
         direction = 'inbound' if _inbound else 'outbound'
+        system_number = None
+        if _destination is not None or _destination_ref is not None:
+            if _inbound or _destination_ref != 'james_env':
+                raise AlphaError('Invalid system phone destination.', 403)
+            system_number = contracts.phone_number(_destination)
+            if str(self.config.values.get('JAMES_DAILY_CALL_ENABLED', '')).lower() not in ('1','true','yes','on') or \
+               str(self.config.values.get('JAMES_DAILY_CALL_OUTBOUND_ENABLED', '')).lower() not in ('1','true','yes','on'):
+                raise AlphaError('James Daily Call outbound delivery is disabled.', 403, code='outbound_disabled')
         if _inbound:
             inbound.require_available(self)
             if kind != 'explicit' or dispatch:
@@ -185,6 +225,9 @@ class PhoneService:
                     raise AlphaError('This request key belongs to a different call duration. Check the original call before requesting another.', 409, code='phone_duration_conflict')
                 return store.public_call(original)
             identity, prefs = store.number(cur, principal), store.prefs(cur, principal, workspace_id)
+            if system_number is not None:
+                identity = {'hash': self._fingerprint_number(system_number), 'verified': True}
+                prefs = {**prefs, 'enabled': True}
             custom_ref = rules.reason_ref(reason_key) if kind == 'proactive' else None
             if custom_ref:
                 selected = rules.matching(cur, prefs, principal, workspace_id, event_type, event_entity_id, now)
@@ -217,7 +260,7 @@ class PhoneService:
                 direction=direction)
             if blocker:
                 raise AlphaError(contracts.failure_message(blocker), 409, code=blocker)
-            number = self.vault.decrypt(identity['ciphertext'], identity['key_id']) if not _inbound else None
+            number = (system_number if system_number is not None else self.vault.decrypt(identity['ciphertext'], identity['key_id'])) if not _inbound else None
             if self.provider.real and not _inbound:
                 allowed = [c for c in self.config.values.get('RAFII_PHONE_ALLOWED_COUNTRY_CODES', '').split(',') if re.fullmatch(r'\+[1-9][0-9]{0,2}', c)]
                 if not any(number.startswith(c) for c in allowed):
@@ -250,9 +293,9 @@ class PhoneService:
                          provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': duration_limit, 'phoneCallId':call_id})
             artifact['voice']['reservationId'] = live_res['reservationId']
             cur.execute('UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id=%s', (json.dumps(artifact), run_id))
-            cur.execute('INSERT INTO public.pr_phone_calls(id,user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,max_seconds,'
-                        'live_reservation_id,telephony_reservation_id,reserved_usd_micro,requested_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,\'requested\',%s,%s,%s,%s,%s,%s,to_timestamp(%s))',
-                        (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], duration_limit,
+            cur.execute('INSERT INTO public.pr_phone_calls(id,user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,destination_ref,max_seconds,'
+                        'live_reservation_id,telephony_reservation_id,reserved_usd_micro,requested_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,\'requested\',%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s))',
+                        (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], _destination_ref, duration_limit,
                          live_res['reservationId'], tel_res['reservationId'], estimate, now))
             cur.execute('UPDATE public.pr_phone_calls SET funded_seconds=60 WHERE id=%s', (call_id,))
             if _inbound:
@@ -353,7 +396,7 @@ class PhoneService:
             cur.execute('UPDATE public.pr_agent_runs SET status=%s,artifact=jsonb_set(artifact,\'{voice,state}\',%s::jsonb),updated_at=now() WHERE id=%s',
                         ('failed' if state == 'failed' else 'completed', json.dumps('failed' if state == 'failed' else 'ended'), value['voice_run_id']))
             notifications = getattr(self.hosted,'notifications',None)
-            if state in ('busy','declined','no_answer','voicemail','failed') and notifications and notifications.enabled():
+            if state in ('busy','declined','no_answer','voicemail','failed') and not self._system_ref(value) and notifications and notifications.enabled():
                 prefs = store.prefs(cur,value['user_id'],value['workspace_id'])
                 channels = ['in_app'] + (['push'] if prefs['fallbackToPush'] else []) + (['email'] if prefs['fallbackToEmail'] else [])
                 notifications.emit(cur,workspace_id=value['workspace_id'],event_type='phone.call_failed',dedupe_key='phone:'+call_id,
@@ -432,8 +475,14 @@ class PhoneService:
             is_inbound = bool(current and current.get('direction') == 'inbound')
             if not current or current['state'] not in ('answered','live') or current['media_generation'] != value['media_generation'] or current['media_resume_until']:
                 raise AlphaError('This phone session ended.', 409, code='phone_ended')
-            if not is_inbound and (not identity or not identity['verified'] or identity['hash'] != current['number_hash'] or not prefs['enabled']):
-                raise AlphaError('This phone session ended.', 409, code='phone_ended')
+            if not is_inbound:
+                if self._system_ref(current):
+                    with self.hosted.connection_factory() as verify_db, verify_db.cursor() as verify_cur:
+                        valid_destination = self.resolve_destination(verify_cur, current)
+                    if not valid_destination:
+                        raise AlphaError('This phone session ended.', 409, code='phone_ended')
+                elif not identity or not identity['verified'] or identity['hash'] != current['number_hash'] or not prefs['enabled']:
+                    raise AlphaError('This phone session ended.', 409, code='phone_ended')
             if not self.config.enabled('RAFII_PHONE_ENABLED') or not self.config.enabled('RAFII_PHONE_INBOUND_ENABLED' if is_inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'):
                 raise AlphaError('Phone Mode is disabled.', 403)
             if current['answered_at'] and self.clock() >= float(current['answered_at']) + min(current['max_seconds'], current['funded_seconds'] or current['max_seconds']):

@@ -20,6 +20,7 @@ AUDIENCES = ("approve", "edit", "manage_connections", "reply", "owner", "actor",
 EVENTS = {
     'security.phone_call': {'category':'security','severity':'security','audience':'actor','email':'off','push':'immediate','template':'phone_call_verify','transactional':True},
     'phone.call_failed': {'category':'automation','severity':'warning','audience':'actor','email':'immediate','push':'immediate','template':'phone_call_failed'},
+    'james.daily_call_fallback': {'category':'automation','severity':'warning','audience':'actor','email':'off','push':'immediate','template':'phone_call_failed'},
     "weekly_proof.generated": {"category": "analytics", "severity": "info", "audience": "owner", "email": "digest", "push": "immediate", "template": "weekly_performance"},
     "monthly_proof.generated": {"category": "analytics", "severity": "info", "audience": "owner", "email": "digest", "push": "off", "template": "weekly_performance"},
     "campaign.week_ready": {"category": "weekly", "severity": "action", "audience": "edit", "email": "immediate", "push": "immediate", "template": "weekly_ready"},

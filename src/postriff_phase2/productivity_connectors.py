@@ -15,6 +15,8 @@ import os
 import re
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from email.header import decode_header, make_header
 from urllib.parse import quote, urlencode, urlparse
 
@@ -26,10 +28,11 @@ from .permissions import require
 from .providers import http_transport
 
 
-PROVIDERS = ("notion", "gmail")
+PROVIDERS = ("notion", "gmail", "google_calendar")
 FLAG_NAMES = {
     "notion": "RAFII_NOTION_CONNECTOR_ENABLED",
     "gmail": "RAFII_GMAIL_CONNECTOR_ENABLED",
+    "google_calendar": "RAFII_GOOGLE_CALENDAR_CONNECTOR_ENABLED",
 }
 OAUTH_TTL = 600
 SELECTION_TTL = 600
@@ -378,7 +381,8 @@ class GmailProvider(ProductivityProvider):
             query_string = urlencode([("format", "metadata"), ("metadataHeaders", "Subject"), ("metadataHeaders", "From"), ("metadataHeaders", "Date")])
             message = _api_body(self.transport("GET", f"{self.API}/messages/{quote(item_id, safe='')}?{query_string}", headers=self._headers(access_token)))
             extracted = extract_gmail_message(message)
-            output.append({"itemId": item_id, "title": extracted["title"], "excerpt": clean(message.get("snippet", ""), 500)})
+            output.append({"itemId": item_id, "title": extracted["title"], "excerpt": clean(message.get("snippet", ""), 500),
+                           "from": extracted.get("from", ""), "date": extracted.get("date", "")})
         return output[:count]
 
     def get_item(self, access_token, item_id):
@@ -394,6 +398,110 @@ class GmailProvider(ProductivityProvider):
         return int(response.get("status") or 0) in (200, 204)
 
 
+class GoogleCalendarProvider(ProductivityProvider):
+    """Read-only Google Calendar adapter. Event descriptions/attachments are never fetched for the daily brief."""
+    id, label = "google_calendar", "Google Calendar"
+    CALENDAR_READONLY = "https://www.googleapis.com/auth/calendar.readonly"
+    scopes = (CALENDAR_READONLY,)
+    AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
+    TOKEN = "https://oauth2.googleapis.com/token"
+    API = "https://www.googleapis.com/calendar/v3"
+    REVOKE = "https://oauth2.googleapis.com/revoke"
+
+    def authorize_url(self, redirect_uri, state, challenge):
+        return self.AUTH + "?" + urlencode({
+            "client_id": self.client_id, "redirect_uri": redirect_uri, "response_type": "code",
+            "scope": self.CALENDAR_READONLY, "state": state, "access_type": "offline",
+            "prompt": "consent", "code_challenge": challenge, "code_challenge_method": "S256",
+        })
+
+    def exchange(self, code, verifier, redirect_uri):
+        body = _oauth_body(self.transport("POST", self.TOKEN, form={
+            "client_id": self.client_id, "client_secret": self.client_secret,
+            "grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri,
+            "code_verifier": verifier,
+        }))
+        scopes = _scopes(body.get("scope"))
+        if self.CALENDAR_READONLY not in scopes:
+            raise AlphaError("Google Calendar read-only permission was not granted.", 409, code="connector_scope_missing")
+        primary = _api_body(self.transport("GET", f"{self.API}/calendars/primary", headers={"Authorization": "Bearer " + body["access_token"]}))
+        account_id = str(primary.get("id") or "primary")
+        return {"accessToken": body["access_token"], "refreshToken": body.get("refresh_token"),
+                "expiresIn": body.get("expires_in"), "scopes": scopes,
+                "providerAccountId": account_id,
+                "accountLabel": clean(primary.get("summary") or "Google Calendar", 160)}
+
+    def refresh(self, refresh_token):
+        body = _oauth_body(self.transport("POST", self.TOKEN, form={
+            "client_id": self.client_id, "client_secret": self.client_secret,
+            "grant_type": "refresh_token", "refresh_token": refresh_token,
+        }))
+        scopes = _scopes(body.get("scope")) or self.minimum_scopes()
+        if self.CALENDAR_READONLY not in scopes:
+            raise InvalidGrant()
+        return {"accessToken": body["access_token"], "refreshToken": refresh_token,
+                "expiresIn": body.get("expires_in"), "scopes": scopes}
+
+    @staticmethod
+    def _headers(access_token):
+        return {"Authorization": "Bearer " + access_token}
+
+    @staticmethod
+    def _event(event):
+        if not isinstance(event, dict) or not isinstance(event.get("id"), str):
+            return None
+        start = event.get("start") if isinstance(event.get("start"), dict) else {}
+        end = event.get("end") if isinstance(event.get("end"), dict) else {}
+        return {"itemId": event["id"], "title": clean(event.get("summary") or "Busy", 300),
+                "start": clean(start.get("dateTime") or start.get("date") or "", 80),
+                "end": clean(end.get("dateTime") or end.get("date") or "", 80),
+                "location": clean(event.get("location") or "", 300)}
+
+    def events_between(self, access_token, time_min, time_max, limit=12):
+        params = urlencode({"timeMin": time_min, "timeMax": time_max, "singleEvents": "true", "orderBy": "startTime",
+                            "maxResults": min(24, max(1, int(limit)))})
+        body = _api_body(self.transport("GET", f"{self.API}/calendars/primary/events?{params}", headers=self._headers(access_token)))
+        output = []
+        for raw in body.get("items") or []:
+            item = self._event(raw)
+            if item and raw.get("status") != "cancelled":
+                output.append(item)
+        return output[:limit]
+
+    def search(self, access_token, query, limit=MAX_RESULTS):
+        now = datetime.now(timezone.utc)
+        params = {"timeMin": now.isoformat().replace("+00:00", "Z"),
+                  "timeMax": (now + timedelta(days=30)).isoformat().replace("+00:00", "Z"),
+                  "singleEvents": "true", "orderBy": "startTime", "maxResults": min(MAX_RESULTS, max(1, int(limit)))}
+        query = clean(query, 200).strip()
+        if query:
+            params["q"] = query
+        body = _api_body(self.transport("GET", f"{self.API}/calendars/primary/events?{urlencode(params)}", headers=self._headers(access_token)))
+        output = []
+        for raw in body.get("items") or []:
+            item = self._event(raw)
+            if item and raw.get("status") != "cancelled":
+                output.append({"itemId": item["itemId"], "title": item["title"],
+                               "excerpt": " · ".join(v for v in (item["start"], item["location"]) if v)[:500]})
+        return output[:limit]
+
+    def get_item(self, access_token, item_id):
+        if not isinstance(item_id, str) or not 1 <= len(item_id) <= 300:
+            raise AlphaError("This connected item is unavailable.", 404)
+        raw = _api_body(self.transport("GET", f"{self.API}/calendars/primary/events/{quote(item_id, safe='')}", headers=self._headers(access_token)))
+        item = self._event(raw)
+        if not item or item["itemId"] != item_id:
+            raise AlphaError("This connected item is unavailable.", 404)
+        text = "\n".join(v for v in (item["title"], "Start: " + item["start"] if item["start"] else "",
+                                          "End: " + item["end"] if item["end"] else "",
+                                          "Location: " + item["location"] if item["location"] else "") if v)
+        return {"itemId": item_id, "title": item["title"], "text": text}
+
+    def revoke(self, access_token):
+        response = self.transport("POST", self.REVOKE, form={"token": access_token})
+        return int(response.get("status") or 0) in (200, 204)
+
+
 def _credential_shape(value):
     return isinstance(value, str) and 0 < len(value) <= 8192 and not any(ch.isspace() for ch in value) and not value.startswith("<")
 
@@ -401,10 +509,12 @@ def _credential_shape(value):
 def providers_from_environment(values, transport=None):
     """Mount configured adapters only; feature flags are checked separately by the service."""
     providers = {}
-    for provider, cls in (("notion", NotionProvider), ("gmail", GmailProvider)):
-        # Accept the repo's established POSTRIFF_OAUTH_* custody names as well as the
-        # connector-specific RAFII_* names used by this rollout.
-        prefixes = (f"RAFII_{provider.upper()}_", f"POSTRIFF_OAUTH_{provider.upper()}_")
+    classes = (("notion", NotionProvider), ("gmail", GmailProvider), ("google_calendar", GoogleCalendarProvider))
+    for provider, cls in classes:
+        # Calendar may deliberately reuse the same Google OAuth app as Gmail, but receives its own read-only grant.
+        prefixes = [f"RAFII_{provider.upper()}_", f"POSTRIFF_OAUTH_{provider.upper()}_"]
+        if provider == "google_calendar":
+            prefixes += ["RAFII_GMAIL_", "POSTRIFF_OAUTH_GMAIL_"]
         pair = next(((values.get(prefix + "CLIENT_ID"), values.get(prefix + "CLIENT_SECRET"))
                      for prefix in prefixes if values.get(prefix + "CLIENT_ID") is not None or values.get(prefix + "CLIENT_SECRET") is not None), (None, None))
         client_id, secret = pair
@@ -725,6 +835,70 @@ class ProductivityConnectorService:
                          sum(1 for item in results.values() if item.get("source"))))
         return results
 
+    def daily_brief_context(self, workspace_id, principal, time_zone):
+        """Internal, bounded read for James Daily Call. No message body or calendar description is fetched.
+
+        This method has no HTTP route. The caller must already be a trusted server-side worker bound to the configured
+        user/workspace. It reuses encrypted OAuth custody and returns only short display metadata plus opaque source ids.
+        Provider text is data, never instructions.
+        """
+        try:
+            zone = ZoneInfo(time_zone)
+        except (ZoneInfoNotFoundError, ValueError, TypeError):
+            raise AlphaError("Choose a valid time zone.", 400) from None
+        local = datetime.fromtimestamp(self.clock(), zone)
+        day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        to_utc = lambda value: value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        out = {"generatedAt": self.clock(), "timeZone": time_zone,
+               "gmail": {"status": "unavailable", "items": []},
+               "calendar": {"status": "unavailable", "items": []}}
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT 1 FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id "
+                        "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL", (workspace_id, principal))
+            if not cur.fetchone():
+                raise AlphaError("Workspace unavailable.", 403)
+            for provider_id, bucket in (("gmail", "gmail"), ("google_calendar", "calendar")):
+                if not self.flags.get(provider_id, False):
+                    out[bucket]["status"] = "disabled"
+                    continue
+                if provider_id not in self.providers:
+                    out[bucket]["status"] = "unconfigured"
+                    continue
+                cur.execute("SELECT connection_id FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s "
+                            "AND provider=%s AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1", (workspace_id, principal, provider_id))
+                row = cur.fetchone()
+                if not row:
+                    out[bucket]["status"] = "not_connected"
+                    continue
+                connection = self._connection(cur, workspace_id, principal, row[0], lock=True)
+                try:
+                    access = self._access_token(cur, workspace_id, connection)
+                    provider = self.providers[provider_id]
+                    if provider_id == "gmail":
+                        primary = provider.search(access, "in:inbox newer_than:7d {is:important is:starred} -category:promotions -category:social", 6)
+                        if not primary:
+                            primary = provider.search(access, "in:inbox newer_than:1d -category:promotions -category:social", 6)
+                        out[bucket]["items"] = [{"sourceId": "gmail:" + str(item["itemId"])[:180],
+                                                  "subject": clean(item.get("title") or "Email", 240),
+                                                  "from": clean(item.get("from") or "", 160),
+                                                  "snippet": clean(item.get("excerpt") or "", 360),
+                                                  "date": clean(item.get("date") or "", 100)} for item in primary[:6]]
+                    else:
+                        events = provider.events_between(access, to_utc(day_start), to_utc(day_end), 12)
+                        out[bucket]["items"] = [{"sourceId": "gcal:" + str(item["itemId"])[:180],
+                                                  "title": clean(item.get("title") or "Busy", 240),
+                                                  "start": clean(item.get("start") or "", 80),
+                                                  "end": clean(item.get("end") or "", 80),
+                                                  "location": clean(item.get("location") or "", 240)} for item in events[:12]]
+                    out[bucket]["status"] = "ok"
+                except AlphaError as error:
+                    out[bucket]["status"] = "reauthorization_required" if error.code in ("connector_reauthorization_required", "connector_scope_missing") else "unavailable"
+                except Exception:
+                    out[bucket]["status"] = "unavailable"
+            db.commit()
+        return out
+
     def revoke_workspace(self, workspace_id):
         """Best-effort provider revocation before workspace cascade deletes encrypted rows."""
         pending = []
@@ -743,7 +917,7 @@ class ProductivityConnectorService:
 
 
 __all__ = [
-    "CONSENT_ACTION", "FLAG_NAMES", "GmailProvider", "InvalidGrant", "NotionProvider",
+    "CONSENT_ACTION", "FLAG_NAMES", "GmailProvider", "GoogleCalendarProvider", "InvalidGrant", "NotionProvider",
     "ProductivityConnectorService", "ProductivityProvider", "apply_connector_egress",
     "egress_decision", "extract_gmail_message", "extract_notion_blocks", "flags_from_environment",
     "providers_from_environment", "synthetic_source",

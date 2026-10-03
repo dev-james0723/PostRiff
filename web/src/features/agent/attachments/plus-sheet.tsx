@@ -352,7 +352,7 @@ function SkillsView({
 }
 
 function connectionLabel(connection: ProductivityConnectorConnection): string {
-  const provider = connection.provider === 'gmail' ? 'Gmail' : connection.provider === 'notion' ? 'Notion' : connection.provider;
+  const provider = connection.provider === 'gmail' ? 'Gmail' : connection.provider === 'google_calendar' ? 'Google Calendar' : connection.provider === 'notion' ? 'Notion' : connection.provider;
   return `${provider} · ${connection.account}`;
 }
 
@@ -444,7 +444,7 @@ function ConnectedAppsView({
       <div className='flex flex-col gap-2'>
         {catalog.providers.map((provider) => {
           const live = liveConnections.filter((connection) => connection.provider === provider.id);
-          const name = provider.id === 'gmail' ? 'Gmail' : provider.id === 'notion' ? 'Notion' : provider.id;
+          const name = provider.id === 'gmail' ? 'Gmail' : provider.id === 'google_calendar' ? 'Google Calendar' : provider.id === 'notion' ? 'Notion' : provider.id;
           return (
             <div key={provider.id} className='rafii-quiet flex min-h-11 items-center gap-3 rounded-xl px-3 py-2'>
               <Icons.link aria-hidden className='text-muted-foreground size-4 shrink-0' />

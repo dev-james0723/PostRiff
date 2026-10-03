@@ -223,6 +223,10 @@ class DeliveryWorker:
         if ctx['type'] == 'security.phone_call':
             body = push_module.payload('Verify your current call', 'Confirm this call with your passkey. If you did not call Rafii, ignore this request.',
                 self._ack_path((ctx['payload'] or {}).get('href'), row), row['eventId'], 'security')
+        elif ctx['type'] == 'james.daily_call_fallback':
+            payload = ctx['payload'] or {}
+            body = push_module.payload(payload.get('title') or 'Daily call missed', payload.get('body') or 'Your daily brief is ready.',
+                self._ack_path(payload.get('href'), row), ctx.get('grouping') or ctx['type'], spec['category'])
         else:
             body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
         results = []

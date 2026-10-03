@@ -11,8 +11,10 @@ def deliver(service, call_id):
         if not value or value['state'] != 'requested' or value.get('direction') == 'inbound':
             return
         service._lock(cur, value['user_id'])
-        identity = store.number(cur, value['user_id'])
+        number = service.resolve_destination(cur, value)
         prefs = store.prefs(cur, value['user_id'], value['workspace_id'])
+        if service._system_ref(value):
+            prefs = {**prefs, 'enabled': True}
         cur.execute('SELECT role,can_publish,can_reply,can_moderate,can_manage_connections FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id '
                     'WHERE workspace_id=%s AND m.user_id=%s AND m.status=\'active\' AND p.deleted_at IS NULL', (value['workspace_id'], value['user_id']))
         member = cur.fetchone()
@@ -37,7 +39,7 @@ def deliver(service, call_id):
         active_calls = int(cur.fetchone()[0])
         if planner.founder_scope(service.config.public()):
             active_calls = store.active_founder_contacts(cur, value['user_id'], value['workspace_id'], exclude_call_id=call_id)
-        blocker = planner.eligibility(value['kind'], prefs, now=service.clock(), verified=bool(identity and identity['verified'] and identity['hash']==value['number_hash']),
+        blocker = planner.eligibility(value['kind'], prefs, now=service.clock(), verified=bool(number),
                     membership=bool(member and Membership.from_row(*member).allows('edit')), configured=bool(service.provider and service.provider.configured and (not service.provider.real or service.config.telephony_rate>0)),
                     live_configured=route.available and service.agent().cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=service.config.public(),
                     event_type=value['reason_key'].split(':',1)[0], daily_calls=int(count if value['kind']=='explicit' else automatic),
@@ -50,7 +52,6 @@ def deliver(service, call_id):
             cur.execute('UPDATE public.pr_phone_calls SET failure_class=%s WHERE id=%s', (blocker, call_id))
             db.commit()
         else:
-            number = service.vault.decrypt(identity['ciphertext'], identity['key_id'])
             if service.provider.real:
                 import re
                 allowed=[c for c in service.config.values.get('RAFII_PHONE_ALLOWED_COUNTRY_CODES','').split(',') if re.fullmatch(r'\+[1-9][0-9]{0,2}',c)]
@@ -96,15 +97,15 @@ def reconcile(service, call_id):
         value = store.call(cur, call_id)
         if not value or value['state'] not in ('dialing','ambiguous','ringing','ending'):
             return
-        identity = store.number(cur, value['user_id'])
+        number = None if value.get('direction') == 'inbound' else service.resolve_destination(cur, value)
     is_inbound = value.get('direction') == 'inbound'
-    if (not identity and not is_inbound) or not service.provider:
+    if (not number and not is_inbound) or not service.provider:
         return  # unknown acceptance is kept charged/reserved until an operator can reconcile
     try:
         if is_inbound:
             receipt = service.provider.reconcile_inbound(value['provider_call_ref'])
         else:
-            receipt = service.provider.reconcile(number=service.vault.decrypt(identity['ciphertext'], identity['key_id']), call_id=call_id,
+            receipt = service.provider.reconcile(number=number, call_id=call_id,
                                 call_ref=value['provider_call_ref'], requested_at=float(value['requested_at']))
     except Exception:
         return
