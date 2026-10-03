@@ -15,6 +15,8 @@ DEFAULT_VARIANT = 'creator-59-v1'
 EXPERIMENT = 'creator-beta-v1'
 VARIANTS = ('creator-49-v1', DEFAULT_VARIANT, 'creator-79-v1')
 OPEN_STATUSES = ('active', 'past_due', 'grace')
+FIXED_PAID_PLANS = {'starter-v1': 'starter', 'studio-v2': 'studio'}
+PAID_PLANS = {'creator-v1': 'creator', **FIXED_PAID_PLANS}
 
 
 def ended_legacy(cur, status, plan_terms_id, price_variant_id):
@@ -96,7 +98,7 @@ class PlanPricing:
         cur.execute("SELECT plan,status,catalog_state,new_checkout_enabled,entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (terms_id,))
         row = cur.fetchone()
         package = tuple(row[:4]) if row else None
-        if terms_id != 'creator-v1' or not package or package != ('creator', 'active', 'public', True):
+        if terms_id not in PAID_PLANS or not package or package != (PAID_PLANS[terms_id], 'active', 'public', True):
             raise AlphaError('This plan is not yet available for purchase.', 409, code='not_for_sale')
         # Creator is a promise of managed credits: never sell it while the server could not spend them (R-COM-02).
         if row[4] != V2_POLICY_VERSION:
@@ -106,11 +108,18 @@ class PlanPricing:
         cur.execute("SELECT status,provider_subscription_id,plan_terms_id,price_variant_id,provider_customer_id,provider FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
         prior = cur.fetchone()
         ended_creator = bool(prior and prior[0] in ('cancelled', 'expired') and prior[2] == terms_id
-                             and prior[3] in VARIANTS and prior[1] and prior[4] and prior[5] == 'stripe')
+                             and ((terms_id == 'creator-v1' and prior[3] in VARIANTS) or (terms_id in FIXED_PAID_PLANS and prior[3] is None))
+                             and prior[1] and prior[4] and prior[5] == 'stripe')
         if (prior and not ended_creator and not ended_legacy(cur, prior[0], prior[2], prior[3])
                 and (prior[0] in OPEN_STATUSES or prior[1] or prior[2] not in ('trial-v1', 'free-v1'))):
             raise AlphaError('This workspace already has a subscription. Use the billing portal.', 409, code='subscription_held')
-        variant = self.assign(cur, workspace_id)
+        if terms_id in FIXED_PAID_PLANS:
+            cur.execute('SELECT price_cents,currency,provider_price_id FROM public.pr_plan_terms WHERE id=%s', (terms_id,))
+            amount, currency, price_id = cur.fetchone()
+            variant = {'planTermsId': terms_id, 'priceVariantId': None, 'priceId': price_id,
+                       'status': 'active', 'amountCents': amount, 'currency': currency}
+        else:
+            variant = self.assign(cur, workspace_id)
         if variant['planTermsId'] != terms_id or variant['status'] != 'active' or not (variant['priceId'] or '').strip():
             raise AlphaError('This server price is not yet available for purchase.', 409, code='price_unavailable')
         cur.execute('SELECT id FROM public.pr_plan_price_variants WHERE provider_price_id=%s UNION ALL SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s', (variant['priceId'], variant['priceId']))
@@ -213,7 +222,7 @@ class PlanPricing:
             if (terms_id and terms_id != mapped_terms) or (variant_id and variant_id != mapped_variant):
                 return False
             terms_id, variant_id = mapped_terms, mapped_variant
-        if event.get('priceConflict') and (terms_id == 'creator-v1' or variant_id):
+        if event.get('priceConflict') and (terms_id in PAID_PLANS or variant_id):
             return False
         if variant_id:
             try:
@@ -257,16 +266,19 @@ class PlanPricing:
             fresh = prior[5] is None or float(event['createdAt']) >= float(prior[5])
             legacy_replacement = (not prior[1] and old_package and old_package[0] == 'legacy'
                                   and package[0] == 'legacy' and not variant_id and (package[1] or '').strip())
+            fixed_replacement = (prior[0] == terms_id and terms_id in FIXED_PAID_PLANS and not prior[1] and not variant_id
+                                 and prior[3] and event.get('customerId') == prior[3] and bool(price_id) and price_id == package[1])
             creator_replacement = (prior[0] == terms_id == 'creator-v1' and prior[1] == variant_id
                                    and variant_id in VARIANTS and prior[3] and event.get('customerId') == prior[3]
                                    and price_id == variant['priceId'])
             # An ended legacy package moving to Creator (checkout allows it): the same customer's new subscription, at
             # the workspace's own verified Creator price, replaces the ended binding. Late legacy events cannot.
             legacy_to_creator = (not prior[1] and old_package and old_package[0] == 'legacy' and prior[0] not in ('trial-v1', 'free-v1')
-                                 and terms_id == 'creator-v1' and variant_id in VARIANTS and prior[3] and event.get('customerId') == prior[3]
-                                 and bool(price_id) and price_id == variant['priceId'])
+                                 and prior[3] and event.get('customerId') == prior[3] and bool(price_id)
+                                 and ((terms_id == 'creator-v1' and variant_id in VARIANTS and price_id == variant['priceId'])
+                                      or (terms_id in FIXED_PAID_PLANS and not variant_id and price_id == package[1])))
             if not (prior[6] in ('cancelled', 'expired') and starts_subscription and fresh
-                    and (legacy_replacement or creator_replacement or legacy_to_creator)):
+                    and (legacy_replacement or creator_replacement or fixed_replacement or legacy_to_creator)):
                 return False
         if terms_id == 'creator-v1':
             if variant_id not in VARIANTS or not subscription:
@@ -274,6 +286,12 @@ class PlanPricing:
             cur.execute('SELECT price_variant_id FROM public.pr_price_experiment_assignments WHERE workspace_id=%s AND experiment_key=%s', (workspace, EXPERIMENT))
             assignment = cur.fetchone()
             if assignment and not (prior and prior[1]) and assignment[0] != variant_id:
+                return False
+        elif terms_id in FIXED_PAID_PLANS:
+            if not price_id and same_subscription and prior[0] == terms_id and not prior[1]:
+                # Omitted cancellation/update facts inherit only the exact established provider subscription.
+                price_id = package[1]
+            if variant_id or not subscription or package[0] != 'public' or not price_id or price_id != (package[1] or '').strip():
                 return False
         elif variant_id or package[0] != 'legacy':
             return False
@@ -300,6 +318,9 @@ def _plan_view(row, *, v2, variant=None, credits_enabled=None):
             'currency': (variant['currency'] if variant else currency) or 'USD', 'interval': None if plan in ('free', 'trial') else 'month',
             'entitlements': {k: safe_entitlements[k] for k in _PUBLIC_ENTITLEMENTS if k in safe_entitlements}}
     if v2:
+        if terms_id in FIXED_PAID_PLANS:
+            variant = {'planTermsId': terms_id, 'priceVariantId': None, 'priceId': provider_price,
+                       'status': status, 'amountCents': price_cents, 'currency': currency}
         view['monthlyCredits'] = 0 if plan == 'free' else safe_entitlements.get('monthlyCredits')
         if plan == 'free':
             view['firstValue'] = dict(FREE_FIRST_VALUE)

@@ -10,6 +10,7 @@ import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { channels, hostedChannels, localChannels } from '@/config/channels';
+import { PublicPricing } from '@/components/marketing/public-pricing';
 import { PRICING_CATALOG, v2PlanCards } from '@/config/plans';
 import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
@@ -149,11 +150,13 @@ export function PricingSummary() {
   return (
     <Section id='pricing' eyebrow='Pricing' title={copy.title} accent={copy.accent} description={copy.description}>
       <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
-        {v2PlanCards().map((card, index) => (
+        <PublicPricing>
+          {v2PlanCards().map((card, index) => (
           <ScrollReveal key={card.id} {...REVEAL} delay={index * STAGGER} className='flex'>
             <V2PlanCardView card={card} />
           </ScrollReveal>
         ))}
+          </PublicPricing>
       </div>
       <Link href={siteConfig.links.pricing} className={LEARN_MORE}>
         {copy.compareLink} <LearnMoreChevron />

@@ -484,7 +484,7 @@ class HostedWorkspaceService:
         """Server-owned public offers; reads no workspace, session, or private provider data."""
         from .plan_pricing import public_catalog as pricing_catalog
         with self.connection_factory() as db, db.cursor() as cur:
-            return pricing_catalog(cur, self.billing.pricing_v2_enabled,
+            return pricing_catalog(cur, self.billing.pricing_v2_enabled and self.billing.provider.id == 'stripe',
                                    credits_enabled=self.ledger.credits is not None)
 
     def usage(self, workspace_id, token):
@@ -502,7 +502,13 @@ class HostedWorkspaceService:
                 view["billing"]["checkoutAvailable"] = False
                 view["billing"]["portalAvailable"] = False
             for terms in view['planTerms']:
-                terms['checkoutAvailable'] = bool(terms['newCheckoutEnabled'] and terms['status'] == 'active' and view['billing']['checkoutAvailable'])
+                terms['checkoutAvailable'] = False
+                if terms['newCheckoutEnabled'] and terms['status'] == 'active' and view['billing']['checkoutAvailable']:
+                    try:
+                        self.billing.pricing.checkout(cur, workspace_id, terms['id'])
+                        terms['checkoutAvailable'] = True
+                    except AlphaError:
+                        pass
         # The stable Growth helper owns its workspace transaction. Calling it while
         # holding this workspace lock would block its second connection.
         if view['billingMode'] == 'free_preview':

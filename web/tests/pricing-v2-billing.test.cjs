@@ -111,6 +111,7 @@ test('four public plans retain exact credits and legacy Studio remains separatel
   assert.doesNotMatch(html, /Choose Starter|Choose Studio|Choose Creator/);
   assert.match(html, /AI writing batches/);
   for (const plan of publicTerms.filter(p => ['starter', 'studio'].includes(p.plan))) {
-    assert.equal(model.planOffer({ terms: { ...plan, status: 'active', checkoutAvailable: true, newCheckoutEnabled: true }, currentTermsId: 'free-v1', lifecycleStatus: 'free', checkoutAvailable: true, isOwner: true }), 'not_available');
+    assert.equal(model.planOffer({ terms: { ...plan, status: 'active', checkoutAvailable: true, newCheckoutEnabled: true }, currentTermsId: 'free-v1', lifecycleStatus: 'free', checkoutAvailable: true, isOwner: true }), 'checkout');
+    assert.equal(model.planOffer({ terms: { ...plan, status: 'active', checkoutAvailable: false, newCheckoutEnabled: true }, currentTermsId: 'free-v1', lifecycleStatus: 'free', checkoutAvailable: true, isOwner: true }), 'not_available');
   }
 });

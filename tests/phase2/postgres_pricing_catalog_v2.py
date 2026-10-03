@@ -28,9 +28,9 @@ OTHER = "00000000-0000-0000-0000-000000000048"
 LEGACY_IDS = ("trial-v1", "studio-v1", "assist-v1", "assist-bounded-v1")
 V2 = {
     "free-v1": ("free", 1, 0, "active", "public", 0, 1, 1, 1, 200),
-    "starter-v1": ("starter", 1, 2900, "proposed", "public", 1000, 1, 3, 1, 1000),
+    "starter-v1": ("starter", 1, 2900, "active", "public", 1000, 1, 3, 1, 1000),
     "creator-v1": ("creator", 1, 5900, "proposed", "public", 3500, 1, 6, 2, 1000),
-    "studio-v2": ("studio", 2, 14900, "proposed", "public", 8000, 3, 10, 3, 1000),
+    "studio-v2": ("studio", 2, 14900, "active", "public", 8000, 3, 10, 3, 1000),
 }
 PACKS = {
     "credits-1000-v2": (1500, 1000000),
@@ -172,7 +172,7 @@ class PricingCatalogV2(unittest.TestCase):
                     e = row["entitlements"]
                     self.assertEqual((row["plan"], row["version"], row["price_cents"], row["status"], row["catalog_state"],
                                       e.get("monthlyCredits", 0), e["members"], e["connectedAccounts"], e["brands"], e["storageMb"]), expected)
-                    self.assertEqual((row["currency"], row["new_checkout_enabled"], row["provider_price_id"]), ("USD", False, None))
+                    self.assertEqual((row["currency"], row["new_checkout_enabled"], row["provider_price_id"]), ("USD", key in ("starter-v1", "studio-v2"), None))
                     self.assertEqual((e["writingBatches"], e["mediaCredits"], e["overage"]), (0, 0, "stop"))
                     self.assertEqual(e.get("creditPolicy"), None if key == "free-v1" else POLICY)
 

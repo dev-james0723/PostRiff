@@ -55,7 +55,7 @@ def validate_catalog(cur):
     cur.execute("SELECT id,status,new_checkout_enabled,entitlements FROM public.pr_plan_terms WHERE id IN ('creator-v1','starter-v1','studio-v2') ORDER BY id")
     rows = cur.fetchall()
     if (len(rows) != 3 or [r[0] for r in rows] != ['creator-v1','starter-v1','studio-v2']
-            or any(r[2] or r[1] not in ('proposed','active') for r in rows)
+            or any(r[1] not in ('proposed','active') or bool(r[2]) != (r[0] in ('starter-v1','studio-v2')) for r in rows)
             or rows[0][3].get('monthlyCredits') != 3500 or rows[0][3].get('creditPolicy') != POLICY):
         raise ValueError('Existing inactive v2 catalog and exact Creator entitlement required.')
     cur.execute("SELECT id,plan_terms_id,amount_cents,status FROM public.pr_plan_price_variants ORDER BY amount_cents,id")
@@ -72,7 +72,9 @@ def prepare_catalog(cur):
         v = variant(price)
         cur.execute("UPDATE public.pr_plan_price_variants SET provider_price_id=%s WHERE id=%s AND plan_terms_id='creator-v1' AND amount_cents=%s",
                     (v['priceId'], v['id'], v['amountCents']))
-    # Leave proposed variants, hidden plans, pack rows and legacy plan status intact.
+    for terms in ('starter-v1', 'studio-v2'):
+        cur.execute('UPDATE public.pr_plan_terms SET provider_price_id=%s WHERE id=%s', ('price_local_synthetic_fixed_' + terms, terms))
+    # Creator variants, packs and legacy plan status retain their original restrictions.
     # Historical signed webhook reconciliation does not require new-sale activation.
 
 
@@ -195,7 +197,10 @@ class SyntheticStripeTransport:
     def __init__(self): self.attempts, self.external_io = 0, 0
     def __call__(self, method, url, headers=None, form=None, body=None):
         self.attempts += 1
-        raise RuntimeError('local-synthetic checkout/portal transport is disabled; no external IO.')
+        allowed = {'price_local_synthetic_fixed_starter-v1', 'price_local_synthetic_fixed_studio-v2'}
+        if method == 'POST' and url.endswith('/v1/checkout/sessions') and form and form.get('line_items[0][price]') in allowed:
+            return {'status': 200, 'body': {'id': 'cs_local_synthetic_fixed_' + str(self.attempts), 'url': 'https://checkout.stripe.com/c/local_synthetic_fixed'}}
+        raise RuntimeError('Only the two approved fixed-price synthetic checkout transports are allowed; no external IO.')
 
 
 class SyntheticGatewayTransport:

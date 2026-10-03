@@ -135,7 +135,8 @@ export function planOffer(input: {
   if (!input.isOwner) return 'owner_only';
   const terms = input.terms;
   if (input.checkoutAvailable !== true || terms.checkoutAvailable !== true || terms.newCheckoutEnabled !== true ||
-      terms.status !== 'active' || terms.catalogState !== 'public' || terms.plan !== 'creator' || !terms.priceVariantId) return 'not_available';
+      terms.status !== 'active' || terms.catalogState !== 'public' ||
+      !(terms.plan === 'creator' && terms.priceVariantId || terms.plan === 'starter' && terms.id === 'starter-v1' || terms.plan === 'studio' && terms.id === 'studio-v2')) return 'not_available';
   if (open) return 'switch_in_portal';
   return 'checkout';
 }

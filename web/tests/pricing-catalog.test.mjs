@@ -54,6 +54,10 @@ test('v2 public cards: outcomes and numbers from the catalog, never legacy sales
   assert.deepEqual([starter.priceCents, starter.monthlyCredits, studio.priceCents, studio.monthlyCredits], [2900, 1000, 14900, 8000]);
   for (const paid of [starter, studio]) {
     assert.equal(v2CardAction(paid, '/auth/sign-up').href, null);
+    const qualified = v2CardAction({ ...paid, checkout: 'available', checkoutAvailable: true }, '/auth/sign-up');
+    assert.equal(qualified.label, `Get ${paid.name}`);
+    assert.ok(qualified.href.includes('account%2Fbilling'));
+    assert.equal(v2CardAction({ ...paid, checkout: 'available', checkoutAvailable: false }, '/auth/sign-up').href, null);
     assert.ok(paid.highlights.includes(`${paid.monthlyCredits.toLocaleString('en-US')} managed AI credits every month`));
   }
   assert.equal(free.interval, null);
@@ -101,4 +105,11 @@ test('legacy account reference data remains unchanged and is not the public new-
     ['assist', 'assist-v1', 3900, 'proposed']
   ]);
   assert.deepEqual({ ...TRIAL }, { days: 14, connectedAccounts: 2, writingBatches: 10, mediaCredits: 1, storageMb: 200, cardRequired: false, autoConvert: false });
+});
+
+test('qualified fixed-plan offers reflect exact approved amounts; unresolved payment setup stays closed', () => {
+  const qualified = { ...V2_CATALOG, plans: V2_CATALOG.plans.map(plan => ['starter', 'studio'].includes(plan.plan) ? { ...plan, checkout: 'available', checkoutAvailable: true } : plan) };
+  assert.deepEqual(jsonLdOffers('v2', qualified).map(p => [p.name, p.price]), [['Free', '0.00'], ['Starter', '29.00'], ['Studio', '149.00']]);
+  const unqualified = { ...qualified, plans: qualified.plans.map(plan => ({ ...plan, checkoutAvailable: false })) };
+  assert.deepEqual(jsonLdOffers('v2', unqualified).map(p => p.name), ['Free']);
 });

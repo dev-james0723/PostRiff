@@ -44,7 +44,7 @@ class UsageCatalogV2(unittest.TestCase):
         with connection() as db:
             assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
-                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql'):
+                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql', '052_fixed_plan_checkout_approval.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())
 
     def setUp(self):

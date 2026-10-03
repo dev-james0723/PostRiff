@@ -297,7 +297,7 @@ export function v2PlanCards(catalog: PublicCatalog = V2_CATALOG): V2PlanCard[] {
 }
 
 /**
- * Signup always starts on Free. Creator has no action until the sanitized catalog explicitly
+ * Signup always starts on Free. Paid plans have no action until the sanitized catalog explicitly
  * reports qualified availability. A navigation link never authorizes checkout or provider spend.
  */
 export interface CardAction {
@@ -308,13 +308,13 @@ export interface CardAction {
 
 export function v2CardAction(card: Pick<V2PlanCard, 'plan' | 'name' | 'checkout' | 'checkoutAvailable' | 'monthlyCredits'>, signUpHref: string): CardAction {
   if (card.plan === 'free') return { label: 'Start free', href: signUpHref, note: 'No card needed.' };
-  if (card.plan === 'creator' && typeof card.monthlyCredits === 'number' && Number.isSafeInteger(card.monthlyCredits) && card.monthlyCredits >= 0 && card.checkout === 'available' && card.checkoutAvailable === true) {
-    return { label: `Get ${card.name}`, href: `${signUpHref}?next=${encodeURIComponent('/app/account/billing#plans')}`, note: 'Start free, then review Creator under Usage & plan. Checkout eligibility is verified by the server.' };
+  if (['starter', 'creator', 'studio'].includes(card.plan) && typeof card.monthlyCredits === 'number' && Number.isSafeInteger(card.monthlyCredits) && card.monthlyCredits >= 0 && card.checkout === 'available' && card.checkoutAvailable === true) {
+    return { label: `Get ${card.name}`, href: `${signUpHref}?next=${encodeURIComponent('/app/account/billing#plans')}`, note: `Start free, then review ${card.name} under Usage & plan. Checkout eligibility is verified by the server.` };
   }
-  return { label: `${card.name} unavailable`, href: null, note: `${card.name} is proposed and it is not available for purchase. You can start on Free.` };
+  return { label: `${card.name} unavailable`, href: null, note: card.plan === 'creator' ? `${card.name} is proposed and it is not available for purchase. You can start on Free.` : `${card.name} checkout is unavailable until payment setup is complete. You can start on Free.` };
 }
 
-/** schema.org: Free, plus the default Creator offer only with explicit qualified availability. */
+/** schema.org: Free, plus approved paid offers only with explicit qualified availability. */
 export interface JsonLdOffer {
   '@type': 'Offer';
   name: string;
@@ -327,7 +327,7 @@ export function jsonLdOffers(catalog: PricingCatalogId = PRICING_CATALOG, v2: Pu
   void catalog;
   const sellable = v2.plans.filter((plan) =>
     (plan.plan === 'free' && plan.priceCents === 0) ||
-    (plan.plan === 'creator' && plan.priceCents === 5900 && plan.currency === 'USD' && catalogLimit(plan, 'monthlyCredits') !== null && plan.checkout === 'available' && plan.checkoutAvailable === true)
+    (isV2PublicPlan(plan) && ({ starter: 2900, creator: 5900, studio: 14900 } as Record<string, number>)[plan.plan] === plan.priceCents && plan.currency === 'USD' && catalogLimit(plan, 'monthlyCredits') !== null && plan.checkout === 'available' && plan.checkoutAvailable === true)
   ).map((plan) => ({ name: plan.label, priceCents: plan.priceCents, currency: plan.currency }));
   return sellable.map((plan): JsonLdOffer => ({ '@type': 'Offer', name: plan.name, price: (plan.priceCents / 100).toFixed(2), priceCurrency: plan.currency, category: 'subscription' }));
 }

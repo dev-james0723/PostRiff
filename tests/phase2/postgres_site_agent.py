@@ -353,7 +353,7 @@ assert http("GET", f"/api/workspaces/{wid}/site-agent/insights", token=VIEWER)[0
 from pathlib import Path
 with connection() as db:
     for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
-                 '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql'):
+                 '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql', '052_fixed_plan_checkout_approval.sql'):
         db.execute((Path(__file__).resolve().parents[2] / 'migrations/postriff' / name).read_text())
 # Pricing v2: use the actual SQL-backed ledger mode; legacy zero counters cannot describe credits.
 from types import SimpleNamespace

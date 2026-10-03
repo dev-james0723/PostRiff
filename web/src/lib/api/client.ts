@@ -8,6 +8,7 @@ import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
  */
 import type {
   ToolRegistry,
+  PublicCatalog,
   WorkspaceApiToken, ApiTokenCreated, TokenScope,
   Analytics,
   Audience,
@@ -162,6 +163,7 @@ export function createApi(getToken: TokenSource) {
     /* public */
     tools: () => get<ToolRegistry>('/api/tools', false),
     catalog: () => get<Catalog>('/api/catalog', false),
+    plans: () => get<PublicCatalog>('/api/plans', false),
     health: () => get<Health>('/api/health', false),
     privacyNotice: () => get<PrivacyNotice>('/api/privacy/notice', false),
     models: () => get<ModelCatalog>('/api/ideas/models', false),

@@ -430,7 +430,7 @@ class Ledger:
                           "priceCents": effective['amountCents'] if effective else r[4], "defaultPriceCents": r[4],
                           "currency": effective['currency'] if effective else r[5], "status": r[6],
                           "priceVariantId": effective['priceVariantId'] if effective else None,
-                          "catalogState": r[8], "newCheckoutEnabled": bool(r[9] and (r[8] == 'public' and r[0] == 'creator-v1' if catalog_v2 else r[1] != 'trial')),
+                          "catalogState": r[8], "newCheckoutEnabled": bool(r[9] and (r[8] == 'public' and r[0] in ('creator-v1','starter-v1','studio-v2') if catalog_v2 else r[1] != 'trial')),
                           "checkoutAvailable": False, "current": r[0] == entitlement['planTermsId'],
                           "entitlements": customer_entitlements(r[7]), "priceLabel": "proposed" if r[6] != "active" else "active"})
         return {
@@ -621,8 +621,13 @@ class Billing:
         live = self.provider.id == "stripe"
         if self.pricing_v2_enabled:
             try:
-                self.pricing.checkout(cur, workspace_id, "creator-v1")
-                purchasable = True
+                purchasable = False
+                for terms_id in ('creator-v1', 'starter-v1', 'studio-v2'):
+                    try:
+                        self.pricing.checkout(cur, workspace_id, terms_id)
+                        purchasable = True
+                    except AlphaError:
+                        pass
             except AlphaError:
                 purchasable = False
         else:

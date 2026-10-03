@@ -201,8 +201,8 @@ class FixtureBoundaries(unittest.TestCase):
 
     def catalog_rows(self):
         return [[('creator-v1', 'proposed', False, {'monthlyCredits':3500,'creditPolicy':f.POLICY}),
-                 ('starter-v1', 'proposed', False, {'monthlyCredits':1000}),
-                 ('studio-v2', 'proposed', False, {'monthlyCredits':8000})],
+                 ('starter-v1', 'active', True, {'monthlyCredits':1000}),
+                 ('studio-v2', 'active', True, {'monthlyCredits':8000})],
                 [(f'creator-{price}-v1','creator-v1',price*100,'proposed') for price in (49,59,79)], [(0,)]]
 
     def test_current_catalog_preflight_checks_real_entitlement_and_all_inactive_variants(self):

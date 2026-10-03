@@ -6,6 +6,7 @@ import { V2PlanCardView } from '@/components/marketing/plan-card';
 import { Section } from '@/components/marketing/section';
 import { Surface } from '@/components/rafii';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PublicPricing } from '@/components/marketing/public-pricing';
 import { PRICING_CATALOG, v2PlanCards } from '@/config/plans';
 import { marketingCopy, v2CompareRows } from '@/config/pricing-copy';
 
@@ -58,9 +59,11 @@ function V2Plans() {
     <>
       <Section className='pt-8 sm:pt-12'>
         <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
+          <PublicPricing>
           {cards.map((card) => (
             <V2PlanCardView key={card.id} card={card} priceSize='large' />
           ))}
+          </PublicPricing>
         </div>
         {copy.pricingFootnote && <p className='text-muted-foreground mt-4 text-xs text-pretty'>{copy.pricingFootnote}</p>}
       </Section>

@@ -257,7 +257,7 @@ class RunnerContracts(unittest.TestCase):
         sql = [Path(a[a.index('-f') + 1]).name for a, _ in self.calls if Path(a[0]).name == 'psql']
         self.assertEqual(sql, ['rls.sql', '020_credit_quotes.sql', '021_credit_purchases.sql',
                               '022_credit_payment_lifecycle.sql', '048_pricing_credit_catalog_v2.sql',
-                              '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql'])
+                              '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql', '052_fixed_plan_checkout_approval.sql'])
         last_sql = max(i for i, (a, _) in enumerate(self.calls) if Path(a[0]).name == 'psql')
         first_child = next(i for i, (a, _) in enumerate(self.calls) if a[0] == sys.executable)
         self.assertLess(last_sql, first_child)

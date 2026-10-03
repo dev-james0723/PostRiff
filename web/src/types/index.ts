@@ -14,7 +14,7 @@ export type WorkspacePermission =
 export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'approver' | 'viewer';
 
 /** Effective workspace plan identities, including v2 Free and Creator. */
-export type WorkspacePlan = 'trial' | 'free' | 'creator' | 'studio' | 'assist';
+export type WorkspacePlan = 'trial' | 'free' | 'starter' | 'creator' | 'studio' | 'assist';
 
 /**
  * Access requirements for a navigation item or page. All present keys must

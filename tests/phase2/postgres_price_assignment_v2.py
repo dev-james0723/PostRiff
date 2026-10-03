@@ -45,7 +45,7 @@ class AssignmentV2(unittest.TestCase):
         with connection() as db:
             assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
-                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
+                         '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql', '051_pricing_public_four_plans.sql', '052_fixed_plan_checkout_approval.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())
 
     def setUp(self):
@@ -59,6 +59,7 @@ class AssignmentV2(unittest.TestCase):
             self.wid = str(db.execute("SELECT pr_bootstrap(%s,'studio')", (self.actor,)).fetchone()[0])
             db.execute("UPDATE pr_plan_terms SET status='proposed',catalog_state='public',new_checkout_enabled=false WHERE id='creator-v1'")
             db.execute("UPDATE pr_plan_price_variants SET status='proposed',provider_price_id=NULL")
+            db.execute("UPDATE pr_plan_terms SET provider_price_id=NULL WHERE id IN ('starter-v1','studio-v2')")
         def verify(token):
             if token != 'fixture':
                 raise AlphaError('Denied', 403)
@@ -167,7 +168,15 @@ class AssignmentV2(unittest.TestCase):
 
     def test_seeded_checkout_all_off_and_old_sales_refused(self):
         self.deny_checkout()
-        for terms in ('starter-v1', 'studio-v2', 'free-v1', 'studio-v1', 'assist-v1'):
+        for terms in ('starter-v1', 'studio-v2'):
+            with connection() as db:
+                db.execute("UPDATE pr_plan_terms SET provider_price_id=%s WHERE id=%s", ('price_synthetic_off_' + terms, terms))
+            self.service = self.make_service(enabled=False)
+            self.deny_checkout(terms)
+            self.service = self.make_service()
+            with connection() as db:
+                db.execute('UPDATE pr_plan_terms SET provider_price_id=NULL WHERE id=%s', (terms,))
+        for terms in ('free-v1', 'studio-v1', 'assist-v1'):
             with connection() as db:
                 db.execute("UPDATE pr_plan_terms SET status='active',provider_price_id='price_synthetic_old' WHERE id=%s", (terms,))
             self.deny_checkout(terms)
@@ -726,6 +735,56 @@ class AssignmentV2(unittest.TestCase):
                         row = db.execute("SELECT g.subscription_id,g.plan_terms_id,g.period_start,g.period_end,u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchone()
                         self.assertEqual(row[:4], (invoice['subscription'], 'task3-review-legacy' if legacy else 'creator-v1', NOW - 10, NOW + 300))
                         self.assertEqual((row[4]['milli'], row[4]['policy']), (3500000, 'credits-candidate-2026-09-23-v1' if legacy else 'credits-v2-2026-09-28'))
+
+
+    def test_fixed_starter_studio_checkout_and_verified_invoice_grant(self):
+        for terms, amount, credits in (('starter-v1', 2900, 1000), ('studio-v2', 14900, 8000)):
+            with self.subTest(terms=terms):
+                if terms == 'studio-v2': self.setUp()
+                price = 'price_synthetic_fixed_' + terms
+                # Provider Price is a verified server binding, never a request amount.
+                with connection() as db:
+                    db.execute('UPDATE pr_plan_terms SET provider_price_id=%s WHERE id=%s', (price, terms))
+                ready = self.service.usage(self.wid, 'fixture')
+                row = next(p for p in ready['planTerms'] if p['id'] == terms)
+                self.assertTrue(row['checkoutAvailable'])
+                self.assertIsNone(row['priceVariantId'])
+                shown = next(p for p in self.service.plans()['plans'] if p['id'] == terms)
+                self.assertEqual((shown['priceCents'], shown['monthlyCredits'], shown['checkout']), (amount, credits, 'available'))
+                self.assertNotIn(price, str(shown))
+                before = len(self.transport.calls)
+                self.service.billing_checkout(self.wid, 'fixture', terms)
+                self.assertEqual(len(self.transport.calls), before + 1)
+                form = self.transport.calls[-1][1]
+                self.assertEqual(form['line_items[0][price]'], price)
+                self.assertEqual(form['metadata[plan_terms_id]'], terms)
+                self.assertNotIn('line_items[0][price_data][unit_amount]', form)
+                obj = self.sub(metadata=False, price=False)
+                obj['metadata'].update(plan_terms_id=terms)
+                obj['items'] = {'data': [{'price': {'id': price}}]}
+                self.assertEqual(self.webhook(obj)['outcome'], 'applied')
+                invoice = {'id': 'in_fixed_' + self.wid, 'subscription': obj['id'], 'customer': obj['customer'],
+                           'metadata': {'workspace_id': self.wid, 'plan_terms_id': terms},
+                           'paid': True, 'status': 'paid', 'amount_paid': amount, 'currency': 'usd',
+                           'billing_reason': 'subscription_create',
+                           'lines': {'data': [{'type': 'subscription', 'subscription': obj['id'], 'price': {'id': price},
+                                               'period': {'start': NOW, 'end': NOW + 300}}]}}
+                signed = self.signed('invoice.paid', invoice)
+                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
+                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+                with connection() as db:
+                    rows = db.execute('SELECT millicredits,plan_terms_id FROM pr_credit_subscription_grants WHERE invoice_id=%s', (invoice['id'],)).fetchall()
+                    self.assertEqual(rows, [(credits * 1000, terms)])
+                    self.assertEqual(db.execute('SELECT price_variant_id,plan_terms_id FROM pr_subscriptions WHERE workspace_id=%s', (self.wid,)).fetchone(), (None, terms))
+                # Signed conflicting plan metadata never creates a second grant or changes the bound subscription.
+                forged = {**invoice, 'id': invoice['id'] + '_wrong', 'metadata': {'workspace_id': self.wid, 'plan_terms_id': 'creator-v1'}}
+                self.assertNotEqual(self.service.billing_webhook(*self.signed('invoice.paid', forged))['outcome'], 'applied')
+                with connection() as db:
+                    self.assertEqual(db.execute('SELECT count(*) FROM pr_credit_subscription_grants WHERE invoice_id=%s', (forged['id'],)).fetchone()[0], 0)
+                closed = self.make_service(enabled=False)
+                calls = len(self.transport.calls)
+                with self.assertRaises(AlphaError): closed.billing_checkout(self.wid, 'fixture', terms)
+                self.assertEqual(len(self.transport.calls), calls)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -1,5 +1,7 @@
 # Rafii Pricing and Credits v2 App-wide Implementation Plan
 
+> Latest direct user amendment (2026-10-03): Starter and Studio must be purchasable. This supersedes the visibility-only restriction in the prior amendment. Approve Starter US$29 / 1,000 credits and Studio v2 US$149 / 8,000 credits for qualified checkout. Reuse server-owned fixed Price bindings, owner-only checkout and verified signed invoice funding. Actual provider setup/unique verified Price binding and credits activation remain required. Production deployment remains outside this LOCAL task.
+
 > Approved user amendment (2026-10-03): publicly include Starter US$29/month with 1,000 credits and Studio (`studio-v2`) US$149/month with 8,000 credits alongside Free and Creator. This supersedes the two-plan/hidden Starter and Studio visibility clauses below. Existing capacity quantities and legacy `studio-v1` US$19 terms remain unchanged. Visibility does not activate checkout, provider spend or production. All remaining Tasks 0–13 acceptance and funding restrictions continue to apply.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Use TDD and fresh verification. Do not work in the current dirty canonical checkout.

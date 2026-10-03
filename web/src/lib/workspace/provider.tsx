@@ -69,7 +69,7 @@ export interface WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function toPlan(value: string | undefined | null): WorkspacePlan {
-  return value === 'free' || value === 'creator' || value === 'studio' || value === 'assist' ? value : 'trial';
+  return value === 'free' || value === 'starter' || value === 'creator' || value === 'studio' || value === 'assist' ? value : 'trial';
 }
 
 export function WorkspaceProvider({ children, initial }: { children: ReactNode; initial?: WorkspaceBootstrap | null }) {

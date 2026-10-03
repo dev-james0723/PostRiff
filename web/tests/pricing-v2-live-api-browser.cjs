@@ -98,6 +98,7 @@ async function visual(scene, url, label, width, motion) {
   await page.goto(base+url); await page.locator('main').first().waitFor();
   await page.waitForFunction(()=>document.fonts.status==='loaded',null,{timeout:ACTION_TIMEOUT_MS});
   const main=page.locator('main').first();
+  if(url==='/pricing') await main.getByRole('link',{name:'Get Starter',exact:true}).waitFor({state:'visible'});
   assert.ok((await main.innerText()).trim().length>0, 'Actual product content must be present');
   // Wait for source-defined data surfaces rather than a sleep or a static fixture.
   if(url.includes('/billing')) {
@@ -106,7 +107,7 @@ async function visual(scene, url, label, width, motion) {
     const plansText=await page.locator('#plans').innerText();
     for(const label of ['Starter','Creator','Studio']) assert.ok(plansText.includes(label));
     for(const credits of ['1,000','3,500','8,000']) assert.ok(plansText.includes(credits));
-    assert.doesNotMatch(plansText,/Choose Starter|Choose Studio/);
+    // Per-workspace owner eligibility remains server-owned; public qualification never bypasses it.
   }
   const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
   assert.ok(overflow.scroll<=overflow.width+1, `${label}: horizontal overflow ${JSON.stringify(overflow)}`);
@@ -134,8 +135,9 @@ async function publicScene(width,motion) {
     assert.equal(creator.checkout,'not_yet_available');assert.equal(catalog.topUps.available,false);
     for(const [id,price,credits] of [['starter-v1',2900,1000],['studio-v2',14900,8000]]) {
       const plan=catalog.plans.find(p=>p.id===id);assert.equal(plan.priceCents,price);assert.equal(plan.monthlyCredits,credits);
-      assert.equal(plan.checkout,'not_yet_available');assert.equal(plan.checkoutAvailable,false);
-      assert.equal(await main.getByRole('button',{name:`${plan.label} unavailable`,exact:true}).isDisabled(),true);
+      assert.equal(plan.checkout,'available');assert.equal(plan.checkoutAvailable,true);
+      await main.getByRole('link',{name:`Get ${plan.label}`,exact:true}).waitFor({state:'visible'});
+      assert.match(await main.getByRole('link',{name:`Get ${plan.label}`,exact:true}).getAttribute('href'),/account%2Fbilling/);
     }
     // The existing public JSON-LD is published by Home, using the same pricing catalog.
     await scene.page.goto(base+'/');
@@ -360,7 +362,7 @@ async function contracts(request, rows) {
     }
   }
   const row=rows.find(r=>r.scenario==='free-new'); const send=api(request,row.principal);const ws='/api/workspaces/'+row.workspaceId;
-  for(const terms of ['creator-v1','starter-v1','studio-v2','studio-v1','assist-v1'])
+  for(const terms of ['creator-v1','studio-v1','assist-v1'])
     await send('POST',ws+'/billing/checkout',{planTermsId:terms},409);
   await send('POST',ws+'/billing/credit-checkout',{packId:'credits-1000-v2',requestId:randomUUID()},503);
   // Owner/member and foreign-tenant protections use actual authenticated APIs.
@@ -504,6 +506,17 @@ async function main() {
     await writerAndGrowth(setup.request,rows);
     const final=await control(setup.request,'snapshot');
     assert.equal(final.externalIO,0);assert.equal(final.syntheticStripeTransportAttempts,0);
+    const buyer=await control(setup.request,'seed',{scenario:'free-new'});
+    const buyerScene=await contextFor(buyer,390,'reduce');
+    try {
+      await visual(buyerScene,'/app/account/billing','fixed-plan-purchase-ready',390,'reduce');
+      for(const [terms,label] of [['starter-v1','Starter'],['studio-v2','Studio']]) {
+        await buyerScene.page.getByRole('button',{name:`Choose ${label}`,exact:true}).waitFor({state:'visible'});
+        const value=await api(buyerScene.context.request,buyer.principal)('POST',`/api/workspaces/${buyer.workspaceId}/billing/checkout`,{planTermsId:terms},201);assert.match(value.url,/^https:\/\/checkout\.stripe\.com\//);
+      }
+      const purchased=await control(setup.request,'snapshot');Object.assign(final,purchased);assert.equal(purchased.externalIO,0);assert.equal(purchased.syntheticStripeTransportAttempts,2);
+      pass('Starter29 and Studio149: qualified public links, owner Choose actions and real local checkout API with exactly two synthetic processor requests');
+    } finally { await buyerScene.context.close(); }
     fs.writeFileSync(path.join(out,'final-local-synthetic-state.json'),JSON.stringify(final,null,2)+'\n');
   } catch(e) {failures.push(String(e.stack));throw e;}
   finally {

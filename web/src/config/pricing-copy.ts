@@ -112,7 +112,6 @@ export function v2CompareRows(catalog: PublicCatalog = V2_CATALOG): { label: str
 
 function v2Copy(catalog: PublicCatalog): MarketingCopy {
   const { creator, first, credits, perUsd, freeAccounts } = v2Numbers(catalog);
-  const creditDescription = credits === null ? 'a managed credit allowance that is currently unavailable' : `${credits} managed credits`;
   const creditSummary = credits === null ? 'Managed credit allowance unavailable.' : `${credits} managed AI credits every month for the work Rafii runs for you, like drafting and rewriting in your voice.`;
   const creatorAccounts = catalogLimit(creator, 'connectedAccounts');
   const creatorBrands = catalogLimit(creator, 'brands');
@@ -123,14 +122,14 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
   const firstLook = `one Post Doctor check and one analysis of up to ${countText(first.genomeMaxPosts)} recent posts, when available for eligible workspaces`;
   return {
     catalog: 'v2',
-    pricingMeta: { description: `Start free, no card. Proposed plans: ${paidSummary}. Paid plans are not available for purchase. Paid work stops at your limit — never a surprise charge.` },
+    pricingMeta: { description: `Start free, no card. Paid plans: ${paidSummary}. Checkout availability is verified before purchase. Paid work stops at your limit — never a surprise charge.` },
     pricingHero: {
       eyebrow: 'Pricing',
       title: 'Start free.',
       accent: 'Upgrade when it’s worth it.',
-      description: `Start free with no card. Preview Rafii on your own writing with ${firstLook}. Proposed Starter, Creator and Studio would add managed AI work every month.`
+      description: `Start free with no card. Preview Rafii on your own writing with ${firstLook}. Starter, Creator and Studio add managed AI work every month.`
     },
-    pricingFootnote: 'Prices are shown in USD. Starter, Creator and Studio are proposed and not available for purchase. Creator’s beta price is still being validated.',
+    pricingFootnote: 'Prices are shown in USD. Starter and Studio are approved plans; checkout opens when payment setup is complete. Creator is proposed and not available for purchase; its beta price is still being validated.',
     pricingFaq: [
       {
         q: 'What can I do on Free?',
@@ -146,7 +145,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
       },
       {
         q: 'Are the paid plan prices final?',
-        a: 'Starter, Creator and Studio are proposed and not available for purchase; Creator’s beta price is still being validated. If paid subscriptions are enabled later, the price shown at checkout is the price you pay, with at least 30 days’ notice by email before a renewal price changes.'
+        a: 'Starter and Studio are approved plans. Creator is proposed and not available for purchase; its beta price is still being validated. If paid subscriptions are enabled later, the price shown at checkout is the price you pay, with at least 30 days’ notice by email before a renewal price changes.'
       },
       { q: 'When am I billed?', a: 'If paid subscriptions are enabled, monthly in advance from the day you subscribe to a paid plan. Free never asks for a card and never converts automatically.' },
       { q: 'Can I cancel any time?', a: 'Yes, from the billing portal. Your paid plan runs to the end of the paid period; then the workspace returns to Free, and your drafts stay readable and exportable.' },
@@ -157,7 +156,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
     landingPricing: {
       title: 'Start free.',
       accent: 'No surprises.',
-      description: `Start free with no card. Proposed plans: ${paidSummary}. Paid plans are not available for purchase. Paid work stops at your limit.`,
+      description: `Start free with no card. Paid plans: ${paidSummary}. Checkout availability is verified before purchase. Paid work stops at your limit.`,
       compareLink: 'Compare plans in detail'
     },
     landingFaqItem: {
@@ -174,7 +173,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
     previewStat: ['Drafts ready', '3'],
     terms: {
       title: 'Free plan, subscriptions and billing',
-      paragraph: `New workspaces start on Free. No payment method is required; Free includes ${firstLook} and has no monthly managed credits. Proposed monthly subscriptions: ${paidSummary}. Credits pay for the AI and data work Rafii runs for you: ${perUsd} credits correspond to US$1 of the verified cost of a task, rounded once per task, and a task’s credit limit is shown and held before it runs. Credits expire at the end of each billing period and do not roll over. Paid plans remain proposed until commercial approval and payment verification are complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Paid work stops when credits are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, after which the workspace returns to Free and your drafts stay readable and exportable. Workspaces that subscribed under an earlier plan keep that plan and its price until they change it, and a trial that is already running continues until it ends. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.`
+      paragraph: `New workspaces start on Free. No payment method is required; Free includes ${firstLook} and has no monthly managed credits. Monthly subscriptions: ${paidSummary}. Credits pay for the AI and data work Rafii runs for you: ${perUsd} credits correspond to US$1 of the verified cost of a task, rounded once per task, and a task’s credit limit is shown and held before it runs. Credits expire at the end of each billing period and do not roll over. Checkout requires completed payment setup and verified prices; Creator remains proposed until its commercial approval is complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Paid work stops when credits are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, after which the workspace returns to Free and your drafts stay readable and exportable. Workspaces that subscribed under an earlier plan keep that plan and its price until they change it, and a trial that is already running continues until it ends. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.`
     },
     signUp: {
       metaTitle: 'Start free',
@@ -193,7 +192,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
         {
           heading: 'Managed credits',
           paragraphs: [
-            `Proposed monthly plans: ${paidSummary}. ${perUsd} credits equal US$1 of the verified model and tool cost of a task, rounded once per task.`,
+            `Monthly plans: ${paidSummary}. ${perUsd} credits equal US$1 of the verified model and tool cost of a task, rounded once per task.`,
             'Before a task runs you see its credit limit. Rafii holds that amount, charges what the task used and returns the rest. A failed task uses no credits, and an unknown cost stays held until it is confirmed rather than counted as zero.'
           ]
         },
@@ -201,7 +200,7 @@ function v2Copy(catalog: PublicCatalog): MarketingCopy {
         { heading: 'Earlier plans', paragraphs: ['Workspaces that subscribed before Creator keep their plan, what it includes and its price; Usage & plan shows them. A trial that is already running continues until it ends, then the workspace moves to Free.'] },
         {
           heading: 'Subscriptions',
-          paragraphs: ['Proposed monthly billing through Stripe, available only when the plan and payment integration are activated. Payment method, cancellation and invoices live in the billing portal (Account → Usage & plan → Manage plan).']
+          paragraphs: ['Monthly billing through Stripe, available when the plan and payment integration are activated. Payment method, cancellation and invoices live in the billing portal (Account → Usage & plan → Manage plan).']
         }
       ]
     }
