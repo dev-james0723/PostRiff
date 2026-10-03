@@ -848,7 +848,7 @@ class AgentRuntimeService:
                  site_extra=None):
         ideas = self.service.ideas
         from ..site_agent import contracts as site_contracts
-        site = {"version": site_contracts.VERSION, "runId": run_id, "status": "completed" if status != "cancelled" else "cancelled", "intent": "agent",
+        site = {"version": site_contracts.VERSION, "runId": run_id, "status": status, "intent": "agent",
                 "language": language, "blocks": blocks, "citations": result.get("citations") or [], "grounding": {"required": False, "sufficient": True, "missing": []},
                 "proposals": proposals, "context": {"route": None, "entity": None, "read": [a["label"] for a in result.get("toolActivity") or [] if a.get("status") == "verified" and a.get("effect") == "READ"][:12],
                                                     "withheld": ["passwords, tokens and keys", "other workspaces"], "stale": False},
@@ -894,8 +894,16 @@ class AgentRuntimeService:
 
     def _spend(self, ledger, default_model) -> int | None:
         """This turn's model spend: each metered call priced at its own model (a specialist on the fast model is not billed at
-        the Manager's price; vision calls count too). None when any call's model has no price."""
+        the Manager's price; vision calls count too). Failed attempts are kept separately from answered spans; any
+        unreconciled attempt or unpriced model leaves total spend unknown, even when no answered span exists."""
         total = 0
+        for call in (ledger.calls if ledger is not None else []):
+            if call.get("feature") == "image":
+                continue  # image generation has its own reservation and settlement, including its own unknown hold
+            actual = call.get("cost_usd_micro")
+            if type(actual) is not int or actual < 0:
+                return None
+            total += actual
         for span in (ledger.spans if ledger is not None else []):
             price = self.cfg.estimate_usd_micro(span.get("model") or default_model or "", span.get("inputTokens") or 0, span.get("outputTokens") or 0)
             if price is None:
@@ -919,10 +927,12 @@ class AgentRuntimeService:
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             if reservation is not None:
                 spent = self._spend(ledger, None)
-                if ledger is None or not ledger.spans:
+                if spent is None:
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "unknown", None)
+                elif ledger is None or (not ledger.spans and not ledger.calls):
                     self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                 else:
-                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed", spent)
             if ctx is not None:
                 from .manager import record_calls
                 record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
