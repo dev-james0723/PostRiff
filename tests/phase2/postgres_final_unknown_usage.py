@@ -177,8 +177,8 @@ print('PASS: operator reconciliation to completed charges the actual cost (0.02 
 # 6. Cancel while a paid request is in flight: no retry is sent and the known cost settles the hold.
 before_calls, before = len(calls), wallet()
 cancel_during_call['on'] = True
-responses.append({'status': 200, 'body': {'choices': [{'message': {'content': 'not json'}}], 'usage': {'prompt_tokens': 1000, 'completion_tokens': 10}}})
-responses.append({'status': 200, 'body': {'choices': [{'message': {'content': 'not json either'}}], 'usage': {'prompt_tokens': 1000, 'completion_tokens': 10}}})
+responses.append({'status': 200, 'body': {'choices': [{'message': {'content': 'not json'}}], 'usage': {'prompt_tokens': 1000, 'completion_tokens': 10}, 'providerMetadata': {'gateway': {'routing': {'finalProvider': 'test'}}}}})
+responses.append({'status': 200, 'body': {'choices': [{'message': {'content': 'not json either'}}], 'usage': {'prompt_tokens': 1000, 'completion_tokens': 10}, 'providerMetadata': {'gateway': {'routing': {'finalProvider': 'test'}}}}})
 error = attempt('A request cancelled mid-flight.', 'cancel-mid-flight')
 assert len(calls) == before_calls + 1, (len(calls), before_calls)
 assert error.status == 409 and 'Cancelled' in str(error), (error.status, str(error))

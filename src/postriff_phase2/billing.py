@@ -373,12 +373,17 @@ class Ledger:
         # Reading immutable balances is independent of spend/checkout activation. In
         # particular policy() is a spend guard and raises for inactive terms.
         if mode == 'managed_credits' and not ai_usage_exempt(member_id):
-            credits = self._credit_book.view(cur, workspace_id)
+            # Lot allocations and internal grant IDs stay in the accounting book.
+            # Customer usage gets only safe purchased-credit facts plus aggregate balances.
+            book = self._credit_book.view(cur, workspace_id)
+            lots = book.get('lots', [])
+            credits = {key: value for key, value in book.items() if key != 'lots'}
             cur.execute("SELECT id::text,meta->'credits'->>'source' FROM public.pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (workspace_id,))
             sources = dict(cur.fetchall())
-            for lot in credits['lots']:
-                source = sources.get(lot['grantId'])
-                lot['kind'] = 'subscription' if source == 'verified-stripe-invoice' else 'purchased' if source == 'verified-stripe-checkout' else 'other'
+            credits['purchasedCredits'] = [
+                {'available': lot['available'], 'held': lot['held'], 'expiresAt': lot['expiresAt']}
+                for lot in lots if sources.get(lot['grantId']) == 'verified-stripe-checkout'
+            ]
             reason = ('credits_disabled' if self.credits is None else 'policy_inactive' if policy_status != 'active'
                       else 'ai_paused' if ai_paused() else 'credit_debt' if credits['debtMilliCredits'] else None)
             # Existing qualified media-notes also use credits. This does not qualify

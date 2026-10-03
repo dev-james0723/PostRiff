@@ -160,7 +160,7 @@ export function managedCreditState(balance: CreditBalance | null) {
     available: creditReading(balance.availableMilliCredits), held: creditReading(balance.heldMilliCredits),
     lifetimeUsed: creditReading(balance.usedMilliCredits), periodGrant: creditReading(balance.currentPeriodGrantMilliCredits),
     periodExpiresAt: creditReading(balance.currentPeriodExpiresAt), debt: creditReading(balance.debtMilliCredits),
-    purchasedLots: balance.lots.filter(lot => lot.kind === 'purchased'),
+    purchasedCredits: balance.purchasedCredits === undefined ? null : balance.purchasedCredits,
     spendAvailable: balance.spendAvailable, spendUnavailableReason: balance.spendUnavailableReason
   };
 }

@@ -9,7 +9,7 @@ const creator = (priceCents = 5900, overrides = {}) => ({
 const balance = (overrides = {}) => ({ mode: 'credits', policy: 'synthetic-v2',
   availableMilliCredits: 4800000, heldMilliCredits: 200000, usedMilliCredits: 7200000,
   currentPeriodGrantMilliCredits: 3500000, currentPeriodExpiresAt: NOW + 86400,
-  debtMilliCredits: 0, lots: [{ grantId: 'purchase-one', kind: 'purchased', milli: 2000000, used: 0, held: 0, reversed: 0, available: 2000000, expiresAt: null }],
+  debtMilliCredits: 0, purchasedCredits: [{ available: 2000000, held: 0, expiresAt: null }],
   spendAvailable: false, spendUnavailableReason: 'policy_inactive', quoteType: 'spending_limit', textOnly: false, ...overrides
 });
 function usage(mode = 'managed_credits', overrides = {}) {

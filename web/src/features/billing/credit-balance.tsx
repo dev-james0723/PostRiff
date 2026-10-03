@@ -28,14 +28,16 @@ export function CreditBalance({ balance, exempt = false }: { balance: Balance | 
           <p className='text-muted-foreground mt-2 text-sm'>{state.periodExpiresAt === null ? 'Current-period expiry unavailable.' : `Current-period credits expire ${formatDate(state.periodExpiresAt)}.`}</p>
           {state.debt !== null && state.debt > 0 && <p role='alert' className='mt-3 text-sm'>Billing adjustment pending: {count(state.debt)} credits. New paid tasks are paused.</p>}
           {!state.spendAvailable && state.spendUnavailableReason && state.spendUnavailableReason !== 'credit_debt' && <p role='status' className='mt-3 text-sm'>{SPEND_REASON[state.spendUnavailableReason]}</p>}
-          {state.purchasedLots.length > 0 && (
+          {state.purchasedCredits === null ? (
+            <p className='text-muted-foreground mt-4 text-sm'>Purchased credit details unavailable.</p>
+          ) : state.purchasedCredits.length > 0 ? (
             <div className='mt-5 border-t border-foreground/10 pt-4'>
               <h3 className='text-sm font-medium'>Purchased credits</h3>
               <ul className='mt-2 flex flex-col gap-2 text-sm'>
-                {state.purchasedLots.map(lot => <li key={lot.grantId} className='flex flex-wrap justify-between gap-2'><span>{count(lot.available)} available · {count(lot.held)} held</span><span className='text-muted-foreground'>{lot.expiresAt === null ? 'Expiry unavailable' : `Expires ${formatDate(lot.expiresAt)}`}</span></li>)}
+                {state.purchasedCredits.map((lot, index) => <li key={`${lot.expiresAt ?? 'none'}:${index}`} className='flex flex-wrap justify-between gap-2'><span>{count(lot.available)} available · {count(lot.held)} held</span><span className='text-muted-foreground'>{lot.expiresAt === null ? 'Expiry unavailable' : `Expires ${formatDate(lot.expiresAt)}`}</span></li>)}
               </ul>
             </div>
-          )}
+          ) : null}
         </>
       )}
       <p className='text-muted-foreground mt-4 text-sm'>No silent overage. Paid tasks pause when credits run out. Extra credits require a separate confirmed purchase.</p>

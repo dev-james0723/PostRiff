@@ -19,7 +19,7 @@ function read(value: Usage) {
   }
   const noPreview: null = value.freePreview;
   return [balance?.currentPeriodGrantMilliCredits, balance?.currentPeriodExpiresAt,
-    balance?.policy, balance?.lots, balance?.spendAvailable, noPreview];
+    balance?.policy, balance?.purchasedCredits, balance?.spendAvailable, noPreview];
 }
 
 function image(value: NonNullable<ModelCatalog['imageGeneration']>) {

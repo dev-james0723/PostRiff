@@ -176,9 +176,9 @@ class UsageCatalogV2(unittest.TestCase):
         balance = self.view()['credits']
         self.assertEqual((balance['currentPeriodGrantMilliCredits'], balance['currentPeriodExpiresAt']), (9000, NOW + 600))
         self.assertEqual((balance['usedMilliCredits'], balance['heldMilliCredits'], balance['availableMilliCredits'], balance['debtMilliCredits']), (5500, 3000, 1000, 0))
-        self.assertIn('lots', balance, 'Usage must expose truthful purchased/subscription credit lots')
-        self.assertEqual({lot['grantId']: lot['kind'] for lot in balance['lots']}, {old: 'other', current: 'subscription', purchased: 'purchased'})
-        self.assertEqual(next(lot for lot in balance['lots'] if lot['grantId'] == purchased)['expiresAt'], None)
+        self.assertNotIn('lots', balance, 'Customer usage must not expose accounting lots or grant IDs')
+        self.assertEqual(balance['purchasedCredits'], [{'available': 1000, 'held': 0, 'expiresAt': None}])
+        self.assertNotIn(old, json.dumps(balance)); self.assertNotIn(current, json.dumps(balance)); self.assertNotIn(purchased, json.dumps(balance))
 
     def test_read_paused_proposed_and_flag_off_keeps_wallet_but_spend_refused(self):
         self.paid()

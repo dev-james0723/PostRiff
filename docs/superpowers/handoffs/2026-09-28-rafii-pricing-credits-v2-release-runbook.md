@@ -75,10 +75,13 @@ exemption is not funding authority. Stored reads, manual paths and existing
 BYOK/CLI behavior remain distinct from managed spending. Unqualified routes fail
 closed; do not display a fabricated fixed price, quote or expiry to bypass them.
 
-Customer projections contain credits and truthful plan data only. Private provider
-costs, raw USD prices, cohort data and raw event payloads stay server-side. An
-unknown or malformed current-period grant is `null`, not an advertised-quota
-fallback. Use the verified linked period's gross granted quantity.
+Customer credit and plan projections contain credits and truthful plan data.
+Owner-only provider-cost diagnostics may appear in a separate advanced view, as
+approved in design section 13 and Task 8; they are not credit balances or customer
+prices. Non-owner users receive no private USD costs. Stripe secrets, raw provider
+Price mappings, internal funding-policy data, cohort data and raw event payloads
+stay server-side. An unknown or malformed current-period grant is `null`, not an
+advertised-quota fallback. Use the verified linked period's gross granted quantity.
 
 ## Independent activation gates — instructions only
 

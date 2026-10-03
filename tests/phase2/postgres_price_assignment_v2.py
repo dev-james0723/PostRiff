@@ -314,11 +314,13 @@ class AssignmentV2(unittest.TestCase):
         self.assertEqual(self.persisted(), ('creator-v1', 'creator-59-v1', 'active'))
 
 
-    def test_historical_paid_without_provider_id_is_never_bucketed(self):
+    def test_historical_ended_legacy_without_provider_id_uses_standard_price_and_is_never_bucketed(self):
         with connection() as db:
             db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status) VALUES(%s,'studio-v1','cancelled')", (self.wid,))
-        with self.assertRaises(AlphaError):
-            self.assignment(self.make_service(experiment=True, cohort=(self.wid,)).billing)
+        result = self.assignment(self.make_service(experiment=True, cohort=(self.wid,)).billing)
+        self.assertEqual(result['priceVariantId'], 'creator-59-v1')
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 0)
 
     def test_cross_workspace_subscription_race_cannot_bind_twice(self):
         self.activate()
@@ -450,28 +452,25 @@ class AssignmentV2(unittest.TestCase):
         with connection() as db:
             return db.execute('SELECT provider_subscription_id,status,extract(epoch from last_event_at) FROM pr_subscriptions WHERE workspace_id=%s', (self.wid,)).fetchone()
 
-    def test_review_f1_ended_legacy_checkout_completion_activates_replacement(self):
+    def test_review_f1_ended_legacy_package_cannot_be_reopened_as_a_new_legacy_sale(self):
         for status in ('cancelled', 'expired'):
             with self.subTest(status=status):
                 self.prepare_review_legacy(status)
-                self.service.billing_checkout(self.wid, 'fixture', 'task3-review-legacy')
-                self.assertEqual(self.transport.calls[-1][1]['line_items[0][price]'], 'price_review_legacy')
-                signed = self.signed('checkout.session.completed', self.review_legacy_completion())
-                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
-                self.assertEqual(self.review_binding()[:2], ('sub_new' + self.wid, 'active'))
-                self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+                before = len(self.transport.calls)
+                with self.assertRaises(AlphaError) as caught:
+                    self.service.billing_checkout(self.wid, 'fixture', 'task3-review-legacy')
+                self.assertEqual(caught.exception.status, 409)
+                self.assertEqual(len(self.transport.calls), before)
 
-    def test_review_f1_new_paid_invoice_can_arrive_before_checkout_completion(self):
+    def test_review_f1_ended_legacy_returns_to_standard_creator_not_experiment_bucket(self):
         self.prepare_review_legacy('expired')
-        self.service.billing_checkout(self.wid, 'fixture', 'task3-review-legacy')
-        invoice = self.review_legacy_invoice()
-        signed = self.signed('invoice.paid', invoice)
-        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'applied')
-        self.assertEqual(self.review_binding()[:2], ('sub_new' + self.wid, 'active'))
-        self.assertEqual(self.service.billing_webhook(*signed)['outcome'], 'duplicate')
+        self.activate()
+        self.service = self.make_service(enabled=True, experiment=True, cohort=(self.wid,))
+        session = self.service.billing_checkout(self.wid, 'fixture', 'creator-v1')
+        self.assertEqual(session['sessionId'], 'cs_synthetic')
+        self.assertEqual(self.transport.calls[-1][1]['line_items[0][price]'], 'price_synthetic_59')
         with connection() as db:
-            credit = db.execute("SELECT u.meta->'credits' FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (invoice['id'],)).fetchone()[0]
-            self.assertEqual((credit['milli'], credit['policy']), (3500000, 'credits-candidate-2026-09-23-v1'))
+            self.assertEqual(db.execute('SELECT count(*) FROM pr_price_experiment_assignments WHERE workspace_id=%s', (self.wid,)).fetchone()[0], 0)
 
     def test_review_f1_old_subscription_events_cannot_replace_new_but_stale_invoice_grants_once(self):
         self.prepare_review_legacy()

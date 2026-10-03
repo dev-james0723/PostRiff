@@ -12,7 +12,7 @@ test('gross period grant, held, debt and lifetime usage remain independent; no i
   assert.equal(state.available, 4800000); assert.equal(state.held, 200000);
   assert.equal(state.lifetimeUsed, 7200000); assert.equal(state.periodGrant, 3500000);
   assert.equal(state.debt, 90000); assert.equal(state.periodExpiresAt, NOW + 86400);
-  assert.equal(state.purchasedLots[0].expiresAt, null);
+  assert.equal(state.purchasedCredits[0].expiresAt, null);
   assert.equal(state.fill, undefined); assert.equal(state.periodUsed, undefined);
 });
 test('unknown period totals stay null, while actual absolute balances remain readable', () => {

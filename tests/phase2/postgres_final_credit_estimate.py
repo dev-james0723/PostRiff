@@ -47,7 +47,7 @@ sent = []
 
 def transport(method, url, headers=None, body=None):
     sent.append(json.loads(body['messages'][-1]['content'].split('\n\n')[0]) if body['messages'][-1]['content'].startswith('{') else body['messages'][-1]['content'])
-    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}}}
+    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}, 'providerMetadata': {'gateway': {'cost': 0.01, 'routing': {'finalProvider': 'test'}}}}}
 
 
 runtime = ServerModelRuntime('synthetic-test-key', model='test/cloud', models=['test/cloud'], prices={'test/cloud': (3, 15)}, transport=transport)

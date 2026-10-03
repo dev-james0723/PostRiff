@@ -1611,7 +1611,8 @@ export interface CreditBalance {
   currentPeriodGrantMilliCredits: number | null;
   currentPeriodExpiresAt: number | null;
   debtMilliCredits: number;
-  lots: CreditLot[];
+  /** Sanitized purchase-lot summaries. Missing/null means the customer projection cannot verify purchase detail. */
+  purchasedCredits?: Array<{ available: number; held: number; expiresAt: number | null }> | null;
   spendAvailable: boolean;
   spendUnavailableReason: 'credits_disabled' | 'policy_inactive' | 'ai_paused' | 'credit_debt' | null;
   quoteType: "spending_limit";
