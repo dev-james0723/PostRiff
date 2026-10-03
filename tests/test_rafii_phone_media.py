@@ -339,7 +339,8 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
                          ['session.start', 'session.instructions.append', 'session.instructions.append'])
         TypeAdapter(InstructionsAppendEventParam).validate_python(received[2])
         self.assertIsNone(received[2]['delegation_id'])
-        self.assertIn('Verified daily briefing result.', received[2]['content'])
+        self.assertIn('Give James the verified daily briefing.', received[2]['content'])
+        self.assertIn('Speak the personal briefing now.', received[2]['content'])
         self.assertNotIn('james-daily-briefing', json.dumps(received[2]))
 
     async def test_delegation_failure_commentary_matches_required_nullable_sdk_field(self):

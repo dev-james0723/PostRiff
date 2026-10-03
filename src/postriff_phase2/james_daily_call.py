@@ -311,10 +311,18 @@ class DailyCallService:
                 "DAILY_CONTEXT_JSON=" + payload[:12000])
 
     def initial_request(self, call_id):
-        return ("Give James a concise 30–90 second daily briefing. Start with today's calendar, then the most important email attention items, "
-                "then any verified deadlines or blockers you can see in the workspace, and finish with 1–3 practical focus items. "
-                "This opening is read-only: do not send, publish, schedule, buy, delete, or change anything. If later James asks for a consequential action, "
-                "use the normal backend proposal/approval flow and require his explicit spoken confirmation.\n\n" + self.context_prompt(call_id))
+        return ("Give James a concise personal daily briefing, not a Rafii workspace briefing. "
+                "First give today's calendar timeline in chronological order with times. Then summarize the most important Gmail attention items. "
+                "Then give 1–3 practical actions for today. Calendar commitments are verified; anything inferred from email must be described as a possible action, not a confirmed obligation. "
+                "Do not mention Rafii unless James explicitly asks about it. This opening is read-only: do not send, publish, schedule, buy, delete, or change anything.\n\n"
+                + self.context_prompt(call_id))
+
+    def personal_context_refresh(self):
+        context = self._context()
+        payload = json.dumps(_brief_data(context), ensure_ascii=False, separators=(",", ":"))
+        return ("REFRESHED_PERSONAL_CONTEXT_JSON=" + payload[:12000] +
+                "\nUse this only as read-only personal context for James. Answer his latest spoken question from it. "
+                "Do not mention Rafii unless he asked about Rafii. If the answer is not in this context, say that plainly instead of guessing.")
 
     def decorate_request(self, call_id, text):
         context = self.context_prompt(call_id)
