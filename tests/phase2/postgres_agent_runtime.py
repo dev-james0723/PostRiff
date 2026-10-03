@@ -341,7 +341,11 @@ def _():
 @scenario("THINK02", "Real Manager + two specialists emits solving/searching/weaving from application-owned runtime phases",
           "Compare campaign evidence with Brand Brain", "working at open; specialist retrieval; weaving only when Manager recombines two evidence channels")
 def _():
-    conversation = fresh_conversation("ThinkingOps synthesis")
+    with connection() as db:
+        conversation = str(db.execute(
+            "INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id",
+            (wid, ONE, "ThinkingOps synthesis"),
+        ).fetchone()[0])
     SCRIPTS.set(
         rafii_manager=[
             [function_call("ask_campaign", {"input": "Check campaign coverage."}, call_id="tm1"),
