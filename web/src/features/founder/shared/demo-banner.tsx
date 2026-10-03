@@ -38,9 +38,9 @@ export function DemoBanner() {
   const busy = mutation.isPending || workspace.isPending;
   return (
     <div role='region' aria-label='Demo data' className='rafii-quiet mx-4 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--rafii-radius-control)] px-3 py-2 text-xs md:mx-8 lg:mx-10'>
-      <span className='bg-foreground text-background inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold tracking-wide uppercase'>Demo</span>
-      <span className='text-muted-foreground min-w-0 flex-1'>Fictional dataset. No real emails, calls or account changes.</span>
-      <div className='flex items-center gap-2'>
+      <span className='bg-foreground text-background inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-semibold tracking-wide uppercase'>Demo</span>
+      <span className='text-muted-foreground min-w-0 flex-1 basis-64 sm:basis-auto'>Fictional dataset. No real emails, calls or account changes.</span>
+      <div className='flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap'>
         <SelectField
           label='Scenario'
           hideLabel

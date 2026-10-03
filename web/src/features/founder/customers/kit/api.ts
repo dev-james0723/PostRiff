@@ -1,7 +1,7 @@
 'use client';
 
 import { NATIVE_CURRENCY_METRIC_IDS } from './metric-policy';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useFounderSession } from '@/features/founder/shell/founder-session';
 import { founderFetch, founderKeys, type FounderApi } from '@/lib/founder/api';
@@ -126,10 +126,18 @@ export function useTileMetric(spec: MetricSpec) {
 export function useRecords(input: RecordsQueryInput | null) {
   const scope = useFounderScope();
   const body = input ? recordsQueryBody(scope.mode, input) : null;
-  return useQuery({
+  return useQuery<Envelope<RecordsData>>({
     queryKey: scope.key('records', body),
     enabled: scope.ready && body !== null,
-    placeholderData: keepPreviousData,
+    // Pagination can keep a prior page; a different mode, environment or collection cannot.
+    // An inline callback also prevents QueryObserver from reusing an earlier placeholder callback's result.
+    placeholderData: (previous, previousQuery) => {
+      const previousBody = previousQuery?.queryKey[4];
+      const sameCollection = previousBody && typeof previousBody === 'object' && 'collection' in previousBody && previousBody.collection === body?.collection;
+      return scope.ready && body && sameCollection && previous?.environment === scope.environment && previous.data.mode === scope.mode &&
+        previousQuery?.queryKey[1] === scope.mode && previousQuery.queryKey[2] === scope.environment
+        ? previous : undefined;
+    },
     queryFn: async ({ signal }) => {
       const result = await founderFetch<Envelope<RecordsData>>(`/workspace/${scope.mode}/query`, { method: 'POST', body, signal });
       const data = result.data;
