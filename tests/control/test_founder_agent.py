@@ -592,6 +592,54 @@ class TurnTests(unittest.TestCase):
         self.assertIn("can't do that", out["result"]["answerText"])
         self.assertEqual(self.db.runs[out["runId"]]["artifact"]["trace"]["fallback"], "guardrail_input")
 
+    def test_provider_refusal_is_failed_persisted_replayable_and_content_free(self):
+        import httpx
+        from openai import RateLimitError
+
+        private_payload = "private-provider-payload-and-customer-text"
+        response = httpx.Response(429, request=httpx.Request("POST", "https://provider.invalid"))
+        error = RateLimitError(private_payload, response=response, body={"code": "insufficient_quota", "message": private_payload, "type": "insufficient_quota"})
+
+        async def refused(*_args, **_kwargs):
+            raise error
+
+        body = {"message": "hi", "mode": "live", "idempotencyKey": "refused-1"}
+        with patch("agents.Runner.run", new=refused), patch.object(founder_agent, "_audit_turn") as audit, self.assertLogs("postriff.agent_runtime", level="ERROR") as logs:
+            out = self.turn(body)
+        self.assertEqual(out["status"], "failed", "a model refusal is not a completed Founder turn")
+        self.assertEqual(self.db.messages[-1]["body"]["siteAgent"]["status"], "failed")
+        self.assertEqual(audit.call_args.args[3], "failed")
+        self.assertEqual(audit.call_args.kwargs["error_code"], "model_error")
+        self.assertIn("quota", out["result"]["answerText"])
+        diagnostic = out["result"]["providerFailure"]
+        self.assertEqual((diagnostic["errorCode"], diagnostic["httpStatus"], diagnostic["reasonBasis"]), ("insufficient_quota", 429, "exact_code"))
+        run = self.db.runs[out["runId"]]
+        self.assertEqual(run["artifact"]["trace"]["providerFailure"], diagnostic)
+        self.assertNotIn(private_payload, json.dumps([run, self.db.messages, logs.output]))
+        self.assertTrue(any(e["type"] == "run.failed" for e in self.db.events))
+        self.assertFalse(any(e["type"] == "run.completed" for e in self.db.events))
+        replay = self.turn(body)
+        self.assertEqual((replay["runId"], replay["status"]), (out["runId"], "failed"))
+        self.assertEqual(len(self.db.runs), 1, "replay does not dispatch another model request")
+
+    def test_timeout_fails_without_claiming_provider_quota_or_overwriting_cancel(self):
+        async def timed_out(*_args, **_kwargs):
+            raise asyncio.TimeoutError()
+
+        with patch("agents.Runner.run", new=timed_out):
+            out = self.turn({"message": "hi", "mode": "live"})
+        self.assertEqual(out["status"], "failed")
+        self.assertEqual(out["result"]["errors"][-1]["code"], "timeout")
+        self.assertNotIn("quota", out["result"]["answerText"])
+
+        async def cancelled_then_refused(*_args, **_kwargs):
+            next(reversed(self.db.runs.values()))["status"] = "cancelled"
+            raise RuntimeError("provider message must not be stored")
+
+        with patch("agents.Runner.run", new=cancelled_then_refused), self.assertLogs("postriff.agent_runtime", level="ERROR"):
+            cancelled = self.turn({"message": "hi again", "mode": "live"})
+        self.assertEqual(cancelled["status"], "cancelled")
+
 
 class FounderPanelContextTests(unittest.TestCase):
     """The panel's real turn body (web/src/lib/founder/page-context.ts): presentational keys, nulls, singular entity types."""
