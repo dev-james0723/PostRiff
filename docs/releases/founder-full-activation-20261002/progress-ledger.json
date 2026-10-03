@@ -1,18 +1,21 @@
 {
   "task": "rafii-founder-full-activation-20261002",
-  "phase": "local_acceptance",
+  "phase": "production_acceptance_google_primary_repair",
   "baseSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
-  "branch": "codex/founder-full-activation-20261002",
+  "branch": "codex/founder-google-acceptance-20261002",
   "singleImplementationReleaseOwner": true,
-  "updatedAt": "2026-10-02T19:18:11.668343+00:00",
+  "updatedAt": "2026-10-03T01:11:36.772268+00:00",
   "liveState": {
-    "productionDeployment": "dpl_6MgiST6Dnyf7ySDjmkKL5RjetcXX",
-    "productionSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
-    "databaseRead": "production_read_only_dashboard_verified; connector_grant_mismatch",
-    "productionWrites": 0,
+    "productionDeployment": "dpl_3HX7FiFEfTsWrcBRQeWgLp7qhHxZ",
+    "productionSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "databaseRead": "correct Rafii connector and actual restricted LOGIN roles verified",
+    "productionWrites": "migration 088 only; temporary privileges restored",
     "providerDispatches": 0,
-    "migrationApplied": false,
-    "ownerDecisions": "H1-H4,H6 accepted; H5 device prompts remain human-only"
+    "migrationApplied": true,
+    "ownerDecisions": "H1-H4,H6 accepted; H5 device prompts remain human-only",
+    "opsProvisioned": false,
+    "approvedPolicySaved": false,
+    "pr92": "merged"
   },
   "validation": [
     {
@@ -70,14 +73,90 @@
       "skipped": 9,
       "log": "/tmp/rafii-full-activation-channels-unit-final.log",
       "sourceBoundary": "before final migration and browser check"
+    },
+    {
+      "run": 37066291791,
+      "head": "4c2bfb88050efab92eec988f727513c68ce358af",
+      "name": "local release gates",
+      "pythonTests": 3698,
+      "conditionalPythonSkips": 367,
+      "webTests": 636,
+      "state": "PASS"
+    },
+    {
+      "run": 37066291818,
+      "name": "restricted-role PostgreSQL",
+      "tests": 547,
+      "skipped": 3,
+      "state": "PASS"
+    },
+    {
+      "run": 37066291871,
+      "name": "Founder browser",
+      "checks": 1062,
+      "failures": 0,
+      "widths": [
+        390,
+        768,
+        1440
+      ],
+      "state": "PASS"
+    },
+    {
+      "run": 37066291864,
+      "attempt": 2,
+      "name": "Rafii browser scenes Chromium/WebKit",
+      "state": "PASS",
+      "earlierAttempt": "WebKit process crash retained in raw/ci-4c-scenes-failed.log"
+    },
+    {
+      "name": "migration088_staging_then_production",
+      "state": "PASS",
+      "execution": "real_hosted"
+    },
+    {
+      "name": "restricted-login-denials-staging-and-production",
+      "state": "PASS",
+      "execution": "real_hosted_read_only"
+    },
+    {
+      "name": "Google-signin-red",
+      "state": "FAIL_expected_missing_implementation",
+      "tests": 18,
+      "failures": 2,
+      "log": "raw/google-signin-red.log"
+    },
+    {
+      "name": "Google-signin-unit",
+      "state": "PASS",
+      "tests": 18,
+      "skipped": 0,
+      "log": "raw/google-signin-green-final.log"
+    },
+    {
+      "name": "Google-types-and-lint",
+      "state": "PASS",
+      "lintErrors": 0,
+      "preexistingWarnings": 2,
+      "logs": [
+        "raw/google-typecheck-final.log",
+        "raw/google-lint-final.log"
+      ]
+    },
+    {
+      "name": "Google-local-browser-build-first",
+      "state": "FAIL",
+      "reason": "Turbopack isolated-root rejected dependency symlink; local dependency clone fixes test setup",
+      "log": "raw/google-browser-build.log"
     }
   ],
   "unresolved": [
-    "staging schema/role acceptance through approved database path",
-    "real owner Ops provisioning and capped canaries",
-    "verified Rafii sender and qualified provider email ceiling",
-    "legacy transactional durable outbox qualification",
-    "exact-head CI and guarded release",
-    "24-hour observation"
+    "qualified Google primary fix release and human fresh MFA",
+    "authenticated Ops provisioning and accepted configurable policy save",
+    "real owner source-to-receipt/UI/agent canaries",
+    "verified Rafii sender and qualified email ceiling",
+    "physical device push/voice/phone acceptance",
+    "unavailable marketing sources and proposed metric definitions/history",
+    "24-hour real observation"
   ]
 }

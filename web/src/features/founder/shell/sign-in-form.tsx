@@ -17,7 +17,7 @@ import { passkeysSupported } from '@/lib/auth/mfa';
 import { passkeySignInEnabled } from '@/lib/auth/passkeys';
 import { safeFounderNext } from '@/lib/founder/api';
 import {
-  beginFounderSignIn, discardFounderIdentity, exchangeFounderToken, FounderSignInError,
+  beginFounderGoogleSignIn, completeFounderGoogleSignIn, beginFounderSignIn, discardFounderIdentity, exchangeFounderToken, FounderSignInError,
   notYetFounder, registerFounderPasskey, verifyFounderFactor, type FounderIdentity
 } from '@/lib/founder/sign-in';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
@@ -49,6 +49,7 @@ export function FounderSignInForm() {
   const currentIdentity = useRef<FounderIdentity | null>(null);
   const exchanged = useRef(false);
   const mounted = useRef(true);
+  const googleCallbackStarted = useRef(false);
   const offerPasskey = passkeySignInEnabled() && supportsPasskey;
 
   useEffect(() => {
@@ -78,11 +79,11 @@ export function FounderSignInForm() {
     exchanged.current = true;
     if (!mounted.current) return;
     // Registration is optional, user-initiated, and offered only AFTER the server accepts Founder authority.
-    if (offerPasskey && identity.method === 'password') setStep({ kind: 'setup', identity, verifiedAt });
+    if (offerPasskey && identity.method !== 'passkey') setStep({ kind: 'setup', identity, verifiedAt });
     else window.location.assign(next);
   }, [next, offerPasskey]);
 
-  async function run(action: (signal: AbortSignal) => Promise<void>) {
+  const run = useCallback(async (action: (signal: AbortSignal) => Promise<void>) => {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
@@ -101,22 +102,35 @@ export function FounderSignInForm() {
       inFlight.current = false;
       if (mounted.current) setBusy(false);
     }
-  }
+  }, [configured]);
 
-  async function signIn(method: 'password' | 'passkey', signal: AbortSignal) {
-    const secret = password;
-    setPassword('');
-    const identity = await beginFounderSignIn(method === 'password' ? { method, email, password: secret } : { method }, signal);
+  const acceptIdentity = useCallback(async (identity: FounderIdentity, signal: AbortSignal) => {
     if (!mounted.current || signal.aborted) { await discardFounderIdentity(identity); return; }
     currentIdentity.current = identity;
     setEmail(identity.email);
-    if (identity.passkeyFactorId && supportsPasskey) setStep({ kind: 'passkey', identity });
+    if (identity.passkeyFactorId && passkeysSupported()) setStep({ kind: 'passkey', identity });
     else if (identity.totpFactorId) setStep({ kind: 'code', identity });
     else {
       startOver();
       throw new FounderSignInError('Your enrolled second factor is not available in this browser. Use a supported device or Account security.');
     }
+  }, [startOver]);
+
+  async function signIn(method: 'password' | 'passkey', signal: AbortSignal) {
+    const secret = password;
+    setPassword('');
+    await acceptIdentity(await beginFounderSignIn(method === 'password' ? { method, email, password: secret } : { method }, signal), signal);
   }
+
+  useEffect(() => {
+    if (googleCallbackStarted.current || (!params.has('code') && !params.has('error') && !params.has('founder_state'))) return;
+    googleCallbackStarted.current = true;
+    const callback = window.location.href;
+    // Remove the one-time code from the address bar before any asynchronous verification or further navigation.
+    window.history.replaceState(null, '', '/founder/sign-in?next=' + encodeURIComponent(next));
+    void run(async (signal) => acceptIdentity(await completeFounderGoogleSignIn(callback), signal));
+    // One callback is consumed once, including React's development effect replay.
+  }, [params, next, run, acceptIdentity]);
 
   async function verify(current: Extract<Step, { kind: 'code' | 'passkey' }>, signal: AbortSignal) {
     let token: string;
@@ -215,6 +229,9 @@ export function FounderSignInForm() {
         ) : (
           <form onSubmit={onSubmit} aria-busy={busy} className='flex flex-col gap-4' noValidate>
             {step.kind === 'password' ? <>
+              <Button type='button' variant='action' size='control' disabled={busy} className='w-full' onClick={() => void run(async () => {
+                window.location.assign(await beginFounderGoogleSignIn(next));
+              })}>Continue with Google</Button>
               {offerPasskey && <>
                 <Button type='button' variant='action' size='control' disabled={busy} className='w-full' onClick={() => void run((signal) => signIn('passkey', signal))}>
                   <Icons.key className='size-4' aria-hidden />{busy ? 'Verifying…' : 'Sign in with Face ID / Passkey'}
@@ -245,7 +262,7 @@ export function FounderSignInForm() {
             </>}
           </form>
         )}
-      <p className='text-muted-foreground text-xs leading-relaxed'>Sessions last eight hours and end on sign out. Real calls, emails and pushes stay off regardless of who signs in.</p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>Sessions last eight hours and end on sign out. Calls, emails and pushes follow your saved policy and channel permissions.</p>
     </Surface>
   );
 }

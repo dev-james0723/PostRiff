@@ -59,7 +59,22 @@ async function fixture(browser, options = {}) {
         state.signatureVerified = true;
         return json(session('aal1'));
       }
-      if (url.pathname.endsWith('/token')) return json(session('aal1'));
+      if (url.pathname.endsWith('/authorize')) {
+        assert.equal(url.searchParams.get('provider'),'google');assert.equal(url.searchParams.get('code_challenge_method'),'s256');
+        state.googleChallenge=url.searchParams.get('code_challenge');
+        const target=new URL(url.searchParams.get('redirect_to'));assert.equal(target.origin,base);assert.equal(target.pathname,'/founder/sign-in');
+        target.searchParams.set('code','synthetic-google-code');
+        if(options.googleStateMismatch)target.searchParams.set('founder_state','wrong-state');
+        return route.fulfill({status:302,headers:{location:target.toString()}});
+      }
+      if (url.pathname.endsWith('/token')) {
+        if(url.searchParams.get('grant_type')==='pkce') {
+          assert.equal(data.auth_code,'synthetic-google-code');
+          assert.equal(crypto.createHash('sha256').update(data.code_verifier).digest('base64url'),state.googleChallenge);
+          state.pkceVerified=true;
+        }
+        return json(session('aal1'));
+      }
       if (url.pathname.endsWith('/user')) return json(user);
       if (url.pathname.endsWith('/challenge')) return json({ id: 'fixture-totp-challenge', type: 'totp', expires_at: Math.floor(Date.now() / 1000) + 300 });
       if (url.pathname === `/auth/v1/factors/${factorId}/verify`) {
@@ -115,6 +130,25 @@ async function verifyCode(page) {
     finally { await f.context.close(); }
   }
   try {
+    await check('Google-PKCE-primary-fresh-MFA-and-storage-isolation',{width:390},async({page,state})=>{
+      await page.getByRole('button',{name:'Continue with Google',exact:true}).click();
+      await page.getByRole('heading',{name:'Enter your authenticator code'}).waitFor();
+      assert.equal(state.pkceVerified,true);assert.equal(state.exchange,0);
+      assert.equal(new URL(page.url()).searchParams.has('code'),false);
+      assert.deepEqual(await page.evaluate(()=>Object.keys(sessionStorage)),[]);
+      assert.deepEqual(await page.evaluate(()=>Object.keys(localStorage)),['consumer-fixture']);
+      await verifyCode(page);await page.getByRole('heading',{name:'Set up faster sign-in'}).waitFor();
+      await page.getByRole('button',{name:'Continue to Founder',exact:true}).click();
+      await page.getByRole('heading',{name:'Verified fixture Founder'}).waitFor();
+      assert.equal(state.exchange,1);assert.equal(state.logout,0);assert.equal(state.registered,0);
+    });
+    await check('Google-foreign-callback-cannot-reach-MFA-or-exchange',{googleStateMismatch:true},async({page,state})=>{
+      await page.getByRole('button',{name:'Continue with Google',exact:true}).click();
+      await page.getByText('Sign-in could not be verified. Use your existing Rafii account and try again.').waitFor();
+      assert.equal(state.pkceVerified,undefined);assert.equal(state.exchange,0);
+      assert.deepEqual(await page.evaluate(()=>Object.keys(sessionStorage)),[]);
+      assert.equal(await page.getByLabel('Password',{exact:true}).isEnabled(),true);
+    });
     await check('mobile-passkey-MFA-and-storage-isolation', { width: 390 }, async ({ page, state }) => {
       await page.getByRole('button', { name: 'Sign in with Face ID / Passkey', exact: true }).waitFor();
       await page.screenshot({ path: path.join(evidence, 'mobile-sign-in.png'), fullPage: true });
@@ -176,5 +210,5 @@ async function verifyCode(page) {
       assert.equal(state.paths.filter((p) => p.endsWith('/authentication/options')).length, 1); assert.equal(state.exchange, 0);
     });
   } finally { await browser.close(); fs.writeFileSync(path.join(evidence, 'results.json'), JSON.stringify({ authority: 'local synthetic Auth/Control servers; real UI, SDK and Chromium virtual authenticator, not iPhone biometric acceptance', results }, null, 2)); }
-  if (results.length !== 7 || results.some((r) => !r.passed)) process.exitCode = 1;
+  if (results.length !== 9 || results.some((r) => !r.passed)) process.exitCode = 1;
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -1,9 +1,9 @@
 {
-  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
-  "sourceState": "uncommitted_candidate",
-  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
-  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
-  "executionState": "candidate_local_only",
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "sourceState": "merged_deployed_core_release",
+  "sourceTreeHash": null,
+  "generatedAt": "2026-10-03T01:11:36.772268+00:00",
+  "executionState": "production_schema_and_core_deployment_verified_acceptance_pending",
   "productionVerified": false,
   "count": 97,
   "metrics": [
@@ -36,7 +36,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -68,7 +69,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -100,7 +102,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -137,7 +140,8 @@
       "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -174,7 +178,8 @@
       "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -211,7 +216,8 @@
       "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -248,7 +254,8 @@
       "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -306,7 +313,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -360,7 +368,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -391,7 +400,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -422,7 +432,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -453,7 +464,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -484,7 +496,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -515,7 +528,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -547,7 +561,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -578,7 +593,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -609,7 +625,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -638,7 +655,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -669,7 +687,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -698,7 +717,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -727,7 +747,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -756,7 +777,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -785,7 +807,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -814,7 +837,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -843,7 +867,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -903,7 +928,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -932,7 +958,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -961,7 +988,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1021,7 +1049,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1050,7 +1079,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1109,7 +1139,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1138,7 +1169,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1168,7 +1200,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1197,7 +1230,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1229,7 +1263,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1261,7 +1296,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1293,7 +1329,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1324,7 +1361,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1355,7 +1393,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1401,7 +1440,8 @@
       },
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1426,7 +1466,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1455,7 +1496,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1480,7 +1522,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -1509,7 +1552,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1538,7 +1582,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1567,7 +1612,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1596,7 +1642,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1625,7 +1672,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1654,7 +1702,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it."
     },
@@ -1683,7 +1732,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1712,7 +1762,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_engineering.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1741,7 +1792,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_engineering.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1770,7 +1822,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_engineering.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1799,7 +1852,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_engineering.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -1830,7 +1884,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -1861,7 +1916,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -1892,7 +1948,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -1923,7 +1980,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -1954,7 +2012,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -1985,7 +2044,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -2016,7 +2076,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": null,
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
       },
       "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
     },
@@ -2045,7 +2106,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2082,7 +2144,8 @@
       "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
       },
       "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
     },
@@ -2115,7 +2178,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2148,7 +2212,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2181,7 +2246,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2214,7 +2280,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2247,7 +2314,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2278,7 +2346,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2309,7 +2378,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2340,7 +2410,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2373,7 +2444,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2398,7 +2470,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2423,7 +2496,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2454,7 +2528,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2479,7 +2554,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2510,7 +2586,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2535,7 +2612,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2560,7 +2638,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2591,7 +2670,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2616,7 +2696,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2646,7 +2727,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2676,7 +2758,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2706,7 +2789,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2736,7 +2820,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2766,7 +2851,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2796,7 +2882,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ai_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2821,7 +2908,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2846,7 +2934,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2875,7 +2964,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2905,7 +2995,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_ops_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2934,7 +3025,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_support_refunds.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2963,7 +3055,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -2992,7 +3085,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -3021,7 +3115,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_product_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -3053,7 +3148,8 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     },
@@ -3085,9 +3181,27 @@
       "aliasComparison": null,
       "validation": {
         "testPath": "tests/control/test_founder_revenue_pg.py",
-        "productionState": "not_run_permission_blocked"
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
       },
       "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
     }
-  ]
+  ],
+  "deploymentSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "reviewedSourceFingerprint": "cb418637e2e8c27b643112b2504be3f2a19c3b522123cb69aeb74ce50ffdaeef",
+  "sourceEvidence": "production-release-verification.json; exact-head CI and identical merged tree",
+  "authCandidate": {
+    "branch": "codex/founder-google-acceptance-20261002",
+    "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "state": "local_qualification_in_progress",
+    "deployed": false
+  },
+  "dispositionCounts": {
+    "canonical_implementation": 48,
+    "explicitly_replaced_definition": 5,
+    "implementation_task": 36,
+    "owner_source_blocker": 8
+  },
+  "runtimeAliasesInstalled": 0,
+  "all97Activated": false
 }

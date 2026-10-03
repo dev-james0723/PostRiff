@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-10-03T01:22:51.630523+00:00",
+  "execution": "real anonymous GET without cookies or tokens",
+  "sourceSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "requests": [
+    {
+      "route": "/api/health",
+      "status": 200,
+      "fixedCode": null,
+      "authenticated": false
+    },
+    {
+      "route": "/api/control/v2/session",
+      "status": 401,
+      "fixedCode": "AUTH_REQUIRED",
+      "authenticated": false
+    }
+  ],
+  "mutations": 0,
+  "providerCalls": 0
+}

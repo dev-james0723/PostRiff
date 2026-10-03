@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { listFactors, verifyPasskey, verifyTotp } from '@/lib/auth/mfa';
 import { getSupabaseEnv } from '@/lib/supabase/env';
-import { CONTROL_EXCHANGE_HEADER, FOUNDER_API_BASE } from './api';
+import { CONTROL_EXCHANGE_HEADER, FOUNDER_API_BASE, safeFounderNext } from './api';
 import { founderErrorMessage } from './errors';
 
 /** Primary passkeys and WebAuthn MFA are different ceremonies. Only the existing server exchange grants Founder access. */
@@ -9,7 +9,7 @@ export type FounderIdentity = {
   client: SupabaseClient;
   userId: string;
   email: string;
-  method: 'password' | 'passkey';
+  method: 'password' | 'passkey' | 'google';
   totpFactorId?: string;
   passkeyFactorId?: string;
 };
@@ -54,6 +54,101 @@ export async function discardFounderIdentity(identity: Pick<FounderIdentity, 'cl
   await identity.client.auth.signOut({ scope: 'local' }).catch(() => undefined);
 }
 
+async function verifiedIdentity(client: SupabaseClient, method: FounderIdentity['method'], authenticatedId?: string): Promise<FounderIdentity> {
+  const verified = await client.auth.getUser();
+  const user = verified.data.user;
+  if (verified.error || !user?.id || !user.email || !user.email_confirmed_at || user.is_anonymous || user.id !== authenticatedId) {
+    throw new FounderSignInError(COPY.identity);
+  }
+  const factors = (await listFactors(client)).filter((factor) => factor.verified);
+  const totpFactorId = factors.find((factor) => factor.kind === 'totp')?.id;
+  const passkeyFactorId = factors.find((factor) => factor.kind === 'webauthn')?.id;
+  if (!totpFactorId && !passkeyFactorId) throw new FounderSignInError(COPY.noFactor);
+  return { client, userId: user.id, email: user.email, method, totpFactorId, passkeyFactorId };
+}
+
+type OAuthBrowser = { origin: string; storage: Storage };
+const GOOGLE_PENDING = 'rafii-founder-google-pending';
+const GOOGLE_PREFIX = 'rafii-founder-google-';
+const GOOGLE_TTL_MS = 600_000;
+function oauthBrowser(): OAuthBrowser { return { origin: window.location.origin, storage: window.sessionStorage }; }
+
+function clearGoogleFlow(browser: OAuthBrowser) {
+  for (const key of Array.from({ length: browser.storage.length }, (_, i) => browser.storage.key(i))) {
+    if (key?.startsWith(GOOGLE_PREFIX)) browser.storage.removeItem(key);
+  }
+}
+
+/** PKCE alone survives navigation in this tab. Tokens and identity stay in memory, and consumer cookies are untouched. */
+function googleClient(state: string, browser: OAuthBrowser): SupabaseClient {
+  const { url, key } = getSupabaseEnv();
+  const storageKey = GOOGLE_PREFIX + state;
+  const memory = new Map<string, string>();
+  const verifierKey = (name: string) => name === storageKey + '-code-verifier' || name === storageKey + '-flows-code-verifier' ||
+    (name.startsWith(storageKey + '-flow-') && name.endsWith('-code-verifier'));
+  const storage = {
+    getItem: (name: string) => verifierKey(name) ? browser.storage.getItem(name) : memory.get(name) ?? null,
+    setItem: (name: string, value: string) => { if (verifierKey(name)) browser.storage.setItem(name, value); else memory.set(name, value); },
+    removeItem: (name: string) => { if (verifierKey(name)) browser.storage.removeItem(name); else memory.delete(name); }
+  };
+  // The SDK only accepts a custom storage adapter with persistSession=true. This adapter persists no session/token.
+  return createClient(url, key, { auth: { storage, storageKey, persistSession: true, autoRefreshToken: false,
+    detectSessionInUrl: false, flowType: 'pkce', experimental: { passkey: true } } });
+}
+
+export async function beginFounderGoogleSignIn(next: string, browser: OAuthBrowser = oauthBrowser()): Promise<string> {
+  clearGoogleFlow(browser);
+  const state = crypto.randomUUID();
+  const target = new URL('/founder/sign-in', browser.origin);
+  target.searchParams.set('next', safeFounderNext(next));
+  target.searchParams.set('founder_state', state);
+  browser.storage.setItem(GOOGLE_PENDING, JSON.stringify({ state, next: safeFounderNext(next), createdAt: Date.now() }));
+  const client = googleClient(state, browser);
+  try {
+    const signed = await client.auth.signInWithOAuth({ provider: 'google', options: {
+      redirectTo: target.toString(), skipBrowserRedirect: true, queryParams: { prompt: 'select_account' }
+    } });
+    if (signed.error || !signed.data.url) throw new FounderSignInError(COPY.identity);
+    const authorization = new URL(signed.data.url);
+    if (authorization.origin !== new URL(getSupabaseEnv().url).origin || authorization.pathname !== '/auth/v1/authorize') throw new FounderSignInError(COPY.identity);
+    browser.storage.setItem(GOOGLE_PENDING, JSON.stringify({ state, next: safeFounderNext(next), createdAt: Date.now(), flowId: signed.data.flowId }));
+    return signed.data.url;
+  } catch {
+    clearGoogleFlow(browser);
+    await discardFounderIdentity({ client });
+    throw new FounderSignInError(COPY.identity);
+  }
+}
+
+export async function completeFounderGoogleSignIn(callback: string, browser: OAuthBrowser = oauthBrowser()): Promise<FounderIdentity> {
+  let pending: { state: string; next: string; createdAt: number; flowId?: string | null };
+  let code: string;
+  try {
+    const target = new URL(callback);
+    pending = JSON.parse(browser.storage.getItem(GOOGLE_PENDING) ?? 'null');
+    code = target.searchParams.get('code') ?? '';
+    if (!pending || typeof pending.state !== 'string' || !/^[a-f0-9-]{36}$/.test(pending.state) ||
+      !Number.isFinite(pending.createdAt) || Date.now() - pending.createdAt < 0 || Date.now() - pending.createdAt > GOOGLE_TTL_MS ||
+      target.origin !== browser.origin || target.pathname !== '/founder/sign-in' || target.searchParams.get('founder_state') !== pending.state ||
+      target.searchParams.get('next') !== pending.next || pending.next !== safeFounderNext(pending.next) ||
+      target.searchParams.has('error') || target.hash || !code || code.length > 4096) throw new Error('Invalid OAuth callback');
+  } catch {
+    clearGoogleFlow(browser);
+    throw new FounderSignInError(COPY.identity);
+  }
+  const client = googleClient(pending.state, browser);
+  // Consume the correlation record before network exchange; a repeated callback cannot exchange again.
+  browser.storage.removeItem(GOOGLE_PENDING);
+  try {
+    const signed = await client.auth.exchangeCodeForSession(code, pending.flowId ? { flowId: pending.flowId } : undefined);
+    if (signed.error) throw new FounderSignInError(COPY.identity);
+    return await verifiedIdentity(client, 'google', signed.data.session?.user.id);
+  } catch {
+    await discardFounderIdentity({ client });
+    throw new FounderSignInError(COPY.identity);
+  } finally { clearGoogleFlow(browser); }
+}
+
 /** A new memory-only client per attempt. It neither reads nor overwrites the consumer account's persistent session. */
 export async function beginFounderSignIn(input: SignInInput, signal?: AbortSignal): Promise<FounderIdentity> {
   const { url, key } = getSupabaseEnv();
@@ -67,17 +162,9 @@ export async function beginFounderSignIn(input: SignInInput, signal?: AbortSigna
       : await client.auth.signInWithPassword({ email: input.email.trim(), password: input.password });
     if (signed.error) throw input.method === 'passkey' ? passkeyFailure(signed.error) : new FounderSignInError(COPY.identity);
     if (signal?.aborted) throw new FounderSignInError(COPY.cancelled, 'cancelled');
-    const verified = await client.auth.getUser();
-    const user = verified.data.user;
-    if (verified.error || !user?.id || !user.email || !user.email_confirmed_at || user.is_anonymous || user.id !== signed.data.session?.user.id) {
-      throw new FounderSignInError(COPY.identity);
-    }
-    const factors = (await listFactors(client)).filter((factor) => factor.verified);
-    const totpFactorId = factors.find((factor) => factor.kind === 'totp')?.id;
-    const passkeyFactorId = factors.find((factor) => factor.kind === 'webauthn')?.id;
-    if (!totpFactorId && !passkeyFactorId) throw new FounderSignInError(COPY.noFactor);
+    const identity = await verifiedIdentity(client, input.method, signed.data.session?.user.id);
     if (signal?.aborted) throw new FounderSignInError(COPY.cancelled, 'cancelled');
-    return { client, userId: user.id, email: user.email, method: input.method, totpFactorId, passkeyFactorId };
+    return identity;
   } catch (error) {
     await discardFounderIdentity({ client });
     throw error instanceof FounderSignInError ? error : new FounderSignInError(COPY.identity);

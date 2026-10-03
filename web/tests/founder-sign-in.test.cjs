@@ -22,6 +22,8 @@ function setup(options = {}) {
   const calls = [];
   let assurance = 'aal1';
   const auth = {
+    signInWithOAuth: async (value) => { calls.push(['oauth', value]); return { data: { url: 'https://fixture.supabase.co/auth/v1/authorize?provider=google', flowId: 'a'.repeat(32) }, error: options.signInError || null }; },
+    exchangeCodeForSession: async (value, opts) => { calls.push(['oauth-code', value, opts]); return { data: { session: { user: USER } }, error: options.signInError || null }; },
     signInWithPassword: async (value) => { calls.push(['password', value]); return options.signInError ? { error: options.signInError } : { data: { session: { user: USER } }, error: null }; },
     signInWithPasskey: async (value) => { calls.push(['passkey', value]); return options.signInError ? { error: options.signInError } : { data: { session: { user: USER } }, error: null }; },
     getUser: async () => { calls.push(['user']); return { data: { user: options.otherUser || USER }, error: options.userError || null }; },
@@ -48,6 +50,45 @@ function setup(options = {}) {
   });
   return { helper, calls, client };
 }
+
+function oauthBrowser() {
+  const data = new Map();
+  return { origin: 'https://app.example.test', storage: { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,v), removeItem: k => data.delete(k), key: i => [...data.keys()][i] ?? null, get length() { return data.size; } }, data };
+}
+
+test('Google primary uses isolated PKCE, persists only the verifier, and still needs fresh MFA', async () => {
+  const s=setup(), browser=oauthBrowser();
+  await s.helper.beginFounderGoogleSignIn('/founder/settings',browser);
+  const opts=s.calls.find(c=>c[0]==='create')[3].auth;
+  assert.equal(opts.flowType,'pkce');assert.equal(opts.detectSessionInUrl,false);assert.equal(opts.autoRefreshToken,false);
+  const request=s.calls.find(c=>c[0]==='oauth')[1];assert.equal(request.provider,'google');assert.equal(request.options.skipBrowserRedirect,true);
+  const target=new URL(request.options.redirectTo);assert.equal(target.origin,browser.origin);assert.equal(target.pathname,'/founder/sign-in');
+  opts.storage.setItem(opts.storageKey,'synthetic-session-token');assert.equal([...browser.data.values()].includes('synthetic-session-token'),false);
+  opts.storage.setItem(opts.storageKey+'-code-verifier','synthetic-pkce-verifier');assert.equal(browser.storage.getItem(opts.storageKey+'-code-verifier'),'synthetic-pkce-verifier');
+  opts.storage.setItem(opts.storageKey+'-flow-'+ 'a'.repeat(32)+'-code-verifier','synthetic-slot-verifier');
+  assert.equal(browser.storage.getItem(opts.storageKey+'-flow-'+ 'a'.repeat(32)+'-code-verifier'),'synthetic-slot-verifier');
+  target.searchParams.set('code','synthetic-auth-code');
+  const who=await s.helper.completeFounderGoogleSignIn(target.toString(),browser);
+  assert.equal(who.method,'google');assert.equal(who.userId,USER.id);assert.equal(who.accessToken,undefined);
+  assert.equal(s.calls.filter(c=>c[0]==='oauth-code').length,1);assert.equal(browser.data.size,0);
+  assert.deepEqual(s.calls.find(c=>c[0]==='oauth-code')[2],{flowId:'a'.repeat(32)});
+  assert.equal(await s.helper.verifyFounderFactor(who,{kind:'totp',code:'123456'}),'synthetic-access-token');
+  await assert.rejects(s.helper.completeFounderGoogleSignIn(target.toString(),browser));
+  assert.equal(s.calls.filter(c=>c[0]==='oauth-code').length,1,'Callback cannot be replayed');
+});
+
+test('Google callback rejects wrong origin, state, expired flow or provider error before exchanging a code', async () => {
+  for(const change of ['origin','state','expired','provider-error']) {
+    const s=setup(),browser=oauthBrowser();await s.helper.beginFounderGoogleSignIn('/founder',browser);
+    const target=new URL(s.calls.find(c=>c[0]==='oauth')[1].options.redirectTo);target.searchParams.set('code','synthetic-auth-code');
+    if(change==='origin') target.hostname='attacker.example.test';
+    if(change==='state') target.searchParams.set('founder_state','wrong-state');
+    if(change==='provider-error') target.searchParams.set('error','private-provider-detail');
+    if(change==='expired') { const key='rafii-founder-google-pending';const pending=JSON.parse(browser.storage.getItem(key));pending.createdAt=Date.now()-3600000;browser.storage.setItem(key,JSON.stringify(pending)); }
+    await assert.rejects(s.helper.completeFounderGoogleSignIn(target.toString(),browser),e=>!e.message.includes('private-provider-detail'));
+    assert.equal(s.calls.some(c=>c[0]==='oauth-code'),false);assert.equal(browser.data.size,0);
+  }
+});
 
 async function identity(s, method = 'passkey') {
   return s.helper.beginFounderSignIn({ method, email: USER.email, password: 'fixture-password' });
