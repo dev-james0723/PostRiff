@@ -391,8 +391,8 @@ class AgentWritePoints(Base):
         asyncio.run(ok.get_response())
         with self.assertRaises(StatusError):
             asyncio.run(busy.get_response())
-        self.assertEqual(ctx.ledger.model_requests, 1, "a failed call is never a priced span")
-        self.assertEqual(len(ctx.ledger.spans), 1)
+        self.assertEqual(ctx.ledger.model_requests, 2, "both the answered request and the refused provider attempt are counted")
+        self.assertEqual(len(ctx.ledger.spans), 1, "the failed attempt never becomes a priced answered span")
         self.assertEqual(ctx.ledger.calls[0]["status"], "rate_limited")
         db = FakeDB()
         with db as conn, conn.cursor() as cur:
