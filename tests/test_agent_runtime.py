@@ -1270,7 +1270,7 @@ class ProviderClientsTest(unittest.TestCase):
 
         ctx = make_ctx()
         scripted = ScriptedModel([])
-        wrapped = manager.metered(scripted, ctx.ledger, agent="rafii_manager", workload="standard_reasoning",
+        wrapped = manager.metered(scripted, ctx, agent="rafii_manager", workload="standard_reasoning",
                                   route={"provider": "openai", "model": "gpt-6-sol"})
         with patch.object(scripted, "get_response", side_effect=TimeoutError("synthetic timeout")), self.assertRaises(TimeoutError):
             asyncio.run(wrapped.get_response())

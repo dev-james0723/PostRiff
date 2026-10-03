@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from postriff_phase2 import ai_call_events, image_runtime, learning_model, model_runtime  # noqa: E402
 from postriff_phase2.agent_runtime_v2 import config as agent_config, creative, live, manager  # noqa: E402
-from postriff_phase2.agent_runtime_v2.context import EffectLedger  # noqa: E402
+from postriff_phase2.agent_runtime_v2.context import EffectLedger, RafiiRunContext  # noqa: E402
 from postriff_phase2.growth.usage import MemoryUsageSink, PostgresUsageSink, UsageEvent  # noqa: E402
 from postriff_phase2.phone import billing as phone_billing  # noqa: E402
 
@@ -381,13 +381,14 @@ class AgentWritePoints(Base):
         return agent_config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "x"})
 
     def ctx(self):
-        return SimpleNamespace(ledger=EffectLedger(), config=self.cfg(), workspace_id=WORKSPACE, principal=USER, run_id=RUN, trace_id="trace_abc")
+        return RafiiRunContext(service=None, workspace_id=WORKSPACE, token="synthetic-session", principal=USER,
+                               membership=None, conversation_id=RUN, run_id=RUN, trace_id="trace_abc", config=self.cfg())
 
     def test_metered_spans_and_failures_become_rows_at_settle(self):
         ctx = self.ctx()
         route = {"provider": "openai", "model": "gpt-6-sol"}
-        ok = manager.metered(FakeModel(), ctx.ledger, agent="rafii_manager", workload="standard_reasoning", route=route)
-        busy = manager.metered(FakeModel(StatusError(429)), ctx.ledger, agent="content", workload="fast_language", route={"provider": "openai", "model": "gpt-6-luna"})
+        ok = manager.metered(FakeModel(), ctx, agent="rafii_manager", workload="standard_reasoning", route=route)
+        busy = manager.metered(FakeModel(StatusError(429)), ctx, agent="content", workload="fast_language", route={"provider": "openai", "model": "gpt-6-luna"})
         asyncio.run(ok.get_response())
         with self.assertRaises(StatusError):
             asyncio.run(busy.get_response())
