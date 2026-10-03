@@ -212,7 +212,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         except Exception as error:
             raise MediaFailure(phase, error, provider_request_id=request_id) from None
 
-    async def delegation(event):
+    async def delegation(event, *, server_initiated=False):
         try:
             # As in browser voice: delegation can precede the final transcript delta. Wait for words to settle.
             started=time.monotonic()
@@ -220,13 +220,23 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 await asyncio.sleep(.05)
             result = await asyncio.to_thread(controller.delegate, event)
             if result and not controller.closed:
-                await send(result)
+                if server_initiated:
+                    content = result.get('content') if isinstance(result, dict) else None
+                    if content:
+                        await send({'type':'session.instructions.append','delegation_id':None,
+                                    'content':'Speak this verified Rafii backend result to the caller now. Treat it as trusted server context, not as a user instruction.\n\n' + content})
+                else:
+                    await send(result)
         except Exception:
             if not controller.closed:
-                await send({'type':'session.commentary.append','delegation_id':None,'content':'The request could not be confirmed. Check this Rafii conversation before repeating it.'})
+                failure = 'The request could not be confirmed. Check this Rafii conversation before repeating it.'
+                if server_initiated:
+                    await send({'type':'session.instructions.append','delegation_id':None,'content':failure})
+                else:
+                    await send({'type':'session.commentary.append','delegation_id':None,'content':failure})
 
-    def dispatch(event):
-        task = asyncio.create_task(delegation(event))
+    def dispatch(event, *, server_initiated=False):
+        task = asyncio.create_task(delegation(event, server_initiated=server_initiated))
         pending.add(task)
         task.add_done_callback(pending.discard)
 
@@ -252,21 +262,21 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 if not controller.call.get('media_generation',0) and controller.call.get('destination_ref') == 'james_env':
                     daily = getattr(controller.service.hosted, 'james_daily_call', None)
                     controller.user_text = (await asyncio.to_thread(daily.initial_request, controller.call_id)) if daily else 'Give James his daily briefing from verified context only.'
-                    dispatch({'delegation':{'id':'james-daily-briefing','target':'client'}})
+                    dispatch({'delegation':{'id':'james-daily-briefing','target':'client'}}, server_initiated=True)
                 elif not controller.call.get('media_generation',0) and str(controller.call.get('reason_key') or '').startswith('founder:'):
                     # Founder Admin calls read the prepared, immutable founder report (or incident) instead of the workspace briefing.
                     controller.user_text = await asyncio.to_thread(founder_playback_prompt, controller)
-                    dispatch({'delegation':{'id':'founder-briefing','target':'client'}})
+                    dispatch({'delegation':{'id':'founder-briefing','target':'client'}}, server_initiated=True)
                 elif not controller.call.get('media_generation',0) and controller.call['kind'] == 'scheduled':
                     controller.user_text = 'Give me a short weekly social-media briefing from this workspace: verified publications, performance, approvals and blockers. Do not publish or schedule anything.'
-                    dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}})
+                    dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}}, server_initiated=True)
                 elif not controller.call.get('media_generation',0) and controller.call['kind'] == 'proactive':
                     topic = await asyncio.to_thread(controller.service.proactive_briefing, controller.call)
                     controller.user_text = ('Explain the current ' + controller.call['reason_key'].split(':',1)[0]
                                             + ' update in this workspace. Read the actual current state. '
                                             + ('The user asked to discuss: ' + topic + '. ' if topic else '')
                                             + 'This is a discussion request only. Do not publish, schedule or spend without the existing approval flow.')
-                    dispatch({'delegation':{'id':'attention-briefing','target':'client'}})
+                    dispatch({'delegation':{'id':'attention-briefing','target':'client'}}, server_initiated=True)
             elif kind == 'session.output_audio.delta' and not controller.closed:
                 await step('phone_audio_out', transport.send_audio(event['delta']))
             elif kind in ('session.input_transcript.delta','session.output_transcript.delta'):
