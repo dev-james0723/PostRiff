@@ -40,6 +40,15 @@ class ProjectPulseClientTests(unittest.TestCase):
                 "workspacePath": "/Users/private/repo",
                 "deviceId": "dev-secret",
                 "recentEvents": [{"command": "cat ~/.ssh/id_rsa"}],
+            }, {
+                "title": "Kynlo orchestration review",
+                "projectKey": "kynlo-orchestration",
+                "branch": "older-duplicate",
+                "state": "running",
+                "verificationState": "older",
+                "nextAction": "Finish bounded acceptance",
+                "client": "codex",
+                "updatedAt": "2026-10-03T20:30:00Z",
             }],
         })
         client = ProjectPulseClient(BASE, transport=transport)

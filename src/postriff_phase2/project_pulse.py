@@ -100,6 +100,7 @@ class ProjectPulseClient:
             return {"status": "unavailable", "items": []}
 
         items = []
+        seen = set()
         for raw in rows[:40]:
             if not isinstance(raw, dict):
                 continue
@@ -116,6 +117,10 @@ class ProjectPulseClient:
                 "client": _bounded(raw.get("client"), 24),
                 "updatedAt": _bounded(raw.get("updatedAt"), 60),
             }
+            dedupe = (item["project"], item["title"], item["state"], item["nextAction"])
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
             items.append(item)
             if len(items) >= MAX_ITEMS:
                 break
