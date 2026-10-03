@@ -330,7 +330,8 @@ async function contracts(request, rows) {
   await send('POST',ws+'/billing/credit-checkout',{packId:'credits-1000-v2',requestId:randomUUID()},503);
   // Owner/member and foreign-tenant protections use actual authenticated APIs.
   const other=rows.find(r=>r.scenario==='creator-59');
-  await api(request,other.principal)('GET',ws+'/usage',undefined,404);
+  const deniedUsage=await api(request,other.principal)('GET',ws+'/usage',undefined,403);
+  assert.deepEqual(deniedUsage,{error:'Workspace unavailable.',code:'permission_denied'},'Foreign workspace denial returns no usage or identity data');
   await api(request,other.memberPrincipal)('POST','/api/workspaces/'+other.workspaceId+'/billing/checkout',{planTermsId:'creator-v1'},403);
   const signing=await control(request,'webhook-replay',{scenario:'creator-59'});
   const unsigned=await request.post(base+'/api/billing/webhook',{headers:{'Stripe-Signature':'t=1,v1=bad'},data:signing.body,timeout:ACTION_TIMEOUT_MS});
