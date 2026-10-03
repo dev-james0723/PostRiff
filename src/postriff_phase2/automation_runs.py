@@ -160,7 +160,7 @@ def research_step(worker, claim, repository, capability):
 
     def researching(state, occ, _task, _cur):
         from .growth.credit_admission import require_qualified_entry
-        require_qualified_entry(_cur,claim['workspaceId'])
+        require_qualified_entry(_cur,claim['workspaceId'],hosted=service)
         occ["lifecycle"] = "researching"
         _skill(occ, "research", "running", "Looking for a source", now)
     if (_update_run(service, claim["workspaceId"], occurrence["id"], claim["actor"], researching, claim["binding"]) or {}).get("cancelled"):
@@ -177,7 +177,7 @@ def research_step(worker, claim, repository, capability):
         from .growth.credit_admission import require_qualified_entry
         def guard():
             with service.connection_factory() as db,db.cursor() as cur:
-                require_qualified_entry(cur,claim['workspaceId'])
+                require_qualified_entry(cur,claim['workspaceId'],hosted=service)
         def guarded(call):
             def invoke(*args,**kwargs):
                 guard()

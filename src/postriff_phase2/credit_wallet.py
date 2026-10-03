@@ -216,11 +216,11 @@ class CreditBook:
         pricing_events.emit(cur, workspace_id, 'credits.held', 'usage_ledger', reservation_id,
                             {'heldMilliCredits': credit['maximum'], 'policy': credit['policy']})
 
-    def settlement(self, cur, workspace_id, reservation_id, outcome, actual):
+    def settlement(self, cur, workspace_id, reservation_id, outcome, actual, *, actual_usd_exact=None):
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'",(workspace_id,reservation_id))
         row=cur.fetchone();credit=row[0] if row else None
         if not credit or outcome=='unknown': return None
-        actual_milli=actual_millicredits(actual) if outcome=='completed' else 0
+        actual_milli=actual_millicredits(actual, actual_usd_exact=actual_usd_exact) if outcome=='completed' else 0
         used=min(credit['maximum'],actual_milli)
         remaining=used;allocations=[]
         for lot in credit['allocations']:

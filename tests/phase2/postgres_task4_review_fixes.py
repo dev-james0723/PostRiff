@@ -95,20 +95,27 @@ class ReviewFixes(unittest.TestCase):
             self.assertEqual(db.execute('SELECT plan_terms_id,price_variant_id,provider_customer_id,provider_subscription_id FROM pr_subscriptions WHERE workspace_id=%s', (self.wid,)).fetchone(),
                 ('creator-v1', 'creator-49-v1', 'cus_' + self.wid, 'sub_old_' + self.wid))
 
-    def test_defaultoff_genuine_legacy_acquisition_and_ended_replacement_still_work(self):
+    def test_defaultoff_new_and_ended_legacy_acquisition_stays_closed(self):
         self.bootstrap(False)
         self.legacy_prices()
-        first = self.service.billing_checkout(self.wid, 'fixture', 'studio-v1')
-        self.assertEqual(first['sessionId'], 'cs_task4')
-        self.assertEqual(self.stripe_calls[-1][1]['line_items[0][price]'], 'price_fix_studio-v1')
-        self.assertIn('customer_email', self.stripe_calls[-1][1])
+        for terms in ('studio-v1', 'assist-v1'):
+            with self.subTest(stage='new', terms=terms):
+                before = len(self.stripe_calls)
+                with self.assertRaises(AlphaError) as caught:
+                    self.service.billing_checkout(self.wid, 'fixture', terms)
+                self.assertEqual(caught.exception.status, 409)
+                self.assertEqual(len(self.stripe_calls), before)
         with connection() as db:
             self.service.ledger.ensure_entitlement(db.cursor(), self.wid, None)
             db.execute("UPDATE pr_subscriptions SET provider='stripe',plan_terms_id='studio-v1',status='cancelled',provider_customer_id='cus_legacy_fix',provider_subscription_id='sub_legacy_ended' WHERE workspace_id=%s", (self.wid,))
-        replacement = self.service.billing_checkout(self.wid, 'fixture', 'assist-v1')
-        self.assertEqual(replacement['sessionId'], 'cs_task4')
-        self.assertEqual(self.stripe_calls[-1][1]['customer'], 'cus_legacy_fix')
-        self.assertEqual(self.stripe_calls[-1][1]['line_items[0][price]'], 'price_fix_assist-v1')
+        for terms in ('studio-v1', 'assist-v1'):
+            with self.subTest(stage='ended', terms=terms):
+                before = len(self.stripe_calls)
+                with self.assertRaises(AlphaError) as caught:
+                    self.service.billing_checkout(self.wid, 'fixture', terms)
+                self.assertEqual(caught.exception.status, 409)
+                self.assertEqual(len(self.stripe_calls), before)
+
 
     def test_distinct_ended_bindings_same_hour_have_distinct_keys_and_retry_is_stable(self):
         self.seed_creator(status='cancelled')

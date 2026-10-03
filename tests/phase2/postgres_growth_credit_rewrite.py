@@ -163,7 +163,14 @@ class RewriteCreditPG(unittest.TestCase):
 
     def test_known_jev_failures_retry_then_fallback_all_physically_accounted(self):
         self.failures=[200,500,500,200,200,200,200]
-        self.rewrite(self.quote(self.request()))
+        # These transports never contact a provider. Keep the synthetic provider
+        # clock deterministic so real PG hold checks do not consume its 3s reply
+        # deadline on a contended host. Production clocks/timeout tests stay intact.
+        from unittest.mock import patch
+        from postriff_phase2.growth.router import AIModelRouter
+        with patch('postriff_phase2.growth.credit_funding.AIModelRouter',
+                   side_effect=lambda **kwargs: AIModelRouter(clock=lambda:0,**kwargs)):
+            self.rewrite(self.quote(self.request()))
         self.assertEqual(len(self.sent),7)
         self.assertEqual(self.wallet()['usedMilliCredits'],8400)
         self.assertEqual(self.sent[3]['body']['model'],FALLBACK)

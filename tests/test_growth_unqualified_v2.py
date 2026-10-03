@@ -24,6 +24,9 @@ class Cursor:
         if sql.startswith(('INSERT', 'UPDATE')): self.writes.append(sql)
 
     def fetchone(self):
+        if self.sql.startswith('SELECT id FROM public.pr_workspaces'): return ('workspace',)
+        if self.sql.startswith('SELECT status,extract'): return ('active', None, False, None, 'studio-v1')
+        if self.sql.startswith('SELECT plan_terms_id'): return ('studio-v1',)
         if 'pr_entitlements' in self.sql:
             return ('free', None) if self.mode == 'free' else ('creator', V2_POLICY_VERSION) if self.mode == 'managed' else ('pro', None)
         if "state ? 'accountDeletion'" in self.sql: return (False,)
@@ -48,7 +51,8 @@ class UnsupportedV2(unittest.TestCase):
         cur = Cursor(mode)
         sources = SimpleNamespace(catalog=lambda: [{'id': 'exa', 'status': 'ready'}], ceiling=lambda source: 200_000,
                                   search=Mock(return_value={'items': [], 'costUsdMicro': 1, 'costSource': 'provider'}))
-        host = SimpleNamespace(connection_factory=lambda: Database(cur))
+        host = SimpleNamespace(connection_factory=lambda: Database(cur),
+                               billing=SimpleNamespace(pricing_v2_enabled=True), clock=lambda: 1_000_000)
         growth = SimpleNamespace(hosted=host, repository=None, clock=lambda: 1_000_000,
                                  env={'POSTRIFF_RADAR_CREDIT_BILLING': '0'}, reserve=Mock(), cap=lambda key: 1_000_000)
         r = Radar(growth, sources)
@@ -103,7 +107,9 @@ class UnsupportedV2(unittest.TestCase):
             with self.subTest(mode=mode):
                 claim.reset_mock(); cur = Cursor(mode)
                 broker = SimpleNamespace(search_items=Mock(return_value={'status': 'unavailable'}))
-                service = SimpleNamespace(clock=lambda: 1_000_000, values={}, hosted=SimpleNamespace(connection_factory=lambda: Database(cur)), _broker=lambda state: broker)
+                host = SimpleNamespace(connection_factory=lambda: Database(cur),
+                                       billing=SimpleNamespace(pricing_v2_enabled=True), clock=lambda: 1_000_000)
+                service = SimpleNamespace(clock=host.clock, values={}, hosted=host, _broker=lambda state: broker)
                 result = scout_runtime.run_workspace(service, 'workspace', time.monotonic() + 1000, broker=broker)
                 self.assertEqual(result.get('reason'), 'growth_credit_bridge_unavailable')
                 claim.assert_not_called(); broker.search_items.assert_not_called(); self.assertFalse(cur.writes)
@@ -131,7 +137,8 @@ class UnsupportedV2(unittest.TestCase):
         for mode in ('free', 'managed'):
             with self.subTest(mode=mode):
                 cur = Cursor(mode); oauth = SimpleNamespace(token_for_worker=Mock(return_value={'accessToken': 'synthetic'})); transport = Mock(return_value={'status': 200, 'body': {'data': []}})
-                importer = history_import.HistoryImporter(lambda: Database(cur), oauth, transport=transport)
+                host = SimpleNamespace(billing=SimpleNamespace(pricing_v2_enabled=True), clock=lambda: 1_000_000)
+                importer = history_import.HistoryImporter(lambda: Database(cur), oauth, transport=transport, hosted=host)
                 importer._finish = Mock(); importer._store_page = Mock(return_value=0)
                 result = importer.run_one({'workspaceId': 'workspace', 'connectionId': 'connection', 'provider': 'threads', 'createdAt': 1_000_000, 'cursor': None, 'pages': 0}, time.monotonic() + 10)
                 self.assertEqual(result, 'cancelled'); oauth.token_for_worker.assert_not_called(); transport.assert_not_called()
@@ -148,7 +155,8 @@ class UnsupportedV2(unittest.TestCase):
                 @contextmanager
                 def transaction(*args): yield cur, (1, {}), 'actor'
                 oauth = SimpleNamespace(repository=SimpleNamespace(transaction=transaction))
-                importer = history_import.HistoryImporter(lambda: Database(cur), oauth, transport=Mock())
+                host = SimpleNamespace(billing=SimpleNamespace(pricing_v2_enabled=True), clock=lambda: 1_000_000)
+                importer = history_import.HistoryImporter(lambda: Database(cur), oauth, transport=Mock(), hosted=host)
                 importer._status = lambda *args: {'status': 'pending'}
                 self.refusal(lambda: importer.request('workspace', 'session', 'connection', {'confirmed': True}))
                 self.assertFalse(cur.writes)

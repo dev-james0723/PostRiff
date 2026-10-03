@@ -1,11 +1,12 @@
 """Internal before-I/O boundary for trends without a qualified customer bridge.
 
-Read effective persisted server entitlements on every attempt. Experimental
+Derive current lifecycle and read server entitlements on every attempt. Experimental
 source/model budgets, client plan labels and quota exemptions are not funding
 authority. Stored processing does not call this module's dispatch guards.
 """
 from postriff_alpha.domain import AlphaError
 from ...credit_meter import V2_POLICY_VERSION
+from ..credit_admission import refresh_lifecycle
 from .contracts import ContractError, scope, uuid
 from .store import row, rows
 
@@ -42,7 +43,8 @@ def funding_mode(cur, workspace_id):
     return 'legacy'
 
 
-def require_qualified_entry(cur, workspace_id):
+def require_qualified_entry(cur, workspace_id, *, store=None):
+    refresh_lifecycle(cur, workspace_id, getattr(store, 'hosted', None))
     if funding_mode(cur, workspace_id) != 'legacy':
         raise unavailable()
 
@@ -50,7 +52,7 @@ def require_qualified_entry(cur, workspace_id):
 def require_dispatch(store, workspace_id):
     """The guard transaction commits/releases its row locks BEFORE external I/O."""
     with store.transaction() as cur:
-        require_qualified_entry(cur, workspace_id)
+        require_qualified_entry(cur, workspace_id, store=store)
 
 
 def require_model_dispatch(store, workspace_id):
@@ -71,7 +73,7 @@ def require_provider_dispatch(store, scope_key, capability, amount):
     scope_key = scope(scope_key)
     with store.transaction() as cur:
         if scope_key.startswith('workspace:'):
-            require_qualified_entry(cur, scope_key[10:])
+            require_qualified_entry(cur, scope_key[10:], store=store)
             return
         cur.execute("""/* trends:beneficiaries */ SELECT workspace_id::text AS workspace_id
             FROM public.pr_trend_entitlements WHERE scope_key=%s AND revoked_at IS NULL
@@ -83,4 +85,4 @@ def require_provider_dispatch(store, scope_key, capability, amount):
         # Shared acquisition cannot silently allocate costs to v2 customers or
         # subsidize them through a legacy beneficiary's experimental budget.
         for beneficiary in beneficiaries:
-            require_qualified_entry(cur, beneficiary['workspace_id'])
+            require_qualified_entry(cur, beneficiary['workspace_id'], store=store)

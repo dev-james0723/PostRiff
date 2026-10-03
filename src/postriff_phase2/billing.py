@@ -14,7 +14,7 @@ import os
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION, actual_millicredits
 from .credit_wallet import CreditBook, project_credit_wallet
 from .developer_usage import ai_usage_exempt
 from .plan_pricing import DEFAULT_VARIANT, PlanPricing
@@ -263,13 +263,18 @@ class Ledger:
                     or budget[3] < preview.maximum_micro or budget[3]+budget[4] > min(budget[2],cap)):
                 raise unavailable()
 
-    def settle(self, cur, workspace_id, reservation_id, outcome, actual_usd_micro=None, idempotency_key=None):
+    def settle(self, cur, workspace_id, reservation_id, outcome, actual_usd_micro=None, idempotency_key=None, *, actual_usd_exact=None):
         """completed → actual cost, batch consumed; failed → provider cost still booked, batch refunded;
         unknown → reservation kept and cost booked as estimated_unknown until reconciled."""
         if outcome not in ("completed", "failed", "unknown"):
             raise AlphaError("Invalid settlement outcome.", 400)
         if actual_usd_micro is not None and (type(actual_usd_micro) is not int or actual_usd_micro < 0):
             raise AlphaError("Invalid actual usage amount.", 400)
+        if actual_usd_exact is not None:
+            try:
+                actual_millicredits(actual_usd_micro, actual_usd_exact=actual_usd_exact)
+            except ValueError:
+                outcome = "unknown"  # An inconsistent exact invoice never becomes a debit.
         cur.execute("SELECT meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'", (workspace_id, reservation_id))
         original = cur.fetchone()
         uses_credits = bool(original and original[0].get("credits"))
@@ -317,13 +322,14 @@ class Ledger:
             pricing_events.settled(cur, workspace_id, reservation_id, 'unknown', None, meta.get('credits'), None, meta)
             return {"reservationId": reservation_id, "state": "estimated_unknown", "note": "Reservation retained until provider usage is reconciled; cost is not recorded as zero."}
         actual = int(actual_usd_micro or 0)
-        credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
+        credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual,
+                                              **({'actual_usd_exact': actual_usd_exact} if actual_usd_exact is not None else {})) if uses_credits else None
         if credit and credit.get("absorbed"):
             # Retain the surviving Task10–11 operator audit alongside private metrics.
             cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,NULL,'usage.absorbed_over_max',%s,%s::jsonb)",
                         (workspace_id, str(reservation_id)[:200], json.dumps({"absorbedMilliCredits": credit["absorbed"], "usedMilliCredits": credit["used"]})))
         kind = "settle" if outcome == "completed" else "release"
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({**({"credits":credit} if credit else {}), **({"actualUsdExact":actual_usd_exact} if actual_usd_exact is not None else {})})))
         pricing_events.settled(cur, workspace_id, reservation_id, outcome, actual, meta.get('credits'), credit, meta)
         # Exactly the budgets this reservation held, already locked/checked above.
         for scope in scopes:
@@ -620,8 +626,9 @@ class Billing:
             except AlphaError:
                 purchasable = False
         else:
-            cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' AND plan NOT IN ('creator','starter','free') AND id<>'studio-v2' AND coalesce((to_jsonb(pr_plan_terms)->>'new_checkout_enabled')::boolean,true) LIMIT 1")
-            purchasable = cur.fetchone() is not None
+            # Rollback preserves servicing/portal access only; retired legacy terms
+            # are never a source of new checkout availability.
+            purchasable = False
         cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
         row = cur.fetchone()
         return {"provider": self.provider.id, "checkoutAvailable": live and purchasable, "portalAvailable": live and bool(row and row[0])}

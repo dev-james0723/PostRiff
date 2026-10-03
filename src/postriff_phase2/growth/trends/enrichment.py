@@ -108,7 +108,9 @@ class TrendEnrichment:
 
     def __init__(self, hosted, *, store=None, values=None, jev_factory=None, monotonic=time.monotonic):
         self.hosted = hosted
-        self.store = store or TrendStore(hosted.repository.connection_factory)
+        self.store = store or TrendStore(hosted.repository.connection_factory, hosted=hosted)
+        if getattr(self.store, 'hosted', None) is None:
+            self.store.hosted = hosted
         self.jobs = TrendJobs(self.store)
         self.values = values
         self.jev_factory = jev_factory
@@ -236,7 +238,7 @@ class TrendEnrichment:
             return self._enqueue_loaded(cur,workspace_id,actor,receipt_id,task,loaded,idempotency_key)
 
     def _enqueue_loaded(self, cur, workspace_id, actor, receipt_id, task, loaded, idempotency_key):
-        credit_admission.require_qualified_entry(cur, workspace_id)
+        credit_admission.require_qualified_entry(cur, workspace_id, store=self.store)
         scope = "workspace:"+workspace_id
         # The authenticated workspace row serializes this bound with other
         # producers, including explicit enqueue requests and cron retries.
@@ -362,7 +364,7 @@ class TrendEnrichment:
                         claim=self.jobs.claim(self.worker_id,job_id=pending_job["job_id"],kind=self.kind,cursor=cur)
                         if claim: self.jobs.finish_local(claim,cursor=cur)
                         output["cached"] += 1; continue
-                    credit_admission.require_qualified_entry(cur, wid)
+                    credit_admission.require_qualified_entry(cur, wid, store=self.store)
                     cur.execute("""SELECT 1 FROM pr_trend_jobs WHERE scope_key=%s AND kind=%s
                         AND state IN ('leased','running') AND lease_until>clock_timestamp() AND payload->>'cache_key'=%s LIMIT 1""",
                                 (pending_job["scope_key"],self.kind,loaded["key"]))
@@ -381,7 +383,7 @@ class TrendEnrichment:
                     fresh=self._load(cur,wid,principal,rid,controls["task"],state)
                     if fresh["key"]!=loaded["key"]:raise contracts.ContractError("model_job_snapshot_changed")
                     loaded=fresh
-                    credit_admission.require_qualified_entry(cur, wid)
+                    credit_admission.require_qualified_entry(cur, wid, store=self.store)
                 if not self.enabled(wid) or self.monotonic()-started+3 > max_seconds:
                     self._discard(claim,"model_dispatch_gate_or_deadline",dispatched=False)
                     output["blocked"]+=1;continue

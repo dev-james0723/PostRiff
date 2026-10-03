@@ -139,12 +139,12 @@ class GenomeCatalogPG(unittest.TestCase):
         with self.assertRaises(AlphaError):self.run_genome(self.body(2))
         self.assertEqual(len(self.f.sent),1);self.assertEqual(self.money(),before)
         with connection() as db:
-            rows=db.execute("SELECT s.actual_usd_micro FROM pr_usage_ledger s JOIN pr_usage_ledger r ON r.id=s.reservation_id WHERE r.workspace_id=%s AND r.kind='reserve' AND r.meta->'platformPreview'->>'kind'='genome' AND s.kind='settle'",(self.f.wid,)).fetchall()
-        self.assertEqual(rows,[(4000,)])
+            rows=db.execute("SELECT s.kind,s.cost_state,s.actual_usd_micro FROM pr_usage_ledger s JOIN pr_usage_ledger r ON r.id=s.reservation_id WHERE r.workspace_id=%s AND r.kind='reserve' AND r.meta->'platformPreview'->>'kind'='genome' AND s.cost_state IN ('actual','released')",(self.f.wid,)).fetchall()
+        self.assertEqual(rows,[('release','released',4000)])
 
     def test_expired_creator_free_genome_keeps_independent_lifetime_and_recent_twenty(self):
         self.approve(paidBaseChecks=False)
-        with connection() as db:db.execute("UPDATE pr_subscriptions SET status='active',cancel_at_period_end=true,current_period_end=now()-interval '1 second' WHERE workspace_id=%s",(self.f.wid,))
+        with connection() as db:db.execute("UPDATE pr_subscriptions SET status='active',cancel_at_period_end=true,current_period_end=to_timestamp(%s) WHERE workspace_id=%s",(self.f.now[0]-1,self.f.wid))
         preview=self.f.g.preview_status(self.f.wid,'synthetic-growth')
         self.assertEqual(preview['postDoctor']['reason'],'used');self.assertEqual(preview['genome']['remaining'],1)
         self.assertEqual(self.status()['billingMode'],'free');self.assertTrue(self.status()['available'])

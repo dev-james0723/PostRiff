@@ -25,7 +25,7 @@ from .judgments import JudgmentService, subject_hash
 from .jev import JevService
 from .post_doctor import PostDoctorService, level_names
 from .router import AIModelRouter, RouterError, TASKS, chat_from_runtime
-from .usage import MemoryUsageSink, PostgresUsageSink
+from .usage import MemoryUsageSink, PostgresUsageSink, task_cost_usd_micro, task_cost_basis
 from .preview import PreviewPolicy, PreviewAuthority, ROUTE as PREVIEW_ROUTE, SCOPES as PREVIEW_SCOPES, recent_samples, unavailable as preview_unavailable
 from .closed_loop import ClosedLoop, ACTIONS as CLOSED_LOOP_ACTIONS, SUMMARY_ROUTE
 from . import postmortem, creator_calibration
@@ -703,24 +703,21 @@ class GrowthService:
             if body.get('_usageRecorded') is not True:
                 for event in sink.events:
                     PostgresUsageSink(cur).record(event)
+                total,unknown,exact=task_cost_basis(sink.events)
+                actual={'usdMicro':None if unknown else total,'unknown':unknown,
+                        'basis':'verified-task-usd-v1','usdExact':None if unknown else exact}
                 if run.get('funding'):
-                    costs=[event.cost_usd_micro() for event in sink.events]
-                    unknown=any(cost is None for cost in costs)
                     outcome='unknown' if unknown else 'failed' if error or status!='running' else 'completed'
                     self.hosted.ledger.settle(cur,workspace_id,run['reservationId'],outcome,
-                        None if unknown else sum(costs),idempotency_key='platform-preview:settle:'+run['id'])
+                        None if unknown else total,idempotency_key='platform-preview:settle:'+run['id'])
                 if run.get('creditPlan'):
-                    costs=[event.cost_usd_micro() for event in sink.events]
-                    total=sum(c for c in costs if c is not None)
-                    from .usage import MAX_USD_MICRO
-                    unknown=any(c is None for c in costs) or total>MAX_USD_MICRO
                     cur.execute("UPDATE public.pr_post_doctor_runs SET body=body||%s::jsonb WHERE workspace_id=%s AND id=%s",
-                                (json.dumps({'_actualUsage':{'usdMicro':None if unknown else total,'unknown':unknown},
-                                             '_usageSource':{'kind':'physical-gateway-attempts','count':len(costs),'binding':run['creditBinding']}}),workspace_id,run['id']))
+                                (json.dumps({'_actualUsage':actual,
+                                             '_usageSource':{'kind':'physical-gateway-attempts','count':len(sink.events),'binding':run['creditBinding']}}),workspace_id,run['id']))
                     # Usage persists independently of private-content/permission fences. A known
                     # success is charged only in the later winning content transaction.
                     if error or status!='running' or unknown:
-                        self._settle_rewrite(cur,workspace_id,run,'unknown' if unknown else 'failed',None if unknown else total)
+                        self._settle_rewrite(cur,workspace_id,run,'unknown' if unknown else 'failed',actual)
                 cur.execute("UPDATE public.pr_post_doctor_runs SET body=body||%s::jsonb WHERE workspace_id=%s AND id=%s",(json.dumps({'_usageRecorded':True}),workspace_id,run['id']))
                 recorded=True
             elif run.get('creditPlan') and status!='running':
@@ -728,7 +725,7 @@ class GrowthService:
                 # the durable invoice, never the empty/replayed in-memory sink.
                 actual=body.get('_actualUsage',{})
                 unknown=actual.get('unknown',True)
-                self._settle_rewrite(cur,workspace_id,run,'unknown' if unknown else 'failed',None if unknown else actual.get('usdMicro'))
+                self._settle_rewrite(cur,workspace_id,run,'unknown' if unknown else 'failed',actual)
         if status!='running':
             if status=='cancelled' and (recorded or run.get('creditPlan')):
                 raise AlphaError('The input or AI permission changed. Discard this result.',409,code='growth_input_changed')
@@ -746,7 +743,7 @@ class GrowthService:
                 draft=(run.get('prepared') or {}).get('draft')
                 if draft and draft.get('id'):
                     valid=valid and self._draft_matches(current,draft)
-                unknown=any(event.cost_usd_micro() is None for event in sink.events)
+                unknown=task_cost_usd_micro(sink.events)[1]
                 status='cancelled' if not valid else 'unknown' if error and unknown else 'failed' if error else 'completed'
                 if status=='completed' and store:
                     result=store(cur,current,principal,result)
@@ -754,7 +751,7 @@ class GrowthService:
                     actual=terminal[0].get('_actualUsage',{})
                     if current is not None and row[0]!=run['revision']: valid=False
                     status='cancelled' if not valid else 'unknown' if actual.get('unknown') else 'failed' if error else 'completed'
-                    self._settle_rewrite(cur,workspace_id,run,'unknown' if actual.get('unknown') else 'completed' if status=='completed' else 'failed',actual.get('usdMicro'))
+                    self._settle_rewrite(cur,workspace_id,run,'unknown' if actual.get('unknown') else 'completed' if status=='completed' else 'failed',actual)
                     cur.execute('SELECT body FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id=%s',(workspace_id,run['id']))
                     terminal=(cur.fetchone()[0],*terminal[1:])
                 metadata={k:v for k,v in terminal[0].items() if k.startswith('_')}
@@ -773,7 +770,7 @@ class GrowthService:
                 if run.get('creditPlan'):
                     cur.execute('SELECT body FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id=%s FOR UPDATE',(workspace_id,run['id']))
                     actual=(cur.fetchone() or ({},))[0].get('_actualUsage',{})
-                    self._settle_rewrite(cur,workspace_id,run,'unknown' if actual.get('unknown') else 'failed',actual.get('usdMicro'))
+                    self._settle_rewrite(cur,workspace_id,run,'unknown' if actual.get('unknown') else 'failed',actual)
                 cur.execute("UPDATE public.pr_post_doctor_runs SET status='cancelled' WHERE workspace_id=%s AND id=%s AND status='running'",(workspace_id,run['id']))
             raise
         if not valid:
@@ -784,8 +781,19 @@ class GrowthService:
         return client_result(saved)
 
     def _settle_rewrite(self,cur,workspace_id,run,outcome,actual):
+        basis={}
+        if isinstance(actual,dict):
+            if actual.get('unknown',True):
+                outcome='unknown'
+            elif actual.get('basis')=='verified-task-usd-v1':
+                exact=actual.get('usdExact')
+                if type(exact) is not str:
+                    outcome='unknown'  # Never replay a new exact-basis task from lossy micro alone.
+                else:
+                    basis['actual_usd_exact']=exact
+            actual=None if outcome=='unknown' else actual.get('usdMicro')
         settled=self.hosted.ledger.settle(cur,workspace_id,run['reservationId'],outcome,actual,
-                                        idempotency_key='growth-credit:settle:'+run['id']+':'+outcome)
+                                        idempotency_key='growth-credit:settle:'+run['id']+':'+outcome,**basis)
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND cost_state IN ('actual','released') LIMIT 1",(workspace_id,run['reservationId']))
         row=cur.fetchone()
         used=row[0].get('used') if row and row[0] else None

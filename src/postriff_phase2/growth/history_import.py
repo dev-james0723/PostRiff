@@ -22,7 +22,7 @@ from postriff_alpha.domain import AlphaError
 
 from ..providers import GRAPH_VERSION
 from . import metric_schedule
-from .credit_admission import funding_mode, require_qualified_entry
+from .credit_admission import require_qualified_entry
 
 FLAG = "POSTRIFF_HISTORY_IMPORT"
 WINDOW_DAYS = 90
@@ -210,8 +210,9 @@ def _sweep(connection_factory, *, limit, only, imports_only, max_seconds=10.0, m
 
 
 class HistoryImporter:
-    def __init__(self, connection_factory, oauth, *, transport, clock=time.time, monotonic=time.monotonic, worker_id=None):
+    def __init__(self, connection_factory, oauth, *, transport, clock=time.time, monotonic=time.monotonic, worker_id=None, hosted=None):
         self.connection_factory = connection_factory
+        self.hosted = hosted
         self.oauth = oauth
         self.transport = transport
         self.clock = clock
@@ -229,7 +230,7 @@ class HistoryImporter:
             raise AlphaError("Confirm reading the last 90 days of this account's posts and their metrics.", 400)
         with self.oauth.repository.transaction(token, workspace_id) as (cur, row, actor):
             require(_membership(row), "manage_connections")
-            require_qualified_entry(cur,workspace_id)
+            require_qualified_entry(cur,workspace_id,hosted=self.hosted)
             throttle(cur, f"history-import:{workspace_id}:{actor}", 5, 3600)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL",
                         (workspace_id, connection_id))
@@ -280,7 +281,11 @@ class HistoryImporter:
 
     def _eligible(self, run):
         with self.connection_factory() as db, db.cursor() as cur:
-            if funding_mode(cur,run["workspaceId"])!='legacy': return False
+            try:
+                require_qualified_entry(cur,run["workspaceId"],hosted=self.hosted)
+            except AlphaError as error:
+                if error.code == 'growth_credit_bridge_unavailable': return False
+                raise
             cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s", (run["workspaceId"],))
             found = cur.fetchone()
             return (bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])

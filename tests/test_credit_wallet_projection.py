@@ -47,4 +47,31 @@ class CreditWalletProjection(unittest.TestCase):
                     self.assertEqual(wallet,original,'Public projection must not mutate the accounting book')
 
 
+    def test_verified_purchase_projection_keeps_only_safe_facts_and_actual_expiry(self):
+        class PurchaseCursor(Cursor):
+            def execute(self, sql, args=()):
+                if "meta->'credits'->>'source'" in sql:
+                    self.many=[('purchase-private-id','verified-stripe-checkout'),
+                               ('subscription-private-id','verified-stripe-invoice'),
+                               ('manual-private-id','operator-grant')]
+                else: super().execute(sql,args)
+        wallet={'availableMilliCredits':1000,'heldMilliCredits':2000,'usedMilliCredits':15000,
+                'debtMilliCredits':0,'currentPeriodGrantMilliCredits':30000,
+                'currentPeriodExpiresAt':1800000060,'lots':[
+                    {'grantId':'purchase-private-id','milli':5000,'available':3000,'held':1000,'expiresAt':None},
+                    {'grantId':'purchase-private-id','milli':5000,'available':2000,'held':500,'expiresAt':1800000100},
+                    {'grantId':'subscription-private-id','milli':1000,'available':1000,'held':0,'expiresAt':None},
+                    {'grantId':'manual-private-id','milli':1000,'available':1000,'held':0,'expiresAt':None}]}
+        original=copy.deepcopy(wallet);ledger=Ledger(credits_enabled=True)
+        ledger._credit_book.view=Mock(return_value=wallet)
+        with patch.object(ledger,'ensure_entitlement',return_value={'planTermsId':'synthetic'}), \
+             patch.object(ledger,'_budget',return_value={'windowKind':'month','spent':0,'reserved':0,'warn':0,'stop':0,'status':'candidate'}):
+            result=ledger.usage_view(PurchaseCursor(V2_POLICY_VERSION),'synthetic-workspace','synthetic-actor')['credits']
+        self.assertEqual(result['purchasedCredits'],[
+            {'available':3000,'held':1000,'expiresAt':None},
+            {'available':2000,'held':500,'expiresAt':1800000100}])
+        self.assertNotIn('lots',result);self.assertNotIn('private-id',repr(result))
+        self.assertEqual(wallet,original)
+
+
 if __name__=='__main__': unittest.main()

@@ -3,6 +3,8 @@
 One USD of verified provider cost maps to 300 credits. Display resolution is 0.1
 credit, rounded once per task. Existing plan terms and balances remain unchanged.
 """
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
+
 # Historical preview/purchase imports retain their original candidate meaning.
 POLICY_VERSION = 'credits-candidate-2026-09-23-v1'
 V2_POLICY_VERSION = 'credits-v2-2026-09-28'
@@ -22,7 +24,7 @@ def millicredits(cost_usd_micro):
     return _rounded_millicredits(_amount(cost_usd_micro))
 
 
-def actual_millicredits(cost_usd_micro):
+def actual_millicredits(cost_usd_micro, *, actual_usd_exact=None):
     """Verified actual ledger costs use storage's domain; the approved debit is capped separately.
 
     The smaller new-quote domain remains unchanged. A known provider overrun must
@@ -31,7 +33,25 @@ def actual_millicredits(cost_usd_micro):
     from .growth.usage import MAX_USD_MICRO
     if type(cost_usd_micro) is not int or not 0 <= cost_usd_micro <= MAX_USD_MICRO:
         raise ValueError('Use a known PostgreSQL bigint-safe actual USD-micro amount.')
-    return _rounded_millicredits(cost_usd_micro)
+    if actual_usd_exact is None:
+        return _rounded_millicredits(cost_usd_micro)
+    # Server accounting supplies a lossless task basis; never accept a debit override.
+    try:
+        if type(actual_usd_exact) is not str:
+            raise ValueError()
+        cost = Decimal(actual_usd_exact)
+        if not cost.is_finite() or cost < 0:
+            raise ValueError()
+        with localcontext() as context:
+            context.prec = max(28, len(cost.as_tuple().digits) + 7)
+            if cost > Decimal(MAX_USD_MICRO).scaleb(-6):
+                raise ValueError()
+            audit = int((cost * MICRO_USD).to_integral_value(rounding=ROUND_CEILING))
+            if audit != cost_usd_micro:
+                raise ValueError()
+            return int((cost * CREDITS_PER_USD * 10).to_integral_value(rounding=ROUND_CEILING)) * MILLI_STEP
+    except (InvalidOperation, ValueError, OverflowError) as error:
+        raise ValueError('Exact task USD must match its known audit microdollars.') from error
 
 
 def _rounded_millicredits(cost_usd_micro):

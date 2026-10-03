@@ -1145,12 +1145,14 @@ class IdeasService:
             cost = (usage or {}).get("costUsd")
             actual = cost_usd_micro(cost)
             known = actual is not None
+            # Only verified cost (including an explicit pre-I/O zero) can release
+            # this hold; an exception's certainty flag is not cost evidence.
             self.ledger.settle(
                 cur,
                 workspace_id,
                 reservation_id,
-                "failed" if known or not uncertain else "unknown",
-                actual if known else 0 if not uncertain else None,
+                "failed" if known else "unknown",
+                actual,
             )
             # A late reply still has a provider charge. Content cancellation cannot erase accounting.
             if not row or row[0] != "running":

@@ -219,7 +219,7 @@ def runtime_from_environment(environ=None):
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
-            service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
+            service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport, hosted=service)
     from .growth.service import GrowthService
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)

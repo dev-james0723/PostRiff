@@ -72,7 +72,7 @@ class BaseCheckCatalogPG(unittest.TestCase):
         self.assertEqual(self.f.sent,[])
 
     def test_current_expired_creator_uses_unchanged_free_lifetime_contract(self):
-        with connection() as db:db.execute("UPDATE pr_subscriptions SET status='active',cancel_at_period_end=true,current_period_end=now()-interval '1 second' WHERE workspace_id=%s",(self.f.wid,))
+        with connection() as db:db.execute("UPDATE pr_subscriptions SET status='active',cancel_at_period_end=true,current_period_end=to_timestamp(%s) WHERE workspace_id=%s",(self.f.now[0]-1,self.f.wid))
         preview=self.f.g.preview_status(self.f.wid,'synthetic-growth')
         self.assertEqual(preview['postDoctor'],{'remaining':0,'eligible':False,'reason':'used'})
         self.assertEqual(preview['genome']['maxPosts'],20)

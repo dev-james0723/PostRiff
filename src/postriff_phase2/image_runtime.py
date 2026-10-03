@@ -40,7 +40,7 @@ class ImageGenerationError(AlphaError):
 
 def image_transport(method, url, headers=None, body=None, timeout=TIMEOUT_SECONDS):
     if url != DEFAULT_ENDPOINT:
-        raise ImageGenerationError("Image generation must use the qualified gateway endpoint.", 503)
+        raise ImageGenerationError("Image generation must use the qualified gateway endpoint.", 503, cost_usd=0.0)
     data = json.dumps(body).encode() if body is not None else None
     request = Request(
         url,
@@ -64,7 +64,11 @@ def image_transport(method, url, headers=None, body=None, timeout=TIMEOUT_SECOND
     try:
         parsed = json.loads(raw) if raw else {}
     except ValueError as error:
-        raise ImageGenerationError("The image provider returned an unreadable response.", uncertain=status >= 500) from error
+        # A successful dispatch with unreadable bytes has no verified cost. Keep
+        # the existing zero-cost refusal classification only for HTTP 4xx.
+        refused = 400 <= status < 500
+        raise ImageGenerationError("The image provider returned an unreadable response.",
+                                   uncertain=not refused, cost_usd=0.0 if refused else None) from error
     return {"status": status, "body": parsed}
 
 

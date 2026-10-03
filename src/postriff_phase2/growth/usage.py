@@ -6,25 +6,62 @@ opaque identifiers only (workspace id, subject hash), never prompt or post text.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import asdict, dataclass
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 from uuid import UUID
 
 STATUSES_OK = ("ok",)
 MAX_USD_MICRO = 2**63 - 1  # PostgreSQL signed bigint, shared by events/ledger/budgets.
 
 
-def cost_usd_micro(cost):
-    """A reported charge is known only when its rounded-up microdollars fit storage."""
+def _usd_micro(cost):
+    # Decimal context is caller-local; never let a low precision round the invoice.
+    with localcontext() as context:
+        context.prec = max(28, len(cost.as_tuple().digits) + 6)
+        return int((cost * 1_000_000).to_integral_value(rounding=ROUND_CEILING))
+
+
+def _reported_cost_usd(cost):
+    """Preserve the reported decimal value, under the existing known-cost domain."""
     if type(cost) not in (int, float): return None
     try:
-        if not math.isfinite(cost) or cost < 0: return None
-        scaled = cost * 1_000_000
-        if not math.isfinite(scaled): return None
-        amount = math.ceil(scaled)
-    except (ValueError, OverflowError):
+        value = Decimal(str(cost))
+        if not value.is_finite() or value < 0: return None
+        return value if _usd_micro(value) <= MAX_USD_MICRO else None
+    except (ValueError, OverflowError, InvalidOperation):
         return None
-    return amount if amount <= MAX_USD_MICRO else None
+
+
+def cost_usd_micro(cost):
+    """Per-attempt telemetry only; task settlement uses the raw-cost aggregate."""
+    value = _reported_cost_usd(cost)
+    return _usd_micro(value) if value is not None else None
+
+
+def task_cost_basis(events):
+    """Keep exact reported task USD alongside conservative audit microdollars.
+
+    Unknown attempts keep the task unknown even when a known subtotal exists.
+    Detail events remain independently rounded; they are never the debit basis.
+    """
+    values = [_reported_cost_usd(event.cost_usd) for event in events]
+    known = [value for value in values if value is not None]
+    unknown = len(known) != len(values)
+    if not known: return 0, unknown, '0'
+    # Retain even a subnormal positive charge beside a large storage-safe cost.
+    # Enough digits for the full exponent range, carries, and USD-micro scaling.
+    with localcontext() as context:
+        context.prec = max(28, max(value.adjusted() for value in known)
+                           - min(value.as_tuple().exponent for value in known)
+                           + len(str(len(known))) + 7)
+        exact = sum(known, Decimal(0))
+        total = _usd_micro(exact)
+    return total, unknown or total > MAX_USD_MICRO, str(exact)
+
+
+def task_cost_usd_micro(events):
+    total, unknown, _ = task_cost_basis(events)
+    return total, unknown
 
 
 @dataclass(frozen=True)

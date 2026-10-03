@@ -297,7 +297,7 @@ def cron(service):
         return {'status': 'unavailable', 'dispatched': 0}
     try:
         started = time.monotonic()
-        store = TrendStore(repository.connection_factory)
+        store = TrendStore(repository.connection_factory, hosted=service)
         result = TrendWorker(store).tick()
         if result['status'] == 'migration_pending':
             return result

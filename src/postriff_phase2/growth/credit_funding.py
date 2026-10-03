@@ -15,7 +15,7 @@ from ..model_runtime import gateway_routing, _gateway_metadata
 from .credit_policy import unavailable
 from .jev import JevService, DEFAULT_MODEL, EVALUATE_ENDPOINT
 from .router import AIModelRouter, RouterError, chat_from_runtime
-from .usage import UsageEvent, MAX_USD_MICRO
+from .usage import UsageEvent, task_cost_usd_micro
 
 
 def credit_guard():
@@ -34,9 +34,7 @@ class RewriteFunding:
         self.blocked = False
 
     def costs(self):
-        values = [e.cost_usd_micro() for e in self.sink.events]
-        total = sum(v for v in values if v is not None)
-        return total, any(v is None for v in values) or total > MAX_USD_MICRO
+        return task_cost_usd_micro(self.sink.events)
 
     def invoke(self, task, model, route, fn, args, kwargs, ids):
         self.current = (task, model, route, ids.get('workspace_id'), ids.get('subject'))

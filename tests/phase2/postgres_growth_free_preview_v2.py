@@ -211,11 +211,14 @@ class PreviewTests(unittest.TestCase):
             db.execute("UPDATE pr_entitlements SET plan_terms_id='creator-v1',source='subscription' WHERE workspace_id=%s", (self.wid,))
             db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,'creator-v1','active',now()+interval '1 month') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='creator-v1',status='active',current_period_end=excluded.current_period_end", (self.wid,))
         self.approve()
-        for kind in ('check', 'rewrite', 'genome', 'audience', 'postmortem'):
+        for kind in ('check', 'genome', 'audience', 'postmortem'):
             self.g.env.update(POSTRIFF_AUDIENCE_MINER='1', POSTRIFF_POSTMORTEM='1')
             prepared = []
             self.denied(lambda: self.g._begin(self.wid, 'fixture', kind, self.body(), lambda *a: (_ for _ in ()).throw(AlphaError('Preparation reached without authority', code='unexpected_preparation'))), 'growth_credit_bridge_unavailable')
             self.assertEqual(prepared, [])
+        # Rewrite is the v2 managed-credit route. A generic preview body has no approved
+        # rewrite request/maximum, so it must fail validation before preparation or I/O.
+        self.denied(lambda: self.g._begin(self.wid, 'fixture', 'rewrite', self.body(), lambda *a: (_ for _ in ()).throw(AlphaError('Preparation reached without authority', code='unexpected_preparation'))), 'invalid_request')
         self.assertEqual(self.sent, [])
 
     def test_route_without_run_authority_cannot_bypass_v2_funding(self):
@@ -230,7 +233,7 @@ class PreviewTests(unittest.TestCase):
             db.execute("INSERT INTO pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,'creator-v1','active',now()+interval '1 month') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id='creator-v1',status='active',current_period_end=excluded.current_period_end", (self.wid,))
         self.approve(paidBaseChecks=True)
         self.assertTrue(self.check()['dimensions'])
-        self.denied(lambda: self.g.rewrite(self.wid, 'fixture', self.body()), 'growth_credit_bridge_unavailable')
+        self.denied(lambda: self.g.rewrite(self.wid, 'fixture', self.body()), 'invalid_request')
         self.assertEqual(len(self.sent), 1)
 
     def test_policy_revocation_stops_before_next_io(self):
@@ -646,8 +649,10 @@ class PreviewTests(unittest.TestCase):
 
     def test_individually_storable_genome_costs_with_unstorable_sum_hold_once(self):
         self.approve()
-        near_max=math.nextafter((2**63-1)/1_000_000,0)
-        charge=math.ceil(near_max*1_000_000)
+        # Explicit reported decimal USD and its exact micro-dollar value.
+        # Binary float multiplication is not an invoice rounding oracle.
+        near_max=9223372036854.773
+        charge=9223372036854773000
         self.assertLessEqual(charge,2**63-1)
         self.assertGreater(charge+4000,2**63-1)
         transport=self.runtime.transport
@@ -691,11 +696,14 @@ class PreviewTests(unittest.TestCase):
 
     def test_genome_cost_sum_at_exact_bigint_max_is_known(self):
         self.approve()
-        near_max=math.nextafter((2**63-1)/1_000_000,0)
-        charge=math.ceil(near_max*1_000_000)
+        # Explicit reported decimal USD and its exact micro-dollar value.
+        # Binary float multiplication is not an invoice rounding oracle.
+        near_max=9223372036854.773
+        charge=9223372036854773000
         remainder=2**63-1-charge
-        first_cost=math.nextafter(remainder/1_000_000,0)
-        self.assertEqual(math.ceil(first_cost*1_000_000),remainder)
+        first_cost=.002807
+        self.assertEqual(remainder,2807)
+        self.assertEqual(str(first_cost),'0.002807')
         transport=self.runtime.transport
         def costs(*args,**kwargs):
             self.cost=first_cost if not self.sent else near_max

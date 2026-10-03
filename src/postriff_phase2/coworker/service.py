@@ -514,7 +514,7 @@ class CoworkerService:
     def _research_diagnostics(self,workspace_id,token,state):
         from ..growth.credit_admission import funding_mode
         with self.repository.transaction(token,workspace_id) as (cur,_row,_actor):
-            supported=funding_mode(cur,workspace_id)=='legacy'
+            supported=funding_mode(cur,workspace_id,hosted=self.hosted)=='legacy'
         rows=self._broker(state).diagnostics()
         if supported: return rows
         return [{**item,'readiness':{'state':'funding_unavailable','reason':'Provider cost and credit funding are not qualified.'}}
@@ -526,7 +526,7 @@ class CoworkerService:
         def guard():
             with self.repository.transaction(token,workspace_id) as (cur,row,_actor):
                 require(self.hosted.ideas._member(row),'edit')
-                require_qualified_entry(cur,workspace_id)
+                require_qualified_entry(cur,workspace_id,hosted=self.hosted)
         guard()
         broker=self._broker(state)
         if isinstance(broker,research_broker.ResearchBroker):
@@ -585,7 +585,7 @@ class CoworkerService:
         state = self._state(workspace_id, token)
         from ..growth.credit_admission import funding_mode
         with self.repository.transaction(token,workspace_id) as (cur,_row,_actor):
-            enabled=flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") and funding_mode(cur,workspace_id)=='legacy'
+            enabled=flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") and funding_mode(cur,workspace_id,hosted=self.hosted)=='legacy'
         return {"providers": self._research_diagnostics(workspace_id,token,state), "enabled": enabled}
 
     def source_campaign(self, workspace_id, token, payload):

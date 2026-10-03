@@ -115,6 +115,13 @@ class TrendsFundingPG(unittest.TestCase):
 
     def setUp(self):
         EnrichmentPostgresTests.setUp(self)
+        # The real dispatch guard now derives lifecycle from trusted server
+        # authority. Bind the synthetic legacy-control host explicitly; this
+        # does not activate v2 or grant source/model/provider funding.
+        from types import SimpleNamespace
+        self.hosted.billing=SimpleNamespace(pricing_v2_enabled=False)
+        self.hosted.clock=lambda:self.at.timestamp()
+        self.store.hosted=self.hosted
         self.entitle('studio-v1')
         self.provider_calls = []
 
@@ -231,11 +238,21 @@ class TrendsFundingPG(unittest.TestCase):
                     self.entitle(terms)
                     with connection(row_factory=factory, service=True) as db:
                         self.assertEqual(credit_admission.funding_mode(db.cursor(), self.wid), expected)
-                    store = TrendStore(lambda: connection(row_factory=factory, service=True))
+                    store = TrendStore(lambda: connection(row_factory=factory, service=True), hosted=self.hosted)
                     if expected == 'legacy':
                         credit_admission.require_dispatch(store, self.wid)
                     else:
                         self.refusal(lambda: credit_admission.require_dispatch(store, self.wid))
+                    self.unlocked()
+                    # Reuse the same native cursor after lifecycle admission;
+                    # the caller must retain its requested SQL row shape.
+                    with store.transaction() as cur:
+                        if expected == 'legacy':
+                            credit_admission.require_qualified_entry(cur,self.wid,store=store)
+                        else:
+                            self.refusal(lambda:credit_admission.require_qualified_entry(cur,self.wid,store=store))
+                        cur.execute('SELECT plan_terms_id FROM public.pr_entitlements WHERE workspace_id=%s',(self.wid,))
+                        self.assertIsInstance(cur.fetchone(),dict if factory is dict_row else tuple)
                     self.unlocked()
         with connection() as db:
             policy = db.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id='creator-v1'").fetchone()[0]
@@ -271,7 +288,7 @@ class TrendsFundingPG(unittest.TestCase):
                 self.assertEqual(self.hold(job['job_id']), ('queued', 0, None, None, None, False))
                 self.assertEqual(self.provider_calls, [])
                 # Exercise actual dict beneficiary rows as well as worker tuples.
-                store = TrendStore(lambda: connection(row_factory=dict_row, service=True))
+                store = TrendStore(lambda: connection(row_factory=dict_row, service=True), hosted=self.hosted)
                 self.refusal(lambda: credit_admission.require_provider_dispatch(store, self.scope, self.paid_capability(), 80))
                 self.unlocked(scope_key=self.scope)
         with connection() as db:

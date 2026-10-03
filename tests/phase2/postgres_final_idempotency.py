@@ -49,7 +49,7 @@ crash = {'next': False}
 
 def transport(method, url, headers=None, body=None):
     calls.append(body['model'])
-    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}}}
+    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}, 'providerMetadata': {'gateway': {'cost': 0.01, 'routing': {'finalProvider': 'test'}}}}}
 
 
 class CrashingRuntime(ServerModelRuntime):

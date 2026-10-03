@@ -81,12 +81,12 @@ class Radar:
         # Only explicitly zero-priced server sources without AI remain available.
         ceilings=[self.sources.ceiling(source) for source in spec.get('sources',[])]
         unpriced=spec.get('useAi') is not False or any(type(amount) is not int or amount!=0 for amount in ceilings)
-        require_qualified_entry(cur,wid,unpriced=unpriced)
+        require_qualified_entry(cur,wid,unpriced=unpriced,hosted=self.host)
 
     def catalog(self,wid,token):
         with self.tx(wid,token) as (cur,row,_):
             consent=row[1].get('radarConsent',{})
-            mode=funding_mode(cur,wid);sources=self.sources.catalog()
+            mode=funding_mode(cur,wid,hosted=self.host);sources=self.sources.catalog()
             if mode!='legacy':
                 sources=[{**source,'status':'credit_bridge_unavailable'} if source['status']=='ready' and source.get('maxRequestUsdMicro')!=0 else source for source in sources]
             return {'sources':sources,'consent':consent,'monitor':row[1].get('radarWatch',{'enabled':False}),
@@ -148,7 +148,7 @@ class Radar:
             if old:
                 if old[4]!=actor or old[5]!=fingerprint:raise AlphaError('This request key belongs to different inputs.',409)
                 return self.visible(old)
-            billing_mode=funding_mode(cur,wid)
+            billing_mode=funding_mode(cur,wid,hosted=self.host)
             maximum=self.maximum(mode) if billing_mode=='legacy' else 0
             if sum(self.sources.ceiling(s) or 0 for s in sources)>maximum:raise AlphaError('These sources exceed this scan allowance.',402)
             from ..growth.service import current_genome
@@ -356,7 +356,7 @@ class Radar:
             elif action=='radar_watch':
                 enabled=payload.get('enabled') is True
                 if enabled:
-                    require_qualified_entry(cur,wid)
+                    require_qualified_entry(cur,wid,hosted=self.host)
                     if self.g.env.get('POSTRIFF_RADAR_MONITORING')!='1':raise AlphaError('Daily monitoring is not enabled.',409)
                     if payload.get('confirmed') is not True or not self.paid(cur,wid):raise AlphaError('Monitoring requires an active paid plan and owner confirmation.',403)
                     try:ZoneInfo(payload.get('timezone',''))

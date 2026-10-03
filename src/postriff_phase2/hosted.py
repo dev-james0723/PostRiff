@@ -568,15 +568,13 @@ class HostedWorkspaceService:
             throttle(cur, f"checkout:{workspace_id}", 5, 60)
             variant_id = None
             self.billing.lifecycle(cur, workspace_id, self.clock())
-            if self.billing.pricing_v2_enabled:
-                price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
-                variant_id, price_id = price["priceVariantId"], price["priceId"]
-            else:
-                cur.execute("SELECT status,provider_price_id,plan,coalesce((to_jsonb(pr_plan_terms)->>'new_checkout_enabled')::boolean,true) FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
-                terms = cur.fetchone()
-                if not terms or terms[0] != "active" or not terms[1] or terms[2] in ("creator", "starter", "free") or plan_terms_id == "studio-v2" or terms[3] is not True:
-                    raise AlphaError("This plan is not yet available for purchase.", 409)
-                price_id = terms[1]
+            # Pricing v2 permanently closes new legacy acquisition. A rollback may
+            # preserve existing subscriptions and their billing portal, but must never
+            # resurrect the retired $19/$39 checkout path.
+            if not self.billing.pricing_v2_enabled:
+                raise AlphaError("This plan is not yet available for purchase.", 409)
+            price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
+            variant_id, price_id = price["priceVariantId"], price["priceId"]
             cur.execute("SELECT provider_customer_id,status,provider_subscription_id,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
             existing = cur.fetchone()
             if existing and existing[1] in ("active", "past_due", "grace"):

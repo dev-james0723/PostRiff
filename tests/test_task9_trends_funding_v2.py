@@ -42,18 +42,25 @@ class FundingCursor:
     def execute(self, sql, params=None):
         self.store.queries.append((sql, params))
         if '/* trends:funding */' in sql:
+            self.description = [SimpleNamespace(name='plan'), SimpleNamespace(name='credit_policy')]
             self.result = [copy.deepcopy(self.store.terms)] if self.store.terms else []
+        elif sql.startswith('SELECT id FROM public.pr_workspaces'):
+            self.result = [(params[0],)]
+        elif sql.startswith('SELECT status,extract'):
+            self.result = [('active', None, False, None, 'studio-v1')]
+        elif sql.startswith('SELECT plan_terms_id'):
+            self.result = [('studio-v1',)]
         elif '/* trends:beneficiaries */' in sql:
             self.description = [SimpleNamespace(name='workspace_id')]
             self.result = [{'workspace_id': w} for w in self.store.beneficiaries]
         else:
             raise AssertionError('Unexpected funding SQL: ' + sql)
-        if self.store.on_query:
+        if self.store.on_query and '/* trends:funding */' in sql:
             self.store.on_query(sql)
 
     def fetchone(self):
         value = self.result[0] if self.result else None
-        if value is not None and self.store.tuple_rows:
+        if isinstance(value, dict) and self.store.tuple_rows:
             return tuple(value[c.name] for c in self.description)
         return value
 
@@ -69,6 +76,7 @@ class FundingStore:
         self.beneficiaries = [F.WORKSPACE]
         self.on_query = None
         self.tuple_rows = tuple_rows
+        self.hosted = SimpleNamespace(billing=SimpleNamespace(pricing_v2_enabled=True), clock=lambda: 1000)
 
     @contextmanager
     def transaction(self, cursor=None):
@@ -418,7 +426,7 @@ class QueuedModelFunding(F.OfflineTest):
     def harness(self, worker_type, terms=MANAGED, cached=False, change_after_start=False):
         class QueueCursor(FundingCursor):
             def execute(cur, sql, params=None):
-                if '/* trends:' in sql:
+                if '/* trends:' in sql or sql.startswith(('SELECT id FROM public.pr_workspaces', 'SELECT status,extract', 'SELECT plan_terms_id')):
                     return super().execute(sql, params)
                 if "SELECT * FROM pr_trend_jobs WHERE kind=" in sql:
                     cur.result = [copy.deepcopy(cur.store.pending)]
@@ -496,4 +504,3 @@ class QueuedModelFunding(F.OfflineTest):
         worker.jobs.finish_local.assert_called_once()
         worker._model.assert_not_called()
         self.assertFalse(any('/* trends:funding */' in sql for sql, _ in store.queries))
-

@@ -66,11 +66,18 @@ class LegacySaleGate(unittest.TestCase):
         with patch.object(hosted,'throttle'),patch.object(hosted,'audit'):
             with self.assertRaises(AlphaError) as caught:svc.billing_checkout(WORKSPACE,'synthetic-token','studio-v1')
         self.assertEqual(caught.exception.status,409);provider.create_checkout_session.assert_not_called()
-    def test_enabled_pre048_legacy_checkout_still_works(self):
-        svc,cur,provider=self.service(True)
-        with patch.object(hosted,'throttle'),patch.object(hosted,'audit'):
-            self.assertEqual(svc.billing_checkout(WORKSPACE,'synthetic-token','studio-v1'),{'id':'synthetic-session'})
-        provider.create_checkout_session.assert_called_once()
+    def test_pre048_and_rollback_never_reopen_a_new_legacy_sale(self):
+        for stored_flag in (None, True, False):
+            with self.subTest(stored_flag=stored_flag):
+                svc,cur,provider=self.service(stored_flag)
+                with patch.object(hosted,'throttle'),patch.object(hosted,'audit'):
+                    with self.assertRaises(AlphaError) as caught:
+                        svc.billing_checkout(WORKSPACE,'synthetic-token','studio-v1')
+                self.assertEqual(caught.exception.status,409)
+                provider.create_checkout_session.assert_not_called()
+                available=Billing.availability(svc.billing,cur,WORKSPACE)
+                self.assertFalse(available['checkoutAvailable'])
+                self.assertTrue(available['portalAvailable'])
     def test_disabled_new_sale_preserves_existing_customer_portal(self):
         svc,cur,provider=self.service(False)
         result=Billing.availability(svc.billing,cur,WORKSPACE)

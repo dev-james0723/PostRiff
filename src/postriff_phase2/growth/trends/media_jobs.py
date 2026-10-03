@@ -113,7 +113,9 @@ class MediaJobs:
     def __init__(self, hosted, *, store=None, values=None, runtime_factory=media_runtime.MediaRuntime,
                  storage_factory=media_storage.BoundedStorage, clock=utcnow):
         self.hosted = hosted
-        self.store = store or TrendStore(hosted.repository.connection_factory)
+        self.store = store or TrendStore(hosted.repository.connection_factory, hosted=hosted)
+        if getattr(self.store, 'hosted', None) is None:
+            self.store.hosted = hosted
         self.jobs = TrendJobs(self.store)
         self.values, self.runtime_factory, self.clock = values, runtime_factory, clock
         self.storage_factory = storage_factory  # Trusted host-only seam; explicit local test adapters.
@@ -242,7 +244,7 @@ class MediaJobs:
                 if existing['payload'] and (existing['payload']['request'] != request or existing['payload']['fingerprint'] != loaded['fingerprint']):
                     _deny('idempotency_conflict')
                 return {'state': existing['state'], 'job_id':existing['job_id'], 'result_id':result_id, 'replayed':True}
-            credit_admission.require_qualified_entry(cur, workspace_id)
+            credit_admission.require_qualified_entry(cur, workspace_id, store=self.store)
             cur.execute("SELECT count(*) FROM pr_trend_jobs WHERE scope_key=%s AND kind=%s AND state IN ('queued','retry_wait','leased','running')",(scope_key,KIND))
             if cur.fetchone()[0] >= 2: _deny('queue_full')
             self.store.ensure_scope(scope_key,cursor=cur)

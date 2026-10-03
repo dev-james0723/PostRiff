@@ -22,6 +22,19 @@ EVIDENCE_ROOT = Path('/private/tmp/rafii-pricing-v2-recovery-20261002/task13-pri
 PYTHON = '/Users/ouxianxing/Documents/James-Au-Studio-product-growth/.venv-growth/bin/python'
 
 
+def timeout_configuration(*, startup_seconds=120, browser_seconds=1200,
+                          action_seconds=120, navigation_seconds=120):
+    """Finite host scheduling allowances; never disable a deadline or a guard."""
+    for name, value, maximum in [('startup', startup_seconds, 300), ('browser', browser_seconds, 3600),
+                                 ('action', action_seconds, 300), ('navigation', navigation_seconds, 300)]:
+        if type(value) is not int or not 1 <= value <= maximum:
+            raise ValueError(f'{name} timeout must be an integer from 1 to {maximum} seconds.')
+    if browser_seconds < max(action_seconds, navigation_seconds):
+        raise ValueError('Browser deadline must cover each configured operation timeout.')
+    return {'startupSeconds': startup_seconds, 'browserSeconds': browser_seconds,
+            'actionMs': action_seconds * 1000, 'navigationMs': navigation_seconds * 1000}
+
+
 def require_free_http_ports(ports):
     if len(set(ports)) != len(ports) or any(type(p) is not int or not 1024 <= p <= 65535 or p == 55439 for p in ports):
         raise ValueError('Two distinct unprivileged HTTP ports, never parent PG 55439.')
@@ -45,8 +58,17 @@ def main():
     p.add_argument('--next-cli', type=Path, required=True)
     p.add_argument('--playwright-module', type=Path, required=True)
     p.add_argument('--chromium', type=Path, required=True, help='Already cached Chromium, NEVER downloaded')
+    p.add_argument('--startup-timeout-seconds', type=int, default=120, help='Owned authenticated readiness, 1..300s')
+    p.add_argument('--browser-timeout-seconds', type=int, default=1200, help='Whole browser child deadline, 1..3600s')
+    p.add_argument('--action-timeout-seconds', type=int, default=120, help='Browser actions/API/style waits, 1..300s')
+    p.add_argument('--navigation-timeout-seconds', type=int, default=120, help='Actual page load/navigation, 1..300s')
     args = p.parse_args()
     if not args.run_local_synthetic: p.error('Explicit --run-local-synthetic required; this candidate has no approval to run now.')
+    try:
+        timeouts=timeout_configuration(startup_seconds=args.startup_timeout_seconds,
+            browser_seconds=args.browser_timeout_seconds, action_seconds=args.action_timeout_seconds,
+            navigation_seconds=args.navigation_timeout_seconds)
+    except ValueError as error:p.error(str(error))
     root, out = args.repo_root.resolve(), args.evidence_dir.resolve()
     if not out.is_relative_to(EVIDENCE_ROOT) or out == EVIDENCE_ROOT:
         p.error('All logs/browser evidence must stay under the authorized Task13 directory.')
@@ -78,6 +100,7 @@ def main():
                POSTRIFF_CREDIT_PURCHASES_ENABLED='0',POSTRIFF_DEV_WEB_ORIGIN=base,POSTRIFF_API_ORIGIN=api,
                POSTRIFF_DEV_SSR='1',PRICING_V2_FIXTURE_TOKEN=secret,PRICING_V2_WEB_URL=base,
                PRICING_V2_EVIDENCE_DIR=str(out),PLAYWRIGHT_MODULE=str(args.playwright_module),BROWSER_EXECUTABLE=str(args.chromium),
+               PRICING_V2_ACTION_TIMEOUT_MS=str(timeouts['actionMs']),PRICING_V2_NAVIGATION_TIMEOUT_MS=str(timeouts['navigationMs']),
                PRICING_V2_TOURS_FILE=str(root/'web/src/features/onboarding/tours.ts'))
     commands=[('backend',[PYTHON,'-B',str(root/'scripts/postriff_dev_hosted.py'),'--port',str(args.api_port),
                          '--pricing-v2-fixture','--pricing-v2-fixture-database',args.database,
@@ -90,20 +113,20 @@ def main():
             processes.append(subprocess.Popen(cmd,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
         # A newly generated capability proves readiness belongs to OUR fixture.
         # No unauthenticated readiness success is used to adopt a foreign server.
-        deadline=time.monotonic()+45
+        deadline=time.monotonic()+timeouts['startupSeconds']
         while time.monotonic()<deadline:
             if any(c.poll() is not None for c in processes): raise RuntimeError('Owned child exited; inspect raw logs.')
             try:
                 req=urllib.request.Request(base+'/dev/pricing-v2-local-synthetic/snapshot',data=b'{}',method='POST',
                        headers={'Origin':base,'X-Pricing-V2-Fixture':secret,'Content-Type':'application/json'})
-                with urllib.request.urlopen(req,timeout=2) as response:
+                with urllib.request.urlopen(req,timeout=min(2,max(.001,deadline-time.monotonic()))) as response:
                     if json.load(response).get('execution')=='local-synthetic-real-http-pg':break
-            except (OSError,ValueError):time.sleep(.2)
+            except (OSError,ValueError):time.sleep(min(.2,max(0,deadline-time.monotonic())))
         else:raise RuntimeError('Owned authenticated Next -> API readiness failed.')
         with (out/'browser.raw.log').open('w') as log:
             child=subprocess.Popen([str(args.node),str(root/'web/tests/pricing-v2-live-api-browser.cjs')],cwd=root,
                   env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-            processes.append(child);code=child.wait(timeout=600)
+            processes.append(child);code=child.wait(timeout=timeouts['browserSeconds'])
         status='PASS' if code==0 else 'FAIL'
     except Exception as error:
         reason=str(error);code=3
@@ -120,6 +143,7 @@ def main():
              'parentPg':'55439 external; not probed, created, migrated or stopped by runner',
              'nextBuildId':(args.next_app/'.next/BUILD_ID').read_text().strip(),
              'nextRoutesSha256':hashlib.sha256(routes_file.read_bytes()).hexdigest(),
+             'configuredTimeouts':timeouts,
              'stripeTestMode':'NOT_RUN','commands':commands},indent=2)+'\n')
     return code
 

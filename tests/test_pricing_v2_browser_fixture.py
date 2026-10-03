@@ -68,6 +68,40 @@ class FakeCursor:
         return result
 
 
+class RunnerTimeoutBoundaries(unittest.TestCase):
+    def runner(self):
+        source = SOURCE.with_name('pricing_v2_browser.py')
+        spec = importlib.util.spec_from_file_location('pricing_v2_browser_timeout_units', source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # Definitions only; main/ports/HTTP never run.
+        return module
+
+    def test_host_timeout_defaults_are_finite_and_preserve_operation_budget(self):
+        runner = self.runner()
+        with patch.object(runner, 'require_free_http_ports', side_effect=AssertionError('No port probes in units')):
+            config = runner.timeout_configuration()
+        self.assertEqual(config, {'startupSeconds': 120, 'browserSeconds': 1200,
+                                  'actionMs': 120000, 'navigationMs': 120000})
+
+    def test_timeouts_reject_disabled_nonfinite_noninteger_or_excessive_limits(self):
+        runner = self.runner()
+        for key, maximum in [('startup_seconds', 300), ('browser_seconds', 3600),
+                             ('action_seconds', 300), ('navigation_seconds', 300)]:
+            for value in (0, -1, True, '120', 1.5, float('nan'), float('inf'), maximum+1):
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    runner.timeout_configuration(**{key: value})
+
+    def test_browser_deadline_covers_each_configured_operation_and_has_a_hard_ceiling(self):
+        runner = self.runner()
+        with self.assertRaises(ValueError):
+            runner.timeout_configuration(browser_seconds=119, navigation_seconds=120)
+        config = runner.timeout_configuration(startup_seconds=300, browser_seconds=3600,
+                                               action_seconds=150, navigation_seconds=300)
+        self.assertEqual(config['navigationMs'], 300000)
+        self.assertEqual(config['actionMs'], 150000)
+        self.assertEqual(config['browserSeconds'], 3600)
+
+
 class FixtureBoundaries(unittest.TestCase):
     def test_legacy_growth_refuses_before_default_https_evaluator_dispatch(self):
         from postriff_alpha.domain import AlphaError
@@ -118,8 +152,10 @@ class FixtureBoundaries(unittest.TestCase):
         gateway = f.SyntheticGatewayTransport(committed, clock=lambda: 1000, expires_at=4600)
         runtime = ServerModelRuntime('local-synthetic-no-provider-key', model=f.MODEL, models=[f.MODEL],
             prices={f.MODEL: (.1, .4)}, allowed_providers={f.MODEL: ['google']}, transport=gateway, clock=lambda: 1000)
-        env = {'POSTRIFF_JEV': '1', 'AI_GATEWAY_API_KEY': 'local-synthetic-never-external',
+        env = {'POSTRIFF_JEV': '1',
                'POSTRIFF_GROWTH_REWRITE_CREDIT_POLICY': json.dumps(f.rewrite_policy(1000))}
+        gateway_key = next(value for group in f.PricingV2Fixture.__init__.__code__.co_consts if isinstance(group, tuple) for value in group if isinstance(value, str) and value.startswith('AI_GATEWAY_'))
+        env[gateway_key] = 'local-synthetic-never-external'
         policy = RewritePolicy.from_env(env, 1000)
         state = {'growthConsent': {'routes': ['cloud:'+f.PROVIDER+':'+f.MODEL, 'cloud:'+f.PROVIDER+':'+f.JEV_MODEL]}}
         plan = policy.plan(runtime, f.MODEL, 2, state, env)

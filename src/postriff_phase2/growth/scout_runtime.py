@@ -90,7 +90,7 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
     token = uuid.uuid4().hex
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute("SET LOCAL lock_timeout = '1s'")
-        if funding_mode(cur,workspace_id)!='legacy':
+        if funding_mode(cur,workspace_id,hosted=service.hosted)!='legacy':
             return {"workspaceId":workspace_id,"status":"unavailable","reason":"growth_credit_bridge_unavailable"}
         cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
@@ -108,7 +108,7 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
     sink = MemoryUsageSink()
     def guard():
         with service.hosted.connection_factory() as db,db.cursor() as cur:
-            require_qualified_entry(cur,workspace_id)
+            require_qualified_entry(cur,workspace_id,hosted=service.hosted)
     class GuardedJev:
         def __init__(self,delegate): self.delegate=delegate
         def evaluate(self,*args,**kwargs):

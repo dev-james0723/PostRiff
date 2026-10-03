@@ -9,6 +9,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+function boundedTimeoutMs(name) {
+  const value=Number(process.env[name] ?? 120000);
+  assert.ok(Number.isInteger(value)&&value>=1000&&value<=300000,`${name}: finite 1000..300000ms required`);
+  return value;
+}
+const ACTION_TIMEOUT_MS=boundedTimeoutMs('PRICING_V2_ACTION_TIMEOUT_MS');
+const NAVIGATION_TIMEOUT_MS=boundedTimeoutMs('PRICING_V2_NAVIGATION_TIMEOUT_MS');
 const MODEL = 'google/gemini-2.5-flash-lite';
 const scenarios = ['free-new','creator-49','creator-59','creator-79','creator-held',
   'creator-pending','creator-settled','creator-over-max','creator-failed',
@@ -37,12 +44,12 @@ async function parsed(response, status=200) {
 }
 async function control(request, action, data={}) {
   return parsed(await request.post(base + '/dev/pricing-v2-local-synthetic/' + action,
-    { headers: { Origin: base, 'X-Pricing-V2-Fixture': secret }, data }));
+    { headers: { Origin: base, 'X-Pricing-V2-Fixture': secret }, data, timeout:ACTION_TIMEOUT_MS }));
 }
 function api(request, principal) {
   return async (method, endpoint, data, status=200) => {
     assert.ok(endpoint.startsWith('/api/') && !endpoint.includes('://'), 'Fixed local customer API path');
-    const response = await request.fetch(base + endpoint, { method, maxRedirects: 0,
+    const response = await request.fetch(base + endpoint, { method, maxRedirects: 0, timeout:ACTION_TIMEOUT_MS,
       headers: { Authorization: 'Bearer dev:' + principal, Origin: base, 'X-PostRiff-Request': 'founder-alpha' },
       ...(data === undefined ? {} : { data }) });
     traffic.push({ method, path: endpoint.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/g,'<workspace>'), status: response.status(), channel: 'real-http' });
@@ -52,6 +59,8 @@ function api(request, principal) {
 async function contextFor(row, width, motion, member=false) {
   const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: motion,
     serviceWorkers: 'block' });
+  context.setDefaultTimeout(ACTION_TIMEOUT_MS);
+  context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
   const external = [], errors = [];
   // Egress guard only; same-origin requests ALWAYS continue to the real server.
   // APIRequestContext uses fixed same-origin URLs separately (no generic URL input).
@@ -75,7 +84,7 @@ async function contextFor(row, width, motion, member=false) {
       localStorage.setItem('postriff-onboarding',s);localStorage.setItem('postriff-onboarding:'+principal,s);
     }, {principal,tours});
   }
-  const page = await context.newPage(); page.setDefaultTimeout(25000);
+  const page = await context.newPage();
   page.on('pageerror', e=>errors.push(e.message));
   page.on('console', m=>{if(m.type()==='error') errors.push(m.text());});
   page.on('response', r=>{
@@ -87,7 +96,7 @@ async function contextFor(row, width, motion, member=false) {
 async function visual(scene, url, label, width, motion) {
   const {page}=scene;
   await page.goto(base+url); await page.locator('main').first().waitFor();
-  await page.evaluate(()=>document.fonts.ready);
+  await page.waitForFunction(()=>document.fonts.status==='loaded',null,{timeout:ACTION_TIMEOUT_MS});
   const main=page.locator('main').first();
   assert.ok((await main.innerText()).trim().length>0, 'Actual product content must be present');
   // Wait for source-defined data surfaces rather than a sleep or a static fixture.
@@ -112,7 +121,7 @@ async function publicScene(width,motion) {
     assert.match(text,/\$59|US\$59|USD 59/);assert.match(text,/3,500|3500/);
     assert.doesNotMatch(text,/\$(19|39)(?:\D|$)/,'No legacy new-sale prices');
     for(const name of ['Starter','Studio']) assert.equal(await main.getByRole('heading',{name,exact:true}).count(),0);
-    const catalog=await parsed(await scene.context.request.get(base+'/api/plans'));
+    const catalog=await parsed(await scene.context.request.get(base+'/api/plans',{timeout:ACTION_TIMEOUT_MS}));
     assert.equal(catalog.pricing,'v2');assert.deepEqual(catalog.plans.map(p=>p.plan).sort(),['creator','free']);
     const creator=catalog.plans.find(p=>p.plan==='creator');
     assert.equal(creator.priceCents,5900);assert.equal(creator.entitlements.monthlyCredits,3500);
@@ -123,6 +132,98 @@ async function publicScene(width,motion) {
     assert.doesNotMatch(JSON.stringify(structured),/studio-v1|assist-v1|price_local_synthetic/);
     pass(`public ${width} ${motion}: Free + Creator $59 / 3500, inactive checkout, no overflow/errors`);
   } finally {await scene.context.close();}
+}
+
+// Runs in the real page, as both a bounded RAF wait predicate and evidence read.
+// Reads styles/animations only: no style injection, cancelled animation or sleep.
+function mobileMenuSnapshot(requireSettled=false) {
+  const popup=document.querySelector('[data-slot="sheet-content"]');
+  const backdrop=document.querySelector('[data-slot="sheet-overlay"]');
+  if(!popup||!backdrop) return requireSettled?false:{settled:false,popup:null,backdrop:null};
+  const viewport={width:innerWidth,height:innerHeight,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches};
+  function inspect(element) {
+    const style=getComputedStyle(element),r=element.getBoundingClientRect();
+    const rect={left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};
+    const transform=new DOMMatrixReadOnly(style.transform==='none'?undefined:style.transform);
+    const translation={x:transform.m41,y:transform.m42,z:transform.m43};
+    const translateZero=style.translate==='none'||style.translate.split(/\s+/).every(v=>/^-?0(?:\.0+)?(?:px|%)?$/.test(v));
+    const animations=element.getAnimations().map(a=>({playState:a.playState,
+      endTime:Number.isFinite(a.effect?.getComputedTiming().endTime)?a.effect.getComputedTiming().endTime:'nonfinite'}));
+    return {rect,opacity:style.opacity,filter:style.filter,translate:style.translate,translation,translateZero,
+      transform:style.transform,display:style.display,visibility:style.visibility,pointerEvents:style.pointerEvents,
+      backgroundColor:style.backgroundColor,backdropFilter:style.backdropFilter,zIndex:style.zIndex,
+      transitionDuration:style.transitionDuration,animations,
+      starting:element.hasAttribute('data-starting-style'),ending:element.hasAttribute('data-ending-style'),
+      inViewport:r.width>0&&r.height>0&&r.left>=-1&&r.top>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1};
+  }
+  const p=inspect(popup),b=inspect(backdrop);
+  const links=[...popup.querySelectorAll('a')].map(a=>({text:a.innerText.trim(),href:a.getAttribute('href'),...inspect(a)}));
+  const point={x:p.rect.left/2,y:innerHeight/2};
+  const hit=document.elementFromPoint(point.x,point.y);
+  const pointHitsBackdrop=point.x>0&&(hit===backdrop||backdrop.contains(hit));
+  const stopped=e=>!e.starting&&!e.ending&&e.animations.every(a=>a.endTime!=='nonfinite'&&['finished','idle'].includes(a.playState));
+  const visible=e=>e.display!=='none'&&e.visibility==='visible'&&Number(e.opacity)===1;
+  const zero=e=>e.translateZero&&Object.values(e.translation).every(v=>Math.abs(v)<=.001);
+  const settled=stopped(p)&&stopped(b)&&visible(p)&&visible(b)&&p.filter==='none'&&zero(p)&&p.inViewport&&
+    b.rect.left<=1&&b.rect.top<=1&&b.rect.right>=innerWidth-1&&b.rect.bottom>=innerHeight-1&&
+    b.pointerEvents!=='none'&&pointHitsBackdrop&&links.length===6&&links.every(a=>visible(a)&&a.inViewport);
+  const snapshot={settled,viewport,popup:{role:popup.getAttribute('role'),...p},backdrop:b,links,
+    backdropPoint:point,pointHitsBackdrop,scrollWidth:document.documentElement.scrollWidth};
+  return requireSettled?settled:snapshot;
+}
+
+async function mobileNavigation320(motion) {
+  const scene=await contextFor(null,320,motion),{page}=scene;
+  const evidence={width:320,motion,execution:'real-browser-public-navigation',states:[]};
+  const prefix=`public-navigation-320-${motion}`;
+  async function openAndSettle(label) {
+    await page.getByRole('button',{name:'Open menu',exact:true}).click();
+    const initial=await page.evaluate(mobileMenuSnapshot,false),started=Date.now();
+    const ready=await page.waitForFunction(mobileMenuSnapshot,true,{polling:'raf',timeout:ACTION_TIMEOUT_MS});
+    await ready.dispose();
+    const settled=await page.evaluate(mobileMenuSnapshot,false);
+    assert.equal(settled.settled,true);assert.equal(settled.popup.role,'dialog');
+    assert.equal(settled.viewport.width,320);assert.equal(settled.viewport.reducedMotion,motion==='reduce');
+    assert.equal(Number(settled.popup.opacity),1);assert.equal(settled.popup.filter,'none');
+    assert.equal(settled.popup.translateZero,true);assert.equal(settled.popup.inViewport,true);
+    if(motion==='no-preference') assert.ok(settled.popup.transitionDuration.split(',').some(v=>parseFloat(v)>0),
+      'Normal sheet motion remains enabled; wait for its actual settled state');
+    assert.ok(settled.scrollWidth<=321);assert.equal(settled.pointHitsBackdrop,true);
+    assert.notEqual(settled.backdrop.backgroundColor,'rgba(0, 0, 0, 0)');
+    assert.notEqual(settled.backdrop.backgroundColor,'transparent');
+    assert.deepEqual(settled.links.map(l=>({text:l.text,href:l.href})),[
+      {text:'Product',href:'/#how-it-works'},{text:'Channels',href:'/channels'},
+      {text:'Pricing',href:'/pricing'},{text:'Docs',href:'/docs'},
+      {text:'Sign in',href:'/auth/sign-in'},{text:'Start free',href:'/auth/sign-up'}
+    ]);
+    evidence.states.push({label,elapsedMs:Date.now()-started,initial,settled});
+    await page.screenshot({path:path.join(out,`${prefix}-${label}.png`),fullPage:false});
+    return settled;
+  }
+  try {
+    await visual(scene,'/','public-home-320',320,motion);
+    await openAndSettle('open-before-link');
+    await page.locator('[data-slot="sheet-content"]').getByRole('link',{name:'Pricing',exact:true}).click();
+    await page.waitForURL(base+'/pricing',{timeout:NAVIGATION_TIMEOUT_MS});
+    await page.locator('[data-slot="sheet-content"]').waitFor({state:'hidden'});
+    await page.locator('[data-slot="sheet-overlay"]').waitFor({state:'hidden'});
+    const reopened=await openAndSettle('open-before-backdrop');
+    await page.mouse.click(reopened.backdropPoint.x,reopened.backdropPoint.y);
+    await page.locator('[data-slot="sheet-content"]').waitFor({state:'hidden'});
+    await page.locator('[data-slot="sheet-overlay"]').waitFor({state:'hidden'});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=321));
+    evidence.linkDestination=page.url();evidence.linkClosedPopup=true;evidence.backdropClosedPopup=true;
+    await page.screenshot({path:path.join(out,`${prefix}-closed-after-backdrop.png`),fullPage:false});
+    assert.deepEqual(scene.external,[]);assert.deepEqual(scene.errors,[]);
+    pass(`Q-M1 320 ${motion}: actual settled popup styles, viewport, six links, navigation and backdrop dismissal`);
+  } catch(error) {
+    evidence.failure=String(error.stack);
+    evidence.failureState=await page.evaluate(mobileMenuSnapshot,false).catch(()=>null);
+    throw error;
+  } finally {
+    fs.writeFileSync(path.join(out,`${prefix}.json`),JSON.stringify(evidence,null,2)+'\n');
+    await scene.context.close();
+  }
 }
 async function billingScene(row,width,motion,member=false,work=false) {
   const scene=await contextFor(row,width,motion,member);
@@ -232,9 +333,9 @@ async function contracts(request, rows) {
   await api(request,other.principal)('GET',ws+'/usage',undefined,404);
   await api(request,other.memberPrincipal)('POST','/api/workspaces/'+other.workspaceId+'/billing/checkout',{planTermsId:'creator-v1'},403);
   const signing=await control(request,'webhook-replay',{scenario:'creator-59'});
-  const unsigned=await request.post(base+'/api/billing/webhook',{headers:{'Stripe-Signature':'t=1,v1=bad'},data:signing.body});
+  const unsigned=await request.post(base+'/api/billing/webhook',{headers:{'Stripe-Signature':'t=1,v1=bad'},data:signing.body,timeout:ACTION_TIMEOUT_MS});
   assert.equal(unsigned.status(),400);
-  const webhook=await request.post(base+'/api/billing/webhook',{headers:{'Content-Type':'application/json','Stripe-Signature':signing.signature},data:signing.body});
+  const webhook=await request.post(base+'/api/billing/webhook',{headers:{'Content-Type':'application/json','Stripe-Signature':signing.signature},data:signing.body,timeout:ACTION_TIMEOUT_MS});
   assert.equal(webhook.status(),200,await webhook.text());
   const before=await control(request,'snapshot');
   for(const scene of before.scenes) {
@@ -325,7 +426,7 @@ async function writerAndGrowth(request,rows) {
   const checked=await freeAPI('POST',fw+'/growth/check',input);assert.equal(checked.userCreditsCharged,0);
   const once=(await control(request,'snapshot')).syntheticModelAttempts.length;
   await freeAPI('POST',fw+'/growth/check',input);assert.equal((await control(request,'snapshot')).syntheticModelAttempts.length,once);
-  const second=await request.post(base+fw+'/growth/check',{headers:{Authorization:'Bearer dev:'+free.principal,Origin:base,'X-PostRiff-Request':'founder-alpha'},data:{...input,requestKey:randomUUID()}});
+  const second=await request.post(base+fw+'/growth/check',{headers:{Authorization:'Bearer dev:'+free.principal,Origin:base,'X-PostRiff-Request':'founder-alpha'},data:{...input,requestKey:randomUUID()},timeout:ACTION_TIMEOUT_MS});
   assert.equal(second.status(),402,await second.text());
   assert.equal((await control(request,'snapshot')).syntheticModelAttempts.length,once);
   const csv='text,platform,language,post_id,published_at\n'+Array.from({length:20},(_,i)=>`Own idea ${i}.,Threads,en,synthetic-${i},2026-09-${String(i+1).padStart(2,'0')}\n`).join('');
@@ -334,7 +435,7 @@ async function writerAndGrowth(request,rows) {
   assert.equal(genome.genome.postCount,20);assert.equal(genome.userCreditsCharged,0);
   const genomeOnce=(await control(request,'snapshot')).syntheticModelAttempts.length;
   await freeAPI('POST',fw+'/growth/history',genomeInput);assert.equal((await control(request,'snapshot')).syntheticModelAttempts.length,genomeOnce);
-  const genomeAgain=await request.post(base+fw+'/growth/history',{headers:{Authorization:'Bearer dev:'+free.principal,Origin:base,'X-PostRiff-Request':'founder-alpha'},data:{...genomeInput,requestKey:randomUUID()}});
+  const genomeAgain=await request.post(base+fw+'/growth/history',{headers:{Authorization:'Bearer dev:'+free.principal,Origin:base,'X-PostRiff-Request':'founder-alpha'},data:{...genomeInput,requestKey:randomUUID()},timeout:ACTION_TIMEOUT_MS});
   assert.equal(genomeAgain.status(),402,await genomeAgain.text());
   assert.equal((await control(request,'snapshot')).syntheticModelAttempts.length,genomeOnce);
   const state=await control(request,'snapshot');assert.equal(state.scenes.find(r=>r.workspaceId===free.workspaceId).wallet.availableMilliCredits,0);
@@ -343,9 +444,10 @@ async function writerAndGrowth(request,rows) {
 }
 async function main() {
   fs.mkdirSync(out,{recursive:true});
-  browser=await chromium.launch({headless:true,executablePath:cached});
+  browser=await chromium.launch({headless:true,executablePath:cached,timeout:NAVIGATION_TIMEOUT_MS});
   const setup=await browser.newContext();
   try {
+    for(const motion of ['no-preference','reduce']) await mobileNavigation320(motion);
     const rows=[];
     for(const scenario of scenarios) rows.push(await control(setup.request,'bootstrap',{scenario}));
     assert.ok(rows.every(r=>r.execution==='local-synthetic-real-http-pg'&&r.stripeTestMode==='NOT_RUN'));
@@ -370,6 +472,7 @@ async function main() {
   finally {
     await setup.close();await browser.close();
     const receipts={execution:'local-synthetic-real-http-pg',customerApiMocks:false,stripeTestMode:'NOT_RUN',
+      configuredTimeouts:{actionMs:ACTION_TIMEOUT_MS,navigationMs:NAVIGATION_TIMEOUT_MS},
       status:failures.length?'FAIL':'PASS',results,failures,traffic};
     fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify(receipts,null,2)+'\n');
     const files=fs.readdirSync(out).filter(f=>fs.statSync(path.join(out,f)).isFile());
