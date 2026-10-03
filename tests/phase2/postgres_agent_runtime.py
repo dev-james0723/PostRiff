@@ -36,7 +36,7 @@ from PIL import Image  # noqa: E402
 from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from postriff_phase2.hosted_storage import PrivateAssetService  # noqa: E402
-from postriff_phase2.agent_runtime_v2 import approvals, config, contracts, creative, live, service as runtime_service  # noqa: E402
+from postriff_phase2.agent_runtime_v2 import approvals, config, contracts, creative, live, service as runtime_service, thinking_state  # noqa: E402
 from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService  # noqa: E402
 from consumer_fixtures import approve_budgets  # noqa: E402
 
@@ -255,7 +255,7 @@ PROVIDER = ProviderLog()
 LIVE = LiveEndpoint()
 FAKE_PROJECT_KEY = "-".join(["fake", "project", "credential", "for", "tests"])  # never a real key; the Live endpoint here is a stand-in
 ENV = {"OPENAI_API_KEY": FAKE_PROJECT_KEY, "RAFII_AGENT_V2_ENABLED": "1", "RAFII_VOICE_ENABLED": "1", "RAFII_IMAGE_AGENT_ENABLED": "1",
-       "RAFII_SPECIALISTS_ENABLED": "1"}
+       "RAFII_SPECIALISTS_ENABLED": "1", "RAFII_AGENT_THINKING_STATES_ENABLED": "1"}
 CFG = config.RuntimeConfig.from_environment(ENV)
 runtime = AgentRuntimeService(service, CFG, model_factory=SCRIPTS.factory, image_studio=creative.ImageStudio(CFG, transport=PROVIDER),
                               vision=creative.VisionAnalyzer(CFG, transport=PROVIDER), live_transport=LIVE, clock=lambda: clock[0])
@@ -341,6 +341,34 @@ def _():
     return {"actual": body["answerText"], "speakable": body["speakableSummary"], "tools": body["toolActivity"]}
 
 
+@scenario("THINK02", "Real Manager + two specialists emits solving/searching/weaving from application-owned runtime phases",
+          "Compare campaign evidence with Brand Brain", "working at open; specialist retrieval; weaving only when Manager recombines two evidence channels")
+def _():
+    with connection() as db:
+        conversation = str(db.execute(
+            "INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id",
+            (wid, ONE, "ThinkingOps synthesis"),
+        ).fetchone()[0])
+    SCRIPTS.set(
+        rafii_manager=[
+            [function_call("ask_campaign", {"input": "Check campaign coverage."}, call_id="tm1"),
+             function_call("ask_brand_intelligence", {"input": "Check the stored brand summary."}, call_id="tm2")],
+            [reply("I combined the campaign and brand evidence.")],
+        ],
+        campaign=[[function_call("campaign_list", {}, call_id="tc1")], [assistant_message("Campaign evidence checked.")]],
+        brand_intelligence=[[function_call("brand_summary", {}, call_id="tb1")], [assistant_message("Brand evidence checked.")]],
+    )
+    result = turn("Compare campaign evidence with Brand Brain", conversationId=conversation)
+    SCRIPTS.complete()
+    observed = runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)
+    semantic = [e for e in observed["events"] if e.get("thinkingOp")]
+    ops = [e["thinkingOp"] for e in semantic]
+    assert ops[0] == "working" and "solving" in ops and "searching" in ops and "weaving" in ops, semantic
+    assert semantic[-1]["thinkingOp"] == "weaving", semantic
+    assert all(set(e) <= {"id", "seq", "type", "at", "stage", "thinkingOp", "thinkingSource", "reasonCode"} for e in semantic), semantic
+    return {"actual": ops, "events": len(semantic)}
+
+
 @scenario("VS03", "Attach a reference image during voice; the backend vision model reads it (MM01, MM02)", "(uploads image) What do you think of this reference?",
           "image stored privately, recorded on the conversation as image 1; vision runs on the backend; findings returned; GPT-Live never gets pixels")
 def _():
@@ -360,6 +388,8 @@ def _():
     assert image_part["type"] == "input_image" and image_part["image_url"].startswith("data:image/")
     assert not any("live" in c["url"] for c in PROVIDER.calls), "no image goes to the Live front-end"
     assert body["toolActivity"][0]["tool"] == "image_analyze" and body["toolActivity"][0]["status"] == "verified"
+    semantic = [e["thinkingOp"] for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert "shaping" in semantic, semantic
     generations = one("SELECT artifact->'trace'->'generations' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert any(g.get("agent") == "vision" and g.get("model") == "gpt-6-sol" and g.get("inputTokens") == 900 for g in generations), generations
     return {"actual": body["answerText"], "visionModel": vision_calls[-1]["body"]["model"]}
@@ -460,6 +490,9 @@ def _():
     assert ("image_generation", "reserve", "estimated") in [(r[0], r[1], r[2]) for r in ledger] or ledger, ledger
     specialists = {a.get("specialist") for a in body["toolActivity"]}
     assert {"creative", "content", "campaign"} <= specialists, specialists
+    semantic = [e["thinkingOp"] for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert {"working", "solving", "shaping", "composing", "acting", "weaving"} <= set(semantic), semantic
+    assert len(semantic) <= 32, semantic
     STATE["task"] = body["task"]["taskId"]
     return {"actual": body["answerText"], "steps": {k: (v["state"], v.get("reason")) for k, v in steps.items()}, "asset": STATE["asset"], "draft": STATE["draft"]}
 
@@ -492,6 +525,8 @@ def _():
     assert audit
     approval = one("SELECT artifact->'trace'->'approval' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert approval["decision"] == "apply" and approval["verified"] is True and approval["via"] == "voice" and approval["waitSeconds"] >= 0, approval
+    semantic = [e for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert any(e["thinkingOp"] == "acting" and e["reasonCode"] == "approval_apply" for e in semantic), semantic
     task = runtime_service.task_view(runtime, wid, OWNER, STATE["task"])
     return {"actual": body["answerText"], "review": reviews[0]["id"], "taskSteps": [(s["label"], s["state"]) for s in task["task"]["steps"]]}
 
@@ -550,6 +585,8 @@ def _():
     before = service.get(wid, OWNER)["revision"]
     result = turn("yes", conversationId=conversation, modality="voice")
     body = result["result"]
+    semantic = rows("SELECT e.body FROM public.pr_agent_events e JOIN public.pr_agent_runs r ON r.id=e.run_id WHERE r.conversation_id::text=%s AND e.body ? 'thinkingOp'", conversation)
+    assert not any(row[0].get("thinkingOp") == "acting" for row in semantic), semantic
     assert "Which one" in body["answerText"] or "several" in body["answerText"], body["answerText"]
     assert service.get(wid, OWNER)["revision"] == before
     STATE["two_conversation"] = conversation
@@ -1191,6 +1228,24 @@ def running_run(conversation, key_prefix="agent:", actor=ONE, text=None, modalit
     return run
 
 
+@scenario("THINK01", "Semantic ThinkingOps use the existing scoped run-event store", "active-run + events",
+          "latest active run only; fixed enum event; metadata-only response; another workspace cannot read either")
+def _():
+    conversation = fresh_conversation("ThinkingOps isolation")
+    run_id = running_run(conversation)
+    runtime._emit_thinking(wid, OWNER, run_id, thinking_state.event("searching", "tool", "web_research"))
+    active = runtime_service.active_run(runtime, wid, OWNER, conversation)
+    observed = runtime_service.run_events(runtime, wid, OWNER, run_id, 0)
+    semantic = [e for e in observed["events"] if e.get("thinkingOp")]
+    assert active and active["runId"] == run_id and active["status"] == "running", active
+    assert set(observed) == {"runId", "conversationId", "status", "events", "cursor"}, observed.keys()
+    assert semantic and semantic[-1]["thinkingOp"] == "searching" and semantic[-1]["reasonCode"] == "web_research", semantic
+    denied(lambda: runtime_service.active_run(runtime, other, OTHER, conversation), 404)
+    denied(lambda: runtime_service.run_events(runtime, other, OTHER, run_id, 0), 404)
+    runtime.cancel(wid, OWNER, run_id)
+    return {"actual": {"active": active["status"], "op": semantic[-1]["thinkingOp"], "eventCount": len(semantic), "crossWorkspace": "refused"}}
+
+
 @scenario("R08b", "After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)", "yes",
           "the paused answer names the proposal; the yes binds (no endless restating); applied through the site path; the stored run is consumed; the Manager finishes")
 def _():
@@ -1206,6 +1261,8 @@ def _():
     task = one("SELECT artifact FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%' ORDER BY created_at DESC LIMIT 1", conversation)[0]
     assert "pendingRun" not in task, "the paused run was consumed"
     assert result["result"]["composedBy"] == "manager" and "waits for its own approval" in result["result"]["answerText"], (result["result"]["composedBy"], result["result"]["answerText"])
+    acting = rows("SELECT e.body FROM public.pr_agent_events e JOIN public.pr_agent_runs r ON r.id=e.run_id WHERE r.conversation_id::text=%s AND e.body->>'thinkingOp'='acting'", conversation)
+    assert acting and acting[-1][0]["reasonCode"] == "approval_apply", acting
     status = [p["status"] for (b,) in rows("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='assistant'", conversation)
               for p in (b.get("siteAgent") or {}).get("proposals") or [] if p["id"] == pending["proposalId"]]
     assert status == ["applied"], status

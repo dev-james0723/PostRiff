@@ -1,3 +1,5 @@
+import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
+
 /**
  * Contract with `/api/workspaces/{id}/agent/*` (Rafii Agent Runtime, docs/design/site-agent/agent-runtime/ARCHITECTURE_LOCK.md).
  * The turn result is surface-neutral: the panel renders `blocks` (site-agent block types), Voice Mode speaks
@@ -88,6 +90,33 @@ export interface AgentResult {
   blocks: SiteAgentBlock[];
   composedBy: 'manager' | 'deterministic' | 'site_agent' | 'grounded';
   language?: string | null;
+}
+
+export interface AgentActiveRun {
+  runId: string;
+  status: string;
+  startedAt: number;
+}
+
+export interface AgentRuntimeEvent {
+  id: string;
+  seq: number;
+  type: string;
+  at: number;
+  stage?: string;
+  thinkingOp?: ThinkingOp;
+  thinkingSource?: 'run' | 'model' | 'specialist' | 'tool' | 'voice' | 'client';
+  reasonCode?: string;
+  text?: string;
+  message?: string;
+}
+
+export interface AgentRunEvents {
+  runId: string;
+  conversationId: string;
+  status: string;
+  events: AgentRuntimeEvent[];
+  cursor: number;
 }
 
 export interface AgentTurnResponse {
