@@ -934,23 +934,23 @@ class AgentRuntimeService:
 
     def _reap_stale_turns(self, cur, workspace_id):
         """A turn whose function was killed never finalised. The writing-recovery cron leaves the runtime's rows alone, so the
-        runtime closes its own dead turns here: each is failed, the person sees why, and its reservations are booked at the
-        reserved amount (the calls it made are unknown; never free, and never held forever)."""
-        # A turn cancelled after its function died never settled either: its open reservations are booked the same way.
+        runtime closes its own dead turns here: each is failed and the person sees why. Unobserved provider usage remains
+        unknown, with the reservation held until reconciliation; an estimate is never recorded as actual spend."""
+        # Cancellation cannot prove what a killed function spent, so retain the same unknown cost hold.
         cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r JOIN public.pr_agent_runs a ON a.id=r.run_id "
                     "WHERE r.workspace_id=%s AND a.idempotency_key LIKE 'agent:%%' AND a.status='cancelled' AND a.updated_at<now()-make_interval(secs=>%s) AND r.kind='reserve' "
                     "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release')) LIMIT 20",
                     (workspace_id, STALE_TURN_SECONDS))
-        for reservation_id, estimate in cur.fetchall():
-            self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
+        for reservation_id, _estimate in cur.fetchall():
+            self.service.ledger.settle(cur, workspace_id, reservation_id, "unknown", None)
         cur.execute("SELECT id::text,conversation_id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'agent:%%' AND status='running' "
                     "AND updated_at<now()-make_interval(secs=>%s) ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED", (workspace_id, STALE_TURN_SECONDS))
         for run_id, conversation_id in cur.fetchall():
             cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.run_id::text=%s AND r.kind='reserve' "
                         "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release'))",
                         (workspace_id, run_id))
-            for reservation_id, estimate in cur.fetchall():
-                self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
+            for reservation_id, _estimate in cur.fetchall():
+                self.service.ledger.settle(cur, workspace_id, reservation_id, "unknown", None)
             answer = "This request stopped before it finished (the server ran out of time). Anything already finished stays as it is; please ask again."
             result = contracts.empty_result(contracts.new_trace_id(), "text")
             result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic",
@@ -958,7 +958,7 @@ class AgentRuntimeService:
             from ..site_agent import contracts as site_contracts
             self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "turn_stalled")], [], [],
                           trace={"traceId": result["traceId"], "composedBy": "deterministic", "fallback": "turn_stalled"}, status="failed",
-                          usage={"provenance": "deterministic", "billing": "reservation booked: the turn never finished"})
+                          usage={"provenance": "deterministic", "billing": "provider cost unknown: reservation retained until reconciliation"})
 
     # --- SDK human-in-the-loop resume (ADR-H1) ---------------------------------------------------------------------------
     def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None):

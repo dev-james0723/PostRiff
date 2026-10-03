@@ -1265,8 +1265,8 @@ def _():
     return {"actual": {"billedSeconds": ended["usageSeconds"], "usdMicro": settled[1]}}
 
 
-@scenario("R17", "The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation",
-          "(cron) recover stalled runs → (next turn) reap", "an old writing run is recovered; task, voice and agent rows are not; the next turn fails the dead agent turn with a message and settles its reservation")
+@scenario("R17", "The runtime closes its dead turn while retaining the unknown provider cost and reserved budget",
+          "(cron) recover stalled runs → (next turn) reap", "an old writing run is recovered; task and voice rows are not; the dead agent fails with a message and an unknown cost hold")
 def _():
     conversation = fresh_conversation("stalled rows")
     writer = running_run(conversation, key_prefix="ideas:", stale=True)
@@ -1281,16 +1281,51 @@ def _():
     statuses = {name: one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", run)[0] for name, run in
                 (("writer", writer), ("task", task), ("agent", dead), ("voice", session["voiceSessionId"]))}
     assert statuses == {"writer": "failed", "task": "running", "agent": "running", "voice": "running"}, statuses
+    budgets_before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
     SCRIPTS.set(rafii_manager=[[reply("Here you go.")]])
     turn("What is on this week?", conversationId=conversation)
     after = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", dead)[0]
     note = one("SELECT body->>'text' FROM public.pr_messages WHERE run_id::text=%s AND role='assistant'", dead)[0]
     settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind='settle'", wid, reservation["reservationId"])
+    budgets_after = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    assert after == "failed" and "stopped before it finished" in note and settled == ("estimated_unknown", None), (after, note, settled)
+    assert budgets_after == budgets_before, "an unobserved cost must not release the hold or become actual spend"
+    with service.repository.transaction(OWNER, wid) as (cur, _row, _principal):
+        runtime._reap_stale_turns(cur, wid)
+    assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind='settle'", wid, reservation["reservationId"])[0] == 1
     voice.end(wid, OWNER, session["voiceSessionId"], {"usageSeconds": 1, "reason": "user_ended"})
     with connection() as db:
         db.execute("UPDATE public.pr_agent_runs SET status='completed' WHERE id=%s", (task,))
-    assert after == "failed" and "stopped before it finished" in note and settled == ("actual", 50_000), (after, note, settled)
     return {"actual": {"cron": statuses, "reaped": after, "settled": settled[0]}}
+
+
+@scenario("R17-cancelled", "Dead cancelled turns retain unknown cost; known settlements and fresh runs stay unchanged",
+          "(cleanup after a cancelled function died)", "unknown hold deduplicated with original attribution; no fabricated actual cost or active-run cancellation")
+def _():
+    conversation = fresh_conversation("cancelled unknown cost")
+    dead = running_run(conversation, stale=True)
+    known = running_run(conversation, stale=True)
+    fresh = running_run(conversation)
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='cancelled',updated_at=to_timestamp(%s) WHERE id=ANY(%s::uuid[])", (clock[0] - 3600, [dead, known]))
+        cur = db.cursor()
+        meta = {"via": "test_cancelled"}
+        hold = service.ledger.reserve(cur, wid, ONE, "text_model", 50_000, "agent:" + dead, charge_batch=False, provider="openai", model="gpt-6-sol", run_id=dead, meta=meta)
+        settled = service.ledger.reserve(cur, wid, ONE, "text_model", 50_000, "agent:" + known, charge_batch=False, provider="openai", model="gpt-6-sol", run_id=known, meta=meta)
+        service.ledger.settle(cur, wid, settled["reservationId"], "completed", 12_345)
+    before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    for _repeat in range(2):
+        with service.repository.transaction(OWNER, wid) as (cur, _row, _principal):
+            runtime._reap_stale_turns(cur, wid)
+    unknown = one("SELECT cost_state,actual_usd_micro,estimated_usd_micro,meta->>'costCenter',meta->>'aiUsageExempt' FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", hold["reservationId"])
+    assert unknown == ("estimated_unknown", None, 50_000, "customer", "false"), unknown
+    assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", hold["reservationId"])[0] == 1
+    assert one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", settled["reservationId"]) == ("actual", 12_345)
+    assert before == rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    assert one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", fresh)[0] == "running"
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='cancelled' WHERE id=%s", (fresh,))
+    return {"actual": {"unknownHold": unknown[2], "knownCost": 12_345, "duplicateSettlements": 0, "providerCalls": 0}}
 
 
 @scenario("R18", "Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)", "(an internal error while finishing)",
