@@ -693,8 +693,20 @@ class HostedApplication:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:
                     coworker_steps = {'status': 'unavailable'}
+                jdc = result.get('jamesDailyCall') if isinstance(result.get('jamesDailyCall'), dict) else {}
+                acceptance = jdc.get('acceptance') if isinstance(jdc.get('acceptance'), dict) else {}
+                scheduled_call = jdc.get('scheduled') if isinstance(jdc.get('scheduled'), dict) else {}
+                # Safe diagnostics only: never log destination, source content, tokens, nonce or provider credentials.
+                jdc_log = {
+                    'status': jdc.get('status'),
+                    'acceptanceState': acceptance.get('state'),
+                    'acceptanceReason': acceptance.get('reason'),
+                    'acceptanceReplayed': acceptance.get('replayed'),
+                    'scheduledState': scheduled_call.get('state'),
+                    'scheduledReason': scheduled_call.get('reason'),
+                }
                 logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
-                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'], 'jamesDailyCall': result.get('jamesDailyCall',{}).get('status')}))
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'], 'jamesDailyCall': jdc_log}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)
