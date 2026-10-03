@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -144,6 +145,36 @@ class DailyCallAcceptanceGateTests(unittest.TestCase):
             with self.assertRaises(AlphaError) as raised:
                 service._budget_check(cursor, service.clock(), extra=200)
         self.assertEqual(raised.exception.code, 'monthly_cost_cap')
+
+    def test_first_dial_admission_failure_is_persisted_not_left_ready(self):
+        service = self._service()
+        service._require_base = Mock()
+        service._context = Mock(return_value={})
+        service._create = Mock(return_value=(
+            {'id': 'run-admission', 'state': 'ready', 'firstCallId': None,
+             'retryCallId': None, 'attemptCount': 0, 'conversationId': None},
+            True,
+        ))
+        service._dial = Mock(side_effect=AlphaError('blocked', 409, code='phone_budget'))
+        cur, db = Mock(), Mock()
+
+        @contextmanager
+        def cursor_context():
+            yield cur
+        db.cursor = cursor_context
+
+        @contextmanager
+        def connection_factory():
+            yield db
+
+        service.hosted.connection_factory = connection_factory
+        with self.assertRaises(AlphaError) as raised:
+            service.trigger('acceptance:test-admission-failure', 'acceptance')
+        self.assertEqual(raised.exception.code, 'phone_budget')
+        sql, params = cur.execute.call_args.args
+        self.assertIn("state='failed'", sql)
+        self.assertEqual(params, ('phone_budget', 'run-admission'))
+        db.commit.assert_called_once()
 
     def _reconcile_harness(self, run, call, now=None):
         service = self._service(now=now)

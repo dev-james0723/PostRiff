@@ -50,7 +50,7 @@ class PhoneSessionController:
         if value.get('destination_ref') == 'james_env':
             self.opening_greeting = 'Hi James, this is your AI personal assistant calling with your daily briefing.'
             config['instructions'] = (
-                "You are James’s private AI personal assistant on a phone call. You are not Rafii and you are not a social-content coworker. "
+                "You are James’s private AI personal assistant on a phone call. "
                 "Rafii is only underlying infrastructure and should not be mentioned unless James explicitly asks about it. "
                 "Your job is to help James run his day: summarize his Gmail attention items, today’s calendar and time-bound commitments, "
                 "surface likely action items, and discuss personal project progress when that source is available. "

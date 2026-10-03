@@ -300,7 +300,28 @@ class DailyCallService:
         if not created:
             return {**run, "replayed": True}
         run["origin"] = origin
-        return {**self._dial(run, 1), "replayed": False}
+        try:
+            return {**self._dial(run, 1), "replayed": False}
+        except AlphaError as error:
+            # A committed run must never remain permanently replayable in "ready" when phone admission
+            # fails before a call row exists. Persist only the bounded machine code; never provider text.
+            with self.hosted.connection_factory() as db, db.cursor() as cur:
+                cur.execute(
+                    "UPDATE public.pr_james_daily_call_runs SET state='failed',failure_class=%s,updated_at=now() "
+                    "WHERE id=%s AND state='ready' AND first_call_id IS NULL",
+                    ((error.code or "dial_blocked")[:80], run["id"]),
+                )
+                db.commit()
+            raise
+        except Exception:
+            with self.hosted.connection_factory() as db, db.cursor() as cur:
+                cur.execute(
+                    "UPDATE public.pr_james_daily_call_runs SET state='failed',failure_class='dial_failed',updated_at=now() "
+                    "WHERE id=%s AND state='ready' AND first_call_id IS NULL",
+                    (run["id"],),
+                )
+                db.commit()
+            raise
 
     def _row_for_call(self, call_id):
         with self.hosted.connection_factory() as db, db.cursor() as cur:

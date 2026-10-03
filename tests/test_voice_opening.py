@@ -51,6 +51,29 @@ class OpeningTests(unittest.TestCase):
         self.assertNotIn('Ask one natural question', opening(Cursor(), 'caller', 'en', kind='proactive'))
         self.assertIn('scheduled briefing', opening(Cursor(), 'caller', 'en', kind='scheduled'))
 
+    def test_james_daily_call_uses_personal_assistant_prompt_not_rafii_prompt(self):
+        cur = Cursor('marin')
+        @contextmanager
+        def transaction(capability, workspace):
+            yield cur, None, 'caller'
+        controller = PhoneSessionController.__new__(PhoneSessionController)
+        controller.call = {
+            'kind': 'explicit', 'workspace_id': 'workspace', 'conversation_id': 'conversation',
+            'destination_ref': 'james_env'
+        }
+        controller.capability = 'scoped-caller'
+        controller.runtime = SimpleNamespace(
+            service=SimpleNamespace(repository=SimpleNamespace(transaction=transaction)),
+            cfg=SimpleNamespace(route=lambda *a, **k: SimpleNamespace(model='gpt-live-1'))
+        )
+        controller.voice = SimpleNamespace(_history=lambda *a: '')
+        result = controller.configuration()
+        self.assertIn("James’s private AI personal assistant", result['instructions'])
+        self.assertNotIn('You are Rafii', result['instructions'])
+        self.assertNotIn('social-content coworker', result['instructions'])
+        self.assertEqual(controller.opening_greeting,
+                         'Hi James, this is your AI personal assistant calling with your daily briefing.')
+
     def test_each_phone_kind_uses_all_six_saved_voices_for_the_authenticated_caller(self):
         for kind in ('explicit', 'inbound', 'scheduled', 'proactive'):
             for voice in style.VOICES:
