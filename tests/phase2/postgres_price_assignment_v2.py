@@ -786,5 +786,28 @@ class AssignmentV2(unittest.TestCase):
                 with self.assertRaises(AlphaError): closed.billing_checkout(self.wid, 'fixture', terms)
                 self.assertEqual(len(self.transport.calls), calls)
 
+    def test_fixed_plan_public_offer_refuses_ambiguous_price_before_checkout(self):
+        for terms in ('starter-v1', 'studio-v2'):
+            with self.subTest(terms=terms):
+                self.setUp()
+                price = 'price_synthetic_collision_' + terms
+                with connection() as db:
+                    db.execute('UPDATE pr_plan_terms SET provider_price_id=%s WHERE id=%s', (price, terms))
+                ready = next(p for p in self.service.plans()['plans'] if p['id'] == terms)
+                self.assertEqual(ready['checkout'], 'available')
+                self.assertTrue(ready['checkoutAvailable'])
+                with connection() as db:
+                    db.execute("UPDATE pr_plan_price_variants SET provider_price_id=%s WHERE id='creator-59-v1'", (price,))
+                refused = next(p for p in self.service.plans()['plans'] if p['id'] == terms)
+                self.assertEqual(refused['checkout'], 'not_yet_available')
+                self.assertIs(refused['checkoutAvailable'], False)
+                self.assertFalse(next(p for p in self.service.usage(self.wid, 'fixture')['planTerms'] if p['id'] == terms)['checkoutAvailable'])
+                self.deny_checkout(terms)
+                with connection() as db:
+                    db.execute("UPDATE pr_plan_price_variants SET provider_price_id=NULL WHERE id='creator-59-v1'")
+                restored = next(p for p in self.service.plans()['plans'] if p['id'] == terms)
+                self.assertEqual(restored['checkout'], 'available')
+                self.assertTrue(restored['checkoutAvailable'])
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

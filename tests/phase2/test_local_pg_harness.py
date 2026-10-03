@@ -333,7 +333,9 @@ class RunnerContracts(unittest.TestCase):
         with disposable.owned_cluster(target, self.pg, env, migrations=migrations):
             pass
         setup = [a for a, _ in self.calls if Path(a[0]).name == 'psql']
-        self.assertEqual(len(setup), 8)
+        self.assertEqual(len(setup), 10)
+        applied = {Path(a[a.index('-f') + 1]).name for a in setup if '-f' in a}
+        self.assertTrue({'051_pricing_public_four_plans.sql', '052_fixed_plan_checkout_approval.sql'} <= applied)
         self.assertTrue(all('-X' in a or '--no-psqlrc' in a for a in setup))
 
     def test_review_psqlrc_presence_refused_before_socket_and_process(self):

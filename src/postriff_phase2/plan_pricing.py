@@ -93,18 +93,18 @@ class PlanPricing:
         return variant
 
     def checkout(self, cur, workspace_id, terms_id):
-        """The workspace's own Creator price, or a 409 whose code says why Creator can't be bought here now
+        """The workspace's server-owned paid-plan price, or a 409 whose code says why it can't be bought here now
         (`not_for_sale`, `credit_policy_inactive`, `credits_unavailable`, `subscription_held`, `price_unavailable`)."""
         cur.execute("SELECT plan,status,catalog_state,new_checkout_enabled,entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (terms_id,))
         row = cur.fetchone()
         package = tuple(row[:4]) if row else None
         if terms_id not in PAID_PLANS or not package or package != (PAID_PLANS[terms_id], 'active', 'public', True):
             raise AlphaError('This plan is not yet available for purchase.', 409, code='not_for_sale')
-        # Creator is a promise of managed credits: never sell it while the server could not spend them (R-COM-02).
+        # Paid plans promise managed credits: never sell one while the server could not spend them (R-COM-02).
         if row[4] != V2_POLICY_VERSION:
-            raise AlphaError('Creator can’t be bought yet: its credit policy isn’t active.', 409, code='credit_policy_inactive')
+            raise AlphaError('This plan can’t be bought yet: its credit policy isn’t active.', 409, code='credit_policy_inactive')
         if self.ledger is not None and getattr(self.ledger, 'credits', None) is None:
-            raise AlphaError('Creator can’t be bought yet: managed credits aren’t switched on.', 409, code='credits_unavailable')
+            raise AlphaError('This plan can’t be bought yet: managed credits aren’t switched on.', 409, code='credits_unavailable')
         cur.execute("SELECT status,provider_subscription_id,plan_terms_id,price_variant_id,provider_customer_id,provider FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
         prior = cur.fetchone()
         ended_creator = bool(prior and prior[0] in ('cancelled', 'expired') and prior[2] == terms_id
@@ -356,7 +356,13 @@ def public_catalog(cur, pricing_v2_enabled, credits_enabled=None):
     spend_enabled = bool(pricing_v2_enabled) and credits_enabled is not False
     plans = [_plan_view(r, v2=True, variant=default if r[1] == 'creator' else None,
                        credits_enabled=spend_enabled) for r in rows]
-    for plan in plans:
+    for row, plan in zip(rows, plans):
+        if plan['checkout'] == 'available':
+            price_id = default['priceId'] if row[1] == 'creator' else row[8]
+            # Public availability must pass checkout's same cross-table unique Price gate.
+            cur.execute('SELECT id FROM public.pr_plan_price_variants WHERE provider_price_id=%s UNION ALL SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s', (price_id, price_id))
+            if len(cur.fetchall()) != 1:
+                plan['checkout'] = 'not_yet_available'
         plan['checkoutAvailable'] = plan['checkout'] == 'available'
     return {'catalogVersion': CATALOG_VERSION_V2, 'pricing': 'v2', 'creditsPerUsd': CREDITS_PER_USD,
             'plans': plans, 'topUps': {'available': False, 'reason': 'not_activated'},
