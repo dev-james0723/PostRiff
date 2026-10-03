@@ -1,0 +1,931 @@
+{
+  "publicationScope": "Sanitized public release metadata. Detailed owner/tenant/session evidence and screenshots are retained locally and are excluded from this publication.",
+  "releaseBoundaryVerified": true,
+  "fullActivationAccepted": false,
+  "reviewedHead": "0353ba72a9681746a9c665312e3f5b93feae2637",
+  "mergedSource": "ead739245c09d9517cd5232ab2e430168433f01a",
+  "trackedTree": "17f94048a035e31ecdce5673b0a3c04cf099a690",
+  "sourceFingerprint": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+  "fingerprintedInputCount": 2478,
+  "ciCheckoutSha": "f48209a1cff76b6bbc0fa12ca0630d1c457e964f",
+  "ciSourceMatch": "CI used the generated PR merge checkout; its input fingerprint matches the reviewed head and released source.",
+  "releaseGateRecords": [
+    {
+      "name": "ci-python",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-postgres",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-web",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-trend-schema",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-types",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-lint",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-build",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-copy",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-python-artifact",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-secrets",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-session-cache",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-browser",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "ci-performance",
+      "status": "PASS",
+      "source": "e54b9cb177f4f4b4c49f0336c15a417fa7868757eee441d8e823225982d93183",
+      "sourceUnchanged": true
+    }
+  ],
+  "requiredChecks": {
+    "expected": 5,
+    "observed": 5,
+    "allPassedAndAttested": true,
+    "observedAt": "2026-10-03T10:25:38.466428+00:00"
+  },
+  "production": {
+    "state": "READY",
+    "source": "ead739245c09d9517cd5232ab2e430168433f01a",
+    "healthStatus": 200,
+    "anonymousFounderSessionStatus": 401
+  },
+  "focusedTests": {
+    "execution": "local_disposable_postgres_with_synthetic_external_services",
+    "redRegressionFailures": 2,
+    "runtimeScenariosPassed": 57,
+    "opsTestsPassed": 13
+  },
+  "features": [
+    {
+      "id": "F01",
+      "name": "Founder authentication",
+      "state": "blocked_owner"
+    },
+    {
+      "id": "F02",
+      "name": "Portal pages",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F03",
+      "name": "Customers and workspace integrity",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F04",
+      "name": "Internal Ops workspace",
+      "state": "verified_live"
+    },
+    {
+      "id": "F05",
+      "name": "Founder text agent",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F06",
+      "name": "Jobs and continuity",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F07",
+      "name": "Browser voice",
+      "state": "blocked_owner"
+    },
+    {
+      "id": "F08",
+      "name": "Outbound calls",
+      "state": "blocked_owner"
+    },
+    {
+      "id": "F09",
+      "name": "In-app notices",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F10",
+      "name": "Founder email",
+      "state": "configured_off"
+    },
+    {
+      "id": "F11",
+      "name": "Customer transactional email",
+      "state": "configured_off"
+    },
+    {
+      "id": "F12",
+      "name": "Founder push",
+      "state": "blocked_owner"
+    },
+    {
+      "id": "F13",
+      "name": "Briefings",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F14",
+      "name": "Incidents and follow-ups",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F15",
+      "name": "Revenue and payments",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F16",
+      "name": "AI cost and attempts",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F17",
+      "name": "Product and retention",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F18",
+      "name": "Operations and connections",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F19",
+      "name": "Support tickets",
+      "state": "configured_off"
+    },
+    {
+      "id": "F20",
+      "name": "Credits and top-ups",
+      "state": "configured_off"
+    },
+    {
+      "id": "F21",
+      "name": "Scoped administrative actions",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F22",
+      "name": "Refund execution",
+      "state": "configured_off"
+    },
+    {
+      "id": "F23",
+      "name": "Engineering and audit receipts",
+      "state": "ready_for_verification"
+    },
+    {
+      "id": "F24",
+      "name": "Marketing and attribution",
+      "state": "blocked_owner"
+    }
+  ],
+  "metricDispositionCounts": {
+    "canonical_implementation": 48,
+    "explicitly_replaced_definition": 5,
+    "implementation_task": 36,
+    "owner_source_blocker": 8
+  },
+  "runtimeAliasesInstalled": 0,
+  "all97Activated": false,
+  "metrics": [
+    {
+      "id": "paid_workspaces",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "delinquent_mrr",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr_new",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr_expansion",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr_contraction",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr_churn",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "collections",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "refunds",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "dispute_net",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "net_collections",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "recovery_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "nrr",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "grr",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "logo_churn",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "contribution",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "cost_coverage",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "active_users",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "active_workspaces",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "activation_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "time_to_value",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "retention_d7",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "retention_d28",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "feature_adoption",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "task_success",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "publish_verified",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "useful_outcomes",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "automation_success",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "ai_actual_cost",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_failed_cost",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "cost_per_useful",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_quality",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_latency",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "task_latency",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "credit_grants",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "credit_consumption",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "credit_available",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "credit_held",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "credit_debt",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "api_errors",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "api_latency",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "queue_age",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "slo_burn",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "affected_workspaces",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "source_lag",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "open_tickets",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "first_response",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "resolution_time",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "csat",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "repeat_tickets",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "required_checks",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "engineering"
+    },
+    {
+      "id": "check_failures",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "engineering"
+    },
+    {
+      "id": "flake_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "engineering"
+    },
+    {
+      "id": "security_open",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "engineering"
+    },
+    {
+      "id": "gsc_clicks",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "gsc_ctr",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "attribution_coverage",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "source_paid_conversion",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "cac",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "decision_recovered_cash",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "experiment_effect",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "marketing"
+    },
+    {
+      "id": "time_back",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "mrr_reactivation",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "paid_customers",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "subscriptions_by_plan_status",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "cash_collected",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 2,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "payment_failures",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "refunds_disputes",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "ai_cost_actual",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_cost_unknown",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_cost_by_feature",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "cost_vs_cash",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "founder_ops_cost",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "budget_remaining",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "publish_outcomes",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "cron_heartbeat",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "notification_delivery",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "phone_calls",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "source_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "data_requests_backlog",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "security_events",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "ai_calls",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_tokens",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_fallback_retry_rate",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_cost_per_call",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "cost_per_useful_outcome",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "ai_cost_forecast",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "ai"
+    },
+    {
+      "id": "api_error_rate",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "queue_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "connection_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "publish_by_provider",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "operations"
+    },
+    {
+      "id": "support_aging",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "support"
+    },
+    {
+      "id": "activation_funnel",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "retention_weekly",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "retention_correlations",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "product"
+    },
+    {
+      "id": "mrr_movements",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    },
+    {
+      "id": "mrr_forecast",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "sourceContractId": "revenue"
+    }
+  ],
+  "remainingAcceptance": [
+    "Fresh owner MFA and contact/briefing synchronization",
+    "Authenticated source/projection/receipt/UI/agent canaries and responsive Live/Demo checks",
+    "Verified intended sender and owner device delivery/audio qualification",
+    "Source/definition/history gates",
+    "24-hour actual observation"
+  ],
+  "realChannelCanaries": "not_run",
+  "providerInvoiceCostUsd": null,
+  "observation24Hours": "not_started"
+}
