@@ -40,6 +40,28 @@ const contact = load('features/founder/settings/contact-policy.ts');
 const nav = load('config/founder-nav.ts');
 const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
+test('Founder settings round trip sends the server editable contract without immutable entitlement or audit fields', () => {
+  const { execFileSync } = require('node:child_process');
+  const script = 'import json,sys; from postriff_phase2.founder_policy import defaults,EDITABLE,validate; p=defaults(); request=json.load(sys.stdin) if not sys.stdin.isatty() else None; print(json.dumps({"settings":p,"editable":sorted(EDITABLE)})) if request is None else (validate(p,request), print("accepted"))';
+  const server = JSON.parse(execFileSync(process.env.RAFII_TEST_PYTHON || 'python3', ['-c', script], {
+    cwd: ROOT, env: { ...process.env, PYTHONPATH: path.join(ROOT, 'src') }, input: 'null', encoding: 'utf8'
+  }));
+  for (const mode of ['limited', 'unlimited']) {
+    const draft = { ...server.settings, dailySpendMode: mode, dailySpendUsdMicro: 75000000, futureImmutableField: 'never-send' };
+    const changes = comms.founderPolicyChanges(draft);
+    assert.deepEqual(Object.keys(changes).sort(), server.editable);
+    assert.equal(changes.dailySpendMode, mode);
+    assert.equal(changes.dailySpendUsdMicro, 75000000);
+    assert.equal(changes.entitlement, undefined);
+    assert.equal(changes.revision, undefined);
+    assert.equal(changes.approvalRef, undefined);
+    assert.equal(changes.futureImmutableField, undefined);
+    assert.equal(execFileSync(process.env.RAFII_TEST_PYTHON || 'python3', ['-c', script], {
+      cwd: ROOT, env: { ...process.env, PYTHONPATH: path.join(ROOT, 'src') }, input: JSON.stringify(changes), encoding: 'utf8'
+    }).trim(), 'accepted');
+  }
+});
+
 const PAGE = { route: '/founder/settings', section: 'settings', mode: 'live', environment: 'local', selectedEntity: null, chart: null, period: null, filters: {}, incidentId: null, uiCapabilities: ['navigate'] };
 
 function recorder(answer = (pathName, init) => ({ requestId: 'r1', environment: 'local', asOf: 'now', dataState: 'not_applicable', receiptIds: [], data: { path: pathName, body: init.body } })) {

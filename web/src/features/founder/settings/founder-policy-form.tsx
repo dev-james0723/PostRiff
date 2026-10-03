@@ -10,13 +10,9 @@ import { founderFetch } from '@/lib/founder/api';
 import type { Envelope } from '@/lib/founder/types';
 import { useCapability, useFounderScope } from '../customers/kit/api';
 import { Panel } from '../customers/kit/page-frame';
+import { founderPolicyChanges, type FounderPolicySettings } from './comms';
 
-type Settings = {
-  dailySpendMode: 'limited' | 'unlimited'; dailySpendUsdMicro: number; warnPercent: number; timeZone: string;
-  replyTo: string; emailCanaryCount: number; pushCanaryCount: number; dailyBriefingTime: string;
-  weeklyReviewTime: string; weeklyReviewDay: number; quietStart: number; quietEnd: number;
-  maxCallSeconds: number; automaticCallAttemptsDaily: number; concurrentCalls: number;
-};
+type Settings = FounderPolicySettings;
 type Policy = { settings: Settings; revision: number; applied: boolean;
   spending: { actualUsdMicro: number; heldUsdMicro: number; warning: boolean; newPaidActionsStopped: boolean };
   ledger: { provider: string; model: string; service: string; action: string; date: string; actualUsdMicro: number }[];
@@ -57,7 +53,7 @@ export function FounderPolicyForm() {
   const scope = useFounderScope(); const client = useQueryClient(); const permitted = useCapability('control.settings');
   const key = scope.key('founder-policy');
   const query = useQuery({ queryKey: key, enabled: scope.ready, queryFn: async ({ signal }) => (await founderFetch<Envelope<Policy>>('/founder-policy', { signal })).data });
-  const save = useMutation({ mutationFn: async (changes: Settings) => (await founderFetch<Envelope<Policy>>('/founder-policy', { method: 'PUT', body: { mode: 'live', revision: query.data?.revision, changes } })).data,
+  const save = useMutation({ mutationFn: async (changes: Settings) => (await founderFetch<Envelope<Policy>>('/founder-policy', { method: 'PUT', body: { mode: 'live', revision: query.data?.revision, changes: founderPolicyChanges(changes) } })).data,
     onSuccess: async (data) => { client.setQueryData(key, data); await client.invalidateQueries({ queryKey: scope.key('activation-readiness') }); } });
   return <Panel title='Founder limits and defaults' description='Your entitlement, external provider budget, contact limits and briefing defaults.'>
     {query.isPending ? <p>Loading settings…</p> : query.isError ? <StateMessage kind='error' layout='inline' title='Founder settings unavailable' description='Create or resume the internal Ops workspace, then reload. No provider spend has been authorized by this failed read.' /> : query.data ? <>

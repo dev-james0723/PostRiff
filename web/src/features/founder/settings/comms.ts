@@ -7,6 +7,26 @@
  */
 import { clockToMinutes, minutesToClock } from '../customers/kit/format';
 
+export type FounderPolicySettings = {
+  dailySpendMode: 'limited' | 'unlimited'; dailySpendUsdMicro: number; warnPercent: number; timeZone: string;
+  replyTo: string; emailCanaryCount: number; pushCanaryCount: number; dailyBriefingTime: string;
+  weeklyReviewTime: string; weeklyReviewDay: number; quietStart: number; quietEnd: number;
+  maxCallSeconds: number; automaticCallAttemptsDaily: number; concurrentCalls: number;
+};
+
+/** GET also returns immutable entitlement/audit fields. Send only editable settings in a PUT. */
+export function founderPolicyChanges(settings: FounderPolicySettings): FounderPolicySettings {
+  return {
+    dailySpendMode: settings.dailySpendMode, dailySpendUsdMicro: settings.dailySpendUsdMicro,
+    warnPercent: settings.warnPercent, timeZone: settings.timeZone, replyTo: settings.replyTo,
+    emailCanaryCount: settings.emailCanaryCount, pushCanaryCount: settings.pushCanaryCount,
+    dailyBriefingTime: settings.dailyBriefingTime, weeklyReviewTime: settings.weeklyReviewTime,
+    weeklyReviewDay: settings.weeklyReviewDay, quietStart: settings.quietStart, quietEnd: settings.quietEnd,
+    maxCallSeconds: settings.maxCallSeconds, automaticCallAttemptsDaily: settings.automaticCallAttemptsDaily,
+    concurrentCalls: settings.concurrentCalls
+  };
+}
+
 export const NOTICE_EVENTS = ['founder.incident_opened', 'founder.incident_recovered', 'founder.briefing_ready', 'founder.source_unavailable'] as const;
 export type NoticeEvent = (typeof NOTICE_EVENTS)[number];
 export type NoticeChannel = 'email' | 'push';

@@ -357,6 +357,31 @@ async function main() {
           drain(tracker);
         });
 
+        // The policy GET includes immutable fields; the actual form must omit them from the protected PUT.
+        await attempt('Founder policy settings round trip', async () => {
+          const again = await exchange(context, FOUNDER);
+          check('fresh exchange for Founder policy', again.status() === 200, again.status());
+          await page.goto(base + '/founder/settings?tab=budgets');
+          const save = page.getByRole('button', { name: 'Save Founder settings', exact: true });
+          await save.waitFor({ timeout: 30000 });
+          await settle(page, tracker);
+          const before = await (await context.request.get(base + '/api/control/v2/founder-policy')).json();
+          await page.getByLabel('Daily cap (USD)', { exact: true }).fill('75');
+          const put = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/founder-policy') && response.request().method() === 'PUT', { timeout: 30000 });
+          await save.click();
+          const response = await put;
+          check('Founder policy form PUT succeeds', response.status() === 200, response.status());
+          const sent = response.request().postDataJSON();
+          check('Founder policy PUT omits immutable server fields', !['version', 'revision', 'approvalRef', 'entitlement', 'financialConfirmationRequired', 'financialRetention', 'supportSource', 'customerPiiDefault'].some((key) => key in sent.changes), sent);
+          const after = await response.json();
+          check('Founder policy saves the edited cap and increments revision', after.data?.settings?.dailySpendUsdMicro === 75000000 && after.data?.revision === before.data.revision + 1, after.data);
+          check('Founder entitlement and financial protections survive settings save', after.data?.settings?.entitlement === 'unlimited' && after.data?.settings?.financialConfirmationRequired === true && after.data?.settings?.financialRetention === 'immutable', after.data);
+          const contact = await (await context.request.get(base + '/api/control/v2/contact-policy')).json();
+          check('Founder policy save preserves disabled delivery', contact.data?.policy?.liveDeliveryEnabled === false, contact.data);
+          await page.getByRole('status').filter({ hasText: 'Founder settings saved.' }).waitFor({ timeout: 30000 });
+          drain(tracker);
+        });
+
         // Follow-ups: a draft with a time is confirmed from the Overview; a draft is never scheduled on its own.
         await attempt('follow-up confirm', async () => {
           const session = await (await context.request.get(base + '/api/control/v2/session')).json();
