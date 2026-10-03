@@ -149,7 +149,9 @@ class MediaPostgres(Offline):
         self.flags={'RAFII_TREND_WORKSPACE_ALLOWLIST':self.workspace,**{'RAFII_TREND_'+n+'_ENABLED':'true'
             for n in ('INTELLIGENCE','RADAR','TRUST_RECEIPTS','MULTIMODAL')}}
         self.storage=SimpleNamespace(object_info=self.info,read_range=self.range)
-        self.hosted=SimpleNamespace(assets=SimpleNamespace(storage=self.storage))
+        self.hosted=SimpleNamespace(assets=SimpleNamespace(storage=self.storage),
+            billing=SimpleNamespace(pricing_v2_enabled=False),
+            clock=lambda:datetime.now(timezone.utc).timestamp())
         self.worker=M.MediaJobs(self.hosted,store=self.store,values=self.flags,runtime_factory=self.make_runtime,
                                storage_factory=self.fixture_storage)
         self.request=[{'asset_id':self.asset_id,'source_id':self.sid,'language':'yue','modalities':['visual','audio'],'frame_count':3}]

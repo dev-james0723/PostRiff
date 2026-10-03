@@ -436,14 +436,14 @@ phone.hangup(credit_call['id'],live_seconds=0)
 with connection() as db:
     wallet=service.ledger.credits.view(db.cursor(),other)
 assert wallet['heldMilliCredits']==0 and wallet['usedMilliCredits']==0,wallet
-sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE workspace_id=%s",other)
+sql("UPDATE pr_phone_calls SET requested_at=to_timestamp(%s)-interval '6 minutes' WHERE workspace_id=%s",clock[0],other)
 denied(lambda:phone.request(other,TWO,{'idempotencyKey':'automatic-no-credit-limit'},kind='scheduled'),402)
 phone.save_preferences(other,TWO,{'maxMilliCreditsPerCall':price['ceilingMilliCredits']})
 automatic=phone.request(other,TWO,{'idempotencyKey':'automatic-approved-credit-limit'},kind='scheduled')
 phone.hangup(automatic['id'],live_seconds=0)
 # The same Manager can reserve against the remaining approved call limit. Unknown
 # usage stays committed; releases free capacity; a model cannot enlarge the limit.
-sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE workspace_id=%s",other)
+sql("UPDATE pr_phone_calls SET requested_at=to_timestamp(%s)-interval '6 minutes' WHERE workspace_id=%s",clock[0],other)
 with connection() as db:
     service.ledger.credits.grant(db.cursor(),other,TWO,'phone-agent-synthetic-grant',500000,source='local-phone-test-only')
 route=cfg.route('standard_reasoning',reason='phone reservation acceptance')

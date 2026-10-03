@@ -72,7 +72,7 @@ class Transport:
 
 
 transport = Transport()
-importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-a")
+importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-a", hosted=service)
 
 refused(400, lambda: importer.request(wid, "fixture-one", CONN, {}))
 refused(404, lambda: importer.request(wid, "fixture-one", CONN, {"confirmed": True}))
@@ -158,14 +158,14 @@ assert run_state(run_id)[:3] == ("running", 0, "http_503"), run_state(run_id)
 checks.append("progress resets a run's attempts: a transient error right after a stored page retries instead of failing the run")
 
 run_id = fresh_run(2)
-late = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-b", monotonic=iter([0.0, 100.0, 100.0]).__next__)
+late = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-b", monotonic=iter([0.0, 100.0, 100.0]).__next__, hosted=service)
 assert late.tick(max_seconds=20).get("deferred") == 1
 assert run_state(run_id)[:2] == ("running", 2), run_state(run_id)
 checks.append("a run handed back at the step's deadline keeps its attempt count")
 
 with connection() as db:
     db.execute("UPDATE public.pr_history_imports SET lease_until=now() - interval '1 second' WHERE id::text=%s", (run_id,))
-broken = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-c")
+broken = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-c", hosted=service)
 def explode(*args):
     raise psycopg.errors.CheckViolation("synthetic")
 broken._store_page = explode

@@ -17,7 +17,8 @@ class Acquisition(unittest.TestCase):
         @contextmanager
         def transaction(*args): yield cur,(1,{}),'actor'
         service=CoworkerService.__new__(CoworkerService)
-        service.hosted=SimpleNamespace(repository=SimpleNamespace(transaction=transaction), ideas=SimpleNamespace(_member=lambda row:None))
+        service.hosted=SimpleNamespace(repository=SimpleNamespace(transaction=transaction), ideas=SimpleNamespace(_member=lambda row:None),
+                                       billing=SimpleNamespace(pricing_v2_enabled=True),clock=lambda:1_000_000)
         service._require=lambda flag:None; service._require_edit=lambda *args:None
         service._state=lambda *args:{}; service.clock=lambda:1_000_000
         service._broker=Mock(return_value=SimpleNamespace(search_items=Mock(return_value={'status':'ok','items':[],'provider':'synthetic','errors':[]})))
@@ -53,7 +54,8 @@ class Acquisition(unittest.TestCase):
         for mode in ('free','managed'):
             with self.subTest(mode=mode):
                 find.reset_mock(); cur=Cursor(mode)
-                host=SimpleNamespace(automation_research=SimpleNamespace(search=Mock(),read=Mock()))
+                host=SimpleNamespace(automation_research=SimpleNamespace(search=Mock(),read=Mock()),
+                                     billing=SimpleNamespace(pricing_v2_enabled=True),clock=lambda:1_000_000)
                 worker=SimpleNamespace(service=host,clock=lambda:1_000_000)
                 claim={'workspaceId':'workspace','actor':'actor','binding':{},'task':{'workflow':{'research':{'onNothing':'draft'}}},'occurrence':{'id':'occ'}}
                 repository=SimpleNamespace(get=lambda *args:{'state':{}})
@@ -70,7 +72,8 @@ class Acquisition(unittest.TestCase):
     def test_legacy_automation_keeps_shared_transport_guard_scoped(self,*_):
         cur=Cursor('legacy'); prior=Mock(); search=ExaSearch(before_call=prior)
         host=SimpleNamespace(automation_research=SimpleNamespace(search=search,read=Mock()),
-                             connection_factory=lambda:Database(cur))
+                             connection_factory=lambda:Database(cur),
+                             billing=SimpleNamespace(pricing_v2_enabled=True),clock=lambda:1_000_000)
         worker=SimpleNamespace(service=host,clock=lambda:1_000_000)
         claim={'workspaceId':'workspace','actor':'actor','binding':{},'task':{'workflow':{'research':{'onNothing':'draft'}}},'occurrence':{'id':'occ'}}
         repository=SimpleNamespace(get=lambda *args:{'state':{}})

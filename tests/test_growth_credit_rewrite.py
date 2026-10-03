@@ -327,7 +327,8 @@ class ServiceAccountingTests(unittest.TestCase):
         with self.assertRaises(AlphaError):self.finish()
         self.assertEqual(self.settlements,[('failed',4000)])
         self.assertEqual(self.cur.usage_count,1)
-        self.assertEqual(self.cur.body.get('_actualUsage'),{'usdMicro':4000,'unknown':False})
+        self.assertEqual(self.cur.body.get('_actualUsage'),{'usdMicro':4000,'unknown':False,
+                                                        'basis':'verified-task-usd-v1','usdExact':'0.004'})
         self.assertEqual(self.cur.body.get('_usageSource',{}).get('count'),1)
         self.assertEqual(self.cur.body.get('_creditSettlement',{}).get('usedMilliCredits'),0)
         self.assertNotIn('rewrite',self.cur.body)

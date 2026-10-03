@@ -107,12 +107,21 @@ view = service.usage(wid, "one")
 assert view["billing"] == {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False}, view["billing"]
 checks.append("proposed plan terms refuse checkout (D3); usage shows no purchasable plan")
 
-# 2. Activating terms with a provider price opens checkout; client paths must be relative.
+# 2. Active legacy terms remain hidden from new checkout; connector serialization and URL guards remain covered.
 with connection() as db:
     db.execute("UPDATE public.pr_plan_terms SET status='active', provider_price_id='price_studio' WHERE id='studio-v1'")
 denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "https://evil.example/x"), 400)
 denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "//evil.example"), 400)
-session = service.billing_checkout(wid, "one", "studio-v1", "/app/account/billing?ok=1")
+before = len(transport.calls)
+denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "/app/account/billing?ok=1"), 409)
+assert len(transport.calls) == before, "active legacy terms must not dispatch new checkout before048/OFF"
+# Exercise the connector's serialization separately with an in-memory transport.
+# This represents a historical legacy checkout, not permitted new hosted acquisition.
+session = provider.create_checkout_session(
+    workspace_id=wid, plan_terms_id="studio-v1", price_id="price_studio",
+    success_url="https://app.postriff.test/app/account/billing?ok=1",
+    cancel_url="https://app.postriff.test/app/account/billing?cancelled=1",
+    customer_email="owner@example.com", idempotency_key="fixture-historical-studio")
 assert session["url"].startswith("https://checkout.stripe.com/") and session["sessionId"] == "cs_test_1", session
 call = transport.calls[-1]
 form = call["form"]
@@ -120,11 +129,11 @@ assert form["mode"] == "subscription" and form["line_items[0][price]"] == "price
 assert form["subscription_data[metadata][workspace_id]"] == wid and form["subscription_data[metadata][plan_terms_id]"] == "studio-v1"
 assert form["success_url"] == "https://app.postriff.test/app/account/billing?ok=1" and form["cancel_url"].startswith("https://app.postriff.test/app/account/billing")
 assert form["customer_email"] == "owner@example.com" and call["headers"].get("Idempotency-Key") and call["headers"]["Authorization"] == "Bearer sk_test_x"
-assert service.usage(wid, "one")["billing"]["checkoutAvailable"] is True
+assert service.usage(wid, "one")["billing"]["checkoutAvailable"] is False
 denied(lambda: service.billing_portal(wid, "one"), 409)
-checks.append("active terms + price open checkout with workspace metadata and idempotency; absolute return URLs refused; portal needs a customer")
+checks.append("active legacy terms refuse new checkout with zero IO; historical connector serialization preserves metadata/idempotency; absolute returns refused; portal needs a customer")
 
-# 3. Stripe-signed checkout completion activates the subscription, reconciles entitlement, notifies the owner once.
+# 3. A previously created legacy checkout still fulfills: entitlement and one owner notification.
 sig, body = signed("checkout.session.completed", {"mode": "subscription", "client_reference_id": wid, "customer": "cus_1", "subscription": "sub_1", "metadata": {"workspace_id": wid, "plan_terms_id": "studio-v1"}}, "evt_1")
 result = service.billing_webhook(sig, body)
 assert result["outcome"] == "applied" and result["status"] == "active" and result["notification"]["sent"] is True, result

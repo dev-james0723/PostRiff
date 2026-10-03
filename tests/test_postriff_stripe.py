@@ -308,7 +308,8 @@ class Availability(unittest.TestCase):
     def test_stripe_with_active_bound_terms_and_customer(self):
         cur = StubCursor({"coalesce(provider_price_id,'')<>''": [(1,)], "SELECT provider_customer_id FROM public.pr_subscriptions": [("cus_1",)]})
         block = Billing(provider=provider(), ledger=Ledger()).availability(cur, "ws-1")
-        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": True, "portalAvailable": True})
+        # Retired legacy sales stay hidden with v2 OFF; the existing customer keeps portal access.
+        self.assertEqual(block, {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": True})
         self.assertIn(("ws-1", "stripe"), [p for _, p in cur.executed])
 
     def test_stripe_without_active_terms_or_customer(self):

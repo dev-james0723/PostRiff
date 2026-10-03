@@ -17,6 +17,7 @@ class Store:
         self.state = state
         self.policies = list(policies)
         self.queries = []
+        self.hosted = SimpleNamespace(billing=SimpleNamespace(pricing_v2_enabled=True),clock=lambda:1_000_000)
 
     @contextmanager
     def transaction(self):
@@ -25,6 +26,12 @@ class Store:
             self.queries.append((sql, args))
             if '/* trends:funding */' in sql:
                 cursor.fetchone.return_value = {'plan':'studio', 'credit_policy':'credits-candidate-2026-09-23-v1'}
+            elif sql.startswith('SELECT id FROM public.pr_workspaces'):
+                cursor.fetchone.return_value = (args[0],)
+            elif sql.startswith('SELECT status,extract'):
+                cursor.fetchone.return_value = ('active',None,False,None,'studio-v1')
+            elif sql.startswith('SELECT plan_terms_id'):
+                cursor.fetchone.return_value = ('studio-v1',)
             else:
                 cursor.fetchone.return_value = {'state':self.state} if self.state is not None else None
         cursor.execute.side_effect = execute

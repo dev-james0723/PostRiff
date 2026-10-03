@@ -44,6 +44,11 @@ class UnqualifiedGrowthV2(unittest.TestCase):
 
     def legacy(self):
         with fixture.connection() as db:
+            db.execute("INSERT INTO public.pr_trials(user_id,workspace_id,plan,started_at,expires_at) "
+                       "VALUES(%s,%s,'studio',to_timestamp(%s),to_timestamp(%s)) "
+                       "ON CONFLICT(user_id) DO UPDATE SET workspace_id=excluded.workspace_id,plan=excluded.plan,"
+                       "started_at=excluded.started_at,expires_at=excluded.expires_at",
+                       (self.fx.actor,self.wid,self.fx.now[0],self.fx.now[0]+14*86400))
             db.execute("UPDATE pr_entitlements SET plan_terms_id=(SELECT id FROM pr_plan_terms WHERE plan='trial' ORDER BY version DESC LIMIT 1) WHERE workspace_id=%s",(self.wid,))
 
     def test_free_and_creator_refuse_paid_acquisition_without_quote_or_io(self):
@@ -87,7 +92,7 @@ class UnqualifiedGrowthV2(unittest.TestCase):
         self.assertNotIn('scoutLease',self.host.get(self.wid,'synthetic')['state'].get('coworker',{}).get('listening',{}))
 
     def test_history_enqueue_worker_refuse_but_saved_status_is_readable(self):
-        transport=Mock(); importer=HistoryImporter(fixture.connection,self.host.oauth,transport=transport)
+        transport=Mock(); importer=HistoryImporter(fixture.connection,self.host.oauth,transport=transport,hosted=self.host)
         self.refusal(lambda:importer.request(self.wid,'synthetic','no-paid-connection',{'confirmed':True}))
         self.assertFalse(importer._eligible({'workspaceId':self.wid,'connectionId':'no-paid-connection'}))
         self.assertEqual(importer.status(self.wid,'synthetic','no-paid-connection')['status'],'none'); transport.assert_not_called()

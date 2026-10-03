@@ -9,6 +9,7 @@ from local_pg_target import selected_target
 import copy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
+from types import SimpleNamespace
 import json
 import os
 from pathlib import Path
@@ -78,7 +79,10 @@ def connect(dsn=DSN):
     db.execute('SET ROLE '+TEST_ROLE)
     return db
 
-store=TrendStore(connect,offline_replay=True); jobs=TrendJobs(store); outbox=TrendOutbox(store)
+store=TrendStore(connect,offline_replay=True,hosted=SimpleNamespace(
+    billing=SimpleNamespace(pricing_v2_enabled=False),
+    clock=lambda:datetime.now(timezone.utc).timestamp()))
+jobs=TrendJobs(store); outbox=TrendOutbox(store)
 for s in (S,WS,VS):store.ensure_scope(s)
 store.grant_entitlement(W,S,['retrieve','derive_metrics','share_across_workspaces'],END)
 store.register_contract(PROVIDER,'v1',list(PERMISSIONS),START,END,{})
