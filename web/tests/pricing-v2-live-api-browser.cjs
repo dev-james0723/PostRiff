@@ -335,7 +335,8 @@ async function contracts(request, rows) {
   await api(request,other.memberPrincipal)('POST','/api/workspaces/'+other.workspaceId+'/billing/checkout',{planTermsId:'creator-v1'},403);
   const signing=await control(request,'webhook-replay',{scenario:'creator-59'});
   const unsigned=await request.post(base+'/api/billing/webhook',{headers:{'Stripe-Signature':'t=1,v1=bad'},data:signing.body,timeout:ACTION_TIMEOUT_MS});
-  assert.equal(unsigned.status(),400);
+  assert.equal(unsigned.status(),401);
+  assert.deepEqual(await unsigned.json(),{error:'Webhook signature rejected.',code:'unauthenticated'},'Invalid signature is rejected by the actual Stripe authentication gate');
   const webhook=await request.post(base+'/api/billing/webhook',{headers:{'Content-Type':'application/json','Stripe-Signature':signing.signature},data:signing.body,timeout:ACTION_TIMEOUT_MS});
   assert.equal(webhook.status(),200,await webhook.text());
   const before=await control(request,'snapshot');
