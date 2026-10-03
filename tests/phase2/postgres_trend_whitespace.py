@@ -3,6 +3,7 @@
 Run through scripts/postriff_pg_suite.py postgres_trend_whitespace. All source
 and independently reviewed qualification records are explicitly synthetic.
 """
+from local_pg_target import selected_target
 from pathlib import Path
 import datetime
 import hashlib
@@ -17,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'tests')]
     started = time.monotonic()
     # Capture before lazy imports, then retain the actual imported source graph
@@ -24,7 +26,7 @@ def main():
     paths = set(ROOT.joinpath('src').rglob('*.py')) | set(ROOT.joinpath('tests').rglob('*.py'))
     paths |= set(ROOT.joinpath('tests/fixtures/trends').rglob('*.json'))
     paths |= {ROOT / p for p in ('tests/phase2/rls.sql','migrations/postriff/040_social_trend_intelligence.sql',
-                               'scripts/postriff_pg_suite.py')}
+                               'scripts/postriff_pg_suite.py', 'scripts/postriff_disposable_postgres.py', 'tests/phase2/local_pg_target.py')}
     before_all = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     previous = os.environ.get('TREND_WHITESPACE_TEST_DSN')
     os.environ['TREND_WHITESPACE_TEST_DSN'] = os.environ.get('POSTRIFF_TEST_DSN', '')
@@ -47,7 +49,7 @@ def main():
         imported = {p for p in imported if p.is_relative_to(ROOT)}
         guarded = imported | {p for p in paths if ('/growth/trends/' in str(p)
             or '/tests/fixtures/trends/' in str(p) or p.suffix == '.sql')}
-        guarded |= {Path(__file__).resolve(), ROOT / 'scripts/postriff_pg_suite.py'}
+        guarded |= {Path(__file__).resolve(), ROOT / 'scripts/postriff_pg_suite.py', ROOT / 'scripts/postriff_disposable_postgres.py', ROOT / 'tests/phase2/local_pg_target.py'}
         before = {str(p.relative_to(ROOT)): before_all.get(str(p.relative_to(ROOT))) for p in sorted(guarded)}
         after = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(guarded)}
         from postriff_phase2.growth.trends import advanced_pipeline, pipeline, whitespace_admission
@@ -56,7 +58,7 @@ def main():
             'whitespace': whitespace_admission.WhitespaceAdmission(None)._method()}
         receipt = {'captured_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'execution_state': 'actual_disposable_postgresql_synthetic_source_generation_and_review_records',
-            'target': '127.0.0.1:55438/postgres', 'postgres_version': version, 'python_version': sys.version,
+            'target': selected_target(require_dsn=True).label(), 'postgres_version': version, 'python_version': sys.version,
             'command': [sys.executable, 'scripts/postriff_pg_suite.py', 'postgres_trend_whitespace'],
             'tests': result.testsRun, 'failures': len(result.failures), 'errors': len(result.errors), 'skips': len(result.skipped),
             'seconds': round(time.monotonic()-started,3), 'source_guard_before': before, 'source_guard_after': after,

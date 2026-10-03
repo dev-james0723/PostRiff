@@ -28,13 +28,15 @@ PERMISSIONS = {k:{'state':'allow','policy_ref':'synthetic-media-grant-v1','audie
 
 def dedicated_test_dsn(environ=None):
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env=os.environ if environ is None else environ
+    target=selected_target(env, validate_fixture_dsns=False)
     if any(env.get(k) for k in ('PGSERVICE','PGHOSTADDR')): raise ValueError('libpq overrides forbidden')
     raw=env.get('POSTRIFF_TEST_DSN')
     if not raw: raise ValueError('explicit portable local media DSN required')
     p=conninfo_to_dict(raw)
-    if set(p)-{'host','port','dbname','user'} or (p.get('host'),p.get('port'),p.get('dbname'))!=('127.0.0.1','55438','postgres'):
-        raise ValueError('only the allocated disposable runner55438 database is allowed')
+    if set(p)-{'host','port','dbname','user'} or (p.get('host'),p.get('port'),p.get('dbname'))!=('127.0.0.1',str(target.port),'postgres'):
+        raise ValueError('only the selected disposable runner database is allowed')
     return make_conninfo(**p,connect_timeout='5')
 
 

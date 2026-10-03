@@ -8,6 +8,7 @@ stalled and cancelled answers end cleanly; feedback, help and owner insights wor
 
 Run through scripts/postriff_pg_suite.py postgres_site_agent (PYTHONPATH=src:tests).
 """
+from local_pg_target import selected_target
 import io
 import json
 import sys
@@ -25,7 +26,7 @@ from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.learning_model import ModelResponse
 from consumer_fixtures import approve_budgets
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000004"
 THREE = "00000000-0000-0000-0000-000000000003"

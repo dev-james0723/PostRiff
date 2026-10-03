@@ -1,4 +1,5 @@
 """Local disposable PostgreSQL; synthetic signals/writer/observations. No real egress."""
+from local_pg_target import selected_target
 import copy
 import json
 import sys
@@ -14,7 +15,7 @@ from postriff_phase2.growth import scout as S, scout_outcomes as O, scout_runtim
 from test_growth_scout import item, Judge, WL, NOW
 from consumer_fixtures import approve_budgets
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 OWNER='00000000-0000-0000-0000-000000000091'; OTHER='00000000-0000-0000-0000-000000000092'; VIEWER='00000000-0000-0000-0000-000000000093'
 connection=lambda:psycopg.connect(DSN)
 with connection() as db:

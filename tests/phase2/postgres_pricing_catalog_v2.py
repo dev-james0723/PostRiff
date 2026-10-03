@@ -5,6 +5,7 @@ RLS fixture intentionally stays legacy: credit suites apply 020--022 themselves.
 This group uses independent databases for a full fresh install and populated
 legacy upgrade, so its RED cannot be masked by adding 048 to that fixture.
 """
+from local_pg_target import selected_target
 import json
 import os
 from pathlib import Path
@@ -13,14 +14,14 @@ import unittest
 
 import psycopg
 from psycopg import sql
-from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from psycopg.conninfo import conninfo_to_dict
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from postriff_migrate import apply, body, migrations, plan
 
 MIGRATION = ROOT / "migrations/postriff/048_pricing_credit_catalog_v2.sql"
-BASE_DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
+BASE_DSN = selected_target().dsn()
 POLICY = "credits-v2-2026-09-28"
 USER = "00000000-0000-0000-0000-000000000047"
 OTHER = "00000000-0000-0000-0000-000000000048"
@@ -41,6 +42,7 @@ NEW_TABLES = ("pr_plan_price_variants", "pr_price_experiment_assignments")
 
 
 def connect(dsn):
+    selected_target().validate_dsn(dsn, dbnames=("postgres", "pricing_catalog_v2_fresh", "pricing_catalog_v2_upgraded", "pricing_catalog_v2_old_packs"))
     return psycopg.connect(dsn, autocommit=True, client_encoding="utf8")
 
 
@@ -67,8 +69,8 @@ class PricingCatalogV2(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         params = conninfo_to_dict(BASE_DSN)
-        if params.get("host") not in ("127.0.0.1", "localhost", "::1") or params.get("port") != "55438":
-            raise ValueError("Only the suite's loopback disposable PostgreSQL on port 55438 is allowed")
+        if params.get("host") not in ("127.0.0.1", "localhost", "::1") or params.get("port") != str(selected_target().port):
+            raise ValueError("Only the selected loopback disposable PostgreSQL target is allowed")
         cls.addClassCleanup(cls.cleanup)
         setup = (ROOT / "tests/phase2/rls.sql").read_text().split("\\ir ")[0]
         setup = "\n".join(line for line in setup.splitlines()
@@ -84,7 +86,7 @@ class PricingCatalogV2(unittest.TestCase):
                 name = "pricing_catalog_v2_" + kind
                 admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
                 cls.databases.append(name)
-                cls.dsns[kind] = make_conninfo(BASE_DSN, dbname=name)
+                cls.dsns[kind] = selected_target().dsn(name)
         # Full old chain, not just the shared harness's subset, proves pre-v2 RED.
         with connect(cls.dsns["upgraded"]) as db:
             db.execute(setup, prepare=False)
@@ -326,7 +328,7 @@ class PricingCatalogV2(unittest.TestCase):
         with connect(BASE_DSN) as admin:
             admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
             self.databases.append(name)
-        dsn = make_conninfo(BASE_DSN, dbname=name)
+        dsn = selected_target().dsn(name)
         with connect(dsn) as db:
             db.execute(self.setup, prepare=False)
             apply(db, self.old)

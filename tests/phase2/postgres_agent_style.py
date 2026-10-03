@@ -5,6 +5,7 @@ waits, and nothing else breaks).
 
 Run through scripts/postriff_pg_suite.py (rls.sql loads migrations up to 030).
 """
+from local_pg_target import selected_target
 import json
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_runtime_v2 import style
 from postriff_phase2.hosted import AGENT_STYLE_NOT_READY, HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 SEVEN = "00000000-0000-0000-0000-000000000007"
 DEFAULT = style.normalize({})

@@ -9,6 +9,7 @@ Writes machine-readable evidence (one record per scenario) for the verification 
 
 Run: PYTHONPATH=src:tests python scripts/agent_runtime_pg.py tests/phase2/postgres_agent_runtime.py
 """
+from local_pg_target import selected_target
 import base64
 import io
 import json
@@ -40,8 +41,8 @@ from postriff_phase2.agent_runtime_v2 import approvals, config, contracts, creat
 from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService  # noqa: E402
 from consumer_fixtures import approve_budgets  # noqa: E402
 
-PORT = os.environ.get("POSTRIFF_PG_PORT", "55438")
-DSN = f"host=127.0.0.1 port={PORT} dbname=postgres"
+PORT = selected_target().port
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000004"
 THREE = "00000000-0000-0000-0000-000000000003"

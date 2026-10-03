@@ -10,6 +10,7 @@ Candidate policy under test (not approved commercial terms; synthetic plan and p
 - A refund of a plan payment takes back that period's credits proportionally.
 - A legacy plan (no credit policy) keeps its writing batches and receives no credits.
 """
+from local_pg_target import selected_target
 import hashlib, hmac, json, sys, time, uuid
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
@@ -20,7 +21,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.hosted import HostedWorkspaceService
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 T0 = int(time.time())
 clock = [float(T0)]
 USERS = {'one': str(uuid.uuid4()), 'two': str(uuid.uuid4())}

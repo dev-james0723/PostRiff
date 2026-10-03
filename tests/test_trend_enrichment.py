@@ -42,12 +42,14 @@ class EnrichmentUnitTests(unittest.TestCase):
 class EnrichmentPostgresTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from local_pg_target import selected_target
+        target = selected_target(validate_fixture_dsns=False)
         import psycopg
         from psycopg.conninfo import conninfo_to_dict
         cls.psycopg=psycopg; cls.dsn=os.environ["TREND_ENRICHMENT_TEST_DSN"]
         params=conninfo_to_dict(cls.dsn)
         allowed = params.get("host") == "127.0.0.1" and ((params.get("port") == "56451" and params.get("dbname", "").startswith("trend_enrichment_"))
-            or (params.get("port"), params.get("dbname")) == ("55438", "postgres"))
+            or (params.get("port"), params.get("dbname")) == (str(target.port), "postgres"))
         if (not allowed or set(params)-{"host","port","dbname","user"}
                 or any(k in os.environ for k in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR", "PGOPTIONS"))):
             raise ValueError("only explicit disposable enrichment or exact local CI database allowed")

@@ -1,4 +1,5 @@
 """Task2: real disposable PostgreSQL accounting; synthetic local funding only."""
+from local_pg_target import selected_target
 import json
 import time
 import unittest
@@ -14,7 +15,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.hosted import HostedWorkspaceService
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 V2 = 'credits-v2-2026-09-28'
 NOW = int(time.time())
 BASE = {'writingBatches': 10, 'mediaCredits': 1, 'members': 1, 'connectedAccounts': 3, 'storageMb': 200}
@@ -28,7 +29,7 @@ class CreditPolicyV2PostgresTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with connection() as db:
-            assert db.info.host == '127.0.0.1' and db.info.port == 55438
+            assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             # The shared RLS fixture omits these; apply only this missing ordered chain.
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())

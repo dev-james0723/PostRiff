@@ -3,6 +3,7 @@
 Run through scripts/postriff_disposable_postgres.py after rls.sql. Disposable
 loopback PostgreSQL only; no hosted credentials are read.
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -16,7 +17,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.contracts import digest
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 # rls.sql tombstones user ...0002 at its end; use a fresh fourth user as the second owner.
 TWO = "00000000-0000-0000-0000-000000000004"

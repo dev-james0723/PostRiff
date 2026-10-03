@@ -3,6 +3,7 @@
 No cluster startup, schema mutation, provider call, or lease acquisition here.
 Parent supplies the existing Task5/6 schema harness and the exclusive port.
 """
+from local_pg_target import selected_target
 import copy
 import json
 import os
@@ -25,9 +26,10 @@ from test_growth_credit_rewrite import declaration, WRITER, FALLBACK
 def connection():
     if os.environ.get('POSTRIFF_TEST_OWNED_PG') != 'task9-growth':
         raise RuntimeError('Parent exclusive disposable-PG lease is required; no default port.')
-    port=int(os.environ['POSTRIFF_TEST_PG_PORT'])
+    port=selected_target().port
+    if 'POSTRIFF_TEST_PG_PORT' not in os.environ: raise RuntimeError('Explicit parent test port required')
     if not 1024<=port<=65535: raise RuntimeError('Explicit loopback test port required')
-    db=psycopg.connect(f'host=127.0.0.1 port={port} dbname=postgres',client_encoding='utf8')
+    db=psycopg.connect(selected_target().dsn(),client_encoding='utf8')
     assert db.info.host=='127.0.0.1' and db.info.port==port
     return db
 

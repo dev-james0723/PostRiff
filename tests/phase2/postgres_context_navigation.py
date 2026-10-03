@@ -1,4 +1,5 @@
 """Context Navigation contracts on a disposable PostgreSQL workspace (no external providers)."""
+from local_pg_target import selected_target
 import json
 import os
 import sys
@@ -14,7 +15,7 @@ from postriff_phase2.agent_runtime import FixtureAgentRuntime
 from postriff_phase2.hosted import PostgresWorkspaceRepository
 from postriff_phase2.ideas import IdeasService
 
-DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000002"
 

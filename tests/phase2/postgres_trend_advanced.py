@@ -3,6 +3,7 @@
 Applies040 only on the guarded disposable target after the baseline schema.
 Requires every pure/real-PG case to run: any skip is a failed acceptance run.
 """
+from local_pg_target import selected_target
 from pathlib import Path
 import sys
 import unittest
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     original = list(sys.path)
     try:
         sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'tests')]

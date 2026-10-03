@@ -3,6 +3,7 @@ recording transport, Stripe-signed webhooks (activation, payment failure, replay
 block, owner notifications, invitation email with the accept link, and reminder dedupe in pr_notifications.
 No network: Stripe and Resend are replaced by in-memory doubles; the service, ledger and SQL are real.
 """
+from local_pg_target import selected_target
 import hashlib
 import hmac
 import json
@@ -17,7 +18,7 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.email import Mailer, NullTransport
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 clock = [time.time() + 3600]  # ahead of any synthetic event timestamps left by earlier scripts on the shared cluster
 checks = []

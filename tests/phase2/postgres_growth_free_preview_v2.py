@@ -1,4 +1,5 @@
 """Task5 real Growth/ledger on disposable PG17; injected Gateway transport only."""
+from local_pg_target import selected_target
 import json
 import math
 import os
@@ -19,7 +20,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from growth_phase1_fixtures import ENV, Models
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 MODEL = 'google/gemini-2.5-flash-lite'
 POLICY = {'approved': True, 'id': 'synthetic-task5', 'model': MODEL, 'provider': 'vercel-ai-gateway',
           'executionProvider': 'google', 'attemptMaxUsdMicro': 20000, 'dailyUsdMicro': 2000000,
@@ -34,7 +35,7 @@ class PreviewTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with connection() as db:
-            assert db.info.host == '127.0.0.1' and db.info.port == 55438
+            assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
                          '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())

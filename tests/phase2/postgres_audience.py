@@ -1,4 +1,5 @@
 """Synthetic reply approvals and comment reads against disposable local PostgreSQL only."""
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -9,7 +10,7 @@ import psycopg
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.contracts import digest
 from postriff_alpha.domain import AlphaError
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 def connection():
     return psycopg.connect(DSN, client_encoding="utf8")

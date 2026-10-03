@@ -3,6 +3,7 @@
 All sources/costs are synthetic, provider adapters are forbidden mocks. Only the
 exact disposable runner or an explicitly allocated local test DB is accepted.
 """
+from local_pg_target import selected_target
 from pathlib import Path
 import sys
 import unittest
@@ -14,6 +15,7 @@ from test_trend_planner import dedicated_test_dsn
 
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     dsn = dedicated_test_dsn()
     with psycopg.connect(dsn) as db:
         if not db.execute("SELECT to_regclass('public.pr_workspaces')").fetchone()[0]:

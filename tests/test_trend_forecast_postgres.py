@@ -24,7 +24,9 @@ import test_trend_forecast as pure_fixture
 def dedicated_test_dsn(environ=None):
     """Exact disposable runner only; reject all libpq redirect channels first."""
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env = os.environ if environ is None else environ
+    target = selected_target(env, validate_fixture_dsns=False)
     if any(k in env for k in ('PGSERVICE', 'PGSERVICEFILE', 'PGHOSTADDR', 'PGOPTIONS')):
         raise ValueError('libpq overrides forbidden')
     raw = env.get('POSTRIFF_TEST_DSN')
@@ -32,7 +34,7 @@ def dedicated_test_dsn(environ=None):
         raise ValueError('explicit portable PostgreSQL runner required')
     p = conninfo_to_dict(raw)
     if (set(p) - {'host', 'port', 'dbname', 'user'} or p.get('host') != '127.0.0.1'
-            or p.get('port') != '55438' or p.get('dbname') != 'postgres'):
+            or p.get('port') != str(target.port) or p.get('dbname') != 'postgres'):
         raise ValueError('exact disposable PostgreSQL target required')
     return make_conninfo(**p, connect_timeout='5')
 

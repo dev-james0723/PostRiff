@@ -1,4 +1,5 @@
 """Real repository/runtime/command/ledger acceptance; synthetic phone and model only. No external egress."""
+from local_pg_target import selected_target
 import asyncio
 import copy
 import json
@@ -28,7 +29,7 @@ import base64
 import hashlib
 import hmac
 
-DSN = os.environ['POSTRIFF_TEST_DSN']
+DSN = selected_target(require_dsn=True).dsn()
 ONE, TWO = '00000000-0000-0000-0000-000000000001', str(uuid.uuid4())
 clock = [time.time()]
 def connection(): return psycopg.connect(DSN)

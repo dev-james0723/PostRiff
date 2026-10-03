@@ -4,6 +4,7 @@ The mail transport probes, at send time, whether the workspace's subscription ro
 webhook transaction (SELECT ... FOR UPDATE NOWAIT from another connection). The address lookup and the
 send are network calls; neither may run while billing rows are locked. Nothing is sent anywhere.
 """
+from local_pg_target import selected_target
 import hashlib, hmac, json, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
@@ -13,7 +14,7 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.email import Mailer, NullTransport
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 

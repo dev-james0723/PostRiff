@@ -2,6 +2,7 @@
 Breaks caught: rebucketing, client authority, gating bypass, wrong/ambiguous price,
 paid repricing, cross-subscription corruption, replay/races and misbound invoice grants.
 """
+from local_pg_target import selected_target
 import hashlib
 import hmac
 import inspect
@@ -19,7 +20,7 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.hosted import HostedWorkspaceService
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 NOW = int(time.time())
 
 
@@ -42,7 +43,7 @@ class AssignmentV2(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with connection() as db:
-            assert db.info.host == '127.0.0.1' and db.info.port == 55438
+            assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
                          '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())

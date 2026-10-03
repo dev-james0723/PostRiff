@@ -524,6 +524,8 @@ class NotificationPostgres(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import os
+        from local_pg_target import selected_target
+        target = selected_target(validate_fixture_dsns=False)
         dsn = os.environ.get('TREND_NOTIFICATIONS_TEST_DSN')
         if not dsn:
             raise unittest.SkipTest('explicit disposable notifications PostgreSQL DSN required')
@@ -532,7 +534,7 @@ class NotificationPostgres(unittest.TestCase):
         params = conninfo_to_dict(dsn)
         allocated = (params.get('host') == '127.0.0.1' and params.get('port') == '56451'
                      and params.get('dbname','').startswith('trend_notifications_'))
-        portable = (params.get('host') == '127.0.0.1' and params.get('port') == '55438'
+        portable = (params.get('host') == '127.0.0.1' and params.get('port') == str(target.port)
                     and params.get('dbname') == 'postgres')
         if (set(params)-{'host','port','dbname','user'} or not (allocated or portable)
                 or any(os.environ.get(k) for k in ('PGSERVICE','PGHOSTADDR'))):

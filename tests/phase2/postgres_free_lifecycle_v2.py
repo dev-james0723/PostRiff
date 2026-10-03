@@ -1,4 +1,5 @@
 """Task4: synthetic-only PG lifecycle, bootstrap security, before-IO, reenrollment."""
+from local_pg_target import selected_target
 import hashlib
 import io
 import zipfile
@@ -17,7 +18,7 @@ from consumer_fixtures import approve_budgets
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = int(time.time())
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 MIGRATION = ROOT / 'migrations/postriff/050_free_lifecycle_bootstrap.sql'
 
 
@@ -29,7 +30,7 @@ class FreeLifecycle(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with connection() as db:
-            assert db.info.host == '127.0.0.1' and db.info.port == 55438
+            assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql',
                          '022_credit_payment_lifecycle.sql', '048_pricing_credit_catalog_v2.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())

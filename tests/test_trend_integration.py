@@ -19,6 +19,8 @@ from test_trend_opportunities import PAYLOAD
 class DurableServiceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from local_pg_target import selected_target
+        target = selected_target(validate_fixture_dsns=False)
         import psycopg
         from psycopg.conninfo import conninfo_to_dict
         from postriff_phase2.hosted import PostgresWorkspaceRepository, HostedPhase2Commands
@@ -30,7 +32,7 @@ class DurableServiceTests(unittest.TestCase):
         from test_trend_service import END, EID, SCOPE, fixture_row
         dsn = os.environ["TREND_SERVICE_TEST_DSN"]
         params = conninfo_to_dict(dsn)
-        permitted = (params.get("host") == "/private/tmp" and params.get("port") == "56447" and params.get("dbname", "").startswith("trend_pipeline_service_")) or (params.get("host") == "127.0.0.1" and params.get("port") == "56451" and params.get("dbname", "").startswith("trend_exposure_")) or (params.get("host"), params.get("port"), params.get("dbname")) == ("127.0.0.1", "55438", "postgres")
+        permitted = (params.get("host") == "/private/tmp" and params.get("port") == "56447" and params.get("dbname", "").startswith("trend_pipeline_service_")) or (params.get("host") == "127.0.0.1" and params.get("port") == "56451" and params.get("dbname", "").startswith("trend_exposure_")) or (params.get("host"), params.get("port"), params.get("dbname")) == ("127.0.0.1", str(target.port), "postgres")
         if not permitted or set(params)-{"host","port","dbname","user"} or any(k in os.environ for k in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR", "PGOPTIONS")):
             raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
         cls.dsn = dsn

@@ -7,6 +7,7 @@
 - Reconciliation settles an unknown hold exactly once with the operator's evidence and actual cost.
 Synthetic in-process transport only.
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -22,7 +23,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.model_runtime import ServerModelRuntime
 from consumer_fixtures import approve_budgets
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 

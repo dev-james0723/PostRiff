@@ -1,4 +1,5 @@
 """Task6 projection on owned disposable PG17. Funding and identities are synthetic."""
+from local_pg_target import selected_target
 import json
 import time
 import unittest
@@ -21,7 +22,7 @@ JAMES = 'b167161d-37f4-4bc3-ae22-2482c982e5a0'
 
 
 def connection():
-    return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres', client_encoding='utf8')
+    return psycopg.connect(selected_target().dsn(), client_encoding='utf8')
 
 
 class OldSchema(unittest.TestCase):
@@ -41,7 +42,7 @@ class UsageCatalogV2(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with connection() as db:
-            assert db.info.host == '127.0.0.1' and db.info.port == 55438
+            assert db.info.host == '127.0.0.1' and db.info.port == selected_target().port
             for name in ('020_credit_quotes.sql', '021_credit_purchases.sql', '022_credit_payment_lifecycle.sql',
                          '048_pricing_credit_catalog_v2.sql', '050_free_lifecycle_bootstrap.sql'):
                 db.execute((ROOT / 'migrations/postriff' / name).read_text())

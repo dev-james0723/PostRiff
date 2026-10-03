@@ -8,6 +8,7 @@ recent verified jobs that have none, dry-run by default.
 
     POSTRIFF_PG_BIN=... python scripts/postriff_pg_suite.py postgres_growth_history
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -23,7 +24,7 @@ from postriff_phase2.growth import history_import as H
 from postriff_phase2.growth import metric_schedule as M
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TOKENS = {"fixture-one": ONE}
 CONN = "conn-threads-history"

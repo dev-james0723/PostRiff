@@ -7,6 +7,7 @@ push service). Nothing is sent, published or charged. Set RAFII_COWORKER_EVIDENC
 Scenario ids: N* notifications, W* Weekly Operator, S* source → campaign, R* research, O* overlays, E* engagement,
 P* performance, A* attention, G* growth, L* listening, H* HTTP wiring, T* tenant isolation.
 """
+from local_pg_target import selected_target
 import base64
 import datetime as dt
 import io
@@ -33,7 +34,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.notifications import push, webhooks
 from postriff_phase2.oauth import CredentialVault
 
-DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
+DSN = selected_target().dsn()
 HK = "Asia/Hong_Kong"
 USERS = {"owner-token-000000000000000000": "00000000-0000-0000-0000-000000000001", "other-token-000000000000000000": "00000000-0000-0000-0000-000000000004",
          "viewer-token-00000000000000000": "00000000-0000-0000-0000-000000000003", "approver-token-0000000000000000": "00000000-0000-0000-0000-000000000005",

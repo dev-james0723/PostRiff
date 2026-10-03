@@ -1,4 +1,5 @@
 """Opt-in credit ledger on disposable PostgreSQL only; all funding is synthetic."""
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.credit_meter import POLICY_VERSION
 from consumer_fixtures import approve_budgets
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 ONE='00000000-0000-0000-0000-000000000001'
 clock=[time.time()]
 def connection(): return psycopg.connect(DSN,client_encoding='utf8')

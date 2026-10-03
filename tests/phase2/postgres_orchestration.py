@@ -18,6 +18,7 @@ the fixture writer, and a disposable publishing adapter.
 
 Run through scripts/postriff_disposable_postgres.py (PYTHONPATH=src:tests).
 """
+from local_pg_target import selected_target
 import datetime as dt
 import json
 import os
@@ -40,7 +41,7 @@ from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.source_policy import facts_digest, use_approved
 from consumer_fixtures import approve_budgets
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TOKEN = "one"
 HK = "Asia/Hong_Kong"

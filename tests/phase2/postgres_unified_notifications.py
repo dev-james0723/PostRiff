@@ -1,4 +1,5 @@
 """Disposable PostgreSQL acceptance: real SQL/services, fake SMS/Push/Phone only."""
+from local_pg_target import selected_target
 import base64
 import hashlib
 import hmac
@@ -18,7 +19,7 @@ from postriff_phase2.notifications.service import NotificationService
 from postriff_phase2.phone.service import PhoneService
 from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
 
-DSN=os.environ['POSTRIFF_TEST_DSN']
+DSN=selected_target(require_dsn=True).dsn()
 ONE,TWO=str(uuid.uuid4()),str(uuid.uuid4())
 def connection(): return psycopg.connect(DSN)
 def verify(token):

@@ -1,4 +1,5 @@
 """Real Radar state machine on disposable PostgreSQL; no external providers."""
+from local_pg_target import selected_target
 import sys,json,time,uuid
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
@@ -10,7 +11,7 @@ from postriff_phase2.growth.service import GrowthService,ROUTES
 from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE
 from radar_fixtures import Models,Writer,ENV,Sources
 ONE='00000000-0000-0000-0000-000000000001';TWO='00000000-0000-0000-0000-000000000002'
-def connection():return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres')
+def connection():return psycopg.connect(selected_target().dsn())
 def verify(t):
     if t in ('one','two'):return ONE if t=='one' else TWO
     raise AlphaError('Verified session required.',401)
