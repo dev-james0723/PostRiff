@@ -1,11 +1,11 @@
 {
-  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
-  "sourceState": "uncommitted_candidate",
-  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
-  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
-  "executionState": "candidate_local_only",
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "sourceState": "merged_deployed_core_release",
+  "sourceTreeHash": null,
+  "generatedAt": "2026-10-03T01:11:36.772268+00:00",
+  "executionState": "production_schema_and_core_deployment_verified_acceptance_pending",
   "productionVerified": false,
-  "mode": "pending_qualification",
+  "mode": "qualified_implementation_no_live_cutover",
   "approval": "founder-owner-20261002",
   "notBefore": null,
   "audiences": [
@@ -30,9 +30,25 @@
   "templateVersion": null,
   "dedupe": "Durable pre-egress hash/key; exact email payload only within 24h; push keys include device ID and never replay a committed uncertain dispatch.",
   "pending": [
-    "existing verified Rafii/PostRiff sender domain",
+    "verified Rafii/PostRiff sender",
     "qualified provider billing ceiling",
-    "H5 owner device consent",
-    "staging schema and raw-body webhook canary"
-  ]
+    "owner physical device permissions",
+    "saved Founder policy and durable new-event-only cutover",
+    "real accepted/delivered/click/read receipts"
+  ],
+  "deploymentSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "reviewedSourceFingerprint": "cb418637e2e8c27b643112b2504be3f2a19c3b522123cb69aeb74ce50ffdaeef",
+  "sourceEvidence": "production-release-verification.json; exact-head CI and identical merged tree",
+  "authCandidate": {
+    "branch": "codex/founder-google-acceptance-20261002",
+    "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "state": "local_qualification_in_progress",
+    "deployed": false
+  },
+  "qualification": {
+    "migration088": "PASS_staging_then_production",
+    "legacyOutbox": "PASS_8_synthetic_PostgreSQL_tests",
+    "signedCallbackDedupe": "PASS_synthetic",
+    "actualCutoverRows": 0
+  }
 }

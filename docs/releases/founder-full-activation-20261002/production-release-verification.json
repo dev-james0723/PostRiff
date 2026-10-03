@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-10-03T01:11:14.716Z",
+  "execution": "real Vercel deployment metadata and Git tree comparison",
+  "deploymentId": "dpl_3HX7FiFEfTsWrcBRQeWgLp7qhHxZ",
+  "sourceSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "sourceRef": "consumer-saas",
+  "target": "production",
+  "state": "READY",
+  "stableAlias": "postriff-phase2-private.vercel.app",
+  "reviewedHead": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "reviewedTreeIdenticalToDeployed": true,
+  "comparisonCommand": "git diff --exit-code 4c2bfb88050efab92eec988f727513c68ce358af 00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "authenticatedAcceptance": "pending existing Google account primary and fresh MFA"
+}

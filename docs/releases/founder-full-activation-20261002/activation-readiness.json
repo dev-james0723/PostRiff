@@ -1,9 +1,9 @@
 {
-  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
-  "sourceState": "uncommitted_candidate",
-  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
-  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
-  "executionState": "candidate_local_only",
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "sourceState": "merged_deployed_core_release",
+  "sourceTreeHash": null,
+  "generatedAt": "2026-10-03T01:11:36.772268+00:00",
+  "executionState": "production_schema_and_core_deployment_verified_acceptance_pending",
   "productionVerified": false,
   "features": [
     {
@@ -11,39 +11,55 @@
       "name": "Founder authentication",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "existing_google_primary_fix_not_deployed",
+        "human_fresh_MFA"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify existing login, fresh factor, CSRF, logout and non-Founder denial."
+      "nextAction": "Deploy qualified Google PKCE primary, then owner completes existing fresh MFA; verify CSRF, logout and non-Founder denial.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F02",
       "name": "Portal pages",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify all pages in Live and Demo at 390, 768 and 1440 pixels."
+      "nextAction": "Verify all pages in Live and Demo at 390, 768 and 1440 pixels.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F03",
       "name": "Customers and workspace integrity",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Reconcile bounded projections against customer A/B and internal tenants."
+      "nextAction": "Reconcile bounded projections against customer A/B and internal tenants.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F04",
@@ -51,13 +67,18 @@
       "state": "configured_off",
       "blockers": [
         "ops_workspace_not_ready",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Finish the reserved workspace through authenticated fresh MFA."
+      "nextAction": "Provision through the existing authenticated fresh-MFA Ops flow; repeat safely and verify the same owner/environment workspace identity.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F05",
@@ -66,30 +87,39 @@
       "blockers": [
         "ops_workspace_not_ready",
         "approved_policy_not_saved",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H2"
       ],
       "effectiveFlags": {
-        "RAFII_AGENT_V2_ENABLED": null
+        "RAFII_AGENT_V2_ENABLED": true,
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Run one capped owner turn and match its tools, receipts and cost."
+      "nextAction": "Run one capped owner turn and match its tools, receipts and cost.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F06",
       "name": "Jobs and continuity",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Reconcile stale runs against leases/provider evidence; verify cancellation and continuity."
+      "nextAction": "Reconcile stale runs against leases/provider evidence; verify cancellation and continuity.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F07",
@@ -99,7 +129,7 @@
         "owner_device_consent",
         "ops_workspace_not_ready",
         "approved_policy_not_saved",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [
         "H5"
@@ -108,10 +138,14 @@
         "H2"
       ],
       "effectiveFlags": {
-        "RAFII_FOUNDER_VOICE_ENABLED": null
+        "RAFII_FOUNDER_VOICE_ENABLED": false,
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Owner microphone consent, bounded voice/delegation/end and settlement canary."
+      "nextAction": "Owner microphone consent, bounded voice/delegation/end and settlement canary.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F08",
@@ -121,7 +155,7 @@
         "owner_device_consent",
         "ops_workspace_not_ready",
         "approved_policy_not_saved",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [
         "H5"
@@ -131,23 +165,32 @@
         "H3"
       ],
       "effectiveFlags": {
-        "RAFII_FOUNDER_CALLS_ENABLED": null
+        "RAFII_FOUNDER_CALLS_ENABLED": false,
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Verified owner destination, contact policy, quiet hours, caps and one approved call."
+      "nextAction": "Verified owner destination, contact policy, quiet hours, caps and one approved call.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F09",
       "name": "In-app notices",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Create one safe notice, retry, follow its link and acknowledge it."
+      "nextAction": "Create one safe notice, retry, follow its link and acknowledge it.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F10",
@@ -155,7 +198,10 @@
       "state": "configured_off",
       "blockers": [
         "durable_cutover_and_delivery_proof_required",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending",
+        "verified_Rafii_sender_unavailable",
+        "provider_billing_ceiling_unqualified",
+        "new_event_cutover_not_committed"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
@@ -164,10 +210,14 @@
         "H3"
       ],
       "effectiveFlags": {
-        "RAFII_FOUNDER_EMAIL_ENABLED": null
+        "RAFII_FOUNDER_EMAIL_ENABLED": false,
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Approve sender and Founder cutover; verify accepted and signed delivered receipts."
+      "nextAction": "Verify the intended Rafii/PostRiff sender domain, qualify its billing ceiling/callback, then commit a new-event-only cutover. Legacy durable outbox synthetic PostgreSQL acceptance passed.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F11",
@@ -175,17 +225,24 @@
       "state": "configured_off",
       "blockers": [
         "durable_cutover_and_delivery_proof_required",
-        "legacy_outbox_not_qualified",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending",
+        "verified_Rafii_sender_unavailable",
+        "provider_billing_ceiling_unqualified",
+        "new_event_cutover_not_committed"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H1",
         "H2"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Approve customer cutover; qualify new V2 events and legacy durable outbox."
+      "nextAction": "Verify the intended Rafii/PostRiff sender domain, qualify its billing ceiling/callback, then commit a new-event-only cutover. Legacy durable outbox synthetic PostgreSQL acceptance passed.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F12",
@@ -193,7 +250,7 @@
       "state": "blocked_owner",
       "blockers": [
         "owner_device_consent",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [
         "H5"
@@ -202,92 +259,126 @@
         "H2"
       ],
       "effectiveFlags": {
-        "RAFII_FOUNDER_PUSH_ENABLED": null
+        "RAFII_FOUNDER_PUSH_ENABLED": false,
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Owner device gesture/subscription, expiry, lock-screen delivery and click/read proof."
+      "nextAction": "Owner device gesture/subscription, expiry, lock-screen delivery and click/read proof.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F13",
       "name": "Briefings",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H3"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Approve schedules; verify DST, overlap, coalescing, retries and receipt coverage."
+      "nextAction": "Save the accepted editable schedule policy; verify future slots, DST, coalescing and receipt coverage without sending old briefings.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F14",
       "name": "Incidents and follow-ups",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Synthetic staging trigger/recovery; observe production detector without customer disruption."
+      "nextAction": "Synthetic staging trigger/recovery; observe production detector without customer disruption.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F15",
       "name": "Revenue and payments",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H4"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Qualify approved catalog and signed Stripe test lifecycle; preserve empty real revenue."
+      "nextAction": "Qualify approved catalog and signed Stripe test lifecycle; preserve empty real revenue.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F16",
       "name": "AI cost and attempts",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Trace attempts and reserve/settle/late cost; retain unknown historical reservations."
+      "nextAction": "Trace attempts and reserve/settle/late cost; retain unknown historical reservations.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F17",
       "name": "Product and retention",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Trace fresh journeys and watermarks; wait for mature cohorts before measuring retention."
+      "nextAction": "Trace fresh journeys and watermarks; wait for mature cohorts before measuring retention.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F18",
       "name": "Operations and connections",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify per-stage health, telemetry gaps, queues, source lag and revoked connections."
+      "nextAction": "Verify per-stage health, telemetry gaps, queues, source lag and revoked connections.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F19",
@@ -295,46 +386,58 @@
       "state": "configured_off",
       "blockers": [
         "support_schema_and_authenticated_flow_not_verified",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H6"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify the in-app ticket source, tenant isolation, reply/reopen/resolve, masked metadata and audited reveal."
+      "nextAction": "Verify the in-app ticket source, tenant isolation, reply/reopen/resolve, masked metadata and audited reveal.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F20",
       "name": "Credits and top-ups",
       "state": "configured_off",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H4"
       ],
       "effectiveFlags": {
-        "POSTRIFF_CREDITS_ENABLED": null,
-        "POSTRIFF_CREDIT_PURCHASES_ENABLED": null
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
       },
       "activationProof": "not_verified",
-      "nextAction": "Approve catalog; test grants, reserve/settle and signed top-ups before live charges."
+      "nextAction": "Approve catalog; test grants, reserve/settle and signed top-ups before live charges.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F21",
       "name": "Scoped administrative actions",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify MFA, typed confirmation, CAS, dedupe and bounded reversible account canary."
+      "nextAction": "Verify MFA, typed confirmation, CAS, dedupe and bounded reversible account canary.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F22",
@@ -342,44 +445,59 @@
       "state": "configured_off",
       "blockers": [
         "stripe_provider_and_financial_confirmation_required",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H4"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Verify fresh-factor typed confirmation, signed Stripe receipts and read-only recovery; actual refunds require per-action confirmation."
+      "nextAction": "Verify fresh-factor typed confirmation, signed Stripe receipts and read-only recovery; actual refunds require per-action confirmation.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F23",
       "name": "Engineering and audit receipts",
       "state": "ready_for_verification",
       "blockers": [
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authenticated_live_acceptance_pending"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Match exact candidate SHA, required CI, deployment and evidence manifest."
+      "nextAction": "Verify the deployed exact SHA attestation and current Engineering UI after authenticated acceptance.",
+      "syntheticQualification": "PASS; core exact-head CI"
     },
     {
       "id": "F24",
       "name": "Marketing and attribution",
-      "state": "configured_off",
+      "state": "blocked_owner",
       "blockers": [
-        "authorized_sources_not_verified",
-        "fresh_effective_configuration_and_end_to_end_proof_required"
+        "authorized_acquisition_GSC_spend_source_missing",
+        "qualified_history_missing"
       ],
       "ownerDependencies": [],
       "acceptedOwnerDecisions": [
         "H6"
       ],
-      "effectiveFlags": {},
+      "effectiveFlags": {
+        "RAFII_CONTROL_ENABLED": true,
+        "RAFII_CONTROL_MOUNT": "embedded",
+        "RAFII_CONTROL_ENVIRONMENT": "production"
+      },
       "activationProof": "not_verified",
-      "nextAction": "Authorize actual GSC/acquisition/spend sources and wait for qualified history."
+      "nextAction": "Authorize actual GSC/acquisition/spend sources and wait for qualified history.",
+      "syntheticQualification": "not_available; no source invented"
     }
   ],
   "acceptedOwnerDefaults": {
@@ -412,5 +530,21 @@
     "productionAliasSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
     "deploymentId": "dpl_6MgiST6Dnyf7ySDjmkKL5RjetcXX",
     "configuration": "audit_snapshot_not_fresh_effective_flags"
+  },
+  "deploymentSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "reviewedSourceFingerprint": "cb418637e2e8c27b643112b2504be3f2a19c3b522123cb69aeb74ce50ffdaeef",
+  "sourceEvidence": "production-release-verification.json; exact-head CI and identical merged tree",
+  "authCandidate": {
+    "branch": "codex/founder-google-acceptance-20261002",
+    "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "state": "local_qualification_in_progress",
+    "deployed": false
+  },
+  "productionVerification": {
+    "migration088": "PASS",
+    "restrictedReaderSessionWatchdog": "PASS",
+    "temporaryPermissionsRestored": "PASS",
+    "stableAlias": "PASS",
+    "authenticatedCanaries": "not_run"
   }
 }

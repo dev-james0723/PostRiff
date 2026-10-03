@@ -1,0 +1,16 @@
+{
+  "ownerAnswer": "Approve both, staging first",
+  "scope": {
+    "staging": "oxacvkhpfgytkepxcaqh",
+    "production": "buoyhkbodnhzngaotoel",
+    "temporaryOnly": [
+      "projection SET/INHERIT for migration administrator",
+      "projection CREATE on rafii_control schema"
+    ],
+    "exactRestoreBeforeCommit": true
+  },
+  "localQualification": "../../../consumer-ready/evidence/activation-088-permission-local-v3.json",
+  "stagingApplied": true,
+  "productionApplied": true,
+  "replayedMigrations": 0
+}
