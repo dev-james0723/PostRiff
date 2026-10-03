@@ -663,7 +663,7 @@ class ProductivityConnectorService:
             require(self._membership(row), "read")
             cur.execute("SELECT connection_id,provider,account_label,scopes,extract(epoch from access_expires_at),revoked_at IS NOT NULL FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s ORDER BY created_at", (workspace_id, principal))
             connections = [{"connectionId": item[0], "provider": item[1], "account": item[2], "scopes": list(item[3] or []),
-                            "expiresAt": item[4], "revoked": bool(item[5])} for item in cur.fetchall()]
+                            "expiresAt": float(item[4]) if item[4] is not None else None, "revoked": bool(item[5])} for item in cur.fetchall()]
         return {"providers": [{"id": pid, "enabled": bool(self.flags.get(pid)), "configured": pid in self.providers,
                                "scopes": list(getattr(self.providers.get(pid), "scopes", ()))} for pid in PROVIDERS],
                 "connections": connections}

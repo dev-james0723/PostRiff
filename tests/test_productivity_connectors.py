@@ -2,6 +2,7 @@
 import base64
 import json
 import os
+from decimal import Decimal
 import sys
 import unittest
 from contextlib import contextmanager
@@ -229,7 +230,18 @@ class FakeCursor:
             connection = self.repo.connections[params[6]]
             connection.update(access=params[0], refresh=params[1], key=params[2], scopes=list(params[3]), expires=params[4])
         elif compact.startswith("SELECT connection_id,provider,account_label,scopes"):
-            self.many = []
+            self.many = [
+                (
+                    connection["connectionId"],
+                    connection["provider"],
+                    connection["account"],
+                    connection["scopes"],
+                    Decimal(str(connection["expires"])) if connection["expires"] is not None else None,
+                    connection["revoked"],
+                )
+                for connection in self.repo.connections.values()
+                if connection["workspace"] == params[0] and connection["member"] == params[1]
+            ]
         elif compact.startswith("UPDATE public.pr_connector_oauth_transactions"):
             pass
         else:
@@ -279,6 +291,14 @@ class ServiceTests(unittest.TestCase):
             self.assertNotIn(secret, browser_objects)
         stored = self.repo.connections[completed["connectionId"]]
         self.assertNotIn("plain-access-token", stored["access"])
+
+    def test_catalog_serializes_postgres_decimal_expiry(self):
+        _, completed, _ = self.complete_from_start()
+        catalog = self.service.catalog("w1", "u1")
+        json.dumps(catalog)
+        connection = next(item for item in catalog["connections"] if item["connectionId"] == completed["connectionId"])
+        self.assertIsInstance(connection["expiresAt"], float)
+        self.assertEqual(connection["expiresAt"], self.repo.connections[completed["connectionId"]]["expires"])
 
     def test_turn_refetch_fails_closed_for_foreign_stale_and_records_exact_digest(self):
         _, completed, picked = self.complete_from_start()
