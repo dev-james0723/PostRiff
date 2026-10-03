@@ -524,6 +524,8 @@ with connection() as db:
 print('PASS custom phone rule review, same-post threshold, single fake call, spoken topic and edit revocation')
 
 # Revocation removes identity/schedules; deletion cascades all phone data even when global switch is off.
+# Keep this cooldown case recent despite earlier PostgreSQL/ASGI fixture work.
+assert sql("UPDATE pr_phone_verification_limits SET last_sent_at=now(),sent_day=current_date WHERE user_id=%s RETURNING user_id::text",ONE)==[(ONE,)]
 phone.delete_number(wid,ONE)
 assert not phone.settings(wid,ONE)['number']
 assert not phone.settings(wid,ONE)['preferences']['enabled']
