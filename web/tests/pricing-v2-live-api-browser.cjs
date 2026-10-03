@@ -300,16 +300,23 @@ async function fundingUIScene(request,row,width,motion,mode,enabled) {
   try {
     await scene.page.goto(base+'/app/workspace/brand');
     const genome=scene.page.locator('[aria-label="Creator Genome"]');await genome.waitFor();
-    await genome.getByLabel('Owned history CSV',{exact:true}).fill('text,platform,language,post_id,published_at\nOwn idea.,Threads,en,synthetic-ui,2026-09-01\n');
-    await genome.getByLabel('CSV account',{exact:true}).fill('local-synthetic-owned');
-    await genome.getByLabel('Confirm owned history retention and analysis',{exact:true}).check();
     const g=await api(scene.context.request,row.principal)('GET','/api/workspaces/'+row.workspaceId+'/growth/catalog');
     assert.equal(g.genomeAnalysis.available,enabled);
+    const csv=genome.getByLabel('Owned history CSV',{exact:true});
+    if(enabled) {
+      await scene.page.waitForFunction(()=>document.querySelector('[aria-label="Creator Genome"] input[aria-label="Owned history CSV"]')?.disabled===false);
+      assert.equal(await csv.isEnabled(),true);
+      await csv.setInputFiles({name:'owned-history.csv',mimeType:'text/csv',buffer:Buffer.from('text,platform,language,post_id,published_at\nOwn idea.,Threads,en,synthetic-ui,2026-09-01\n')});
+      await genome.getByLabel('CSV account',{exact:true}).fill('local-synthetic-owned');
+      await genome.getByLabel('Confirm owned history retention and analysis',{exact:true}).check();
+    } else {
+      assert.equal(await csv.isEnabled(),false,'Unfunded CSV input stays disabled; no forced input');
+    }
     assert.equal(await genome.getByRole('button',{name:'Propose my Genome',exact:true}).isEnabled(),enabled);
     const overflow=await scene.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);assert.ok(overflow);
     await scene.page.screenshot({path:path.join(out,`${row.scenario}-genome-${mode}-${width}-${motion}.png`),fullPage:true});
     assert.deepEqual(scene.errors,[]);assert.deepEqual(scene.external,[]);
-    pass(`${row.scenario} Genome ${mode} ${width} ${motion}: actual catalog and UI button agree after explicit input/consent`);
+    pass(`${row.scenario} Genome ${mode} ${width} ${motion}: actual catalog and UI funding gates agree; funded input and consent are explicit`);
   } finally {await scene.context.close();}
 }
 async function contracts(request, rows) {
