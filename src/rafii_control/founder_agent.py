@@ -627,12 +627,7 @@ def _resolve_ops(values, control, principal):
     Settings); 409 POLICY_DISABLED (ops_workspace_not_configured) when neither exists."""
     import os
     env = values if values is not None else os.environ
-    if env.get(OPS_WORKSPACE_ENV):
-        return ops_workspace_id(values)
-    try:
-        from . import founder_ops
-    except ImportError:
-        return ops_workspace_id(values)
+    from . import founder_ops
     store = getattr(getattr(control, "queries", None), "store", None)
     workspace, _source = founder_ops.resolve(env, store, principal["operator"]["user_id"])
     if not workspace:

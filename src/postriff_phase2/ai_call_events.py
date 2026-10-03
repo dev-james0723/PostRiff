@@ -228,10 +228,18 @@ def _in_savepoint(cursor, rows):
 
 
 def _on_own_connection(connect, rows):
+    from .telemetry_journal import record as journal
     with connect() as db:
         with db.cursor() as cur:
             cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}", ())
-            inserted = _insert(cur, rows)
+            try:
+                inserted = _in_savepoint(cur, rows)
+            except Exception as error:
+                _failed(error)
+                journal(cur, 'ai_call_events', rows, state='failed', error=error)
+                inserted = 0
+            else:
+                journal(cur, 'ai_call_events', rows, state='recorded', recorded=inserted)
         db.commit()
     return inserted
 
@@ -240,12 +248,31 @@ def write(rows, *, cursor=None, connect=None):
     """Insert built rows; returns how many were new. Never raises. With `cursor` the rows join the caller's transaction (and
     commit with it) under a savepoint; with `connect` (a connection factory) they commit on a short connection of their own."""
     rows = [row for row in (rows or []) if isinstance(row, dict)][:MAX_ROWS]
-    if not rows or not installed() or (cursor is None and connect is None):
+    if not rows or (cursor is None and connect is None):
+        return 0
+    from .telemetry_journal import record as journal
+    if not installed():
+        try:
+            if cursor is not None:
+                journal(cursor, 'ai_call_events', rows, state='suspended')
+            else:
+                with connect() as db, db.cursor() as cur:
+                    cur.execute('SET LOCAL statement_timeout = 200', ())
+                    journal(cur, 'ai_call_events', rows, state='suspended')
+                    db.commit()
+        except Exception as error:
+            _failed(error)
         return 0
     try:
-        return _in_savepoint(cursor, rows) if cursor is not None else _on_own_connection(connect, rows)
+        if cursor is None:
+            return _on_own_connection(connect, rows)
+        inserted = _in_savepoint(cursor, rows)
+        journal(cursor, 'ai_call_events', rows, state='recorded', recorded=inserted)
+        return inserted
     except Exception as error:  # noqa: BLE001 - recording never fails the customer's request
         _failed(error)
+        if cursor is not None:
+            journal(cursor, 'ai_call_events', rows, state='failed', error=error)
         return 0
 
 

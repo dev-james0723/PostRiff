@@ -126,7 +126,7 @@ class RegistrationTests(Base):
 
     def test_source_vocabulary(self):
         self.assertEqual(founder_sources.SOURCE_IDS, ('cron', 'database', 'control_database', 'control_reader', 'phone_provider', 'notifications',
-                                                      'stripe_webhooks', 'email_provider', 'model_gateway'))
+                                                      'stripe_webhooks', 'email_provider', 'model_gateway', 'product_writer', 'ai_writer'))
         self.assertEqual(founder_sources.REQUIRED_SOURCES, ('cron', 'database', 'control_database'), 'no 8.D source pages on its own')
         self.assertEqual(founder_sources.EVENT_SOURCE_IDS, ('stripe_webhooks', 'email_provider', 'model_gateway'))
         self.assertIs(live_metrics.SOURCE_IDS, founder_sources.SOURCE_IDS)
@@ -529,7 +529,9 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(fstore.written['database'], ('measured', 'qualified', NOW_EPOCH))
         self.assertEqual(fstore.written['phone_provider'], ('not_applicable', 'not_configured', None))
         self.assertEqual(fstore.store.reads, [True], 'the reader probe runs as the read-only reader role')
-        self.assertEqual(db.savepoints, 3, 'one savepoint per event probe, so one failure cannot abort the others')
+        self.assertEqual(db.savepoints, 5, 'independent event and writer probes retain their own savepoints')
+        self.assertEqual(fstore.written['product_writer'], ('partial', 'not_configured', None))
+        self.assertEqual(fstore.written['ai_writer'], ('partial', 'not_configured', None))
         self.assertTrue(all('payload' not in sql for sql, _ in db.statements))
 
     def test_unmounted_missing_and_failing_event_sources(self):

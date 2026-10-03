@@ -181,6 +181,7 @@ class PushTransport:
 
 
 class WebPushTransport(PushTransport):
+    requires_cutover = True
     name = "webpush"
 
     def __init__(self, vapid, post=raw_post, clock=time.time):

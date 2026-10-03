@@ -311,7 +311,8 @@ export interface ContactPolicy {
   dailyCap: number;
   concurrentCap: number;
   eventAllowlist: string[];
-  budgetUsdMicroDaily: number;
+  /** null is an explicitly selected Unlimited call budget; the shared spend policy still applies. */
+  budgetUsdMicroDaily: number | null;
   updatedAt?: Timestamp | null;
 }
 

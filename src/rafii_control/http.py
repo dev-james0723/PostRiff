@@ -226,11 +226,13 @@ class ControlApplication:
         try:
             ops, _source = founder_module('founder_ops').resolve(self.flags, getattr(self.queries, 'store', None), principal['operator']['user_id'])
         except ControlError:
-            ops = self.flags.get('RAFII_FOUNDER_OPS_WORKSPACE_ID')
+            return None
         if self.runtime is None or not ops: return None
         try: phone = getattr(self.runtime(), 'phone', None)
         except Exception: return None
-        return founder_module('founder_contact').PhoneCalls(phone, ops, principal['operator']['user_id']) if phone else None
+        operator = principal['operator']['user_id']
+        contact = founder_module('founder_contact')
+        return contact.PhoneCalls(phone, ops, operator, policy_loader=lambda: contact.load_policy(self.founder_store(), operator)) if phone else None
 
     def demo_incidents(self, principal):
         """Demo incidents are part of the founder's own Demo dataset (founder_preview_scenarios); the live store is never a fallback."""

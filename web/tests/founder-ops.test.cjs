@@ -239,7 +239,9 @@ test('the pages keep the browser-gate guarantees: Ack only in Live, scrollers re
   assert.ok(tables.length >= 5 && tables.every((cls) => cls.split(' ').includes('relative')), 'every table scroller is relative, so its sr-only caption cannot widen the page');
   assert.match(panels, /className='rafii-quiet relative overflow-x-auto/, 'the matrix scrolls inside a relative box');
   const support = read('features/founder/support/support-view.tsx');
-  assert.match(support, /Ticket source not chosen \(D7\)/);
+  assert.match(support, /<SupportInbox/);
+  assert.match(support, /Business-hour targets and satisfaction surveys have not been configured/);
+  assert.doesNotMatch(support, /Ticket source not chosen \(D7\)/);
   const advanced = read('features/founder/advanced/advanced-view.tsx');
   assert.match(advanced, /<DataHealth \/>/);
 });

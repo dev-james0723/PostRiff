@@ -10,6 +10,7 @@ import copy
 import json
 import unittest
 import uuid
+from unittest.mock import patch
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,20 @@ ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/rafii-control-v2"
 OPERATOR = "00000000-0000-0000-0000-000000000001"
 OPS = "20000000-0000-4000-8000-000000000002"
+
+
+def setUpModule():
+    # Runtime tests use local metadata doubles. The Ops PostgreSQL suite exercises
+    # the real role, owner, environment, classification and crash boundaries.
+    global _ops_patches
+    _ops_patches = [patch('rafii_control.founder_ops.ready', return_value=True), patch('rafii_control.founder_ops.stored', return_value=None)]
+    for mock in _ops_patches:
+        mock.start()
+
+
+def tearDownModule():
+    for mock in reversed(_ops_patches):
+        mock.stop()
 NOW = datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc).timestamp()
 SCENARIO_AT = "2026-10-01T13:00:00Z"
 QUESTIONS = (("今個月 AI 成本為甚麼上升？", ["founder_cost_breakdown", "founder_attention_list"]),
@@ -60,6 +75,17 @@ class ReadStore:
 
     def __init__(self):
         self.receipts = []
+
+    @contextmanager
+    def transaction(self, read=False):
+        yield self
+
+    def execute(self, sql, params=()):
+        self.ops_row = None if sql.startswith('SELECT ops_workspace_id') else dict(role='owner', status='active', deleted=False, kind='internal', environment=self.environment)
+        return self
+
+    def fetchone(self):
+        return self.ops_row
 
     def read(self, kind, identifier=None):
         return []
@@ -596,4 +622,3 @@ class FounderPanelContextTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

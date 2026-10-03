@@ -167,13 +167,18 @@ def record_many(cur, workspace_id, user_id, events):
     except Exception as error:  # noqa: BLE001 - a malformed call site must not fail the command either
         _note("product_events.invalid", error)
         return 0
-    if not rows or suspended():
+    if not rows:
+        return 0
+    from .telemetry_journal import record as journal
+    if suspended():
+        journal(cur, 'product_events', rows, state='suspended')
         return 0
     mark = "product_event_" + uuid.uuid4().hex[:8]
     try:
         cur.execute(f"SAVEPOINT {mark}")
     except Exception as error:  # noqa: BLE001 - the caller's transaction is already unusable; its owner decides
         _failed(error)
+        journal(cur, 'product_events', rows, state='failed', error=error)
         return 0
     try:
         cur.execute(INSERT + ",".join([ROW] * len(rows)) + " ON CONFLICT DO NOTHING", [value for item in rows for value in item])
@@ -185,13 +190,16 @@ def record_many(cur, workspace_id, user_id, events):
         except Exception:  # noqa: BLE001
             pass
         _failed(error)
+        journal(cur, 'product_events', rows, state='failed', error=error)
         return 0
     try:
         cur.execute(f"RELEASE SAVEPOINT {mark}")
     except Exception as error:  # noqa: BLE001
         _failed(error)
         return 0
-    return written if isinstance(written, int) and not isinstance(written, bool) and written >= 0 else len(rows)
+    written = written if isinstance(written, int) and not isinstance(written, bool) and written >= 0 else len(rows)
+    journal(cur, 'product_events', rows, state='recorded', recorded=written)
+    return written
 
 
 def record(cur, workspace_id, user_id, event, entity_id, version, properties=None):

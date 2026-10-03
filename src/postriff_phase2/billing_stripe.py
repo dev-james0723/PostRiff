@@ -380,3 +380,22 @@ class StripePaymentProvider:
         if not isinstance(body.get("url"), str):
             raise AlphaError("The billing portal could not be opened.", 502)
         return {"url": body["url"]}
+
+    def create_refund(self, *, payment_intent_id, amount_minor, action_id, reason):
+        form = {'payment_intent': payment_intent_id, 'amount': amount_minor, 'metadata[founder_action_id]': action_id}
+        if reason in ('duplicate', 'fraudulent', 'requested_by_customer'):
+            form['reason'] = reason
+        return self._post('/refunds', form, idempotency_key='founder-refund:' + action_id)
+
+    def find_refund(self, *, payment_intent_id, action_id):
+        """Reconcile uncertain submission with GET; never repeat the POST."""
+        from urllib.parse import urlencode
+        response = self.transport('GET', API + '/refunds?' + urlencode({'payment_intent': payment_intent_id, 'limit': 100}),
+                                  headers={'Authorization': 'Bearer ' + self.secret_key})
+        body = response.get('body')
+        if response.get('status') != 200 or not isinstance(body, dict) or not isinstance(body.get('data'), list):
+            raise AlphaError('Refund reconciliation is unavailable.', 503)
+        matches = [r for r in body['data'] if isinstance(r, dict) and (r.get('metadata') or {}).get('founder_action_id') == action_id]
+        if len(matches) != 1:
+            raise AlphaError('Refund outcome remains uncertain. Reconcile it before another submission.', 503)
+        return matches[0]

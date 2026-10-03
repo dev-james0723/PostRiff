@@ -28,15 +28,21 @@ def deliver(service, call_id):
             fresh = cur.fetchone()
             custom_event_current = bool(fresh and fresh[0])
         route = service.agent().cfg.route('voice_front_end', reason='phone delivery')
-        start = planner.day_start(service.clock(), prefs['timeZone'])
+        start = planner.day_start(service.clock(), planner.effective_preferences(prefs, service.config.public())['timeZone'])
         cur.execute(f'SELECT count(*) FILTER(WHERE kind<>\'explicit\'),count(*),coalesce(sum({billing.DAILY_COST_SQL}),0) FROM public.pr_phone_calls WHERE user_id=%s '
                     'AND requested_at>=to_timestamp(%s) AND id<>%s', (value['user_id'], start, call_id))
         automatic, count, reserved = cur.fetchone()
+        cur.execute('SELECT count(*) FROM public.pr_phone_calls WHERE user_id=%s AND id<>%s AND NOT(state=ANY(%s))',
+                    (value['user_id'], call_id, list(contracts.TERMINAL)))
+        active_calls = int(cur.fetchone()[0])
+        if planner.founder_scope(service.config.public()):
+            active_calls = store.active_founder_contacts(cur, value['user_id'], value['workspace_id'], exclude_call_id=call_id)
         blocker = planner.eligibility(value['kind'], prefs, now=service.clock(), verified=bool(identity and identity['verified'] and identity['hash']==value['number_hash']),
                     membership=bool(member and Membership.from_row(*member).allows('edit')), configured=bool(service.provider and service.provider.configured and (not service.provider.real or service.config.telephony_rate>0)),
                     live_configured=route.available and service.agent().cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=service.config.public(),
                     event_type=value['reason_key'].split(':',1)[0], daily_calls=int(count if value['kind']=='explicit' else automatic),
                     custom_rule_ref=custom_ref,
+                    active_calls=active_calls,
                     reserved_cost=int(reserved), estimate=value['reserved_usd_micro'], daily_budget=service.config.daily_budget)
         if not custom_event_current:
             blocker = 'event_not_allowed'

@@ -193,7 +193,7 @@ class PhoneService:
             if _inbound:
                 # This identity is the authenticated single-use web ticket, never the caller ID.
                 identity = {'hash': inbound.digest(self, 'principal', principal), 'verified': True}
-            start = planner.day_start(now, prefs['timeZone'])
+            start = planner.day_start(now, planner.effective_preferences(prefs, self.config.public())['timeZone'])
             cur.execute(f'SELECT count(*),coalesce(sum({billing.DAILY_COST_SQL}),0),count(*) FILTER(WHERE kind<>\'explicit\') '
                         'FROM public.pr_phone_calls WHERE user_id=%s AND requested_at>=to_timestamp(%s)', (principal, start))
             count, reserved, automatic = cur.fetchone()
@@ -203,12 +203,16 @@ class PhoneService:
             recent = cur.fetchall()
             estimate_live, estimate_tel = billing.estimates(self, direction=direction)
             estimate = estimate_live + estimate_tel
+            active_count = (store.active_founder_contacts(cur, principal, workspace_id)
+                            if planner.founder_scope(self.config.public()) and not _inbound else
+                            sum(r[0] not in contracts.TERMINAL for r in recent))
             blocker = planner.eligibility(kind, prefs, now=now, verified=bool(identity and identity['verified']), membership=member.allows('edit'),
                 configured=bool(self.provider and self.provider.configured and (not self.provider.real or self.config.telephony_rate > 0)),
                 live_configured=route.available and agent.cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=self.config.public(), event_type=event_type,
                 custom_rule_ref=custom_ref,
                 daily_calls=int(count if kind == 'explicit' else automatic), recent_equivalent=any(r[1] == reason and r[2] for r in recent),
                 active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate,
+                active_calls=active_count,
                 daily_budget=self.config.daily_budget,
                 direction=direction)
             if blocker:

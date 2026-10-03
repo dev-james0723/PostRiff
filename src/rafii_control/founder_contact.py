@@ -40,8 +40,8 @@ FLAG = 'RAFII_FOUNDER_CALLS_ENABLED'
 # admin_audit_log action for every dial decision the attempt ledger records (CONTRACTS §3); content-free.
 AUDIT_ACTION = 'founder.call.request'
 log = logging.getLogger('rafii_control.founder_contact')
-MAX_BUDGET_USD_MICRO = 50_000_000
-CALL_MAX_SECONDS = 300
+MAX_BUDGET_USD_MICRO = 10_000_000_000
+CALL_MAX_SECONDS = 600
 # Attempt states beyond phone.contracts.STATES: planned/eligible (policy evaluated), reserved (row committed, not yet
 # dialed), suppressed (policy or phone product refused; nothing was dialed).
 PLANNING_STATES = ('planned', 'eligible', 'reserved', 'suppressed')
@@ -93,8 +93,10 @@ def validate_policy(body, current, operator_id):
     ref = out['destination_ref']
     if ref is not None and ref != destination_ref(operator_id):
         raise ControlError('VALIDATION_FAILED', 400)
-    for key, low, high in (('quiet_start', 0, 1439), ('quiet_end', 0, 1439), ('daily_cap', 0, 2), ('concurrent_cap', 0, 1),
+    for key, low, high in (('quiet_start', 0, 1439), ('quiet_end', 0, 1439), ('daily_cap', 0, 100), ('concurrent_cap', 0, 10),
                            ('budget_usd_micro_daily', 0, MAX_BUDGET_USD_MICRO)):
+        if key == 'budget_usd_micro_daily' and out[key] is None:
+            continue  # explicit Unlimited; the shared Founder ledger still enforces its own policy
         if type(out[key]) is not int or not low <= out[key] <= high:
             raise ControlError('VALIDATION_FAILED', 400)
     zone = out['time_zone']
@@ -179,10 +181,10 @@ def plan_contact(policy, purpose, now, state):
         return _decision('TIME_NOT_SELECTED', 'time_zone_invalid', purpose, now)
     if purpose == 'briefing' and not state.get('scheduled_at'):
         return _decision('TIME_NOT_SELECTED', 'no_schedule', purpose, now)
-    budget = int(policy.get('budget_usd_micro_daily') or 0)
-    if budget <= 0:
+    budget = policy.get('budget_usd_micro_daily', 0)
+    if budget is not None and budget <= 0:
         return _decision('BUDGET_NOT_APPROVED', 'no_daily_budget', purpose, now)
-    if int(state.get('reserved_usd_micro') or 0) + int(state.get('estimate_usd_micro') or 0) > budget:
+    if budget is not None and int(state.get('reserved_usd_micro') or 0) + int(state.get('estimate_usd_micro') or 0) > budget:
         return _decision('BUDGET_NOT_APPROVED', 'daily_budget_exhausted', purpose, now)
     quiet = {'quiet_start': policy['quiet_start'], 'quiet_end': policy['quiet_end'], 'time_zone': policy['time_zone']}
     if purpose != 'test' and in_quiet_hours(now, quiet):
@@ -352,23 +354,54 @@ def test_call(fstore, principal, body, *, now, flags, calls):
 class PhoneCalls:
     """Live adapter over the phone product for one operator in the ops workspace. No number, provider body or audio is
     read here; the phone ledger (`public.pr_phone_calls`) stays the source of truth for call state."""
-    def __init__(self, phone, ops_workspace_id, operator_id):
+    def __init__(self, phone, ops_workspace_id, operator_id, *, policy_loader=None):
         self.phone, self.workspace_id, self.operator_id = phone, ops_workspace_id, operator_id
+        self.policy_loader = policy_loader
 
     def configured(self):
         provider = getattr(self.phone, 'provider', None)
         return bool(self.phone and self.workspace_id and provider and provider.configured)
 
-    def estimate_usd_micro(self, max_seconds=CALL_MAX_SECONDS):
+    def estimate_usd_micro(self, max_seconds=None):
         from postriff_phase2.phone import billing
         try:
-            return int(sum(billing.estimates(self.phone, seconds=max_seconds)))
+            settings = self._settings()
+            return int(sum(billing.estimates(self.phone, seconds=settings['maxCallSeconds'] if max_seconds is None else max_seconds)))
         except Exception:
             return 0
 
+    def _settings(self):
+        from postriff_phase2.billing import ops_metadata
+        from postriff_phase2.founder_policy import policy_from_marker
+        with self.phone.hosted.connection_factory() as db, db.cursor() as cur:
+            marker = ops_metadata(cur, self.workspace_id)
+        if not marker or marker['operatorId'] != str(self.operator_id):
+            raise AlphaError('Founder call requires the verified internal owner.', 403)
+        return policy_from_marker(marker)
+
     def _scoped(self, reason_key_value):
-        from postriff_phase2.phone.runtime import principal_phone
-        return principal_phone(self.phone, self.workspace_id, self.operator_id, founder_reason_key=reason_key_value)
+        from postriff_phase2.phone.runtime import principal_phone, FounderPhoneConfig
+        settings = self._settings()
+        contact_policy = self.policy_loader() if self.policy_loader else {
+            'daily_cap': settings['automaticCallAttemptsDaily'], 'concurrent_cap': settings['concurrentCalls'],
+            'quiet_start': settings['quietStart'], 'quiet_end': settings['quietEnd'], 'time_zone': settings['timeZone'],
+            'budget_usd_micro_daily': settings['dailySpendUsdMicro'] if settings['dailySpendMode'] == 'limited' else None}
+        scoped, capability = principal_phone(self.phone, self.workspace_id, self.operator_id, founder_reason_key=reason_key_value)
+        scoped.config = FounderPhoneConfig({**self.phone.config.values, 'RAFII_FOUNDER_OPS_WORKSPACE_ID': self.workspace_id,
+                                           'RAFII_FOUNDER_PHONE_MAX_SECONDS': settings['maxCallSeconds'],
+                                           'RAFII_FOUNDER_PHONE_DAILY_USD_MICRO': contact_policy['budget_usd_micro_daily'],
+                                           'RAFII_FOUNDER_PHONE_AUTOMATIC_DAILY': contact_policy['daily_cap'],
+                                           'RAFII_FOUNDER_PHONE_CONCURRENT': contact_policy['concurrent_cap'],
+                                           'RAFII_FOUNDER_PHONE_QUIET_START': contact_policy['quiet_start'],
+                                           'RAFII_FOUNDER_PHONE_QUIET_END': contact_policy['quiet_end'],
+                                           'RAFII_FOUNDER_PHONE_TIME_ZONE': contact_policy['time_zone'],
+                                           'RAFII_FOUNDER_PHONE_CONTACT_ALLOWED': not self.policy_loader or (
+                                               contact_policy['live_delivery_enabled'] and 'call' in contact_policy['channels']
+                                               and contact_policy['destination_ref'] == destination_ref(self.operator_id)
+                                               and (reason_key_value.split(':')[1] == 'test' or
+                                                    'founder.' + reason_key_value.split(':')[1] in contact_policy['event_allowlist']))},
+                                          self.workspace_id, reason_key_value)
+        return scoped, capability
 
     def request(self, attempt):
         scoped, capability = self._scoped(attempt['idempotency_key'])

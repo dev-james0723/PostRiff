@@ -18,7 +18,22 @@ class FounderPhoneConfig(PhoneConfig):
     def __init__(self, values, workspace_id, reason_key):
         super().__init__(dict(values))
         self.founder = {'workspaceId': workspace_id, 'opsWorkspaceId': self.values.get('RAFII_FOUNDER_OPS_WORKSPACE_ID') or None,
-                        'reasonKey': reason_key}
+                        'reasonKey': reason_key,
+                        'automaticCallsDaily': int(self.values.get('RAFII_FOUNDER_PHONE_AUTOMATIC_DAILY', 2)),
+                        'concurrentCalls': int(self.values.get('RAFII_FOUNDER_PHONE_CONCURRENT', 1)),
+                        'quietStart': int(self.values.get('RAFII_FOUNDER_PHONE_QUIET_START', 1320)),
+                        'quietEnd': int(self.values.get('RAFII_FOUNDER_PHONE_QUIET_END', 480)),
+                        'timeZone': self.values.get('RAFII_FOUNDER_PHONE_TIME_ZONE', 'America/Indiana/Indianapolis'),
+                        'callingAllowed': self.values.get('RAFII_FOUNDER_PHONE_CONTACT_ALLOWED', True)}
+
+    @property
+    def cap_seconds(self):
+        return min(3600, max(60, int(self.values.get('RAFII_FOUNDER_PHONE_MAX_SECONDS', 600))))
+
+    @property
+    def daily_budget(self):
+        value = self.values.get('RAFII_FOUNDER_PHONE_DAILY_USD_MICRO', 50_000_000)
+        return None if value is None else max(0, int(value))
 
     def public(self):
         return {**super().public(), 'founder': dict(self.founder)}

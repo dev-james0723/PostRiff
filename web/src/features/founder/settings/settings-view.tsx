@@ -13,26 +13,15 @@ import { ContactPolicyForm } from './contact-policy-form';
 import { NotificationsTab } from './notifications-tab';
 import { OpsWorkspacePanel } from './ops-workspace-panel';
 import { ReportsTab } from './reports-tab';
+import { ReadinessPanel } from './readiness-panel';
+import { FounderPolicyForm } from './founder-policy-form';
 
 /**
  * Settings (PRD §5.1, CONTRACTS §8.E): Contact & calls (policy and the founder workspace) · Reports (briefing versions
  * with their receipts, and schedules) · Notifications (channel readiness, preferences, notices) · Budgets · Security.
- * The tab lives in the address and its ids are the nav's (`FOUNDER_SECTIONS.settings.tabs`). Budgets and Security have
- * no settings to change yet, so they say what they will hold and offer no control.
+ * The tab lives in the address and its ids are the nav's (`FOUNDER_SECTIONS.settings.tabs`). Budgets expose the versioned owner policy; security controls retain their existing MFA boundary.
  */
 
-function BudgetsTab() {
-  return (
-    <Panel title='Budgets' description='Spending limits for what Rafii does on your behalf.'>
-      <StateMessage
-        kind='unsupported'
-        layout='inline'
-        title='Budgets are not editable here yet'
-        description='This tab will hold the founder workspace’s AI and voice spending limits and their alert thresholds. Today the daily contact budget is set in Contact & calls, and request rates for Founder Rafii and voice are fixed by Control.'
-      />
-    </Panel>
-  );
-}
 
 function SecurityTab() {
   const { capabilities } = useFounderScope();
@@ -92,6 +81,7 @@ export function SettingsView() {
             <ContactPolicyForm />
           </Panel>
           <OpsWorkspacePanel />
+          <ReadinessPanel />
         </TabsContent>
         <TabsContent value='reports' className='pt-4'>
           <ReportsTab />
@@ -100,7 +90,7 @@ export function SettingsView() {
           <NotificationsTab />
         </TabsContent>
         <TabsContent value='budgets' className='pt-4'>
-          <BudgetsTab />
+          <FounderPolicyForm />
         </TabsContent>
         <TabsContent value='security' className='pt-4'>
           <SecurityTab />

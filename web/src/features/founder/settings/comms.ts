@@ -107,6 +107,7 @@ export interface OpsWorkspace {
   source: 'environment' | 'settings' | null;
   name: string | null;
   canCreate: boolean;
+  provisioningState?: 'ready' | 'reserved' | 'not_configured';
 }
 
 export interface OpsWorkspaceCreated {
@@ -261,6 +262,7 @@ export function opsWorkspaceSummary(ops: OpsWorkspace | undefined): { state: 'se
       : { state: 'set', title: ops.name ?? 'Rafii Ops (founder)', description: 'Created here. Founder Rafii, voice and founder calls run in this internal workspace; it is classified internal, so its usage never counts as a customer’s.' };
   }
   if (ops?.canCreate) {
+    if (ops.provisioningState === 'reserved') return { state: 'creatable', title: 'Resume founder workspace creation', description: 'The internal workspace identity is reserved. Retry creation to finish that same workspace safely.' };
     return { state: 'creatable', title: 'No founder workspace yet', description: 'Founder Rafii, voice and founder calls need one internal workspace to run in. Creating it makes one “Rafii Ops (founder)” workspace with you as its only member, classified internal; it never gets a trial, subscription or connection.' };
   }
   return { state: 'unavailable', title: 'No founder workspace, and it cannot be created here', description: 'Control runs without the Rafii app runtime here, so the workspace cannot be created from this page. Set RAFII_FOUNDER_OPS_WORKSPACE_ID instead.' };

@@ -69,7 +69,10 @@ class VoiceCursor(FakeCursor):
 
     def execute(self, sql, params=()):
         db, text = self.db, ' '.join(sql.split())
-        if text.startswith('INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact)'):
+        if text.startswith("SELECT state->'founderOps'"):
+            from postriff_phase2.founder_policy import defaults
+            self.rows = [({'operatorId': getattr(db, 'ops_operator', OPERATOR), 'environment': 'local', 'version': 1, 'policy': defaults()},)]
+        elif text.startswith('INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact)'):
             ident = str(uuid.uuid4())
             db.runs[ident] = {'conversation_id': params[0], 'workspace_id': params[1], 'actor': params[2], 'status': 'running', 'model': params[3], 'key': params[6],
                               'artifact': json.loads(params[7])}
@@ -84,11 +87,12 @@ class VoiceCursor(FakeCursor):
         elif text.startswith('SELECT conversation_id::text,status FROM public.pr_agent_runs'):
             run = db.runs.get(params[0])
             self.rows = [(run['conversation_id'], run['status'])] if run and run['workspace_id'] == params[1] else []
-        elif text.startswith('SELECT id::text,artifact FROM public.pr_agent_runs') and "LIKE 'voice:%%'" in text:
+        elif text.startswith('SELECT id::text,artifact FROM public.pr_agent_runs') and 'idempotency_key LIKE' in text:
             self.rows = []   # nothing older than the cap to reap
-        elif text.startswith('SELECT count(*) FROM public.pr_agent_runs') and "LIKE 'voice:%%'" in text:
-            self.rows = [(sum(1 for r in db.runs.values() if r['workspace_id'] == params[0] and r['actor'] == params[1] and str(r['key']).startswith('voice:')
-                              and r['status'] == 'running'),)]
+        elif text.startswith('SELECT (SELECT count(*) FROM public.pr_phone_calls'):
+            self.rows = [(getattr(db, 'phone_contacts', 0) + sum(1 for r in db.runs.values()
+                         if r['workspace_id'] == params[4] and r['actor'] == params[5] and str(r['key']).startswith('voice:')
+                         and not str(r['key']).startswith('voice:phone:') and r['status'] == 'running'),)]
         elif text.startswith('SELECT role,body FROM public.pr_messages') and 'LIMIT 16' in text:
             self.rows = [(m['role'], m['body']) for m in db.messages if m['conversation_id'] == params[0]][::-1][:16]
         else:
@@ -108,6 +112,7 @@ class VoiceRepository:
     @contextmanager
     def transaction(self, token, workspace_id):
         acting = self.verify_session(token)
+        self.db.ops_operator = acting
         yield VoiceCursor(self.db), (workspace_id, '{}', 'owner', False, False, False, False), acting
 
 
@@ -135,6 +140,20 @@ def base(cfg=None, transport=None):
     return types.SimpleNamespace(cfg=cfg or runtime_cfg(), model_factory=None, live_transport=transport, clock=lambda: NOW)
 
 
+def setUpModule():
+    from unittest.mock import patch
+    from rafii_control import founder_ops
+    global _ops_patches
+    _ops_patches = [patch('rafii_control.founder_ops.ready', return_value=True), patch('rafii_control.founder_ops.stored', side_effect=lambda store, operator: getattr(store, 'ops', None))]
+    for mock in _ops_patches:
+        mock.start()
+
+
+def tearDownModule():
+    for mock in reversed(_ops_patches):
+        mock.stop()
+
+
 class VoiceGateTests(unittest.TestCase):
     def setUp(self):
         self.db, self.transport = FakeDatabase(), Transport()
@@ -150,8 +169,8 @@ class VoiceGateTests(unittest.TestCase):
 
     def test_flag_and_ops_workspace_are_required_before_anything_is_read(self):
         for values, blocker in (({founder_agent.OPS_WORKSPACE_ENV: OPS}, 'founder_voice_disabled'), ({founder_voice.FLAG: '0', founder_agent.OPS_WORKSPACE_ENV: OPS}, 'founder_voice_disabled'),
-                                ({founder_voice.FLAG: '1'}, 'ops_workspace_not_configured'), ({founder_voice.FLAG: '1', founder_agent.OPS_WORKSPACE_ENV: 'not-a-uuid'}, 'ops_workspace_not_configured')):
-            with self.subTest(values=values), self.assertRaises(founder_agent.PolicyDisabled) as caught:
+                                ({founder_voice.FLAG: '1'}, 'ops_workspace_not_configured'), ({founder_voice.FLAG: '1', founder_agent.OPS_WORKSPACE_ENV: 'not-a-uuid'}, 'ops_workspace_invalid')):
+            with self.subTest(values=values), self.assertRaises(ControlError) as caught:
                 self.start(values)
             self.assertEqual((caught.exception.code, caught.exception.status, caught.exception.blocker), ('POLICY_DISABLED', 409, blocker))
         self.assertEqual((self.db.sql, self.transport.calls, self.service.ledger.reserved), ([], [], []), 'nothing was read, reserved or created')
@@ -190,7 +209,8 @@ class VoiceGateTests(unittest.TestCase):
         open_ = founder_voice.status(self.service, principal(), values=ON, control=Control(Scenarios.outage), base=base())
         self.assertEqual((open_['available'], open_['blockers'], open_['model'], open_['delegation']), (True, [], 'gpt-live-1', 'client'))
         self.assertEqual(founder_voice.status(self.service, principal(), values=ON, base=base(runtime_cfg(OPENAI_API_KEY=None)))['blockers'], ['voice_route_unavailable'])
-        self.assertEqual((self.db.sql, self.transport.calls), ([], []))
+        self.assertTrue(all(sql.startswith('SELECT ') for sql in self.db.sql), 'status only reads saved owner policy')
+        self.assertEqual(self.transport.calls, [])
 
 
 class VoiceSessionTests(unittest.TestCase):
@@ -235,6 +255,9 @@ class VoiceSessionTests(unittest.TestCase):
         self.assertEqual((reserved['workspaceId'], reserved['key'], reserved['provider'], reserved['meta']['costCenter'], reserved['meta']['via']),
                          (OPS, 'voice:' + out['voiceSessionId'], 'openai', 'founder_ops', 'rafii_founder_voice'))
         self.assertEqual(reserved['estimate'], runtime_cfg().live_usd_micro_per_minute * out['capMinutes'])
+        with self.assertRaises(ControlError):
+            self.start(mode='demo')
+        founder_voice.end(self.service, principal(), out['voiceSessionId'], {}, str(uuid.uuid4()), mode='live', control=self.control, values=ON, base=base())
         demo = self.start(mode='demo')
         self.assertIn('Data mode: Demo', self.transport.calls[-1]['body']['session']['instructions'])
         self.assertEqual(self.db.conversations[demo['conversationId']]['title'], '[founder:demo:local] Voice conversation')
@@ -243,6 +266,7 @@ class VoiceSessionTests(unittest.TestCase):
         class SettingsStore:
             """rafii_control.founder_settings as founder_ops reads it (the workspace created from Settings)."""
             environment = 'local'
+            ops = OPS
 
             @contextmanager
             def transaction(self, read=False):
@@ -256,11 +280,20 @@ class VoiceSessionTests(unittest.TestCase):
             founder_voice.start(self.service, principal(), {'sdp': SDP}, str(uuid.uuid4()), mode='live', control=self.control, values=values, base=base(), transport=self.transport)
         self.assertEqual(caught.exception.blocker, 'ops_workspace_not_configured', 'no variable and no stored workspace')
 
+    def test_an_active_phone_call_uses_the_same_slot_before_browser_provider_egress(self):
+        self.db.phone_contacts = 1
+        with self.assertRaises(ControlError) as caught:
+            self.start()
+        self.assertEqual(caught.exception.blocker, 'voice_busy')
+        self.assertEqual(self.transport.calls, [])
+        self.assertEqual(self.service.ledger.reserved, [])
+
     def test_conversation_must_belong_to_the_session_namespace(self):
         live_session = self.start()
         with self.assertRaises(ControlError) as caught:
             self.start(mode='demo', body={'sdp': SDP, 'conversationId': live_session['conversationId']})
         self.assertEqual((caught.exception.code, caught.exception.status), ('SOURCE_UNAVAILABLE', 404))
+        founder_voice.end(self.service, principal(), live_session['voiceSessionId'], {}, str(uuid.uuid4()), mode='live', control=self.control, values=ON, base=base())
         again = self.start(body={'sdp': SDP, 'conversationId': live_session['conversationId']})
         self.assertEqual(again['conversationId'], live_session['conversationId'], 'voice continues the same founder thread')
 
@@ -343,8 +376,9 @@ class VoiceSessionTests(unittest.TestCase):
         self.assertEqual((ended['state'], ended['mode']), ('ended', 'live'))
         (reserved,) = self.service.ledger.reserved
         (settled,) = self.service.ledger.settled
-        self.assertEqual((settled[0], settled[1]), (reserved['reservationId'], 'completed'))
-        self.assertGreaterEqual(settled[2], int(15 * runtime_cfg().live_usd_micro_per_minute / 60), 'billed on the server clock, never on what the client reports')
+        self.assertEqual(settled, (reserved['reservationId'], 'unknown', None), 'client/server clocks cannot establish provider cost')
+        self.assertIsNone(ended['usageSeconds'])
+        self.assertEqual(ended['costState'], 'unknown')
         again = founder_voice.end(self.service, principal(), session['voiceSessionId'], {}, str(uuid.uuid4()), mode='live', control=self.control, values=ON, base=base())
         self.assertEqual(again['note'], 'Already ended.')
         self.assertEqual(len(self.service.ledger.settled), 1)

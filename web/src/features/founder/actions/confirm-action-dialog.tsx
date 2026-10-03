@@ -149,7 +149,7 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
   const stage = done ? 'done' : preview ? 'review' : 'form';
   const confirmable = preview !== null && preview.execution.allowed && confirmPath(preview) !== null;
   const stillOpen = preview?.state === 'previewed';
-  const needsTyped = kind === 'account_block';
+  const needsTyped = kind === 'account_block' || kind === 'refund_intent';
   const canConfirm = confirmable && stillOpen && typedConfirmationOk(kind, typed) && busy === null && !failure?.previewAgain;
 
   return (
@@ -178,10 +178,10 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
             )}
             {confirmable && stillOpen && needsTyped && (
               <div className='flex flex-col gap-2'>
-                <Label htmlFor={typedId}>Type {TYPED_BLOCK} to confirm</Label>
+                <Label htmlFor={typedId}>Type {kind === 'refund_intent' ? 'REFUND' : TYPED_BLOCK} to confirm</Label>
                 <Input id={typedId} value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete='off' spellCheck={false} aria-describedby={typedHelpId} className={`${FIELD_CLASS} font-mono`} />
                 <p id={typedHelpId} className='text-muted-foreground text-xs'>
-                  The customer is refused from their next request on. Nothing is deleted; lifting the block restores everything.
+                  {kind === 'refund_intent' ? 'This confirmation submits the exact refund shown above to Stripe. An uncertain submission is reconciled before another action.' : 'The customer is refused from their next request on. Nothing is deleted; lifting the block restores everything.'}
                 </p>
               </div>
             )}

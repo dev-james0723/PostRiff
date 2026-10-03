@@ -467,6 +467,31 @@ class ConsumerActions:
         return core, display
 
 
+    def refund_provider(self):
+        from .founder_refunds import provider
+        return provider(self.service)
+
+    def refund_execution_view(self, params, ctx):
+        from .founder_refunds import snapshot, core
+        _, display = self.refund_view(params, ctx)
+        with self.transaction() as cur:
+            value = snapshot(cur, params)
+        if value['disputed']:
+            raise _invalid('payment_disputed', 409)
+        if params['amountMinor'] > value['paidMinor'] - value['refundedMinor'] - value['dispatchHoldsMinor']:
+            raise _invalid('amount_exceeds_refundable', 409)
+        if value['livemode'] != self.refund_provider().live:
+            raise _invalid('stripe_mode_mismatch', 409)
+        display['current']['dispatchHoldsMinor'] = value['dispatchHoldsMinor']
+        display['effect'].pop('blocker', None)
+        display['effect']['financialConfirmationRequired'] = True
+        return core(value), display
+
+    def refund_execute(self, row, check):
+        from .founder_refunds import execute
+        return execute(self, row, check)
+
+
 def consumer_actions(app):
     """The consumer side for this app: injected by tests as `app.founder_consumer_actions`, otherwise built over the
     embedded consumer runtime (`app.consumer()` answers 503 SOURCE_UNAVAILABLE on the separate mount)."""
@@ -624,6 +649,7 @@ CREDITS = Spec('credits_adjust', _credit_params, 'credits_view', 'credits_execut
 BLOCK = Spec('account_block', _block_params, 'block_view', 'block_execute', path_target=True, typed=TYPED_BLOCK)
 UNBLOCK = Spec('account_unblock', _unblock_params, 'unblock_view', 'unblock_execute', path_target=True)
 REFUND = Spec('refund_intent', _refund_params, 'refund_view', blocker='refund_policy_not_decided')
+REFUND_EXECUTION = Spec('refund_intent', _refund_params, 'refund_execution_view', 'refund_execute', typed='REFUND', ready='refund_provider')
 
 
 def effective_state(row, now):
@@ -639,6 +665,8 @@ def _confirm_path(row):
         return '/api/control/v2/actions/credits/confirm'
     if row['kind'] in ('account_block', 'account_unblock'):
         return f"/api/control/v2/actions/accounts/{row['target_id']}/{'block' if row['kind'] == 'account_block' else 'unblock'}/confirm"
+    if row['kind'] == 'refund_intent':
+        return '/api/control/v2/actions/refunds/confirm'
     return None
 
 
@@ -649,8 +677,8 @@ def public_action(row, now):
     confirm = None
     if not row['blocker'] and _confirm_path(row):
         confirm = {'method': 'POST', 'path': _confirm_path(row), 'expiresAt': stamp(row['expires_at']),
-                   'requires': ['fresh_second_factor'] + (['typed_confirmation'] if row['kind'] == 'account_block' else []),
-                   'typedConfirmation': TYPED_BLOCK if row['kind'] == 'account_block' else None}
+                   'requires': ['fresh_second_factor'] + (['typed_confirmation'] if row['kind'] in ('account_block','refund_intent') else []),
+                   'typedConfirmation': TYPED_BLOCK if row['kind'] == 'account_block' else 'REFUND' if row['kind'] == 'refund_intent' else None}
     return {'previewId': row['id'], 'kind': row['kind'], 'state': state, 'revision': row['revision'], 'targetType': row['target_type'],
             'targetId': row['target_id'], 'workspaceId': row['workspace_id'], 'target': preview.get('target'), 'current': preview.get('current'),
             'effect': preview.get('effect'), 'result': row['result'] or None, 'errorCode': row['error_code'], 'blocker': row['blocker'],
@@ -816,7 +844,17 @@ def list_actions(app, principal, request):
     return {'mode': 'live', 'actions': [public_action(row, now) for row in (rows or [])[:limit]], 'truncated': len(rows or []) > limit, 'limit': limit,
             'actionsState': 'measured' if rows is not None else 'not_installed',
             'activeBlocks': blocks or [], 'activeBlocksState': 'measured' if blocks is not None else 'not_installed',
-            'policies': {'creditsEnabled': _credits_enabled(app), 'refundExecution': {'allowed': False, 'blocker': 'refund_policy_not_decided'}}}
+            'policies': {'creditsEnabled': _credits_enabled(app), 'refundExecution': _refund_readiness(app)}}
+
+
+def _refund_readiness(app):
+    try:
+        consumer_actions(app).refund_provider()
+        return {'allowed': True, 'confirmationRequired': True, 'typedConfirmation': 'REFUND', 'blocker': None}
+    except ActionError as error:
+        return {'allowed': False, 'confirmationRequired': True, 'blocker': error.blocker or 'stripe_refund_provider_not_configured'}
+    except Exception:
+        return {'allowed': False, 'confirmationRequired': True, 'blocker': 'refund_source_unavailable'}
 
 
 def _credits_enabled(app):
@@ -876,3 +914,15 @@ except Exception:  # noqa: BLE001 - the routes above must not depend on the cron
     founder_cron = None
 if founder_cron is not None and not any(name == 'account_block_retention' for name, _ in founder_cron.STAGES):
     founder_cron.register_stage('account_block_retention', retention_stage)
+
+
+def refund_execution_preview(app, principal, request):
+    return _preview(app, principal, request, REFUND_EXECUTION)
+
+
+def refund_confirm(app, principal, request):
+    return _confirm(app, principal, request, REFUND_EXECUTION)
+
+
+http.register_route('POST', r'/actions/refunds/execute/preview', 'refunds.prepare', 'founder_actions', 'refund_execution_preview', **_ACTION)
+http.register_route('POST', r'/actions/refunds/confirm', 'refunds.prepare', 'founder_actions', 'refund_confirm', **_ACTION)

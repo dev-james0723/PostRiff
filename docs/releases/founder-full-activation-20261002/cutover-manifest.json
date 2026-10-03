@@ -1,0 +1,38 @@
+{
+  "sourceSha": "6059664c049bc6eb4da6d533e8926a135ff7e22f",
+  "sourceState": "uncommitted_candidate",
+  "sourceTreeHash": "c56b7f5b1ac0685bf4bb05dac48dd7fcc36c3f3e03d59fe8eccd2c1d2c83bc9e",
+  "generatedAt": "2026-10-02T19:05:39.600591+00:00",
+  "executionState": "candidate_local_only",
+  "productionVerified": false,
+  "mode": "pending_qualification",
+  "approval": "founder-owner-20261002",
+  "notBefore": null,
+  "audiences": [
+    "founder",
+    "customer"
+  ],
+  "channels": [
+    "email",
+    "push",
+    "calls"
+  ],
+  "approvedCanary": {
+    "founderEmails": 3,
+    "founderDevicePushes": 3,
+    "customerMessages": 0
+  },
+  "dailyExternalSpendUsd": 50,
+  "warnPercent": 80,
+  "actualProviderCalls": 0,
+  "newEventsOnly": true,
+  "backlogDisposition": "read_only_preserve_suppressed_unsent_uncertain_expired",
+  "templateVersion": null,
+  "dedupe": "Durable pre-egress hash/key; exact email payload only within 24h; push keys include device ID and never replay a committed uncertain dispatch.",
+  "pending": [
+    "existing verified Rafii/PostRiff sender domain",
+    "qualified provider billing ceiling",
+    "H5 owner device consent",
+    "staging schema and raw-body webhook canary"
+  ]
+}

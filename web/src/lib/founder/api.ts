@@ -235,7 +235,7 @@ export function createFounderApi(options: FounderApiOptions = {}) {
     createBriefingSchedule: (body: BriefingScheduleBody) => request<{ schedule: BriefingSchedule }>('POST', '/briefing-schedules', body),
     deleteBriefingSchedule: (id: string) => request<{ deleted: boolean }>('DELETE', `/briefing-schedules/${encodeURIComponent(id)}`),
     /** Always answers 409 POLICY_DISABLED until live delivery is enabled and a provider is configured. */
-    testCall: (body: Record<string, unknown> = {}) => request<{ attemptId?: string }>('POST', '/calls/test', body),
+    testCall: (body: { requestId: string }) => request<{ attempt: { id: string; state: string; phoneCallId: string | null }; replayed: boolean }>('POST', '/calls/test', body),
     /** One founder turn; the `Idempotency-Key` equals the body's key so a resend of the same message is one run. */
     agentTurn: (body: FounderAgentTurnRequest, init?: RequestInit) => request<FounderAgentTurnResponse>('POST', '/agent/turns', body, { 'Idempotency-Key': body.idempotencyKey }, init),
     agentRun: (runId: string, init?: RequestInit) => request<FounderAgentRun>('GET', `/agent/runs/${encodeURIComponent(runId)}`, undefined, {}, init),

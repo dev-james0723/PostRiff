@@ -149,7 +149,8 @@ class RowsAndWriting(Base):
             cur.execute("INSERT INTO public.pr_usage_ledger(x) VALUES(%s)", (1,))
             written = ai_call_events.write_attempts({"workspace_id": WORKSPACE, "feature": "agent"}, [{"model": "gpt-6-sol", "status": "ok"}], cursor=cur)
         self.assertEqual(written, 1)
-        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger", "pr_ai_call_events"])
+        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger", "pr_ai_call_events", 'pr_audit_events'])
+        self.assertEqual(json.loads(db.committed[-1][1][2])['state'], 'recorded')
         self.assertEqual(db.log[1], "SAVEPOINT")
 
     def test_missing_table_leaves_the_callers_writes_committed_and_backs_off_for_ten_minutes(self):
@@ -160,7 +161,8 @@ class RowsAndWriting(Base):
                 cur.execute("INSERT INTO public.pr_usage_ledger(x) VALUES(%s)", (1,))
                 self.assertEqual(ai_call_events.write_attempts({"workspace_id": WORKSPACE, "feature": "agent"}, [{"status": "ok"}], cursor=cur), 0)
                 cur.execute("INSERT INTO public.pr_agent_runs(x) VALUES(%s)", (2,))
-        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger", "pr_agent_runs"], "the ledger and run writes commit")
+        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger", 'pr_audit_events', "pr_agent_runs"], "domain writes and durable gap commit")
+        self.assertEqual(json.loads(db.committed[1][1][2])['errorClass'], 'UndefinedTable')
         self.assertIn("ROLLBACK TO SAVEPOINT", db.log)
         self.assertEqual(len(logged.records), 1)
         self.assertIn("UndefinedTable", logged.output[0])
@@ -170,7 +172,8 @@ class RowsAndWriting(Base):
         with mock.patch.object(logger, "warning") as again:
             with db as conn, conn.cursor() as cur:
                 self.assertEqual(ai_call_events.write_attempts({"feature": "agent"}, [{"status": "ok"}], cursor=cur), 0)
-        self.assertEqual(len(db.log), before, "no statement at all while backing off")
+        self.assertFalse(any(isinstance(entry, tuple) and 'INSERT INTO public.pr_ai_call_events' in entry[0] for entry in db.log[before:]))
+        self.assertEqual(json.loads(db.committed[-1][1][2])['state'], 'suspended')
         again.assert_not_called()
         with mock.patch.object(ai_call_events.time, "monotonic", return_value=time.monotonic() + ai_call_events.BACKOFF_SECONDS + 1):
             self.assertTrue(ai_call_events.installed(), "re-checked after ten minutes")
@@ -419,7 +422,7 @@ class AgentWritePoints(Base):
             with db as conn, conn.cursor() as cur:
                 cur.execute("INSERT INTO public.pr_usage_ledger(x) VALUES(%s)", (1,))
                 self.assertEqual(manager.record_calls(cur, ctx, None), 0)
-        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger"])
+        self.assertEqual([table for table, _ in db.committed], ["pr_usage_ledger", 'pr_audit_events'])
         self.assertEqual(manager.record_calls(None, ctx, None), 0)
 
     def test_follow_up_chips_span_and_unknown_outcome(self):
@@ -514,7 +517,7 @@ class VoicePhoneAndGrowthWritePoints(Base):
         with self.assertLogs("postriff.ai_call_events", "WARNING"):
             PostgresUsageSink(cur).record(UsageEvent(task="trend.culture_classify", model="m", route="primary", status="rate_limited", latency_ms=3))
         db.commit()
-        self.assertEqual([table for table, _ in db.committed], ["pr_model_usage_events"])
+        self.assertEqual([table for table, _ in db.committed], ['pr_audit_events', "pr_model_usage_events"])
 
     def test_memory_sink_numbers_retries_without_changing_equality(self):
         sink = MemoryUsageSink()
