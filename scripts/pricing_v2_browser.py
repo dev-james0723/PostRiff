@@ -110,7 +110,7 @@ def main():
     try:
         for name,cmd in commands:
             log=(out/(name+'.raw.log')).open('w');logs.append(log)
-            processes.append(subprocess.Popen(cmd,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
+            processes.append(subprocess.Popen(cmd,cwd=args.next_app if name=='frontend' else root,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
         # A newly generated capability proves readiness belongs to OUR fixture.
         # No unauthenticated readiness success is used to adopt a foreign server.
         deadline=time.monotonic()+timeouts['startupSeconds']
