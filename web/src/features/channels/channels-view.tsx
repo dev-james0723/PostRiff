@@ -254,12 +254,14 @@ function ChannelsPage() {
 
   const replaceParams = useCallback(
     (mutate: (next: URLSearchParams) => void) => {
-      const next = new URLSearchParams(params.toString());
+      // Start from the browser's current URL so navigation-free deep-link cleanup
+      // cannot be reintroduced later by a stale useSearchParams snapshot.
+      const next = new URLSearchParams(window.location.search);
       mutate(next);
       const query = next.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [params, pathname, router]
+    [pathname, router]
   );
 
   const setFilter = useCallback(
@@ -301,16 +303,25 @@ function ChannelsPage() {
   const connectParam = params.get('connect');
   const capabilityParam = params.get('capability');
   useEffect(() => {
-    if (!connectParam || !data) return;
-    if (canManage && providers.some((provider) => provider.id === connectParam)) {
-      const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
-      openConnect({ providerId: connectParam, capability });
-    }
-    replaceParams((search) => {
-      search.delete('connect');
-      search.delete('capability');
-    });
-  }, [canManage, capabilityParam, connectParam, data, openConnect, providers, replaceParams]);
+    if (!connectParam || !data || !canManage) return;
+    if (!providers.some((provider) => provider.id === connectParam)) return;
+
+    const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
+    openConnect({ providerId: connectParam, capability });
+  }, [canManage, capabilityParam, connectParam, data, openConnect, providers]);
+
+  const handleConnectOpenChange = useCallback(
+    (open: boolean) => {
+      setConnectOpen(open);
+      if (!open && (connectParam || capabilityParam)) {
+        replaceParams((search) => {
+          search.delete('connect');
+          search.delete('capability');
+        });
+      }
+    },
+    [capabilityParam, connectParam, replaceParams]
+  );
 
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
   const errorMessage = error instanceof Error ? error.message : undefined;
@@ -516,7 +527,7 @@ function ChannelsPage() {
         </div>
       )}
 
-      <ConnectSheet open={connectOpen} onOpenChange={setConnectOpen} providers={providers} request={connectRequest} />
+      <ConnectSheet open={connectOpen} onOpenChange={handleConnectOpenChange} providers={providers} request={connectRequest} />
     </PageContainer>
   );
 }
