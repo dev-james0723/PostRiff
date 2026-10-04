@@ -1,0 +1,36 @@
+{
+  "execution": "local harness: Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identities",
+  "base": "http://localhost:3397",
+  "checks": 1068,
+  "failed": 4,
+  "failures": [
+    {
+      "name": "390px demo overview tab \"Today\": no failed control request",
+      "ok": false,
+      "detail": [
+        "500 GET /api/control/v2/overview?mode=demo&period=30d"
+      ]
+    },
+    {
+      "name": "390px demo overview tab \"Today\": no console error",
+      "ok": false,
+      "detail": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      ]
+    },
+    {
+      "name": "390px demo customers tab \"Workspaces\": no failed control request",
+      "ok": false,
+      "detail": [
+        "503 POST /api/control/v2/workspace/demo/query"
+      ]
+    },
+    {
+      "name": "390px demo customers tab \"Workspaces\": no console error",
+      "ok": false,
+      "detail": [
+        "Failed to load resource: the server responded with a status of 503 (Unavailable)"
+      ]
+    }
+  ]
+}

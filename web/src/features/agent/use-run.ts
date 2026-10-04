@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Run } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { useLiveRunStore } from '@/features/notifications/live-state';
 
 const ACTIVE = new Set(['running', 'queued']);
 const MAX_POLL_FAILURES = 20;
@@ -14,10 +15,15 @@ const MAX_POLL_FAILURES = 20;
 export function useRun(runId: string | null, seed: Run | null = null) {
   const { api, workspaceId } = useWorkspaceApi();
   const [run, setRun] = useState<Run | null>(seed);
+  const reportLive = useLiveRunStore((state) => state.report);
 
   useEffect(() => {
     if (seed && seed.runId === runId) setRun(seed);
   }, [seed, runId]);
+
+  useEffect(() => {
+    if (run && runId === run.runId) reportLive(workspaceId, run);
+  }, [reportLive, run, runId, workspaceId]);
 
   useEffect(() => {
     if (!runId) {

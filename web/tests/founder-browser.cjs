@@ -34,7 +34,9 @@ const SECTIONS = [
   ['settings', '/founder/settings', /Settings/],
   ['advanced', '/founder/advanced', /Advanced/]
 ];
-const WIDTHS = [1440, 768, 390];
+// A single viewport can run against a fresh disposable fixture when a long all-width sweep exhausts its local test state.
+const WIDTHS = process.env.FOUNDER_TEST_WIDTH ? [Number(process.env.FOUNDER_TEST_WIDTH)] : [1440, 768, 390];
+if (WIDTHS.some((width) => ![1440, 768, 390].includes(width))) throw new Error('FOUNDER_TEST_WIDTH must be 1440, 768 or 390.');
 
 const results = [];
 function check(name, ok, detail) {
@@ -267,9 +269,11 @@ async function main() {
         await page.getByRole('tab', { name: 'Payments', selected: true }).waitFor({ timeout: 30000 });
         check(`${width}px revenue ?tab=payments selects its tab`, true);
         await page.goto(base + '/founder/operations?mode=demo&tab=connections');
-        await page.locator('[data-tab="connections"]').waitFor({ timeout: 30000 });
+        // The panel's stable anchor distinguishes it from other tab controls with the same data-tab value.
+        const connectionsPanel = page.locator('#founder-operations-connections');
+        await connectionsPanel.waitFor({ timeout: 30000 });
         await settle(page, tracker);   // panels above load after the first scroll; the page keeps the target in place
-        const inView = await page.locator('[data-tab="connections"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
+        const inView = await connectionsPanel.evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
         check(`${width}px operations ?tab=connections scrolls to its panel`, inView);
         await page.goto(base + '/founder/settings?tab=reports');
         await page.getByRole('tab', { name: 'Reports', selected: true }).waitFor({ timeout: 30000 });
@@ -425,7 +429,7 @@ async function main() {
     await browser.close();
   }
   const failed = results.filter((result) => !result.ok);
-  const summary = { execution: 'local harness: Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identities', base, checks: results.length, failed: failed.length, failures: failed };
+  const summary = { execution: 'local harness: Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identities', base, widths: WIDTHS, checks: results.length, failed: failed.length, failures: failed };
   fs.writeFileSync(path.join(outDir, 'founder-browser.json'), JSON.stringify(summary, null, 2));
   process.stdout.write(`\n${results.length - failed.length}/${results.length} checks passed\n`);
   process.exitCode = failed.length ? 1 : 0;

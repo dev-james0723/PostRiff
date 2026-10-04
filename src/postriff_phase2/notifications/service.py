@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import time
+import uuid
 
 from postriff_alpha.domain import AlphaError
 
@@ -205,10 +206,15 @@ class NotificationService:
             return self.hosted.repository.transaction(token, workspace_id)
         return None
 
-    def center(self, workspace_id, token, before=None, unread_only=False):
+    def center(self, workspace_id, token, before=None, before_id=None, unread_only=False, include_dismissed=False):
         self._require()
+        if before_id:
+            try:
+                before_id = str(uuid.UUID(before_id))
+            except (TypeError, ValueError) as error:
+                raise AlphaError('Invalid notification cursor.', 400) from error
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
-            return {**store.center(cur, principal, workspace_id, before=before, unread_only=unread_only), "catalogVersion": catalog.CATALOG_VERSION}
+            return {**store.center(cur, principal, workspace_id, before=before, before_id=before_id, unread_only=unread_only, include_dismissed=include_dismissed), "catalogVersion": catalog.CATALOG_VERSION}
 
     def mark(self, workspace_id, token, delivery_id, action):
         self._require()
