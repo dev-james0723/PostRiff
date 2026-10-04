@@ -185,10 +185,11 @@ class Ledger:
             if (existing[2] or {}).get("fingerprint") != fingerprint:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
+        founder_unlimited = bool(not ops and workspace_plan_exempt(cur, workspace_id))
         policy = active_budget_policy() if estimated_usd_micro > 0 and not ops else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
-        exempt = ai_usage_exempt(member_id)
+        exempt = ai_usage_exempt(member_id) or founder_unlimited
         limits, founder_spend = None, None
         if ops:
             # Re-read under the workspace lock: a concurrent settings change
@@ -363,7 +364,7 @@ class Ledger:
         return {
             "entitlement": entitlement,
             "credits": credits,
-            "aiUsageExempt": ai_usage_exempt(member_id),
+            "aiUsageExempt": ai_usage_exempt(member_id) or entitlement.get("unlimited") is True,
             "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
             "budget": None if ws_budget is None else {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
