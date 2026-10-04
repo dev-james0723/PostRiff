@@ -83,13 +83,13 @@ class UniversalLibrary:
    rows=cur.fetchall()
   keys=("id","originalFilename","displayTitle","titleSource","summary","tags","kind","mime","extension","bytes","hash","processing","analysisStatus","indexingStatus","createdAt","uploadedBy");assets=[]
   for r in rows:
-   a=dict(zip(keys,r));a["tags"]=list(a["tags"] or []);a["createdAt"]=float(a["createdAt"]);a["assetKind"]=a["kind"];a["deleted"]=False;assets.append(a)
+   a=dict(zip(keys,r));a["tags"]=list(a["tags"] or []);a["createdAt"]=float(a["createdAt"]);a["assetKind"]=a["kind"];a["hash"]=a["hash"] or "";a["deleted"]=False;assets.append(a)
   snap=self.service.repository.get(w,t)
   legacy=[{**a,"assetKind":"video" if str(a.get("mime") or "").startswith("video/") else "image"} for a in snap["state"].get("phase2",{}).get("assets",[]) if not a.get("deleted") and not a.get("deletionPending")]
   return {"assets":legacy+assets,"query":query}
  def sweep(self,connect,limit=100):
   s=self._store()
-  with connect() as db,db.cursor() as cur:cur.execute("SELECT workspace_id::text,replace(id::text,'-',''),object_name FROM public.pr_library_assets WHERE processing_status='pending' AND token_expires_at+make_interval(secs=>%s)<now() ORDER BY token_expires_at LIMIT %s FOR UPDATE SKIP LOCKED",(SWEEP_MARGIN,limit));due=cur.fetchall()
+  with connect() as db,db.cursor() as cur:cur.execute("SELECT workspace_id::text,replace(id::text,'-',''),object_name FROM public.pr_library_assets WHERE (processing_status='pending' AND token_expires_at+make_interval(secs=>%s)<now()) OR processing_status='deleting' ORDER BY token_expires_at NULLS FIRST LIMIT %s FOR UPDATE SKIP LOCKED",(SWEEP_MARGIN,limit));due=cur.fetchall()
   removed=failed=0
   for w,i,o in due:
    try:
