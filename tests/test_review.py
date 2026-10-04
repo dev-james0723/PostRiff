@@ -40,6 +40,17 @@ class ReviewTests(unittest.TestCase):
         self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
         self.state, self.rows, self.scope = fixture()
 
+    def test_generic_workspace_presentation_never_contains_private_review_storage(self):
+        from types import SimpleNamespace
+        from postriff_phase2.hosted import HostedPhase2Commands
+        commands=HostedPhase2Commands.__new__(HostedPhase2Commands)
+        commands.engine=SimpleNamespace(_present=lambda state,revision:{'state':copy.deepcopy(state),'revision':revision})
+        state={'coworker':{'review':{'snapshots':[{'value':'restricted report'}],'requests':{'cached':{'result':'restricted report'}}},'growthLoop':{'active':'existing control'}}}
+        shown=commands.present(state,7)
+        self.assertNotIn('review',shown['state']['coworker'])
+        self.assertEqual(shown['state']['coworker']['growthLoop'],state['coworker']['growthLoop'])
+        self.assertIn('review',state['coworker'])
+
     def context(self):
         return self.review.resolve_review_context('workspace', self.scope, self.state, NOW, rights_epoch='epoch')
 

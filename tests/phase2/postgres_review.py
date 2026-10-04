@@ -46,7 +46,7 @@ co=CoworkerService(host,{'POSTRIFF_SOURCE_SHA':os.environ['POSTRIFF_SOURCE_SHA']
 jobs=seed_review(host,wid,'one',clock[0]);conn=jobs[0]['manifest']['channelId']
 scope={'channelIds':[conn],'publicationPeriod':{'start':review.iso(clock[0]-7*86400),'end':review.iso(clock[0]),'timezone':'UTC'},'horizon':'24h','cutoffAt':review.iso(clock[0]),'nativeMetric':[{'provider':'threads','nativeName':'views','unit':'count','definitionVersion':review.insights.DEFINITION_VERSION}]}
 checks=[]
-def current():return host.get(wid,'one')
+def current():return host.repository.get(wid,'one')
 def body(**extra):return {'workspaceRevision':current()['revision'],'idempotencyKey':str(uuid.uuid4()),**extra}
 p=r.read(wid,'one',scope)
 assert p['coverage']['eligible']==12 and p['groups'][0]['sampleSize']==12,p['coverage']
@@ -82,6 +82,7 @@ snapshot_body=body(scope=scope,contextDigest=p['contextDigest'],basisDigest=p['b
 s=r.create_snapshot(wid,'one',snapshot_body)['record']
 assert r.create_snapshot(wid,'one',snapshot_body)['record']==s
 assert r.snapshot(wid,'one',s['snapshotId'],1)==s
+assert 'review' not in host.get(wid,'one')['state'].get('coworker',{})
 exports=[r.snapshot(wid,'one',s['snapshotId'],1,format_=f) for f in ('markdown','csv','pdf')]
 assert all(x['payloadDigest']==s['payloadDigest'] and s['snapshotId'] in x['content'] and '繁體中文' in x['content'] for x in exports)
 assert "'=SUM" in exports[1]['content']
@@ -128,6 +129,7 @@ with connection() as db:db.execute("UPDATE public.pr_memberships SET role='owner
 checks.append('membership demotion blocks snapshot mutation and replay')
 with connection() as db:db.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported' WHERE workspace_id=%s AND capability='analytics'",(wid,))
 restricted=r.read(wid,'one',scope);assert not restricted['groups'] and all(e['value'] is None and not e['sourceRef'] for e in restricted['nativeResults'])
+assert 'review' not in host.get(wid,'one')['state'].get('coworker',{})
 for f in (None,'markdown','csv','pdf'):refused(403,lambda:r.snapshot(wid,'one',s['snapshotId'],1,format_=f))
 refused(403,lambda:r.create_snapshot(wid,'one',snapshot_body))
 with connection() as db:db.execute("UPDATE public.pr_channel_capabilities SET level='Direct' WHERE workspace_id=%s AND capability='analytics'",(wid,))

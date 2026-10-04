@@ -152,7 +152,7 @@ def save_review_view(state, workspace_id, body, actor, now):
         if type(body.get('expectedRevision')) is not int or body['expectedRevision'] != (existing['revision'] if existing else 0):
             raise AlphaError('This Saved View changed. Reload it.',409)
         if not existing and len(root['views'])>=MAX_VIEWS:
-            raise AlphaError('Saved View limit reached. Archive an existing view first.',409)
+            raise AlphaError('Saved View history limit reached (32 retained views, including archives).',409)
         value = {'id':existing['id'] if existing else 'rv_'+request_id[:24], 'workspaceId':workspace_id,'schemaVersion':SCHEMA_VERSION,
                  'name':name.strip(),'owner':existing['owner'] if existing else actor,'revision':(existing['revision'] if existing else 0)+1,
                  'filterDefinition':copy.deepcopy(definition),'status':'archived' if body.get('archive') is True else 'active',

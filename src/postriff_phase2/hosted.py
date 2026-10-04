@@ -225,7 +225,11 @@ class HostedPhase2Commands:
         self.engine.images = FixtureImages()
 
     def present(self, state, revision):
-        return self.engine._present(state, revision)
+        shown = self.engine._present(state, revision)
+        # Frozen reports and replay receipts are private storage. Only the
+        # Review service may expose them after its current-source rights checks.
+        (shown['state'].get('coworker') or {}).pop('review', None)
+        return shown
 
     def __call__(self, state, principal, action, payload):
         if not isinstance(action, str) or not isinstance(payload, dict):
