@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.developer_usage import ai_usage_exempt
+from postriff_phase2.developer_usage import ai_usage_exempt, founder_plan_exempt, workspace_plan_exempt
 from postriff_phase2.model_runtime import ServerModelRuntime, check_level_ceiling
 from postriff_phase2.hosted_app import HostedApplication
 from test_postriff_phase2_hosted import invoke
@@ -22,6 +22,26 @@ class DeveloperUsageTests(unittest.TestCase):
         for configured in ('', '*', 'JamesAU0723', DEV + ',invalid'):
             with self.subTest(configured=configured), patch.dict(os.environ, {'RAFII_AI_UNLIMITED_USER_IDS': configured}):
                 self.assertFalse(ai_usage_exempt(DEV))
+
+    @patch.dict(os.environ, {'RAFII_FOUNDER_UNLIMITED_USER_IDS': DEV})
+    def test_founder_allowlist_is_uuid_only_and_implies_ai_exemption(self):
+        self.assertTrue(founder_plan_exempt(DEV))
+        self.assertTrue(ai_usage_exempt(DEV))
+        for actor in (OTHER, None, 'jamesau0723@gmail.com', {'founder': True}):
+            self.assertFalse(founder_plan_exempt(actor))
+            self.assertFalse(ai_usage_exempt(actor))
+
+        cur = Mock()
+        cur.fetchall.return_value = [(DEV,)]
+        self.assertTrue(workspace_plan_exempt(cur, 'workspace'))
+        cur.execute.assert_called_once()
+        cur.fetchall.return_value = [(OTHER,)]
+        self.assertFalse(workspace_plan_exempt(cur, 'workspace'))
+
+    def test_invalid_founder_allowlist_fails_closed(self):
+        for configured in ('', '*', 'jamesau0723@gmail.com', DEV + ',invalid'):
+            with self.subTest(configured=configured), patch.dict(os.environ, {'RAFII_FOUNDER_UNLIMITED_USER_IDS': configured}):
+                self.assertFalse(founder_plan_exempt(DEV))
 
     @patch.dict(os.environ, {'RAFII_AI_UNLIMITED_USER_IDS': DEV})
     def test_exact_uuid_only_and_runtime_quota_skip(self):
