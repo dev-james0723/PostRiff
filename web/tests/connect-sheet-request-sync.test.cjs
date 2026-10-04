@@ -7,9 +7,15 @@ const start = source.indexOf('// Each opening starts from what opened it');
 const end = source.indexOf('function choosePlatform', start);
 const block = source.slice(start, end);
 
-test('connect sheet does not reset requested provider when provider query data refreshes', () => {
-  assert.match(block, /request\?\.providerId/);
-  assert.match(block, /request\?\.capability/);
-  assert.doesNotMatch(block, /\[open, providers, request\]/);
-  assert.match(block, /\[open, request\?\.providerId, request\?\.capability\]/);
+test('connect sheet preserves the requested provider across provider-query refreshes', () => {
+  assert.match(block, /providerSignature/);
+  assert.doesNotMatch(block, /\[open, providers, request/);
+});
+
+test('URL deep links are authoritative for direct-entry provider and capability selection', () => {
+  assert.match(block, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(block, /search\.get\('connect'\)/);
+  assert.match(block, /search\.get\('capability'\)/);
+  assert.match(block, /request\?\.providerId \?\? urlProviderId/);
+  assert.match(block, /request\?\.capability \?\? urlCapability/);
 });
