@@ -190,6 +190,19 @@ class Sessions(unittest.TestCase):
             self.assertEqual(form.get(key), value, key)
         self.assertNotIn("customer", form)
 
+    def test_checkout_card_only_override_is_explicit_and_opt_in(self):
+        transport = RecordingTransport()
+        p = StripePaymentProvider("sk_test_x", SECRET, transport=transport, clock=lambda: NOW, checkout_card_only=True)
+        p.create_checkout_session(workspace_id="ws-1", plan_terms_id="starter-v1", price_id="price_1",
+                                  success_url="https://app/billing", cancel_url="https://app/pricing",
+                                  customer_email="o@example.com", idempotency_key="card-only")
+        self.assertEqual(transport.calls[0]["form"]["payment_method_types[0]"], "card")
+        default_transport = RecordingTransport()
+        provider(default_transport).create_checkout_session(workspace_id="ws-2", plan_terms_id="starter-v1", price_id="price_1",
+                                                            success_url="https://app/billing", cancel_url="https://app/pricing",
+                                                            customer_email="o@example.com", idempotency_key="dynamic")
+        self.assertNotIn("payment_method_types[0]", default_transport.calls[0]["form"])
+
     def test_checkout_prefers_existing_customer(self):
         transport = RecordingTransport()
         provider(transport).create_checkout_session(workspace_id="ws-1", plan_terms_id="studio-v1", price_id="price_1", success_url="https://a", cancel_url="https://b", customer_id="cus_1", customer_email="o@example.com", idempotency_key="k")
