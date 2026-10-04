@@ -167,8 +167,85 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
       check(`${label}: no page error`, seen.pageErrors.length === 0, seen.pageErrors);
       check(`${label}: no console error`, seen.consoleErrors.length === 0, seen.consoleErrors);
       check(`${label}: no failed request`, seen.requestFailures.length === 0, seen.requestFailures);
+      if (id === 'customers') await customerDetailPass(page, tracker, width, mode);
     });
   }
+}
+
+/** The same selected account's metadata must open in Customer 360 in both modes, at every viewport. */
+async function customerDetailPass(page, tracker, width, mode) {
+  const label = `${width}px ${mode} Customer 360`;
+  await attempt(`${label}: opens`, async () => {
+    const open = page.locator('tbody button[aria-label^="Open "]').first();
+    await open.waitFor();
+    const name = (await open.getAttribute('aria-label')).slice(5);
+    const fetched = page.waitForResponse((response) => {
+      if (!response.url().endsWith(`/workspace/${mode}/query`) || response.request().method() !== 'POST') return false;
+      return Boolean(response.request().postDataJSON()?.recordId);
+    });
+    await open.click();
+    const response = await fetched;
+    const payload = await response.json();
+    check(`${label}: real detail API succeeds`, response.status() === 200, payload.code);
+    const data = payload.data;
+    check(`${label}: detail returns linked records`, Boolean(data?.linkedRecords), payload.code);
+    if (!data?.linkedRecords) return;
+    const linked = data.linkedRecords;
+    const selected = response.request().postDataJSON().recordId;
+    check(`${label}: exact selected account returned`, data.rows?.[0]?.id === selected, data.rows?.[0]?.id);
+    const workspaces = new Set(data.workspaces.map((row) => row.id));
+    check(`${label}: linked records belong to selected workspaces`, Object.values(linked).flat().every((row) => !row.workspaceId || workspaces.has(row.workspaceId)));
+    const dialog = page.locator('[role="dialog"][aria-label="Customer 360"]');
+    await dialog.getByRole('heading').filter({ hasText: name }).waitFor();
+    await settle(page, tracker);
+    check(`${label}: displays selected name`, (await dialog.innerText()).includes(name));
+    if (mode === 'demo') {
+      const liveBefore = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+      const actions = dialog.getByRole('region', { name: 'Demo workspace actions' });
+      const input = actions.getByRole('textbox', { name: 'Sample workspace name' });
+      const original = await input.inputValue();
+      const sample = 'Fictional browser workspace ' + width;
+      await input.fill(sample);
+      await actions.getByRole('button', { name: 'Save sample workspace', exact: true }).click();
+      await actions.getByRole('status').filter({ hasText: 'Sample workspace saved.' }).waitFor();
+      const body = { collection: 'customers', search: '', status: 'all', page: 1, recordId: selected };
+      const persisted = await (await page.context().request.post(base + '/api/control/v2/workspace/demo/query', { headers: { Origin: base, 'X-CSRF-Token': (await (await page.context().request.get(base + '/api/control/v2/session')).json()).data.csrfToken }, data: body })).json();
+      check(`${label}: sandbox rename persists through the real API`, persisted.data.workspaces[0].name === sample, persisted.code);
+      await actions.getByRole('button', { name: 'Reset my Demo', exact: true }).click();
+      await actions.getByRole('status').filter({ hasText: 'Your Demo changes were reset.' }).waitFor();
+      check(`${label}: reset restores the original linked sample`, await input.inputValue() === original);
+      const liveAfter = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+      check(`${label}: Demo actions leave canonical Live workspaces unchanged`, JSON.stringify(liveBefore.workspaces) === JSON.stringify(liveAfter.workspaces));
+    } else {
+      check(`${label}: Live never offers a Demo mutation`, await dialog.getByRole('region', { name: 'Demo workspace actions' }).count() === 0);
+    }
+    for (const tab of ['Billing', 'Usage & AI cost', 'Connections', 'Support', 'Activity', 'Advanced']) {
+      await dialog.getByRole('tab', { name: tab, exact: true }).click();
+      await settle(page, tracker);
+      const text = await dialog.innerText();
+      check(`${label} ${tab}: wired source without historical placeholders`, !/P1|054 views|not part of the Live query yet|per-customer view is/.test(text), text.slice(-400));
+      check(`${label} ${tab}: no invalid values`, !/\bNaN\b|\bundefined\b/.test(text), text.slice(-400));
+      if (tab === 'Billing' && linked.invoices?.length) check(`${label}: shows the exact invoice`, text.includes(String(linked.invoices[0].number ?? linked.invoices[0].id)));
+      if (tab === 'Connections' && !linked.connections) check(`${label}: missing connection source is explicit`, /not configured|not part of this Demo dataset/.test(text));
+      if (tab === 'Usage & AI cost' && mode === 'live') check(`${label}: history does not invent a balance`, /verified current balance is not included/.test(text) && !/Balance after/.test(text));
+      if (tab === 'Billing') await page.screenshot({ path: path.join(outDir, `${width}-${mode}-customer-billing.png`), fullPage: true });
+    }
+    const violations = await axe(page);
+    check(`${label}: axe without critical/serious violations`, violations.length === 0, violations);
+    check(`${label}: no horizontal page overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    try {
+      await page.waitForFunction((element) => element === document.activeElement, await open.elementHandle(), { timeout: 3000 });
+      check(`${label}: Escape closes and returns keyboard focus`, true);
+    } catch {
+      check(`${label}: Escape closes and returns keyboard focus`, false, await page.evaluate(() => ({ active: document.activeElement?.outerHTML.slice(0,300), openers: [...document.querySelectorAll('[data-customer-open]')].slice(0,2).map((element) => ({ id: element.getAttribute('data-customer-open'), text: element.outerHTML.slice(0,200) })) })));
+    }
+    const seen = drain(tracker);
+    check(`${label}: no failed control request`, seen.apiFailures.length === 0, seen.apiFailures);
+    check(`${label}: no page error`, seen.pageErrors.length === 0, seen.pageErrors);
+    check(`${label}: no console error`, seen.consoleErrors.length === 0, seen.consoleErrors);
+  });
 }
 
 /**
@@ -254,6 +331,16 @@ async function main() {
         return (await response.json()).data;
       });
       if (!login) {
+        await context.close();
+        continue;
+      }
+      if (process.argv.includes('--customers')) {
+        for (const mode of ['live', 'demo']) {
+          await page.goto(base + '/founder/customers?mode=' + mode);
+          await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor();
+          await settle(page, tracker);
+          await customerDetailPass(page, tracker, width, mode);
+        }
         await context.close();
         continue;
       }
