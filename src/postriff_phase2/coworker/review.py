@@ -769,12 +769,6 @@ class ReviewService:
             from ..permissions import require
             require(self.c.hosted.ideas._member(row),'edit')
             state = self.c.hosted.ideas._state(row)
-            projection = self._project(cur,workspace_id,state,actor,scope)
-            if projection['contextDigest'] != body.get('contextDigest') or projection['basisDigest'] != body.get('basisDigest'):
-                raise AlphaError('Review the current scope and evidence before saving a report.',409)
-            previous = next((s for s in reversed(review_state(state).get('snapshots',[])) if s['snapshotId']==body.get('snapshotId')),None)
-            if body.get('snapshotId') and not previous:
-                raise AlphaError('Report unavailable in this workspace.',404)
             request_id = digest([workspace_id,body.get('idempotencyKey')])
             existing_request = review_state(state).get('requests',{}).get(request_id)
             if existing_request:
@@ -784,6 +778,12 @@ class ReviewService:
                 saved = existing_request['result']
                 self._snapshot_current(cur,workspace_id,state,actor,saved)
                 return {'record':saved,'workspaceRevision':row[0],'verified':True,'existing':True}
+            projection = self._project(cur,workspace_id,state,actor,scope)
+            if projection['contextDigest'] != body.get('contextDigest') or projection['basisDigest'] != body.get('basisDigest'):
+                raise AlphaError('Review the current scope and evidence before saving a report.',409)
+            previous = next((s for s in reversed(review_state(state).get('snapshots',[])) if s['snapshotId']==body.get('snapshotId')),None)
+            if body.get('snapshotId') and not previous:
+                raise AlphaError('Report unavailable in this workspace.',404)
             if previous and body.get('expectedVersion')!=previous['version']:
                 raise AlphaError('Report version changed. Reload it.',409)
             source_sha = self.c.values.get('POSTRIFF_SOURCE_SHA') or os.environ.get('VERCEL_GIT_COMMIT_SHA') or os.environ.get('POSTRIFF_SOURCE_SHA')

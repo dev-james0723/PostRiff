@@ -88,7 +88,7 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
         <option value=''>Accounts shown separately</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.platform} · {a.account}</option>)}
       </select></label>
       <label className='text-sm'>Publication dates<select className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={input.publicationPeriod ? 'fixed' : relative} onChange={(e) => change({ publicationPeriod: undefined, relativeDateRule: { kind: e.target.value as NonNullable<ReviewInput['relativeDateRule']>['kind'], timezone } })}>
-        {input.publicationPeriod && <option value='fixed'>Shared fixed period</option>}<option value='this_week'>This week</option><option value='last_week'>Last week</option><option value='this_month'>This month</option><option value='last_month'>Last month</option>
+        {input.publicationPeriod && <option value='fixed'>Fixed UTC period</option>}<option value='this_week'>This week</option><option value='last_week'>Last week</option><option value='this_month'>This month</option><option value='last_month'>Last month</option>
       </select></label>
       <label className='text-sm'>Post age<select className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={scope.horizon} onChange={(e) => change({ horizon: e.target.value as ReviewInput['horizon'] })}><option value='1h'>1 hour</option><option value='24h'>24 hours</option><option value='7d'>7 days</option></select></label>
       <label className='text-sm'>Timezone<input aria-label='Review timezone' className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={timezone} onChange={(e) => change({ publicationPeriod: undefined, relativeDateRule: { kind: relative, timezone: e.target.value } })} /></label>
@@ -102,6 +102,11 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
           const p = result.resolvedContext.publicationPeriod; const end = new Date(p.start); const start = new Date(end.getTime() - (Date.parse(p.end) - Date.parse(p.start)));
           change({ comparison: { kind: 'previous_period', publicationPeriod: { start: start.toISOString().replace('.000Z','Z'), end: p.start, timezone: p.timezone } } });
         }}><option value='none'>No comparison</option><option value='previous_period' disabled={!result}>Previous period</option></select></label>
+      </div>
+      <div className='mt-3 grid gap-3 sm:grid-cols-3'>
+        <label className='text-sm'>Native metric<select aria-label='Native metric filter' className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={input.nativeMetric?.length===1?JSON.stringify(input.nativeMetric[0]):''} onChange={e=>change({nativeMetric:e.target.value?[JSON.parse(e.target.value)]:undefined})}><option value=''>Native metrics shown separately</option>{query.data?.resolvedContext.nativeMetric.map(m=><option key={JSON.stringify(m)} value={JSON.stringify(m)}>{m.provider} · {m.nativeName}</option>)}</select></label>
+        <label className='text-sm'>UTC publication start<input aria-label='UTC publication start' className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' placeholder='YYYY-MM-DDTHH:mm:ssZ' value={input.publicationPeriod?.start??result?.resolvedContext.publicationPeriod.start??''} onChange={e=>change({relativeDateRule:undefined,publicationPeriod:{start:e.target.value,end:input.publicationPeriod?.end??result?.resolvedContext.publicationPeriod.end??e.target.value,timezone}})}/></label>
+        <label className='text-sm'>UTC publication end (excluded)<input aria-label='UTC publication end excluded' className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' placeholder='YYYY-MM-DDTHH:mm:ssZ' value={input.publicationPeriod?.end??result?.resolvedContext.publicationPeriod.end??''} onChange={e=>change({relativeDateRule:undefined,publicationPeriod:{start:input.publicationPeriod?.start??result?.resolvedContext.publicationPeriod.start??e.target.value,end:e.target.value,timezone}})}/></label>
       </div>
     </details>
     <div className='mt-4 space-y-3' aria-live='polite'>
