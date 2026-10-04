@@ -134,8 +134,10 @@ export function AssetCard({
   const ref = useRef<HTMLDivElement>(null);
   // Thumbnails are the stored renditions (up to 4096 px), so a card fetches only once it is near the viewport.
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
-  const image = useAssetImage(asset.id, nearView);
-  const storageMissing = image.storageNotConfigured;
+  const assetKind = kindOf(asset);
+  const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const image = useAssetImage(asset.id, nearView && mediaAsset);
+  const storageMissing = mediaAsset && image.storageNotConfigured;
   const loaded = Boolean(image.data);
   useEffect(() => {
     if (storageMissing) onStorageMissing?.();
@@ -145,7 +147,6 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const assetKind = kindOf(asset);
   const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : 'Photo');
   const label = `${assetKind === 'video' ? 'Video' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
@@ -172,7 +173,12 @@ export function AssetCard({
           >
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
-              {image.data ? (
+              {!mediaAsset ? (
+                <div className='rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-2 p-4'>
+                  <span className='text-foreground text-sm font-medium'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+                  <span className='max-w-full truncate text-xs'>{assetKind === 'document' ? 'Document' : 'File'}</span>
+                </div>
+              ) : image.data ? (
                 <div className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (
@@ -241,7 +247,7 @@ export function AssetCard({
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
         </ContextMenuItem>
-        {canApprove ? (
+        {canApprove && mediaAsset ? (
           <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />
             Use in a post
