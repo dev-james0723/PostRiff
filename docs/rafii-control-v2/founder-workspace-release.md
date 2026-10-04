@@ -1,5 +1,7 @@
 # Founder workspace implementation and release receipt — 2026-09-30
 
+Historical snapshot. The [October 3 continuation](founder-customer-completion-20261003.md) supersedes the deployment, project, connector and migration blockers described below; it preserves the remaining distinction between local synthetic qualification and authenticated hosted acceptance.
+
 **State: implemented, committed, pushed and under review in PR #85; hosted Control qualification remains pending. This is not a production-readiness claim.**
 
 This is the continuation of the authoritative Control v2 application, not a separate prototype. The current user request explicitly authorizes implementation, commit/push and release through review. Earlier milestone instructions holding source upload are historical. It does not authorize unreviewed hosted migrations, privileged account enrollment, new provider spend or live customer messages.

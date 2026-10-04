@@ -78,6 +78,9 @@ async function api(method, url, body) {
     await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
     await dialog.getByText('The platform did not return a usable next-page cursor. Coverage is incomplete.',{exact:true}).waitFor();
     checks.push('incomplete pagination is a failed/partial coverage state');
+    fixture('cancelled');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
+    await dialog.getByText('Import cancelled because access changed.',{exact:true}).waitFor();
+    checks.push('cancelled import is explicitly labelled rather than reported complete');
     fixture('purge');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
     await dialog.getByText('Removing earlier imported data. New imports are blocked until removal finishes.',{exact:true}).waitFor();
     assert.equal(await dialog.getByRole('button',{name:'Review another import',exact:true}).count(),0);
