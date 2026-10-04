@@ -22,7 +22,9 @@ from .media import decode_upload
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
+FILE_OBJECT = re.compile(r"[0-9a-f]{32}\.[a-z0-9]{1,12}")
 MAX_BODY = 8 * 1024 * 1024
+MAX_FILE_BODY = 50 * 1024 * 1024
 MAX_VIDEO_BODY = 100_000_000
 LIST_PAGE = 100
 LIST_PAGES = 200
