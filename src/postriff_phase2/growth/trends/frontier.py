@@ -21,6 +21,7 @@ from .jobs import partition_key
 from .outbox import TrendOutbox
 from .planner import FrontierPlanner, integer, schedule_controls
 from .policy import SourcePolicy, admit
+from .providers.registry import contract_runtime_version
 from .store import row, rows, utcnow
 
 VERSION = 'discovery-frontier-v1'
@@ -103,7 +104,9 @@ class DiscoveryFrontier:
             manifest = stored['manifest']
             policy = SourcePolicy(**{k: v for k, v in manifest.items() if k in {f.name for f in fields(SourcePolicy)}})
             cap, registered, _ = self.registry.resolve(provider, policy.operation, scope, version, at=at)
-            if canonical(asdict(policy)) != canonical(asdict(registered)) or stored['provider_contract_version'] != cap.version:
+            runtime_version = contract_runtime_version(
+                stored['provider_contract_version'], stored.get('contract_manifest') or {})
+            if canonical(asdict(policy)) != canonical(asdict(registered)) or runtime_version != cap.version:
                 raise ContractError('planner_contract_mismatch')
             schedule = schedule_controls(manifest)
             admit(cap, policy, at=at, requested_scope=scope,

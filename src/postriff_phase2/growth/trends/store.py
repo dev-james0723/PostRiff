@@ -195,7 +195,7 @@ class TrendStore:
         trust_lock(cur)
         at = at or utcnow()
         cur.execute("""SELECT p.*,c.revoked_at AS contract_revoked,c.valid_from AS contract_start,c.expires_at AS contract_end,
-            c.operations AS contract_operations,c.available_at AS contract_available_at FROM public.pr_trend_source_policies p
+            c.operations AS contract_operations,c.available_at AS contract_available_at,c.manifest AS contract_manifest FROM public.pr_trend_source_policies p
             JOIN public.pr_trend_provider_contracts c ON (c.provider_id,c.version)=(p.provider_id,p.provider_contract_version)
             JOIN public.pr_trend_scopes s USING(scope_key) WHERE p.scope_key=%s AND p.provider_id=%s AND p.version=%s
             AND s.enabled FOR SHARE OF p,c,s""", (scope_key,provider_id,version))
