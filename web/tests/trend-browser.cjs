@@ -84,7 +84,9 @@ async function run() {
       const calls = [],
         unhandledMutations = [],
         external = [],
-        errors = [];
+        errors = [],
+        runtimeDiagnostics = [],
+        networkDiagnostics = [];
       await context.addCookies([
         { name: 'postriff_dev', value: '1', url: base },
         { name: 'postriff_theme', value: 'rafii', url: base }
@@ -341,7 +343,22 @@ async function run() {
       });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
-      page.on('pageerror', (e) => errors.push(e.message));
+      page.on('pageerror', (e) => {
+        errors.push(e.message);
+        const diagnostic = { at: new Date().toISOString(), url: page.url(), scenario,
+          lastCheck: results.at(-1)?.name, message: e.message, stack: e.stack,
+          recentNetwork: networkDiagnostics.slice(-12) };
+        runtimeDiagnostics.push(diagnostic);
+        console.log('RUNTIME DIAGNOSTIC ' + JSON.stringify(diagnostic));
+      });
+      for (const event of ['requestfinished', 'requestfailed']) {
+        page.on(event, (request) => {
+          const url = new URL(request.url());
+          if (url.origin === base && url.pathname.startsWith('/api/'))
+            networkDiagnostics.push({ at: new Date().toISOString(), event,
+              path: url.pathname, scenario, failure: request.failure()?.errorText });
+        });
+      }
       try {
         await page.goto(base + '/app/trends', { waitUntil: 'domcontentloaded', timeout: 180000 });
         await visibleText(page, 'Trend Beta is off');
@@ -824,7 +841,7 @@ async function run() {
       } catch (error) {
         fs.writeFileSync(
           path.join(out, `failure-${width}.txt`),
-          JSON.stringify({ error: String(error), errors, calls }, null, 2) +
+          JSON.stringify({ error: String(error), errors, runtimeDiagnostics, networkDiagnostics, calls }, null, 2) +
             '\n' +
             (await page
               .locator('body')
