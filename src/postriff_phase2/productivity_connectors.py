@@ -367,6 +367,10 @@ class GmailProvider(ProductivityProvider):
     def _headers(access_token):
         return {"Authorization": "Bearer " + access_token}
 
+    def authenticated_account(self, access_token):
+        profile = _api_body(self.transport("GET", f"{self.API}/profile", headers=self._headers(access_token)))
+        return str(profile.get("emailAddress") or "").strip().lower()
+
     def search(self, access_token, query, limit=MAX_RESULTS):
         query = clean(query, 500).strip()
         if not query:
@@ -445,6 +449,10 @@ class GoogleCalendarProvider(ProductivityProvider):
     @staticmethod
     def _headers(access_token):
         return {"Authorization": "Bearer " + access_token}
+
+    def authenticated_account(self, access_token):
+        primary = _api_body(self.transport("GET", f"{self.API}/calendars/primary", headers=self._headers(access_token)))
+        return str(primary.get("id") or "").strip().lower()
 
     @staticmethod
     def _event(event):
@@ -835,13 +843,15 @@ class ProductivityConnectorService:
                          sum(1 for item in results.values() if item.get("source"))))
         return results
 
-    def daily_brief_context(self, workspace_id, principal, time_zone):
+    def daily_brief_context(self, workspace_id, principal, time_zone, *, account_bindings=None):
         """Internal, bounded read for James Daily Call. No message body or calendar description is fetched.
 
         This method has no HTTP route. The caller must already be a trusted server-side worker bound to the configured
         user/workspace. It reuses encrypted OAuth custody and returns only short display metadata plus opaque source ids.
         Provider text is data, never instructions.
         """
+        if not account_bindings or any(not account_bindings.get(p, {}).get("account") or not CONNECTION_ID.fullmatch(str(account_bindings.get(p, {}).get("connectionId") or "")) for p in ("gmail", "google_calendar")):
+            raise AlphaError("Personal briefing account binding is missing.", 409, code="briefing_identity_unbound")
         try:
             zone = ZoneInfo(time_zone)
         except (ZoneInfoNotFoundError, ValueError, TypeError):
@@ -865,8 +875,11 @@ class ProductivityConnectorService:
                 if provider_id not in self.providers:
                     out[bucket]["status"] = "unconfigured"
                     continue
+                binding = account_bindings[provider_id]
+                expected_account = binding["account"].strip().lower()
                 cur.execute("SELECT connection_id FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s "
-                            "AND provider=%s AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1", (workspace_id, principal, provider_id))
+                            "AND provider=%s AND connection_id=%s AND lower(provider_account_id)=%s AND revoked_at IS NULL",
+                            (workspace_id, principal, provider_id, binding["connectionId"], expected_account))
                 row = cur.fetchone()
                 if not row:
                     out[bucket]["status"] = "not_connected"
@@ -875,8 +888,13 @@ class ProductivityConnectorService:
                 try:
                     access = self._access_token(cur, workspace_id, connection)
                     provider = self.providers[provider_id]
+                    if provider.authenticated_account(access) != expected_account:
+                        out[bucket]["status"] = "identity_mismatch"
+                        continue
+                    out[bucket]["account"] = expected_account
+                    out[bucket]["connectionId"] = binding["connectionId"]
                     if provider_id == "gmail":
-                        primary = provider.search(access, "in:inbox newer_than:7d {is:important is:starred} -category:promotions -category:social", 6)
+                        primary = provider.search(access, "in:inbox newer_than:1d {is:important is:starred} -category:promotions -category:social", 6)
                         if not primary:
                             primary = provider.search(access, "in:inbox newer_than:1d -category:promotions -category:social", 6)
                         out[bucket]["items"] = [{"sourceId": "gmail:" + str(item["itemId"])[:180],

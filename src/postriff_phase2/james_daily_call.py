@@ -112,6 +112,17 @@ class DailyCallConfig:
     @property
     def workspace_id(self): return _uuid(self.values, "JAMES_DAILY_CALL_WORKSPACE_ID")
 
+    @property
+    def briefing_bindings(self):
+        bindings = {}
+        for provider, prefix in (("gmail", "GMAIL"), ("google_calendar", "CALENDAR")):
+            account = str(self.values.get("JAMES_DAILY_CALL_" + prefix + "_ACCOUNT") or "").strip().lower()
+            connection = str(self.values.get("JAMES_DAILY_CALL_" + prefix + "_CONNECTION_ID") or "").strip()
+            if not account or not re.fullmatch(r"pc_[0-9a-f]{32}", connection):
+                raise AlphaError("Personal briefing account binding is missing.", 409, code="briefing_identity_unbound")
+            bindings[provider] = {"account": account, "connectionId": connection}
+        return bindings
+
     def destination(self):
         value = phone_contracts.phone_number(self.values.get("JAMES_PHONE_E164"))
         return value
@@ -218,7 +229,7 @@ class DailyCallService:
         connectors = getattr(self.hosted, "productivity_connectors", None)
         if connectors is None:
             raise AlphaError("Daily briefing sources are unavailable.", 503, code="briefing_unavailable")
-        context = connectors.daily_brief_context(self.cfg.workspace_id, self.cfg.user_id, self.cfg.time_zone)
+        context = connectors.daily_brief_context(self.cfg.workspace_id, self.cfg.user_id, self.cfg.time_zone, account_bindings=self.cfg.briefing_bindings)
         if self.cfg.require_sources and (context.get("gmail", {}).get("status") != "ok" or context.get("calendar", {}).get("status") != "ok"):
             raise AlphaError("Connect Gmail and Google Calendar before placing the daily call.", 409, code="briefing_sources_unavailable")
         context["projectPulse"] = self.project_pulse.fetch()
@@ -342,7 +353,7 @@ class DailyCallService:
 
     def initial_request(self, call_id):
         return ("Give James a concise personal daily briefing, not a Rafii workspace briefing. "
-                "First give today's calendar timeline in chronological order with times. Then summarize the most important Gmail attention items. "
+                "First summarize new personal Gmail attention items. Then give today's personal calendar timeline in chronological order with times. "
                 "Then summarize the most relevant Project Pulse items updated today or still active: name the project, branch/state, verified progress, blockers, and next action when present. "
                 "Then give 1–3 practical actions for today. Calendar commitments are verified; anything inferred from email or project metadata must be described as a possible action, not a confirmed obligation. "
                 "Do not mention Rafii unless James explicitly asks about it. This opening is read-only: do not send, publish, schedule, buy, delete, or change anything.\n\n"

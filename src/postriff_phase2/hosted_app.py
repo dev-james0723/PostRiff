@@ -605,6 +605,23 @@ class HostedApplication:
                     location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
+            if path == "/api/internal/james-daily-call/briefing-audit" and method == "GET":
+                expected = os.environ.get("JAMES_DAILY_CALL_AUDIT_TOKEN", "")
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 32 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Briefing audit authorization failed.", 401)
+                daily = self._runtime().james_daily_call
+                context = daily._context()  # Read-only: never create a run, tick a worker or dial.
+                sources = {bucket: {"status": context[bucket].get("status"),
+                                    "account": context[bucket].get("account"),
+                                    "connectionId": context[bucket].get("connectionId"),
+                                    "itemCount": len(context[bucket].get("items") or [])}
+                           for bucket in ("gmail", "calendar")}
+                pulse = context.get("projectPulse") or {}
+                return self._json(start_response, 200, {
+                    "sources": sources, "projectPulse": {"status": pulse.get("status"), "itemCount": len(pulse.get("items") or [])},
+                    "timeZone": context.get("timeZone"), "scheduledEnabled": daily.cfg.scheduled_enabled,
+                    "openingPolicy": daily.initial_request(None), "callsCreated": 0})
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
