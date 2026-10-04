@@ -132,8 +132,8 @@ export function ConnectSheet({
     const urlProviderId = search.get('connect') ?? undefined;
     const urlCapabilityValue = search.get('capability');
     const urlCapability = CONNECT_CAPABILITIES.find((value) => value === urlCapabilityValue);
-    const requestedProviderId = request?.providerId ?? urlProviderId;
-    const requestedCapability = request?.capability ?? urlCapability;
+    const requestedProviderId = urlProviderId ?? request?.providerId;
+    const requestedCapability = urlCapability ?? request?.capability;
     const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
 
     setProviderId(initial?.id ?? '');
