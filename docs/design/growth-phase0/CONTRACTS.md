@@ -153,6 +153,33 @@ As built: `golden.parse(FILE) -> (rows, problems, warnings)`; `validate` prints 
 
 Readers: `insights.latest_observations` now returns, per post and metric, the latest *available* reading and falls back to the latest reading only when none was ever available, so a later reading that lacks a metric never hides a real value. `summary` adds `readOffset` (t0/1h/24h/7d/backfill, or None for legacy rows; read via `to_jsonb` so pre-032 databases work) and `observedAt` to each metric; existing callers read `value` only and are unchanged. Still open for Phase 2 postmortems: cohorts do not include read age, so like-for-like comparisons should filter on `readOffset`. Operations: the cron snapshot adds `metricReadsOverdue` (pending/claimed > 10 min past due), `metricReadsDead24h` and `historyImportsFailed24h` (zero when 032 is absent); any non-zero count sets status `attention`.
 
+### Stage 3A admission hardening (2026-10-03, supersedes the metric schedule admission above)
+
+`MetricScheduler(..., workspace_allowlist=())` denies all work by default. Hosted production reads require both
+`POSTRIFF_METRIC_READS=1` and an explicit UUID list in `POSTRIFF_METRIC_WORKSPACE_ALLOWLIST`. An empty, wildcard,
+malformed or partially malformed list admits nobody. Claims filter at SQL level before consuming an attempt;
+verified-post scheduling and authenticated Beta/tracking responses use the same workspace admission.
+
+Scheduling, token acquisition, native insights GET and completion require a mounted, enabled,
+`production_reviewed` Threads/Instagram adapter, a non-revoked credential bound to that provider, exact native
+analytics scopes and `analytics=Direct`. Threads requires `threads_basic` and `threads_manage_insights`;
+Instagram Login requires `instagram_business_basic` and `instagram_business_manage_insights`. A generic identity
+or read-post scope is insufficient. Live introspection may reduce rights; cached grants never substitute for
+current credential/capability checks. Completion takes the workspace/credential/capability locks that serialize
+with disconnect/deletion, and retains the unexpired lease and attempt-generation fence. A purge appearing during
+grant acquisition or completion retries owned-post reads and never appends data meanwhile.
+
+Each bounded tick returns and logs content-free `providerReads`, `providerErrors` and `costUnknownReads` counters.
+These count attempted native insights GETs, including transport failures, independently of committed observations;
+OAuth introspection is a separate request. Native responses have no invoice, so logs retain `costUsd=null` and
+`costSource=unknown`. The existing read/attempt/time bounds remain in force. This does not create a provider invoice
+or assert zero cost. Unknown rights, scopes, adapter review, workspace admission or account deletion fail closed.
+
+The `Growth metrics acceptance` CI gate exercises disposable PostgreSQL and actual browser/API/DB paths with
+synthetic identities, publications and transports. It proves implementation behavior, never real provider review,
+account ownership, live publication, elapsed +1h/+24h/+7d reads or creator lift. History import retains its separate
+consent-copy and UI acceptance gate and stays off in production.
+
 ### History import (`growth/history_import.py`), flags `POSTRIFF_HISTORY_IMPORT` + `POSTRIFF_METRIC_READS` (both required, default off)
 
 `HistoryImporter(connection_factory, oauth, *, transport, clock, monotonic, worker_id)`. Routes (only when attached): `POST /api/workspaces/{ws}/channels/{conn}/history-import` with `{"confirmed": true}` → 202 run status (interactive session only, `manage_connections`, throttle 5/hour, live Threads/Instagram credential, Direct analytics else 409 `analytics_required`; one active run per connection); `GET` same path → latest run status (`read`). Disabled → 404 `feature_disabled`. Cron: `history_import.tick(max_runs=2, max_seconds=20)` runs before the metric step. Listing uses the analytics grant (`threads_basic` / `instagram_business_basic` already in it) — no new scope: Threads `GET graph.threads.net/{v}/me/threads` (token in query, as insights), Instagram `GET graph.instagram.com/{v}/me/media` (Bearer header, as social_history). Up to 3 pages per tick, 12 pages (300 posts) per run, stop at 90 days before the request. Each page's `pr_owned_posts` upserts (metadata, caption sha256/length, https permalinks only — never caption text), one `backfill` reading per post (anchor = publish time, due immediately) and the cursor commit together, fenced on the run lease. 429/5xx/transport keep the cursor and back off (failed after 5 attempts); 400/401/403/404 or a revoked credential fail the run; lost eligibility cancels it. `oauth.disconnect` calls `purge_connection` in a savepoint (safe before 032): deletes imported posts and their job-less observations and cancels pending readings and runs. **Enablement gate:** the consent copy that says analytics reads "posts Rafii created" (providers.py EXPLAIN texts, web capabilities/coverage copy) must be updated before the flag is turned on anywhere real; the web UI for the route is not built in Phase 0.

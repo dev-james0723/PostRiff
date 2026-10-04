@@ -112,11 +112,12 @@ class CoworkerService:
     def status(self, workspace_id, token):
         from .. import skill_registry
         from ..growth.trends import beta
+        from ..growth.metric_schedule import workspace_enabled
         state = self._state(workspace_id, token)
         weekly = weekly_operator.view(state)
         notifications = getattr(self.hosted, "notifications", None)
         return {**flags.public(), "registryRelease": skill_registry.default_registry().release(),
-                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=getattr(self.hosted, "metric_reads", None) is not None),
+                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=workspace_enabled(getattr(self.hosted, "metric_reads", None), workspace_id)),
                 "notifications": notifications.status() if notifications else {"enabled": False},
                 "research": research_broker.ResearchBroker(state=state).diagnostics() if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
                 "weekly": {"recipes": len([r for r in weekly["recipes"] if r.get("status") != "deleted"]), "weeks": len(weekly["weeks"])}}
@@ -860,8 +861,9 @@ class CoworkerService:
             trend_report = self._trend_learning_report(cur, workspace_id, _p)
             result = performance.view(cur, workspace_id, state, self.clock(), trend_report=trend_report)
             from ..growth.trends import beta
+            from ..growth.metric_schedule import workspace_enabled
             result['post_tracking'] = beta.tracking(cur, workspace_id, state, self.clock(),
-                enabled=getattr(self.hosted, 'metric_reads', None) is not None)
+                enabled=workspace_enabled(getattr(self.hosted, 'metric_reads', None), workspace_id))
             if trend_report is not None:
                 from ..growth.trends import learning_options
                 from ..growth.trends.store import TrendStore

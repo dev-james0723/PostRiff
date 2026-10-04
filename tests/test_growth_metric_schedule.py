@@ -3,9 +3,21 @@ from types import SimpleNamespace
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.growth import metric_schedule as M
+from postriff_phase2.providers import ThreadsProvider
 
 
 class Hooks(unittest.TestCase):
+    def test_workspace_list_is_explicit_and_invalid_entries_deny_the_whole_list(self):
+        wid = "267f7d90-b11c-470c-9880-733ea7c1d483"
+        self.assertEqual(M.allowed_workspaces({M.WORKSPACE_ALLOWLIST: wid}), {wid})
+        for raw in ("", "*", wid + ",*", wid + ",", "other", [wid]):
+            with self.subTest(raw=raw):
+                self.assertFalse(M.allowed_workspaces({M.WORKSPACE_ALLOWLIST: raw}))
+        self.assertFalse(M.workspace_enabled(None, wid))
+        denied = M.MetricScheduler(None, None, transport=None)
+        self.assertFalse(M.workspace_enabled(denied, wid))
+        self.assertEqual(denied.claim(10), [])  # no DB needed, no claims outside admission
+
     def test_scheduling_runs_after_a_failing_hook_and_the_error_still_reaches_the_worker(self):
         seen = []
         scheduler = SimpleNamespace(on_post_verified=lambda cur, ws, job: seen.append("scheduled"))
@@ -29,20 +41,64 @@ class Hooks(unittest.TestCase):
 class Read(unittest.TestCase):
     def scheduler(self, reply=None, token_error=None):
         class OAuth:
-            providers = {}
+            providers = {"threads": ThreadsProvider("synthetic-client", "synthetic-secret", production_reviewed=True)}
             def token_for_worker(self, ws, conn):
                 if token_error:
                     raise token_error
-                return {"accessToken": "t"}
+                return {"accessToken": "t", "provider": "threads", "scopes": sorted(M.NATIVE_ANALYTICS_SCOPES["threads"])}
         def transport(method, url, **kw):
             if isinstance(reply, Exception):
                 raise reply
             return reply
-        s = M.MetricScheduler(None, OAuth(), transport=transport)
+        s = M.MetricScheduler(None, OAuth(), transport=transport, workspace_allowlist={"w"})
         s._eligible = lambda row: "read"
         return s
 
     ROW = {"workspaceId": "w", "connectionId": "c", "provider": "threads", "postId": "p"}
+
+    def test_review_pause_workspace_and_scopes_are_rechecked_before_insights(self):
+        for case in ("unreviewed", "malformed_review", "paused", "second_workspace", "no_allowlist", "missing_scope", "wrong_provider"):
+            with self.subTest(case=case):
+                s = self.scheduler({"status": 200, "body": {}})
+                calls = []
+                s.transport = lambda *a, **k: calls.append(a) or {"status": 200, "body": {}}
+                row = dict(self.ROW)
+                if case == "unreviewed":
+                    s.oauth.providers["threads"].production_reviewed = False
+                elif case == "malformed_review":
+                    s.oauth.providers["threads"].production_reviewed = "false"
+                elif case == "paused":
+                    s.oauth.providers["threads"].execution_enabled = False
+                elif case == "second_workspace":
+                    row["workspaceId"] = "other"
+                elif case == "no_allowlist":
+                    s.workspace_allowlist = frozenset()
+                else:
+                    s.oauth.token_for_worker = lambda *a: {"accessToken": "t", "provider": "instagram" if case == "wrong_provider" else "threads", "scopes": ["threads_basic"]}
+                self.assertEqual(s.read(row, {})["state"], "cancelled")
+                self.assertEqual(calls, [])
+
+    def test_introspection_or_revocation_during_grant_fetch_suppresses_read(self):
+        for eligibility_after_grant, expected in (("cancel", "cancelled"), ("wait", "transient")):
+            with self.subTest(eligibility=eligibility_after_grant):
+                s = self.scheduler({"status": 200, "body": {}})
+                eligibility = iter(("read", eligibility_after_grant))
+                s._eligible = lambda row: next(eligibility)
+                calls = []
+                s.transport = lambda *a, **k: calls.append(a)
+                self.assertEqual(s.read(self.ROW, {})["state"], expected)
+                self.assertEqual(calls, [])
+
+    def test_provider_attempt_signals_do_not_report_unknown_cost_as_zero(self):
+        s = self.scheduler({"status": 429, "body": {}})
+        s.claim = lambda limit: [dict(self.ROW, id="r", attempts=1, maxAttempts=5)]
+        s.complete = lambda row, outcome: True
+        with self.assertLogs("postriff.growth.metric_reads", "INFO") as logs:
+            result = s.tick()
+        self.assertEqual((result["providerReads"], result["providerErrors"], result["retry"], result["costUnknownReads"]), (1, 1, 1, 1))
+        self.assertIn('"costUsd": null', logs.output[-1])
+        self.assertNotIn("access_token", logs.output[-1])
+        self.assertNotIn("synthetic-token", logs.output[-1])
 
     def test_classification(self):
         cases = [({"status": 200, "body": {"data": []}}, None, "done"),

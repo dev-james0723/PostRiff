@@ -222,7 +222,8 @@ def runtime_from_environment(environ=None):
     # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
     from .growth import metric_schedule
     if metric_schedule.enabled(values):
-        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport)
+        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
+            workspace_allowlist=metric_schedule.allowed_workspaces(values))
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)

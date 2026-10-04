@@ -22,6 +22,7 @@ from postriff_phase2.growth import backfill as B
 from postriff_phase2.growth import history_import as H
 from postriff_phase2.growth import metric_schedule as M
 from postriff_phase2.hosted import HostedWorkspaceService
+from postriff_phase2.providers import ThreadsProvider
 
 DSN = "host=127.0.0.1 port=55438 dbname=postgres"
 ONE = "00000000-0000-0000-0000-000000000001"
@@ -58,7 +59,8 @@ with connection() as db:
     wid = str(db.execute("select workspace_id from public.pr_memberships where user_id=%s", (ONE,)).fetchone()[0])
     db.execute("update public.pr_memberships set status='active', role='owner' where user_id=%s", (ONE,))
 service = HostedWorkspaceService(connection, verify)
-service.oauth.token_for_worker = lambda ws, conn: {"accessToken": "synthetic-token"}
+service.oauth.providers["threads"] = ThreadsProvider("synthetic-client", "synthetic-secret", production_reviewed=True)
+service.oauth.token_for_worker = lambda ws, conn: {"accessToken": "synthetic-token", "provider": "threads", "scopes": sorted(M.NATIVE_ANALYTICS_SCOPES["threads"])}
 
 
 class Transport:
@@ -120,7 +122,7 @@ checks.append("the import pages newest-first, stops at the 90-day window, keeps 
 
 metric_transport = Transport()
 metric_transport.replies = [{"status": 200, "body": {"data": [{"name": "views", "total_value": {"value": n}}]}} for n in (10, 20, 30)]
-readings = M.MetricScheduler(connection, service.oauth, transport=metric_transport).tick()
+readings = M.MetricScheduler(connection, service.oauth, transport=metric_transport, workspace_allowlist={wid}).tick()
 with connection() as db:
     obs = db.execute("SELECT provider_post_id, value FROM public.pr_metric_observations WHERE metric='views' AND read_offset='backfill' AND job_id IS NULL ORDER BY value").fetchall()
 assert readings["done"] == 3 and len(obs) == 3, (readings, obs)
@@ -192,7 +194,7 @@ with connection() as db:
 assert again == [("pending", "history_import")], again
 checks.append("after disconnect and reconnect a new import schedules readings for the same posts again")
 
-reader = M.MetricScheduler(connection, service.oauth, transport=metric_transport, worker_id="mr-race")
+reader = M.MetricScheduler(connection, service.oauth, transport=metric_transport, workspace_allowlist={wid}, worker_id="mr-race")
 late_rows = [r for r in reader.claim(10) if r["postId"] == "h1"]
 with connection() as db, db.cursor() as cur:
     H.purge_connection(cur, wid, CONN)                        # disconnect lands while the reading is in flight
@@ -231,7 +233,7 @@ with connection() as db, db.cursor() as cur:
     db.commit()
     kept_source = db.execute("SELECT source, job_id FROM public.pr_metric_reads WHERE provider_post_id='rafii-post'").fetchone()
 assert kept_source == ("backfill", "job-rafii"), kept_source
-blocked = M.MetricScheduler(connection, service.oauth, transport=metric_transport, worker_id="mr-blocked").tick()
+blocked = M.MetricScheduler(connection, service.oauth, transport=metric_transport, workspace_allowlist={wid}, worker_id="mr-blocked").tick()
 with connection() as db:
     states = dict(db.execute("SELECT provider_post_id, status FROM public.pr_metric_reads WHERE provider_post_id IN ('blocked-imp','rafii-post')").fetchall())
     waiting = db.execute("SELECT failure_class, due_at > now() FROM public.pr_metric_reads WHERE provider_post_id='rafii-post'").fetchone()
