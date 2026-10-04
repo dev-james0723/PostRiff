@@ -349,11 +349,50 @@ class DailyCallService:
                 + self.context_prompt(call_id))
 
     def personal_context_refresh(self):
+        """Compact read-only facts for one Live delegation result.
+
+        GPT-Live append events are deliberately small. Do not return the full briefing JSON here:
+        a delegated follow-up must stay comfortably under the provider's 500-token append ceiling.
+        """
         context = self._context()
-        payload = json.dumps(_brief_data(context), ensure_ascii=False, separators=(",", ":"))
-        return ("REFRESHED_PERSONAL_CONTEXT_JSON=" + payload[:12000] +
-                "\nUse this only as read-only personal context for James. Answer his latest spoken question from it. "
-                "Do not mention Rafii unless he asked about Rafii. If the answer is not in this context, say that plainly instead of guessing.")
+        calendar = (context.get("calendar") or {}).get("items") or []
+        gmail = (context.get("gmail") or {}).get("items") or []
+        projects = (context.get("projectPulse") or {}).get("items") or []
+
+        parts = []
+        if calendar:
+            facts = []
+            for item in calendar[:4]:
+                title = _bounded(item.get("title") or "Calendar item", 90)
+                start = _bounded(item.get("start"), 45)
+                facts.append(title + (" @ " + start if start else ""))
+            parts.append("Calendar: " + "; ".join(facts))
+        if gmail:
+            facts = []
+            for item in gmail[:3]:
+                subject = _bounded(item.get("subject") or "Email", 100)
+                sender = _bounded(item.get("from"), 70)
+                facts.append((sender + ": " if sender else "") + subject)
+            parts.append("Email attention: " + "; ".join(facts))
+        if projects:
+            facts = []
+            for item in projects[:4]:
+                name = _bounded(item.get("project") or item.get("title") or "Project", 70)
+                state = _bounded(item.get("state"), 35)
+                branch = _bounded(item.get("branch"), 70)
+                action = _bounded(item.get("nextAction"), 90)
+                detail = name
+                if state:
+                    detail += " [" + state + "]"
+                if branch:
+                    detail += " branch " + branch
+                if action:
+                    detail += "; next " + action
+                facts.append(detail)
+            parts.append("Projects: " + "; ".join(facts))
+        if not parts:
+            parts.append("No refreshed personal items are currently available.")
+        return _bounded("Refreshed personal context. " + " ".join(parts), 1200)
 
     def decorate_request(self, call_id, text):
         context = self.context_prompt(call_id)

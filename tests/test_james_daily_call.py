@@ -84,6 +84,33 @@ class BriefingSafetyTests(unittest.TestCase):
                    'gmail': {'items': [{'subject': 'B' * 500}]}}
         self.assertLessEqual(len(_fallback_text(context)), 120)
 
+    def test_live_personal_refresh_is_compact_and_excludes_email_body_like_snippets(self):
+        hosted = SimpleNamespace(clock=lambda: 0)
+        service = DailyCallService(hosted, dict(BASE), clock=lambda: 0)
+        service._context = Mock(return_value={
+            'calendar': {'items': [
+                {'title': 'Lesson ' + ('A' * 300), 'start': '2026-10-03T15:30:00-04:00'}
+                for _ in range(8)
+            ]},
+            'gmail': {'items': [
+                {'subject': 'Important ' + ('B' * 300), 'from': 'sender@example.com',
+                 'snippet': 'PRIVATE_LONG_BODY_' + ('X' * 3000)}
+                for _ in range(8)
+            ]},
+            'projectPulse': {'items': [
+                {'project': 'kynlo', 'title': 'Kynlo', 'state': 'running',
+                 'branch': 'fix/project-pulse-' + ('c' * 200),
+                 'nextAction': 'Run acceptance ' + ('D' * 300)}
+                for _ in range(8)
+            ]},
+        })
+        text = service.personal_context_refresh()
+        self.assertLessEqual(len(text), 1200)
+        self.assertIn('Calendar:', text)
+        self.assertIn('Email attention:', text)
+        self.assertIn('Projects:', text)
+        self.assertNotIn('PRIVATE_LONG_BODY_', text)
+
 
 class DailyCallAcceptanceGateTests(unittest.TestCase):
     def _service(self, values=None, now=None, phone=None, connectors=None):
