@@ -7,10 +7,11 @@ const start = source.indexOf('// Deep link from other pages');
 const end = source.indexOf('const companionExpanded', start);
 const block = source.slice(start, end);
 
-test('channel capability deep links survive query cleanup without remounting the connect sheet', () => {
-  assert.match(source, /useRef<string \| null>\(null\)/);
+test('channel capability deep links stay authoritative until the connect sheet closes', () => {
   assert.match(block, /openConnect\(\{ providerId: connectParam, capability \}\)/);
-  assert.match(block, /window\.history\.replaceState/);
-  assert.doesNotMatch(block, /replaceParams\(/);
-  assert.match(block, /handledConnectDeepLink\.current/);
+  assert.doesNotMatch(block.split('const handleConnectOpenChange')[0], /replaceParams\(/);
+  assert.match(block, /const handleConnectOpenChange = useCallback/);
+  assert.match(block, /search\.delete\('connect'\)/);
+  assert.match(block, /search\.delete\('capability'\)/);
+  assert.match(source, /onOpenChange=\{handleConnectOpenChange\}/);
 });
