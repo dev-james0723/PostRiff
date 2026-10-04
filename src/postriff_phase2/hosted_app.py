@@ -223,9 +223,11 @@ def runtime_from_environment(environ=None):
     on_verified = service.audience.on_post_verified
     # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
     from .growth import metric_schedule
+    # Explicit interactive canary shares admission, but does not mount the cron step.
+    service.metric_probe = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
+        workspace_allowlist=metric_schedule.allowed_workspaces(values))
     if metric_schedule.enabled(values):
-        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
-            workspace_allowlist=metric_schedule.allowed_workspaces(values))
+        service.metric_reads = service.metric_probe
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
@@ -863,6 +865,11 @@ class HostedApplication:
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
+                if len(parts) == 6 and parts[5] == "insights-canary" and method == "POST":
+                    probe = getattr(service, "metric_probe", None)
+                    if probe is None:
+                        raise AlphaError("Native insights canary is not enabled.", 404, code="feature_disabled")
+                    return self._json(start_response, 200, probe.probe(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 6 and parts[5] == "picture" and method == "GET":
                     # The account's profile picture for previews; the web app asks with ?v=<digest>, so a new picture is a new URL.
                     raw, digest = oauth.picture(parts[2], token, parts[4])
