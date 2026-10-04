@@ -121,6 +121,10 @@ export function ConnectSheet({
   const reconnect = request?.reconnect ?? null;
 
   // Each opening starts from what opened it: the tile's provider, the card's capability, or the first provider.
+  // Providers arrive through React Query and may be replaced by an equivalent array after
+  // the sheet opens. Depending on the whole array here resets a deliberate Instagram /
+  // Analytics selection back to the first provider. Re-initialize only when the sheet
+  // actually opens or the requested provider/capability changes.
   useEffect(() => {
     if (!open) return;
     const initial = providers.find((p) => p.id === request?.providerId) ?? providers[0];
@@ -131,7 +135,7 @@ export function ConnectSheet({
     setBusy(false);
     setInputValue('');
     setNotSeenYet(false);
-  }, [open, providers, request]);
+  }, [open, request?.providerId, request?.capability]);
 
   function choosePlatform(id: string) {
     const next = providers.find((p) => p.id === id);
