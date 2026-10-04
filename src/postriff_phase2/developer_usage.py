@@ -38,23 +38,43 @@ def ai_usage_exempt(member_id):
     return _allowed(member_id, FOUNDER_ALLOWLIST, AI_ALLOWLIST)
 
 
-def workspace_plan_exempt(cur, workspace_id):
-    """A workspace owned by an allowlisted Founder is outside customer plan ceilings.
+def _server_founder(cur, member_id):
+    """Recognize the control-plane Founder from its server-created internal tenant marker."""
+    try:
+        actor = str(UUID(str(member_id)))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    cur.execute(
+        "SELECT w.id::text FROM public.pr_workspaces w "
+        "JOIN public.pr_memberships m ON m.workspace_id=w.id "
+        "WHERE m.user_id=%s AND m.role='owner' AND m.status='active' "
+        "AND w.state->'workspace'->>'name' LIKE 'Rafii Ops (founder)%%' "
+        "AND w.state->'founderOps'->>'operatorId'=%s "
+        "AND w.state->'founderOps'->>'version'='1' "
+        "AND w.state->'founderOps'->>'environment' IN ('local','staging','production') LIMIT 2",
+        (actor, actor),
+    )
+    return len(cur.fetchall()) == 1
 
-    Ownership is read from server-side membership state. Email/profile fields never confer authority.
+
+def workspace_plan_exempt(cur, workspace_id):
+    """A verified Founder-owned workspace is outside customer commercial plan ceilings.
+
+    Authority comes from the optional immutable UUID allowlist or Rafii's server-created Founder
+    Ops marker. Email/profile fields and request flags never confer Founder status.
     """
     allowed = _allowlist(FOUNDER_ALLOWLIST)
-    if not allowed:
-        return False
     cur.execute(
         "SELECT user_id::text FROM public.pr_memberships "
         "WHERE workspace_id=%s AND role='owner' AND status='active'",
         (workspace_id,),
     )
-    for row in cur.fetchall():
+    owners = cur.fetchall()
+    for row in owners:
         try:
-            if UUID(str(row[0])) in allowed:
-                return True
+            owner = UUID(str(row[0]))
         except (ValueError, TypeError, AttributeError, IndexError):
             continue
+        if owner in allowed or _server_founder(cur, owner):
+            return True
     return False
