@@ -214,7 +214,7 @@ function DetailBody({
       <LargeImage asset={asset} />
 
       {publishing && (
-        <StateMessage kind='loading' layout='inline' title='A post using this image is publishing' description='You can delete it once that post finishes.' />
+        <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />
       )}
 
       {/* Provenance and rights are inspectable facts (DNA §21.9), read as quiet rows without dividers. */}
@@ -225,7 +225,10 @@ function DetailBody({
         <dl className='flex flex-col'>
           <Fact term='Dimensions'>{dims ? `${dims} px` : 'Not recorded'}</Fact>
           <Fact term='Size'>{typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : 'Not recorded'}</Fact>
+          {asset.originalFilename ? <Fact term='Original file'>{asset.originalFilename}</Fact> : null}
           <Fact term='Format'>{reencoded ? 'JPEG · metadata removed' : asset.mime}</Fact>
+          {asset.aiSummary ? <Fact term='Summary'>{asset.aiSummary}</Fact> : null}
+          {asset.aiTags?.length ? <Fact term='Tags'>{asset.aiTags.join(' · ')}</Fact> : null}
           <HashFact term='Stored hash' hash={asset.hash} />
           {asset.sourceHash && <HashFact term='Source hash' hash={asset.sourceHash} />}
           {typeof asset.createdAt === 'number' && (
@@ -258,7 +261,7 @@ function DetailBody({
         )}
       </section>
 
-      <ImageRules asset={asset} platforms={platforms} />
+      {kindOf(asset) === 'image' ? <ImageRules asset={asset} platforms={platforms} /> : null}
     </div>
   );
 }
@@ -274,7 +277,7 @@ function DetailActions({
 }: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
   return (
     <>
-      {!canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use images in posts.</p>}
+      {!canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use media in posts.</p>}
       <div className='flex flex-wrap gap-2'>
         {canApprove ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
@@ -293,7 +296,7 @@ function DetailActions({
             size='control'
             className='rounded-[var(--rafii-radius-control)] sm:ml-auto'
             disabled={deleting || publishing}
-            title={publishing ? 'A post using this image is publishing' : undefined}
+            title={publishing ? 'A post using this asset is publishing' : undefined}
             onClick={() => onDelete(asset)}
           >
             {deleting ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.trash aria-hidden />}
@@ -309,7 +312,9 @@ export function AssetDetail(props: AssetDetailProps) {
   const { asset, open, onOpenChange } = props;
   const isMobile = useIsMobile();
   const dims = asset ? dimensionsOf(asset) : null;
-  const title = dims ? `Image ${dims}` : 'Image';
+  const assetKind = asset ? kindOf(asset) : null;
+  const fallbackTitle = assetKind === 'video' ? 'Video' : 'Photo';
+  const title = asset?.displayTitle?.trim() || asset?.originalFilename?.trim() || (dims ? `${fallbackTitle} ${dims}` : fallbackTitle);
   const description = props.uses.length === 0 ? 'Not used in a post yet' : `Used in ${props.uses.length} ${props.uses.length === 1 ? 'post' : 'posts'}`;
 
   if (isMobile) {
@@ -323,7 +328,7 @@ export function AssetDetail(props: AssetDetailProps) {
                   <DrawerTitle>{title}</DrawerTitle>
                   <DrawerDescription>{description}</DrawerDescription>
                 </div>
-                <DrawerClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' />}>
+                <DrawerClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' />}>
                   <Icons.close aria-hidden />
                 </DrawerClose>
               </DrawerHeader>
@@ -352,7 +357,7 @@ export function AssetDetail(props: AssetDetailProps) {
       <SheetContent side='right' showCloseButton={false} className={SHEET_CLASS}>
         {asset && (
           <>
-            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' className='absolute top-3 right-3 z-10' />}>
+            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' className='absolute top-3 right-3 z-10' />}>
               <Icons.close aria-hidden />
             </SheetClose>
             <SheetHeader className='pr-16'>
