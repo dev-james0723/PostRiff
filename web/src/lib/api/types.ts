@@ -1515,6 +1515,8 @@ export interface Entitlement {
   resetsAt: number | null;
   source: string;
   version: number;
+  /** Server-authoritative Founder/internal workspace: customer plan ceilings do not apply. */
+  unlimited?: boolean;
 }
 
 export interface SubscriptionView {
