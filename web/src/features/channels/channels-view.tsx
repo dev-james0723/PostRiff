@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
@@ -218,7 +218,6 @@ function ChannelsPage() {
 
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const handledConnectDeepLink = useRef<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState<boolean | null>(null);
   // Saved folders narrow the account list below (a view, never a mutation); empty means every account.
@@ -307,21 +306,22 @@ function ChannelsPage() {
     if (!connectParam || !data || !canManage) return;
     if (!providers.some((provider) => provider.id === connectParam)) return;
 
-    const deepLinkKey = connectParam + ':' + (capabilityParam ?? '');
-    if (handledConnectDeepLink.current === deepLinkKey) return;
-    handledConnectDeepLink.current = deepLinkKey;
-
     const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
     openConnect({ providerId: connectParam, capability });
+  }, [canManage, capabilityParam, connectParam, data, openConnect, providers]);
 
-    // Avoid a Next router navigation here: it can remount the page before the sheet
-    // consumes connectRequest, dropping the requested provider/capability.
-    const next = new URLSearchParams(window.location.search);
-    next.delete('connect');
-    next.delete('capability');
-    const query = next.toString();
-    window.history.replaceState(window.history.state, '', query ? pathname + '?' + query : pathname);
-  }, [canManage, capabilityParam, connectParam, data, openConnect, pathname, providers]);
+  const handleConnectOpenChange = useCallback(
+    (open: boolean) => {
+      setConnectOpen(open);
+      if (!open && (connectParam || capabilityParam)) {
+        replaceParams((search) => {
+          search.delete('connect');
+          search.delete('capability');
+        });
+      }
+    },
+    [capabilityParam, connectParam, replaceParams]
+  );
 
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
   const errorMessage = error instanceof Error ? error.message : undefined;
@@ -527,7 +527,7 @@ function ChannelsPage() {
         </div>
       )}
 
-      <ConnectSheet open={connectOpen} onOpenChange={setConnectOpen} providers={providers} request={connectRequest} />
+      <ConnectSheet open={connectOpen} onOpenChange={handleConnectOpenChange} providers={providers} request={connectRequest} />
     </PageContainer>
   );
 }
