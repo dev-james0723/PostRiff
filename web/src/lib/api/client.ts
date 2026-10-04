@@ -11,6 +11,7 @@ import type {
   ToolRegistry,
   WorkspaceApiToken, ApiTokenCreated, TokenScope,
   Analytics,
+  Asset,
   Audience,
   AuditEvent,
   Bootstrap,
@@ -315,6 +316,22 @@ export function createApi(getToken: TokenSource) {
         expectedRevision,
         ...body
       }, DRAFT_TIMEOUT_MS),
+
+    /* Universal Library: normalized documents/files use the same signed private-storage boundary as video. */
+    library: (w: string, query = '', limit = 100) =>
+      get<{ assets: Asset[]; query: string }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit) })}`),
+    beginLibraryFile: (w: string, body: { filename: string; mime: string; bytes: number }) =>
+      send<{ upload: { assetId: string; url: string; mime: string; bytes: number; filename: string; expiresIn: number } }>('POST', `${ws(w)}/library/files`, body),
+    commitLibraryFile: (w: string, assetId: string) =>
+      send<{ asset: Asset; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(assetId)}/commit`, {}),
+    libraryFile: (w: string, assetId: string) =>
+      get<{ asset: Asset; extractedText: string; chunks: { ordinal: number; text: string }[] }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
+    libraryFileUrl: (w: string, assetId: string) =>
+      get<{ url: string; mime: string; filename: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/url`),
+    renameLibraryFile: (w: string, assetId: string, title: string) =>
+      send<{ asset: Asset }>('PATCH', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`, { title }),
+    deleteLibraryFile: (w: string, assetId: string) =>
+      send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
 
     /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
     mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),
