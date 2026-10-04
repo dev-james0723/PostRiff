@@ -16,6 +16,6 @@ test('URL deep links are authoritative for direct-entry provider and capability 
   assert.match(block, /new URLSearchParams\(window\.location\.search\)/);
   assert.match(block, /search\.get\('connect'\)/);
   assert.match(block, /search\.get\('capability'\)/);
-  assert.match(block, /request\?\.providerId \?\? urlProviderId/);
-  assert.match(block, /request\?\.capability \?\? urlCapability/);
+  assert.match(block, /urlProviderId \?\? request\?\.providerId/);
+  assert.match(block, /urlCapability \?\? request\?\.capability/);
 });
