@@ -17,11 +17,28 @@ test('the Library accepts HEIC and lists only Library assets', () => {
   assert.match(library, /\.filter\(isLibraryAsset\)/);
 });
 
-test('the Library copy is the SPEC §13 string', () => {
-  assert.match(
-    read('features', 'library', 'library-view.tsx'),
-    /JPEG or PNG photos, 320–4096 px per side\. Large photos are resized before upload and saved as JPEG with metadata removed\. Add videos from a chat with the Add button\./
-  );
+test('the Library copy tells the truth about current photo and video upload paths', () => {
+  const view = read('features', 'library', 'library-view.tsx');
+  assert.match(view, /Add photos here\./);
+  assert.match(view, /Videos added from Rafii chat also appear here once the server verifies them\./);
+  assert.doesNotMatch(view, /video is not accepted/i);
+});
+
+test('the Living Archive exposes gallery\/list views, media filters and universal metadata hooks', () => {
+  const view = read('features', 'library', 'library-view.tsx');
+  const library = read('features', 'library', 'use-library.ts');
+  const types = read('lib', 'api', 'types.ts');
+  assert.match(view, /label='Library view'/);
+  assert.match(view, /value: 'gallery'/);
+  assert.match(view, /value: 'list'/);
+  assert.match(view, /id='library-kind'/);
+  assert.match(library, /export type LibraryKindFilter = 'all' \| 'image' \| 'video'/);
+  assert.match(library, /asset\.displayTitle/);
+  assert.match(library, /asset\.originalFilename/);
+  assert.match(types, /displayTitle\?: string/);
+  assert.match(types, /aiSummary\?: string/);
+  assert.match(types, /extractedText\?: string/);
+  assert.match(read('features', 'library', 'asset-list-row.tsx'), /export function AssetListRow/);
 });
 
 test('videos show a duration badge and hand playback to the global player', () => {
