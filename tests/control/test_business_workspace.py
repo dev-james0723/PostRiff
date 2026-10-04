@@ -41,6 +41,8 @@ class BusinessWorkspaceTests(unittest.TestCase):
         # Fresh test actors share the global exchange limiter; isolate fixture budgets between cases.
         with psycopg.connect(self.dsn,autocommit=True) as con:
             con.execute('DELETE FROM rafii_control.request_budgets WHERE bucket=%s',(hashlib.sha256(b'exchange:global').hexdigest(),))
+            # Live metric tests aggregate this shared disposable database. Remove only this case's fictional ledger rows.
+            con.execute('DELETE FROM public.pr_usage_ledger WHERE workspace_id=%s',(self.workspace,))
 
     def action(self,kind,target,value=''):
         return dict(action=kind,targetId=target,value=value,revision=self.service.demo(self.principal)['revision'],requestId=str(uuid.uuid4()))
