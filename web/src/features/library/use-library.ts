@@ -34,7 +34,7 @@ export interface AssetUse {
 }
 
 export type LibraryFilter = 'all' | 'unused' | 'used';
-export type LibraryKindFilter = 'all' | 'image' | 'video';
+export type LibraryKindFilter = 'all' | 'image' | 'video' | 'document' | 'file';
 /** `newest` is offered only when assets carry an upload time; `stored` is the order the API returns. */
 export type LibrarySort = 'newest' | 'stored' | 'largest';
 
@@ -156,7 +156,9 @@ export function useLibrary({
       kindCounts: {
         all: live.length,
         image: live.filter((asset) => kindOf(asset) === 'image').length,
-        video: live.filter((asset) => kindOf(asset) === 'video').length
+        video: live.filter((asset) => kindOf(asset) === 'video').length,
+        document: live.filter((asset) => kindOf(asset) === 'document').length,
+        file: live.filter((asset) => kindOf(asset) === 'file').length
       },
       totals: {
         count: live.length,
