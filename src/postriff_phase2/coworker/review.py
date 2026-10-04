@@ -91,6 +91,18 @@ def resolve_relative_period(rule, now):
     return {'start': iso(start.timestamp()), 'end': iso(end.timestamp()), 'timezone': rule['timezone']}
 
 
+def previous_period(chosen, relative_rule=None):
+    local_zone = zone(chosen['timezone'])
+    end = datetime.fromtimestamp(stamp(chosen['start']), local_zone)
+    if relative_rule and 'month' in relative_rule['kind']:
+        start = (end - timedelta(days=1)).replace(day=1)
+    else:
+        current_end = datetime.fromtimestamp(stamp(chosen['end']), local_zone)
+        # Civil duration preserves a local week across daylight-saving changes.
+        start = end - (current_end - end)
+    return period({'start':iso(start.timestamp()),'end':iso(end.timestamp()),'timezone':chosen['timezone']})
+
+
 def review_state(state):
     return (state.get('coworker') or {}).get('review') or {}
 
@@ -122,8 +134,10 @@ def _request(state, workspace_id, operation, body, build):
 
 
 def save_review_view(state, workspace_id, body, actor, now):
-    definition = body.get('filterDefinition')
+    definition = copy.deepcopy(body.get('filterDefinition'))
     resolve_review_context(workspace_id,definition,state,now)
+    if definition.get('relativeDateRule') and definition.get('comparison',{}).get('kind')=='previous_period':
+        definition['comparison'] = {'kind':'previous_period','relativeToPublicationPeriod':True}
     name = body.get('name')
     if not isinstance(name,str) or not name.strip() or len(name)>120:
         raise AlphaError('Name the Saved View in at most 120 characters.',400)
@@ -240,7 +254,13 @@ def resolve_review_context(workspace_id, value, state, now, *, rights_epoch='unk
     if not isinstance(comparison, dict) or comparison.get('kind') not in ('none','previous_period'):
         raise AlphaError('Choose a supported comparison.', 400)
     if comparison['kind'] == 'previous_period':
-        baseline = period(comparison.get('publicationPeriod'))
+        if set(comparison)=={'kind','relativeToPublicationPeriod'} and comparison['relativeToPublicationPeriod'] is True:
+            baseline = previous_period(chosen,value.get('relativeDateRule'))
+        elif set(comparison)=={'kind','publicationPeriod'}:
+            # Reopening legacy relative views must move both periods together.
+            baseline = previous_period(chosen,value['relativeDateRule']) if value.get('relativeDateRule') else period(comparison['publicationPeriod'])
+        else:
+            raise AlphaError('Choose one fixed or relative comparison period.',400)
         if stamp(baseline['end']) > stamp(chosen['start']):
             raise AlphaError('The baseline must precede this publication cohort.', 400)
         comparison = {'kind':'previous_period', 'publicationPeriod':baseline}
@@ -286,15 +306,38 @@ def _classification(state, job_id, version):
     return next((r for r in reversed(rows) if r['version'] <= version), {'tags':[]})
 
 
+def scoped_jobs(state, context):
+    """Apply the requested cohort before the bounded observation load."""
+    periods = [context['publicationPeriod']]
+    if context['comparison'].get('publicationPeriod'):
+        periods.append(context['comparison']['publicationPeriod'])
+    bounds = [(stamp(p['start']),stamp(p['end'])) for p in periods]
+    selected = []
+    for job in state.get('phase2',{}).get('jobs',[]):
+        manifest = job.get('manifest') or {}
+        published = verified_at(job)
+        if job.get('state')!='verified' or not job.get('providerReference') or manifest.get('channelId') not in context['channelIds'] or not finite(published):
+            continue
+        if context['language'] is not None and locales.canonical(manifest.get('payload',{}).get('language'))!=context['language']:
+            continue
+        if context['formatIds'] and manifest.get('contentType',{}).get('formatId') not in context['formatIds']:
+            continue
+        if any(t['tagId'] not in _classification(state,job['id'],t['classificationVersion'])['tags'] for t in context['tagSelection']):
+            continue
+        if any(start<=published<end for start,end in bounds):
+            selected.append(job)
+    return sorted(selected,key=lambda j:verified_at(j),reverse=True)
+
+
 def project_review(state, context, observations, direct_connections, now):
     """Pure projection. Current rights override even a previously measured zero."""
     cutoff = stamp(context['cutoffAt'])
     selected = context['publicationPeriod']
     baseline = context['comparison'].get('publicationPeriod')
     channels = {c['id']:c for c in state.get('phase2',{}).get('channels',[])}
-    jobs = [j for j in state.get('phase2',{}).get('jobs',[]) if j.get('state') == 'verified' and j.get('providerReference')]
+    jobs = scoped_jobs(state,context)
     all_count = len(jobs)
-    jobs = sorted(jobs,key=lambda j:verified_at(j) or 0,reverse=True)[:MAX_POSTS]
+    jobs = jobs[:MAX_POSTS]
     rows = defaultdict(list)
     for row in observations:
         rows[(row.get('jobId'),row.get('nativeName'))].append(row)
@@ -598,8 +641,7 @@ class ReviewService:
         direct, epoch = self._rights(cur,workspace_id,state)
         now = self.c.clock()
         context = resolve_review_context(workspace_id,value,state,now,rights_epoch=epoch)
-        jobs = [j for j in state.get('phase2',{}).get('jobs',[]) if j.get('state')=='verified' and j.get('providerReference')]
-        jobs = sorted(jobs,key=lambda j:verified_at(j) or 0,reverse=True)[:MAX_POSTS]
+        jobs = scoped_jobs(state,context)[:MAX_POSTS]
         tracked = tracking(cur,workspace_id,{'phase2':{**state.get('phase2',{}),'jobs':jobs}},now,
                            enabled=collection_enabled(getattr(self.c.hosted,'growth',None),workspace_id) if getattr(self.c.hosted,'growth',None) else False,limit=MAX_POSTS)
         tracking_index = {(p['job_id'],h['window']):h for p in tracked['posts'] for h in p['horizons']}
@@ -734,7 +776,11 @@ class ReviewService:
         from ..growth.trends.service import validate_stored_bindings
         for evidence in snapshot['nativeResults']:
             binding = evidence['publicationBinding'];job = jobs.get(binding['jobId'])
-            if not job or digest([job.get('manifest'),job.get('verification')])!=binding['manifestDigest']:
+            if (not job or digest([job.get('manifest'),job.get('verification')])!=binding['manifestDigest']
+                    or str(job.get('providerReference'))!=binding['nativePostId']
+                    or job.get('manifest',{}).get('channelId')!=binding['connectionId']
+                    or str(job.get('manifest',{}).get('platform','')).lower()!=binding['provider']
+                    or binding['workspaceId']!=workspace_id):
                 raise AlphaError('A report publication changed or was removed.',410)
             if evidence['value'] is not None and binding['connectionId'] not in direct:
                 raise AlphaError('The current analytics grant no longer permits this report.',403)

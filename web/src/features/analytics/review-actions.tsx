@@ -28,7 +28,7 @@ export function ReviewActions({projection:p,scope,onScope,refresh,visible=true}:
   const publications=[...new Map(p.nativeResults.filter(e=>e.accessState==='allowed'&&e.displayPermission==='allowed').map(e=>[e.publicationBinding.jobId,e.publicationBinding])).values()];
   const publication=publications.find(b=>b.jobId===jobId)??publications[0];
   const currentClass=publication?views.data?.classifications[publication.jobId]:undefined;
-  const fixedScope:ReviewInput={...scope,relativeDateRule:undefined,publicationPeriod:p.resolvedContext.publicationPeriod,cutoffAt:p.resolvedContext.cutoffAt};
+  const fixedScope:ReviewInput={...scope,relativeDateRule:undefined,publicationPeriod:p.resolvedContext.publicationPeriod,comparison:p.resolvedContext.comparison,cutoffAt:p.resolvedContext.cutoffAt};
   async function saveView(archive=false){
     if(!views.data)return;
     const filterDefinition=archive&&selected?selected.filterDefinition:{...scope,cutoffAt:undefined};

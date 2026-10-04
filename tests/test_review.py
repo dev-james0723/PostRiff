@@ -93,6 +93,34 @@ class ReviewTests(unittest.TestCase):
         b = self.review.resolve_relative_period({'kind': 'this_week', 'timezone': 'America/New_York'}, NOW)
         self.assertNotEqual(a, b)
 
+    def test_relative_saved_view_moves_previous_period_together(self):
+        definition={'channelIds':['own'],'relativeDateRule':{'kind':'this_week','timezone':'UTC'},'comparison':{'kind':'previous_period','publicationPeriod':{'start':'2026-09-21T00:00:00Z','end':'2026-09-28T00:00:00Z','timezone':'UTC'}}}
+        saved=self.review.save_review_view(self.state,'workspace',{'name':'Weekly','filterDefinition':definition,'expectedRevision':0,'idempotencyKey':'relative-baseline'},'owner',NOW)
+        reopened=self.review.resolve_review_context('workspace',saved['filterDefinition'],self.state,NOW+7*86400)
+        self.assertEqual(reopened['comparison']['publicationPeriod']['start'],'2026-09-28T00:00:00Z')
+        self.assertEqual(reopened['comparison']['publicationPeriod']['end'],'2026-10-05T00:00:00Z')
+
+    def test_scope_filter_precedes_retention_bound(self):
+        self.state['phase2']['channels'].append({'id':'other','platform':'Instagram'})
+        for i in range(300):
+            job=copy.deepcopy(self.state['phase2']['jobs'][0]);job['id']='other'+str(i);job['providerReference']='other-post'+str(i)
+            job['manifest']['channelId']='other';job['verification']['at']=NOW-3600-i
+            self.state['phase2']['jobs'].append(job)
+        p=self.projection()
+        self.assertEqual(p['coverage']['eligible'],6)
+        self.assertFalse(p['coverage']['truncated'])
+
+    def test_relative_baseline_preserves_civil_week_and_month(self):
+        scope={'channelIds':['own'],'relativeDateRule':{'kind':'this_week','timezone':'America/New_York'},'comparison':{'kind':'previous_period','relativeToPublicationPeriod':True}}
+        now=datetime(2026,11,8,17,tzinfo=timezone.utc).timestamp()
+        context=self.review.resolve_review_context('workspace',scope,self.state,now)
+        self.assertEqual(context['comparison']['publicationPeriod'],{'start':'2026-10-26T04:00:00Z','end':'2026-11-02T05:00:00Z','timezone':'America/New_York'})
+        scope['relativeDateRule']={'kind':'this_month','timezone':'UTC'}
+        context=self.review.resolve_review_context('workspace',scope,self.state,NOW)
+        self.assertEqual(context['comparison']['publicationPeriod'],{'start':'2026-09-01T00:00:00Z','end':'2026-10-01T00:00:00Z','timezone':'UTC'})
+        fixed={**scope,'relativeDateRule':None,'publicationPeriod':context['publicationPeriod'],'comparison':context['comparison']}
+        self.assertEqual(self.review.resolve_review_context('workspace',fixed,self.state,NOW+40*86400)['comparison'],context['comparison'])
+
     def test_zero_and_null_and_invalid_values_are_separate(self):
         for i, value in enumerate((None, True, -1, float('nan'), float('inf'))):
             self.rows[2 + i * 2]['value'] = value

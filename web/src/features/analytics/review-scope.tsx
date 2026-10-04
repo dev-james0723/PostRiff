@@ -8,6 +8,7 @@ import { useChannels, useSnapshot } from '@/lib/api/hooks';
 import { useCoworkerApi } from '@/lib/coworker/hooks';
 import { errorMessage } from '@/lib/coworker/api';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { isVerified } from '@/lib/channels/state';
 import { REVIEW_SCHEMA_VERSION, REVIEW_STATE_LABELS, reviewContextInputSchema, reviewDisplayState, type MetricEvidence, type ReviewInput, type ReviewProjection } from '@/lib/analytics/review-contract';
 import { ReviewActions } from './review-actions';
 
@@ -53,7 +54,7 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
   const cache = useQueryClient();
   const [input, setInput] = useState<Partial<ReviewInput>>(inputFromLocation);
   const accounts = useMemo(() => channels.data?.channels ?? [], [channels.data]);
-  const channelIds = input.channelIds ?? accounts.filter((a) => a.connectionState === 'connected').map((a) => a.id).slice(0, 8);
+  const channelIds = input.channelIds ?? accounts.filter(isVerified).map((a) => a.id).slice(0, 8);
   const storedZone = snapshot.data?.state.timeZone;
   const timezone = input.relativeDateRule?.timezone ?? input.publicationPeriod?.timezone ?? (typeof storedZone === 'string' ? storedZone : 'UTC');
   const scope = useMemo<ReviewInput>(() => ({
@@ -80,7 +81,7 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
   const change = (patch: Partial<ReviewInput>) => setInput((old) => ({ ...old, ...patch, cutoffAt: undefined }));
   const relative = input.relativeDateRule?.kind ?? 'this_week';
   const error = query.error ?? channels.error ?? snapshot.error;
-  const shared = result ? { ...scope, relativeDateRule: undefined, publicationPeriod: result.resolvedContext.publicationPeriod, cutoffAt: result.resolvedContext.cutoffAt } : scope;
+  const shared = result ? { ...scope, relativeDateRule: undefined, publicationPeriod: result.resolvedContext.publicationPeriod, comparison:result.resolvedContext.comparison, cutoffAt: result.resolvedContext.cutoffAt } : scope;
   return <section aria-label='Evidence review' className='min-w-0 rounded-xl border bg-card p-4 sm:p-5'>
     <div className='mb-4'><h2 className='text-lg font-semibold'>Review your published content</h2><p className='text-muted-foreground text-sm'>A fixed post-age window, each platform’s own numbers and a traceable next step.</p></div>
     <div className='grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4'>
@@ -99,8 +100,7 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
         <label className='text-sm'>Format<select className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={input.formatIds?.[0] ?? ''} onChange={(e) => change({ formatIds: e.target.value ? [e.target.value] : [] })}><option value=''>Formats shown separately</option>{formats.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
         <label className='text-sm'>Comparison<select className='rafii-field rafii-focus mt-1 w-full rounded-md border p-2' value={input.comparison?.kind ?? 'none'} onChange={(e) => {
           if (e.target.value === 'none' || !result) return change({ comparison: { kind: 'none' } });
-          const p = result.resolvedContext.publicationPeriod; const end = new Date(p.start); const start = new Date(end.getTime() - (Date.parse(p.end) - Date.parse(p.start)));
-          change({ comparison: { kind: 'previous_period', publicationPeriod: { start: start.toISOString().replace('.000Z','Z'), end: p.start, timezone: p.timezone } } });
+          change({ comparison: { kind: 'previous_period', relativeToPublicationPeriod:true } });
         }}><option value='none'>No comparison</option><option value='previous_period' disabled={!result}>Previous period</option></select></label>
       </div>
       <div className='mt-3 grid gap-3 sm:grid-cols-3'>
@@ -113,6 +113,7 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
       {error ? <div role='alert'><p>{errorMessage(error,'Unable to read this scope.')}</p><Button variant='quiet' onClick={() => { void channels.refetch(); void snapshot.refetch(); void query.refetch(); }}>Retry current reading</Button></div> : !result ? <p role='status'>Loading the current scope…</p> : <>
         <p className='text-muted-foreground break-words text-xs'>{result.resolvedContext.publicationPeriod.start} → {result.resolvedContext.publicationPeriod.end} (end excluded) · {result.resolvedContext.publicationPeriod.timezone} · cumulative at {result.resolvedContext.horizon}.</p>
         <p className='text-sm'>{result.coverage.eligible} of {result.coverage.publications} publications have qualified readings. {result.coverage.missing} metric readings excluded or missing. Promotion status unknown.</p>
+        {result.coverage.truncated&&<p role='status' className='text-sm'>This scope exceeds the loading limit. Showing at most {result.coverage.maximumPosts} matching publications; coverage and summaries are limited to the retained readings.</p>}
         {!channelIds.length ? <p>No connected account. <Link className='underline' href='/app/channels'>Open Channels</Link></p> : !result.groups.length ? <p>No comparable native readings in this scope. <Link className='underline' href='/app/channels'>Check analytics permissions</Link>. Collection start is unknown; HistoryImport is off.</p> :
           <div className='overflow-x-auto rounded-lg border'><table className='w-full text-left text-sm'><caption className='sr-only'>Native metrics by account, language, format and definition</caption><thead><tr>{['Account / cohort','Native metric','Aggregation','Current','Previous','Samples'].map((h) => <th key={h} scope='col' className='p-2 font-medium'>{h}</th>)}</tr></thead><tbody>{result.groups.map((g) => <tr key={JSON.stringify(g.cohort)} className='border-t'><td className='p-2'>{g.cohort.provider} · {g.cohort.connectionId}<small className='block'>{g.cohort.language ?? 'Unknown language'} · {g.cohort.formatId ?? 'Unknown format'}</small></td><td className='p-2'>{g.cohort.nativeName}</td><td className='p-2'>{g.aggregation}</td><td className='p-2'>{g.value ?? '—'}</td><td className='p-2'>{g.baselineValue ?? '—'}</td><td className='p-2'>{g.sampleSize} / {g.baselineSampleSize} · need {g.minimumSample} each</td></tr>)}</tbody></table></div>}
         {result.comparisons.map((c) => <p key={JSON.stringify(c.cohort)} className='text-sm'>{c.cohort.nativeName}: {c.relativeChange === null ? (REVIEW_STATE_LABELS[c.reason ?? 'unavailable'] ?? c.reason?.replaceAll('_',' ')) : `${(c.relativeChange * 100).toFixed(1)}% relative difference`}. Descriptive, causal=false.</p>)}

@@ -13,12 +13,13 @@ export const relativeDateRuleSchema = z.object({ kind: z.enum(['this_week', 'las
 export const nativeMetricSchema = z.object({ provider: z.string().min(1), nativeName: id, definitionVersion: id, unit: z.literal('count') }).strict();
 export const tagSelectionSchema = z.object({ tagId: id, kind: z.enum(['theme', 'campaign', 'series']), classificationVersion: z.number().int().nonnegative() }).strict();
 export const comparisonSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('none') }).strict(), z.object({ kind: z.literal('previous_period'), publicationPeriod: publicationPeriodSchema }).strict()]);
+export const comparisonInputSchema = z.union([comparisonSchema, z.object({kind:z.literal('previous_period'),relativeToPublicationPeriod:z.literal(true)}).strict()]);
 const inputFields = {
   schemaVersion: z.literal('1.0').optional(), workspaceId: id.optional(), channelIds: z.array(id).max(8),
   publicationPeriod: publicationPeriodSchema.optional(), relativeDateRule: relativeDateRuleSchema.optional(),
   horizon: z.enum(['1h', '24h', '7d']).optional(), language: z.string().max(40).nullable().optional(), formatIds: z.array(id).max(12).optional(),
   tagSelection: z.array(tagSelectionSchema).max(30).optional(), nativeMetric: z.array(nativeMetricSchema).max(48).optional(),
-  comparison: comparisonSchema.optional(), cutoffAt: instant.optional(), scopeKind: z.literal('published_content_cohort').optional(),
+  comparison: comparisonInputSchema.optional(), cutoffAt: instant.optional(), scopeKind: z.literal('published_content_cohort').optional(),
   aggregation: z.enum(['median', 'mean']).optional(), attributionState: z.literal('unknown').optional()
 };
 export const reviewContextInputSchema = z.object(inputFields).strict().refine((v) => Boolean(v.publicationPeriod) !== Boolean(v.relativeDateRule), 'Choose one date scope');

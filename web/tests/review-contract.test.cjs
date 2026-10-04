@@ -28,6 +28,12 @@ if (fs.existsSync(file)) {
     assert.equal(t.reviewDisplayState({accessState:'revoked',valueState:'measured',value:0,freshnessState:'current',collectionState:'measured'}),'revoked');
     assert.equal(t.reviewDisplayState({accessState:'allowed',valueState:'measured',value:0,freshnessState:'current',collectionState:'measured'}),'measured_zero');
   });
+  test('relative baseline input resolves separately from the fixed report contract',()=>{
+    const scope={channelIds:['owned'],relativeDateRule:{kind:'this_week',timezone:'America/New_York'},comparison:{kind:'previous_period',relativeToPublicationPeriod:true}};
+    assert.ok(t.reviewContextInputSchema.safeParse(scope).success);
+    assert.equal(t.comparisonSchema.safeParse(scope.comparison).success,false);
+    assert.equal(t.reviewContextInputSchema.safeParse({...scope,comparison:{...scope.comparison,publicationPeriod:period}}).success,false);
+  });
   test('generated schema matches canonical runtime',()=>{
     const defs=Object.fromEntries(Object.entries(t).filter(([,v])=>v instanceof z.ZodType).map(([k,v])=>[k,z.toJSONSchema(v,{io:'input'})]));
     const schema={$schema:'https://json-schema.org/draft/2020-12/schema',title:'Rafii review projection 1.0',$defs:defs};

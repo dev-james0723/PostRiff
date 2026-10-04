@@ -85,6 +85,19 @@ p=r.read(wid,'one',scope)
 s2=r.create_snapshot(wid,'one',body(scope=scope,contextDigest=p['contextDigest'],basisDigest=p['basisDigest'],humanNotes=['New note'],frequency='weekly',snapshotId=s['snapshotId'],expectedVersion=1))['record']
 assert s2['version']==2 and r.snapshot(wid,'one',s['snapshotId'],1)['humanNotes']==s['humanNotes']
 checks.append('fixed reports immutable versions, replay idempotency and three renderer payload parity / CSV injection')
+# Current publication identity is part of the source, even if its manifest is unchanged.
+with connection() as db:
+    raw=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]
+    changed=copy.deepcopy(raw)
+    target=next(j for j in changed['phase2']['jobs'] if j['id']==s['nativeResults'][0]['publicationBinding']['jobId'])
+    target['providerReference']='changed-native-identity'
+    db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(changed),wid))
+try:
+    for f in (None,'markdown','csv','pdf'):refused(410,lambda:r.snapshot(wid,'one',s['snapshotId'],1,format_=f))
+    refused(410,lambda:r.create_snapshot(wid,'one',snapshot_body))
+finally:
+    with connection() as db:db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(raw),wid))
+checks.append('current native publication identity blocks snapshot read, replay and all exports after rebinding')
 # A failure in the same cursor after the state UPDATE must roll everything back.
 p=r.read(wid,'one',scope);rev=current()['revision'];before_count=len(current()['state']['coworker']['review']['snapshots'])
 original=r._snapshot_current
