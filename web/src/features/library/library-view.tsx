@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
@@ -24,12 +24,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
+import { putSignedUpload } from '@/lib/api/upload';
 import { keys, useAct } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { kindOf } from '@/lib/media/asset-kinds';
 import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
@@ -73,9 +75,11 @@ const SORT_LABELS: Record<LibrarySort, string> = {
 };
 
 const KIND_LABELS: Record<LibraryKindFilter, string> = {
-  all: 'All media',
+  all: 'All assets',
   image: 'Photos',
-  video: 'Videos'
+  video: 'Videos',
+  document: 'Documents',
+  file: 'Files'
 };
 
 type LibraryViewMode = 'gallery' | 'list';
@@ -169,7 +173,7 @@ export function LibraryView() {
   const canApprove = checkAccess(access, { permission: 'approve' });
   const reduce = useReducedMotion();
   const client = useQueryClient();
-  const { workspaceId } = useWorkspaceApi();
+  const { api, workspaceId } = useWorkspaceApi();
   const act = useAct();
   const upload = useUploadQueue();
 
@@ -178,6 +182,8 @@ export function LibraryView() {
   const [view, setView] = useState<LibraryViewMode>('gallery');
   const [sort, setSort] = useState<LibrarySort>('newest');
   const [query, setQuery] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const filePicker = useRef<HTMLInputElement>(null);
   const auth = useAuth();
   const library = useLibrary({ filter, kindFilter, sort, query });
   const { snapshot, assets, visible, counts, totals } = library;
@@ -235,7 +241,13 @@ export function LibraryView() {
     if (revision === null) return;
     setDeletingIds((ids) => new Set(ids).add(asset.id));
     try {
-      await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
+      const assetKind = kindOf(asset);
+      if (assetKind === 'document' || assetKind === 'file') {
+        await api.deleteLibraryFile(workspaceId, asset.id);
+        await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
+      } else {
+        await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
+      }
       // The card leaves the grid, so success needs no toast.
     } catch (error) {
       toast.error('Couldn’t delete this asset', { description: error instanceof ApiError ? error.message : undefined });
@@ -248,6 +260,28 @@ export function LibraryView() {
         next.delete(asset.id);
         return next;
       });
+    }
+  }
+
+  async function uploadLibraryFile(file: File) {
+    if (!canEdit || uploadingFile) return;
+    if (!file.size || file.size > 50 * 1024 * 1024) {
+      toast.error('Choose a file up to 50 MB');
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const mime = file.type || 'application/octet-stream';
+      const ticket = await api.beginLibraryFile(workspaceId, { filename: file.name, mime, bytes: file.size });
+      await putSignedUpload(ticket.upload.url, file, { 'Content-Type': ticket.upload.mime });
+      await api.commitLibraryFile(workspaceId, ticket.upload.assetId);
+      await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
+      toast.success('File added to Library');
+    } catch (error) {
+      toast.error('Couldn’t add this file', { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setUploadingFile(false);
+      if (filePicker.current) filePicker.current.value = '';
     }
   }
 
@@ -370,7 +404,9 @@ export function LibraryView() {
                 options={[
                   { value: 'all', label: `${KIND_LABELS.all} (${library.kindCounts.all})` },
                   { value: 'image', label: `${KIND_LABELS.image} (${library.kindCounts.image})` },
-                  { value: 'video', label: `${KIND_LABELS.video} (${library.kindCounts.video})` }
+                  { value: 'video', label: `${KIND_LABELS.video} (${library.kindCounts.video})` },
+                  { value: 'document', label: `${KIND_LABELS.document} (${library.kindCounts.document})` },
+                  { value: 'file', label: `${KIND_LABELS.file} (${library.kindCounts.file})` }
                 ]}
               />
               <FilterSelect id='library-sort' label='Sort' value={library.sort} onChange={(value) => setSort(value as LibrarySort)} options={sortOptions} />
@@ -406,7 +442,7 @@ export function LibraryView() {
               normalizedQuery
                 ? `No asset matches “${normalizedQuery}”`
                 : kindFilter !== 'all'
-                  ? `No ${kindFilter === 'image' ? 'photos' : 'videos'} match these filters`
+                  ? `No ${kindFilter === 'image' ? 'photos' : kindFilter === 'video' ? 'videos' : kindFilter === 'document' ? 'documents' : 'files'} match these filters`
                   : filter === 'unused'
                     ? 'Every asset is used in a post'
                     : 'No asset is used in a post yet'
@@ -476,14 +512,35 @@ export function LibraryView() {
     );
   }
 
+  const headerActions = canEdit ? (
+    <div className='flex flex-wrap items-center gap-2'>
+      <Button variant='glass' size='control' disabled={uploadingFile} onClick={() => filePicker.current?.click()}>
+        {uploadingFile ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.upload aria-hidden />}
+        {uploadingFile ? 'Adding file…' : 'Add file'}
+      </Button>
+      {uploadButton}
+    </div>
+  ) : undefined;
+
   return (
     <PageContainer
       pageTitle='Library'
       infoContent={infoContent}
-      pageHeaderAction={uploadButton}
+      pageHeaderAction={headerActions}
     >
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
         <input {...getInputProps({ 'aria-label': 'Choose JPEG or PNG images to upload' })} />
+        <input
+          ref={filePicker}
+          type='file'
+          className='sr-only'
+          aria-label='Choose a document or file to add to Library'
+          accept='.txt,.md,.markdown,.html,.htm,.json,.csv,.pdf,.docx,.xlsx,.pptx'
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) void uploadLibraryFile(file);
+          }}
+        />
 
         {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
         {storageMissing ? (
