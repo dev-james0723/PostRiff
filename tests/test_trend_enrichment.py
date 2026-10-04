@@ -42,12 +42,14 @@ class EnrichmentUnitTests(unittest.TestCase):
 class EnrichmentPostgresTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from local_pg_target import selected_target
+        target = selected_target(validate_fixture_dsns=False)
         import psycopg
         from psycopg.conninfo import conninfo_to_dict
         cls.psycopg=psycopg; cls.dsn=os.environ["TREND_ENRICHMENT_TEST_DSN"]
         params=conninfo_to_dict(cls.dsn)
         allowed = params.get("host") == "127.0.0.1" and ((params.get("port") == "56451" and params.get("dbname", "").startswith("trend_enrichment_"))
-            or (params.get("port"), params.get("dbname")) == ("55438", "postgres"))
+            or (params.get("port"), params.get("dbname")) == (str(target.port), "postgres"))
         if (not allowed or set(params)-{"host","port","dbname","user"}
                 or any(k in os.environ for k in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR", "PGOPTIONS"))):
             raise ValueError("only explicit disposable enrichment or exact local CI database allowed")
@@ -108,7 +110,10 @@ class EnrichmentPostgresTests(unittest.TestCase):
         self.assertEqual(self.store.get_receipt(self.wid,self.actor,self.rid)["verification_state"],"verified")
         for dimension,key in zip(("system","provider","workspace"),enrichment.reviewed_config({"manifest":self.policy},"workspace_fit",self.wid)["budget_keys"]):
             TrendJobs(self.store).configure_budget(key,dimension,100000,self.start,self.end)
-        self.hosted=SimpleNamespace(repository=PostgresWorkspaceRepository(self.connect,lambda token:self.actor,HostedPhase2Commands()))
+        self.hosted=SimpleNamespace(repository=PostgresWorkspaceRepository(self.connect,lambda token:self.actor,HostedPhase2Commands()),
+                                    billing=SimpleNamespace(pricing_v2_enabled=False),
+                                    clock=lambda:datetime.now(timezone.utc).timestamp())
+        self.store.hosted=self.hosted
         self.values={"RAFII_TREND_"+n+"_ENABLED":"1" for n in enrichment.REQUIRED_FLAGS};self.values["RAFII_TREND_WORKSPACE_ALLOWLIST"]=self.wid
         self.calls=[];self.side_effect=None;self.cost="0.0001"
         def transport(method,url,*,headers,body,timeout):

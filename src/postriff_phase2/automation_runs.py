@@ -163,6 +163,8 @@ def research_step(worker, claim, repository, capability):
     spec = task["workflow"]["research"]
 
     def researching(state, occ, _task, _cur):
+        from .growth.credit_admission import require_qualified_entry
+        require_qualified_entry(_cur,claim['workspaceId'],hosted=service)
         occ["lifecycle"] = "researching"
         _skill(occ, "research", "running", "Looking for a source", now)
     if (_update_run(service, claim["workspaceId"], occurrence["id"], claim["actor"], researching, claim["binding"]) or {}).get("cancelled"):
@@ -176,8 +178,27 @@ def research_step(worker, claim, repository, capability):
         record = {**base, "decision": "unavailable", "reason": "Web research isn't available right now."}
     else:
         from . import automation_research
+        from .growth.credit_admission import require_qualified_entry
+        def guard():
+            with service.connection_factory() as db,db.cursor() as cur:
+                require_qualified_entry(cur,claim['workspaceId'],hosted=service)
+        def guarded(call):
+            def invoke(*args,**kwargs):
+                guard()
+                return call(*args,**kwargs)
+            return invoke
+        search = backends.search
+        if isinstance(search,web_research.ExaSearch):
+            # The host shares backends between workspaces; bind only this run's copy.
+            search = copy.copy(search)
+            prior_guard = search.before_call
+            def before_call():
+                if prior_guard is not None:
+                    prior_guard()
+                guard()
+            search.before_call = before_call
         try:
-            record = automation_research.find(spec, search=backends.search, read=backends.read, now=now)
+            record = automation_research.find(spec, search=guarded(search), read=guarded(backends.read), now=now)
         except AlphaError as error:
             record = {**base, "decision": "unavailable", "reason": str(error)}
     page = record.pop("page", None)

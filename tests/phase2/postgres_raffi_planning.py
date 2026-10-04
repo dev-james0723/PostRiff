@@ -1,4 +1,5 @@
 """Tenant/RLS and persisted command coverage for Raffi campaign/suggestion state."""
+from local_pg_target import selected_target
 import os
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ import psycopg
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000002"
 FOREIGN = "00000000-0000-0000-0000-000000000099"

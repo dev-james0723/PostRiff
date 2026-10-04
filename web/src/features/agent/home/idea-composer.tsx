@@ -66,7 +66,7 @@ export interface IdeaComposerProps {
   addButton?: ReactNode;
   textareaHandlers?: TextareaHandlers;
   /** Shared `/` command menu; Home decides whether a picked command runs locally or through Agent Runtime V2. */
-  slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
+  slash?: { commands?: SlashCommand[]; onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
 }
 
 /**
@@ -101,7 +101,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
   }
   return (
     <section ref={composerBox} aria-label='Create a social draft' data-tour='composer' className={cn('rafii-composer relative flex flex-col rounded-[var(--rafii-radius-composer)] px-5 pt-5 pb-4 md:px-[26px] md:pt-[27px] md:pb-[18px]', className)}>
-      {slash ? <SlashCommandMenu value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
+      {slash ? <SlashCommandMenu commands={slash.commands} value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
       <div className='text-muted-foreground flex min-h-9 items-center justify-end gap-3'>
         <button type='button' onClick={onExpand} disabled={disabled} aria-label='Expand writing space' className='rafii-focus hover:text-foreground inline-flex min-h-10 items-center gap-1.5 rounded-md text-xs font-medium'>
           Expand

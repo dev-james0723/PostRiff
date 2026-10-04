@@ -41,6 +41,7 @@ import {
   type TextEncodingName
 } from '@/lib/media/text-file';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { readWithCredit, type MediaReadRequest } from './read-with-credit';
 
 import {
   briefStorageKey,
@@ -99,6 +100,7 @@ export interface ComposerAttachmentsOptions {
   /** The chosen writer is the free preview writer ("Templates (no AI model)"): nothing is read. */
   fixtureWriter?: boolean;
   creditMode: boolean;
+  freePreview?: boolean;
   catalog: AttachmentsCatalog | null | undefined;
   snapshot: Snapshot | null | undefined;
   imageGeneration?: boolean;
@@ -147,7 +149,7 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith('video/') || /\.(mp4|mov)$/i.test(file.name);
@@ -208,6 +210,11 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
   const counter = useRef(0);
   const photoQueue = useRef<Promise<unknown>>(Promise.resolve());
   const readTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const activeReads = useRef(new Set<string>());
+  const pendingReads = useRef(new Map<string, { body: MediaReadRequest; max?: number | null }>());
+  const readMode = `${creditMode}:${Boolean(options.freePreview)}`;
+  const modeRef = useRef(readMode);
+  modeRef.current = readMode;
   const [textFile, setTextFile] = useState<TextFileResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [connectorItems, setConnectorItems] = useState<ConnectorItemLike[]>([]);
@@ -244,7 +251,7 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
 
   // --- reads ----------------------------------------------------------------------------------------------------------------
   const runRead = useCallback(
-    async (key: string) => {
+    async (key: string, approvedMaxMilliCredits?: number | null) => {
       const chip = stateRef.current.chips.find((item) => item.key === key);
       if (
         !chip ||
@@ -254,29 +261,21 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
       )
         return;
       if (chip.upload && chip.upload.status !== 'ready') return;
+      if (activeReads.current.has(key) || chip.read?.status === 'read') return;
+      activeReads.current.add(key);
       dispatch({ type: 'reading', key });
       try {
-        let creditQuoteId: string | undefined;
-        if (creditMode) {
-          const request = { operation: 'media-notes' as const, request: { assetId: chip.id } };
-          const estimate = await api.creditEstimate(workspaceId, request);
-          if (!estimate.cached) {
-            const quote = await api.creditQuote(workspaceId, {
-              ...request,
-              maxMilliCredits: estimate.ceilingMilliCredits,
-              expectedRevision: estimate.stateRevision
-            });
-            creditQuoteId = quote.quoteId;
-          }
-        }
-        const idempotencyKey = `${chip.id}:${Date.now().toString(36)}`;
-        for (let poll = 0; poll <= READ_POLLS; poll += 1) {
-          const result = await api.mediaNotes(workspaceId, {
-            assetId: chip.id,
-            idempotencyKey,
-            ...(creditQuoteId ? { creditQuoteId } : {})
-          });
+        const pending = pendingReads.current.get(key);
+        if (pending && creditMode && pending.max !== approvedMaxMilliCredits) throw new Error('Reconcile this pending read with the same approved maximum before starting another.');
+        const idempotencyKey = pending?.body.idempotencyKey ?? crypto.randomUUID();
+        const result = await readWithCredit({ api, workspaceId, assetId: chip.id, idempotencyKey,
+          approvalRequired: creditMode, approvedMaxMilliCredits, paidUnavailable: options.freePreview,
+          resume: pending?.body, polls: READ_POLLS, wait: () => wait(READ_POLL_MS),
+          isCurrent: () => modeRef.current === readMode && eligibleRef.current && stateRef.current.chips.some(item => item.key === key && item.id === chip.id && item.role === 'reference'),
+          onAuthorized: body => pendingReads.current.set(key, { body, max: approvedMaxMilliCredits }) });
+        if (result) {
           if (result.status === 'ready') {
+            pendingReads.current.delete(key);
             dispatch({
               type: 'read',
               key,
@@ -286,15 +285,18 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
             say(`${chip.label} is ready.`);
             return;
           }
-          if (result.status !== 'reading') break;
-          await wait(READ_POLL_MS);
+          if (result.status !== 'reading') pendingReads.current.delete(key);
         }
         dispatch({ type: 'readFailed', key });
-      } catch {
+      } catch (error) {
         dispatch({ type: 'readFailed', key });
+        const message = error instanceof Error ? error.message : 'This read is unavailable.';
+        setNotice(message); say(message);
+      } finally {
+        activeReads.current.delete(key);
       }
     },
-    [api, creditMode, say, workspaceId]
+    [api, creditMode, options.freePreview, readMode, say, workspaceId]
   );
 
   const scheduleRead = useCallback(
@@ -689,11 +691,11 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
   }, [api, state, workspaceId]);
 
   const retry = useCallback(
-    (key: string) => {
+    (key: string, approvedMaxMilliCredits?: number | null) => {
       const chip = stateRef.current.chips.find((item) => item.key === key);
       if (!chip) return;
       if (chip.read?.status === 'failed') {
-        void runRead(key);
+        void runRead(key, approvedMaxMilliCredits);
         return;
       }
       const entry = pending.current.get(key);
@@ -705,7 +707,7 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
     [runRead, uploadPhoto, uploadVideo]
   );
 
-  const read = useCallback((key: string) => runRead(key), [runRead]);
+  const read = useCallback((key: string, approvedMaxMilliCredits?: number | null) => runRead(key, approvedMaxMilliCredits), [runRead]);
 
   /** At send: wait for running reads, at most 20 s; a reference still unread is reported `not_read_yet` by the server. */
   const settleReads = useCallback(async (timeoutMs = SEND_READ_WAIT_MS) => {

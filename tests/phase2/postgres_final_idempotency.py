@@ -7,6 +7,7 @@
   starting a second paid run. A new click (new key and new quote) is a new task.
 All model traffic is a synthetic in-process transport; no external calls.
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -21,7 +22,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.model_runtime import ServerModelRuntime
 from consumer_fixtures import approve_budgets
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 
@@ -48,7 +49,7 @@ crash = {'next': False}
 
 def transport(method, url, headers=None, body=None):
     calls.append(body['model'])
-    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}}}
+    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}, 'providerMetadata': {'gateway': {'cost': 0.01, 'routing': {'finalProvider': 'test'}}}}}
 
 
 class CrashingRuntime(ServerModelRuntime):

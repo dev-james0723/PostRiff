@@ -54,9 +54,9 @@ class ImageRouting(unittest.TestCase):
             self.assertAlmostEqual(result['usage']['costUsd'], 0.04, msg=spelling)
             self.assertEqual(result['usage']['provenance'], 'provider_reported')
             self.assertEqual(result['usage']['executionProvider'], 'openai')
-        # The long-standing `usage.cost` field still wins when present.
+        # Gateway's reported total is authoritative; overlapping usage cost is not another charge.
         result = GatewayImageRuntime('secret', 'openai/gpt-image-2', transport=Recording(reply('openai', '0.04', usage={'cost': 0.03}))).generate('A red piano')
-        self.assertAlmostEqual(result['usage']['costUsd'], 0.03)
+        self.assertAlmostEqual(result['usage']['costUsd'], 0.04)
 
     def test_an_image_served_outside_the_approved_set_is_not_kept(self):
         runtime = GatewayImageRuntime('secret', 'openai/gpt-image-2', transport=Recording(reply('runware', '0.05')))

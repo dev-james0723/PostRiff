@@ -1,15 +1,20 @@
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 import { MobileNav } from './mobile-nav';
 import { Wordmark } from './wordmark';
 
+/** "Start free trial" today, "Start free" under Pricing v2; passed to the menu so the copy stays server-side. */
+const SIGN_UP = marketingCopy(PRICING_CATALOG).headerCta;
+
 /**
  * Public header on the same translucent panel as the app's `Header` (DNA §8.2): wordmark, the
- * main navigation as quiet text controls, the theme toggle, and the two entry paths (Sign in,
- * Start free trial) whose hrefs are the product's real auth routes.
+ * main navigation as quiet text controls, the theme toggle, and the two entry paths (Sign in, and
+ * the catalog's sign-up label) whose hrefs are the product's real auth routes.
  */
 export function SiteHeader() {
   return (
@@ -35,9 +40,9 @@ export function SiteHeader() {
             Sign in
           </Link>
           <Link href={siteConfig.links.signUp} className={cn(buttonVariants({ variant: 'action', size: 'lg' }), 'hidden min-h-10 px-4 md:inline-flex')}>
-            Start free trial
+            {SIGN_UP}
           </Link>
-          <MobileNav />
+          <MobileNav signUpLabel={SIGN_UP} />
         </div>
       </div>
     </header>

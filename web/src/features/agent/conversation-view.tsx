@@ -4,6 +4,7 @@ import { createSubmissionGate } from './submission-gate';
 import { creditRequestFor, submitConversationTurn } from './credit-turn';
 import { useCreditEstimate } from './use-credit-estimate';
 import { parseCreditLimit } from './credit-limit';
+import { workSurfacePolicy, workSurfaceCommands } from './work-surface-policy';
 import { CreditLimitField } from './credit-limit-field';
 
 import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
@@ -73,7 +74,7 @@ import { ThreadNavigator } from '@/features/context-navigation/thread-navigator'
 import { navigationId } from '@/features/context-navigation/markers';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import type { MediaMoment, NavigationItem } from '@/lib/api/types';
-import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import { COMMANDS, commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
@@ -243,7 +244,10 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const state = snapshot.data?.state;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const choice = useModelChoice(models.data, state?.writerDefaults?.model);
-  const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
+  const policy = workSurfacePolicy(usage.data, choice.option?.costClass, imageRequested, models.data?.imageGeneration);
+  const creditMode = policy.creditMode;
+  const mediaCreditMode = usage.data?.billingMode !== 'legacy_allowances';
+  const imagePolicy = workSurfacePolicy(usage.data, choice.option?.costClass, true, models.data?.imageGeneration);
   const { user } = useAuth();
   const live = useLiveRegion();
   const fixtureWriter = choice.option?.provider === 'fixture';
@@ -264,7 +268,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     conversationId,
     owner: user?.id,
     fixtureWriter,
-    creditMode,
+    creditMode: mediaCreditMode,
+    freePreview: usage.data?.billingMode === 'free_preview',
     catalog: models.data?.attachments,
     snapshot: snapshot.data,
     imageGeneration: imageRequested,
@@ -310,12 +315,14 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   // `requestFields` leaves out the model on Auto (the server resolves the workspace default) and the Auto level.
   // Chat attachments (chat-context SPEC §11.2): the same chip fields go to the estimate, the quote and the turn; quick
   // replies (`chips: false`) and image turns carry none.
-  const turnPayload = (body: string, chips = true) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone, ...(chips && attachmentsOn ? attachments.fields : {}) });
+  const turnPayload = (body: string, chips = true) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone, imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, ...(chips && attachmentsOn && !imageRequested ? attachments.fields : {}) });
   const estimateRequest = creditRequestFor(turnPayload(text.trim()));
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !policy.blocked, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
-  const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
+  const creditInvalid = Boolean(policy.blocked) || creditMode && (!creditEstimate.estimate || !maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const imageCapability = models.data?.imageGeneration;
+  const composerSlash = parseSlash(text.trim());
+  const commandUnavailable = composerSlash?.command.kind === 'agent' && usage.data?.billingMode !== 'legacy_allowances';
   const running = ['running', 'queued'].includes(run?.status ?? '');
   const pendingThinking = useThinkingState(conversationId, busy && !running && !imageRequested);
   const runThinkingOp = latestThinkingOp(run?.events ?? [], 'working');
@@ -374,7 +381,16 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   async function sendTurn(override?: string) {
     const body = (override ?? text).trim();
     const slash = override === undefined ? parseSlash(body) : null;
-    if (!body || busy || running || (!choice.available && !slash)) return;
+    if (!body || busy || running || (!choice.available && !slash && !imageRequested)) return;
+    if (override !== undefined && (creditMode || policy.blocked)) {
+      if (text.trim()) { toast('Your unsent message is kept. Review this quick reply before sending a paid task.'); return; }
+      setText(body);
+      setCreditLimit('');
+      setImageRequested(false);
+      toast(policy.blocked ?? 'Review this reply’s estimate and approve its maximum before sending.');
+      requestAnimationFrame(() => composer.current?.focus());
+      return;
+    }
     const clear = () => {
       // Text typed while the request was in flight is kept.
       if (override === undefined) setText((current) => (current.trim() === body ? '' : current));
@@ -392,6 +408,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       return;
     }
     if (slash?.command.kind === 'agent') {
+      if (usage.data?.billingMode !== 'legacy_allowances') { toast.error('This command has no qualified credit approval route yet. Keep your text or use the draft composer to review a supported task.'); return; }
       if (!gate.enter()) return;
       setBusy(true);
       try {
@@ -436,14 +453,14 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       if (override !== undefined) toast.error('Choose a channel below, then send again.');
       return;
     }
-    if (creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
+    if (creditInvalid || !gate.enter()) return;
     setBusy(true);
     try {
       const withChips = override === undefined;
       // A reference still being read gets at most 20 s; one that isn't ready is reported `not_read_yet`, never dropped.
       if (withChips && attachmentsOn) await attachments.settleReads();
-      const sent = withChips && attachmentsOn ? attachments.sentKeys : [];
-      const request = { ...turnPayload(body, withChips), imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, idempotencyKey: crypto.randomUUID() };
+      const sent = withChips && attachmentsOn && !imageRequested ? attachments.sentKeys : [];
+      const request = { ...turnPayload(body, withChips), idempotencyKey: crypto.randomUUID() };
       const result = await submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits: creditMode ? maximum : null, isCurrent: gate.alive });
       if (!result || !gate.alive()) return;
       if (result.status === 'memory') {
@@ -715,7 +732,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
 
           {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
-          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
+          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
           {messages.at(-1)?.body.intent === 'onboarding' ? (
             <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
           ) : canEdit ? (
@@ -725,7 +742,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               onChange={setText}
               onSubmit={() => void sendTurn()}
               busy={busy || running}
-              submitDisabled={creditInvalid || (creditMode && imageRequested)}
+              submitDisabled={composerSlash ? commandUnavailable : creditInvalid}
               compact
               placeholder={imageRequested ? 'A grand piano on an empty stage, warm light' : 'Make it shorter and post Tuesday at 9'}
               chips={chips}
@@ -743,16 +760,16 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               voiceAvailable={voiceAvailable}
               imageGeneration={{
                 enabled: imageRequested,
-                available: !creditMode && Boolean(imageCapability?.available),
-                detail: imageCapability?.detail ?? 'Checking…',
+                available: !imagePolicy.blocked,
+                detail: imagePolicy.blocked ?? imageCapability?.detail ?? 'Checking…',
                 onChange: setImageRequested
               }}
-              hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
+              hint={commandUnavailable ? 'This command has no qualified credit approval route yet. Keep your text or use the draft composer.' : policy.blocked ?? (imageRequested ? (usage.data?.billingMode === 'legacy_allowances' ? 'Uses 1 media credit' : 'Approve the maximum credits for this image') : '⌘↵ to send')}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
               deliveryPlanner={{ open: deliveryPlannerOpen, onOpenChange: setDeliveryPlannerOpen, options: deliveryOptions }}
-              slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
+              slash={{ commands: workSurfaceCommands(COMMANDS, usage.data?.billingMode), onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               attachments={attachmentsOn ? attachments : undefined}
-              attachmentBar={{ conversationId, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
+              attachmentBar={{ conversationId, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode: mediaCreditMode, freePreview: usage.data?.billingMode === 'free_preview', fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
             />
           ) : (
             <StateMessage kind='permission' title='Viewing only.' description='Ask an owner for edit access.' />

@@ -8,11 +8,13 @@ import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
  */
 import type {
   ToolRegistry,
+  PublicCatalog,
   WorkspaceApiToken, ApiTokenCreated, TokenScope,
   Analytics,
   Audience,
   AuditEvent,
   Bootstrap,
+  BootstrapPlan,
   Catalog,
   ChannelDestination,
   ChannelView,
@@ -42,6 +44,8 @@ import type {
   ProviderView,
   Run,
   CreditEstimate,
+  PostDoctorRewriteRequest,
+  PostDoctorRewriteCreditBody,
   MediaNotesBody,
   MediaNotesCreditBody,
   MediaNotesResult,
@@ -146,7 +150,7 @@ export function createApi(getToken: TokenSource) {
     radarAdvance: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/advance`, {}, 90_000),
     growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
     postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
-    postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
+    postDoctorRewrite: (w: string, body: PostDoctorRewriteRequest) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
     creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
     analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
     performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
@@ -159,6 +163,7 @@ export function createApi(getToken: TokenSource) {
     /* public */
     tools: () => get<ToolRegistry>('/api/tools', false),
     catalog: () => get<Catalog>('/api/catalog', false),
+    plans: () => get<PublicCatalog>('/api/plans', false),
     health: () => get<Health>('/api/health', false),
     privacyNotice: () => get<PrivacyNotice>('/api/privacy/notice', false),
     models: () => get<ModelCatalog>('/api/ideas/models', false),
@@ -169,7 +174,7 @@ export function createApi(getToken: TokenSource) {
     revokeToken: (w: string, id: string) => send<{ tokenId: string; revoked: boolean }>('DELETE', `${ws(w)}/tokens/${encodeURIComponent(id)}`),
 
     /* account & workspaces */
-    bootstrap: (plan: string) => send<Bootstrap>('POST', '/api/auth/verify', { plan }),
+    bootstrap: (plan: BootstrapPlan = 'free') => send<Bootstrap>('POST', '/api/auth/verify', { plan }),
     logout: () => send<{ signedOut: boolean }>('POST', '/api/auth/logout'),
     workspaces: () => get<{ workspaces: WorkspaceListItem[] }>('/api/workspaces'),
     sessions: () => get<{ sessions: SessionInfo[] }>('/api/auth/sessions'),
@@ -301,9 +306,9 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/ideas/runs/${encodeURIComponent(runId)}/apply`,
         { expectedRevision, artifactHash }
       ),
-    creditEstimate: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
+    creditEstimate: (w: string, body: Record<string, unknown> | MediaNotesCreditBody | PostDoctorRewriteCreditBody) =>
       send<CreditEstimate>('POST', `${ws(w)}/ideas/credit-estimates`, body),
-    creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
+    creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody | PostDoctorRewriteCreditBody) =>
       send<{ quoteId: string; maxMilliCredits: number; expiresAt: number; kind: "spending_limit" }>("POST", `${ws(w)}/ideas/credit-quotes`, body),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
       send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {

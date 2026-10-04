@@ -1,3 +1,9 @@
+> **Pricing v2 supersession — 2026-10-02:** This is a historical design or
+> validation record. Its legacy prices, new-sale setup and proposed pack
+> expiry are not current launch authority. Existing $19/$39 customers
+> remain grandfathered; new prospects use Free + Creator $59/3,500.
+> Follow the [v2 release runbook](../superpowers/handoffs/2026-09-28-rafii-pricing-credits-v2-release-runbook.md); original evidence below is preserved.
+
 # Budget policy and provisional pricing — 2026-09-24
 
 Decided under the owner's full-speed delegation. These are provisional values, each versioned so it can be replaced.

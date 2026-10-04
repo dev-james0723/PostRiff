@@ -208,6 +208,7 @@ class TrendLabEnrichment(enrichment.TrendEnrichment):
         return loaded
 
     def execute(self, model, loaded, task, workspace_id, usage):
+        model = self._funded_model(model, workspace_id)
         router=AIModelRouter(jev=model,usage=usage,tasks={"trend."+TASK:("evaluate",loaded["config"]["model"],(),3.0,1000)})
         pack=loaded["pack"];qs=question_set(pack)
         judgment=JudgmentService(router.evaluator("trend."+TASK)).judge(qs,pack,subject=contracts.digest(pack),scope="personal:"+workspace_id,model=loaded["config"]["model"],workspace_id=workspace_id)

@@ -1,6 +1,6 @@
 /** Validate the browser's destination before a preview build can embed public auth configuration. */
 export function assertPreviewEnvironment(env) {
-  if (env.VERCEL_ENV !== 'preview') return;
+  if (env.VERCEL_ENV !== 'preview' && env.POSTRIFF_ENVIRONMENT !== 'staging') return;
   const staging = env.POSTRIFF_STAGING_PROJECT_REF || '';
   const production = env.POSTRIFF_PRODUCTION_PROJECT_REF || '';
   if (env.POSTRIFF_ENVIRONMENT !== 'staging' || !/^[a-z0-9]{20}$/.test(staging) || !/^[a-z0-9]{20}$/.test(production) || staging === production) {

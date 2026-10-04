@@ -8,7 +8,7 @@
  * settle), `hosted.py` (usage, members, billing_checkout) and migration 007 (plan terms,
  * subscription statuses, ledger kinds).
  */
-import type { ChannelView, LedgerEntry, Member, PlanTerms, Usage } from '@/lib/api/types';
+import type { ChannelView, CreditBalance, LedgerEntry, Member, PlanTerms, Usage } from '@/lib/api/types';
 import { isConnected } from '@/lib/channels/state';
 import { daysUntil } from '@/lib/time';
 
@@ -88,16 +88,19 @@ function preferRow(candidate: PlanTerms, held: PlanTerms, currentTermsId: string
 }
 
 /**
- * One row per purchasable plan. Trial and retired rows are dropped. Within a plan the row the
+ * One row per public Free/Creator package, plus the actual current legacy terms. Within a plan the row the
  * workspace is on wins (so "Current" and its numbers match what it has); otherwise the highest
  * active version; otherwise the highest version. Cheapest first.
  */
 export function latestTermsPerPlan(terms: readonly PlanTerms[], currentTermsId?: string | null): PlanTerms[] {
   const byPlan = new Map<string, PlanTerms>();
   for (const row of terms) {
-    if (row.plan === 'trial' || row.status === 'retired') continue;
-    const held = byPlan.get(row.plan);
-    if (!held || preferRow(row, held, currentTermsId)) byPlan.set(row.plan, row);
+    if (row.plan === 'trial') continue;
+    const current = row.id === currentTermsId;
+    if (!current && (row.catalogState !== 'public' || !['free', 'starter', 'creator', 'studio'].includes(row.plan) || row.status === 'retired')) continue;
+    const key = row.id === 'studio-v2' && row.catalogState === 'public' ? row.id : row.plan;
+    const held = byPlan.get(key);
+    if (!held || preferRow(row, held, currentTermsId)) byPlan.set(key, row);
   }
   return [...byPlan.values()].toSorted((a, b) => a.priceCents - b.priceCents || a.plan.localeCompare(b.plan));
 }
@@ -109,7 +112,7 @@ export function currentTerms(usage: Pick<Usage, 'planTerms' | 'entitlement'>): P
 
 /** A plan allowance from `entitlements` jsonb: a finite, non-negative number, or null when missing or malformed. Never a fallback constant. */
 export function allowanceTotal(terms: Pick<PlanTerms, 'entitlements'> | null | undefined, key: string): number | null {
-  const value = terms?.entitlements?.[key];
+  const value = terms?.entitlements?.[key as keyof PlanTerms['entitlements']];
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
@@ -121,7 +124,7 @@ export function allowanceTotal(terms: Pick<PlanTerms, 'entitlements'> | null | u
 export type PlanOffer = 'current' | 'owner_only' | 'switch_in_portal' | 'not_available' | 'checkout';
 
 export function planOffer(input: {
-  terms: Pick<PlanTerms, 'id' | 'status'>;
+  terms: Pick<PlanTerms, 'id' | 'status' | 'plan' | 'catalogState' | 'checkoutAvailable' | 'newCheckoutEnabled' | 'priceVariantId'>;
   currentTermsId: string | null | undefined;
   lifecycleStatus: string | null | undefined;
   checkoutAvailable: boolean | undefined;
@@ -130,12 +133,39 @@ export function planOffer(input: {
   const open = hasOpenSubscription(input.lifecycleStatus);
   if (input.terms.id === input.currentTermsId && open) return 'current';
   if (!input.isOwner) return 'owner_only';
+  const terms = input.terms;
+  if (input.checkoutAvailable !== true || terms.checkoutAvailable !== true || terms.newCheckoutEnabled !== true ||
+      terms.status !== 'active' || terms.catalogState !== 'public' ||
+      !(terms.plan === 'creator' && terms.priceVariantId || terms.plan === 'starter' && terms.id === 'starter-v1' || terms.plan === 'studio' && terms.id === 'studio-v2')) return 'not_available';
   if (open) return 'switch_in_portal';
-  if (!input.checkoutAvailable || input.terms.status !== 'active') return 'not_available';
   return 'checkout';
 }
 
+/** Stale display data cannot authorize checkout; the server still validates every request. */
+export function canCheckoutFromUsage(usage: Usage | undefined, usageReadSucceeded: boolean, isOwner: boolean, planTermsId: string): boolean {
+  if (!usageReadSucceeded || !usage) return false;
+  const terms = usage.planTerms.find(row => row.id === planTermsId);
+  return !!terms && planOffer({ terms, currentTermsId: usage.entitlement.planTermsId,
+    lifecycleStatus: usage.billingMode === 'free_preview' ? 'free' : usage.lifecycle?.status,
+    checkoutAvailable: usage.billing?.checkoutAvailable, isOwner }) === 'checkout';
+}
+
 /* ---------- meters ---------- */
+
+/** Wallet totals can include purchases and other periods. The gross grant cannot supply a usage ratio. */
+const creditReading = (value: number | null) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+
+export function managedCreditState(balance: CreditBalance | null) {
+  if (!balance) return { kind: 'unavailable' as const };
+  return {
+    kind: 'known' as const,
+    available: creditReading(balance.availableMilliCredits), held: creditReading(balance.heldMilliCredits),
+    lifetimeUsed: creditReading(balance.usedMilliCredits), periodGrant: creditReading(balance.currentPeriodGrantMilliCredits),
+    periodExpiresAt: creditReading(balance.currentPeriodExpiresAt), debt: creditReading(balance.debtMilliCredits),
+    purchasedCredits: balance.purchasedCredits === undefined ? null : balance.purchasedCredits,
+    spendAvailable: balance.spendAvailable, spendUnavailableReason: balance.spendUnavailableReason
+  };
+}
 
 /** `remaining` counts down (writing batches, media credits); `used` counts up (accounts, members). */
 export type MeterMode = 'remaining' | 'used';

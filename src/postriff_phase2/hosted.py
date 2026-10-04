@@ -4,6 +4,7 @@ The caller supplies a connection factory and a server-side verified Auth princip
 No browser may supply the principal. No service key or profile metadata is accepted.
 """
 from contextlib import contextmanager
+from uuid import UUID
 import copy
 import hashlib
 import io
@@ -31,7 +32,7 @@ MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_c
 # by role. Every value is derived from rows the member may already see; nothing here is per-member.
 WORKSPACE_SUMMARY_COLUMNS = (
     "coalesce(w.state->'workspace'->>'name',''),"
-    "(SELECT pt.plan FROM public.pr_subscriptions s JOIN public.pr_plan_terms pt ON pt.id=s.plan_terms_id WHERE s.workspace_id=w.id AND s.status IN ('active','past_due','grace')),"
+    "coalesce((SELECT pt.plan FROM public.pr_subscriptions s JOIN public.pr_plan_terms pt ON pt.id=s.plan_terms_id WHERE s.workspace_id=w.id AND s.status IN ('active','past_due','grace')), (SELECT pt.plan FROM public.pr_entitlements e JOIN public.pr_plan_terms pt ON pt.id=e.plan_terms_id WHERE e.workspace_id=w.id AND pt.plan='free')),"
     "(SELECT t.plan FROM public.pr_trials t WHERE t.workspace_id=w.id ORDER BY t.started_at LIMIT 1),"
     "(SELECT o.user_id::text FROM public.pr_memberships o WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
     "(SELECT coalesce(op.display_name,'') FROM public.pr_memberships o JOIN public.pr_profiles op ON op.user_id=o.user_id WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
@@ -63,12 +64,11 @@ def _membership(row):
 
 
 def workspace_summary(name, subscription_plan, trial_plan, owner_id, owner_name, counts):
-    """Shape the WORKSPACE_SUMMARY_COLUMNS tail of a row. A workspace is on a paid plan only while a
-    subscription is live; otherwise it is a trial of `trialPlan`."""
+    """Shape the effective paid/Free plan and retain historical trial selection."""
     counts = counts if isinstance(counts, dict) else {}
     return {
         "name": name or "My workspace",
-        "plan": subscription_plan if subscription_plan in ("studio", "assist") else "trial",
+        "plan": subscription_plan if subscription_plan in ("studio", "assist", "creator", "starter", "free") else "trial",
         "trialPlan": trial_plan if trial_plan in ("studio", "assist") else None,
         "owner": {"userId": owner_id, "displayName": owner_name or ""} if owner_id else None,
         "memberCounts": {role: int(counts.get(role, 0) or 0) for role in ROLES},
@@ -225,7 +225,18 @@ class HostedPhase2Commands:
         self.engine.images = FixtureImages()
 
     def present(self, state, revision):
-        return self.engine._present(state, revision)
+        if state.get("phase2", {}).get("trial"):
+            return self.engine._present(state, revision)
+        # The fixture presenter requires a trial. Hosted Free has none; retain the
+        # shared draft/content/media projections without manufacturing a grant.
+        result = Store._present(self.engine, state, revision)
+        ensure_content_state(result["state"])
+        result["state"]["contentTypes"] = content_projection(result["state"])
+        p = result["state"]["phase2"]
+        p["art"]["providerBrief"] = self.engine.art_brief(state)
+        p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
+        p["channels"] = [{**x, "displayState": self.engine.channel_state(x)} for x in p["channels"]]
+        return result
 
     def __call__(self, state, principal, action, payload):
         if not isinstance(action, str) or not isinstance(payload, dict):
@@ -271,12 +282,16 @@ class HostedPhase2Commands:
             return state
         if action.startswith("p2_"):
             hosted_action = action[3:]
+            if hosted_action == "plan" and not state["phase2"].get("trial"):
+                raise AlphaError("Choose a paid plan through the hosted billing checkout.", 409)
             if hosted_action in self.SERVER_ACTIONS:
                 raise AlphaError("This operation requires its dedicated hosted endpoint.", 409)
             self.engine.apply_phase2(_NoDatabase(), state, hosted_action, payload, {"id": "supabase-session", "user_id": principal})
         else:
             if action in ("generate", "adapt"):
-                trial = state["phase2"]["trial"]
+                trial = state["phase2"].get("trial")
+                if not trial:
+                    raise AlphaError("Use the dedicated managed writing endpoint with explicit managed approval. Drafts, edits and exports remain available.", 402)
                 if trial["expiresAt"] <= self.clock() or trial["writingUsed"] >= trial["writingGrant"]:
                     raise AlphaError("The trial has no writing allowance left. Drafts and exports remain available.")
                 trial["writingUsed"] += 1
@@ -356,7 +371,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, pricing_v2_enabled=False, creator_experiment_enabled=False, creator_experiment_cohort=()):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -380,7 +395,8 @@ class HostedWorkspaceService:
         from .privacy import DataRequests
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
-        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock, pricing_v2_enabled=pricing_v2_enabled)
+        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, ledger=self.ledger)
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,
@@ -389,9 +405,8 @@ class HostedWorkspaceService:
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
-        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock)
         self.ideas.ledger = self.ledger
-        self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
+        self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock, pricing_v2_enabled=pricing_v2_enabled, creator_experiment_enabled=creator_experiment_enabled, creator_experiment_cohort=creator_experiment_cohort)
         from .credit_purchases import CreditPurchases
         self.credit_purchases = CreditPurchases(self.ledger._credit_book, self.billing.provider, clock) if self.billing.provider.id == "stripe" else None
         self.credit_purchases_enabled = credit_purchases_enabled and credits_enabled
@@ -473,9 +488,16 @@ class HostedWorkspaceService:
         return preview
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
+    def plans(self):
+        """Server-owned public offers; reads no workspace, session, or private provider data."""
+        from .plan_pricing import public_catalog as pricing_catalog
+        with self.connection_factory() as db, db.cursor() as cur:
+            return pricing_catalog(cur, self.billing.pricing_v2_enabled and self.billing.provider.id == 'stripe',
+                                   credits_enabled=self.ledger.credits is not None)
+
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
-            view = self.ledger.usage_view(cur, workspace_id, actor)
+            view = self.ledger.usage_view(cur, workspace_id, actor, pricing=self.billing.pricing)
             view["lifecycle"] = {"status": "internal", "canPublish": True, "exportAvailable": True, "draftsRetained": True} if view["entitlement"].get("unlimited") else self.billing.lifecycle(cur, workspace_id, self.clock())
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
@@ -486,7 +508,20 @@ class HostedWorkspaceService:
                     entry.pop("actualUsdMicro", None)
                 view["billing"]["checkoutAvailable"] = False
                 view["billing"]["portalAvailable"] = False
-            return view
+            for terms in view['planTerms']:
+                terms['checkoutAvailable'] = False
+                if terms['newCheckoutEnabled'] and terms['status'] == 'active' and view['billing']['checkoutAvailable']:
+                    try:
+                        self.billing.pricing.checkout(cur, workspace_id, terms['id'])
+                        terms['checkoutAvailable'] = True
+                    except AlphaError:
+                        pass
+        # The stable Growth helper owns its workspace transaction. Calling it while
+        # holding this workspace lock would block its second connection.
+        if view['billingMode'] == 'free_preview':
+            from .growth.http import ensure
+            view['freePreview'] = ensure(self).preview_status(workspace_id, token)
+        return view
 
     def billing_webhook(self, signature, body):
         notice = None
@@ -497,10 +532,10 @@ class HostedWorkspaceService:
                 result = self.billing.process_webhook(cur, signature, body)
                 if result.get("outcome") == "applied":
                     notice = self._billing_notice(cur, result)
-        # The address lookup and the email are network calls: only after the billing change is committed
-        # and every row lock is released.
+        # Only the committed outbox receipt is returned. Identity lookup and delivery
+        # belong to the existing notification worker, never Stripe's HTTP response.
         if notice:
-            result["notification"] = self._deliver_billing_notice(notice)
+            result["notification"] = notice
         return result
 
     # --- live billing (Stripe) and transactional email ------------------------------------
@@ -532,6 +567,10 @@ class HostedWorkspaceService:
     def billing_checkout(self, workspace_id, token, plan_terms_id, success_path=None, cancel_path=None):
         """Owner-only. Only 'active' plan terms bound to a provider price are purchasable (D3).
         Nothing is written until the provider's webhook confirms the subscription."""
+        try:
+            workspace_id = str(UUID(str(workspace_id)))
+        except ValueError as error:
+            raise AlphaError("Invalid workspace identity.", 400) from error
         provider = self._live_provider()
         if not isinstance(plan_terms_id, str) or not 1 <= len(plan_terms_id) <= 64:
             raise AlphaError("Choose a plan.")
@@ -540,21 +579,42 @@ class HostedWorkspaceService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "owner")
             throttle(cur, f"checkout:{workspace_id}", 5, 60)
-            cur.execute("SELECT status,provider_price_id FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
-            terms = cur.fetchone()
-            if not terms or terms[0] != "active" or not terms[1]:
+            variant_id = None
+            self.billing.lifecycle(cur, workspace_id, self.clock())
+            # Pricing v2 permanently closes new legacy acquisition. A rollback may
+            # preserve existing subscriptions and their billing portal, but must never
+            # resurrect the retired $19/$39 checkout path.
+            if not self.billing.pricing_v2_enabled:
                 raise AlphaError("This plan is not yet available for purchase.", 409)
-            cur.execute("SELECT provider_customer_id,status FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
+            price = self.billing.pricing.checkout(cur, workspace_id, plan_terms_id)
+            variant_id, price_id = price["priceVariantId"], price["priceId"]
+            cur.execute("SELECT provider_customer_id,status,provider_subscription_id,plan_terms_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
             existing = cur.fetchone()
             if existing and existing[1] in ("active", "past_due", "grace"):
                 raise AlphaError("This workspace already has a subscription. Change it from the billing portal.", 409)
+            # Rollback must not offer a legacy checkout that the retained Creator binding cannot fulfill.
+            if existing and existing[3] == "creator-v1" and plan_terms_id != existing[3]:
+                raise AlphaError("Reenroll with this workspace's existing Creator package and paid variant.", 409)
             customer_id = existing[0] if existing else None
-            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id)
+            # The ended provider subscription identifies one reenrollment generation, across retries/hours.
+            generation = {"endedSubscription": existing[2]} if existing and existing[2] else {"acquisitionHour": int(self.clock() // 3600)}
+            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id,
+                  {"priceVariantId": variant_id, "catalog": "pricing-v2" if self.billing.pricing_v2_enabled else "legacy"})
         customer_email = None if customer_id else self._email_for(principal)
         if not customer_id and not customer_email:
             raise AlphaError("Your account email could not be resolved for checkout.", 502)
-        key = digest({"checkout": workspace_id, "plan": plan_terms_id, "hour": int(self.clock() // 3600)})
-        return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=terms[1], success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+        key = digest({"checkout": workspace_id, "plan": plan_terms_id, **({"variant": variant_id} if variant_id else {}), "generation": generation})
+        session = provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=price_id, **({"price_variant_id": variant_id} if variant_id else {}), success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+        # The provider adapter has validated this response. Observation cannot retry
+        # the provider or discard the returned session if its transaction rolls back.
+        from . import pricing_events
+        try:
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                pricing_events.emit(cur, workspace_id, 'checkout.started', 'checkout_session', session['sessionId'],
+                                    pricing_events.price_facts(plan_terms_id, variant_id))
+        except Exception:
+            print('analytics.checkout_observation_failed')
+        return session
 
     def billing_credit_packs(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
@@ -606,46 +666,34 @@ class HostedWorkspaceService:
                 return self.reminders.run(cur)
 
     def _billing_notice(self, cur, result):
-        """One owner email per applied billing event, deduped in pr_notifications; never changes the webhook outcome."""
-        kind = {"subscription.activated": "subscription_activated", "invoice.payment_failed": "payment_failed"}.get(result.get("type"))
-        workspace_id = result.get("workspaceId")
-        if not kind or not workspace_id or not self.public_base_url:
-            return None
-        cur.execute("SELECT m.user_id::text FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.role='owner' AND m.status='active' ORDER BY m.updated_at LIMIT 1", (workspace_id,))
-        owner = cur.fetchone()
-        if not owner:
-            return None
-        cur.execute("INSERT INTO public.pr_notifications(workspace_id,user_id,kind,dedupe_key) VALUES(%s,%s,%s,%s) ON CONFLICT (dedupe_key) DO NOTHING RETURNING id::text", (workspace_id, owner[0], kind, f"{kind}:{result['eventId']}"))
-        inserted = cur.fetchone()
-        if not inserted:
-            return {"kind": kind, "sent": False, "reason": "duplicate"}
-        if kind == "subscription_activated":
-            from .billing import plan_display_label
-            cur.execute("SELECT p.label FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
-            label = cur.fetchone()
-            detail = plan_display_label(label[0] if label else None)
-        else:
-            cur.execute("SELECT extract(epoch from grace_until) FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
-            grace = cur.fetchone()
-            detail = float(grace[0]) if grace and grace[0] else self.clock() + 7 * 86400
-        return {"kind": kind, "pending": True, "notificationId": inserted[0], "owner": owner[0], "detail": detail}
+        """Plan the owner's billing notification in the billing transaction.
 
-    def _deliver_billing_notice(self, notice):
-        """Sends a notice recorded by `_billing_notice`, outside any transaction; marks it sent after."""
-        if not notice.get("pending"):
-            return notice
-        address = self._email_for(notice["owner"])
-        if not address:
-            return {"kind": notice["kind"], "sent": False, "reason": "no address"}
-        billing_url = f"{self.public_base_url}/app/account/billing"
-        if notice["kind"] == "subscription_activated":
-            outcome = self.mailer.subscription_activated(address, notice["detail"], billing_url)
-        else:
-            outcome = self.mailer.payment_failed(address, notice["detail"], billing_url)
-        if outcome.get("sent"):
-            with self.connection_factory() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_notifications SET sent=true WHERE id=%s", (notice["notificationId"],))
-        return {"kind": notice["kind"], "sent": bool(outcome.get("sent"))}
+        The existing notification outbox supplies leases, provider idempotency,
+        preference/cutover checks and uncertainty handling in its cron worker.
+        Its detector uses the same key, so a later scan cannot send it twice.
+        """
+        kind = {"subscription.activated": "billing.subscription_active",
+                "invoice.payment_failed": "billing.payment_failed"}.get(result.get("type"))
+        workspace_id = result.get("workspaceId")
+        notifications = getattr(self, "notifications", None)
+        if not kind or not workspace_id:
+            return None
+        if notifications is None or not notifications.enabled():
+            return {"kind": kind, "queued": False, "sent": False, "reason": "notifications_disabled"}
+        cur.execute("SELECT status,extract(epoch from last_event_at),extract(epoch from updated_at),"
+                    "coalesce(provider_subscription_id,plan_terms_id) FROM public.pr_subscriptions WHERE workspace_id=%s",
+                    (workspace_id,))
+        row = cur.fetchone()
+        if not row or (kind == "billing.subscription_active" and row[0] != "active") or (kind == "billing.payment_failed" and row[0] != "past_due"):
+            return {"kind": kind, "queued": False, "sent": False, "reason": "subscription_state_changed"}
+        status, last_event, updated, subscription = row
+        key = (f"subscription_active:{workspace_id}:{subscription}" if kind == "billing.subscription_active"
+               else f"payment_failed:{workspace_id}:{int(last_event or updated or 0)}")
+        planned = notifications.emit(cur, workspace_id=workspace_id, event_type=kind,
+                                     dedupe_key=key, entity_type="subscription", entity_id=workspace_id,
+                                     payload={"href": "/app/account/billing"})
+        return {"kind": kind, "queued": bool(planned.get("created")), "sent": False,
+                "reason": "durable_notification_outbox" if planned.get("created") else "duplicate"}
 
     def data_request(self, workspace_id, token, kind, payload):
         from . import privacy
@@ -719,7 +767,7 @@ class HostedWorkspaceService:
         return shown
 
     def bootstrap(self, token, plan="studio", client=None, client_label=""):
-        if plan not in PLANS:
+        if plan not in PLANS and plan != "free":
             raise AlphaError("This plan is not available.")
         if client:
             with self.connection_factory() as db:
@@ -730,14 +778,19 @@ class HostedWorkspaceService:
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 throttle(cur, f"verify-user:{principal}", 60, 60)
-                cur.execute("SELECT public.pr_bootstrap(%s,%s)", (principal, plan))
+                if self.billing.pricing_v2_enabled:
+                    cur.execute("SELECT public.pr_bootstrap_free(%s)", (principal,))
+                else:
+                    cur.execute("SELECT public.pr_bootstrap(%s,%s)", (principal, "studio" if plan == "free" else plan))
                 workspace_id = str(cur.fetchone()[0])
-                cur.execute(f"SELECT w.revision,w.state,t.plan,extract(epoch from t.started_at),extract(epoch from t.expires_at),t.writing_grant,t.writing_used,t.artwork_grant,{MEMBER_COLUMNS} FROM public.pr_workspaces w JOIN public.pr_trials t ON t.workspace_id=w.id JOIN public.pr_memberships m ON m.workspace_id=w.id AND m.user_id=%s WHERE w.id=%s FOR UPDATE OF w", (principal, workspace_id))
+                cur.execute(f"SELECT w.revision,w.state,t.plan,extract(epoch from t.started_at),extract(epoch from t.expires_at),t.writing_grant,t.writing_used,t.artwork_grant,{MEMBER_COLUMNS} FROM public.pr_workspaces w LEFT JOIN public.pr_trials t ON t.workspace_id=w.id JOIN public.pr_memberships m ON m.workspace_id=w.id AND m.user_id=%s AND m.status='active' WHERE w.id=%s FOR UPDATE OF w", (principal, workspace_id))
                 revision, state, saved_plan, started, expires, writing_grant, writing_used, artwork_grant, *member = cur.fetchone()
                 state = json.loads(state) if isinstance(state, str) else state
                 if not state or "phase2" not in state:
-                    state = initial_phase2_state(workspace_id, principal, "Rafii member", saved_plan, float(started), execution="hosted-candidate")
-                    state["phase2"]["trial"].update({"expiresAt": float(expires), "writingGrant": writing_grant, "writingUsed": writing_used, "artworkSets": artwork_grant})
+                    saved_plan = saved_plan or "free"
+                    state = initial_phase2_state(workspace_id, principal, "Rafii member", saved_plan, float(started) if started is not None else self.clock(), execution="hosted-candidate")
+                    if started is not None:
+                        state["phase2"]["trial"].update({"expiresAt": float(expires), "writingGrant": writing_grant, "writingUsed": writing_used, "artworkSets": artwork_grant})
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
                     audit(cur, workspace_id, principal, "workspace.created", "", {"plan": saved_plan})
@@ -745,6 +798,7 @@ class HostedWorkspaceService:
                     # Product taxonomy (PRD §8.6): the signup milestone, ids/enums only, behind its own savepoint.
                     product_events.record(cur, workspace_id, principal, "workspace.created", workspace_id, 1, {"plan": saved_plan})
                     created = True
+                self.billing.lifecycle(cur, workspace_id, self.clock())
                 self._touch_session(cur, principal, self._session_id(token, principal), client_label)
         if created and self.public_base_url:
             address = self._email_for(principal)
@@ -757,6 +811,11 @@ class HostedWorkspaceService:
         return self._present(self.repository.get(workspace_id, token))
 
     def mutate(self, workspace_id, token, revision, action, payload):
+        if action in ("generate", "adapt"):
+            with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+                require(_membership(row), "edit")
+                if self.ledger.ensure_entitlement(cur, workspace_id, None)["planTermsId"] == "free-v1":
+                    raise AlphaError("Free has no managed writing allowance. Drafts, edits and exports remain available.", 402, code="free_managed_writing_unavailable")
         if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
             from .voice_ai import HostedVoiceAnalysis
             return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
@@ -768,6 +827,9 @@ class HostedWorkspaceService:
         principal = self.verify_session(token)
         with self.connection_factory() as db:
             with db.cursor() as cur:
+                cur.execute("SELECT w.id::text FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.id FOR UPDATE OF w", (principal,))
+                for (wid,) in cur.fetchall():
+                    self.billing.lifecycle(cur, wid, self.clock())
                 cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},extract(epoch from w.created_at),{WORKSPACE_SUMMARY_COLUMNS} FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
                 rows = cur.fetchall()
         return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6]), **workspace_summary(*row[7:13])} for row in rows]}
@@ -1020,7 +1082,7 @@ class HostedWorkspaceService:
             self.repository.assert_fresh(token, principal)
             granted = validate_grant(role, flags, actor)
             from .billing import require_plan_capacity
-            require_plan_capacity(cur, workspace_id, "members")
+            require_plan_capacity(cur, workspace_id, "members", ledger=self.ledger)
             cur.execute("SELECT count(*) FROM public.pr_invitations WHERE workspace_id=%s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now()", (workspace_id,))
             if cur.fetchone()[0] >= MAX_PENDING_INVITATIONS:
                 raise AlphaError("Revoke or wait for pending invitations before adding more.", 409)
@@ -1087,7 +1149,7 @@ class HostedWorkspaceService:
         if existing and existing[1] == "active":
             raise AlphaError("You are already a member of this workspace.", 409)
         from .billing import require_plan_capacity
-        require_plan_capacity(cur, workspace_id, "members")
+        require_plan_capacity(cur, workspace_id, "members", ledger=self.ledger)
         values = (role, granted.get("can_publish", False), granted.get("can_reply", False), granted.get("can_moderate", False), granted.get("can_manage_connections", False))
         if existing:
             cur.execute("UPDATE public.pr_memberships SET status='active',role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (*values, workspace_id, principal))

@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ButtonState } from '@/components/motion/button';
 import { ApiError } from '@/lib/api/client';
+import { useUsage } from '@/lib/api/hooks';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { canCheckoutFromUsage } from './billing-model';
 
 export const PORTAL = 'portal';
 
@@ -24,6 +27,10 @@ export interface BillingRedirect {
  */
 export function useBillingRedirect(): BillingRedirect {
   const { api, workspaceId } = useWorkspaceApi();
+  const usage = useUsage();
+  const isOwner = checkAccess(useWorkspaceAccess(), { permission: 'owner' });
+  const eligibility = useRef({ usage, isOwner });
+  eligibility.current = { usage, isOwner };
   const [pending, setPending] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ target: string; message: string } | null>(null);
 
@@ -65,6 +72,10 @@ export function useBillingRedirect(): BillingRedirect {
     errorFor: (target) => (failure?.target === target ? failure.message : null),
     busy: pending !== null,
     openPortal: () => void go(PORTAL, () => api.portal(workspaceId)),
-    startCheckout: (planTermsId) => void go(planTermsId, () => api.checkout(workspaceId, planTermsId))
+    startCheckout: (planTermsId) => {
+      const current = eligibility.current;
+      if (!canCheckoutFromUsage(current.usage.data, current.usage.isSuccess && !current.usage.isError, current.isOwner, planTermsId)) return;
+      void go(planTermsId, () => api.checkout(workspaceId, planTermsId));
+    }
   };
 }

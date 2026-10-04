@@ -816,6 +816,9 @@ export interface SchedulePlan {
 
 /** Server estimate for the exact request a credit quote would bind (FINAL-05). */
 export interface CreditEstimate {
+  /** Growth rewrites quote the entire pipeline maximum, not the writer's usual cost. */
+  operation?: CreditOperation;
+  estimateKind?: 'maximum';
   estimateMilliCredits: number;
   ceilingMilliCredits: number;
   availableMilliCredits: number;
@@ -826,13 +829,31 @@ export interface CreditEstimate {
   reasoning?: string;
   /** The workspace revision the estimate was computed on; re-estimate when it changes. */
   stateRevision?: number;
-  /** `media-notes` only. `cached: true` means nothing to pay and no quote needed. */
+  /** Media notes or a completed Growth rewrite: `cached` needs no new quote. */
   kind?: 'photo' | 'video_frames';
   frames?: number;
   cached?: boolean;
 }
 
-export type CreditOperation = 'turn' | 'quick-start' | 'media-notes';
+export type CreditOperation = 'turn' | 'quick-start' | 'media-notes' | 'post-doctor-rewrite';
+
+export interface PostDoctorRewriteRequest {
+  checkId: string;
+  model?: string;
+  facts: Record<string, string>;
+  confirmed: boolean;
+  requestKey: string;
+  creditQuoteId?: string;
+  expectedRevision?: number;
+}
+
+/** Reuse this exact request for estimate, explicit MAX approval and Growth execution. */
+export interface PostDoctorRewriteCreditBody {
+  operation: 'post-doctor-rewrite';
+  request: PostDoctorRewriteRequest;
+  expectedRevision?: number;
+  maxMilliCredits?: number;
+}
 
 /** A read quote binds one asset (SPEC §5.5). */
 export interface MediaNotesCreditBody {
@@ -1054,6 +1075,8 @@ export interface ModelCatalog {
   agents?: AgentInfo[];
   imageGeneration?: {
     available: boolean;
+    /** Server-qualified credit estimate bridge; independent of legacy image availability. */
+    creditEstimateAvailable: boolean;
     model: string | null;
     provider: string | null;
     costClass: 'paid';
@@ -1507,6 +1530,8 @@ export interface OAuthComplete {
 
 export interface Entitlement {
   planTermsId: string;
+  /** Actual effective entitlement after lifecycle reconciliation. */
+  plan: string;
   writingBatchesRemaining: number;
   mediaCreditsRemaining: number;
   connectedAccounts: number;
@@ -1527,6 +1552,7 @@ export interface SubscriptionView {
   plan: string;
   label: string;
   priceCents: number;
+  priceVariantId: string | null;
   currency: string;
   priceStatus: string;
   termsVersion: number;
@@ -1539,10 +1565,27 @@ export interface PlanTerms {
   version: number;
   label: string;
   priceCents: number;
+  defaultPriceCents: number;
+  priceVariantId: string | null;
+  catalogState: 'public' | 'hidden' | 'legacy';
+  current: boolean;
+  /** Catalog permission, independent of provider readiness and the member's role. */
+  newCheckoutEnabled: boolean;
+  checkoutAvailable: boolean;
   currency: string;
   status: string;
   priceLabel: string;
-  entitlements: Record<string, unknown>;
+  entitlements: {
+    writingBatches?: number;
+    mediaCredits?: number;
+    members?: number;
+    connectedAccounts?: number;
+    brands?: number;
+    storageMb?: number;
+    creditPolicy?: string;
+    monthlyCredits?: number;
+    overage?: string;
+  };
 }
 
 export interface LedgerEntry {
@@ -1562,16 +1605,51 @@ export interface LedgerEntry {
 
 export interface CreditBalance {
   mode: "credits";
+  policy: string;
   availableMilliCredits: number;
   heldMilliCredits: number;
+  /** Lifetime settled usage; never a current-period usage counter. */
   usedMilliCredits: number;
+  /** GROSS verified linked grant for the current period; null without evidence. */
+  currentPeriodGrantMilliCredits: number | null;
+  currentPeriodExpiresAt: number | null;
   debtMilliCredits: number;
+  /** Sanitized purchase-lot summaries. Missing/null means the customer projection cannot verify purchase detail. */
+  purchasedCredits?: Array<{ available: number; held: number; expiresAt: number | null }> | null;
+  spendAvailable: boolean;
+  spendUnavailableReason: 'credits_disabled' | 'policy_inactive' | 'ai_paused' | 'credit_debt' | null;
   quoteType: "spending_limit";
   textOnly: boolean;
 }
 
-export interface Usage {
-  credits?: CreditBalance | null;
+export interface CreditLot {
+  grantId: string;
+  kind: 'subscription' | 'purchased' | 'other';
+  milli: number;
+  expiresAt: number | null;
+  used: number;
+  held: number;
+  reversed: number;
+  available: number;
+}
+
+/** Transport intents only. The server selects Free in v2 and owns paid entitlement. */
+export type BootstrapPlan = 'free' | 'studio' | 'assist';
+export type BillingMode = 'free_preview' | 'managed_credits' | 'legacy_allowances';
+export type PreviewUnavailableReason = 'used' | 'plan_unavailable' | 'permission_required' | 'feature_disabled' | 'consent_required' | 'funding_unavailable' | 'rate_limited';
+export interface PreviewAction {
+  /** Lifetime action count, never a fungible credit balance. */
+  remaining: 0 | 1;
+  eligible: boolean;
+  reason: PreviewUnavailableReason | null;
+}
+export interface FreePreview {
+  postDoctor: PreviewAction;
+  genome: PreviewAction & { maxPosts: 20 };
+}
+
+interface UsageBase {
+  aiUsageExempt: boolean;
   entitlement: Entitlement;
   subscription: SubscriptionView | null;
   budget: {
@@ -1590,6 +1668,13 @@ export interface Usage {
   billing?: { provider: string; checkoutAvailable: boolean; portalAvailable: boolean };
   membership: Membership;
 }
+
+/** Mode comes from server entitlement; flag OFF/exemption can leave managed credits null. */
+export type Usage = UsageBase & (
+  | { billingMode: 'free_preview'; credits: null; freePreview: FreePreview }
+  | { billingMode: 'managed_credits'; credits: CreditBalance | null; freePreview: null }
+  | { billingMode: 'legacy_allowances'; credits: CreditBalance | null; freePreview: null }
+);
 
 /* ---------- time back (time_savings.py) ---------- */
 
@@ -1921,3 +2006,40 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+
+/* ---------- public pricing catalog display contract ---------- */
+
+/** Presentation data only; checkout authorization remains on the server. */
+export type CatalogCheckout = 'available' | 'not_yet_available' | 'not_applicable' | 'legacy_flow';
+
+export interface CatalogFirstValue {
+  postDoctorRuns: number;
+  genomeAnalyses: number;
+  genomeMaxPosts: number;
+}
+
+export interface CatalogPlan {
+  id: string;
+  plan: string;
+  label: string;
+  priceCents: number;
+  currency: string;
+  interval: 'month' | null;
+  entitlements: Record<string, number | string>;
+  /** Authoritative quantity; null/omitted means unknown, never an entitlement fallback. */
+  monthlyCredits?: number | null;
+  firstValue?: CatalogFirstValue;
+  checkout: CatalogCheckout;
+  /** Explicit server-qualified checkout availability; omitted/false means unavailable. */
+  checkoutAvailable?: boolean;
+  priceVariantId?: string | null;
+}
+
+export interface PublicCatalog {
+  catalogVersion: 'pricing-v2-2026-09-28' | 'legacy-2026-09';
+  pricing: 'v2' | 'legacy';
+  creditsPerUsd?: number;
+  plans: CatalogPlan[];
+  topUps: { available: boolean; reason: string };
+  notes?: string[];
+}

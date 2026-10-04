@@ -1,49 +1,73 @@
-"""Portable isolated PostgreSQL suites; full logs; a new cluster per group."""
+"""Full actual local PostgreSQL catalogue; full logs; a new owned cluster/group."""
 import json
 import os
 from pathlib import Path
-import shutil
-import subprocess
 import sys
-import tempfile
+import subprocess
 import time
-ROOT=Path(__file__).resolve().parents[1]
-PG=Path(os.environ.get('POSTRIFF_PG_BIN','/opt/homebrew/opt/postgresql@17/bin'))
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
-os.environ['LC_ALL']='C';os.environ['POSTRIFF_RESEARCH']='0'
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tests/phase2'))
+from local_pg_target import selected_target
+from postriff_disposable_postgres import (
+    child_environment, owned_cluster, group_migrations, source_bindings,
+    emit_receipt, failure_receipt, validate_script_targets,
+)
+
+PG = Path(os.environ.get('POSTRIFF_PG_BIN', '/opt/homebrew/opt/postgresql@17/bin'))
+SEQUENCES = {
+    'postgres_plan_guards': ('postgres_repository', 'postgres_plan_guards'),
+    'postgres_instagram_lifecycle': ('postgres_instagram_lifecycle', 'postgres_safety'),
+}
+
+
+def selected_groups(names=()):
+    catalogue = {p.stem: p for p in sorted((ROOT / 'tests/phase2').glob('postgres_*.py'))}
+    # These are sequence members, not exclusions from executable coverage.
+    standalone = {k: v for k, v in catalogue.items() if k not in ('postgres_repository', 'postgres_safety')}
+    if names:
+        if len(set(names)) != len(names) or set(names) - set(standalone):
+            raise ValueError('Unknown, duplicate or sequence-only PostgreSQL selection')
+        standalone = {k: v for k, v in standalone.items() if k in names}
+    if not standalone:
+        raise ValueError('No selected PostgreSQL tests')
+    return [tuple(catalogue[name] for name in SEQUENCES.get(key, (key,))) for key in standalone]
+
 
 def main():
-    if not (PG/'initdb').is_file():
-        print(json.dumps({'status':'VALIDATION_UNAVAILABLE','reason':f'{PG}/initdb missing; set POSTRIFF_PG_BIN'}));return 3
-    # Browser seed helpers require their own CLI arguments; only integration
-    # suites belong in this runner's disposable-cluster catalogue.
-    scripts=[p for p in sorted((ROOT/'tests/phase2').glob('postgres_*.py')) if p.name not in ('postgres_repository.py','postgres_safety.py')]
-    if sys.argv[1:]: scripts=[p for p in scripts if p.stem in sys.argv[1:]]
-    if not scripts: raise ValueError('No selected PostgreSQL tests')
-    results=[]
-    for script in scripts:
-        with tempfile.TemporaryDirectory(prefix='consumer-pg-') as tmp:
-            data=Path(tmp)/'data'
-            subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)
-            server_log=Path(tmp)/'postgres.log'
-            try:
-                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
-            except subprocess.CalledProcessError:
-                # TemporaryDirectory otherwise removes the only startup diagnostic.
-                # This cluster has no application credentials or customer records.
-                if server_log.exists():print(server_log.read_text(),flush=True)
-                raise
-            try:
-                subprocess.run([str(PG/'psql'),DSN,'-v','ON_ERROR_STOP=1','-q','-f',str(ROOT/'tests/phase2/rls.sql')],check=True,stdout=subprocess.DEVNULL)
-                group=[script]
-                if script.name=='postgres_plan_guards.py':group.insert(0,ROOT/'tests/phase2/postgres_repository.py')
-                if script.name=='postgres_instagram_lifecycle.py':group.append(ROOT/'tests/phase2/postgres_safety.py')
+    target = selected_target()  # Fail invalid/conflicting input before any I/O.
+    groups = selected_groups(sys.argv[1:])
+    paths = [p for group in groups for p in group]
+    validate_script_targets(paths, target)
+    if not (PG / 'initdb').is_file():
+        print(json.dumps({'status': 'VALIDATION_UNAVAILABLE',
+                          'reason': f'{PG}/initdb missing; set POSTRIFF_PG_BIN'}))
+        return 3
+    env = child_environment(target, os.environ)
+    env['POSTRIFF_RESEARCH'] = '0'
+    setups = [group_migrations(group, env) for group in groups]  # All admission before sockets.
+    before = source_bindings(paths)
+    results = []
+    clusters = []
+    receipt = dict(execution='local-db; synthetic external services', binder=source_bindings)
+    args = (target, paths, before, results, [sys.executable, *sys.argv], clusters)
+    try:
+        for group, migrations in zip(groups, setups):
+            state = {'scripts': [str(p.relative_to(ROOT)) for p in group]}
+            clusters.append(state)
+            with owned_cluster(target, PG, env, baseline=group[0].stem != 'postgres_migration_013',
+                               migrations=migrations, state=state):
                 for path in group:
-                    print('RUN '+str(path.relative_to(ROOT)),flush=True);start=time.monotonic()
-                    result=subprocess.run([sys.executable,str(path)],cwd=ROOT,env={**os.environ,'POSTRIFF_TEST_DSN':DSN})
-                    results.append({'script':str(path.relative_to(ROOT)),'exitCode':result.returncode,'seconds':round(time.monotonic()-start,2)})
-            finally:
-                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-m','fast','-w','stop'],check=True,stdout=subprocess.DEVNULL)
-    print(json.dumps({'execution':'local-db; synthetic external services','results':results}),flush=True)
-    return int(any(r['exitCode'] for r in results))
-if __name__=='__main__':sys.exit(main())
+                    print('RUN ' + str(path.relative_to(ROOT)), flush=True)
+                    start = time.monotonic()
+                    result = subprocess.run([sys.executable, str(path)], cwd=ROOT, env=env)
+                    results.append({'script': str(path.relative_to(ROOT)), 'exitCode': result.returncode,
+                                    'seconds': round(time.monotonic() - start, 2)})
+    except BaseException as error:
+        failure_receipt(*args, error=error, **receipt)
+        raise
+    return emit_receipt(*args, **receipt)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

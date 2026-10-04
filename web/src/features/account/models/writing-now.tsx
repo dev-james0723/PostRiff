@@ -9,20 +9,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUsage } from '@/lib/api/hooks';
 import type { AgentInfo, ModelOption } from '@/lib/api/types';
 import { modelName, shortLabel } from '@/features/agent/use-model';
-import { formatNumber } from '@/lib/time';
+import { writingCostDescription } from '@/features/agent/work-surface-policy';
 import { KIND_LABEL, costCopy, routeKind } from './catalog';
 
-/** Writing batches left, read from Usage only when the current writer is metered. */
-function BatchesLeft() {
+/** The server billing mode chooses the cost description, independently of batch totals. */
+function WritingCost() {
   const usage = useUsage();
   if (usage.isLoading) return <span aria-hidden className='t-skel-pulse bg-muted inline-block h-4 w-24 rounded-md align-middle' />;
-  const remaining = usage.data?.entitlement?.writingBatchesRemaining;
-  if (typeof remaining !== 'number') return null;
-  return (
-    <span>
-      {formatNumber(remaining)} writing batch{remaining === 1 ? '' : 'es'} left
-    </span>
-  );
+  return <span>{writingCostDescription(usage.data)}</span>;
 }
 
 export interface WritingNowProps {
@@ -92,8 +86,8 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
           </p>
         )}
         <p className='text-muted-foreground flex flex-wrap gap-x-2 text-sm'>
-          <span>{option.costClass === 'none' ? 'Free' : option.costClass === 'subscription' ? 'Paid by your CLI subscription' : cost.line}</span>
-          {option.costClass === 'paid' && <BatchesLeft />}
+          {option.costClass !== 'paid' && <span>{option.costClass === 'none' ? 'Free' : option.costClass === 'subscription' ? 'Paid by your CLI subscription' : cost.line}</span>}
+          {option.costClass === 'paid' && <WritingCost />}
         </p>
         {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />}
         <p className='text-muted-foreground text-xs leading-relaxed'>Your pick is saved in this browser. Auto follows the workspace default.</p>

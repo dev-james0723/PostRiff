@@ -28,10 +28,10 @@ async function withResend<T>(call: () => Promise<T>, keyed: boolean, isCurrent: 
   }
 }
 
-/** The request body a credit quote (and its estimate) binds: writing only, web research off. */
+/** Preserve task intent for the server's estimate/quote; never downgrade unsupported research. */
 export function creditRequestFor(request: Record<string, unknown>): Record<string, unknown> {
   const payload = structuredClone(request);
-  payload.research = false;
+  if (payload.research === undefined) payload.research = false;
   delete payload.idempotencyKey;
   delete payload.creditQuoteId;
   return payload;
@@ -51,9 +51,8 @@ export async function submitConversationTurn({ api, workspaceId, conversationId,
   const payload = structuredClone(request);
   if (maxMilliCredits !== null) {
     if (!Number.isSafeInteger(maxMilliCredits) || maxMilliCredits <= 0 || maxMilliCredits > 100_000_000) throw new Error('Choose a valid maximum credit limit.');
-    const image = payload.imageGeneration as { enabled?: boolean } | undefined;
-    if (payload.research === true || image?.enabled) throw new Error('This credit approval covers writing only.');
-    payload.research = false;
+    if (payload.research === true) throw new Error('Research credit approval is unavailable for this route. Your research request has not been changed.');
+    if (payload.research === undefined) payload.research = false;
     if (!isCurrent()) return null;
     const current = await api.snapshot(workspaceId);
     if (!isCurrent()) return null;
@@ -79,9 +78,8 @@ export async function submitQuickStart({ api, workspaceId, expectedRevision, req
   const payload = structuredClone(request);
   if (maxMilliCredits !== null) {
     if (!Number.isSafeInteger(maxMilliCredits) || maxMilliCredits <= 0 || maxMilliCredits > 100_000_000) throw new Error('Choose a valid maximum credit limit.');
-    const image = payload.imageGeneration as { enabled?: boolean } | undefined;
-    if (payload.research === true || image?.enabled) throw new Error('This credit approval covers writing only.');
-    payload.research = false;
+    if (payload.research === true) throw new Error('Research credit approval is unavailable for this route. Your research request has not been changed.');
+    if (payload.research === undefined) payload.research = false;
     if (!isCurrent()) return null;
     const quote = await api.creditQuote(workspaceId, { operation: 'quick-start', request: payload, expectedRevision, maxMilliCredits });
     if (!isCurrent()) return null;

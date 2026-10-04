@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { InfoTip } from '@/components/rafii';
 import { STATUS } from '@/lib/status-labels';
 import { useDraftHandoff } from './use-draft';
+import { DraftCreditApproval } from './draft-credit-approval';
 import { factsDigest, isWeb, kindIcon, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
 
 const FACT_KINDS = new Set(['text', 'document', 'sample']);
@@ -456,12 +457,14 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
         <>
           <div className='flex flex-col gap-2'>
             {/* The one dominant commitment on this surface (DNA §9.2). */}
-            <StatefulButton data-tour='ideas-draft' className={cn(ACTION, 'w-full')} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={retractAct.isPending} onClick={() => void draft.fromSource(source)}>
+            <StatefulButton data-tour='ideas-draft' className={cn(ACTION, 'w-full')} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={retractAct.isPending || Boolean(draft.blocked)} onClick={() => void draft.fromSource(source)}>
               Draft from this source
             </StatefulButton>
             <p className='text-muted-foreground hidden text-xs leading-relaxed sm:block'>
               {draft.modelLabel} · {draft.destinationLabel}
             </p>
+            {draft.blocked && <p role='status' className='text-muted-foreground text-sm'>{draft.blocked}</p>}
+            <DraftCreditApproval draft={draft} />
             {reminders.length > 0 && <Notes items={reminders} />}
           </div>
           <div className='flex flex-col gap-1.5'>

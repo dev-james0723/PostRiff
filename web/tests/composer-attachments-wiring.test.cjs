@@ -55,12 +55,36 @@ test('the shared composer mounts slash commands and full Agent Chat sends agent 
 });
 
 test('the conversation sends one set of chip fields to the estimate and the turn, none with quick replies', () => {
-  assert.match(view, /\.\.\.\(chips && attachmentsOn \? attachments\.fields : \{\}\)/);
+  const ts = require('typescript');
+  const file = ts.createSourceFile('conversation-view.tsx', view, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let payload;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'turnPayload') payload = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(payload && ts.isArrowFunction(payload), 'test the actual payload builder');
+  const compiled = ts.transpileModule('const value = ' + payload.getText(file), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText;
+  const create = new Function('languages', 'choice', 'voiceMode', 'voiceSourceIds', 'timeZone',
+    'imageRequested', 'attachmentsOn', 'attachments', compiled + '\nreturn value;');
+  const fields = { references: [{ kind: 'source', id: 'owned-source' }], attachments: [{ assetId: 'owned-image', role: 'reference' }] };
+  const build = (image, enabled = true) => create({ destinations: [] }, { requestFields: { model: 'fixture/model' } },
+    'neutral', [], 'UTC', image, enabled, { fields });
+  const textTurn = build(false)('same request');
+  assert.deepEqual(textTurn.references, fields.references);
+  assert.deepEqual(textTurn.attachments, fields.attachments);
+  assert.deepEqual(build(false)('same request'), textTurn, 'estimate and turn share the same payload builder');
+  for (const request of [build(false)('quick reply', false), build(false, false)('disabled'), build(true)('image turn')]) {
+    assert.equal(request.references, undefined);
+    assert.equal(request.attachments, undefined);
+  }
+  assert.deepEqual(build(true)('image turn').imageGeneration, { enabled: true, count: 1 });
   assert.match(view, /const estimateRequest = creditRequestFor\(turnPayload\(text\.trim\(\)\)\)/);
   assert.match(view, /const withChips = override === undefined;/);
   assert.match(view, /turnPayload\(body, withChips\)/);
   assert.match(view, /onQuickReply=\{[^}]*sendTurn\(reply\)/);
-  assert.match(view, /imageGeneration: imageRequested,/, 'image turns send no chips (the hook drops them)');
 });
 
 test('reads settle before sending, only sent chips are cleared, and the report shows under each answer', () => {

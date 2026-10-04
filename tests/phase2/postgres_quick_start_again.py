@@ -3,6 +3,7 @@ duplicate, and Context Pocket sources (`sourceIds`) are read with the idea or re
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ import psycopg
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 clock = [time.time()]
 

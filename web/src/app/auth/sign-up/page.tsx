@@ -1,17 +1,21 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { AuthForm } from '@/components/auth/auth-form';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
+
+const { signUp } = marketingCopy(PRICING_CATALOG);
 
 export const metadata: Metadata = {
-  title: 'Start your free trial',
-  description: 'Create a Rafii workspace. 14-day trial, no card required.',
+  title: signUp.metaTitle,
+  description: signUp.metaDescription,
   robots: { index: false }
 };
 
 export default function SignUpPage() {
   return (
     <Suspense fallback={null}>
-      <AuthForm intent='sign-up' />
+      <AuthForm intent='sign-up' signUp={signUp} />
     </Suspense>
   );
 }

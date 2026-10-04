@@ -1,7 +1,7 @@
 """Local pipeline acceptance; PostgreSQL cases require an explicit private test DB.
 
 TREND_PIPELINE_TEST_DSN must name trend_pipeline_* on /private/tmp:56447.
-POSTRIFF_TEST_DSN is accepted only for the runner at 127.0.0.1:55438/postgres.
+POSTRIFF_TEST_DSN must match the selected loopback runner (default55438/postgres).
 Never reads application credentials or touches a hosted database.
 """
 from copy import deepcopy
@@ -24,7 +24,9 @@ from postriff_phase2.growth.trends.outbox import TrendOutbox
 def dedicated_test_dsn(environ=None):
     """Fail before connecting unless the explicit target is a disposable local DB."""
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env=os.environ if environ is None else environ
+    target=selected_target(env, validate_fixture_dsns=False)
     if any(env.get(name) for name in ('PGSERVICE','PGHOSTADDR')):
         raise ValueError('libpq service/address environment overrides are forbidden')
     dedicated=env.get('TREND_PIPELINE_TEST_DSN')
@@ -39,7 +41,7 @@ def dedicated_test_dsn(environ=None):
         valid=(params.get('host')=='/private/tmp' and params.get('port')=='56447'
                and params.get('dbname','').startswith('trend_pipeline_'))
     else:
-        valid=(params.get('host')=='127.0.0.1' and params.get('port')=='55438'
+        valid=(params.get('host')=='127.0.0.1' and params.get('port')==str(target.port)
                and params.get('dbname')=='postgres')
     if not valid: raise ValueError('dedicated local pipeline database or exact disposable runner required')
     return make_conninfo(**params,connect_timeout='5')

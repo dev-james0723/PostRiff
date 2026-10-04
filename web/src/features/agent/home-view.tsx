@@ -52,6 +52,7 @@ import { VoiceLearningPanel } from './voice-learning-panel';
 import { useAuth } from '@/lib/auth/session';
 import { CreditLimitField } from './credit-limit-field';
 import { parseCreditLimit } from './credit-limit';
+import { workSurfacePolicy, workSurfaceCommands } from './work-surface-policy';
 import { creditRequestFor } from './credit-turn';
 import { useCreditEstimate } from './use-credit-estimate';
 import { quickStartPayload } from './home/use-home-generation';
@@ -63,15 +64,16 @@ import { useComposerAttachments } from './attachments/use-composer-attachments';
 import { toSaved } from './attachments/state';
 import type { TextareaHandlers } from './home/idea-composer';
 import { createSubmissionGate } from './submission-gate';
-import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
+import { briefStorageKey, turnStorageKey, decodeBrief, decodeBriefState, encodeBrief } from './brief-recovery';
 import { WorkspaceOpportunityPreview } from '@/features/trends/workspace-opportunity-preview';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
-import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import { COMMANDS, commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import type { ChatAutomation } from '@/lib/api/types';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 import { GrowthHome } from '@/features/growth/growth-loop';
+import { workAttention } from '@/features/overview/work-attention';
 
 /*
  * Home's dialogs are code-split: none is needed to paint Home, so each loads when the browser is idle
@@ -227,7 +229,10 @@ function HomeWorkspace() {
 
   // Auto follows the owner's workspace default; `choice.model` is always the concrete writer, `requestFields` what is sent.
   const choice = useModelChoice(models.data, state?.writerDefaults?.model);
-  const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
+  const policy = workSurfacePolicy(usage.data, choice.option?.costClass, imageRequested, models.data?.imageGeneration);
+  const creditMode = policy.creditMode;
+  const mediaCreditMode = usage.data?.billingMode !== 'legacy_allowances';
+  const imagePolicy = workSurfacePolicy(usage.data, choice.option?.costClass, true, models.data?.imageGeneration);
 
   /* ---- chat attachments (chat-context SPEC §11.2): posts, photos and videos are chips; a source goes to the Context
      Pocket, a template becomes this message's template, accounts and folders become destinations ---- */
@@ -256,7 +261,8 @@ function HomeWorkspace() {
     workspaceId,
     owner: user?.id,
     fixtureWriter,
-    creditMode,
+    creditMode: mediaCreditMode,
+    freePreview: usage.data?.billingMode === 'free_preview',
     catalog: models.data?.attachments,
     snapshot: snapshot.data,
     imageGeneration: imageRequested,
@@ -285,7 +291,7 @@ function HomeWorkspace() {
         aria: mentionTextareaProps(mention.open, mention.listId, activeOption)
       }
     : undefined;
-  const barProps = { attachments, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, id: crypto.randomUUID() }) };
+  const barProps = { attachments, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode: mediaCreditMode, freePreview: usage.data?.billingMode === 'free_preview', fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, id: crypto.randomUUID() }) };
   const mentionList = (inline: boolean) =>
     attachmentsOn ? (
       <MentionList
@@ -310,13 +316,13 @@ function HomeWorkspace() {
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
-    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included, ...chipFields })),
-    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included, chipFields]
+    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, timeZone, sourceIds: included, ...chipFields })),
+    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, imageRequested, timeZone, included, chipFields]
   );
   // On Auto the body names no model, so a changed workspace default must still ask for a fresh estimate.
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !policy.blocked, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
-  const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
+  const creditInvalid = Boolean(policy.blocked) || creditMode && (!creditEstimate.estimate || !maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const voiceAvailable = voiceSourceIds.length > 0;
   const imageCapability = models.data?.imageGeneration;
   const generation = useHomeGeneration(params.get('run'));
@@ -329,6 +335,7 @@ function HomeWorkspace() {
   }, [params]);
 
   const attention = deriveAttention({ snapshot, channels: channelQuery, usage, now: Date.now() / 1000 });
+  attention.items = workAttention(attention.items, usage.data?.billingMode);
   const needsYou: NeedsYou[] = attention.items.map((item) => ({ ...item, icon: item.id.startsWith('voice') ? 'user' : item.id === 'approvals' ? 'clock' : 'broadcast' }));
 
   /* ---- labels ---- */
@@ -390,12 +397,14 @@ function HomeWorkspace() {
     composer.current?.focus();
   }
 
-  const commandReady = canEdit && Boolean(slash) && !preparing && Boolean(snapshot.data) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
-  const canGenerate = commandReady || (canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
+  const commandUnavailable = slash?.command.kind === 'agent' && usage.data?.billingMode !== 'legacy_allowances';
+  const commandReady = canEdit && Boolean(slash) && !commandUnavailable && !preparing && Boolean(snapshot.data) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
+  const canGenerate = commandReady || (canEdit && (imageRequested || choice.available) && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
 
   async function start() {
     const body = text.trim();
     const currentSlash = parseSlash(body);
+    if (currentSlash?.command.kind === 'agent' && usage.data?.billingMode !== 'legacy_allowances') { toast.error('This command has no qualified credit approval route yet. Keep your text or use the draft composer to review a supported task.'); return; }
     if (!body || !canGenerate) return;
     if (currentSlash?.command.kind === 'client') {
       if (currentSlash.command.name === 'help') {
@@ -511,6 +520,22 @@ function HomeWorkspace() {
   async function answerAutomation(reply: string) {
     const target = automationReply;
     if (!target || target.workspaceId !== workspaceId || !canEdit) return;
+    const replyPolicy = workSurfacePolicy(usage.data, choice.option?.costClass, false);
+    if (replyPolicy.creditMode || replyPolicy.blocked || !models.isSuccess) {
+      if (!user?.id) { toast.error('Open the conversation to review this reply.'); return; }
+      try {
+        const key = turnStorageKey(user.id, workspaceId, target.id);
+        const saved = decodeBriefState(sessionStorage.getItem(key), user.id, workspaceId);
+        if (saved && (saved.text.trim() || saved.chips.length)) {
+          toast('Your unsent message is kept. Review this quick reply in the conversation before sending.');
+        } else {
+          sessionStorage.setItem(key, encodeBrief(user.id, workspaceId, reply));
+          toast(replyPolicy.blocked ?? 'Review this reply’s estimate and approve its maximum in the conversation.');
+        }
+        router.push(`/app/agent/${encodeURIComponent(target.id)}`);
+      } catch { toast.error('Couldn’t save the reply. Open the conversation and review it before sending.'); }
+      return;
+    }
     try {
       const result = await api.turn(workspaceId, target.id, {
         text: reply,
@@ -543,7 +568,7 @@ function HomeWorkspace() {
     composer.current?.focus();
   }, [generation, router]);
 
-  const helpText = !canEdit
+  const helpText = policy.blocked ?? (!canEdit
     ? 'Only editors can draft here.'
     : generation.busy || generation.running
       ? 'Writing your drafts…'
@@ -555,7 +580,7 @@ function HomeWorkspace() {
             ? 'Tick “Use this text to draft with”.'
             : imageRequested && !imageCapability?.available
               ? (imageCapability?.detail ?? 'Image generation isn’t available yet.')
-              : `${destinationCount} draft${destinationCount === 1 ? '' : 's'} · ⌘↵ to send`;
+              : `${destinationCount} draft${destinationCount === 1 ? '' : 's'} · ⌘↵ to send`);
 
   const recent = conversations.data?.conversations ?? [];
   const firstName = greetingName(me.data?.displayName);
@@ -601,7 +626,7 @@ function HomeWorkspace() {
               placeholder={template ? `${template.title}…` : PLACEHOLDER}
               disabled={!snapshot.data || preparing || generation.busy || generation.running}
               busy={preparing || generation.busy || generation.running}
-              slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
+              slash={{ commands: workSurfaceCommands(COMMANDS, usage.data?.billingMode), onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               onExpand={() => setDialog('expand')}
               contextCount={included.length}
               onOpenContext={() => setDialog('context')}
@@ -621,9 +646,9 @@ function HomeWorkspace() {
                 <button
                   type='button'
                   aria-pressed={imageRequested}
-                  disabled={creditMode || !imageCapability?.available || preparing || generation.busy || generation.running}
+                  disabled={Boolean(imagePolicy.blocked) || preparing || generation.busy || generation.running}
                   onClick={() => setImageRequested((v) => !v)}
-                  title={imageCapability?.detail ?? 'Checking…'}
+                  title={imagePolicy.blocked ?? imageCapability?.detail ?? 'Checking…'}
                   className={cn('rafii-focus inline-flex min-h-11 items-center gap-1.5 rounded-md text-xs font-medium', imageRequested ? 'text-foreground' : 'text-muted-foreground hover:text-foreground', !imageCapability?.available && 'opacity-50')}
                 >
                   <Icons.media className='size-3.5' />
@@ -668,8 +693,8 @@ function HomeWorkspace() {
                   voice={{ value: voiceMode === 'personalized' ? 'Writing like you' : 'Neutral', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
-              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
-              generate={{ label: slash ? 'Run command' : generation.run ? 'Generate again' : 'Generate drafts', count: slash ? 0 : destinationCount, disabled: !canGenerate, onClick: () => void start(), help: slash ? 'Runs this Rafii command in a conversation.' : helpText }}
+              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
+              generate={{ label: slash ? 'Run command' : generation.run ? 'Generate again' : 'Generate drafts', count: slash ? 0 : destinationCount, disabled: !canGenerate || commandUnavailable, onClick: () => void start(), help: commandUnavailable ? 'This command has no qualified credit approval route yet. Keep your text or use the draft composer.' : slash ? 'Runs this Rafii command in a conversation.' : helpText }}
               consent={
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
                   <Checkbox checked={use} onCheckedChange={setUse} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />

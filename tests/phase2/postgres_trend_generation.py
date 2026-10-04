@@ -1,4 +1,5 @@
 """Generation and reused executor regression on the exact disposable suite target."""
+from local_pg_target import selected_target
 import os
 from pathlib import Path
 import sys
@@ -9,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def main():
     dsn=os.environ.get('POSTRIFF_TEST_DSN','');params=conninfo_to_dict(dsn)
-    if (set(params)-{'host','port','dbname','user'} or (params.get('host'),params.get('port'),params.get('dbname'))!=('127.0.0.1','55438','postgres')
+    if (set(params)-{'host','port','dbname','user'} or (params.get('host'),params.get('port'),params.get('dbname'))!=('127.0.0.1',str(selected_target(require_dsn=True).port),'postgres')
             or any(k in os.environ for k in ('PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGOPTIONS'))):
         raise ValueError('exact disposable script runner target required')
     with psycopg.connect(dsn) as db:

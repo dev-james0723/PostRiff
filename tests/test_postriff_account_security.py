@@ -519,7 +519,15 @@ class MyInvitations(unittest.TestCase):
 
     def test_accept_matches_the_email_and_joins_like_the_link_does(self):
         invitation = ("inv-1", WORKSPACE, "editor", {"can_publish": True})
-        cursor = FakeCursor([((1,), 1), (invitation, 1), (None, 1), (None, 0), (None, 1), (None, 1), (("manual-seats", 10, 1, 2, 2, 200, None, "manual", 1), 1), ((1,), 1), (None, 1), (None, 1), (None, 1), (None, 1)])
+        cursor = FakeCursor([
+            ((1,), 1), (invitation, 1), (None, 1), (None, 0), (None, 1),
+            # Internal-workspace probe precedes the customer lifecycle.
+            (None, 0),
+            # Capacity derives lifecycle before reading the manual seat entitlement.
+            (None, 0), (None, 0), (("manual-seats",), 1),
+            (("manual-seats", 10, 1, 2, 2, 200, None, "manual", 1), 1),
+            ((1,), 1), (None, 1), (None, 1), (None, 1), (None, 1),
+        ])
         joined = service(cursor, verifier(), email_lookup=lambda principal: self.EMAIL).accept_my_invitation("t", "inv-1")
         self.assertEqual(joined, {"workspaceId": WORKSPACE, "role": "editor", "can_publish": True, "can_reply": False, "can_moderate": False, "can_manage_connections": False})
         statements = [sql for sql, _ in cursor.executed]
@@ -639,7 +647,12 @@ class ChannelsAndWorkspaces(unittest.TestCase):
 
     def test_workspaces_route_carries_the_summary(self):
         row = (WORKSPACE, "owner", True, True, True, True, 1_700_000_000.0, "Studio", None, "studio", PRINCIPAL, "", {"owner": 1})
-        cursor = FakeCursor([([row], 1)])
+        cursor = FakeCursor([
+            ([(WORKSPACE,)], 1),
+            # The locked workspace's existing trial is still active at the service clock.
+            (("trial", None, False, 1_800_086_400.0, "trial-v1"), 1),
+            (("trial-v1",), 1), ([row], 1),
+        ])
         listed = service(cursor, verifier()).workspaces("t")["workspaces"][0]
         self.assertEqual((listed["workspaceId"], listed["name"], listed["plan"], listed["trialPlan"], listed["memberCounts"]["owner"], listed["membership"]["role"]), (WORKSPACE, "Studio", "trial", "studio", 1, "owner"))
 

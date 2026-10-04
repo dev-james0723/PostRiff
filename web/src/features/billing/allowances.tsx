@@ -143,7 +143,7 @@ function OverNote({ children }: { children: ReactNode }) {
 }
 
 /** Owner-only AI spend against the workspace limit. Money stays explicit: spent, limit, and that nothing goes over. */
-function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
+export function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
   const guard = costGuardState(budget);
   return (
     <div className='flex flex-col gap-1.5 sm:col-span-2' data-tour='billing-cost-guard'>
@@ -171,13 +171,11 @@ export function Allowances({
   usage,
   channels,
   members,
-  isOwner,
   now
 }: {
   usage: Usage;
   channels: UseQueryResult<{ channels: ChannelView[]; providers: ProviderView[] }>;
   members: UseQueryResult<{ members: Member[]; membership: Membership }>;
-  isOwner: boolean;
   now: number;
 }) {
   const terms = currentTerms(usage);
@@ -250,7 +248,6 @@ export function Allowances({
           <span className='text-foreground'>Storage</span>
           <span className='text-muted-foreground tabular-nums'>{ent.storageMb.toLocaleString()} MB</span>
         </div>
-        {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
       </Surface>
     </section>
   );

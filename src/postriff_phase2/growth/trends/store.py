@@ -106,9 +106,12 @@ def aggregate_payload(payload):
 
 
 class TrendStore:
-    def __init__(self, connection_factory, *, offline_replay=False):
+    def __init__(self, connection_factory, *, offline_replay=False, hosted=None):
         self.connection_factory = connection_factory
         self.offline_replay = offline_replay
+        # Trusted server binding, never a workspace blob or client plan label.
+        # Unbound stores retain saved/manual reads but cannot admit paid I/O.
+        self.hosted = hosted
 
     @contextmanager
     def transaction(self, cursor=None):

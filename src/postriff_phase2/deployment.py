@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 def isolated_environment(values):
     result = dict(values)
-    if result.get('VERCEL_ENV') != 'preview':
+    if result.get('VERCEL_ENV') != 'preview' and result.get('POSTRIFF_ENVIRONMENT') != 'staging':
         return result
     if result.get('POSTRIFF_ENVIRONMENT') != 'staging':
         raise ValueError('Preview requires the explicit staging environment.')

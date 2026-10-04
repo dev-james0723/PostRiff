@@ -11,6 +11,7 @@ from postriff_phase2.growth.trends import contracts,generation,opportunities,rel
 from postriff_phase2.growth.usage import MemoryUsageSink
 from postriff_phase2.model_runtime import ServerModelRuntime,DEFAULT_ENDPOINT
 import test_trend_enrichment as enrichment_tests
+from test_trend_worker import ProbeStore
 
 MODEL="openai/gpt-4.1-mini"
 
@@ -58,7 +59,7 @@ class GenerationUnitTests(unittest.TestCase):
             calls.append(body)
             return {"status":200,"body":{"model":MODEL,"usage":{"cost":.001},"choices":[]}}
         runtime=ServerModelRuntime("synthetic",model=MODEL,transport=transport)
-        worker=generation.TrendGeneration(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)))
+        worker=generation.TrendGeneration(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)),store=ProbeStore([]))
         p=pack();loaded={"config":review(),"pack":p,"task":"culture_explain","context_revision":"context"};sink=MemoryUsageSink()
         with self.assertRaises(Exception):worker.execute(runtime,loaded,"culture_explain",str(uuid.uuid4()),sink)
         self.assertEqual(len(calls),1);self.assertEqual(len(sink.events),1);self.assertEqual(sink.events[0].cost_usd,.001)
@@ -70,7 +71,7 @@ class GenerationUnitTests(unittest.TestCase):
 
     def test_price_and_token_preflight_refuses_before_transport(self):
         runtime=ServerModelRuntime("synthetic",model=MODEL,transport=lambda *a,**k:self.fail("transport"))
-        worker=generation.TrendGeneration(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)))
+        worker=generation.TrendGeneration(SimpleNamespace(repository=SimpleNamespace(connection_factory=lambda:None)),store=ProbeStore([]))
         loaded={"config":{**review(),"approved_attempt_cap_microusd":1},"pack":pack(),"task":"culture_explain"}
         with self.assertRaises(contracts.ContractError):worker.prepare_model(runtime,loaded)
         loaded["config"]=review();loaded["pack"]["workspace_context"]["memory"]="long "*30000

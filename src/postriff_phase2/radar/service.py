@@ -20,6 +20,7 @@ from ..growth.usage import MemoryUsageSink, PostgresUsageSink, UsageEvent
 from ..growth.judgments import JudgmentService
 from ..growth import questions
 from ..growth.closed_loop import SUMMARY_ROUTE
+from ..growth.credit_admission import funding_mode, require_qualified_entry
 from . import core
 from .sources import Sources
 
@@ -75,11 +76,21 @@ class Radar:
     def maximum(self,mode):
         return self.g.cap('POSTRIFF_RADAR_'+mode.upper()+'_USD_CAP')
 
+    def funding(self,cur,wid,spec):
+        # The old optional Radar quote is not a qualified whole-pipeline bridge.
+        # Only explicitly zero-priced server sources without AI remain available.
+        ceilings=[self.sources.ceiling(source) for source in spec.get('sources',[])]
+        unpriced=spec.get('useAi') is not False or any(type(amount) is not int or amount!=0 for amount in ceilings)
+        require_qualified_entry(cur,wid,unpriced=unpriced,hosted=self.host)
+
     def catalog(self,wid,token):
         with self.tx(wid,token) as (cur,row,_):
             consent=row[1].get('radarConsent',{})
-            return {'sources':self.sources.catalog(),'consent':consent,'monitor':row[1].get('radarWatch',{'enabled':False}),
-                    'monitoringAvailable':self.g.env.get('POSTRIFF_RADAR_MONITORING')=='1','paidMonitoring':self.paid(cur,wid),'modes':core.MODES,'enabled':True,
+            mode=funding_mode(cur,wid,hosted=self.host);sources=self.sources.catalog()
+            if mode!='legacy':
+                sources=[{**source,'status':'credit_bridge_unavailable'} if source['status']=='ready' and source.get('maxRequestUsdMicro')!=0 else source for source in sources]
+            return {'sources':sources,'consent':consent,'monitor':row[1].get('radarWatch',{'enabled':False}),
+                    'paidScanAvailable':mode=='legacy','aiAnalysisAvailable':mode=='legacy','monitoringAvailable':mode=='legacy' and self.g.env.get('POSTRIFF_RADAR_MONITORING')=='1','paidMonitoring':self.paid(cur,wid),'modes':core.MODES,'enabled':True,
                     'monitorMaximumUsdMicro':self.maximum('quick')}
 
     def load(self,cur,wid,rid):
@@ -130,21 +141,23 @@ class Radar:
         if not isinstance(key,str) or not 16<=len(key)<=100:raise AlphaError('A request key is required.')
         with self.tx(wid,token) as (cur,row,actor):
             require(_membership(row),'edit');self.permitted(row[1],spec)
+            self.funding(cur,wid,spec)
             fingerprint=digest(spec)
             cur.execute('SELECT id::text,status,context_digest,body,created_by::text,fingerprint FROM public.pr_radar_runs WHERE workspace_id=%s AND request_key=%s',(wid,key))
             old=cur.fetchone()
             if old:
                 if old[4]!=actor or old[5]!=fingerprint:raise AlphaError('This request key belongs to different inputs.',409)
                 return self.visible(old)
-            maximum=self.maximum(mode)
+            billing_mode=funding_mode(cur,wid,hosted=self.host)
+            maximum=self.maximum(mode) if billing_mode=='legacy' else 0
             if sum(self.sources.ceiling(s) or 0 for s in sources)>maximum:raise AlphaError('These sources exceed this scan allowance.',402)
             from ..growth.service import current_genome
             b={**spec,'maximumUsdMicro':maximum,'quoteExpiresAt':self.clock()+600,'quotedAt':self.clock(),
                'items':[],'opportunities':[],'judgments':{},'steps':[],'sourceResults':[],
                'usage':{'knownUsdMicro':0,'unknownAttempts':0,'actualUsdMicro':0},'spentCeiling':0,
-               'genome':current_genome(row[1]),'customerCharge':'included_allowance','creditQuote':None,
+               'genome':current_genome(row[1]),'customerCharge':'included_allowance' if billing_mode=='legacy' else 'none','creditQuote':None,
                'notification':False}
-            if self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1':
+            if billing_mode=='legacy' and self.g.env.get('POSTRIFF_RADAR_CREDIT_BILLING')=='1':
                 q=self.book.issue(cur,wid,actor,row[0],fingerprint,'radar.'+mode,'radar',millicredits(maximum))
                 b['creditQuote']=q['quoteId'];b['maximumCredits']=q['maxMilliCredits']/1000;b['customerCharge']='credits'
             cur.execute("INSERT INTO public.pr_radar_runs(workspace_id,request_key,created_by,status,fingerprint,context_digest,body) VALUES(%s,%s,%s,'quoted',%s,%s,%s::jsonb) RETURNING id::text",(wid,key,actor,fingerprint,self.context(row[1]),json.dumps(b)))
@@ -158,6 +171,7 @@ class Radar:
             if r[1]!='quoted':return self.visible(r)
             if b['quoteExpiresAt']<=self.clock() or r[2]!=self.context(row[1]):raise AlphaError('This quote expired or permissions changed. Review a new scan.',409)
             self.permitted(row[1],b)
+            self.funding(cur,wid,b)
             # Workspace serialization includes ambiguous attempts; they must be resolved first.
             cur.execute("SELECT 1 FROM public.pr_radar_runs WHERE workspace_id=%s AND status in ('running','unknown') LIMIT 1",(wid,))
             if cur.fetchone():raise AlphaError('Finish or reconcile the existing Radar scan first.',409)
@@ -206,6 +220,7 @@ class Radar:
             if r[1]!='running':return self.visible(r)
             if r[2]!=self.context(row[1]):raise AlphaError('Radar inputs or consent changed. Stop this scan.',409)
             self.permitted(row[1],b)
+            self.funding(cur,wid,b)
             if r[4]:
                 if r[5] and float(r[5])>self.clock():raise AlphaError('A scan step is already running.',409)
                 b['notice']='An earlier attempt has an unknown outcome. It will not be repeated.'
@@ -232,6 +247,7 @@ class Radar:
                 require(_membership(row),'edit');live=self.load(cur,wid,rid)
                 if self.context(row[1])!=context or live[1]!='running' or live[4]!=lease or float(live[5] or 0)<=self.clock():raise AlphaError('This Radar request no longer has permission.',409)
                 self.permitted(row[1],b)
+                self.funding(cur,wid,b)
         try:
             guard()
             if step.startswith('source:'):
@@ -340,6 +356,7 @@ class Radar:
             elif action=='radar_watch':
                 enabled=payload.get('enabled') is True
                 if enabled:
+                    require_qualified_entry(cur,wid,hosted=self.host)
                     if self.g.env.get('POSTRIFF_RADAR_MONITORING')!='1':raise AlphaError('Daily monitoring is not enabled.',409)
                     if payload.get('confirmed') is not True or not self.paid(cur,wid):raise AlphaError('Monitoring requires an active paid plan and owner confirmation.',403)
                     try:ZoneInfo(payload.get('timezone',''))

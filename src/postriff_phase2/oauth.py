@@ -62,8 +62,10 @@ def pkce_pair():
 
 
 class OAuthService:
-    def __init__(self, repository, commands, vault, providers, public_base_url, clock=time.time):
+    def __init__(self, repository, commands, vault, providers, public_base_url, clock=time.time, *, ledger=None):
         self.repository, self.commands, self.vault, self.clock = repository, commands, vault, clock
+        from .billing import Ledger
+        self.ledger = ledger if ledger is not None else Ledger(clock=clock)
         self.providers = providers if providers is not None else {}
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
@@ -356,7 +358,7 @@ class OAuthService:
             missing = sorted(set(scopes) - set(granted))
             connection_id = hashlib.sha256(f"{provider_id}:{identity['providerAccountId']}".encode()).hexdigest()[:32]
             from .billing import require_plan_capacity
-            require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id)
+            require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id, ledger=self.ledger)
             access_ct, key_id = self.vault.encrypt(grant["accessToken"])
             refresh_ct = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else None
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None

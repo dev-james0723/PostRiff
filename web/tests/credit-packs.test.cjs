@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path');
 const read=(p)=>fs.readFileSync(path.resolve(__dirname,'../src',p),'utf8');
 test('billing exposes approved server-provided packs to owners only',()=>{
  const view=read('features/billing/billing-view.tsx');
- assert.ok(view.includes('data.credits && isOwner && <CreditPacks'));
+ assert.ok(view.includes("data.billingMode === 'managed_credits' && isOwner && <CreditPacks"));
  const client=read('lib/api/client.ts');assert.ok(client.includes('/billing/credit-packs'));assert.ok(client.includes('/billing/credit-checkout'));
 });
 test('a checkout return prompts verification rather than declaring payment success',()=>{

@@ -42,6 +42,7 @@ web/.env*.local
 /.claude/
 /.agents/
 /.token-pilot/
+/.superpowers/
 /.git
 /.git/
 /PostRiff_Research_2026-09-18/

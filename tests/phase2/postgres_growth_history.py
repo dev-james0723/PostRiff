@@ -8,6 +8,7 @@ recent verified jobs that have none, dry-run by default.
 
     POSTRIFF_PG_BIN=... python scripts/postriff_pg_suite.py postgres_growth_history
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -23,7 +24,7 @@ from postriff_phase2.growth import history_import as H
 from postriff_phase2.growth import metric_schedule as M
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TOKENS = {"fixture-one": ONE}
 CONN = "conn-threads-history"
@@ -71,7 +72,7 @@ class Transport:
 
 
 transport = Transport()
-importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-a")
+importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-a", hosted=service)
 
 refused(400, lambda: importer.request(wid, "fixture-one", CONN, {}))
 refused(404, lambda: importer.request(wid, "fixture-one", CONN, {"confirmed": True}))
@@ -157,14 +158,14 @@ assert run_state(run_id)[:3] == ("running", 0, "http_503"), run_state(run_id)
 checks.append("progress resets a run's attempts: a transient error right after a stored page retries instead of failing the run")
 
 run_id = fresh_run(2)
-late = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-b", monotonic=iter([0.0, 100.0, 100.0]).__next__)
+late = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-b", monotonic=iter([0.0, 100.0, 100.0]).__next__, hosted=service)
 assert late.tick(max_seconds=20).get("deferred") == 1
 assert run_state(run_id)[:2] == ("running", 2), run_state(run_id)
 checks.append("a run handed back at the step's deadline keeps its attempt count")
 
 with connection() as db:
     db.execute("UPDATE public.pr_history_imports SET lease_until=now() - interval '1 second' WHERE id::text=%s", (run_id,))
-broken = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-c")
+broken = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-c", hosted=service)
 def explode(*args):
     raise psycopg.errors.CheckViolation("synthetic")
 broken._store_page = explode

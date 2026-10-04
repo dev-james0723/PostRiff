@@ -1,5 +1,6 @@
 """FINAL-02 on disposable PostgreSQL: a draft refreshed in place by a later run keeps that run's reference
 after the proposal is edited, so reopening the run (?run=) can show the saved text. Free preview writer only."""
+from local_pg_target import selected_target
 import sys
 import time
 from pathlib import Path
@@ -9,7 +10,7 @@ import psycopg
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 

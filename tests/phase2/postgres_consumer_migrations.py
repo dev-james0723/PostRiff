@@ -1,4 +1,5 @@
 """Full hosted migration ledger, populated upgrade/replay, RLS and measured DB restore."""
+from local_pg_target import selected_target
 import hashlib
 import json
 import os
@@ -12,14 +13,14 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'scripts'))
 from postriff_migrate import apply,plan,migrations
 PG=Path(os.environ.get('POSTRIFF_PG_BIN','/opt/homebrew/opt/postgresql@17/bin'))
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 with psycopg.connect(DSN,autocommit=True) as admin:
     admin.execute('CREATE DATABASE migration_candidate')
     admin.execute('CREATE DATABASE migration_restore')
 setup=(ROOT/'tests/phase2/rls.sql').read_text().split('\\ir ')[0].replace('\\set ON_ERROR_STOP on','')
 # Roles already exist cluster-wide from the independent suite harness.
 setup='\n'.join(line for line in setup.splitlines() if not line.startswith('create role '))
-base='host=127.0.0.1 port=55438 dbname=migration_candidate'
+base=selected_target().dsn('migration_candidate')
 paths=migrations()
 with psycopg.connect(base,autocommit=True) as db:
     db.execute(setup,prepare=False)
@@ -51,7 +52,7 @@ with psycopg.connect(base,autocommit=True) as db:
         dump=Path(tmp)/'backup.dump';start=time.monotonic()
         subprocess.run([str(PG/'pg_dump'),base,'-Fc','-f',str(dump)],check=True)
         backup_seconds=time.monotonic()-start; start=time.monotonic()
-        target='host=127.0.0.1 port=55438 dbname=migration_restore'
+        target=selected_target().dsn('migration_restore')
         subprocess.run([str(PG/'pg_restore'),'-d',target,'--exit-on-error',str(dump)],check=True)
         restore_seconds=time.monotonic()-start
         with psycopg.connect(target,autocommit=True) as restored:
@@ -61,7 +62,7 @@ with psycopg.connect(base,autocommit=True) as db:
         print(json.dumps({'status':'PASS','execution':'disposable PostgreSQL only','hostedMigrations':len(paths),'backupBytes':dump.stat().st_size,'backupSeconds':round(backup_seconds,3),'restoreSeconds':round(restore_seconds,3),'RPO':'0 for quiescent synthetic snapshot','productionRPO':'NOT_RUN','objectStorageRestore':'NOT_RUN'}))
 # Fresh install from no PostRiff schema is independently exercised too.
 with psycopg.connect(DSN,autocommit=True) as admin:admin.execute('CREATE DATABASE migration_fresh')
-with psycopg.connect('host=127.0.0.1 port=55438 dbname=migration_fresh',autocommit=True) as fresh:
+with psycopg.connect(selected_target().dsn('migration_fresh'),autocommit=True) as fresh:
     fresh.execute(setup,prepare=False)
     assert all(r['status']=='PENDING' for r in apply(fresh))
     assert all(r['status']=='APPLIED' for r in plan(fresh))

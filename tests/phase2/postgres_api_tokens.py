@@ -1,4 +1,5 @@
 """Real local PostgreSQL token lifecycle and HTTP permission boundaries; no external calls."""
+from local_pg_target import selected_target
 import io
 import json
 import sys
@@ -12,7 +13,7 @@ from postriff_phase2.hosted_app import HostedApplication
 ONE='00000000-0000-0000-0000-000000000001'
 clock=[time.time()]
 fresh=[clock[0]]
-def connection():return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres',client_encoding='utf8')
+def connection():return psycopg.connect(selected_target().dsn(),client_encoding='utf8')
 def verify(raw):
     if raw != 'fixture-one':raise AlphaError('Verified session required',401)
     return ONE

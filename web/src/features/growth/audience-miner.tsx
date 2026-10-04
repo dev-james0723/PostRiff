@@ -10,9 +10,13 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useGrowthCatalog } from './shared';
 import { EmptyGrowth, useGrowthAction } from './studio-parts';
 import type { AudienceCluster } from '@/lib/growth/types';
+import { useUsage } from '@/lib/api/hooks';
+import { growthAvailability } from './availability';
 
 export function AudienceMiner() {
   const catalog = useGrowthCatalog();
+  const usage = useUsage();
+  const availability = growthAvailability(usage.data, 'audience');
   const { api, workspaceId } = useWorkspaceApi();
   const query = useQuery({ queryKey: ['growth-audience', workspaceId], queryFn: () => api.audienceInsights(workspaceId), enabled: catalog.data?.audienceMiner === true, retry: false });
   const access = useWorkspaceAccess();
@@ -25,6 +29,7 @@ export function AudienceMiner() {
   const request = useRef<string | null>(null);
   if (!catalog.data?.audienceMiner) return <EmptyGrowth title='Audience Miner is not enabled here yet.'><p>Your inbox still works as usual.</p></EmptyGrowth>;
   async function analyze() {
+    if (!availability.available || busy) { setError(availability.detail); return; }
     setBusy(true); setError(''); request.current ??= crypto.randomUUID();
     try {
       const result = await api.analyzeAudience(workspaceId, { days, confirmed, requestKey: request.current });
@@ -41,8 +46,9 @@ export function AudienceMiner() {
     {query.isPending && <p className='growth-loading' role='status'>Looking for eligible conversations…</p>}
     {query.isError && <p role='alert' className='growth-error'>Comments could not be loaded. <Button variant='quiet' onClick={() => void query.refetch()}>Try again</Button></p>}
     {query.data && <>
-      <div className='growth-audience-controls'><label>Look back<select aria-label='Audience window' value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value)); request.current = null; setConfirmed(false); }}>{[7,14,30].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></label><p>Up to {query.data.maximumPerRun} comments per analysis.<br />Two analyses per workspace each day.</p></div>
-      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label='Analyze these eligible comments with the allowed AI models within my daily allowance.' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Analyze these eligible comments with the allowed AI models within my daily allowance.</label><Button className='growth-primary' disabled={busy || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button></>}
+      <div className='growth-audience-controls'><label>Look back<select aria-label='Audience window' value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value)); request.current = null; setConfirmed(false); }}>{[7,14,30].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></label><p>Up to {query.data.maximumPerRun} comments per analysis.{usage.data?.billingMode === 'legacy_allowances' && <><br />Two analyses per workspace each day.</>}</p></div>
+      {checkAccess(access, { permission: 'edit' }) && <><label className='growth-check'><input type='checkbox' aria-label='Analyze these eligible comments with the allowed AI models.' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Analyze these eligible comments with the allowed AI models.</label><Button className='growth-primary' disabled={!availability.available || busy || !confirmed || !query.data.audienceConsent || !query.data.eligibleComments} onClick={() => void analyze()}>{busy ? 'Finding the useful threads…' : 'Find audience insights'}<IconArrowUpRight size={17} aria-hidden /></Button></>}
+      {!availability.available && <p role='status' className='growth-footnote'>{availability.detail}</p>}
       {!query.data.audienceConsent && <p className='growth-footnote'>The owner must allow comment analysis in AI permissions above.</p>}
       <p className='growth-footnote'>{query.data.coverage}</p>
       {summary && <p role='status' className='growth-success'>{summary}</p>}

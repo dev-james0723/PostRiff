@@ -8,6 +8,7 @@ write them or see the AI usage ledger.
 
     POSTRIFF_PG_BIN=... python scripts/postriff_pg_suite.py postgres_growth_metric_reads
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -21,7 +22,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.growth import metric_schedule as M
 from postriff_phase2.growth.usage import PostgresUsageSink, UsageEvent
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000002"
 CONN = "conn-threads-1"

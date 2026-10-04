@@ -1,10 +1,11 @@
 """Read-only server aggregates use durable state; expose no identifiers or content."""
+from local_pg_target import selected_target
 import json
 import time
 import psycopg
 from postriff_phase2.operational_signals import snapshot
 
-def connection():return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres')
+def connection():return psycopg.connect(selected_target().dsn())
 now=time.time()
 with connection() as db:
     wid=db.execute('SELECT id FROM public.pr_workspaces LIMIT 1').fetchone()[0]

@@ -1,6 +1,7 @@
 """Milestone C on disposable PostgreSQL: OAuth start→complete with PKCE, encrypted custody,
 capability rows, scope drift, replay/expiry/cross-member, refresh, disconnect, tenancy, account pictures.
 """
+from local_pg_target import selected_target
 import io
 import json
 import sys
@@ -15,7 +16,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
 from PIL import Image
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 SIX = "00000000-0000-0000-0000-000000000006"
 clock = [time.time()]

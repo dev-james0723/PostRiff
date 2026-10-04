@@ -2,8 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalLayout } from '@/components/marketing/legal-layout';
 import { GOVERNING_LAW, LEGAL_CONTACT_EMAIL } from '@/config/legal';
-import { TRIAL } from '@/config/plans';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
+
+/** Section 6 follows the catalog the site sells from: the trial today, Free and Creator under Pricing v2. */
+const BILLING = marketingCopy(PRICING_CATALOG).terms;
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
@@ -17,7 +21,7 @@ const sections = [
   { id: 'use', title: 'Acceptable use' },
   { id: 'content', title: 'Your content and AI output' },
   { id: 'platforms', title: 'Third-party platforms' },
-  { id: 'billing', title: 'Trial, subscriptions and billing' },
+  { id: 'billing', title: BILLING.title },
   { id: 'ip', title: 'Intellectual property' },
   { id: 'disclaimers', title: 'Disclaimers' },
   { id: 'liability', title: 'Limitation of liability' },
@@ -61,10 +65,8 @@ export default function TermsPage() {
         Connecting a platform account is your own authorisation to that platform, subject to its terms. Platforms change their APIs and review status; where a platform has not yet approved Rafii for direct publishing, the capability is shown as Assisted (export only) and we will not represent it as more than that. We are not responsible for a platform suspending, rate-limiting or removing content.
       </p>
 
-      <h2 id='billing'>6. Trial, subscriptions and billing</h2>
-      <p>
-        New workspaces get a {TRIAL.days}-day trial with {TRIAL.connectedAccounts} connected accounts and {TRIAL.writingBatches} writing batches. No payment method is required and the trial never converts into a paid plan automatically. Paid plans remain proposed until commercial approval and payment verification are complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Plan allowances stop when they are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, and your drafts stay readable and exportable afterwards. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.
-      </p>
+      <h2 id='billing'>6. {BILLING.title}</h2>
+      <p>{BILLING.paragraph}</p>
 
       <h2 id='ip'>7. Intellectual property</h2>
       <p>Rafii, its software, design and documentation are ours or our licensors’. We give you a limited, non-exclusive, non-transferable right to use the service while these terms apply. Feedback you send us may be used without obligation.</p>

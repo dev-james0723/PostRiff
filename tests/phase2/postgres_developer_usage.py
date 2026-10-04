@@ -1,4 +1,5 @@
 """Local synthetic DB only: account quota exemption, isolation, revocation and accounting."""
+from local_pg_target import selected_target
 import json
 import os
 import sys
@@ -26,7 +27,7 @@ def denied(call, text):
     raise AssertionError('Expected denial: ' + text)
 
 
-with psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres') as db:
+with psycopg.connect(selected_target().dsn()) as db:
     db.execute((Path(__file__).resolve().parents[2] / 'migrations/postriff/020_credit_quotes.sql').read_text())
     cur = db.cursor()
     cur.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s', (DEV,))

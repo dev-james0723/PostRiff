@@ -7,6 +7,7 @@ failed reading falls back to the deterministic one.
 
 Run through scripts/postriff_disposable_postgres.py (PYTHONPATH=src:tests).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -21,7 +22,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.learning_model import ModelResponse
 from consumer_fixtures import approve_budgets
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TOKEN = "fixture-one"
 HK = "Asia/Hong_Kong"

@@ -2,11 +2,12 @@
 pr_notifications table exist after 001–008, the dedupe key is unique, and the browser role
 can neither read nor write notification rows.
 """
+from local_pg_target import selected_target
 import json
 
 import psycopg
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 checks = []
 

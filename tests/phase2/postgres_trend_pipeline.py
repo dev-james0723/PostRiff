@@ -4,6 +4,7 @@ The runner applies rls.sql/035 first; this wrapper applies040 when absent and ru
 real300-source ingestion, crash/retry, sealed verification and deletion/purge tests.
 All content is synthetic. No provider/model/network client is used.
 """
+from local_pg_target import selected_target
 from pathlib import Path
 import sys
 import unittest
@@ -15,6 +16,7 @@ from test_trend_pipeline import dedicated_test_dsn
 
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     dsn=dedicated_test_dsn()
     with psycopg.connect(dsn) as db:
         if not db.execute("SELECT to_regclass('public.pr_workspaces')").fetchone()[0]:

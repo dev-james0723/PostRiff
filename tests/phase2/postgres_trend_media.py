@@ -1,4 +1,5 @@
 """Portable040-only durable local media acceptance (no003, no live services)."""
+from local_pg_target import selected_target
 from pathlib import Path
 import sys
 import unittest
@@ -6,6 +7,7 @@ import unittest
 ROOT=Path(__file__).resolve().parents[2]
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     previous=list(sys.path)
     try:
         sys.path[:0]=[str(ROOT/'src'),str(ROOT/'tests')]

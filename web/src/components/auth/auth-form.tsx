@@ -11,18 +11,13 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { safeNext, verifyHref } from '@/lib/auth/navigation';
-import { plans } from '@/config/plans';
+import type { SignUpCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { passkeysSupported } from '@/lib/auth/mfa';
 import { passkeySignInEnabled, signInWithPasskey } from '@/lib/auth/passkeys';
 import { devSignIn, useAuth } from '@/lib/auth/session';
-import { rememberPlan, selectedPlan, type TrialPlan } from '@/lib/workspace/provider';
+import { rememberPlan, type TrialPlan } from '@/lib/workspace/provider';
 import { rafiiInput } from './form-styles';
-
-const TRIAL_PLANS: { id: TrialPlan; label: string; note: string }[] = [
-  { id: 'studio', label: 'Studio', note: 'Manual drafting and scheduling' },
-  { id: 'assist', label: 'Studio Assist', note: 'Adds AI writing batches' }
-];
 
 /** The one central surface every auth page uses (DNA §21.16): glass over the ambient canvas. */
 export function AuthSurface({ children }: { children: React.ReactNode }) {
@@ -35,14 +30,19 @@ export function AuthSurface({ children }: { children: React.ReactNode }) {
 
 const linkClass = 'rafii-focus text-foreground rounded-sm underline underline-offset-4';
 
-export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
+/**
+ * Public signup starts free, with no trial or paid plan chooser. The optional copy is
+ * passed by the signup page; the actual workspace plan remains a server decision.
+ */
+export function AuthForm({ intent, signUp }: { intent: 'sign-in' | 'sign-up'; signUp?: SignUpCopy }) {
   const auth = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get('next'));
   const callbackError = params.get('error');
 
-  const [plan, setPlan] = useState<TrialPlan>('studio');
+  const freeSignup = intent === 'sign-up';
+  const [plan, setPlan] = useState<TrialPlan>(freeSignup ? 'free' : 'studio');
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -50,9 +50,14 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   const [error, setError] = useState<string | null>(callbackError ? 'Couldn’t sign you in. Try again.' : null);
 
   useEffect(() => {
-    const fromUrl = params.get('plan');
-    setPlan(fromUrl === 'assist' ? 'assist' : fromUrl === 'studio' ? 'studio' : selectedPlan());
-  }, [params]);
+    if (intent !== 'sign-up') return;
+    setPlan('free');
+  }, [intent]);
+
+  // A signup hint is transport data; the server decides the workspace's actual plan.
+  function rememberSignupPlan() {
+    if (intent === 'sign-up') rememberPlan(freeSignup ? 'free' : plan);
+  }
 
   useEffect(() => {
     if (auth.status === 'signed-in') router.replace(next);
@@ -72,7 +77,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   }
 
   async function google() {
-    rememberPlan(plan);
+    rememberSignupPlan();
     const { createClient } = await import('@/lib/supabase/client');
     const { error: oauthError } = await createClient().auth.signInWithOAuth({
       provider: 'google',
@@ -91,7 +96,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   const offerPasskey = intent === 'sign-in' && passkeySignInEnabled() && passkeysSupported();
 
   async function sendCode() {
-    rememberPlan(plan);
+    rememberSignupPlan();
     const { createClient } = await import('@/lib/supabase/client');
     const { error: otpError } = await createClient().auth.signInWithOtp({
       email: email.trim(),
@@ -114,7 +119,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   }
 
   const title = intent === 'sign-up' ? 'Create your Rafii workspace' : 'Sign in to Rafii';
-  const subtitle = intent === 'sign-up' ? '14-day free trial. No card needed.' : undefined;
+  const subtitle = intent === 'sign-up' ? signUp?.subtitle : undefined;
 
   if (auth.status === 'loading') {
     return (
@@ -142,35 +147,41 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     );
   }
 
-  const PlanChooser = intent === 'sign-up' && !next.startsWith('/invite/') && (
+  const signingUp = intent === 'sign-up' && !next.startsWith('/invite/');
+  const chooser = signingUp && !freeSignup && signUp?.showPlanChooser ? signUp.chooser : null;
+  const promise = signingUp ? (signUp?.promise ?? null) : null;
+  const PlanChooser = chooser ? (
     <fieldset className='flex flex-col gap-2'>
-      <legend className='text-foreground mb-2 text-sm font-medium'>Trial plan</legend>
+      <legend className='text-foreground mb-2 text-sm font-medium'>{chooser.legend}</legend>
       <RadioGroup value={plan} onValueChange={(value) => setPlan(value === 'assist' ? 'assist' : 'studio')}>
-        {TRIAL_PLANS.map((option) => {
-          const priced = plans.find((p) => p.id === option.id);
-          return (
-            <Label
-              key={option.id}
-              htmlFor={`plan-${option.id}`}
-              className='rafii-quiet has-data-checked:rafii-glass-selected flex min-h-14 cursor-pointer items-center gap-3 rounded-[var(--rafii-radius-control)] px-3.5 py-3 transition-colors'
-            >
-              <RadioGroupItem id={`plan-${option.id}`} value={option.id} />
-              <span className='flex flex-1 flex-col gap-0.5'>
-                <span className='text-sm font-medium'>{option.label}</span>
-                <span className='text-muted-foreground text-xs font-normal'>{option.note}</span>
-              </span>
-              {priced && (
-                <span className='text-muted-foreground text-xs font-normal tabular-nums'>
-                  ${priced.priceCents / 100}/mo after trial
-                </span>
-              )}
-            </Label>
-          );
-        })}
+        {chooser.options.map((option) => (
+          <Label
+            key={option.id}
+            htmlFor={`plan-${option.id}`}
+            className='rafii-quiet has-data-checked:rafii-glass-selected flex min-h-14 cursor-pointer items-center gap-3 rounded-[var(--rafii-radius-control)] px-3.5 py-3 transition-colors'
+          >
+            <RadioGroupItem id={`plan-${option.id}`} value={option.id} />
+            <span className='flex flex-1 flex-col gap-0.5'>
+              <span className='text-sm font-medium'>{option.label}</span>
+              <span className='text-muted-foreground text-xs font-normal'>{option.note}</span>
+            </span>
+            {option.price && <span className='text-muted-foreground text-xs font-normal tabular-nums'>{option.price}</span>}
+          </Label>
+        ))}
       </RadioGroup>
-      <p className='text-muted-foreground text-xs leading-relaxed'>No charge during the trial. You’re only billed if you choose a paid plan.</p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>{chooser.note}</p>
     </fieldset>
-  );
+  ) : promise ? (
+    // Pricing v2: every workspace starts on Free, so there is nothing to choose before signing up.
+    <ul aria-label='What starting free means' className='text-muted-foreground flex flex-col gap-1.5 text-sm leading-relaxed'>
+      {promise.map((line) => (
+        <li key={line} className='flex items-start gap-2'>
+          <Icons.check className='text-foreground mt-0.5 size-4 shrink-0' aria-hidden />
+          <span>{line}</span>
+        </li>
+      ))}
+    </ul>
+  ) : null;
 
   if (auth.mode === 'dev') {
     return (
@@ -183,7 +194,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
             size='control'
             disabled={busy}
             onClick={() => {
-              rememberPlan(plan);
+              rememberSignupPlan();
               devSignIn();
               router.replace(next);
             }}
@@ -195,7 +206,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
             size='control'
             disabled={busy}
             onClick={() => {
-              rememberPlan(plan);
+              rememberSignupPlan();
               devSignIn(true);
               router.replace(next);
             }}
@@ -317,7 +328,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
             <>
               New to Rafii?{' '}
               <Link href={`${siteConfig.links.signUp}?next=${encodeURIComponent(next)}`} className={linkClass}>
-                Start a free trial
+                {signUp?.switchLabel ?? 'Create an account'}
               </Link>
             </>
           )}
