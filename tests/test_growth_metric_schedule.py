@@ -90,15 +90,17 @@ class Read(unittest.TestCase):
                 self.assertEqual(calls, [])
 
     def test_provider_attempt_signals_do_not_report_unknown_cost_as_zero(self):
-        s = self.scheduler({"status": 429, "body": {}})
-        s.claim = lambda limit: [dict(self.ROW, id="r", attempts=1, maxAttempts=5)]
-        s.complete = lambda row, outcome: True
-        with self.assertLogs("postriff.growth.metric_reads", "INFO") as logs:
-            result = s.tick()
-        self.assertEqual((result["providerReads"], result["providerErrors"], result["retry"], result["costUnknownReads"]), (1, 1, 1, 1))
-        self.assertIn('"costUsd": null', logs.output[-1])
-        self.assertNotIn("access_token", logs.output[-1])
-        self.assertNotIn("synthetic-token", logs.output[-1])
+        for reply, state in (({"status": 429, "body": {}}, "retry"), (AlphaError("native rejection", 404), "unavailable")):
+            with self.subTest(reply=reply):
+                s = self.scheduler(reply)
+                s.claim = lambda limit: [dict(self.ROW, id="r", attempts=1, maxAttempts=5)]
+                s.complete = lambda row, outcome: True
+                with self.assertLogs("postriff.growth.metric_reads", "INFO") as logs:
+                    result = s.tick()
+                self.assertEqual((result["providerReads"], result["providerErrors"], result[state], result["costUnknownReads"]), (1, 1, 1, 1))
+                self.assertIn('"costUsd": null', logs.output[-1])
+                self.assertNotIn("access_token", logs.output[-1])
+                self.assertNotIn("synthetic-token", logs.output[-1])
 
     def test_classification(self):
         cases = [({"status": 200, "body": {"data": []}}, None, "done"),

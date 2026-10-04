@@ -276,8 +276,9 @@ class MetricScheduler:
             fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
         except AlphaError as error:
             status = getattr(error, "status", None)
-            if status in (404, 409):            # credential revoked or connection gone
-                return {"state": "unavailable", "failure": "credential", "http": None}
+            if status in (404, 409):            # revoked grant, or an attempted native request rejected by the transport
+                return {"state": "unavailable", "failure": f"http_{status}" if requested else "credential",
+                        "http": status if requested else None, "providerRead": requested}
             return {"state": "transient", "failure": "transport", "http": None, "providerRead": requested}
         except Exception as error:  # noqa: BLE001 - one bad row must not stop the step
             _note("metric_reads.read_failed", error)
