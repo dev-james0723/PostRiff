@@ -13,7 +13,7 @@ class FakeTelephonyProvider:
         self.outcome, self.secret, self.calls = outcome, secret, {}
         self.create_count, self.end_count = 0, 0
 
-    def create_outbound_call(self, *, number, call_id, max_seconds):
+    def create_outbound_call(self, *, number, call_id, max_seconds, detect_machine=True):
         self.create_count += 1
         # Deliberately do not retain the target number.
         ref = 'fake_' + call_id

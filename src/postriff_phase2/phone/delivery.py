@@ -65,8 +65,17 @@ def deliver(service, call_id):
     if blocker:
         service.finish(call_id, 'cancelled')
         return
+    bypass_amd = (
+        service._system_ref(value)
+        and str(service.config.values.get('JAMES_DAILY_CALL_ACCEPTANCE_BYPASS_AMD', '')).lower() in ('1','true','yes','on')
+    )
     try:
-        receipt = service.provider.create_outbound_call(number=number, call_id=call_id, max_seconds=value['max_seconds'])
+        receipt = service.provider.create_outbound_call(
+            number=number,
+            call_id=call_id,
+            max_seconds=value['max_seconds'],
+            detect_machine=not bypass_amd,
+        )
     except Exception:
         from .contracts import CallReceipt
         receipt = CallReceipt('ambiguous')

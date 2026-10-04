@@ -167,7 +167,7 @@ class DialProvider:
         duration = duration if type(duration) is int and 0 <= duration <= 86400 else None
         return CallReceipt(state(value), ref, duration)
 
-    def create_outbound_call(self, *, number, call_id, max_seconds):
+    def create_outbound_call(self, *, number, call_id, max_seconds, detect_machine=True):
         phone_number(number)
         ready = self.readiness()
         if not ready['ready']:

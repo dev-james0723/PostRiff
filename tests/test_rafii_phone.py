@@ -296,6 +296,24 @@ class PhoneTransportTest(unittest.TestCase):
         self.assertIn(('TimeLimit','600'),fields);self.assertIn(('Record','false'),fields)
         self.assertEqual([v for k,v in fields if k=='StatusCallbackEvent'],['initiated','ringing','answered','completed'])
 
+    def test_twilio_machine_detection_can_be_disabled_for_bounded_james_trial(self):
+        requests = []
+        def transport(method, url, fields=None):
+            requests.append((method, fields))
+            return 201, {'sid':'CA'+'c'*32, 'status':'queued'}
+        p = self.twilio(transport)
+        self.assertEqual(
+            p.create_outbound_call(number='+14155550111', call_id='one', max_seconds=180, detect_machine=False).state,
+            'ringing',
+        )
+        self.assertNotIn(('MachineDetection','Enable'), requests[0][1])
+        requests.clear()
+        self.assertEqual(
+            p.create_outbound_call(number='+14155550111', call_id='two', max_seconds=180).state,
+            'ringing',
+        )
+        self.assertIn(('MachineDetection','Enable'), requests[0][1])
+
     def test_twilio_ambiguous_create_never_retries(self):
         for status in (0,408,500,201):
             calls=[]

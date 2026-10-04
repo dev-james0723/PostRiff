@@ -34,11 +34,15 @@ def answer(service, call_id, url, parameters, signature):
     if (parameters.get('AccountSid') or [''])[0] != provider.account or not re.fullmatch(r'CA[0-9a-fA-F]{32}',ref):
         raise AlphaError('Invalid provider call identity.',403)
     answered_by = (parameters.get('AnsweredBy') or ['unknown'])[0]
-    voicemail = answered_by != 'human'
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         value = store.call(cur, call_id, lock=True)
         if not value or value['provider'] != provider.name or (value['provider_call_ref'] and value['provider_call_ref'] != ref):
             raise AlphaError('Call unavailable.', 404)
+        bypass_amd = (
+            value.get('destination_ref') == 'james_env'
+            and str(service.config.values.get('JAMES_DAILY_CALL_ACCEPTANCE_BYPASS_AMD', '')).lower() in ('1','true','yes','on')
+        )
+        voicemail = False if bypass_amd else answered_by != 'human'
         cur.execute('UPDATE public.pr_phone_calls SET provider_call_ref=coalesce(provider_call_ref,%s) WHERE id=%s', (ref, call_id))
         if value['state'] in contracts.TERMINAL or value['state'] == 'ending' or not service.config.enabled('RAFII_PHONE_ENABLED'):
             return provider.answer_xml(call_id, voicemail=True)

@@ -78,11 +78,13 @@ class TwilioProvider:
     def _calls(self, suffix=''):
         return 'https://api.twilio.com/2010-04-01/Accounts/' + self.account + '/Calls' + suffix + '.json'
 
-    def create_outbound_call(self, *, number, call_id, max_seconds):
+    def create_outbound_call(self, *, number, call_id, max_seconds, detect_machine=True):
         phone_number(number)
         fields = [('To', number), ('From', phone_number(self.originating_number)), ('Url', self.base_url + '/api/phone/answer/' + call_id),
                   ('Method','POST'), ('StatusCallback',self.base_url + '/api/phone/webhooks/' + call_id), ('StatusCallbackMethod','POST'),
-                  ('Timeout','25'), ('TimeLimit',str(min(600,max_seconds))), ('MachineDetection','Enable'), ('Record','false')]
+                  ('Timeout','25'), ('TimeLimit',str(min(600,max_seconds))), ('Record','false')]
+        if detect_machine:
+            fields.append(('MachineDetection','Enable'))
         fields += [('StatusCallbackEvent', event) for event in ('initiated','ringing','answered','completed')]
         status, result = self.transport('POST', self._calls(), fields)
         if status == 201 and re.fullmatch(r'CA[0-9a-fA-F]{32}', str(result.get('sid',''))):
