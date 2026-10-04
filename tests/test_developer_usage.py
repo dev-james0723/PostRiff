@@ -32,11 +32,19 @@ class DeveloperUsageTests(unittest.TestCase):
             self.assertFalse(ai_usage_exempt(actor))
 
         cur = Mock()
-        cur.fetchall.return_value = [(DEV,)]
+        cur.fetchall.side_effect = [[(DEV,)]]
         self.assertTrue(workspace_plan_exempt(cur, 'workspace'))
-        cur.execute.assert_called_once()
-        cur.fetchall.return_value = [(OTHER,)]
-        self.assertFalse(workspace_plan_exempt(cur, 'workspace'))
+
+        # Without an env allowlist, the server-created Founder Ops tenant is sufficient authority.
+        cur = Mock()
+        cur.fetchall.side_effect = [[(DEV,)], [('founder-ops-workspace',)]]
+        with patch.dict(os.environ, {'RAFII_FOUNDER_UNLIMITED_USER_IDS': ''}):
+            self.assertTrue(workspace_plan_exempt(cur, 'workspace'))
+
+        cur = Mock()
+        cur.fetchall.side_effect = [[(OTHER,)], []]
+        with patch.dict(os.environ, {'RAFII_FOUNDER_UNLIMITED_USER_IDS': ''}):
+            self.assertFalse(workspace_plan_exempt(cur, 'workspace'))
 
     def test_invalid_founder_allowlist_fails_closed(self):
         for configured in ('', '*', 'jamesau0723@gmail.com', DEV + ',invalid'):
