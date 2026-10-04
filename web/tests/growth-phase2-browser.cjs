@@ -3,13 +3,14 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
 const {randomUUID}=require('node:crypto');const {execFileSync}=require('node:child_process');
 const base='http://127.0.0.1:3296',principal=randomUUID(),root=path.resolve(__dirname,'../..');
-const out=path.join(root,'docs/design/growth-phase2/evidence');fs.mkdirSync(out,{recursive:true});
+const python=process.env.POSTRIFF_TEST_PYTHON || 'python3';
+const out=process.env.POSTRIFF_GROWTH_EVIDENCE_DIR || path.join(root,'docs/design/growth-phase2/evidence');fs.mkdirSync(out,{recursive:true});
 const headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base};
 async function api(method,url,body){const r=await fetch(base+url,{method,headers,...(body?{body:JSON.stringify(body)}:{})});assert.ok(r.ok,`${url}: ${r.status} ${await r.clone().text()}`);return r.json()}
 (async()=>{
 assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');
 const {workspaceId:wid}=await api('POST','/api/auth/verify',{plan:'studio'});
-execFileSync('/tmp/rafii-phase1-env/bin/python',['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid],{cwd:root});
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid],{cwd:root});
 const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
 const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
 await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
@@ -26,6 +27,14 @@ const v=await page.evaluate(async()=> (await window.axe.run('.growth-studio',{re
 assert.deepEqual(v,[],name+' accessibility');}
 try{
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded',timeout:120000});
+await page.getByRole('button',{name:'1h',exact:true}).click();
+await page.getByRole('heading',{name:'Post readings are not enabled.',exact:true}).waitFor();
+assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
+await page.getByRole('button',{name:'7d',exact:true}).click();
+await page.getByRole('heading',{name:'Post readings are not enabled.',exact:true}).waitFor();
+await page.getByRole('button',{name:'24h',exact:true}).click();
+await page.getByRole('heading',{name:'The reading is in. Find the useful part.',exact:true}).waitFor();
+checks.push('disabled collection is unavailable rather than pending; retained observed readings remain inspectable');
 await page.getByText('AI permissions & daily allowances').click();
 await page.getByRole('checkbox',{name:'Allow comment analysis'}).check();
 await page.getByRole('checkbox',{name:'Allow growth AI models'}).check();
@@ -62,6 +71,16 @@ await page.evaluate(()=>document.documentElement.classList.remove('dark'));
 await page.goto(base+'/app/workspace/brand',{waitUntil:'domcontentloaded'});await page.getByLabel('Creator Genome',{exact:true}).waitFor();await shot('genome-desktop');
 await page.goto(base+'/app',{waitUntil:'domcontentloaded'});await page.locator('.growth-entry').waitFor();await shot('home-desktop');
 checks.push('shared visual system and Growth Studio entry on Home and Genome');
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid,'empty'],{cwd:root});
+await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
+await page.getByRole('heading',{name:'Native post analytics are unavailable.',exact:true}).waitFor();
+assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
+assert.equal(await page.getByRole('link',{name:'Connect analytics'}).getAttribute('href'),'/app/channels');
+await page.setViewportSize({width:390,height:844});await audit('mobile native analytics unavailable');await shot('native-analytics-unavailable-mobile');
+await page.getByRole('link',{name:'Connect analytics'}).click();
+await page.waitForURL(base+'/app/channels');
+await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();
+checks.push('missing native connection is explicit on mobile and the connection link opens the Accounts flow');
 assert.deepEqual(errors,[]);
 fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'PASS',execution:'zero-network deterministic fixtures, disposable database',checks,realModelCalls:0,consoleErrors:errors},null,2));
 console.log(JSON.stringify({status:'PASS',checks}));

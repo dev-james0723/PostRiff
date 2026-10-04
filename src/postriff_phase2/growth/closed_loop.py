@@ -15,6 +15,8 @@ from . import audience_miner as miner, creator_calibration as calibration, perfo
 from .decision_loop import DecisionLoop
 from .judgments import JudgmentService, subject_hash
 from .usage import MemoryUsageSink
+from .metric_schedule import enabled as metric_reads_enabled
+from .trends.beta import tracking
 
 SUMMARY_MODEL='anthropic/claude-haiku-4.5'
 SUMMARY_ROUTE='cloud:vercel-ai-gateway:'+SUMMARY_MODEL
@@ -58,13 +60,25 @@ class ClosedLoop:
         self.g.session(token);self.g.gate('postmortem')
         with self.repository.transaction(token,wid) as (cur,row,_):
             jobs,posts,predictions=self._observations(cur,wid,row[1])
+            enabled=metric_reads_enabled(self.g.env)
+            tracked=tracking(cur,wid,{'phase2':{**row[1].get('phase2',{}),'jobs':jobs}},self.g.clock(),enabled=enabled,limit=300)
+            windows={p['job_id']:{h['window']:h for h in p['horizons']} for p in tracked['posts']}
+            cur.execute("SELECT connection_id FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='analytics' AND level='Direct'",(wid,))
+            direct={r[0] for r in cur.fetchall()}
+            connected={c['id'] for c in row[1].get('phase2',{}).get('channels',[]) if not c.get('revoked') and c.get('platform') in ('Threads','Instagram')}
             entries=[]
             for job in jobs:
                 p=next(p for p in posts if p['id']==job['id'])
+                readings=[]
+                for h in performance.HORIZONS:
+                    available=any(performance.available(r) for r in p.get('readings',{}).get(h,{}).values())
+                    measured=windows.get(job['id'],{}).get(h,{})
+                    readings.append({'horizon':h,'available':available,'state':'measured' if available else measured.get('state','unavailable'),
+                                     'dueAt':measured.get('due_at'),'reason':measured.get('reason')})
                 entries.append({'jobId':job['id'],'title':job['manifest'].get('payload',{}).get('text','')[:120],
                                 'platform':p['platform'],'at':job['verification'].get('at'),
                                 'hasPrediction':job['id'] in predictions,
-                                'windows':[{ 'horizon':h,'available':any(performance.available(r) for r in p.get('readings',{}).get(h,{}).values())} for h in performance.HORIZONS]})
+                                'windows':readings})
             cur.execute('SELECT id::text,job_id,horizon,status,body FROM public.pr_postmortems WHERE workspace_id=%s AND expires_at>now() ORDER BY created_at DESC LIMIT 30',(wid,))
             reports=[]
             for mid,jid,h,status,body in cur.fetchall():
@@ -73,6 +87,7 @@ class ClosedLoop:
                 reports.append({**body,'id':mid,'status':status if fresh else 'stale'})
             return {'posts':entries,'reports':reports,'calibration':self._calibrations(cur,wid,row[1],posts,predictions),
                     'coverage':{'maximumPosts':300,'loadedPosts':len(jobs)},
+                    'measurement':{'enabled':enabled,'analyticsConnections':len(connected & direct)},
                     'notice':'Readings keep their native metric and time window. No report changes your Genome automatically.'}
 
     def report(self,wid,token,body):

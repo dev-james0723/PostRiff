@@ -1,5 +1,5 @@
 """Real service + disposable PostgreSQL. No real credentials, AI or publishing."""
-import sys,json,time,uuid
+import sys,json,time,uuid,os
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 sys.path[:0]=[str(ROOT/'src'),str(ROOT/'tests')]
@@ -10,7 +10,7 @@ from postriff_phase2.growth.service import GrowthService,ROUTES,current_genome
 from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE
 from growth_phase2_fixtures import Models,Writer,ENV,seed
 ONE='00000000-0000-0000-0000-000000000001';TWO='00000000-0000-0000-0000-000000000002'
-def connection():return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres')
+def connection():return psycopg.connect(os.environ.get('POSTRIFF_TEST_DSN','host=127.0.0.1 port=55438 dbname=postgres'))
 def verify(token):
     if token in ('one','two'):return ONE if token=='one' else TWO
     raise AlphaError('Verified session required.',401)
@@ -35,6 +35,37 @@ refused(404,lambda:GrowthService(host,env={}).closed_loop.overview(wid,'one'))
 refused(403,lambda:c.overview(foreign,'one'))
 refused(403,lambda:c.overview(wid,'prt_invalid'))
 assert c.overview(wid,'one')['posts'] and not models.calls
+initial=c.overview(wid,'one')
+assert initial['measurement']=={'enabled':False,'analyticsConnections':1}
+def window(h):
+    post=next(p for p in c.overview(wid,'one')['posts'] if p['jobId']==job)
+    return next(w for w in post['windows'] if w['horizon']==h)
+assert window('1h')['state']=='disabled' and not window('1h')['available']
+assert window('24h')['state']=='measured' and window('24h')['available']
+from postriff_phase2.growth.metric_schedule import schedule
+verified=next(j for j in saved()['state']['phase2']['jobs'] if j['id']==job)
+g.env['POSTRIFF_METRIC_READS']='1'
+with connection() as db,db.cursor() as cur:
+    schedule(cur,wid,verified['manifest']['channelId'],'threads',verified['providerReference'],job,verified['verification']['at'],'verification')
+assert window('1h')['state']=='scheduled' and window('7d')['state']=='pending_horizon'
+assert window('7d')['dueAt']>clock[0]
+with connection() as db:
+    db.execute("UPDATE public.pr_metric_reads SET status='dead',failure_class='retry_exhausted' WHERE workspace_id=%s AND job_id=%s AND read_offset='1h'",(wid,job))
+assert window('1h')['state']=='unavailable' and window('1h')['reason']=='retry_exhausted'
+with connection() as db:
+    db.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND job_id=%s AND read_offset='1h'",(wid,job))
+assert window('1h')['state']=='unscheduled'
+with connection() as db:
+    db.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported' WHERE workspace_id=%s AND capability='analytics'",(wid,))
+assert c.overview(wid,'one')['measurement']['analyticsConnections']==0
+assert window('7d')['state']=='rights_unavailable'
+with connection() as db:
+    db.execute("UPDATE public.pr_channel_capabilities SET level='Direct' WHERE workspace_id=%s AND capability='analytics'",(wid,))
+    db.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND job_id=%s AND read_offset='7d'",(wid,job))
+assert window('7d')['state']=='unscheduled' and window('7d')['dueAt']>clock[0]
+g.env.pop('POSTRIFF_METRIC_READS')
+assert not models.calls
+checks.append('real SQL reading states distinguish measured, disabled, scheduled, future horizon, exhausted, unscheduled and revoked rights without dispatch')
 refused(403,lambda:c.report(wid,'one',body(jobId=job,horizon='24h')))
 consent(False)
 refused(403,lambda:c.mine(wid,'one',body(days=14)))
