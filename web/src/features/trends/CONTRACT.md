@@ -38,7 +38,7 @@ POST `/opportunities/{id}/dismiss` uses strict dismissOpportunityInputSchema: re
 
 ## Growth Beta status and comparable feedback
 
-Authenticated coworker `/status` adds `trend_beta` (canonical `trendBetaStatusSchema`). Radar requires the intelligence, Radar and trust flags plus explicit workspace admission. Missing or malformed status fails closed. `stored_radar` is not live-source qualification: acquisition is `none` or `unverified`, never inferred from an enabled provider flag. GET never queues acquisition.
+Authenticated coworker `/status` adds `trend_beta` (canonical `trendBetaStatusSchema`). Radar requires the intelligence, Radar and trust flags plus explicit workspace admission. Missing or malformed status fails closed. Acquisition is `none` when the operation is off, `unverified` while admitted without a recent successful batch, `active` only after a recent durable workspace-local collection receipt, and `degraded` for a revoked, expired, paused or unhealthy source. GET reads source health and receipts only; it never queues acquisition. A recent sample does not claim platform-wide coverage.
 
 Existing Performance adds `post_tracking` (`postTrackingSchema`), bounded to 120 verified jobs and their t0/1h/24h/7d schedules. It checks exact workspace/job/provider/account/native-post identity and current Direct analytics capability. Disabled, unscheduled, pending horizon, scheduled, pending, unavailable, unsupported provider, disconnected account and unavailable rights are separate from measured native data; zero remains a valid observed value. Reads neither schedule nor fetch metrics.
 

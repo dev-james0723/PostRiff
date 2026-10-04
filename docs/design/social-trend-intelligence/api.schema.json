@@ -7038,7 +7038,9 @@
           "type": "string",
           "enum": [
             "none",
-            "unverified"
+            "unverified",
+            "active",
+            "degraded"
           ]
         },
         "metric_reads_enabled": {
