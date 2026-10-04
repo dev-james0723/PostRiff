@@ -1,4 +1,5 @@
 """Synthetic PostgreSQL workflow acceptance; no provider or customer traffic."""
+import os
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,7 @@ from rafii_control import founder_support
 from rafii_control.auth import ControlError
 
 
+@unittest.skipUnless(os.environ.get('RAFII_CONTROL_TEST_DSN'), 'disposable control PostgreSQL DSN required')
 class SupportWorkflowTests(unittest.TestCase):
     setUp = support_baseline.SupportRefundPostgresTests.setUp
     tearDown = support_baseline.SupportRefundPostgresTests.tearDown
