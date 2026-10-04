@@ -1,0 +1,75 @@
+name: Growth Studio browser acceptance
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: growth-studio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  growth-studio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      POSTRIFF_DEV_WEB_ORIGIN: http://127.0.0.1:3296
+      POSTRIFF_API_ORIGIN: http://127.0.0.1:4396
+      POSTRIFF_DIST_DIR: .next-growth-acceptance
+      NEXT_PUBLIC_POSTRIFF_DEV_AUTH: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+      POSTRIFF_TEST_PYTHON: python3
+      POSTRIFF_GROWTH_EVIDENCE_DIR: ${{ github.workspace }}/.codex/growth-studio-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and browser tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm --prefix web ci
+          cd web
+          npx playwright install --with-deps chromium
+      - name: Install PostgreSQL 17 from its signed repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql
+          sudo chmod 1777 /var/run/postgresql
+      - name: Actual browser, API and disposable PostgreSQL with synthetic external services
+        shell: bash
+        run: |
+          mkdir -p "$POSTRIFF_GROWTH_EVIDENCE_DIR"
+          python scripts/postriff_dev_hosted.py --port 4396 --pg-port 55796 --growth-phase2-fixture > "$POSTRIFF_GROWTH_EVIDENCE_DIR/api.log" 2>&1 &
+          api_pid=$!
+          (cd web && node node_modules/next/dist/bin/next dev --port 3296) > "$POSTRIFF_GROWTH_EVIDENCE_DIR/web.log" 2>&1 &
+          web_pid=$!
+          cleanup() { kill "$web_pid" "$api_pid" 2>/dev/null || true; wait "$web_pid" "$api_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3296/api/auth/config > /dev/null; then ready=1; break; fi
+            kill -0 "$api_pid" "$web_pid"
+            sleep 1
+          done
+          test "$ready" = 1
+          node web/tests/growth-phase2-browser.cjs > "$POSTRIFF_GROWTH_EVIDENCE_DIR/browser.log" 2>&1
+      - name: Preserve evidence for the exact source
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: growth-studio-${{ github.sha }}
+          path: .codex/growth-studio-evidence/
+          retention-days: 14
