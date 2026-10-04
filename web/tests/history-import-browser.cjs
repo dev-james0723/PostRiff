@@ -147,6 +147,7 @@ async function api(method, url, body) {
     await page.route('**/history-import',route=>route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'off',code:'feature_disabled'})}));
     const offResponse=page.waitForResponse(r=>new URL(r.url()).pathname===endpoint && r.status()===404);
     await page.reload({waitUntil:'domcontentloaded'});await offResponse;
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden'});
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('OFF-gate response hides the entry point');
     await page.unroute('**/history-import');await visit();
@@ -154,6 +155,7 @@ async function api(method, url, body) {
     const alert=page.getByRole('alertdialog');await alert.getByText(/removes imported metadata/).waitFor();
     await alert.getByRole('button',{name:'Disconnect',exact:true}).click();
     await page.getByText('Threads disconnected',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden'});
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);

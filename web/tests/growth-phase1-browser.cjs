@@ -162,6 +162,7 @@ async function mobile(page, selector) {
       .waitFor({ timeout: 90000 });
     await genome.getByText('Review supporting posts and counterexamples').first().click();
     await genome.getByText('My first own teaching note.', { exact: true }).first().waitFor();
+    const firstGenome = await genome.getByLabel('Genome version', { exact: true }).inputValue();
     await genome.getByRole('button', { name: 'Approve this Genome', exact: true }).click();
     await genome.getByText('Create a public Content DNA card', { exact: true }).click();
     await genome
@@ -191,7 +192,16 @@ async function mobile(page, selector) {
       .waitFor({ state: 'hidden' });
     const revoked = await fetch(base + '/api/content-dna/' + dna.split('/').at(-1));
     assert.equal(revoked.status, 404);
-    checks.push('Genome corpus, evidence, approval, public label preview and revoke');
+    const priorGenome = fixture('genome-prior');
+    assert.equal(priorGenome.execution, 'explicitly synthetic prior version in disposable Phase 1 database');
+    assert.notEqual(priorGenome.genomeId, firstGenome);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await genome.getByLabel('Genome version', { exact: true }).selectOption(priorGenome.genomeId);
+    await genome.getByRole('button', { name: 'Restore this approved version', exact: true }).click();
+    await genome.getByRole('button', { name: 'Restore this approved version', exact: true }).waitFor({state:'hidden'});
+    const restored = await api('GET', `/api/workspaces/${wid}/growth/genome`);
+    assert.equal(restored.active.id, priorGenome.genomeId);
+    checks.push('Genome corpus, evidence, approve, select and restore prior version, public label preview and revoke');
 
     // Recheck the accepted revision so the verified fixture captures its exact advice.
     let current = await api('GET', `/api/workspaces/${wid}`);

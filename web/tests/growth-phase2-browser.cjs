@@ -96,6 +96,37 @@ if(role==='owner')await page.getByText('AI permissions & daily allowances').clic
 await audit(role+' permissions');
 }
 checks.push('owner/editor/viewer reads and visible AI/consent permissions use actual local memberships');
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid,'calibration'],{cwd:root});
+await page.goto(base+'/app/growth?view=patterns',{waitUntil:'domcontentloaded'});
+const prepare=page.getByRole('button',{name:'Prepare a calibration',exact:true});
+const versions=page.getByLabel('Calibration version',{exact:true});
+const confirmCalibration=page.getByRole('checkbox',{name:'I reviewed the evidence and want this version used.'});
+await prepare.waitFor();assert.equal(await prepare.isEnabled(),true);
+await prepare.click();await versions.waitFor();
+const firstCalibration=await versions.inputValue();
+assert.ok((await page.locator('.growth-calibration-review').innerText()).includes('held out'));
+assert.equal(await page.getByRole('button',{name:'Use this calibration',exact:true}).isDisabled(),true);
+await confirmCalibration.check();await page.getByRole('button',{name:'Use this calibration',exact:true}).click();
+await page.getByRole('button',{name:'Use this calibration',exact:true}).waitFor({state:'hidden'});
+await prepare.click();
+await page.waitForFunction(id=>document.querySelector('select[aria-label="Calibration version"]')?.value!==id,firstCalibration);
+assert.equal(await confirmCalibration.isChecked(),false,'Each new calibration version needs its own confirmation');
+assert.equal(await page.getByRole('button',{name:'Use this calibration',exact:true}).isDisabled(),true);
+await confirmCalibration.check();await page.getByRole('button',{name:'Use this calibration',exact:true}).click();
+await page.getByRole('button',{name:'Use this calibration',exact:true}).waitFor({state:'hidden'});
+await versions.selectOption(firstCalibration);
+assert.equal(await page.getByRole('button',{name:'Restore this calibration',exact:true}).isDisabled(),true);
+await page.setViewportSize({width:390,height:844});await audit('qualified synthetic calibration mobile');await shot('calibration-mobile');
+await confirmCalibration.check();await page.getByRole('button',{name:'Restore this calibration',exact:true}).click();
+await page.getByRole('button',{name:'Restore this calibration',exact:true}).waitFor({state:'hidden'});
+for(const role of ['editor','viewer']){
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid,'role-'+role],{cwd:root});
+await page.reload({waitUntil:'domcontentloaded'});await prepare.waitFor();assert.equal(await prepare.isDisabled(),true);
+assert.equal(await page.getByRole('button',{name:'Use this calibration',exact:true}).count(),0);
+}
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid,'role-owner'],{cwd:root});
+await page.setViewportSize({width:1440,height:1100});
+checks.push('fifty synthetic chronological publications, held-out disclosure, per-version confirmation, owner approve/restore and editor/viewer denial');
 await page.route(catalogPattern,async r=>{const response=await r.fetch();const catalog=await response.json();await r.fulfill({response,json:{...catalog,postmortem:false,audienceMiner:false,genome:false,postDoctor:false,customerAccess:{mode:'paid_studio',qualified:false,reason:'current_live_paid_studio_required'}}})});
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
 await page.getByRole('heading',{name:'Your Studio subscription needs attention.',exact:true}).waitFor();

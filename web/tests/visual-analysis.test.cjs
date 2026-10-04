@@ -228,10 +228,13 @@ if (require.main === module && process.argv.includes('--fixtures')) {
     for(const value of ['Point estimate','10th percentile','90th percentile','forecast_v2','10 paired predictions','Source training cutoff','Forecast target window','Receipt confirmed','synthetic'])assert.ok(html.includes(value),value);
     assert.doesNotMatch(html,/<svg|<path|<canvas/);
   });
-  test('forecast binding change, stale read, expiry, missing qualification and errors suppress numeric values', () => {
+  test('forecast binding change, stale read, expiry, missing qualification and errors suppress numeric values', (t) => {
+    // The selector and rendered component must evaluate the same instant;
+    // process scheduling must not make an expired fixture future-dated.
+    t.mock.method(Date, 'now', () => now);
     for(const mutate of [x=>x.binding.trust_receipt_id='other',x=>x.binding.workspace_id='other',
-      x=>x.response.data.scope_key='workspace:other',x=>x.response.as_of=new Date(Date.now()-31_000).toISOString(),
-      x=>x.binding.expires_at=new Date(Date.now()-1000).toISOString(),x=>delete x.response.data.qualification]) {
+      x=>x.response.data.scope_key='workspace:other',x=>x.response.as_of=new Date(now-31_000).toISOString(),
+      x=>x.binding.expires_at=new Date(now-1000).toISOString(),x=>delete x.response.data.qualification]) {
       const x=clone(f.bound);mutate(x);assert.equal(panel.selectForecast(x,f.trend,f.workspace,'',now),null);
       reset(x);requested=true;assert.doesNotMatch(render(panel.ForecastPanel),/Point estimate/);
     }

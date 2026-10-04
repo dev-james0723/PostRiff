@@ -2,7 +2,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const engine = process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+assert.ok(['chromium','webkit'].includes(engine), 'Supported browser engine required');
 const { fixtures } = require('./trend-fixtures.cjs');
 const workspaceFixture = require('./fixtures/wp04a-workspace.json');
 const base = process.env.TREND_WEB_URL;
@@ -45,7 +47,7 @@ async function visibleText(page, pattern) {
   await page.getByText(pattern).first().waitFor();
 }
 async function run() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await ({chromium,webkit})[engine].launch({ headless: true });
   try {
     for (const width of (process.env.TREND_WIDTHS || '1440,390,820').split(',').map(Number)) {
       const context = await browser.newContext({
@@ -320,6 +322,12 @@ async function run() {
             trial: {},
             balances: []
           });
+        if (pathname.endsWith('/phone'))
+          return send({ available: false, providerReady: false, flags: {}, number: null,
+            preferences: { enabled: false, proactiveCalls: false, scheduledCalls: false,
+              quietStart: 22, quietEnd: 8, timeZone: 'UTC', maxCallsPerDay: 0,
+              maxMilliCreditsPerCall: 0, eventAllowlist: [], customRules: [],
+              fallbackToPush: false, fallbackToEmail: false }, calls: [], schedules: [] });
         if (pathname.endsWith('/memory')) return send(workspaceFixture.memory);
         if (pathname.endsWith('/memory/proposals'))
           return send({ pending: [], recent: [], learning: { items: [] } });
@@ -790,15 +798,16 @@ async function run() {
           // Browser zoom changes the CSS viewport as well as pixel density; CSS `zoom` alone
           // leaves media queries at 820px and is not an equivalent test of browser zoom.
           await page.setViewportSize({ width: 410, height: 500 });
-          const cdp = await context.newCDPSession(page);
-          await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: 410,
-            height: 500,
-            deviceScaleFactor: 2,
-            mobile: false
-          });
+          if (engine === 'chromium') {
+            const cdp = await context.newCDPSession(page);
+            await cdp.send('Emulation.setDeviceMetricsOverride', {
+              width: 410, height: 500, deviceScaleFactor: 2, mobile: false
+            });
+          }
           assert.equal(await page.evaluate(() => matchMedia('(max-width: 767px)').matches), true);
-          record('200% browser-zoom-equivalent reflow: 820 physical pixels / 410 CSS pixels');
+          record(engine === 'chromium'
+            ? '200% browser-zoom-equivalent reflow: 820 physical pixels / 410 CSS pixels'
+            : 'WebKit 200% reflow layout: 410 CSS pixels; browser zoom and pixel density not emulated');
           await noOverflow(page, '820 at 200% zoom');
           await page.getByRole('button', { name: 'Why should I trust this?' }).click();
           await page.getByRole('dialog').getByRole('heading', { name: '1. What we saw' }).waitFor();
@@ -834,7 +843,7 @@ async function run() {
     fs.writeFileSync(
       path.join(out, 'results.json'),
       JSON.stringify(
-        { execution: 'synthetic_intercepted_browser', colorScheme, longContent, results },
+        { execution: 'synthetic_intercepted_browser', engine, colorScheme, longContent, results },
         null,
         2
       )

@@ -579,10 +579,10 @@ async function main() {
       };
       const external = [],
         errors = [];
-      // This guard only blocks external navigation. Every same-origin request continues unchanged.
-      await context.route('**/*', (route) => {
+      // Do not intercept same-origin RSC or API transport: WebKit's intercepted
+      // navigation/prefetch cancellation can surface protocol errors. Guard only egress.
+      await context.route((url) => url.origin !== new URL(base).origin, (route) => {
         const url = new URL(route.request().url());
-        if (url.origin === base) return route.continue();
         external.push(url.origin);
         return route.abort();
       });

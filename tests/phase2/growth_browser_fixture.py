@@ -18,6 +18,16 @@ uuid.UUID(principal);uuid.UUID(wid)
 def connection():return psycopg.connect(f'host=127.0.0.1 port={port} dbname=postgres')
 host=HostedWorkspaceService(connection,lambda token:principal)
 saved=host.repository.get(wid,'fixture')
+if kind=='genome-prior':
+    # Seed a historical local fixture version, never bypass the one-proposal/day cap.
+    # Copy only current consent/evidence bindings so restore still revalidates them.
+    with connection() as db,db.cursor() as cur:
+        cur.execute("SELECT body FROM public.pr_genome_versions WHERE workspace_id=%s AND status='approved' ORDER BY created_at DESC LIMIT 1",(wid,))
+        current=cur.fetchone();assert current,'An approved local fixture Genome is required'
+        prior_id=str(uuid.uuid4());body={**current[0],'id':prior_id}
+        cur.execute("INSERT INTO public.pr_genome_versions(id,workspace_id,status,body,created_by,approved_by,approved_at,created_at) VALUES(%s,%s,'superseded',%s::jsonb,%s,%s,now()-interval '1 day',now()-interval '1 day')",(prior_id,wid,json.dumps(body),principal,principal))
+    print(json.dumps({'genomeId':prior_id,'execution':'explicitly synthetic prior version in disposable Phase 1 database'}))
+    sys.exit(0)
 def command(state,actor):
     if kind=='draft':
         state['variants']=[{'id':'growth-browser-draft','text':'One idea. Another idea!','platform':'Threads','language':'en','revision':1,

@@ -23,5 +23,5 @@ elif mode in ('role-owner','role-editor','role-viewer'):
         db.execute("UPDATE public.pr_memberships SET role=%s WHERE workspace_id=%s AND user_id=%s AND status='active'",(mode.removeprefix('role-'),wid,principal))
     print(json.dumps({'execution':'disposable membership fixture','role':mode.removeprefix('role-')}))
 else:
-    assert mode=='seed','Unknown disposable scenario'
-    print(json.dumps(seed(host,wid,'fixture')))
+    assert mode in ('seed','calibration'),'Unknown disposable scenario'
+    print(json.dumps(seed(host,wid,'fixture',calibration=mode=='calibration')))

@@ -97,6 +97,7 @@ jobs:
             test "$ready" = 1
             node "web/tests/$harness" > "$POSTRIFF_GROWTH_EVIDENCE_DIR/browser.log" 2>&1
           done
+          TREND_WEB_URL=http://127.0.0.1:3296 TREND_EVIDENCE_DIR="$evidence_root/trends-ui" node web/tests/trend-browser.cjs > "$evidence_root/trends-ui.log" 2>&1
       - name: Preserve evidence for the exact source
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
