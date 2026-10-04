@@ -1,0 +1,24 @@
+{
+  "execution": "actual loopback UI/API/SQL plus clearly labeled synthetic visual fixture",
+  "providerCalls": 0,
+  "results": [
+    {
+      "browser": "chromium",
+      "mobile": false,
+      "status": "PASS",
+      "workspace": "2679b9aa-0819-46da-a69d-b89af78c0bdc",
+      "action": "real SQL action failure/retry, priority, history, partial"
+    },
+    {
+      "browser": "webkit",
+      "mobile": true,
+      "status": "PASS",
+      "workspace": "e940661d-5cef-4e18-a4cf-26a2137cea4c",
+      "action": "touch, keyboard, 375px, axe"
+    },
+    {
+      "visual": "synthetic component states",
+      "status": "PASS"
+    }
+  ]
+}

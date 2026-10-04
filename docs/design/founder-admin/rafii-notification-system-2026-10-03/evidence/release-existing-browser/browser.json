@@ -1,0 +1,37 @@
+{
+  "execution": "actual local UI/API/SQL with fake transports and synthetic STOP state",
+  "realSMS": 0,
+  "realCalls": 0,
+  "results": [
+    {
+      "browser": "chromium",
+      "status": "PASS",
+      "checks": [
+        "shared masked verification",
+        "SMS off despite Phone verification/enabled",
+        "explicit text consent",
+        "authenticated Push navigation cancels durable SMS",
+        "provider STOP settings state",
+        "Phone remains enabled",
+        "desktop/mobile/light/dark",
+        "axe WCAG2A/AA",
+        "zero call requests"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "status": "PASS",
+      "checks": [
+        "shared masked verification",
+        "SMS off despite Phone verification/enabled",
+        "explicit text consent",
+        "authenticated Push navigation cancels durable SMS",
+        "provider STOP settings state",
+        "Phone remains enabled",
+        "desktop/mobile/light/dark",
+        "axe WCAG2A/AA",
+        "zero call requests"
+      ]
+    }
+  ]
+}

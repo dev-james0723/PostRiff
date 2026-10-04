@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { FounderPanelLauncher } from '@/features/founder/agent/launcher';
+import { FounderNotificationBell } from '@/features/notifications/founder-notification-bell';
 import { ModePill } from '@/features/founder/shared/mode-pill';
 import { FounderBreadcrumbs } from './founder-breadcrumbs';
 import { useFounderSession } from './founder-session';
@@ -28,6 +29,7 @@ export function FounderHeader() {
         </Button>
         <ModePill mode={mode} onChange={setMode} />
         <FounderPanelLauncher />
+        <FounderNotificationBell />
         <div className='hidden sm:block'>
           <ThemeModeToggle />
         </div>

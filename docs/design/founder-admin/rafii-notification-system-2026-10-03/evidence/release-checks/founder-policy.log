@@ -1,0 +1,36 @@
+/Users/ouxianxing/.codex/worktrees/rafii-notification-release-20261003/James-Au-Studio/src/postriff_phase2/phone/session.py:358: SyntaxWarning: 'return' in a 'finally' block
+  return
+test_notice_centre_test_notice_and_read (test_founder_notifications.ControlRouteTests.test_notice_centre_test_notice_and_read) ... ok
+test_preferences_get_and_put_with_step_up (test_founder_notifications.ControlRouteTests.test_preferences_get_and_put_with_step_up) ... {"error": "UndefinedTable", "event": "founder_notice.preferences_unavailable"}
+ok
+test_report_routes_list_versions_and_carry_receipts (test_founder_notifications.ControlRouteTests.test_report_routes_list_versions_and_carry_receipts) ... ok
+test_digest_email_only_through_policy_flags_and_preference (test_founder_notifications.DigestTests.test_digest_email_only_through_policy_flags_and_preference) ... ok
+test_digest_is_a_registered_cron_stage (test_founder_notifications.DigestTests.test_digest_is_a_registered_cron_stage) ... {"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "operational_snapshot"}
+{"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "connection_health"}
+ok
+test_digest_waits_for_its_hour_and_quiet_hours_then_runs_once_a_day (test_founder_notifications.DigestTests.test_digest_waits_for_its_hour_and_quiet_hours_then_runs_once_a_day) ... ok
+test_stage_never_raises_and_purges_past_retention (test_founder_notifications.DigestTests.test_stage_never_raises_and_purges_past_retention) ... {"error": "UndefinedTable", "event": "founder_notice.preferences_unavailable"}
+{"error": "UndefinedTable", "event": "founder_notice.centre_unavailable"}
+{"error": "RuntimeError", "event": "founder_notice.digest_failed"}
+ok
+test_critical_notice_leaves_by_email_and_push_only_through_every_gate (test_founder_notifications.NotifierTests.test_critical_notice_leaves_by_email_and_push_only_through_every_gate) ... ok
+test_cron_tick_records_founder_notices_for_incidents_and_recovery (test_founder_notifications.NotifierTests.test_cron_tick_records_founder_notices_for_incidents_and_recovery) ... ok
+test_in_app_always_even_when_the_consumer_outbox_is_off (test_founder_notifications.NotifierTests.test_in_app_always_even_when_the_consumer_outbox_is_off) ... ok
+test_missing_centre_table_keeps_the_outbox_and_never_raises (test_founder_notifications.NotifierTests.test_missing_centre_table_keeps_the_outbox_and_never_raises) ... {"error": "OperationalError", "event": "founder_notice.outbox_unavailable"}
+ok
+test_missing_outbox_tables_are_not_installed_yet_and_logged_once (test_founder_notifications.NotifierTests.test_missing_outbox_tables_are_not_installed_yet_and_logged_once) ... ok
+test_replays_are_one_notice_and_text_is_fixed_vocabulary (test_founder_notifications.NotifierTests.test_replays_are_one_notice_and_text_is_fixed_vocabulary) ... ok
+test_readiness_names_every_failing_gate (test_founder_notifications.PreferenceTests.test_readiness_names_every_failing_gate) ... ok
+test_validation_is_strict_and_never_widens_a_channel (test_founder_notifications.PreferenceTests.test_validation_is_strict_and_never_widens_a_channel) ... ok
+test_customer_catalogue_stays_byte_identical (test_founder_notifications.RegistrationTests.test_customer_catalogue_stays_byte_identical) ... ok
+test_memory_centre_covers_the_sql_surface (test_founder_notifications.RegistrationTests.test_memory_centre_covers_the_sql_surface) ... ok
+test_routes_capabilities_and_the_stage_are_registered_once (test_founder_notifications.RegistrationTests.test_routes_capabilities_and_the_stage_are_registered_once) ... ok
+test_email_and_push_need_the_policy_the_flag_and_the_preference (test_founder_notifications.RoutingTests.test_email_and_push_need_the_policy_the_flag_and_the_preference) ... ok
+test_quiet_hours_hold_everything_below_critical_and_security (test_founder_notifications.RoutingTests.test_quiet_hours_hold_everything_below_critical_and_security) ... ok
+test_route_table_follows_prd_6_7 (test_founder_notifications.RoutingTests.test_route_table_follows_prd_6_7) ... ok
+test_warnings_join_the_daily_digest (test_founder_notifications.RoutingTests.test_warnings_join_the_daily_digest) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.052s
+
+OK

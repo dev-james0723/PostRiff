@@ -121,6 +121,24 @@ for item in batch: sql("UPDATE pr_notification_deliveries SET digest_id=%s WHERE
 ns.acknowledge(wid,ONE,next(d[0] for d in deliveries(batch[0]) if d[1]=='email'))
 assert all(sms_row(item)[2]=='cancelled' for item in batch)
 assert not fake.sent
+# Archive hides a routine card from the active center, while the same persisted
+# delivery remains discoverable in history. No new notification table is needed.
+archivable=emit('publish.verified')
+archived_id=next(d[0] for d in deliveries(archivable) if d[1]=='in_app')
+assert ns.mark(wid,ONE,archived_id,'dismissed')['verified']
+assert archived_id not in {item['id'] for item in ns.center(wid,ONE)['items']}
+assert archived_id in {item['id'] for item in ns.center(wid,ONE,include_dismissed=True)['items']}
+clear()
+with connection() as db:
+    for index in range(55):
+        store.emit(db.cursor(),workspace_id=wid,event_type='publish.verified',dedupe_key=f'history-page:{index}',
+                   payload={'title':f'History event {index}'},actor=ONE,email_available=False,push_enabled=False,channel_filter={'in_app'})
+first_page=ns.center(wid,ONE,include_dismissed=True)['items']
+assert len(first_page)==50
+assert all(item['dedupeKey'].startswith('history-page:') for item in first_page)
+last=first_page[-1]
+second_page=ns.center(wid,ONE,before=last['createdAt'],before_id=last['id'],include_dismissed=True)['items']
+assert len(second_page)==5 and not {item['id'] for item in first_page}.intersection(item['id'] for item in second_page)
 clear(); consent()
 # State removal is authoritatively resolved through the domain hook and again at egress.
 before={'phase2':{'jobs':[{'id':'job-local','state':'failed','attempts':[{}]}]}}

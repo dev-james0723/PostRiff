@@ -135,23 +135,27 @@ def _ts(value):
 
 
 # --- notification centre --------------------------------------------------------------------------------------------
-def center(cur, user_id, workspace_id=None, limit=50, before=None, unread_only=False):
+def center(cur, user_id, workspace_id=None, limit=50, before=None, before_id=None, unread_only=False, include_dismissed=False):
     """In-app notifications for one person (only rows they own, only workspaces they still belong to)."""
     params = [user_id]
-    sql = """SELECT d.id::text, d.status, extract(epoch from d.created_at), e.event_type, e.category, e.severity, e.entity_type, e.entity_id, e.payload,
-                    e.workspace_id::text, extract(epoch from d.read_at), extract(epoch from d.acted_at)
+    statuses = "('delivered','read','acted','dismissed')" if include_dismissed and not unread_only else "('delivered','read','acted')"
+    sql = f"""SELECT d.id::text, d.status, extract(epoch from d.created_at), e.event_type, e.category, e.severity, e.entity_type, e.entity_id, e.payload,
+                    e.workspace_id::text, extract(epoch from d.read_at), extract(epoch from d.acted_at), e.dedupe_key
              FROM public.pr_notification_deliveries d JOIN public.pr_notification_events e ON e.id = d.event_id
-             WHERE d.user_id = %s AND d.channel = 'in_app' AND d.status IN ('delivered','read','acted')
+             WHERE d.user_id = %s AND d.channel = 'in_app' AND d.status IN {statuses}
                AND (e.workspace_id IS NULL OR EXISTS (SELECT 1 FROM public.pr_memberships m WHERE m.workspace_id = e.workspace_id AND m.user_id = d.user_id AND m.status='active'))"""
     if workspace_id:
         sql += " AND (e.workspace_id = %s OR e.workspace_id IS NULL)"
         params.append(workspace_id)
     if unread_only:
         sql += " AND d.status = 'delivered'"
-    if before:
+    if before and before_id:
+        sql += " AND (d.created_at, d.id) < (to_timestamp(%s), %s::uuid)"
+        params.extend((before, before_id))
+    elif before:
         sql += " AND d.created_at < to_timestamp(%s)"
         params.append(before)
-    sql += " ORDER BY d.created_at DESC LIMIT %s"
+    sql += " ORDER BY d.created_at DESC, d.id DESC LIMIT %s"
     params.append(max(1, min(int(limit), 100)))
     cur.execute(sql, params)
     items = []
@@ -159,7 +163,7 @@ def center(cur, user_id, workspace_id=None, limit=50, before=None, unread_only=F
         spec = catalog.EVENTS.get(r[3]) or catalog.EXTENSION_EVENTS.get(r[3], {})
         items.append({"id": r[0], "status": r[1], "createdAt": float(r[2]), "type": r[3], "category": r[4], "severity": r[5], "entity": {"type": r[6], "id": r[7]},
                       "payload": r[8] or {}, "workspaceId": r[9], "readAt": float(r[10]) if r[10] else None, "actedAt": float(r[11]) if r[11] else None,
-                      "actionable": spec.get("severity") in ("action", "critical", "warning", "security")})
+                      "actionable": spec.get("severity") in ("action", "critical", "warning", "security"), "dedupeKey": r[12]})
     cur.execute("SELECT count(*) FROM public.pr_notification_deliveries WHERE user_id=%s AND channel='in_app' AND status='delivered'" + (" AND (workspace_id=%s OR workspace_id IS NULL)" if workspace_id else ""),
                 [user_id] + ([workspace_id] if workspace_id else []))
     return {"items": items, "unread": cur.fetchone()[0]}

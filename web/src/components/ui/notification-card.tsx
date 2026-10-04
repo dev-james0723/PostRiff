@@ -2,6 +2,7 @@
 
 import type { FC } from 'react';
 import { Icons } from '@/components/icons';
+import type { NotificationKind } from '@/features/notifications/presentation';
 import { cn } from '@/lib/utils';
 
 export type NotificationStatus = 'unread' | 'read' | 'archived';
@@ -26,6 +27,9 @@ export interface NotificationCardProps {
   onMarkAsRead?: (id: string) => void;
   onAction?: (notificationId: string, actionId: string, actionType: ActionType) => void;
   loadingActionId?: string;
+  kind?: NotificationKind;
+  error?: string | null;
+  onArchive?: (id: string) => void;
   className?: string;
 }
 
@@ -74,24 +78,31 @@ export const NotificationCard: FC<NotificationCardProps> = ({
   onMarkAsRead,
   onAction,
   loadingActionId,
+  kind = 'info',
+  error,
+  onArchive,
   className
 }) => {
   const isUnread = status === 'unread';
+  const semantic = kind === 'critical' || kind === 'security' ? 'text-destructive'
+    : kind === 'warning' ? 'text-amber-700 dark:text-amber-300'
+      : 'text-foreground';
+  const KindIcon = kind === 'security' ? Icons.lock
+    : kind === 'critical' || kind === 'warning' ? Icons.warning
+      : kind === 'success' ? Icons.circleCheck : Icons.notification;
 
   return (
     <div
       className={cn(
-        'group relative w-full rounded-2xl transition-all',
-        isUnread ? 'bg-muted' : 'bg-muted/40',
+        'group relative w-full rounded-2xl border border-border/70 bg-background text-foreground shadow-[0_5px_18px_rgb(0_0_0/0.06)]',
         className
       )}
     >
       <div className='px-4 py-3.5'>
         <div className='flex items-start justify-between gap-3'>
-          {/* Main content */}
+          <KindIcon aria-hidden='true' className={cn('mt-0.5 size-4 shrink-0', semantic)} />
           <div className='min-w-0 flex-1 space-y-1'>
-            {/* Title with unread indicator */}
-            <div className='flex items-center gap-2'>
+            <div className='flex flex-wrap items-center gap-2'>
               <h3
                 className={cn(
                   'text-[15px] leading-tight font-semibold',
@@ -100,41 +111,30 @@ export const NotificationCard: FC<NotificationCardProps> = ({
               >
                 {title}
               </h3>
-              {isUnread && <div aria-hidden className='bg-foreground h-1.5 w-1.5 flex-shrink-0 rounded-full' />}
+              {isUnread && <span className='rounded-full border border-foreground/30 px-1.5 py-0.5 text-[10px] font-medium leading-none'>Unread</span>}
             </div>
-
-            {/* Description */}
-            <p
-              className={cn(
-                'mb-0 text-[13px]',
-                isUnread ? 'text-muted-foreground' : 'text-muted-foreground/60'
-              )}
-            >
-              {body}
-            </p>
+            {body && <p className='mb-0 text-[13px] leading-relaxed text-muted-foreground'>{body}</p>}
           </div>
-
-          {/* Mark as read button */}
           {isUnread && onMarkAsRead && (
             <button
               type='button'
+              disabled={loadingActionId === 'read'}
               onClick={() => onMarkAsRead(id)}
               className={cn(
-                'rounded-lg p-1.5 transition-colors',
+                'rafii-focus grid size-11 shrink-0 place-items-center rounded-xl transition-colors',
                 'text-muted-foreground hover:bg-accent hover:text-foreground'
               )}
-              aria-label='Mark as read'
+              aria-label={'Mark ' + title + ' as read'}
             >
-              <Icons.check size={16} />
+              {loadingActionId === 'read' ? <Icons.spinner size={16} className='animate-spin' /> : <Icons.check size={16} />}
             </button>
           )}
         </div>
 
-        <div className='mt-3 flex items-end justify-between'>
-          {/* Actions */}
+        <div className='mt-3 flex flex-wrap items-end justify-between gap-2'>
           {actions.length > 0 && (
-            <div className={cn('flex flex-wrap items-center gap-2', !isUnread && 'opacity-60')}>
-              {actions.map((action) => {
+            <div className='flex flex-wrap items-center gap-2'>
+              {actions.slice(0, 2).map((action) => {
                 const isLoading = loadingActionId === action.id;
                 const isExecuted = action.executed || false;
                 const showLoading = isLoading && action.type !== 'modal';
@@ -146,7 +146,7 @@ export const NotificationCard: FC<NotificationCardProps> = ({
                     disabled={isLoading || isExecuted}
                     onClick={() => onAction?.(id, action.id, action.type)}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-normal transition',
+                      'rafii-focus flex min-h-11 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-medium transition',
                       action.style === 'primary'
                         ? 'bg-primary/10 text-primary hover:bg-primary/20'
                         : action.style === 'danger'
@@ -157,7 +157,7 @@ export const NotificationCard: FC<NotificationCardProps> = ({
                     )}
                   >
                     {showLoading ? (
-                      <Icons.spinner size={12} className='animate-spin' />
+                      <Icons.spinner size={14} className='animate-spin' />
                     ) : (
                       <>
                         <span>{action.label}</span>
@@ -176,11 +176,19 @@ export const NotificationCard: FC<NotificationCardProps> = ({
 
           {/* Timestamp */}
           {createdAt && (
-            <span className='text-muted-foreground/60 inline-block text-[11px]'>
+            <span className='text-muted-foreground inline-block text-[11px]'>
               {formatDate(createdAt)}
             </span>
           )}
         </div>
+        {onArchive && (
+          <button type='button' onClick={() => onArchive(id)} disabled={loadingActionId === 'archive'}
+            className='rafii-focus mt-1 min-h-11 rounded-lg px-2 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground'
+            aria-label={'Archive ' + title}>
+            {loadingActionId === 'archive' ? 'Archiving…' : 'Archive'}
+          </button>
+        )}
+        {error && <p role='alert' className='mt-2 text-xs text-destructive'>{error}</p>}
       </div>
     </div>
   );

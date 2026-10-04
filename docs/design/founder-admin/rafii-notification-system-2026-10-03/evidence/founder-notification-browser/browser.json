@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "execution": "local Founder Control session and durable in-app test notice; email/push not sent",
+  "viewport": 390,
+  "checks": [
+    "unread bell",
+    "touch expanded stack",
+    "confirmed read",
+    "Demo header skips notice fetch",
+    "Demo separation",
+    "axe"
+  ]
+}

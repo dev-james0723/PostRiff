@@ -1,0 +1,12 @@
+{
+  "execution": "local harness: Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identities",
+  "base": "http://localhost:3399",
+  "widths": [
+    1440,
+    768,
+    390
+  ],
+  "checks": 1072,
+  "failed": 0,
+  "failures": []
+}
