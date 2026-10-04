@@ -58,7 +58,7 @@ class FakeProvider:
         self.exchanges, self.revoked, self.refreshes, self.grant_scopes = [], [], 0, None
 
     def capability_scopes(self, capability):
-        return {"publish": ["w_member_social", "openid"], "identity": ["openid"], "analytics": []}.get(capability, [])
+        return {"publish": ["w_member_social", "openid"], "schedule": ["w_member_social", "openid"], "identity": ["openid"], "analytics": []}.get(capability, [])
 
     def explain(self, capability):
         return "PostRiff will post on your behalf only when you approve an exact post."
