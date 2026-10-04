@@ -30,6 +30,7 @@ from .notifications.planner import in_quiet_hours
 from .phone import billing as phone_billing, contracts as phone_contracts, planner as phone_planner, store as phone_store
 from .phone.runtime import principal_phone
 from .project_pulse import ProjectPulseClient
+from .personal_agent import JamesPersonalRouter
 
 DESTINATION_REF = "james_env"
 REASON_PREFIX = "james_daily:"
@@ -192,6 +193,7 @@ class DailyCallService:
         self.cfg = DailyCallConfig(self.values)
         self.project_pulse = ProjectPulseClient(self.values)
         self.clock = clock or hosted.clock or time.time
+        self.personal_router = JamesPersonalRouter(self)
 
     @property
     def phone(self):
@@ -393,6 +395,10 @@ class DailyCallService:
         if not parts:
             parts.append("No refreshed personal items are currently available.")
         return _bounded("Refreshed personal context. " + " ".join(parts), 1200)
+
+    def query_personal(self, question, hint=None):
+        """Fresh read-only follow-up query for the live personal assistant."""
+        return self.personal_router.route(question, hint=hint)
 
     def decorate_request(self, call_id, text):
         context = self.context_prompt(call_id)

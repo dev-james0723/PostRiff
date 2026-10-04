@@ -186,8 +186,15 @@ class FakeCursor:
             if row and row["workspace"] == params[0]:
                 self.one = (row["id"], row["member"], row["provider"], row["redirect"], row["scopes"], row["verifier"], row["key"], row["expires"], row["consumed"])
         elif compact.startswith("SELECT connection_id FROM public.pr_connector_credentials"):
-            found = next((c for c in self.repo.connections.values() if (c["workspace"], c["member"], c["provider"], c["accountId"]) == params), None)
+            if len(params) == 4:
+                found = next((c for c in self.repo.connections.values() if (c["workspace"], c["member"], c["provider"], c["accountId"]) == params), None)
+            else:
+                found = next((c for c in reversed(list(self.repo.connections.values()))
+                              if c["workspace"] == params[0] and c["member"] == params[1]
+                              and c["provider"] == params[2] and not c["revoked"]), None)
             self.one = (found["connectionId"],) if found else None
+        elif compact.startswith("SELECT 1 FROM public.pr_memberships m JOIN public.pr_profiles p"):
+            self.one = (1,) if params[0] == "w1" and params[1] == "u1" else None
         elif compact.startswith("INSERT INTO public.pr_connector_credentials"):
             connection_id = params[1]
             self.repo.connections[connection_id] = {"workspace": params[0], "connectionId": connection_id, "member": params[2], "provider": params[3],
@@ -254,6 +261,16 @@ class FakeCursor:
         return self.many
 
 
+class FakeDB:
+    def __init__(self, repo):
+        self.repo = repo
+    @contextmanager
+    def cursor(self):
+        yield FakeCursor(self.repo)
+    def commit(self):
+        return None
+
+
 class FakeRepository:
     def __init__(self, state, now=1000.0):
         self.state, self.now = state, now
@@ -264,6 +281,10 @@ class FakeRepository:
     def transaction(self, token, workspace_id):
         # The token is the verified principal in this deliberately tiny fake.
         yield FakeCursor(self), (1, self.state, *self.membership), token
+
+    @contextmanager
+    def connection_factory(self):
+        yield FakeDB(self)
 
 
 class ServiceTests(unittest.TestCase):
@@ -364,6 +385,62 @@ class ServiceTests(unittest.TestCase):
             off.start("w1", "u1", "notion")
         self.assertEqual(caught.exception.code, "feature_disabled")
         self.assertEqual(self.repo.oauth, {})
+
+    def test_internal_personal_reads_use_encrypted_connected_credentials_and_bounded_metadata(self):
+        gmail_calls, calendar_calls = [], []
+
+        def gmail_respond(call):
+            gmail_calls.append(call)
+            if "/messages?" in call["url"]:
+                return {"status": 200, "body": {"messages": [{"id": "m1"}]}}
+            if "format=metadata" in call["url"]:
+                return {"status": 200, "body": {"id": "m1", "snippet": "Weekend recording confirmed",
+                    "payload": {"headers": [
+                        {"name": "Subject", "value": "Recording time"},
+                        {"name": "From", "value": "Violinist <music@example.com>"},
+                        {"name": "Date", "value": "Fri"},
+                    ]}}}
+            raise AssertionError(call)
+
+        def calendar_respond(call):
+            calendar_calls.append(call)
+            if "/calendars/primary/events?" in call["url"]:
+                return {"status": 200, "body": {"items": [{"id": "e1", "summary": "Lori lesson",
+                    "start": {"dateTime": "2026-10-05T15:30:00-05:00"},
+                    "end": {"dateTime": "2026-10-05T16:30:00-05:00"},
+                    "location": "Studio", "description": "PRIVATE DESCRIPTION"}]}}
+            raise AssertionError(call)
+
+        gmail = GmailProvider("client", "secret", Recorder(gmail_respond))
+        calendar = GoogleCalendarProvider("client", "secret", Recorder(calendar_respond))
+        service = ProductivityConnectorService(
+            self.repo, self.vault, {"gmail": gmail, "google_calendar": calendar},
+            "https://app.example", flags={"gmail": True, "google_calendar": True}, clock=lambda: self.repo.now,
+        )
+        for connection_id, provider, token, scopes in (
+            ("pc_" + "1" * 32, "gmail", "gmail-access-secret", gmail.minimum_scopes()),
+            ("pc_" + "2" * 32, "google_calendar", "calendar-access-secret", calendar.minimum_scopes()),
+        ):
+            cipher, key = self.vault.encrypt(token)
+            self.repo.connections[connection_id] = {
+                "workspace": "w1", "connectionId": connection_id, "member": "u1", "provider": provider,
+                "accountId": provider + "-account", "account": provider, "access": cipher, "refresh": None,
+                "key": key, "scopes": list(scopes), "expires": self.repo.now + 3600, "revoked": False,
+            }
+
+        mail = service.personal_gmail_search("w1", "u1", 'in:inbox "recording"', 4)
+        events = service.personal_calendar_range("w1", "u1", "America/Chicago", self.repo.now, self.repo.now + 7 * 86400, 8)
+        found = service.personal_calendar_search("w1", "u1", "Lori", 4)
+
+        self.assertEqual(mail[0]["subject"], "Recording time")
+        self.assertEqual(events[0]["title"], "Lori lesson")
+        self.assertEqual(found[0]["title"], "Lori lesson")
+        encoded = json.dumps({"mail": mail, "events": events, "search": found})
+        self.assertNotIn("gmail-access-secret", encoded)
+        self.assertNotIn("calendar-access-secret", encoded)
+        self.assertNotIn("PRIVATE DESCRIPTION", encoded)
+        self.assertTrue(any("Authorization" in call["headers"] for call in gmail_calls))
+        self.assertTrue(any("Authorization" in call["headers"] for call in calendar_calls))
 
     def test_synthetic_source_has_no_secret_fields(self):
         source = synthetic_source("gmail", "ci_" + "1" * 32, "pc_" + "2" * 32,

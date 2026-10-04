@@ -835,6 +835,106 @@ class ProductivityConnectorService:
                          sum(1 for item in results.values() if item.get("source"))))
         return results
 
+    def _personal_access(self, cur, workspace_id, principal, provider_id):
+        """Internal read-only connector access for James Personal Agent. No HTTP surface."""
+        if not self.flags.get(provider_id, False):
+            raise AlphaError("This personal data source is disabled.", 503, code="connector_disabled")
+        provider = self.providers.get(provider_id)
+        if provider is None:
+            raise AlphaError("This personal data source is unavailable.", 503, code="connector_not_configured")
+        cur.execute("SELECT connection_id FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s "
+                    "AND provider=%s AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1",
+                    (workspace_id, principal, provider_id))
+        row = cur.fetchone()
+        if not row:
+            raise AlphaError("Connect this personal data source first.", 409, code="connector_not_connected")
+        connection = self._connection(cur, workspace_id, principal, row[0], lock=True)
+        if not connection:
+            raise AlphaError("This connected account is unavailable.", 409, code="connector_not_connected")
+        return provider, self._access_token(cur, workspace_id, connection), connection
+
+    def personal_calendar_range(self, workspace_id, principal, time_zone, start_at, end_at, limit=20):
+        """Bounded read-only Google Calendar range for James Personal Agent."""
+        try:
+            zone = ZoneInfo(time_zone)
+        except (ZoneInfoNotFoundError, ValueError, TypeError):
+            raise AlphaError("Choose a valid time zone.", 400) from None
+        if not isinstance(start_at, (int, float)) or not isinstance(end_at, (int, float)) or end_at <= start_at:
+            raise AlphaError("Choose a valid calendar range.", 400)
+        if end_at - start_at > 32 * 86400:
+            raise AlphaError("Calendar range is too large.", 400)
+        count = min(24, max(1, int(limit)))
+        to_utc = lambda ts: datetime.fromtimestamp(float(ts), zone).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT 1 FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id "
+                        "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL",
+                        (workspace_id, principal))
+            if not cur.fetchone():
+                raise AlphaError("Workspace unavailable.", 403)
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar")
+            try:
+                events = provider.events_between(access, to_utc(start_at), to_utc(end_at), count)
+            except AlphaError as error:
+                if error.code in ("connector_reauthorization_required", "connector_scope_missing"):
+                    self._mark_revoked(cur, workspace_id, connection["connectionId"])
+                raise
+            db.commit()
+        return [{"sourceId": "gcal:" + str(item["itemId"])[:180],
+                 "title": clean(item.get("title") or "Busy", 240),
+                 "start": clean(item.get("start") or "", 80),
+                 "end": clean(item.get("end") or "", 80),
+                 "location": clean(item.get("location") or "", 240)} for item in events[:count]]
+
+    def personal_calendar_search(self, workspace_id, principal, query, limit=12):
+        """Search upcoming Google Calendar event titles/locations over the provider's bounded horizon."""
+        query = clean(query, 200).strip()
+        if not query:
+            raise AlphaError("Enter a calendar search.", 400)
+        count = min(12, max(1, int(limit)))
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT 1 FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id "
+                        "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL",
+                        (workspace_id, principal))
+            if not cur.fetchone():
+                raise AlphaError("Workspace unavailable.", 403)
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar")
+            try:
+                items = provider.search(access, query, count)
+            except AlphaError as error:
+                if error.code in ("connector_reauthorization_required", "connector_scope_missing"):
+                    self._mark_revoked(cur, workspace_id, connection["connectionId"])
+                raise
+            db.commit()
+        return [{"sourceId": "gcal:" + str(item["itemId"])[:180],
+                 "title": clean(item.get("title") or "Busy", 240),
+                 "excerpt": clean(item.get("excerpt") or "", 360)} for item in items[:count]]
+
+    def personal_gmail_search(self, workspace_id, principal, query, limit=8):
+        """Bounded Gmail metadata/snippet search for James Personal Agent."""
+        query = clean(query, 500).strip()
+        if not query:
+            raise AlphaError("Enter a Gmail search.", 400)
+        count = min(12, max(1, int(limit)))
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT 1 FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id "
+                        "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL",
+                        (workspace_id, principal))
+            if not cur.fetchone():
+                raise AlphaError("Workspace unavailable.", 403)
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "gmail")
+            try:
+                messages = provider.search(access, query, count)
+            except AlphaError as error:
+                if error.code in ("connector_reauthorization_required", "connector_scope_missing"):
+                    self._mark_revoked(cur, workspace_id, connection["connectionId"])
+                raise
+            db.commit()
+        return [{"sourceId": "gmail:" + str(item["itemId"])[:180],
+                 "subject": clean(item.get("title") or "Email", 240),
+                 "from": clean(item.get("from") or "", 160),
+                 "snippet": clean(item.get("excerpt") or "", 360),
+                 "date": clean(item.get("date") or "", 100)} for item in messages[:count]]
+
     def daily_brief_context(self, workspace_id, principal, time_zone):
         """Internal, bounded read for James Daily Call. No message body or calendar description is fetched.
 
