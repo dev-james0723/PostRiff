@@ -1,0 +1,1189 @@
+{
+  "package_id": "RAFII-INSIGHTS-GROWTH-20261004",
+  "version": "1.0",
+  "baseline_date": "2026-10-04",
+  "product_validation_executed": false,
+  "allowed_statuses": [
+    "not_run",
+    "pass",
+    "fail",
+    "blocked",
+    "not_applicable"
+  ],
+  "cases": [
+    {
+      "id": "AC01",
+      "phase": "P0",
+      "requirement_ids": [
+        "R01",
+        "R20"
+      ],
+      "name": "開工身份與 base",
+      "required_environment": "read-only project inspection",
+      "expected": "origin、最新 integration SHA、dirty state、owners、AGENTS／lease 有實際記錄；保留舊工作，不以 d91660b7 開工。",
+      "implementation_tasks": [
+        "0"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC02",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02"
+      ],
+      "name": "真零與缺值",
+      "required_environment": "unit + browser + export",
+      "expected": "原生 0 顯示 0 並計入可比數據；null 保持原因且不計入數值，UI／API／輸出一致。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC03",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02",
+        "R06"
+      ],
+      "name": "無效數字",
+      "required_environment": "unit + contract",
+      "expected": "boolean、NaN、Infinity、負值不進入 measured／totals；null reason 存在。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC04",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "每 metric 的 timestamp",
+      "required_environment": "exact regression + unit",
+      "expected": "同 post reach／likes 的不同 observedAt 各自保留；hypothesis 不借其他 metric 時間。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC05",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03",
+        "R14"
+      ],
+      "name": "更新及 basisDigest",
+      "required_environment": "unit + PG",
+      "expected": "自己的 evidence 變更使 digest／舊 result 失效；只更新另一 metric 不偽稱本 metric 已刷新。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC06",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "Lesson 支持期間",
+      "required_environment": "exact regression + export",
+      "expected": "每項 support 保留 exact ID、24h、publication／observation periods；可對回來源並匯出。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC07",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "反證及 legacy period",
+      "required_environment": "unit + contract",
+      "expected": "counterEvidence 有相同時間語義；舊 lesson 缺期間標 legacy_period_unavailable，不由 createdAt 補造。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC08",
+      "phase": "P0",
+      "requirement_ids": [
+        "R04",
+        "R14"
+      ],
+      "name": "身份與能力分層",
+      "required_environment": "unit + PG + native read",
+      "expected": "workspace／account／provider／nativePost／verified job 均匹配；登入或 grant-qualified 不能變成 live-tested。",
+      "implementation_tasks": [
+        "1",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC09",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02",
+        "R04"
+      ],
+      "name": "收集狀態",
+      "required_environment": "unit + browser",
+      "expected": "disabled、unscheduled、pending horizon、scheduled、pending、unsupported、disconnected、unauthorized 分開；文案由 current state 推導。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC10",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03",
+        "R06"
+      ],
+      "name": "嚴格 readOffset 與 freshness",
+      "required_environment": "unit + PG",
+      "expected": "1h／7d／backfill／未知 legacy offset 不進 strict24h cohort；舊 available 值保留真實時間與 stale／last attempt 狀態。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC11",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05"
+      ],
+      "name": "日期與時區",
+      "required_environment": "unit + contract",
+      "expected": "半開 UTC 邊界可由原 IANA timezone 重建，跨 DST／月底／週月差異不混；cumulative 不稱週內事件。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC12",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R09"
+      ],
+      "name": "跨頁共用 context",
+      "required_environment": "browser + contract",
+      "expected": "Analytics→Growth／報告保留完整解析 context；若改範圍明示新期間及原因，每 card 使用實際期間。",
+      "implementation_tasks": [
+        "2",
+        "4",
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC13",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R14"
+      ],
+      "name": "不可信 scope input",
+      "required_environment": "PG + API",
+      "expected": "偽造 workspace／connection／tag／format IDs 不取到另一 workspace 資料；無權 view 不靜默換帳戶。",
+      "implementation_tasks": [
+        "2",
+        "3"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC14",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "樣本與去重",
+      "required_environment": "unit + contract",
+      "expected": "同一作品多 snapshots 只算一 publication；三篇描述性、五篇 Trend baseline、既有 experiment gates 各自保留且不稱因果證明。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC15",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "跨平台及混 cohort",
+      "required_environment": "unit + browser + export",
+      "expected": "不同 provider／account／language／format／definition／unit／horizon 不混比；reach 不稱跨貼文去重受眾。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC16",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "零或缺失 baseline",
+      "required_environment": "unit + browser",
+      "expected": "baseline0／null 時 relative change 為 null 及原因；顯示原始值，不出無限成長。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC17",
+      "phase": "P1",
+      "requirement_ids": [
+        "R03",
+        "R06"
+      ],
+      "name": "比率 matched readings",
+      "required_environment": "unit + PG",
+      "expected": "分子分母需相同合格 reading binding；異時或不同定義只顯示原值，derived ratio unavailable。",
+      "implementation_tasks": [
+        "1",
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC18",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "聚合定義",
+      "required_environment": "unit + export",
+      "expected": "mean-of-ratios 與 ratio-of-sums 明確區分；native 名稱、分子分母、方法與 definition version 可重建。",
+      "implementation_tasks": [
+        "2",
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC19",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06",
+        "R09"
+      ],
+      "name": "未知付費影響",
+      "required_environment": "unit + browser",
+      "expected": "unknown promotion 明示未知，建議是描述性假說；無成本或 conversion 不算 ROI／ROAS／CAC。",
+      "implementation_tasks": [
+        "2",
+        "4"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC20",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07"
+      ],
+      "name": "相對 Saved View",
+      "required_environment": "unit + browser",
+      "expected": "跨日重新開啟解析當下 period；既有固定 snapshot 日期不移動，两者標籤不同。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC21",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07",
+        "R14"
+      ],
+      "name": "Saved View mutation",
+      "required_environment": "PG + API",
+      "expected": "create／update／archive current rights、expectedRevision、idempotency 正確；並發及不同 body 重用 key 返回 conflict。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC22",
+      "phase": "P1",
+      "requirement_ids": [
+        "R08"
+      ],
+      "name": "可修改分類",
+      "required_environment": "unit + browser",
+      "expected": "theme／campaign／series 分開；AI 只是 suggestion，人手可修改／確認，approved source 保留。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC23",
+      "phase": "P1",
+      "requirement_ids": [
+        "R08",
+        "R12"
+      ],
+      "name": "歷史重分類",
+      "required_environment": "PG + export",
+      "expected": "建立新 classificationVersion，舊 report 的內容 membership／值保持可重建；新版本明示影響。",
+      "implementation_tasks": [
+        "3",
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC24",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R07"
+      ],
+      "name": "完整 filters 解析",
+      "required_environment": "browser + API",
+      "expected": "account／language／format／tag／date／comparison 依 server scope 生效；unknown 不偷偷歸入其他格式或語言。",
+      "implementation_tasks": [
+        "2",
+        "3"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC25",
+      "phase": "P1",
+      "requirement_ids": [
+        "R09"
+      ],
+      "name": "Bounded Takeaways",
+      "required_environment": "unit + browser",
+      "expected": "最多三個，有資料才產生；每項數字／期間／support／counter／限制可對回 projection，不湊滿空假說。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC26",
+      "phase": "P1",
+      "requirement_ids": [
+        "R09",
+        "R10"
+      ],
+      "name": "具體下一步",
+      "required_environment": "unit + contract",
+      "expected": "每卡一個明確動作，綁現有 hypothesis／experiment／draft reference 和 contextDigest；引用不合停止。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC27",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R17"
+      ],
+      "name": "人手接受與 replay",
+      "required_environment": "PG + browser",
+      "expected": "接受建立既有草稿／實驗，重複同 body 不重建；不發布、不自動更新 Genome／偏好。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC28",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R14"
+      ],
+      "name": "行動前失效",
+      "required_environment": "PG + API",
+      "expected": "basis／revision／rights／receipt／expiry 改變後 action 或 replay 被拒絕，顯示可恢復原因。",
+      "implementation_tasks": [
+        "4",
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC29",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R17"
+      ],
+      "name": "讀取無 paid side effects",
+      "required_environment": "API spy + browser",
+      "expected": "GET、mount、filters、Saved View、export retry 不排 acquisition／model jobs；顯式 paid action 經既有 quote／consent／quota／reservation。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC30",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R16"
+      ],
+      "name": "Learning 由 owner 控制",
+      "required_environment": "PG + browser",
+      "expected": "提出 lesson／偏好後需 owner approve；可 restore，失效 evidence 不保留有效學習結論。",
+      "implementation_tasks": [
+        "4",
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC31",
+      "phase": "P1",
+      "requirement_ids": [
+        "R11",
+        "R18"
+      ],
+      "name": "工作與結果分層",
+      "required_environment": "unit + export",
+      "expected": "completed／accepted／verified 分別；Time Back 標 estimated；UTC workspace proof 和選定 native cohort 各自列 scope。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC32",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12"
+      ],
+      "name": "不可變快照",
+      "required_environment": "PG + unit",
+      "expected": "相同 version 值／notes／範圍不改；刷新或改註記建立新 version，canonical payloadDigest 可重建。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC33",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12"
+      ],
+      "name": "三格式同源",
+      "required_environment": "golden + rendered export",
+      "expected": "PDF／Markdown／CSV 同 snapshot／context／metric values／null reasons／notes；formatter 不再 query 或重算。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC34",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "匯出 current rights",
+      "required_environment": "PG + API + export",
+      "expected": "撤銷、expired、deleted 資料不能新匯出／replay；redacted report 建新 version；offline 檔不宣稱可遠端撤銷。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC35",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "CSV 安全及語義",
+      "required_environment": "export parser",
+      "expected": "UTF-8／quoting／注入防護符合既有政策；每行有來源、原生定義、window、timestamps、status／null reason。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC36",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R19"
+      ],
+      "name": "PDF 可讀",
+      "required_environment": "PDF rendering inspection",
+      "expected": "繁體字無缺字，長註記／表格跨頁無截斷、来源可讀，fixed period 和 snapshot version 可辨識。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC37",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R17"
+      ],
+      "name": "匯出失敗重試",
+      "required_environment": "API + export",
+      "expected": "snapshot 已保存；重試同 payload／format／rendererVersion，不重跑 AI／provider，不漂移數值。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC38",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "快照角色與 workspace",
+      "required_environment": "PG + API",
+      "expected": "另一 workspace／無權角色不能讀／export；snapshot ID 不是繞過 membership 的 bearer authority。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC39",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R04",
+        "R14"
+      ],
+      "name": "權限撤銷讀取",
+      "required_environment": "API + browser",
+      "expected": "曾有值但 grant／來源權限已撤銷仍 fail closed；不因 frozen／cached measured 值繼續展示敏感資料。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC40",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R14",
+        "R17"
+      ],
+      "name": "兩階段與並發 rights",
+      "required_environment": "PG race + replay",
+      "expected": "prepare 與 commit／model／export 時再次檢查 current rights／basis；競態撤銷、expired revision、idempotent replay 不繞過。",
+      "implementation_tasks": [
+        "1",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC41",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R14"
+      ],
+      "name": "Restricted／secret 不洩漏",
+      "required_environment": "API + DOM + model-input inspection",
+      "expected": "source secret queries、tokens、restricted excerpts 不在 response、hidden DOM、prompt、logs、PDF、CSV。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC42",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13"
+      ],
+      "name": "完整 Trends lineage",
+      "required_environment": "contract + PG",
+      "expected": "receipt／opportunity revision／angle／accepted source／draft revision／approved manifest／verified native identity 可追溯，只由 server 帶入。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC43",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13"
+      ],
+      "name": "採用不是結果",
+      "required_environment": "unit + API + browser",
+      "expected": "GET 不算 exposure；failed exposure 不造 ID；view／accept／draft／verified publish／24h outcome 分開。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC44",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R06"
+      ],
+      "name": "24h 可比 feedback",
+      "required_environment": "unit + PG",
+      "expected": "既有五篇 baseline、same cohort、matched counter time、unchanged outcome 生效；unknown offset／重複 snapshots 不充樣本。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC45",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R09"
+      ],
+      "name": "反證與 treatment unknown",
+      "required_environment": "unit + browser",
+      "expected": "counterEvidence 可查，多建議 treatment unknown；relative difference 永遠 causal=false，不推 adoption 的因果收益。",
+      "implementation_tasks": [
+        "4",
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC46",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R14"
+      ],
+      "name": "Revision drift 失效",
+      "required_environment": "PG + API",
+      "expected": "opportunity／draft／receipt／context 變更後 Lab、edit、accept、learning、review linkage 失效且不串錯 native post。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC47",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R16"
+      ],
+      "name": "禁止代理推估",
+      "required_environment": "unit + contract",
+      "expected": "JEV 不處理 popularity／views／reach／follower-growth；空 native conversion registry 仍 unavailable，不用 delta／views 作 conversion。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC48",
+      "phase": "P2",
+      "requirement_ids": [
+        "R15",
+        "R17"
+      ],
+      "name": "HistoryImport 維持 OFF",
+      "required_environment": "unit + API",
+      "expected": "重用／檢索／replay 不開旗標、不排 backfill、不擴 scopes；available history 的邊界明示。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC49",
+      "phase": "P2",
+      "requirement_ids": [
+        "R15"
+      ],
+      "name": "內容候選可追溯",
+      "required_environment": "unit + browser",
+      "expected": "每個候選回到原文、版本、平台／格式／語言／日期；無 metric 是 content-only；同作品去重，刪改令舊候選失效。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC50",
+      "phase": "P2",
+      "requirement_ids": [
+        "R16"
+      ],
+      "name": "個人化資格",
+      "required_environment": "unit + calibration fixture",
+      "expected": "只有 reviewed method／sample／coverage／calibration 合格才出有期間時區的假說；不足 method_unavailable，不造 accuracy 或最佳。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC51",
+      "phase": "P2",
+      "requirement_ids": [
+        "R16",
+        "R10"
+      ],
+      "name": "偏好版本與撤銷",
+      "required_environment": "PG + browser",
+      "expected": "propose／owner approve／restore／expiry 依既有規則；支持來源失效使建議 stale，不自動更改發文頻率。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC52",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R19"
+      ],
+      "name": "異步 scope 不串頁",
+      "required_environment": "browser race",
+      "expected": "快速切帳戶／workspace／filter 时舊 response 不覆蓋新 context；cache 包含 context／rights epoch，未保存變更使舊行動失效。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC53",
+      "phase": "P1",
+      "requirement_ids": [
+        "R18",
+        "R17"
+      ],
+      "name": "冷啟動與基本誠實性",
+      "required_environment": "browser + API",
+      "expected": "零內容／無 metric 仍顯示工作和缺口；不假學習；基本 state／來源說明不因新 paywall 隱藏，現有 entitlements 不改。",
+      "implementation_tasks": [
+        "4",
+        "7"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC54",
+      "phase": "P1",
+      "requirement_ids": [
+        "R19"
+      ],
+      "name": "手機與鍵盤",
+      "required_environment": "browser + accessibility inspection",
+      "expected": "390px／430px／desktop 可用，整頁不溢出；filters／source／accept／export 可鍵盤操作，非單靠顏色。",
+      "implementation_tasks": [
+        "2",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC55",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R02",
+        "R14",
+        "R19"
+      ],
+      "name": "所有 UI 狀態",
+      "required_environment": "browser + DOM",
+      "expected": "catalog 狀態有可理解文案及恢復動作；loading／error／partial／stale／revoked 不顯示假的0或可操作舊結果。",
+      "implementation_tasks": [
+        "2",
+        "5",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC56",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07",
+        "R08",
+        "R12",
+        "R14"
+      ],
+      "name": "持久化與隔離",
+      "required_environment": "disposable PostgreSQL",
+      "expected": "真 PG migration／rollback／RLS或等效scope／unique／並發／idempotency／retention 按 final storage map 驗證。",
+      "implementation_tasks": [
+        "3",
+        "5",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC57",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R01",
+        "R20"
+      ],
+      "name": "必要工程檢查",
+      "required_environment": "CI + local runtime",
+      "expected": "相關 regression、generated contracts、web lint／typecheck／build、PG／browser 通過，source SHA 對應；保留 PR107／120 修補。",
+      "implementation_tasks": [
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "AC58",
+      "phase": "P1",
+      "requirement_ids": [
+        "R04",
+        "R20"
+      ],
+      "name": "真實讀取及完成證據",
+      "required_environment": "authorized native read + evidence audit",
+      "expected": "一合格帳戶一格式的 exact 24h native讀取與原生口徑對照有證據；若要完整發布閉環另需既有批准素材／verified post。每項 receipt 含SHA／環境／方法／實際輸出；未有則 blocked，不由fixture替代。",
+      "implementation_tasks": [
+        "0",
+        "8"
+      ],
+      "status": "not_run",
+      "actual": null,
+      "source_sha": null,
+      "executed_at": null,
+      "evidence_paths": [],
+      "blocked_reason": null
+    }
+  ]
+}

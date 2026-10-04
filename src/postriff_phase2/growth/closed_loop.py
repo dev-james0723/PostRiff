@@ -49,7 +49,8 @@ class ClosedLoop:
             posts.append({'id':job['id'],'platform':m['platform'],'connectionId':m.get('channelId'),
                           'providerPostId':str(job['providerReference']),'provider':m['platform'].lower(),
                           'language':m.get('payload',{}).get('language'),'format':m.get('contentType',{}).get('formatId','text'),
-                          'timeBucket':'unknown'})
+                          'timeBucket':'unknown','publishedAt':job['verification'].get('at'),
+                          'publicationDigest':postmortem.binding(job)['digest']})
         cur.execute('SELECT job_id,body,extract(epoch from verified_at) FROM public.pr_predictions WHERE workspace_id=%s',(wid,))
         predictions={r[0]:{**r[1],'verifiedAt':float(r[2])} for r in cur.fetchall() if r[0] in {j['id'] for j in jobs}}
         return jobs,performance.attach_readings(cur,wid,posts),predictions

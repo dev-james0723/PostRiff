@@ -1,6 +1,24 @@
 """Native outcomes beside frozen writing advice. Associations, never causal explanations."""
 from . import performance
 from ..contracts import digest
+import math
+
+
+def evidence_binding(post, metric, horizon):
+    reading = post.get('readings', {}).get(horizon, {}).get(metric, {})
+    return {'jobId': post['id'], 'provider': post.get('provider'), 'connectionId': post.get('connectionId'),
+            'nativePostId': post.get('providerPostId'), 'publicationDigest': post.get('publicationDigest'),
+            'publicationAt': post.get('publishedAt'), 'observationId': reading.get('observationId'),
+            'nativeName': metric, 'definitionVersion': reading.get('definitionVersion'), 'unit': reading.get('unit'),
+            'horizon': horizon, 'readOffset': reading.get('readOffset'), 'observedAt': reading.get('observedAt'),
+            'ingestedAt': reading.get('ingestedAt'), 'nativeWindow': reading.get('nativeWindow', 'cumulative_at_observation')}
+
+
+def evidence_period(bindings, key):
+    stamps = [b.get(key) for b in bindings]
+    if not stamps or any(type(t) not in (int, float) or not math.isfinite(t) for t in stamps):
+        return None
+    return {'start': min(stamps), 'end': max(stamps), 'bounds': 'closed', 'timezone': 'UTC'}
 
 # One writing dimension can relate to several native metrics. Do not add those metrics.
 METRICS = {'shareability':('shares','reposts'), 'conversation':('replies','comments'),
@@ -59,10 +77,24 @@ def build(job, prediction, posts, predictions, horizon):
         if row['status']=='mixed':continue
         grade='conflicting' if counter else 'supported' if len(supporting)>=3 else 'limited'
         label=f"{row['label']}: {row['status']} expectations"
+        index = {p['id']: p for p in posts}
+        support_bindings = [evidence_binding(index[pid], row['metric'], horizon) for pid in supporting]
+        counter_bindings = [evidence_binding(index[pid], row['metric'], horizon) for pid in counter]
+        all_bindings = support_bindings + counter_bindings
+        support_period = evidence_period(support_bindings, 'publicationAt')
+        observation_period = evidence_period(support_bindings, 'observedAt')
+        full_period = evidence_period(all_bindings, 'observedAt')
+        complete = all(all(b.get(k) is not None for k in ('observationId','publicationAt','ingestedAt','publicationDigest')) for b in all_bindings)
         lessons.append({'id':digest([row['dimension'],row['metric'],horizon,row['status']])[:16],
                         'label':label,'text':f"{row['label']} advice {row['status']} the observed {horizon} {row['metric']} outcomes in this account cohort. Treat this as an association, not a cause.",
                         'kind':'performance','grade':grade,'evidenceIds':supporting,'counterEvidenceIds':counter,
-                        'metric':row['metric'],'provenance':['official'],'cohort':{k:post.get(k) for k in ('platform','connectionId','format','language','timeBucket')}})
+                        'metric':row['metric'],'provenance':['official'],'cohort':{k:post.get(k) for k in ('platform','connectionId','format','language','timeBucket')},
+                        'horizon':horizon,'supportBindings':support_bindings,'counterEvidenceBindings':counter_bindings,
+                        'supportPublicationPeriod':support_period,'supportObservationPeriod':observation_period,
+                        'counterPublicationPeriod':evidence_period(counter_bindings,'publicationAt'),
+                        'counterObservationPeriod':evidence_period(counter_bindings,'observedAt'),
+                        'periodState':'available' if complete else 'legacy_period_unavailable',
+                        'dateRange':[full_period['start'],full_period['end']] if full_period else None})
     return {'jobId':job['id'],'horizon':horizon,'title':job.get('manifest',{}).get('payload',{}).get('text','')[:150],
             'platform':post['platform'],'prediction':prediction,'reading':reading,'comparisons':comparisons,
             'lessons':lessons[:6],'status':'observed','causal':False,

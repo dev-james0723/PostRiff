@@ -1,0 +1,6 @@
+## codex/rafii-insights-growth-20261004
+?? .claude/skills/
+?? .superpowers/
+?? docs/design/rafii-insights-growth/
+?? tests/test_rafii_analytics_acceptance.py
+fc29af29482fb28e1acbd42a62700b0db7e51829 Enable account-scoped Instagram schedule, analytics, comments and replies

@@ -3,6 +3,7 @@ definition version, observation/ingestion time, availability; present `Unavailab
 zero; rates with numerator/denominator; like-for-like cohorts; < 3 comparable → insufficient.
 """
 from fractions import Fraction
+from decimal import Decimal
 import math
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
@@ -99,7 +100,7 @@ def rate(numerator, denominator):
     return {"value": str(Fraction(int(numerator), int(denominator))), "display": f"{numerator}/{denominator}", "numerator": numerator, "denominator": denominator}
 
 
-def latest_observations(cur, workspace_id, basis=None):
+def latest_observations(cur, workspace_id, basis=None, *, include_identity=False):
     """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
     take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
     The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); databases without migration 035
@@ -108,7 +109,8 @@ def latest_observations(cur, workspace_id, basis=None):
     offset = read_offset_column(cur)
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
-    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
+    identity = ",id::text,source_endpoint" if include_identity else ""
+    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset}{identity} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
 
 
@@ -119,10 +121,10 @@ def summary(cur, workspace_id, jobs, now, basis=None):
     posts = {}
     for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
         post = posts.setdefault((provider, connection_id, post_id, job_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
-        if value is None or not math.isfinite(float(value)) or value < 0:
+        if not (type(value) in (int, float) or isinstance(value, Decimal)) or value is None or not math.isfinite(float(value)) or value < 0:
             availability = "unavailable"
         # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
-        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
+        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed), "ingestedAt": float(ingested)}
         post["metrics"][metric]["definitionVersion"] = version
     job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
     items = []
