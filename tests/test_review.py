@@ -55,9 +55,29 @@ class ReviewTests(unittest.TestCase):
     def test_dates_require_explicit_timezone_and_half_open_period(self):
         self.scope['publicationPeriod']['timezone'] = 'fake/zone'
         with self.assertRaises(AlphaError): self.context()
+
+    def test_scope_rejects_ambiguous_dates_and_future_classification(self):
+        self.scope['relativeDateRule'] = {'kind':'this_week','timezone':'UTC'}
+        with self.assertRaises(AlphaError): self.context()
+        self.scope.pop('relativeDateRule')
+        self.state['coworker'] = {'review':{'tags':{'theme':{'kind':'theme'}},'classificationVersion':2}}
+        self.scope['tagSelection'] = [{'tagId':'theme','kind':'theme','classificationVersion':3}]
+        with self.assertRaises(AlphaError): self.context()
+
+    def test_metric_time_keeps_subsecond_precision(self):
+        self.rows[0]['observedAt'] += 0.125
+        evidence = self.projection()['nativeResults'][0]
+        self.assertEqual(self.review.stamp(evidence['observedAt']), self.rows[0]['observedAt'])
         self.scope['publicationPeriod']['timezone'] = 'UTC'
         self.scope['publicationPeriod']['end'] = self.scope['publicationPeriod']['start']
         with self.assertRaises(AlphaError): self.context()
+
+    def test_takeaway_cannot_propose_hypothesis_with_other_scope_or_low_arms(self):
+        p=self.projection()
+        h={'id':'h','cohort':{'connectionId':'own','provider':'instagram','language':'en','contentTypeId':'text','definitionVersion':insights.DEFINITION_VERSION},'metric':'reach','dimension':'length','sample_a':5,'sample_b':5,'evidence_ids':['0'],'counter_evidence_ids':[],'expiresAt':NOW+100}
+        self.assertFalse(self.review.review_hypothesis_eligible(self.state,p,h,NOW))
+        h['cohort']['connectionId']='other'
+        self.assertFalse(self.review.review_hypothesis_eligible(self.state,p,h,NOW))
 
     def test_relative_view_resolves_dst_local_week_without_moving_snapshot(self):
         a = self.review.resolve_relative_period({'kind': 'this_week', 'timezone': 'America/New_York'}, datetime(2026, 11, 1, 17, tzinfo=timezone.utc).timestamp())
@@ -115,6 +135,79 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(self.review.matched_ratio(self.rows[1],self.rows[0])['reason'],'zero_denominator')
         self.rows[0]['value']=10;self.rows[1]['observedAt']+=1
         self.assertEqual(self.review.matched_ratio(self.rows[1],self.rows[0])['reason'],'incompatible_readings')
+
+    def test_saved_view_relative_rule_replay_and_revision_conflict(self):
+        self.assertTrue(hasattr(self.review,'save_review_view'),'Saved Views must use the existing aggregate')
+        body={'name':'Weekly original content','filterDefinition':{**self.scope,'publicationPeriod':None,'relativeDateRule':{'kind':'this_week','timezone':'UTC'}},'expectedRevision':0,'idempotencyKey':'view-key-001'}
+        view=self.review.save_review_view(self.state,'workspace',body,'owner',NOW)
+        self.assertEqual(view['revision'],1)
+        self.assertEqual(view,self.review.save_review_view(self.state,'workspace',body,'owner',NOW+1))
+        with self.assertRaises(AlphaError):self.review.save_review_view(self.state,'workspace',{**body,'name':'Different'},'owner',NOW)
+        with self.assertRaises(AlphaError):self.review.save_review_view(self.state,'workspace',{**body,'id':view['id'],'idempotencyKey':'view-key-002','expectedRevision':0},'owner',NOW)
+
+    def test_classification_versions_do_not_rewrite_old_membership(self):
+        self.assertTrue(hasattr(self.review,'classify_content'),'Human classification is versioned')
+        body={'jobId':'0','manifestDigest':self.projection()['nativeResults'][0]['publicationBinding']['manifestDigest'],
+              'tags':[{'tagId':'theme-practice','kind':'theme','label':'Practice'}],'confirmed':True,'source':'human','expectedRevision':0,'idempotencyKey':'class-key-01'}
+        one=self.review.classify_content(self.state,'workspace',body,'owner',NOW)
+        self.assertEqual(one['version'],1)
+        second={**body,'tags':[],'expectedRevision':1,'idempotencyKey':'class-key-02'}
+        self.review.classify_content(self.state,'workspace',second,'owner',NOW)
+        self.assertEqual(self.review._classification(self.state,'0',1)['tags'],['theme-practice'])
+        self.assertEqual(self.review._classification(self.state,'0',2)['tags'],[])
+
+    def test_ai_classification_is_a_suggestion_until_human_confirmation(self):
+        self.assertTrue(hasattr(self.review,'classify_content'))
+        body={'jobId':'0','manifestDigest':self.projection()['nativeResults'][0]['publicationBinding']['manifestDigest'],
+              'tags':[{'tagId':'theme-practice','kind':'theme','label':'Practice'}],'confirmed':False,'source':'ai_suggestion','expectedRevision':0,'idempotencyKey':'class-ai-001'}
+        suggestion=self.review.classify_content(self.state,'workspace',body,'owner',NOW)
+        self.assertEqual(suggestion['status'],'suggested')
+        self.assertEqual(self.review._classification(self.state,'0',999)['tags'],[])
+
+    def test_bounded_takeaways_keep_support_counter_and_no_empty_claims(self):
+        self.assertTrue(hasattr(self.review,'review_takeaways'))
+        p=self.projection();items=self.review.review_takeaways(p,self.state,NOW)
+        self.assertLessEqual(len(items),3);self.assertTrue(items)
+        self.assertTrue(all(i['supportBindings'] and i['contextDigest']==p['contextDigest'] and i['causal'] is False for i in items))
+        p['groups']=[];self.assertEqual(self.review.review_takeaways(p,self.state,NOW),[])
+
+    def test_snapshot_is_immutable_and_notes_make_a_new_version(self):
+        self.assertTrue(hasattr(self.review,'build_review_snapshot'))
+        p=self.projection();original=copy.deepcopy(p)
+        a=self.review.build_review_snapshot(p,self.state,['繁體中文註記'],'owner','a'*40,NOW)
+        b=self.review.build_review_snapshot(p,self.state,['New note'],'owner','a'*40,NOW+1,previous=a)
+        self.assertEqual(a['version'],1);self.assertEqual(b['version'],2)
+        self.assertEqual(a['humanNotes'],['繁體中文註記']);self.assertNotEqual(a['payloadDigest'],b['payloadDigest'])
+        self.assertEqual(p,original)
+        self.assertEqual(a['resolvedContext']['publicationPeriod'],p['resolvedContext']['publicationPeriod'])
+        self.assertEqual(a['timeBack']['state'],'unavailable')
+
+    def test_exports_use_same_snapshot_and_csv_is_safe(self):
+        self.assertTrue(hasattr(self.review,'format_snapshot'))
+        import csv,io
+        p=self.projection();s=self.review.build_review_snapshot(p,self.state,['=malicious','繁體註記,含逗號'],'owner','a'*40,NOW)
+        outputs={f:self.review.format_snapshot(s,f) for f in ('markdown','csv','pdf')}
+        for f,content in outputs.items():
+            self.assertIn(s['snapshotId'],content['content']);self.assertIn('繁體註記',content['content'])
+            self.assertEqual(content['payloadDigest'],s['payloadDigest'])
+        rows=list(csv.DictReader(io.StringIO(outputs['csv']['content'])))
+        self.assertEqual(rows[0]['value'],'0.0');self.assertEqual(rows[0]['valueState'],'measured')
+        self.assertTrue(rows[0]['humanNotes'].startswith("'="))
+        self.assertIn('observationId',rows[0]);self.assertIn('sourceRef',rows[0])
+
+    def test_reuse_deduplicates_and_has_no_history_import_effect(self):
+        self.assertTrue(hasattr(self.review,'reuse_candidates'))
+        self.state['phase2']['jobs'].append(copy.deepcopy(self.state['phase2']['jobs'][0]))
+        before=copy.deepcopy(self.state);r=self.review.reuse_candidates(self.state,self.projection(),NOW)
+        self.assertEqual(len(r),6);self.assertEqual(self.state,before)
+        self.assertTrue(all(c['state']=='content_only' and c['revision'] is not None for c in r))
+        self.state['phase2']['channels'][0]['revoked']=True
+        self.assertEqual(self.review.reuse_candidates(self.state,self.projection(),NOW),[])
+
+    def test_unreviewed_personalization_withholds_accuracy_and_best_claims(self):
+        self.assertTrue(hasattr(self.review,'personalization_status'))
+        result=self.review.personalization_status(self.state,self.projection(),NOW)
+        self.assertEqual(result['status'],'method_unavailable');self.assertIsNone(result['accuracy'])
 
 
 if __name__=='__main__':unittest.main()

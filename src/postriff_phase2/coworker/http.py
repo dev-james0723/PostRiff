@@ -11,6 +11,7 @@ class for each mutation and re-reads what it changed.
 from __future__ import annotations
 
 import html
+import json
 import time
 from urllib.parse import parse_qs
 
@@ -133,6 +134,29 @@ def handle(app, environ, start_response, service, token, method, parts):
             return json_(200, notifications.unsubscribe_push(workspace_id, token, subscription_id=rest[0]))
     if resource == "coworker" and rest:
         area, tail = rest[0], rest[1:]
+        if area == 'review' and tail == ['views']:
+            if method == 'GET':
+                return json_(200,coworker.review.views(workspace_id,token))
+            if method == 'POST':
+                return json_(200,coworker.review.save_view(workspace_id,token,body()))
+        if area == 'review' and tail == ['classifications'] and method == 'POST':
+            return json_(200,coworker.review.classify(workspace_id,token,body()))
+        if area == 'review' and tail == ['snapshots'] and method == 'POST':
+            return json_(201,coworker.review.create_snapshot(workspace_id,token,body()))
+        if area == 'review' and len(tail) in (2,3) and tail[0]=='snapshots' and method=='GET':
+            raw_version = _query(environ,'version') or '1'
+            if not raw_version.isdigit() or not 1<=int(raw_version)<=64 or len(tail)==3 and tail[2]!='export':
+                raise AlphaError('Choose an existing report version.',400)
+            return json_(200,coworker.review.snapshot(workspace_id,token,tail[1],int(raw_version),format_=_query(environ,'format') if len(tail)==3 else None))
+        if area == 'review' and not tail and method == 'GET':
+            raw = _query(environ,'scope') or '{}'
+            if len(raw)>16000:
+                raise AlphaError('Review scope is too large.',400)
+            try:
+                scope = json.loads(raw)
+            except (ValueError,TypeError):
+                raise AlphaError('Review scope must be valid JSON.',400) from None
+            return json_(200,coworker.review.read(workspace_id,token,scope))
         if area == "growth-loop":
             loop = coworker.growth_loop
             if not tail and method == "GET":

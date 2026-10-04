@@ -64,6 +64,8 @@ class CoworkerService:
             engine.trend_bindings_current = lambda state, bindings: queue_bindings_current(hosted.connection_factory, state, bindings, self.clock())
         from .growth_loop import GrowthLoop
         self.growth_loop = GrowthLoop(self)
+        from .review import ReviewService
+        self.review = ReviewService(self)
 
     # --- plumbing ----------------------------------------------------------------------------------------------------------
     @property
@@ -846,11 +848,11 @@ class CoworkerService:
             out.append({"workspaceId": workspace_id, **result})
         return {"workspaces": out}
 
-    def _trend_learning_report(self, cur, workspace_id, principal):
+    def _trend_learning_report(self, cur, workspace_id, principal, *, window='24h'):
         from ..growth.trends import config as trend_config, learning
         from ..growth.trends.store import TrendStore
         if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
-            return learning.report(cur,workspace_id,principal,self.clock(),store=TrendStore(self.hosted.connection_factory))
+            return learning.report(cur,workspace_id,principal,self.clock(),store=TrendStore(self.hosted.connection_factory),window=window)
         return None
 
     def performance_view(self, workspace_id, token):
