@@ -172,6 +172,78 @@ class MetricScheduler:
         return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
                     and getattr(adapter, "execution_enabled", True) is True)
 
+    def probe(self, workspace_id, token, connection_id, payload):
+        """Explicit interactive canary before scheduled reads are enabled.
+
+        The same workspace, adapter, scope and purge admission applies. Read one
+        owned Instagram media id and its native insights; retain no history,
+        schedule rows or observations. Audit only identifiers and result classes.
+        """
+        from urllib.parse import quote, urlencode
+        from ..api_tokens import is_api_token
+        from ..hosted import _membership, audit, throttle
+        from ..permissions import require
+        from ..providers import GRAPH_VERSION
+        if is_api_token(token):
+            raise AlphaError("An interactive sign-in is required for this canary.", 403, code="interactive_required")
+        if not isinstance(payload, dict) or payload.get("confirmed") is not True:
+            raise AlphaError("Confirm one bounded native insights read.", 400)
+        probe_id = uuid.uuid4().hex
+        with self.oauth.repository.transaction(token, workspace_id) as (cur, membership, actor):
+            require(_membership(membership), "manage_connections")
+            if not self.workspace_allowed(workspace_id, cursor=cur):
+                raise AlphaError("This workspace is not admitted for metric reads.", 404, code="feature_disabled")
+            cur.execute("SELECT provider,provider_account_id FROM public.pr_encrypted_credentials "
+                        "WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
+            stored = cur.fetchone()
+            if not stored or stored[0] != "instagram":
+                raise AlphaError("This canary requires a connected Instagram account.", 404)
+            row = {"workspaceId": workspace_id, "connectionId": connection_id, "provider": stored[0], "jobId": None}
+            if self._eligibility(cur, row) != "read":
+                raise AlphaError("This connection is not admitted for native insights.", 409, code="analytics_required")
+            throttle(cur, f"insights-canary:{workspace_id}:{actor}", 3, 3600)
+            audit(cur, workspace_id, actor, "metric_reads.canary_requested", connection_id,
+                  {"probeId": probe_id, "maxPosts": 1, "maxPages": 1})
+        result = {"probeId": probe_id, "connectionId": connection_id, "provider": "instagram",
+                  "state": "unavailable", "http": None, "providerRead": False, "found": {}}
+        try:
+            grant = self.oauth.token_for_worker(workspace_id, connection_id)
+            if (grant.get("provider") != "instagram" or
+                    not NATIVE_ANALYTICS_SCOPES["instagram"] <= set(grant.get("scopes") or []) or
+                    self._eligible(row) != "read"):
+                result.update(state="cancelled", failure="not_eligible")
+            elif self.oauth.providers["instagram"].identity(grant["accessToken"])["providerAccountId"] != stored[1]:
+                result.update(state="cancelled", failure="account_changed")
+            elif self._eligible(row) != "read" or (grant.get("expiresAt") is not None and grant["expiresAt"] <= self.clock()):
+                # Identity is provider I/O: access can change while it is in flight.
+                result.update(state="cancelled", failure="not_eligible")
+            else:
+                url = f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(str(stored[1]), safe='')}/media?" + urlencode({"fields": "id", "limit": 1})
+                listed = self.transport("GET", url, headers={"Authorization": f"Bearer {grant['accessToken']}"})
+                data = (listed.get("body") or {}).get("data") if isinstance(listed.get("body"), dict) else None
+                if listed.get("status") != 200:
+                    result.update(http=listed.get("status"), failure="media_read")
+                elif not isinstance(data, list) or not data or not isinstance(data[0], dict) or not isinstance(data[0].get("id"), str) or not data[0]["id"].isdigit() or len(data[0]["id"]) > 200:
+                    result.update(http=200, failure="no_eligible_media")
+                else:
+                    row["postId"] = data[0]["id"]
+                    read = self.read(row, {(workspace_id, connection_id): grant})
+                    result.update(read)
+                    result["providerPostId"] = row["postId"]
+                    if result["state"] == "done" and not result.get("found"):
+                        result.update(state="unavailable", failure="no_native_metrics")
+        except Exception as error:  # provider messages and URLs can contain credentials
+            result.update(state="unavailable", failure="transport", http=None, found={})
+            _note("metric_reads.canary_failed", error)
+        with self.oauth.repository.transaction(token, workspace_id) as (cur, membership, actor):
+            require(_membership(membership), "manage_connections")
+            if self._eligibility(cur, row, lock=True) != "read":
+                result.update(state="cancelled", failure="not_eligible", found={})
+            audit(cur, workspace_id, actor, "metric_reads.canary_completed", connection_id,
+                  {"probeId": probe_id, "state": result["state"], "http": result["http"],
+                   "providerRead": result["providerRead"], "availableMetrics": sorted(result.get("found") or {})})
+        return result
+
     # --- scheduling (SQL only, inside the verification transaction) ---------------------------------------------------
     def provider_for(self, platform):
         for pid, adapter in (getattr(self.oauth, "providers", None) or {}).items():
@@ -245,8 +317,9 @@ class MetricScheduler:
         if not found or found[0]:
             return "cancel"
         if not self.workspace_allowed(row['workspaceId'],cursor=cur):return 'cancel'
-        cur.execute("SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL" +
-                    (" FOR SHARE" if lock else ""), (row["workspaceId"], row["connectionId"]))
+        cur.execute("SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL "
+                    "AND (access_expires_at IS NULL OR access_expires_at>to_timestamp(%s))" +
+                    (" FOR SHARE" if lock else ""), (row["workspaceId"], row["connectionId"], self.clock()))
         credential = cur.fetchone()
         if (not credential or credential[0] != row["provider"] or
                 not NATIVE_ANALYTICS_SCOPES[row["provider"]] <= set(credential[1] or [])):
@@ -277,6 +350,8 @@ class MetricScheduler:
                     not NATIVE_ANALYTICS_SCOPES[row["provider"]] <= set(grant.get("scopes") or [])):
                 return {"state": "cancelled", "failure": "analytics_scope_missing"}
             # Introspection can reveal a revoked scope. A reused grant never replaces current DB rights.
+            if grant.get("expiresAt") is not None and grant["expiresAt"] <= self.clock():
+                return {"state": "cancelled", "failure": "credential_expired"}
             eligibility = self._eligible(row)
             if eligibility == "wait":
                 return {"state": "transient", "failure": "purge_pending", "http": None}

@@ -379,8 +379,8 @@ class HostedCallSiteTests(unittest.TestCase):
 class Adapter:
     platform, capability_version, assisted_fallback, production_reviewed, native_schedule = "Mastodon", 1, True, False, False
 
-    def capability_scopes(self,capability):
-        return ['write'] if capability=='publish' else []
+    def capability_scopes(self, capability):
+        return ['write'] if capability in ('publish', 'schedule') else []
 
     def exchange(self, code, verifier, redirect):
         return {"accessToken": "AT", "scopes": ["write"], "expiresIn": 3600}

@@ -48,7 +48,12 @@ async function api(method, url, body) {
   page.setDefaultTimeout(30000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   let posts=0;page.on('request',r=>{if(new URL(r.url()).pathname===endpoint && r.method()==='POST')posts++;});
-  const checks=[];
+  const checks=[], traffic=[];
+  page.on('response', async response => {
+    if (new URL(response.url()).pathname !== endpoint) return;
+    const record={method:response.request().method(),status:response.status()};traffic.push(record);
+    try {record.body=await response.json();} catch {record.bodyUnavailable=true;}
+  });
   async function visit() { await page.goto(base+'/app/channels',{waitUntil:'domcontentloaded',timeout:120000});await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({timeout:120000}); }
   async function open() { await page.getByRole('button',{name:'Past analytics',exact:true}).click();return page.getByRole('dialog').filter({has:page.getByText('Import past analytics',{exact:true})}); }
   async function shot(name) {await page.screenshot({path:path.join(out,name+'.png')});}
@@ -161,5 +166,11 @@ async function api(method, url, body) {
     assert.deepEqual(errors,[]);
     const report={engine,execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
     fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+  } catch (error) {
+    let latest;
+    try {latest=await api('GET',endpoint);} catch (readError) {latest={unavailable:String(readError)};}
+    fs.writeFileSync(path.join(out,'failure.json'),JSON.stringify({engine,execution:'failed local synthetic acceptance; never production',error:String(error),checks,traffic,latest,pageErrors:errors},null,2));
+    await shot('failure').catch(()=>{});
+    throw error;
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
