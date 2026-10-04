@@ -30,11 +30,13 @@ def main():
     parser.add_argument('--web-port', type=int, default=4459)
     parser.add_argument('--pg-port', type=int, default=56449)
     parser.add_argument('--skip-build', action='store_true', help='reuse only a matching local .next-trend-live build')
+    parser.add_argument('--browser-engine',choices=('chromium','webkit'),default='chromium')
     parser.add_argument('--pool-only', action='store_true', help='only affected Home/Weekly real API checks; historical46 are not rerun')
     parser.add_argument('--learning-only', action='store_true', help='only affected Performance real API checks; historical Radar/Lab/Pool receipts retained')
     parser.add_argument('--metric-admission', action='store_true', help='learning-only: mount a read-only scheduler for one synthetic workspace and prove the others stay disabled')
     args = parser.parse_args()
     if args.pool_only and args.learning_only: parser.error('Choose one bounded mode')
+    if args.pool_only and args.browser_engine != 'chromium': parser.error('Pool-only harness supports Chromium; full Radar/Lab supports WebKit')
     if args.metric_admission and not args.learning_only: parser.error('Metric admission requires learning-only')
     dist = '.next-trend-learning' if args.learning_only else '.next-trend-live'
     out = args.out.resolve()
@@ -86,6 +88,7 @@ def main():
     code = 1
     summary = {'execution': 'real_api_postgresql_synthetic_identity_and_seed', 'network_guard_probe': 'connect_and_dns_denied',
         'trend_api_interception': False, 'provider_or_model_configuration': False}
+    summary['browser_engine']=args.browser_engine
     summary['harness_sources'] = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in (
         'scripts/trend_browser.py', 'tests/phase2/seed_trend_browser.py', 'web/tests/trend-live-api-browser.cjs', 'web/tests/trend-pool-live-api-browser.cjs')}
     ui = json.loads((ROOT/'web/src/features/trends/redesign-validation.json').read_text())
@@ -198,6 +201,7 @@ def main():
                     (out/'learning-fixture-error.json').write_text(json.dumps(learning_errors))
             learning_thread = threading.Thread(target=learning_fixture_events, daemon=True)
             learning_thread.start()
+        env['POSTRIFF_BROWSER_ENGINE']=args.browser_engine
         code = subprocess.call(['node','web/tests/trend-pool-live-api-browser.cjs' if args.pool_only else 'web/tests/trend-live-api-browser.cjs'], cwd=ROOT, env=env)
         learning_stop.set()
         if learning_thread: learning_thread.join(timeout=5)

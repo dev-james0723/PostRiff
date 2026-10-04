@@ -214,13 +214,23 @@ def _sweep(connection_factory, *, limit, only, imports_only, max_seconds=10.0, m
 
 
 class HistoryImporter:
-    def __init__(self, connection_factory, oauth, *, transport, clock=time.time, monotonic=time.monotonic, worker_id=None):
+    def __init__(self, connection_factory, oauth, *, transport, customer_access=None, clock=time.time, monotonic=time.monotonic, worker_id=None):
         self.connection_factory = connection_factory
         self.oauth = oauth
         self.transport = transport
         self.clock = clock
         self.monotonic = monotonic
         self.worker_id = worker_id or f"hi-{uuid.uuid4().hex[:12]}"
+        self.customer_access=customer_access
+
+    def _customer_allowed(self,cur,workspace_id,connection_id,provider):
+        if self.customer_access is None:return True
+        adapter=(getattr(self.oauth,'providers',None) or {}).get(provider)
+        if not (adapter and getattr(adapter,'production_reviewed',False) is True and getattr(adapter,'execution_enabled',True) is True
+                and self.customer_access.allowed(workspace_id,cursor=cur)):return False
+        cur.execute('SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL',(workspace_id,connection_id))
+        credential=cur.fetchone()
+        return bool(credential and credential[0]==provider and metric_schedule.NATIVE_ANALYTICS_SCOPES.get(provider,frozenset({'unsupported'}))<=set(credential[1] or []))
 
     # --- customer surface ----------------------------------------------------------------------------------------------
     def request(self, workspace_id, token, connection_id, payload):
@@ -233,6 +243,7 @@ class HistoryImporter:
             raise AlphaError("Confirm reading the last 90 days of this account's posts and their metrics.", 400)
         with self.oauth.repository.transaction(token, workspace_id) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            if self.customer_access:self.customer_access.require(workspace_id,cursor=cur)
             try:
                 throttle(cur, f"history-import:{workspace_id}:{actor}", 5, 3600)
             except AlphaError as error:
@@ -245,6 +256,8 @@ class HistoryImporter:
             found = cur.fetchone()
             if not found or found[0] not in ("threads", "instagram"):
                 raise AlphaError("History import is available for connected Threads and Instagram accounts.", 404)
+            if not self._customer_allowed(cur,workspace_id,connection_id,found[0]):
+                raise AlphaError('Public customer review and current analytics scopes are required.',409,code='history_provider_not_ready')
             if not metric_schedule.analytics_direct(cur, workspace_id, connection_id):
                 raise AlphaError("Connect this account for insights first.", 409, code="analytics_required")
             if purge_pending(cur, workspace_id, connection_id):
@@ -303,6 +316,7 @@ class HistoryImporter:
             cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s", (run["workspaceId"],))
             found = cur.fetchone()
             return (bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])
+                    and self._customer_allowed(cur,run['workspaceId'],run['connectionId'],run['provider'])
                     and not purge_pending(cur, run["workspaceId"], run["connectionId"]))
 
     def _finish(self, run, status, failure=None, backoff_seconds=None, refund=False):
@@ -323,6 +337,11 @@ class HistoryImporter:
         """Posts, their backfill readings and the cursor in one transaction fenced on the lease. `failure` stores the
         page and then fails the run with that class. Returns the stored count, or None if the lease was lost."""
         with self.connection_factory() as db, db.cursor() as cur:
+            if self.customer_access:
+                cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s FOR UPDATE",(run['workspaceId'],))
+                workspace=cur.fetchone()
+                if not workspace or workspace[0] or not self._customer_allowed(cur,run['workspaceId'],run['connectionId'],run['provider']):
+                    return None
             cur.execute("SELECT pages,posts FROM public.pr_history_imports WHERE id=%s::uuid AND lease_owner=%s AND status='running' FOR UPDATE",
                         (run["id"], self.worker_id))
             live = cur.fetchone()
@@ -362,6 +381,10 @@ class HistoryImporter:
                 self._finish(run, "cancelled", "not_eligible")
                 return "cancelled"
             grant = self.oauth.token_for_worker(run["workspaceId"], run["connectionId"])
+            if self.customer_access and (grant.get('provider')!=run['provider'] or
+                    not metric_schedule.NATIVE_ANALYTICS_SCOPES[run['provider']]<=set(grant.get('scopes') or [])):
+                self._finish(run,'cancelled','analytics_scope_missing')
+                return 'cancelled'
         except AlphaError as error:
             if getattr(error, "status", None) in (404, 409):
                 self._finish(run, "failed", "credential")

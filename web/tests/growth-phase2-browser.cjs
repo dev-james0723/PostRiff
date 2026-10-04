@@ -1,8 +1,11 @@
 /** Local UI + real services + disposable data, with all external requests blocked. */
-const {chromium}=require('playwright');
+const {chromium,webkit}=require('playwright');
 const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
 const {randomUUID}=require('node:crypto');const {execFileSync}=require('node:child_process');
-const base='http://127.0.0.1:3296',principal=randomUUID(),root=path.resolve(__dirname,'../..');
+const base=process.env.POSTRIFF_GROWTH_TEST_ORIGIN || 'http://127.0.0.1:3296',principal=randomUUID(),root=path.resolve(__dirname,'../..');
+assert.equal(new URL(base).hostname,'127.0.0.1','Disposable loopback harness only');
+const engine=process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';assert.ok(['chromium','webkit'].includes(engine));
+const pgPort=process.env.POSTRIFF_GROWTH_TEST_PG_PORT || '55796';
 const python=process.env.POSTRIFF_TEST_PYTHON || 'python3';
 const out=process.env.POSTRIFF_GROWTH_EVIDENCE_DIR || path.join(root,'docs/design/growth-phase2/evidence');fs.mkdirSync(out,{recursive:true});
 const headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base};
@@ -10,9 +13,9 @@ async function api(method,url,body){const r=await fetch(base+url,{method,headers
 (async()=>{
 assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');
 const {workspaceId:wid}=await api('POST','/api/auth/verify',{plan:'studio'});
-execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid],{cwd:root});
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid],{cwd:root});
 const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
+const browser=await ({chromium,webkit})[engine].launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
 await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
 await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
 await context.addInitScript(({principal,wid,tours})=>{localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-workspace',wid);localStorage.setItem('postriff-onboarding',JSON.stringify({completed:{},dismissed:tours,nudged:{}}))},{principal,wid,tours});
@@ -26,7 +29,18 @@ await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
 const v=await page.evaluate(async()=> (await window.axe.run('.growth-studio',{resultTypes:['violations']})).violations.filter(v=>['serious','critical'].includes(v.impact)).map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
 assert.deepEqual(v,[],name+' accessibility');}
 try{
+const catalogPattern='**/growth/catalog';
+await page.route(catalogPattern,async r=>{const response=await r.fetch();const catalog=await response.json();await r.fulfill({response,json:{...catalog,postmortem:false,audienceMiner:false,genome:true,postDoctor:true}})});
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded',timeout:120000});
+await page.getByRole('link',{name:'Open Creator Genome',exact:true}).waitFor();
+assert.equal(await page.getByRole('link',{name:'Check a draft with Post Doctor',exact:true}).getAttribute('href'),'/app/queue');
+await page.getByRole('tab',{name:'Your patterns'}).click();
+await page.getByLabel('Creator Genome',{exact:true}).waitFor();
+await audit('independent writing lanes');await shot('independent-writing-lanes');
+checks.push('Genome and Post Doctor remain reachable with native-result and comment lanes disabled');
+await page.unroute(catalogPattern);
+await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded',timeout:120000});
+await page.getByRole('tab',{name:'Your results'}).click();
 await page.getByRole('button',{name:'1h',exact:true}).click();
 await page.getByRole('heading',{name:'Post readings are not enabled.',exact:true}).waitFor();
 assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
@@ -71,7 +85,30 @@ await page.evaluate(()=>document.documentElement.classList.remove('dark'));
 await page.goto(base+'/app/workspace/brand',{waitUntil:'domcontentloaded'});await page.getByLabel('Creator Genome',{exact:true}).waitFor();await shot('genome-desktop');
 await page.goto(base+'/app',{waitUntil:'domcontentloaded'});await page.locator('.growth-entry').waitFor();await shot('home-desktop');
 checks.push('shared visual system and Growth Studio entry on Home and Genome');
-execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid,'empty'],{cwd:root});
+for(const role of ['viewer','editor','owner']){
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid,'role-'+role],{cwd:root});
+await page.goto(base+'/app/growth?view=audience',{waitUntil:'domcontentloaded'});
+await page.locator('.growth-cluster').first().waitFor();
+assert.equal(await page.getByRole('button',{name:'Find audience insights',exact:true}).count(),role==='viewer'?0:1);
+if(role==='owner')await page.getByText('AI permissions & daily allowances').click();
+assert.equal(await page.getByRole('button',{name:'Revoke growth AI permission',exact:true}).count(),role==='owner'?1:0);
+if(role==='owner')await page.getByText('AI permissions & daily allowances').click();
+await audit(role+' permissions');
+}
+checks.push('owner/editor/viewer reads and visible AI/consent permissions use actual local memberships');
+await page.route(catalogPattern,async r=>{const response=await r.fetch();const catalog=await response.json();await r.fulfill({response,json:{...catalog,postmortem:false,audienceMiner:false,genome:false,postDoctor:false,customerAccess:{mode:'paid_studio',qualified:false,reason:'current_live_paid_studio_required'}}})});
+await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
+await page.getByRole('heading',{name:'Your Studio subscription needs attention.',exact:true}).waitFor();
+assert.equal(await page.getByRole('link',{name:'Review subscription',exact:false}).getAttribute('href'),'/app/account/billing');
+assert.equal(await page.getByRole('button',{name:'Find audience insights',exact:true}).count(),0);
+await audit('expired subscription readiness');await shot('subscription-readiness');await page.unroute(catalogPattern);
+await page.route('**/growth/postmortems',r=>r.fulfill({status:503,json:{error:'Synthetic provider unavailable'}}));
+await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
+await page.getByRole('alert').filter({hasText:'Readings could not be loaded.'}).waitFor();
+await page.unroute('**/growth/postmortems');await page.getByRole('button',{name:'Try again',exact:true}).click();
+await page.locator('.growth-results-layout').waitFor();
+checks.push('fixture subscription expiry and provider/API failure recovery stay explicit');
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py',pgPort,principal,wid,'empty'],{cwd:root});
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
 await page.getByRole('heading',{name:'Native post analytics are unavailable.',exact:true}).waitFor();
 assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
@@ -82,7 +119,7 @@ await page.waitForURL(base+'/app/channels');
 await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();
 checks.push('missing native connection is explicit on mobile and the connection link opens the Accounts flow');
 assert.deepEqual(errors,[]);
-fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'PASS',execution:'zero-network deterministic fixtures, disposable database',checks,realModelCalls:0,consoleErrors:errors},null,2));
+fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'PASS',engine,execution:'zero-network deterministic fixtures, disposable database; not ordinary paid production acceptance',checks,realModelCalls:0,consoleErrors:errors},null,2));
 console.log(JSON.stringify({status:'PASS',checks}));
 }catch(e){await shot('failure');console.log((await page.locator('body').innerText()).slice(-6500));throw e}finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

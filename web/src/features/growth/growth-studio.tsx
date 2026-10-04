@@ -13,6 +13,7 @@ import type { GrowthOverview, Postmortem } from '@/lib/growth/types';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 import { EmptyGrowth, GrowthHero, useGrowthAction } from './studio-parts';
 import { AudienceMiner } from './audience-miner';
+import { GenomePanel } from './genome-panel';
 import { readingState } from './measurement-state';
 
 const VIEWS = ['results', 'audience', 'patterns'] as const;
@@ -28,6 +29,8 @@ function Studio() {
   const { api, workspaceId } = useWorkspaceApi();
   const [view, setView] = useQueryState('view', parseAsStringLiteral(VIEWS).withDefault('results'));
   const overview = useQuery({ queryKey: ['growth-overview', workspaceId], queryFn: () => api.growthOverview(workspaceId), enabled: catalog.data?.postmortem === true, retry: false });
+  const paidRequired = catalog.data?.customerAccess?.mode === 'paid_studio' && !catalog.data.customerAccess.qualified;
+  const anyLane = catalog.data && (catalog.data.postmortem || catalog.data.audienceMiner || catalog.data.genome || catalog.data.postDoctor);
   return <PageContainer pageTitle='Growth Studio'>
     <div className='growth-studio'>
       <GrowthHero eyebrow='Your creative practice, evolving' title='Make every post' accent='a little more you.' description='See what resonates, listen to your audience, and decide what to carry into your next idea.' />
@@ -37,10 +40,11 @@ function Studio() {
           if (next !== null) { event.preventDefault(); void setView(TABS[next].id); document.getElementById(`tab-${TABS[next].id}`)?.focus(); }
         }}><Icon size={18} aria-hidden />{label}</button>)}
       </div>
-      {catalog.isPending ? <p role='status' className='growth-loading'>Opening your studio…</p> : catalog.isError ? <p role='alert'>Your growth settings could not be loaded. <Button variant='quiet' onClick={() => void catalog.refetch()}>Try again</Button></p> : !catalog.data?.postmortem && !catalog.data?.audienceMiner ? <EmptyGrowth title='Growth Studio is not enabled here yet.'><p>Your drafts and existing analytics are still available.</p><Link href='/app/analytics'>Open analytics <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth> : <>
+      {catalog.isPending || catalog.isError || paidRequired || !anyLane ? <section id={`panel-${view}`} role='tabpanel' aria-labelledby={`tab-${view}`}>{catalog.isPending ? <p role='status' className='growth-loading'>Opening your studio…</p> : catalog.isError ? <p role='alert'>Your growth settings could not be loaded. <Button variant='quiet' onClick={() => void catalog.refetch()}>Try again</Button></p> : paidRequired ? <EmptyGrowth title='Your Studio subscription needs attention.'><p>Growth Studio requires a current paid Studio or Studio Assist subscription. Your saved drafts remain available.</p><Link href='/app/account/billing'>Review subscription <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth> : <EmptyGrowth title='Growth Studio is not enabled here yet.'><p>Your drafts and existing analytics are still available.</p><Link href='/app/analytics'>Open analytics <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth>}</section> : <>
+        {(catalog.data?.genome || catalog.data?.postDoctor) && <div className='growth-section-heading'><div><p className='growth-kicker'>Your writing practice</p><p>Work with your own drafts and writing samples while platform readings are still ahead.</p></div><div className='flex flex-wrap gap-3'>{catalog.data?.genome && <Link href='/app/workspace/brand'>Open Creator Genome <IconArrowRight size={16} aria-hidden /></Link>}{catalog.data?.postDoctor && <Link href='/app/queue'>Check a draft with Post Doctor <IconArrowRight size={16} aria-hidden /></Link>}</div></div>}
         {catalog.data && <details className='growth-permission'><summary>AI permissions & daily allowances</summary><GrowthConsent catalog={catalog.data} onChange={() => void catalog.refetch()} /></details>}
         <section key={view} id={`panel-${view}`} role='tabpanel' aria-labelledby={`tab-${view}`} className='growth-view'>
-          {view === 'audience' ? <AudienceMiner /> : !catalog.data?.postmortem ? <EmptyGrowth title='Postmortems are not enabled here yet.'><p>Your normal analytics remain available.</p></EmptyGrowth> : overview.isPending ? <p role='status' className='growth-loading'>Gathering verified readings…</p> : overview.isError ? <p role='alert'>Readings could not be loaded. <Button variant='quiet' onClick={() => void overview.refetch()}>Try again</Button></p> : overview.data ? view === 'results' ? <Results data={overview.data} onRefresh={() => void overview.refetch()} /> : <Patterns data={overview.data} /> : <EmptyGrowth title='Postmortems are not enabled here yet.'><p>Your normal analytics remain available.</p></EmptyGrowth>}
+          {view === 'audience' ? <AudienceMiner /> : view === 'patterns' && !catalog.data?.postmortem && catalog.data?.genome ? <GenomePanel /> : !catalog.data?.postmortem ? <EmptyGrowth title='Postmortems are not enabled here yet.'><p>Your normal analytics remain available.</p></EmptyGrowth> : overview.isPending ? <p role='status' className='growth-loading'>Gathering verified readings…</p> : overview.isError ? <p role='alert'>Readings could not be loaded. <Button variant='quiet' onClick={() => void overview.refetch()}>Try again</Button></p> : overview.data ? view === 'results' ? <Results data={overview.data} onRefresh={() => void overview.refetch()} /> : <Patterns data={overview.data} /> : <EmptyGrowth title='Postmortems are not enabled here yet.'><p>Your normal analytics remain available.</p></EmptyGrowth>}
         </section>
       </>}
     </div>

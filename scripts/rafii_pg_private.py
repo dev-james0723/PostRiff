@@ -47,8 +47,10 @@ def main(names):
     with tempfile.TemporaryDirectory(prefix="rafii-pg-mirror-") as tmp:
         base = mirror(Path(tmp) / "repo")
         # Same grouping as postriff_pg_suite.py: these two run inside other scripts' databases.
-        scripts = [p for p in sorted((base / "tests/phase2").glob("*.py")) if p.name not in ("postgres_repository.py", "postgres_safety.py")]
+        scripts = [p for p in sorted((base / "tests/phase2").glob("postgres_*.py")) if p.name not in ("postgres_repository.py", "postgres_safety.py")]
         if names:
+            unknown=set(names)-{p.stem for p in scripts}
+            if unknown:raise ValueError('Unknown PostgreSQL test selection: '+','.join(sorted(unknown)))
             scripts = [p for p in scripts if p.stem in names]
         results = []
         for script in scripts:

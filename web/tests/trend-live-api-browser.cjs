@@ -6,7 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { chromium } = require('playwright');
+const { chromium,webkit } = require('playwright');
+const engine=process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+assert.ok(['chromium','webkit'].includes(engine));
 const { z } = require('zod');
 const t = require('./trend-contract.cjs').loadTypes();
 const base = process.env.TREND_WEB_URL;
@@ -558,9 +560,9 @@ async function checkLearning({ page, row, root, api, headers, other }) {
 }
 
 async function main() {
-  const browser = await chromium.launch({
+  const browser = await ({chromium,webkit})[engine].launch({
     headless: true,
-    ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {})
+    ...(engine==='chromium' && process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {})
   });
   try {
     for (const row of [...seed.seeds, ...seed.lab_seeds, ...seed.dismiss_seeds]) {
@@ -883,7 +885,7 @@ async function main() {
     fs.writeFileSync(
       path.join(out, 'browser-results.json'),
       JSON.stringify(
-        { execution: seed.execution, trend_api_interception: false, results, traffic },
+        { execution: seed.execution, engine, trend_api_interception: false, results, traffic },
         null,
         2
       )

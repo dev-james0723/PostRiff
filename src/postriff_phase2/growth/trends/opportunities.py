@@ -273,8 +273,7 @@ def refresh_workspace_candidates(hosted, *, values=None, max_workspaces=5, trend
         return {"status": "disabled", "workspaces": 0, "created": 0, "existing": 0, "unavailable": 0}
     if type(max_workspaces) is not int or not 1 <= max_workspaces <= 5 or type(trend_limit) is not int or not 1 <= trend_limit <= 20:
         raise ValueError("workspace_candidate_bound")
-    raw = str(flags._source(values).get("RAFII_TREND_WORKSPACE_ALLOWLIST", ""))
-    allowed = [contracts.uuid(w.strip()) for w in raw.split(",") if w.strip()]
+    allowed = config.admitted_workspaces(values)
     result = {"status": "stored_only", "workspaces": 0, "created": 0, "existing": 0, "unavailable": 0}
     if not allowed:
         return result

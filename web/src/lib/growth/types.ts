@@ -1,5 +1,6 @@
 export type AdviceGoal = 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
 export interface GrowthCatalog {
+  customerAccess?: { mode: 'paid_studio' | 'private_beta'; qualified: boolean; reason: string; plan: 'studio' | 'assist' | null; planTermsId?: string | null };
   radar?: boolean;
   postDoctor: boolean;
   postDoctorV2?: boolean;
@@ -94,6 +95,8 @@ export interface GrowthReadingWindow {
   available: boolean;
   state?: 'measured' | 'pending_horizon' | 'scheduled' | 'pending' | 'disabled' | 'unsupported' | 'disconnected' | 'rights_unavailable' | 'unscheduled' | 'unavailable';
   dueAt?: number | null;
+  deadlineAt?: number | null;
+  nextAttemptAt?: number | null;
   reason?: string | null;
 }
 export interface GrowthOverview {

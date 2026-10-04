@@ -493,9 +493,8 @@ class DiscoveryFrontier:
         if not all(config.enabled(n, self.values) for n in ('INTELLIGENCE','RADAR','PROVIDER_OPERATIONS')):
             return {'status': 'disabled', 'results': [], 'blocked': 0}
         at = self.clock()
-        env = os.environ if self.values is None else self.values
-        workspaces = [w.strip() for w in str(env.get('RAFII_TREND_WORKSPACE_ALLOWLIST','')).split(',')
-                      if config.workspace_allowed(w.strip(), self.values)]
+        env = config.flags._source(self.values)
+        workspaces = config.admitted_workspaces(self.values)
         operations = [o.strip() for o in str(env.get('RAFII_TREND_ALLOWED_OPERATIONS','')).split(',') if o.strip()]
         with self.store.transaction() as cur:
             cur.execute("""SELECT scope_key,provider_id,version FROM public.pr_trend_source_policies

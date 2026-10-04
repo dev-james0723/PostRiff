@@ -459,7 +459,7 @@ class WhitespaceAdmission:
             raise TrendStorageError('whitespace_plan_bound')
         result = {'state':'disabled','workspaces':0,'stored':0,'reused':0,'unavailable':0}
         if not all(config.enabled(n,self.values) for n in ('INTELLIGENCE','RADAR','TRUST_RECEIPTS','WHITESPACE')): return result
-        allowed = sorted({contracts.uuid(w.strip()) for w in str(flags._source(self.values).get('RAFII_TREND_WORKSPACE_ALLOWLIST','')).split(',') if w.strip()})
+        allowed = config.admitted_workspaces(self.values)
         if not allowed: return result
         with self.store.transaction() as cur:
             cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('trend-whitespace-plan-v1',0))")

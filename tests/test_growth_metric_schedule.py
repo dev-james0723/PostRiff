@@ -56,6 +56,31 @@ class Read(unittest.TestCase):
 
     ROW = {"workspaceId": "w", "connectionId": "c", "provider": "threads", "postId": "p"}
 
+    def test_missed_horizon_never_calls_provider_or_manufactures_old_reading(self):
+        s=self.scheduler({'status':200,'body':{}})
+        s.clock=lambda:1000+3600+601
+        outcome=s.read({**self.ROW,'offset':'1h','anchorAt':1000},{})
+        self.assertEqual(outcome['state'],'unavailable')
+        self.assertEqual(outcome['failure'],'horizon_missed')
+        self.assertFalse(outcome.get('providerRead'))
+
+    def test_backfill_has_no_historic_horizon_and_late_response_is_unqualified(self):
+        s=self.scheduler({'status':200,'body':{'data':[]}})
+        s.clock=lambda:1000000
+        self.assertEqual(s.read({**self.ROW,'offset':'backfill','anchorAt':1000},{})['state'],'done')
+        at=[1000+3600]
+        s=self.scheduler()
+        s.clock=lambda:at[0]
+        def transport(*args,**kw):
+            at[0]+=601
+            return {'status':200,'body':{'data':[{'name':'views','total_value':{'value':12}}]}}
+        s.transport=transport
+        outcome=s.read({**self.ROW,'offset':'1h','anchorAt':1000},{})
+        self.assertEqual(outcome['state'],'unavailable')
+        self.assertEqual(outcome['failure'],'horizon_missed')
+        self.assertTrue(outcome['providerRead'])
+        self.assertTrue(outcome['found'])  # retain only as a current untimed snapshot at fenced completion
+
     def test_review_pause_workspace_and_scopes_are_rechecked_before_insights(self):
         for case in ("unreviewed", "malformed_review", "paused", "second_workspace", "no_allowlist", "missing_scope", "wrong_provider"):
             with self.subTest(case=case):

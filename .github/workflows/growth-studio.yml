@@ -9,6 +9,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   growth-studio:
+    strategy:
+      matrix:
+        engine: [chromium, webkit]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -23,6 +26,7 @@ jobs:
       NEXT_PUBLIC_SENTRY_DISABLED: '1'
       NEXT_TELEMETRY_DISABLED: '1'
       POSTRIFF_TEST_PYTHON: python3
+      POSTRIFF_BROWSER_ENGINE: ${{ matrix.engine }}
       POSTRIFF_GROWTH_EVIDENCE_DIR: ${{ github.workspace }}/.codex/growth-studio-evidence
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,7 +43,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
           npm --prefix web ci
           cd web
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Install PostgreSQL 17 from its signed repository
         run: |
           sudo apt-get update
@@ -70,6 +74,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: growth-studio-${{ github.sha }}
+          name: growth-studio-${{ matrix.engine }}-${{ github.sha }}
           path: .codex/growth-studio-evidence/
           retention-days: 14
