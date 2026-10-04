@@ -180,15 +180,20 @@ async function liveWorkspaceRenamePass(page, tracker, width) {
   const label = `${width}px live approved workspace rename`;
   await attempt(`${label}: rename and restore`, async () => {
     await page.getByRole('tab', { name: 'Workspaces', exact: true }).click();
-    const rename = page.getByRole('button', { name: /^Rename approved test workspace / }).first();
+    const liveBefore = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+    const approved = liveBefore.workspaces.find((row) => row.renameAllowed === true);
+    check(`${label}: server identifies exactly one approved workspace`, Boolean(approved), liveBefore.workspaces.filter((row) => row.renameAllowed === true));
+    if (!approved) return;
+    await page.getByRole('textbox', { name: 'Search workspaces' }).fill(approved.id);
+    const rename = page.getByRole('button', { name: `Rename approved test workspace ${approved.name}`, exact: true });
     await rename.waitFor({ state: 'visible' });
     await rename.click();
 
     let dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Rename approved test workspace', exact: true }) });
     const input = dialog.getByRole('textbox', { name: 'Workspace name' });
     const original = await input.inputValue();
-    const workspaceId = (await dialog.getByText(/Live acceptance only/).innerText()).match(/[0-9a-f]{8}-[0-9a-f-]{27,}/i)?.[0];
-    check(`${label}: dialog names the exact workspace`, Boolean(workspaceId), await dialog.innerText());
+    const workspaceId = approved.id;
+    check(`${label}: dialog names the exact workspace`, (await dialog.innerText()).includes(workspaceId), await dialog.innerText());
 
     const sample = `Fictional live acceptance ${width}`;
     await input.fill(sample);
