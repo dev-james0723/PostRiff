@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
@@ -218,6 +218,7 @@ function ChannelsPage() {
 
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
+  const handledConnectDeepLink = useRef<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState<boolean | null>(null);
   // Saved folders narrow the account list below (a view, never a mutation); empty means every account.
@@ -254,12 +255,14 @@ function ChannelsPage() {
 
   const replaceParams = useCallback(
     (mutate: (next: URLSearchParams) => void) => {
-      const next = new URLSearchParams(params.toString());
+      // Start from the browser's current URL so navigation-free deep-link cleanup
+      // cannot be reintroduced later by a stale useSearchParams snapshot.
+      const next = new URLSearchParams(window.location.search);
       mutate(next);
       const query = next.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [params, pathname, router]
+    [pathname, router]
   );
 
   const setFilter = useCallback(
@@ -301,16 +304,24 @@ function ChannelsPage() {
   const connectParam = params.get('connect');
   const capabilityParam = params.get('capability');
   useEffect(() => {
-    if (!connectParam || !data) return;
-    if (canManage && providers.some((provider) => provider.id === connectParam)) {
-      const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
-      openConnect({ providerId: connectParam, capability });
-    }
-    replaceParams((search) => {
-      search.delete('connect');
-      search.delete('capability');
-    });
-  }, [canManage, capabilityParam, connectParam, data, openConnect, providers, replaceParams]);
+    if (!connectParam || !data || !canManage) return;
+    if (!providers.some((provider) => provider.id === connectParam)) return;
+
+    const deepLinkKey = connectParam + ':' + (capabilityParam ?? '');
+    if (handledConnectDeepLink.current === deepLinkKey) return;
+    handledConnectDeepLink.current = deepLinkKey;
+
+    const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
+    openConnect({ providerId: connectParam, capability });
+
+    // Avoid a Next router navigation here: it can remount the page before the sheet
+    // consumes connectRequest, dropping the requested provider/capability.
+    const next = new URLSearchParams(window.location.search);
+    next.delete('connect');
+    next.delete('capability');
+    const query = next.toString();
+    window.history.replaceState(window.history.state, '', query ? pathname + '?' + query : pathname);
+  }, [canManage, capabilityParam, connectParam, data, openConnect, pathname, providers]);
 
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
   const errorMessage = error instanceof Error ? error.message : undefined;
