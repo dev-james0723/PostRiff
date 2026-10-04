@@ -33,8 +33,9 @@ import { cn } from '@/lib/utils';
 import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
+import { AssetListRow } from './asset-list-row';
 import { AssetDetail } from './asset-detail';
-import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
+import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibraryKindFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
 
 const infoContent = {
@@ -42,15 +43,15 @@ const infoContent = {
   sections: [
     {
       title: 'Private',
-      description: 'Only members of this workspace can see these images.'
+      description: 'Only members of this workspace can see these assets.'
     },
     {
       title: 'What you approve is what publishes',
-      description: 'Each image is stored with a fingerprint (hash), and a post publishes exactly the image it was approved with.'
+      description: 'Each asset is stored with a fingerprint (hash), and a post publishes exactly the media it was approved with.'
     },
     {
-      title: 'What’s accepted',
-      description: 'JPEG or PNG photos, 320–4096 px per side. Large photos are resized before upload and saved as JPEG with metadata removed. Add videos from a chat with the Add button.'
+      title: 'Current upload paths',
+      description: 'Add photos here. Photos are decoded, stripped of metadata and stored privately. Videos added from Rafii chat also appear here once the server verifies them.'
     },
     {
       title: 'Used',
@@ -70,6 +71,14 @@ const SORT_LABELS: Record<LibrarySort, string> = {
   stored: 'Workspace order',
   largest: 'Largest first'
 };
+
+const KIND_LABELS: Record<LibraryKindFilter, string> = {
+  all: 'All media',
+  image: 'Photos',
+  video: 'Videos'
+};
+
+type LibraryViewMode = 'gallery' | 'list';
 
 const SKELETON_KEYS = Array.from({ length: 12 }, (_, index) => `skeleton-${index}`);
 
@@ -165,10 +174,12 @@ export function LibraryView() {
   const upload = useUploadQueue();
 
   const [filter, setFilter] = useState<LibraryFilter>('all');
+  const [kindFilter, setKindFilter] = useState<LibraryKindFilter>('all');
+  const [view, setView] = useState<LibraryViewMode>('gallery');
   const [sort, setSort] = useState<LibrarySort>('newest');
   const [query, setQuery] = useState('');
   const auth = useAuth();
-  const library = useLibrary({ filter, sort, query });
+  const library = useLibrary({ filter, kindFilter, sort, query });
   const { snapshot, assets, visible, counts, totals } = library;
 
   const [detail, setDetail] = useState<LibraryAsset | null>(null);
@@ -206,7 +217,13 @@ export function LibraryView() {
   // The sort is a display choice inside the labelled Filters panel; the default is not a narrowing (DNA §10.5).
   const defaultSort: LibrarySort = library.hasTimestamps ? 'newest' : 'stored';
   const sortActive = library.sort !== defaultSort ? 1 : 0;
+  const kindActive = kindFilter === 'all' ? 0 : 1;
+  const filterCount = sortActive + kindActive;
   const sortOptions = [...(library.hasTimestamps ? [{ value: 'newest', label: SORT_LABELS.newest }] : []), { value: 'stored', label: SORT_LABELS.stored }, { value: 'largest', label: SORT_LABELS.largest }];
+  const activeFilterSummary = [
+    kindActive ? KIND_LABELS[kindFilter] : null,
+    sortActive ? SORT_LABELS[library.sort] : null
+  ].filter(Boolean).join(' · ');
 
   function openDetail(asset: LibraryAsset) {
     setDetail(asset);
@@ -221,7 +238,7 @@ export function LibraryView() {
       await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
       // The card leaves the grid, so success needs no toast.
     } catch (error) {
-      toast.error('Couldn’t delete this image', { description: error instanceof ApiError ? error.message : undefined });
+      toast.error('Couldn’t delete this asset', { description: error instanceof ApiError ? error.message : undefined });
       if (error instanceof ApiError && error.status === 409) {
         void client.refetchQueries({ queryKey: keys.snapshot(workspaceId), exact: true });
       }
@@ -285,8 +302,8 @@ export function LibraryView() {
               <Icons.media className='size-5' />
             </span>
           }
-          title='No images yet'
-          description={canEdit ? undefined : 'Only editors can upload images.'}
+          title='No assets yet'
+          description={canEdit ? 'Upload a photo here. Videos added from Rafii chat also appear in this Library.' : 'Only editors can add media.'}
           action={
             canEdit ? (
               <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null} title='Or drop JPEG or PNG files anywhere on this page'>
@@ -306,8 +323,8 @@ export function LibraryView() {
         <Workbar
           search={query}
           onSearch={setQuery}
-          searchPlaceholder='1080x1350'
-          searchLabel='Search images by hash prefix or dimensions'
+          searchPlaceholder='Title, filename, hash or 1080x1350'
+          searchLabel='Search Library assets by title, filename, summary, tag, hash or dimensions'
           tabs={
             <div data-tour='library-filter' className='sm:w-fit'>
               <SegmentedControl
@@ -326,21 +343,59 @@ export function LibraryView() {
               />
             </div>
           }
+          view={
+            <SegmentedControl
+              label='Library view'
+              value={view}
+              onChange={(value) => setView(value as LibraryViewMode)}
+              options={[
+                { value: 'gallery', label: 'Gallery' },
+                { value: 'list', label: 'List' }
+              ]}
+            />
+          }
           filters={
-            <FilterPanel count={sortActive} onClear={() => setSort(defaultSort)}>
+            <FilterPanel
+              count={filterCount}
+              onClear={() => {
+                setKindFilter('all');
+                setSort(defaultSort);
+              }}
+            >
+              <FilterSelect
+                id='library-kind'
+                label='Type'
+                value={kindFilter}
+                onChange={(value) => setKindFilter(value as LibraryKindFilter)}
+                options={[
+                  { value: 'all', label: `${KIND_LABELS.all} (${library.kindCounts.all})` },
+                  { value: 'image', label: `${KIND_LABELS.image} (${library.kindCounts.image})` },
+                  { value: 'video', label: `${KIND_LABELS.video} (${library.kindCounts.video})` }
+                ]}
+              />
               <FilterSelect id='library-sort' label='Sort' value={library.sort} onChange={(value) => setSort(value as LibrarySort)} options={sortOptions} />
             </FilterPanel>
           }
           count={
             <span data-tour='library-stats' className='inline-flex items-center gap-1'>
               <DigitSwap value={totals.count} />
-              <span>{totals.count === 1 ? 'image' : 'images'}</span>
+              <span>{totals.count === 1 ? 'asset' : 'assets'}</span>
               <span className='hidden md:inline' title={totals.unknownBytes > 0 ? `${totals.unknownBytes} without a size` : undefined}>
                 · {formatBytes(totals.bytes)}
               </span>
             </span>
           }
-          summary={<ActiveFilters count={sortActive} summary={SORT_LABELS[library.sort]} onClear={() => setSort(defaultSort)} clearLabel='Reset sort' />}
+          summary={
+            <ActiveFilters
+              count={filterCount}
+              summary={activeFilterSummary}
+              onClear={() => {
+                setKindFilter('all');
+                setSort(defaultSort);
+              }}
+              clearLabel='Clear filters'
+            />
+          }
         />
 
         {visible.length === 0 ? (
@@ -349,10 +404,12 @@ export function LibraryView() {
             kind='empty'
             title={
               normalizedQuery
-                ? `No image matches “${normalizedQuery}”`
-                : filter === 'unused'
-                  ? 'Every image is used in a post'
-                  : 'No image is used in a post yet'
+                ? `No asset matches “${normalizedQuery}”`
+                : kindFilter !== 'all'
+                  ? `No ${kindFilter === 'image' ? 'photos' : 'videos'} match these filters`
+                  : filter === 'unused'
+                    ? 'Every asset is used in a post'
+                    : 'No asset is used in a post yet'
             }
             action={
               <Button
@@ -368,24 +425,49 @@ export function LibraryView() {
             }
           />
         ) : (
-          <div role='list' aria-label='Images' className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'>
+          <div
+            role='list'
+            aria-label='Library assets'
+            className={cn(
+              view === 'gallery'
+                ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'
+                : 'flex flex-col gap-2'
+            )}
+          >
             <AnimatePresence>
-              {visible.map((asset, index) => (
-                <AssetCard
-                  key={asset.id}
-                  asset={asset}
-                  uses={library.usesOf(asset.id)}
-                  publishing={library.isPublishing(asset.id)}
-                  first={index === 0}
-                  canEdit={canEdit}
-                  canApprove={canApprove}
-                  deleting={deletingIds.has(asset.id)}
-                  onOpen={() => openDetail(asset)}
-                  onDelete={() => setPendingDelete(asset)}
-                  onStorageMissing={markStorageMissing}
-                  onPreviewLoaded={markPreviewLoaded}
-                />
-              ))}
+              {visible.map((asset, index) =>
+                view === 'gallery' ? (
+                  <AssetCard
+                    key={asset.id}
+                    asset={asset}
+                    uses={library.usesOf(asset.id)}
+                    publishing={library.isPublishing(asset.id)}
+                    first={index === 0}
+                    canEdit={canEdit}
+                    canApprove={canApprove}
+                    deleting={deletingIds.has(asset.id)}
+                    onOpen={() => openDetail(asset)}
+                    onDelete={() => setPendingDelete(asset)}
+                    onStorageMissing={markStorageMissing}
+                    onPreviewLoaded={markPreviewLoaded}
+                  />
+                ) : (
+                  <AssetListRow
+                    key={asset.id}
+                    asset={asset}
+                    uses={library.usesOf(asset.id)}
+                    publishing={library.isPublishing(asset.id)}
+                    first={index === 0}
+                    canEdit={canEdit}
+                    canApprove={canApprove}
+                    deleting={deletingIds.has(asset.id)}
+                    onOpen={() => openDetail(asset)}
+                    onDelete={() => setPendingDelete(asset)}
+                    onStorageMissing={markStorageMissing}
+                    onPreviewLoaded={markPreviewLoaded}
+                  />
+                )
+              )}
             </AnimatePresence>
           </div>
         )}
@@ -466,12 +548,12 @@ export function LibraryView() {
       <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 md:p-6'>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this image?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this asset?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete && library.usesOf(pendingDelete.id).length > 0
                 ? `Used in ${library.usesOf(pendingDelete.id).length} ${library.usesOf(pendingDelete.id).length === 1 ? 'post' : 'posts'}. `
                 : ''}
-              This permanently deletes the image. Scheduled posts using it will need a new review; published posts aren’t affected.
+              This permanently deletes the stored media. Scheduled posts using it will need a new review; published posts aren’t affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
