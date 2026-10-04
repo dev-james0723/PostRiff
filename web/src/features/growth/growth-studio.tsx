@@ -13,6 +13,7 @@ import type { GrowthOverview, Postmortem } from '@/lib/growth/types';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 import { EmptyGrowth, GrowthHero, useGrowthAction } from './studio-parts';
 import { AudienceMiner } from './audience-miner';
+import { readingState } from './measurement-state';
 
 const VIEWS = ['results', 'audience', 'patterns'] as const;
 const TABS = [{ id: 'results', label: 'Your results', icon: IconChartDots3 }, { id: 'audience', label: 'Your audience', icon: IconMessageCircle2 }, { id: 'patterns', label: 'Your patterns', icon: IconDna2 }] as const;
@@ -59,7 +60,7 @@ function Results({ data, onRefresh }: { data: GrowthOverview; onRefresh: () => v
   const request = useRef<string | null>(null);
   const selected = data.posts.find((p) => p.jobId === selectedId) ?? data.posts[0];
   const saved = data.reports.find((r) => r.jobId === selected?.jobId && r.horizon === horizon);
-  const shown = saved ?? (report?.jobId === selected?.jobId && report.horizon === horizon ? report : null);
+  const shown = saved ?? (report && selected && report.jobId === selected.jobId && report.horizon === horizon ? report : null);
   const staleBasis = saved?.status === 'stale' ? saved.basisDigest : null;
   useEffect(() => { request.current = null; setConfirmed(false); setReport(null); setError(''); }, [selected?.jobId, horizon, staleBasis]);
   async function review() {
@@ -70,20 +71,21 @@ function Results({ data, onRefresh }: { data: GrowthOverview; onRefresh: () => v
     finally { setBusy(false); }
   }
   const ready = data.posts.filter((p) => p.windows.some((w) => w.available)).length;
-  if (!selected) return <EmptyGrowth title='Your first field note is still ahead.'><p>After a publication is verified, its own platform readings will appear here at one hour, one day and one week.</p><Link href='/app/queue'>See your drafts <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth>;
+  const reading = readingState(selected?.windows.find((w) => w.horizon === horizon));
+  if (!selected) return data.measurement?.analyticsConnections === 0 ? <EmptyGrowth title='Native post analytics are unavailable.'><p>Connect an owned Threads or Instagram account with analytics permission before Rafii can measure your verified publications.</p><Link href='/app/channels'>Connect analytics <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth> : data.measurement?.enabled === false ? <EmptyGrowth title='Post readings are not enabled.'><p>Metric collection is disabled. Your existing analytics remain available.</p><Link href='/app/analytics'>Open analytics <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth> : <EmptyGrowth title='Your first field note is still ahead.'><p>After a publication is verified, its own platform readings will appear here at one hour, one day and one week.</p><Link href='/app/queue'>See your drafts <IconArrowRight size={16} aria-hidden /></Link></EmptyGrowth>;
   return <>
     <div className='growth-section-heading'><div><p className='growth-kicker'>01 / Observe</p><h3>What happened after publish.</h3></div><span className='growth-count'><strong>{ready}</strong> posts with readings</span></div>
     <div className='growth-results-layout'>
       <aside className='growth-post-list' aria-label='Choose a publication'>{data.posts.map((p) => <button key={p.jobId} className={selected.jobId === p.jobId ? 'is-selected' : ''} aria-pressed={selected.jobId === p.jobId} disabled={busy} onClick={() => setSelectedId(p.jobId)}>
         <span className='growth-post-meta'>{p.platform}<span>{new Date(p.at * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></span>
-        <strong>{p.title || 'Published post'}</strong><span className='growth-windows'>{p.windows.map((w) => <span key={w.horizon} data-available={w.available}><span aria-hidden>{w.available ? '●' : '○'}</span> {w.horizon}<span className='sr-only'>{w.available ? ' available' : ' pending'}</span></span>)}</span>
+        <strong>{p.title || 'Published post'}</strong><span className='growth-windows'>{p.windows.map((w) => <span key={w.horizon} data-available={w.available}><span aria-hidden>{w.available ? '●' : '○'}</span> {w.horizon}<span className='sr-only'> {readingState(w).label}</span></span>)}</span>
       </button>)}</aside>
       <div className='growth-report-paper'>
         <div className='growth-report-top'><span className='growth-kicker'>Field note / {selected.platform}</span><div className='growth-horizons' role='group' aria-label='Reading window'>{(['1h','24h','7d'] as const).map((h) => <button key={h} aria-pressed={horizon === h} disabled={busy} onClick={() => setHorizon(h)}>{h}</button>)}</div></div>
         <h3 className='growth-post-title'>{selected.title || 'Your published post'}</h3>
         {shown && shown.status !== 'stale' ? <Report key={shown.id} report={shown} /> : <div className='growth-review-start'>
-          <IconClock size={28} aria-hidden /><h4>{shown?.status === 'stale' ? 'There’s new evidence to review.' : selected.windows.find((w) => w.horizon === horizon)?.available ? 'The reading is in. Find the useful part.' : 'Give this post a little time.'}</h4>
-          <p>{selected.windows.find((w) => w.horizon === horizon)?.available ? 'Compare the exact published draft with this reading window. AI suggests a next step; you decide what becomes a lesson.' : 'No verified reading for this window yet. Missing data stays missing.'}</p>
+          <IconClock size={28} aria-hidden /><h4>{shown?.status === 'stale' ? 'There’s new evidence to review.' : reading.title}</h4>
+          <p>{reading.detail}</p>
           {selected.windows.find((w) => w.horizon === horizon)?.available && checkAccess(access, { permission: 'edit' }) && <>
             <label className='growth-check'><input type='checkbox' aria-label='Use the allowed AI models to review these readings within my daily allowance.' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Use the allowed AI models to review these readings within my daily allowance.</label>
             <Button className='growth-primary' disabled={busy || !confirmed || !catalog.data?.allowedRoutes.includes(catalog.data.summaryRoute)} onClick={() => void review()}>{busy ? 'Reviewing this window…' : 'Review this result'}<IconArrowUpRight size={17} aria-hidden /></Button>

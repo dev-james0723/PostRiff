@@ -22,22 +22,25 @@ def status(workspace_id, values=None, *, metric_reads_enabled):
 
 def horizon_state(row, due, now):
     if row is None:
-        return "pending_horizon" if due > now else "unscheduled"
+        return "unscheduled"
     if row["status"] == "done":
         return "measured" if row["measured"] else "unavailable"
     if row["status"] == "cancelled":
         return "disconnected"
-    if row["status"] == "unavailable":
+    if row["status"] in ("unavailable", "dead"):
         return "unavailable"
     if row["status"] == "claimed":
         return "pending"
     return "pending_horizon" if due > now else "scheduled"
 
 
-def tracking(cur, workspace_id, state, now, *, enabled):
+def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
+    if type(limit) is not int or not 1 <= limit <= 300:
+        raise ValueError("Tracking limit must be between 1 and 300 posts.")
     history = (state.get("phase2") or {}).get("jobs", [])
-    jobs = [j for j in history if j.get("state") == "verified" and j.get("providerReference")][-120:]
-    result = {"enabled": bool(enabled), "as_of": now, "truncated": len(history) > 120, "posts": []}
+    candidates = [j for j in history if j.get("state") == "verified" and j.get("providerReference")]
+    jobs = candidates[-limit:]
+    result = {"enabled": bool(enabled), "as_of": now, "truncated": len(candidates) > limit, "posts": []}
     rows, direct = {}, set()
     schema_ready = False
     if enabled and jobs:
