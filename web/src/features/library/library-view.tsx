@@ -271,7 +271,15 @@ export function LibraryView() {
     }
     setUploadingFile(true);
     try {
-      const mime = file.type || 'application/octet-stream';
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+      const fallbackMime: Record<string, string> = {
+        txt: 'text/plain', md: 'text/markdown', markdown: 'text/markdown', html: 'text/html', htm: 'text/html',
+        json: 'application/json', csv: 'text/csv', pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+      };
+      const mime = fallbackMime[extension] ?? 'application/octet-stream';
       const ticket = await api.beginLibraryFile(workspaceId, { filename: file.name, mime, bytes: file.size });
       await putSignedUpload(ticket.upload.url, file, { 'Content-Type': ticket.upload.mime });
       await api.commitLibraryFile(workspaceId, ticket.upload.assetId);
@@ -535,7 +543,6 @@ export function LibraryView() {
           type='file'
           className='sr-only'
           aria-label='Choose a document or file to add to Library'
-          accept='.txt,.md,.markdown,.html,.htm,.json,.csv,.pdf,.docx,.xlsx,.pptx'
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             if (file) void uploadLibraryFile(file);
