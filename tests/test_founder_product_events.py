@@ -385,6 +385,9 @@ class Adapter:
     def identity(self, access):
         return {"providerAccountId": "acct-1", "handle": "@me"}
 
+    def capability_scopes(self, capability):
+        return ["write"] if capability == "publish" else []
+
     def revoke(self, token):
         return True
 
