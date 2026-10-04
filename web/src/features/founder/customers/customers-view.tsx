@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { parseAsInteger, parseAsString, useQueryState, useQueryStates } from 'nuqs';
 import { Icons } from '@/components/icons';
@@ -24,7 +24,7 @@ import type { RecordRow } from './kit/types';
 import { CustomerSheet } from './customer-sheet';
 import { RISK_VIEWS, flagIndex, joinFlags, resolveSavedView, riskView, type FlagIndex, type SavedViewId } from './customer-risk';
 import { observedPlans } from './query';
-import { FlagCell, FlagCoverage, RiskRulesList, RiskViewPanel } from './risk-views';
+import { FlagCoverage, RiskChips, RiskRulesList, RiskViewPanel } from './risk-views';
 import { useCustomerRisk } from './use-customer-risk';
 import { WorkspacesTab } from './workspaces-tab';
 
@@ -53,7 +53,7 @@ interface ListFilters {
 const SORTABLE: Record<string, string> = { name: 'name', status: 'status', plan: 'plan', createdAt: 'createdAt' };
 const ATTENTION_STATUSES = new Set(['past_due', 'unpaid', 'grace']);
 
-function customerColumns(sortable: boolean, risk: RiskQuery, index: FlagIndex, onOpen: (row: RecordRow) => void): ColumnDef<RecordRow>[] {
+function customerColumns(sortable: boolean, renderFlags: (row: RecordRow) => ReactNode, onOpen: (row: RecordRow) => void): ColumnDef<RecordRow>[] {
   return [
     {
       id: 'name',
@@ -100,7 +100,7 @@ function customerColumns(sortable: boolean, risk: RiskQuery, index: FlagIndex, o
       id: 'flags',
       enableSorting: false,
       header: 'Flags',
-      cell: ({ row }) => <FlagCell risk={risk} flags={joinFlags(row.original.workspaceIds, index)} />
+      cell: ({ row }) => renderFlags(row.original)
     },
     {
       id: 'createdAt',
@@ -118,6 +118,7 @@ function customerColumns(sortable: boolean, risk: RiskQuery, index: FlagIndex, o
           variant='quiet'
           size='sm'
           aria-label={`Open ${recordLabel(row.original)}`}
+          data-customer-open={row.original.id}
           onClick={(event) => {
             event.stopPropagation();
             onOpen(row.original);
@@ -170,7 +171,17 @@ function CustomerList({ filters, search, page, update, clear, risk, index, onOpe
     [data?.rows, workspaces]
   );
   const openRow = useCallback((row: RecordRow) => onOpenCustomer(row.id), [onOpenCustomer]);
-  const tableColumns = useMemo(() => customerColumns(mode === 'demo', risk, index, openRow), [mode, risk, index, openRow]);
+  // Query observers return a fresh wrapper on each render. Keep cell components stable when only the drawer URL changes.
+  const flagsAllowed = risk.allowed;
+  const flagsPending = risk.query.isPending;
+  const flagsError = risk.query.error;
+  const flagsData = risk.query.data;
+  const renderFlags = useCallback((row: RecordRow) => {
+    if (!flagsAllowed || flagsError || !flagsData || flagsData.dataState === 'unavailable') return <span className='text-muted-foreground text-xs'>{flagsPending && flagsAllowed ? 'Checking…' : '—'}</span>;
+    if (flagsPending) return <span className='text-muted-foreground text-xs'>Checking…</span>;
+    return <RiskChips flags={joinFlags(row.workspaceIds, index)} empty={flagsData.data.truncated ? `Not among the first ${count(flagsData.data.limit)} flagged` : 'No flags'} />;
+  }, [flagsAllowed, flagsPending, flagsError, flagsData, index]);
+  const tableColumns = useMemo(() => customerColumns(mode === 'demo', renderFlags, openRow), [mode, renderFlags, openRow]);
   const { table } = useDataTable<RecordRow>({
     data: rows,
     columns: tableColumns,
