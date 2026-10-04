@@ -1,8 +1,9 @@
 # Rafii Stripe sandbox integration — 2026-10-03
 
-Execution state: local integration candidate. Stripe sandbox acceptance has not
-passed. No remote configuration, migration, deployment, Product, Price, Checkout,
-Portal or Test Clock operation has been performed by this phase.
+Execution state: sandbox provisioning begun; end-to-end acceptance has not passed.
+Two test Products/Prices and a restricted-feature test Portal configuration were
+created. No Preview deployment, database migration/mapping, webhook endpoint,
+Checkout or Test Clock execution has occurred. Production remains untouched.
 
 ## Authority and target
 
@@ -16,31 +17,42 @@ Creator-first activation instructions. It does not reopen those tasks.
 The sole Vercel target is `jamesau0723-6572s-projects/postriff-phase2-private`,
 project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`, team
 `team_PgXY5VdAYKcsv0RLoDPHscNq`. The production alias is
-`https://postriff-phase2-private.vercel.app`. Read-only Vercel verification on this
-run resolved that alias to READY production deployment
-`dpl_4wrwibdSSy9wd5VrDrWnFHBt7eN5`, `consumer-saas` source
-`7156703b3725156c6041b059040007ab2ea63fab`. The latest project deployment can be a
+`https://postriff-phase2-private.vercel.app`. The resumed run used the authenticated Vercel CLI identity
+`jamesau0723-6572` to resolve the alias to READY production deployment
+`dpl_CiLjwauR5atA6dJUavjBhTaR5bTr`, `consumer-saas` source
+`5c477be05e4712fca200c1c9f49ebc1d10393946`. The preserved checkpoint
+`c8165ec5ca0a9955db424d2a055152981dc612f5` is integrated with that newer source. The latest project deployment can be a
 Preview; use the production alias to resolve production lineage.
 
 The Phone Call Repair receipt (2026-09-27), Growth Loop release receipt, launch
 checklist and later Founder release receipts establish this canonical project
-and the existing Supabase production reference `buoyhkbodnhzngaotoel`. This is
-documented lineage; current environment/database bindings remain unverified.
+and the existing Supabase production reference `buoyhkbodnhzngaotoel`. Individual environment reads confirm that Production web/server Supabase URLs
+bind to that production reference. The existing unbranched Preview URLs bind to
+`oxacvkhpfgytkepxcaqh`, the excluded `rafii-consumer-staging` Supabase project.
+Do not use that database for this activation.
 The older Phone Mode setup receipt and `rafii-consumer-staging` are not deployment
 authority for this task. Do not modify or deploy to that separate project.
 
-Current permission boundary: the Vercel connector returns HTTP 403 for action
-`list`, resource `projectEnvVars` on the canonical project. Preview/Production
-variable names and scopes cannot be read. Write permission is unverified. Do not
-use another credential path to bypass that denial. Obtain environment list/read
-access and the scoped Preview configuration write access before proceeding.
-The Stripe connector currently exposes only a live account, with no selectable
-test context. Obtain the intended sandbox context before any Stripe mutation.
+The latest user instruction expressly authorizes authenticated Vercel CLI/API
+as the fallback for the connector's continuing `projectEnvVars:list` 403. CLI
+list/read checks pass against the exact canonical project/team IDs. Do not repair
+or re-consent the connector again. Use explicit `--project` and `--scope` for CLI
+actions; never blind-link this worktree. Production writes remain unauthorized.
+
+The Stripe connector now exposes context `acct_1QYChoJZl100kP8e`, name
+`d-festival.org`, with a separate selectable `livemode=false` context. All Stripe
+calls in this activation use `livemode=false`; the live context is untouched.
+Initial test Products, Prices, webhook endpoints and Portal configurations were
+empty. Required next boundaries are an isolated database branch cost approval
+and secure availability of a runtime test key. Chrome sign-in was completed by
+James; browser automation subsequently disconnected. No credential was printed.
 
 ## Integration and schema
 
-A fresh isolated worktree starts at the exact deployed source above and performs
-a three-way merge of the approved pricing checkpoint. Conflicts preserve current
+The preserved isolated worktree first merged the reviewed pricing checkpoint
+with production `7156703b`, producing `c8165ec5`. The resumed integration merges
+production `5c477be0` into that checkpoint, preserving both parents and resolving
+three conflicts explicitly. No pricing task is reimplemented. Conflicts preserve current
 Founder Ops entitlement, spending telemetry, billing records, notification
 cutover and current Next.js 16.3.8 alongside pricing/credit behavior. No reset,
 clean, stash, blind cherry-pick or production database write is part of this work.
@@ -71,7 +83,11 @@ and auth. It must not point to `buoyhkbodnhzngaotoel`; the existing secret-hash
 isolation checks must pass. Record that relationship explicitly. Never infer
 isolation from a Preview URL or healthy HTTP response alone.
 
-Candidate Preview settings, pending actual identity and secret-hash verification:
+Branch-scoped Preview settings remain pending isolated database identity and
+secret-hash verification. No environment value has been changed by this phase.
+Use branch `codex/rafii-stripe-sandbox-20261003` and preserve shared Preview values:
+
+Candidate Preview settings:
 
 ```text
 POSTRIFF_ENVIRONMENT=staging
@@ -95,6 +111,27 @@ Provision only two active sandbox monthly USD recurring Prices:
 | --- | --- | --- |
 | starter-v1 | USD 29.00 | 1,000 |
 | studio-v2 | USD 149.00 | 8,000 |
+
+
+Verified test resources created during the resumed run:
+
+| Plan terms | Product ID | Price ID | Mode |
+| --- | --- | --- | --- |
+| starter-v1 | prod_VNQyTtOX80l3ib | price_1UMg6XJZl100kP8eIdHGr0US | livemode=false |
+| studio-v2 | prod_VNQyJNeWhzGQmt | price_1UMg70JZl100kP8eR77h5tG8 | livemode=false |
+
+Recurring currency/amount/interval/count/usage are verified as USD 2900/14900,
+month, 1, licensed. Tax behavior remains unspecified; no tax/legal terms are added.
+Test Portal `bpc_1UMgB5JZl100kP8eHeGbW10Q` enables payment methods, invoices and
+end-of-period cancellation, with customer edits and subscription updates disabled.
+Do not create duplicate resources on resume. Price mappings belong in
+`public.pr_plan_terms.provider_price_id`, not fabricated Price env variables.
+There are no database mapping changes yet.
+
+Supabase reports no existing branch for `buoyhkbodnhzngaotoel`. A schema-only
+branch in canonical Rafii organization `gztpsyvraqdcoklwpvdo` is quoted by the
+provider at USD 0.01344/hour. Its tool requires cost confirmation. Approval is
+pending; no branch or billable database resource has been created.
 
 Free has no Stripe Price. Do not provision or map Creator, $49/$59/$79 experiments
 or top-ups. Preserve Creator's proposed/new-checkout-disabled state. Retrieve

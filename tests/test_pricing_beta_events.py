@@ -326,7 +326,10 @@ class Hooks(unittest.TestCase):
             cur.result = ('compatibility-row',)
             event = UsageEvent('postdoctor.judge', 'fixture', 'primary', 'ok', 1,
                                workspace_id=workspace, cost_usd=.013, cost_source='gateway')
-            with patch.object(events, 'growth_usage') as usage, patch.object(cur, 'fetchone') as fetched:
+            # Preserve the independent Founder attempt writer; this assertion
+            # covers the pricing sink's compatibility path and identity reads.
+            with patch.object(events, 'growth_usage') as usage, patch.object(cur, 'fetchone') as fetched, \
+                    patch('postriff_phase2.ai_call_events.write_attempts'):
                 PostgresUsageSink(cur).record(event)
                 self.assertFalse(usage.called, 'unscoped usage is retained only in the original sink')
                 self.assertFalse(fetched.called, 'compatibility sink has no returned UUID identity')

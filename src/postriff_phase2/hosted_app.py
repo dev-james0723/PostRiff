@@ -225,7 +225,8 @@ def runtime_from_environment(environ=None):
     # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
     from .growth import metric_schedule
     if metric_schedule.enabled(values):
-        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport)
+        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
+            workspace_allowlist=metric_schedule.allowed_workspaces(values))
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
@@ -273,7 +274,7 @@ class HostedApplication:
     @staticmethod
     def _json(start_response, status, body, extra_headers=None):
         raw = json.dumps(body, ensure_ascii=False).encode()
-        labels = {200: "OK", 201: "Created", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
+        labels = {200: "OK", 201: "Created", 202: "Accepted", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
         headers = [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "no-referrer")]
         headers.extend(extra_headers or [])
         start_response(f"{status} {labels.get(status, 'Error')}", headers)

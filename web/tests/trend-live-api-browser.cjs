@@ -434,6 +434,7 @@ async function checkLearning({ page, row, root, api, headers, other }) {
   assert.equal(beta.radar_available, true);
   assert.equal(beta.acquisition, 'none');
   assert.equal(beta.follower_conversion, 'unavailable');
+  assert.equal(beta.metric_reads_enabled, row.metric_reads_enabled === true);
   pass(`${row.width} actual workspace Beta status reports stored-only sources and unavailable follower conversion`);
   const descriptor = await read();
   assert.equal(descriptor.choice_options.length,1);
@@ -523,13 +524,15 @@ async function checkLearning({ page, row, root, api, headers, other }) {
   fs.writeFileSync(path.join(out,`real-performance-future-${row.width}.json`),JSON.stringify(timed,null,2));
   await page.reload();await panel.waitFor();
   await page.locator('[data-post-tracking]').waitFor();
-  assert.ok(await page.getByText('Automatic metric reads are off.', {exact:true}).isVisible());
+  const metricsEnabled = row.metric_reads_enabled === true;
+  assert.equal(await page.getByText('Automatic metric reads are off.', {exact:true}).count(), metricsEnabled ? 0 : 1);
   const trackingResponse = await api('GET', ws + '/coworker/performance');
   const tracking = t.postTrackingSchema.parse((await trackingResponse.json()).post_tracking);
-  assert.equal(tracking.enabled, false);
+  assert.equal(tracking.enabled, metricsEnabled);
   assert.equal(tracking.posts.length, 2);
-  assert.ok(tracking.posts.every(p => p.horizons.length === 4 && p.horizons.every(h => h.state === 'disabled')));
-  pass(`${row.width} actual tracking preserves four horizons and disabled status with no provider dispatch`);
+  assert.ok(tracking.posts.every(p => p.horizons.length === 4 && p.horizons.every(h => metricsEnabled
+    ? !['disabled','measured'].includes(h.state) : h.state === 'disabled')));
+  pass(`${row.width} actual tracking preserves four horizons and workspace admission (${metricsEnabled ? 'admitted, unmeasured' : 'disabled'}) with no provider dispatch`);
   assert.ok(await panel.getByText('Waiting for the measurement window',{exact:true}).isVisible());
   assert.ok(await panel.getByText('No prior metric choice for this window',{exact:true}).isVisible());
   assert.equal(posts().length,1);

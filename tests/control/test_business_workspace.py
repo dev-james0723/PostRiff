@@ -41,6 +41,8 @@ class BusinessWorkspaceTests(unittest.TestCase):
         # Fresh test actors share the global exchange limiter; isolate fixture budgets between cases.
         with psycopg.connect(self.dsn,autocommit=True) as con:
             con.execute('DELETE FROM rafii_control.request_budgets WHERE bucket=%s',(hashlib.sha256(b'exchange:global').hexdigest(),))
+            # Live metric tests aggregate this shared disposable database. Remove only this case's fictional ledger rows.
+            con.execute('DELETE FROM public.pr_usage_ledger WHERE workspace_id=%s',(self.workspace,))
 
     def action(self,kind,target,value=''):
         return dict(action=kind,targetId=target,value=value,revision=self.service.demo(self.principal)['revision'],requestId=str(uuid.uuid4()))
@@ -161,6 +163,78 @@ class BusinessWorkspaceTests(unittest.TestCase):
             self.assertNotIn('data',result)
         finally:
             with psycopg.connect(self.dsn,autocommit=True) as con: con.execute('GRANT SELECT ON rafii_control.business_customers TO rafii_control_reader')
+
+    def customer_detail(self):
+        return self.request('/workspace/live/query','POST',dict(collection='customers',search='',status='all',page=1,recordId=self.user))
+
+    def test_live_customer_detail_reads_linked_canonical_records_without_other_tenants_or_private_content(self):
+        ticket=str(uuid.uuid4()); invoice='fictional-invoice-'+uuid.uuid4().hex
+        other=str(uuid.uuid4()); other_ticket=str(uuid.uuid4())
+        with psycopg.connect(self.dsn,autocommit=True) as con:
+            con.execute('INSERT INTO auth.users(id) VALUES(%s)',(other,))
+            other_workspace=str(con.execute("SELECT public.pr_bootstrap(%s,'studio')",(other,)).fetchone()[0])
+            con.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,status) VALUES(%s,'studio-v1','fixture','active')",(self.workspace,))
+            con.execute("INSERT INTO public.pr_connection_health(workspace_id,connection_id,provider,capability,level,state,connection_state) VALUES(%s,'fictional-link','fixture','analytics','Direct','ok','read_verified')",(self.workspace,))
+            for wid,uid,tid,label in ((self.workspace,self.user,ticket,invoice),(other_workspace,other,other_ticket,'unrelated-'+invoice)):
+                con.execute("INSERT INTO public.pr_invoices(invoice_id,provider,workspace_id,amount_due,amount_paid,currency,status,livemode,event_id,event_at) VALUES(%s,'stripe',%s,2500,2500,'usd','paid',false,%s,now())",(label,wid,'event-'+label))
+                con.execute("INSERT INTO public.pr_support_tickets(id,workspace_id,created_by,category) VALUES(%s,%s,%s,'billing')",(tid,wid,uid))
+                con.execute("INSERT INTO public.pr_support_messages(workspace_id,ticket_id,actor_id,actor_role,body,request_id,fingerprint) VALUES(%s,%s,%s,'customer','DO_NOT_DISCLOSE_PRIVATE_SUPPORT_731',%s,'local-only')",(wid,tid,uid,str(uuid.uuid4())))
+            usage=str(con.execute("INSERT INTO public.pr_usage_ledger(workspace_id,kind,dimension,unit,cost_state,idempotency_key,meta) VALUES(%s,'adjust','action','credit','actual',%s,%s) RETURNING id",(self.workspace,uuid.uuid4().hex,Jsonb(dict(credits=dict(op='grant',milli=12500,source='test'),privateCanary='DO_NOT_DISCLOSE_RAW_LEDGER_731')))).fetchone()[0])
+            event=str(con.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,meta) VALUES(%s,%s,'mfa.enabled',%s) RETURNING id",(self.workspace,self.user,Jsonb(dict(privateCanary='DO_NOT_DISCLOSE_AUDIT_731')))).fetchone()[0])
+        status,response=self.customer_detail()
+        self.assertEqual(status,200,response)
+        data=response['data']; linked=data['linkedRecords']; coverage=data['linkedRecordCoverage']
+        self.assertEqual(data['rows'][0]['id'],self.user)
+        self.assertEqual(linked['subscriptions'][0]['workspaceId'],self.workspace)
+        self.assertIsNone(linked['subscriptions'][0]['amountMinor'],'unapproved plan prices are never displayed as active terms')
+        self.assertEqual([(r['id'],r['amountMinor'],r['currency']) for r in linked['invoices']],[(invoice,2500,'USD')])
+        self.assertEqual([r['id'] for r in linked['tickets']],[ticket])
+        self.assertEqual(linked['tickets'][0]['identityVisibility'],'masked')
+        self.assertEqual([r['id'] for r in linked['credits']],[usage])
+        self.assertEqual(linked['credits'][0]['quantity'],12.5)
+        self.assertEqual(linked['credits'][0]['op'],'grant')
+        self.assertEqual([r['id'] for r in linked['usage']],[usage])
+        self.assertEqual(linked['usage'][0]['quantity'],1.0)
+        self.assertEqual([r['id'] for r in linked['activity']],[event])
+        self.assertEqual(linked['members'][0]['memberId'],self.user)
+        self.assertEqual(linked['members'][0]['name'],'Fictional Founder Test')
+        self.assertEqual(linked['connections'][0]['connectionId'],'fictional-link')
+        for rows in linked.values():
+            self.assertTrue(all(r['workspaceId']==self.workspace for r in rows))
+        for section in ('subscriptions','invoices','tickets','credits','usage','activity','members','connections'):
+            self.assertEqual(coverage[section],dict(state='connected',total=1,limit=50,truncated=False))
+        # A missing required payment source remains explicit, never an invented zero or Demo fallback.
+        self.assertNotIn('payments',linked)
+        self.assertEqual(coverage['payments']['state'],'not_configured')
+        self.assertIsNone(coverage['payments']['total'])
+        encoded=json.dumps(data)
+        for private in ('DO_NOT_DISCLOSE',other_workspace,other_ticket,'unrelated-'+invoice):self.assertNotIn(private,encoded)
+        self.assertNotIn('body',linked['tickets'][0])
+        self.assertNotIn('meta',linked['usage'][0])
+        self.assertNotIn('email',linked['members'][0])
+
+    def test_live_customer_history_is_bounded_and_reports_older_records(self):
+        prefix='fictional-bounded-'+uuid.uuid4().hex
+        with psycopg.connect(self.dsn,autocommit=True) as con:
+            for index in range(54):
+                con.execute("INSERT INTO public.pr_invoices(invoice_id,provider,workspace_id,amount_due,amount_paid,currency,status,livemode,event_id,event_at,recorded_at) VALUES(%s,'stripe',%s,100,0,'usd','open',false,%s,now(),now()+%s*interval '1 second')",(prefix+'-'+str(index),self.workspace,prefix+'-event-'+str(index),index))
+        status,response=self.customer_detail()
+        self.assertEqual(status,200,response)
+        data=response['data']
+        self.assertEqual(data['linkedRecordCoverage']['invoices'],dict(state='connected',total=54,limit=50,truncated=True))
+        self.assertEqual(len(data['linkedRecords']['invoices']),50)
+        self.assertEqual(data['linkedRecords']['invoices'][0]['id'],prefix+'-53')
+        self.assertNotIn(prefix+'-0',{r['id'] for r in data['linkedRecords']['invoices']})
+
+    def test_customer_detail_permission_failure_does_not_become_empty_history(self):
+        with psycopg.connect(self.dsn,autocommit=True) as con:con.execute('REVOKE SELECT ON rafii_control.business_invoices FROM rafii_control_reader')
+        try:
+            status,response=self.customer_detail()
+            self.assertEqual(status,503,response)
+            self.assertEqual(response['code'],'WORKSPACE_ACCESS_REQUIRED')
+            self.assertNotIn('data',response)
+        finally:
+            with psycopg.connect(self.dsn,autocommit=True) as con:con.execute('GRANT SELECT ON rafii_control.business_invoices TO rafii_control_reader')
 
     def test_global_search_pagination_literal_inputs_and_linked_record_lookup(self):
         prefix='Fictional Global '+str(uuid.uuid4())

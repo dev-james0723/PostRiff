@@ -357,6 +357,8 @@ class HostedCallSiteTests(unittest.TestCase):
                                  ("SELECT w.revision,w.state", [(1, state, "studio", NOW, NOW + 86400, 10, 0, 3, "owner", True, True, True, True)])])
         service = HostedWorkspaceService.__new__(HostedWorkspaceService)
         service.connection_factory, service.verify_session, service.public_base_url = (lambda: script), (lambda token: USER), ""
+        service.clock = lambda: NOW
+        service.billing = SimpleNamespace(pricing_v2_enabled=False, lifecycle=lambda *args: None)
         service.commands = SimpleNamespace(present=lambda saved, revision: {"revision": revision})
         result = service.bootstrap("token", "studio")
         return script, result
@@ -535,7 +537,13 @@ class CoworkerCallSiteTests(unittest.TestCase):
         service = CoworkerService.__new__(CoworkerService)
         repository = Repository(script, state)
         service.hosted = SimpleNamespace(repository=repository, ideas=SimpleNamespace(_member=IdeasService._member), notifications=None, connection_factory=lambda: script,
-                                         commands=None)
+                                         commands=None, clock=lambda: NOW, billing=SimpleNamespace(pricing_v2_enabled=False))
+        # This product-event fixture is a qualified legacy workspace. Managed
+        # credit admission has its own refusal and PostgreSQL integration tests.
+        script.answers.extend([("SELECT id FROM public.pr_workspaces", [(WS,)]),
+                               ("SELECT extract(epoch from expires_at)", [(NOW + 86400,)]),
+                               ("SELECT plan_terms_id FROM public.pr_entitlements", [("studio-v1",)]),
+                               ("SELECT p.plan,p.entitlements", [("studio", None)])])
         service.values, service.clock = {}, lambda: NOW
         service._require = lambda flag: None
         service._require_edit = lambda workspace_id, token: None

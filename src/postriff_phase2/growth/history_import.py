@@ -8,8 +8,8 @@ pr_metric_reads, which MetricScheduler reads like any other. Each page and its c
 fenced on the run's lease. Reading needs the connection's analytics capability to be Direct (its grant carries
 threads_basic / instagram_business_basic, which list the account's own posts), so no new scope is requested.
 
-Off unless POSTRIFF_HISTORY_IMPORT and POSTRIFF_METRIC_READS are both "1". Before enabling it in production the
-consent copy that says analytics reads "posts Rafii created" must be updated (docs/design/growth-phase0/CONTRACTS.md).
+Off unless POSTRIFF_HISTORY_IMPORT and POSTRIFF_METRIC_READS are both "1". Review/request/status and consent
+ship behind this gate; production activation is a separate operation.
 """
 from __future__ import annotations
 
@@ -28,6 +28,8 @@ FLAG = "POSTRIFF_HISTORY_IMPORT"
 WINDOW_DAYS = 90
 PAGE_LIMIT = 25
 MAX_PAGES = 12                  # at most 300 posts per run
+MAX_POSTS = PAGE_LIMIT * MAX_PAGES
+CONSENT_VERSION = "history-import.v1"
 PAGES_PER_TICK = 3
 LEASE_SECONDS = 120
 MAX_ATTEMPTS = 5
@@ -83,7 +85,10 @@ def list_page(transport, provider, access_token, cursor=None):
         raise HistoryHTTP(response.get("status"))
     body = response["body"]
     posts = []
-    for item in body.get("data") or []:
+    data = body.get("data", [])
+    if not isinstance(data, list):
+        raise HistoryHTTP(502)
+    for item in data[:PAGE_LIMIT]:   # enforce our bound even if the provider ignores its requested limit
         if not isinstance(item, dict) or not item.get("id"):
             continue
         caption = item.get(text_field) if isinstance(item.get(text_field), str) else ""
@@ -222,16 +227,22 @@ class HistoryImporter:
     # --- customer surface ----------------------------------------------------------------------------------------------
     def request(self, workspace_id, token, connection_id, payload):
         from ..api_tokens import is_api_token
-        from ..hosted import _membership, throttle
+        from ..hosted import _membership, audit, throttle
         from ..permissions import require
         if is_api_token(token):
-            raise AlphaError("An interactive sign-in is required to import post history.", 403)
+            raise AlphaError("An interactive sign-in is required to import post history.", 403, code="interactive_required")
         if not isinstance(payload, dict) or payload.get("confirmed") is not True:
             raise AlphaError("Confirm reading the last 90 days of this account's posts and their metrics.", 400)
         with self.oauth.repository.transaction(token, workspace_id) as (cur, row, actor):
             require(_membership(row), "manage_connections")
             require_qualified_entry(cur,workspace_id,hosted=self.hosted)
-            throttle(cur, f"history-import:{workspace_id}:{actor}", 5, 3600)
+            try:
+                throttle(cur, f"history-import:{workspace_id}:{actor}", 5, 3600)
+            except AlphaError as error:
+                if error.status == 429:
+                    raise AlphaError("Up to five history-import requests are allowed per hour. Try again after this hour's window.",
+                                     429, code="history_import_throttled") from None
+                raise
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL",
                         (workspace_id, connection_id))
             found = cur.fetchone()
@@ -245,6 +256,9 @@ class HistoryImporter:
             cur.execute("""INSERT INTO public.pr_history_imports(workspace_id,connection_id,provider,requested_by) VALUES(%s,%s,%s,%s)
                            ON CONFLICT (workspace_id,connection_id) WHERE status IN ('pending','running') DO NOTHING""",
                         (workspace_id, connection_id, found[0], actor))
+            if cur.rowcount:
+                audit(cur, workspace_id, actor, "history_import.requested", connection_id,
+                      {"consentVersion": CONSENT_VERSION, "windowDays": WINDOW_DAYS, "maxPosts": MAX_POSTS, "maxPages": MAX_PAGES})
             return self._status(cur, workspace_id, connection_id)
 
     def status(self, workspace_id, token, connection_id):
@@ -256,13 +270,21 @@ class HistoryImporter:
 
     @staticmethod
     def _status(cur, workspace_id, connection_id):
-        cur.execute("""SELECT id::text,status,pages,posts,failure_class,extract(epoch from created_at)::float8 FROM public.pr_history_imports
+        result = {"connectionId": connection_id, "status": "none", "windowDays": WINDOW_DAYS,
+                  "maxPosts": MAX_POSTS, "maxPages": MAX_PAGES, "pageLimit": PAGE_LIMIT,
+                  "purgePending": purge_pending(cur, workspace_id, connection_id)}
+        cur.execute("""SELECT id::text,status,pages,posts,failure_class,extract(epoch from created_at)::float8,
+                              extract(epoch from updated_at)::float8, attempts, extract(epoch from lease_until)::float8
+                       FROM public.pr_history_imports
                        WHERE workspace_id=%s AND connection_id=%s ORDER BY created_at DESC LIMIT 1""", (workspace_id, connection_id))
         row = cur.fetchone()
-        if not row:
-            return {"connectionId": connection_id, "status": "none"}
-        return {"connectionId": connection_id, "importId": row[0], "status": row[1], "pages": row[2], "posts": row[3],
-                "failure": row[4], "requestedAt": row[5], "windowDays": WINDOW_DAYS}
+        if row:
+            result.update(importId=row[0], status=row[1], pages=row[2], posts=row[3], failure=row[4], requestedAt=row[5],
+                          updatedAt=row[6], attempts=row[7], retryAt=row[8] if row[1] == "running" and row[4] else None)
+        cur.execute("""SELECT status, count(*) FROM public.pr_metric_reads WHERE workspace_id=%s AND connection_id=%s
+                       AND source='history_import' AND job_id IS NULL GROUP BY status""", (workspace_id, connection_id))
+        result["metricReads"] = dict(cur.fetchall())
+        return result
 
     # --- cron step --------------------------------------------------------------------------------------------------
     def claim(self, limit):
@@ -273,10 +295,10 @@ class HistoryImporter:
                                           WHERE status='pending' OR (status='running' AND (lease_until IS NULL OR lease_until < now()))
                                           ORDER BY updated_at LIMIT %s FOR UPDATE SKIP LOCKED)
                            RETURNING h.id::text, h.workspace_id::text, h.connection_id, h.provider, h.cursor, h.pages, h.attempts,
-                                     extract(epoch from h.created_at)::float8""", (self.worker_id, LEASE_SECONDS, limit))
+                                     extract(epoch from h.created_at)::float8, h.posts""", (self.worker_id, LEASE_SECONDS, limit))
             rows = cur.fetchall()
             db.commit()
-        keys = ("id", "workspaceId", "connectionId", "provider", "cursor", "pages", "attempts", "createdAt")
+        keys = ("id", "workspaceId", "connectionId", "provider", "cursor", "pages", "attempts", "createdAt", "posts")
         return [dict(zip(keys, r)) for r in rows]
 
     def _eligible(self, run):
@@ -309,14 +331,18 @@ class HistoryImporter:
         """Posts, their backfill readings and the cursor in one transaction fenced on the lease. `failure` stores the
         page and then fails the run with that class. Returns the stored count, or None if the lease was lost."""
         with self.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT 1 FROM public.pr_history_imports WHERE id=%s::uuid AND lease_owner=%s AND status='running' FOR UPDATE",
+            cur.execute("SELECT pages,posts FROM public.pr_history_imports WHERE id=%s::uuid AND lease_owner=%s AND status='running' FOR UPDATE",
                         (run["id"], self.worker_id))
-            if not cur.fetchone() or purge_pending(cur, run["workspaceId"], run["connectionId"]):
+            live = cur.fetchone()
+            if not live or purge_pending(cur, run["workspaceId"], run["connectionId"]) or not metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"]):
                 db.rollback()   # lease lost, or the account was disconnected: store nothing more
                 return None
+            if live[0] >= MAX_PAGES or live[1] >= MAX_POSTS:
+                db.rollback()
+                return None
             stored = 0
-            for post in page["posts"]:
-                if post["publishedAt"] is None or post["publishedAt"] < cutoff:
+            for post in page["posts"][:min(PAGE_LIMIT, MAX_POSTS - live[1])]:
+                if post["publishedAt"] is None or not cutoff <= post["publishedAt"] <= run["createdAt"]:
                     continue
                 cur.execute("""INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,published_at,media_type,
                                                                  media_product_type,permalink,caption_chars,source)
@@ -353,9 +379,15 @@ class HistoryImporter:
             return self._retry(run, "error")
         cutoff = run["createdAt"] - WINDOW_DAYS * 86400
         cursor, pages = run["cursor"], run["pages"]
+        if pages >= MAX_PAGES or run.get("posts", 0) >= MAX_POSTS:
+            self._finish(run, "done")
+            return "done"
         for _ in range(PAGES_PER_TICK):
             if self.monotonic() >= deadline:
                 break
+            if not self._eligible(run):
+                self._finish(run, "cancelled", "not_eligible")
+                return "cancelled"
             try:
                 if not self._eligible(run):
                     self._finish(run,"cancelled","not_eligible")

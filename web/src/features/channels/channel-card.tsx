@@ -43,6 +43,9 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
+import { HistoryImportControl } from './history-import-control';
+import { historyImportCopy } from '@/lib/channels/history-import-copy';
+import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
@@ -117,6 +120,8 @@ function DisconnectButton({
   onConfirm: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const { locale } = usePreferences();
+  const { copy, lang } = historyImportCopy(locale);
   return (
     <>
       <Button variant='quiet' disabled={disabled} className={cn(CONTROL_44, 'text-destructive hover:text-destructive')} onClick={() => setOpen(true)}>
@@ -129,6 +134,7 @@ function DisconnectButton({
             <AlertDialogDescription>
               Rafii loses access to {account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.
             </AlertDialogDescription>
+            <AlertDialogDescription lang={lang}>{copy.purge}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={DIALOG_FOOTER_PLAIN}>
             <AlertDialogCancel variant='glass' size='control'>
@@ -360,6 +366,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        <HistoryImportControl channel={channel} provider={provider} canManage={canManage} />
         {canManage && !disconnected && (
           <StatefulButton
             variant='outline'
