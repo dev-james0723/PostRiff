@@ -48,6 +48,13 @@ class BrowserIsolationTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):helper.main()
                 run.assert_not_called()
 
+    def test_history_fixture_cannot_share_another_suite_or_database_port(self):
+        runner = load('consumer_ready_browser')
+        for args in (['--history-import','--founder'], ['--history-import','--performance'], ['--history-import','--pg-port','55489']):
+            with self.subTest(args=args), patch.object(sys,'argv',['runner',*args]), patch.object(runner.subprocess,'Popen') as spawn:
+                with self.assertRaises(SystemExit):runner.main()
+                spawn.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -17,6 +17,7 @@ def main():
     parser.add_argument('--tour',action='store_true',help='record a short local Demo workflow instead of the full Founder acceptance suite')
     parser.add_argument('--customers',action='store_true',help='run only the Founder Customer 360 browser acceptance')
     parser.add_argument('--performance',action='store_true')
+    parser.add_argument('--history-import',action='store_true',help='History Import consent/status acceptance with synthetic providers on the disposable database')
     parser.add_argument('--api-port',type=int,default=4438)
     parser.add_argument('--web-port',type=int,default=4439)
     parser.add_argument('--pg-port',type=int,default=55479)
@@ -25,6 +26,8 @@ def main():
     ports=(args.api_port,args.web_port,args.pg_port)
     if any(not 1024<=port<=65535 for port in ports) or len(set(ports))!=3:parser.error('Three distinct loopback ports from 1024 to 65535 are required')
     if args.founder and args.performance:parser.error('Choose Founder or consumer performance acceptance')
+    if args.history_import and (args.founder or args.performance):parser.error('Choose History Import or another acceptance suite')
+    if args.history_import and args.pg_port!=55479:parser.error('History Import fixtures require disposable PostgreSQL port 55479')
     if args.tour and not args.founder:parser.error('--tour requires --founder')
     if args.customers and (not args.founder or args.tour):parser.error('--customers requires --founder and cannot run with --tour')
     # Next bakes rewrites into the build. Runtime flags alone cannot change which API a test reaches.
@@ -56,10 +59,13 @@ def main():
     if args.founder:
         env.update(RAFII_AGENT_HARNESS='1',RAFII_FOUNDER_WEB_ORIGINS=f'http://localhost:{args.web_port},http://127.0.0.1:{args.web_port}',RAFII_WEB_URL=f'http://localhost:{args.web_port}',RAFII_API_URL=f'http://127.0.0.1:{args.api_port}',FOUNDER_EVIDENCE_DIR=str(out))
     env.setdefault('PLAYWRIGHT_MODULE',str(ROOT/'.codex/consumer-ready/web/node_modules/playwright'))
+    if args.history_import:
+        env.update(RAFII_WEB_URL=f'http://127.0.0.1:{args.web_port}',RAFII_HISTORY_PG_PORT=str(args.pg_port),RAFII_FIXTURE_PYTHON=sys.executable,RAFII_HISTORY_REPORT_DIR=str(out/'history-import-browser'))
     processes=[];logs=[]
     try:
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
-        commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+(['--founder-fixture'] if args.founder else [])),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
+        fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
+        commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
         for name,command in commands:
             log=(out/f'durable-{name}.log').open('w');logs.append(log)
             processes.append(subprocess.Popen(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
@@ -72,7 +78,7 @@ def main():
                         if response.status==200:break
                 except Exception:time.sleep(.25)
             else:raise RuntimeError('Local server readiness deadline exceeded')
-        test = 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        test = 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal

@@ -8,6 +8,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { Capability } from '@/lib/api/types';
 import { CAPABILITY_CHIPS, LEVEL_MEANING, type CapabilityChipDef } from '@/lib/channels/capabilities';
 import { useHoverCapable } from '@/lib/hooks/use-hover-capable';
+import { historyImportCopy } from '@/lib/channels/history-import-copy';
+import { usePreferences } from '@/lib/preferences';
 import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { POPOVER_ELEVATED } from './rafii-materials';
@@ -16,6 +18,8 @@ const HOVER_OPEN_DELAY = 80;
 const HOVER_CLOSE_DELAY = 100;
 
 function ChipEvidence({ chip, value }: { chip: CapabilityChipDef; value: Capability | undefined }) {
+  const { locale } = usePreferences();
+  const { copy, lang } = historyImportCopy(locale);
   const level = value?.level ?? 'Unsupported';
   const evidence = value?.evidence?.trim();
   return (
@@ -24,7 +28,7 @@ function ChipEvidence({ chip, value }: { chip: CapabilityChipDef; value: Capabil
         <span className='text-foreground font-medium'>{chip.label}</span>
         <LevelBadge level={level} />
       </div>
-      <p className='text-muted-foreground text-xs leading-relaxed'>{chip.meaning}</p>
+      <p className='text-muted-foreground text-xs leading-relaxed' lang={chip.key === 'analytics' ? lang : undefined}>{chip.key === 'analytics' ? copy.analyticsAccess : chip.meaning}</p>
       <p className='text-foreground text-xs leading-relaxed'>{evidence || LEVEL_MEANING[level] || LEVEL_MEANING.Unsupported}</p>
       <dl className='text-muted-foreground grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs'>
         <dt>Verified</dt>
