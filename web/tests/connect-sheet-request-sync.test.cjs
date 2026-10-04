@@ -19,3 +19,8 @@ test('URL deep links are authoritative for direct-entry provider and capability 
   assert.match(block, /urlProviderId \?\? request\?\.providerId/);
   assert.match(block, /urlCapability \?\? request\?\.capability/);
 });
+
+
+test('capability radios expose their visible labels to browser accessibility', () => {
+  assert.match(source, /aria-label=\{option\.label\}/);
+});
