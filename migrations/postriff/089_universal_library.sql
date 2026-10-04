@@ -49,10 +49,10 @@ create index if not exists pr_library_assets_metadata_search on public.pr_librar
   to_tsvector('simple',
     coalesce(display_title,'') || ' ' ||
     coalesce(original_filename,'') || ' ' ||
-    coalesce(summary,'') || ' ' ||
-    array_to_string(tags,' ')
+    coalesce(summary,'')
   )
 );
+create index if not exists pr_library_assets_tags on public.pr_library_assets using gin(tags);
 
 do $$
 declare t text;
