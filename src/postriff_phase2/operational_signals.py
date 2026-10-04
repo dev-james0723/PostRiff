@@ -62,7 +62,8 @@ def snapshot(connection_factory, now=None):
             cur.execute("""SELECT count(*) FILTER (WHERE source='verification' AND status IN ('pending','claimed') AND due_at < to_timestamp(%s)),
                                   count(*) FILTER (WHERE source<>'verification' AND status IN ('pending','claimed') AND scheduled_at < to_timestamp(%s)),
                                   count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
-                           FROM public.pr_metric_reads""", (now-600, now-86400, now-86400))
+                           FROM public.pr_metric_reads WHERE workspace_id=ANY(%s::uuid[])""",
+                        (now-600, now-86400, now-86400, sorted(metric_schedule.allowed_workspaces(os.environ))))
             reads_overdue, backfill_stale, reads_dead = cur.fetchone()
             cur.execute("SELECT count(*) FROM public.pr_history_imports WHERE status='failed' AND updated_at > to_timestamp(%s)", (now-86400,))
             imports_failed = cur.fetchone()[0]

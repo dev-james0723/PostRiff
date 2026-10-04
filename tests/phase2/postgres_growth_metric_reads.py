@@ -41,7 +41,7 @@ class OAuth:
         self.calls += 1
         if self.fail:
             raise self.fail
-        return {"accessToken": "synthetic-token"}
+        return {"accessToken": "synthetic-token", "provider": "threads", "scopes": sorted(M.NATIVE_ANALYTICS_SCOPES["threads"])}
 
 
 class Transport:
@@ -60,6 +60,7 @@ with connection() as db:
     wid = db.execute("SELECT workspace_id::text FROM public.pr_memberships WHERE user_id=%s", (ONE,)).fetchone()[0]
     other = db.execute("SELECT workspace_id::text FROM public.pr_memberships WHERE user_id=%s", (TWO,)).fetchone()[0]
     db.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,%s,'analytics','Direct')", (wid, CONN))
+    db.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,key_id,scopes) VALUES(%s,%s,'threads','synthetic-account','sealed','k1',%s)", (wid, CONN, sorted(M.NATIVE_ANALYTICS_SCOPES['threads'])))
     migration = (ROOT / "migrations/postriff/035_growth_metric_reads.sql").read_text(encoding="utf-8")
 db = psycopg.connect(DSN, autocommit=True)
 db.execute(migration)
@@ -69,7 +70,7 @@ checks.append("migration 035 applies on top of rls.sql and re-applies as a no-op
 
 oauth, transport = OAuth(), Transport()
 mono = [0.0]
-scheduler = M.MetricScheduler(connection, oauth, transport=transport, clock=time.time, monotonic=lambda: mono[0], worker_id="mr-a")
+scheduler = M.MetricScheduler(connection, oauth, transport=transport, workspace_allowlist={wid}, clock=time.time, monotonic=lambda: mono[0], worker_id="mr-a")
 now = time.time()
 
 
@@ -83,7 +84,7 @@ with connection() as db, db.cursor() as cur:
     scheduler.on_post_verified(cur, wid, job("p1"))                      # replay: idempotent
     scheduler.on_post_verified(cur, wid, job("p2", platform="LinkedIn"))  # no insights for LinkedIn
     scheduler.on_post_verified(cur, wid, job("p3", channel="no-analytics"))
-    broken = M.MetricScheduler(connection, None, transport=transport)
+    broken = M.MetricScheduler(connection, None, transport=transport, workspace_allowlist={wid})
     broken.provider_for = lambda platform: 1 / 0                            # a fault inside the hook
     broken.on_post_verified(cur, wid, job("p4"))
     cur.execute("SELECT 1")                                                 # the outer transaction is still usable
@@ -149,7 +150,7 @@ with connection() as db, db.cursor() as cur:
 a_rows = scheduler.claim(5)
 with connection() as db:
     db.execute("UPDATE public.pr_metric_reads SET lease_until=now() - interval '1 second' WHERE provider_post_id='p5'")
-b = M.MetricScheduler(connection, oauth, transport=transport, worker_id="mr-b")
+b = M.MetricScheduler(connection, oauth, transport=transport, workspace_allowlist={wid}, worker_id="mr-b")
 b_rows = b.claim(5)
 transport.replies = [INSIGHTS]
 assert b.complete(b_rows[0], b.read(b_rows[0], {})) is True
@@ -244,8 +245,10 @@ checks.append("analytics keep the latest available value per metric (a later rea
 import os
 from postriff_phase2.operational_signals import snapshot
 os.environ.pop(M.FLAG, None)
+os.environ.pop(M.WORKSPACE_ALLOWLIST, None)
 assert snapshot(connection)["counts"]["metricReadsOverdue"] == 0, "flag off: leftover rows are not an incident"
 os.environ[M.FLAG] = "1"
+os.environ[M.WORKSPACE_ALLOWLIST] = wid
 before = snapshot(connection)["counts"]
 with connection() as db, db.cursor() as cur:
     M.schedule(cur, wid, CONN, "threads", "late-fresh", "job-late", now - 1200, "verification", (("t0", 0),))
@@ -255,6 +258,7 @@ after = snapshot(connection)
 assert after["counts"]["metricReadsOverdue"] == before["metricReadsOverdue"] + 1 and after["status"] == "attention", after
 assert after["counts"]["metricBackfillStale"] == before["metricBackfillStale"], "a fresh import's old anchors are not overdue"
 os.environ.pop(M.FLAG, None)
+os.environ.pop(M.WORKSPACE_ALLOWLIST, None)
 checks.append("the operations snapshot counts only fresh readings overdue by 10 minutes, and only while metric reads are on")
 
 with connection() as db, db.cursor() as cur:
@@ -264,7 +268,7 @@ with connection() as db, db.cursor() as cur:
     db.commit()
 with connection() as db:
     db.execute("UPDATE public.pr_metric_reads SET status='claimed', lease_owner='mr-dead', lease_until=now() - interval '1 second' WHERE provider_post_id='imp0'")
-claimed = M.MetricScheduler(connection, oauth, transport=transport, worker_id="mr-prio").claim(10)
+claimed = M.MetricScheduler(connection, oauth, transport=transport, workspace_allowlist={wid}, worker_id="mr-prio").claim(10)
 order = [r["postId"] for r in claimed]
 assert order[0] == "imp0" and {"fresh", "late-fresh"} <= set(order[1:4]) and len(order) == 10, order
 checks.append("claims take crashed leases, then fresh verification readings, then a large import's backfill, however old its anchors")
@@ -347,5 +351,73 @@ with connection() as db:
     assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='beta-fence'").fetchone()[0] == 0
     assert db.execute('SELECT status FROM pr_metric_reads WHERE id=%s', (new['id'],)).fetchone()[0] == 'cancelled'
 checks.append('same-worker generation and expiry fence completion/release; revocation during HTTP suppresses append')
+
+# Stage 3A admission is independent of the global switch. Even a second tenant with
+# genuine-looking Direct capabilities and native grant metadata is never claimed.
+with connection() as db, db.cursor() as cur:
+    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,%s,'analytics','Direct') ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level='Direct'", (other, CONN))
+    cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,key_id,scopes) VALUES(%s,%s,'threads','other-synthetic-account','sealed','k1',%s)", (other, CONN, sorted(M.NATIVE_ANALYTICS_SCOPES['threads'])))
+    M.schedule(cur, other, CONN, 'threads', 'denied-tenant', 'job-denied', now-10, 'verification', (('t0', 0),))
+    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,%s,'analytics','Direct') ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level='Direct'", (wid, CONN))
+    scheduler.on_post_verified(cur, other, job('denied-hook'))
+assert M.MetricScheduler(connection, oauth, transport=transport).claim(100) == []
+assert all(r['workspaceId'] == wid for r in scheduler.claim(100))
+with connection() as db:
+    denied = db.execute("SELECT status,attempts FROM pr_metric_reads WHERE workspace_id=%s AND provider_post_id='denied-tenant'", (other,)).fetchone()
+    denied_hook = db.execute("SELECT count(*) FROM pr_metric_reads WHERE workspace_id=%s AND provider_post_id='denied-hook'", (other,)).fetchone()[0]
+assert denied == ('pending', 0) and denied_hook == 0
+checks.append('empty allowlist does no work; a Direct-analytics second workspace is never scheduled, claimed or charged an attempt')
+
+row = {'workspaceId': wid, 'connectionId': CONN, 'provider': 'threads', 'postId': 'rights-guard'}
+for reason in ('review', 'paused', 'stored_scope', 'credential_provider', 'revoked'):
+    with connection() as db:
+        db.execute("UPDATE pr_encrypted_credentials SET provider='threads',scopes=%s,revoked_at=NULL WHERE workspace_id=%s AND connection_id=%s", (sorted(M.NATIVE_ANALYTICS_SCOPES['threads']), wid, CONN))
+        if reason == 'stored_scope':
+            db.execute("UPDATE pr_encrypted_credentials SET scopes=ARRAY['threads_basic'] WHERE workspace_id=%s AND connection_id=%s", (wid, CONN))
+        elif reason == 'credential_provider':
+            db.execute("UPDATE pr_encrypted_credentials SET provider='instagram' WHERE workspace_id=%s AND connection_id=%s", (wid, CONN))
+        elif reason == 'revoked':
+            db.execute("UPDATE pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id=%s", (wid, CONN))
+    oauth.providers['threads'].production_reviewed = reason != 'review'
+    oauth.providers['threads'].execution_enabled = reason != 'paused'
+    before_tokens, before_reads = oauth.calls, len(transport.urls)
+    assert scheduler.read(row, {})['state'] == 'cancelled', reason
+    assert (oauth.calls, len(transport.urls)) == (before_tokens, before_reads), reason
+checks.append('provider review/pause, stored native scopes, provider binding and credential revocation suppress token and insights calls')
+oauth.providers['threads'].production_reviewed = True
+oauth.providers['threads'].execution_enabled = True
+with connection() as db:
+    db.execute("UPDATE pr_encrypted_credentials SET scopes=%s,revoked_at=NULL WHERE workspace_id=%s AND connection_id=%s", (sorted(M.NATIVE_ANALYTICS_SCOPES['threads']), wid, CONN))
+
+# A real zero is an available observation, while absent native fields remain NULL.
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, 'threads', 'zero-native', 'job-zero-native', now-10, 'verification', (('t0', 0),))
+zero_row = next(r for r in scheduler.claim(100) if r['postId'] == 'zero-native')
+transport.replies = [{'status': 200, 'body': {'data': [{'name': 'views', 'values': [{'value': 0}]}]}}]
+zero_outcome = scheduler.read(zero_row, {})
+assert zero_outcome['state'] == 'done', zero_outcome
+assert scheduler.complete(zero_row, zero_outcome) is True
+with connection() as db:
+    actual = dict((m, (a, v)) for m,a,v in db.execute("SELECT metric,availability,value FROM pr_metric_observations WHERE provider_post_id='zero-native'").fetchall())
+assert actual['views'] == ('available', 0) and actual['likes'] == ('unavailable', None)
+assert scheduler.complete(zero_row, zero_outcome) is False
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='zero-native'").fetchone()[0] == 6
+checks.append('native observed zero stays available; missing fields stay NULL; completion replay appends nothing')
+
+# Revocation after HTTP cannot commit observations or report a successful read.
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, 'threads', 'scope-race', 'job-scope-race', now-10, 'verification', (('t0', 0),))
+race_row = next(r for r in scheduler.claim(100) if r['postId'] == 'scope-race')
+transport.replies = [INSIGHTS]
+race_outcome = scheduler.read(race_row, {})
+with connection() as db:
+    db.execute("UPDATE pr_encrypted_credentials SET scopes=ARRAY['threads_basic'] WHERE workspace_id=%s AND connection_id=%s", (wid, CONN))
+assert scheduler.complete(race_row, race_outcome) is True
+assert race_outcome['state'] == 'cancelled'
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='scope-race'").fetchone()[0] == 0
+    assert db.execute("SELECT status FROM pr_metric_reads WHERE id=%s", (race_row['id'],)).fetchone()[0] == 'cancelled'
+checks.append('scope revoked during HTTP prevents append and is counted as cancelled, not done')
 
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

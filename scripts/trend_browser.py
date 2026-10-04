@@ -32,8 +32,10 @@ def main():
     parser.add_argument('--skip-build', action='store_true', help='reuse only a matching local .next-trend-live build')
     parser.add_argument('--pool-only', action='store_true', help='only affected Home/Weekly real API checks; historical46 are not rerun')
     parser.add_argument('--learning-only', action='store_true', help='only affected Performance real API checks; historical Radar/Lab/Pool receipts retained')
+    parser.add_argument('--metric-admission', action='store_true', help='learning-only: mount a read-only scheduler for one synthetic workspace and prove the others stay disabled')
     args = parser.parse_args()
     if args.pool_only and args.learning_only: parser.error('Choose one bounded mode')
+    if args.metric_admission and not args.learning_only: parser.error('Metric admission requires learning-only')
     dist = '.next-trend-learning' if args.learning_only else '.next-trend-live'
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -132,6 +134,15 @@ def main():
         flags['RAFII_WEEKLY_OPERATOR_ENABLED'] = '1'
         if args.learning_only: flags.update(RAFII_PERFORMANCE_LEARNING_ENABLED='1', RAFII_ADAPTIVE_SKILLS_ENABLED='1')
         attach(service, flags)
+        if args.metric_admission:
+            from postriff_phase2.growth.metric_schedule import MetricScheduler
+            # Actual scheduler admission, no OAuth adapter/grant or insights transport.
+            # Explicit stored fixture publications bypass the worker and schedule nothing.
+            service.metric_reads = MetricScheduler(connect, None, transport=None, workspace_allowlist={seeds[0]['workspace_id']})
+            for row in seeds:
+                row['metric_reads_enabled'] = service.metric_reads.workspace_allowed(row['workspace_id'])
+            summary['metric_admission'] = {'execution': 'synthetic_workspace_admission_only',
+                'allowed_workspaces': 1, 'denied_workspaces': len(seeds)-1, 'native_provider_calls': 0}
         if args.learning_only: seed.seed_learning_sources(service, connect, seeds)
         seed.seed_lab_drafts(service, connect, lab_seeds)
         app = HostedApplication(service, public_auth={'provider':'dev','execution':'dev-synthetic','flow':'dev'})
@@ -240,6 +251,9 @@ def main():
             assert jobs == sum(len(r['jobs']) for r in lab_persistence), 'Only the explicitly requested local Lab jobs may exist'
             assert db.execute("SELECT count(*) FROM pr_trend_jobs WHERE kind <> 'trend.opportunity_lab.local' OR provider_id IS NOT NULL OR reservation_id IS NOT NULL").fetchone()[0] == 0
             assert db.execute('SELECT count(*) FROM pr_model_usage_events').fetchone()[0] == 0, 'No model usage events'
+            if args.metric_admission:
+                assert db.execute('SELECT count(*) FROM pr_metric_reads').fetchone()[0] == 0, 'Read-only browser admission creates no metric queue'
+                assert service.metric_reads.tick()['providerReads'] == 0, 'No provider dispatch from mount or browser GETs'
             assert db.execute('SELECT count(*) FROM pr_trend_budget_reservations').fetchone()[0] == 0, 'No provider/model cost reservations'
             completions = db.execute("SELECT meta FROM pr_audit_events WHERE kind='trend.lab_completed'").fetchall()
             assert all(r[0].get('modelCalls') == 0 for r in completions)
