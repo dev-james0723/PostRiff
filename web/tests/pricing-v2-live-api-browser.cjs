@@ -508,7 +508,7 @@ async function main() {
     await writerAndGrowth(setup.request,rows);
     const final=await control(setup.request,'snapshot');
     assert.equal(final.externalIO,0);assert.equal(final.syntheticStripeTransportAttempts,0);
-    const buyer=await control(setup.request,'seed',{scenario:'free-new'});
+    const buyer=await control(setup.request,'bootstrap',{scenario:'free-new'});
     const buyerScene=await contextFor(buyer,390,'reduce');
     try {
       await visual(buyerScene,'/app/account/billing','fixed-plan-purchase-ready',390,'reduce');
