@@ -195,7 +195,7 @@ def runtime_from_environment(environ=None):
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
     verify = supabase_verifier(project_url, publishable, database)
-    storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video"))
+    storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video", file_bucket=values.get("POSTRIFF_LIBRARY_BUCKET") or "postriff-library"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
     from .oauth import CredentialVault
     from .providers import registry_from_environment, http_transport
@@ -641,6 +641,12 @@ class HostedApplication:
                         result["videoSweep"] = uploads.sweep(service.repository.connection_factory)
                     except Exception:
                         result["videoSweep"] = {"status": "unavailable"}
+                library = getattr(service, "library", None)
+                if library is not None and library.storage is not None:
+                    try:
+                        result["librarySweep"] = library.sweep(service.repository.connection_factory)
+                    except Exception:
+                        result["librarySweep"] = {"status": "unavailable"}
                 from .coworker import runtime as coworker_runtime
                 result["coworker"] = coworker_runtime.cron(service)
                 from .phone.runtime import cron as phone_cron
@@ -874,6 +880,31 @@ class HostedApplication:
             if len(parts) == 4 and parts[:3] == ["api", "auth", "sessions"] and method == "DELETE":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_session(token, parts[3]))
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "library":
+                library = service.library
+                workspace_id = parts[2]
+                if len(parts) == 4 and method == "GET":
+                    from urllib.parse import parse_qs
+                    query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+                    return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0]))
+                if len(parts) == 5 and parts[4] == "files" and method == "POST":
+                    return self._json(start_response, 201, library.begin(workspace_id, token, self._body(environ)))
+                if len(parts) == 6 and parts[4] == "files":
+                    asset_id = parts[5]
+                    if method == "GET": return self._json(start_response, 200, library.detail(workspace_id, token, asset_id))
+                    if method == "PATCH":
+                        body = self._body(environ)
+                        return self._json(start_response, 200, library.rename(workspace_id, token, asset_id, body.get("title")))
+                    if method == "DELETE":
+                        self._body(environ)
+                        return self._json(start_response, 200, library.delete(workspace_id, token, asset_id))
+                if len(parts) == 7 and parts[4] == "files":
+                    asset_id, verb = parts[5], parts[6]
+                    if verb == "commit" and method == "POST":
+                        self._body(environ)
+                        return self._json(start_response, 200, library.commit(workspace_id, token, asset_id))
+                    if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id))
+                raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
                 # Chat-context SPEC §5.7: the bytes go browser → storage on a signed URL; these only begin, commit and abort.
                 uploads = service.video_uploads
