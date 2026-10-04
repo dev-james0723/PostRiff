@@ -305,6 +305,7 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len({event['event_id'] for event in received}), len(received))
         TypeAdapter(InstructionsAppendEventParam).validate_python(received[1])
         self.assertIsNone(received[1]['delegation_id'])
+        self.assertIn('Speak first now.', received[1]['content'])
         self.assertEqual(received[2]['type'], 'session.input_audio.append')
         self.assertEqual(received[2]['audio'], AUDIO_IN)
         self.assertEqual(socket.outgoing, [{'event': 'media', 'streamSid': 'MZ-local', 'media': {'payload': AUDIO_OUT}}])
@@ -312,13 +313,10 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': 2.5, 'reason': 'completed'})])
         self.assertEqual(controller.finishes, [(CALL_ID, 'completed', {'live_seconds': 2.5})])
 
-    async def test_server_initiated_daily_briefing_uses_instructions_not_fabricated_delegation_result(self):
+    async def test_server_initiated_daily_briefing_uses_one_short_speak_first_directive(self):
         controller, socket, received = Controller(), Socket(), []
         controller.last_input_at = 0
         controller.call['destination_ref'] = 'james_env'
-        controller.service.hosted = SimpleNamespace(
-            james_daily_call=SimpleNamespace(initial_request=lambda _call_id: 'Give James the verified daily briefing.')
-        )
         controller.delegate = lambda _event: {
             'type': 'session.commentary.append',
             'delegation_id': 'james-daily-briefing',
@@ -328,7 +326,6 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
             received.append(json.loads(await ws.recv()))
             await ws.send(json.dumps({'type': 'session.started', 'session': {'id': 'local-live-session'}}))
             received.append(json.loads(await ws.recv()))
-            received.append(json.loads(await ws.recv()))
             await ws.send(json.dumps({'type': 'session.closed', 'usage': {'seconds': 1}}))
         async with serve(server, '127.0.0.1', 0) as local:
             port = local.sockets[0].getsockname()[1]
@@ -336,12 +333,12 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
                 async with client.live.connect() as connection:
                     await asyncio.wait_for(bridge(controller, TwilioMediaTransport(socket, 'MZ-local'), connection), 8)
         self.assertEqual([event['type'] for event in received],
-                         ['session.start', 'session.instructions.append', 'session.instructions.append'])
-        TypeAdapter(InstructionsAppendEventParam).validate_python(received[2])
-        self.assertIsNone(received[2]['delegation_id'])
-        self.assertIn('Give James the verified daily briefing.', received[2]['content'])
-        self.assertIn('Speak the personal briefing now.', received[2]['content'])
-        self.assertNotIn('james-daily-briefing', json.dumps(received[2]))
+                         ['session.start', 'session.instructions.append'])
+        TypeAdapter(InstructionsAppendEventParam).validate_python(received[1])
+        self.assertIsNone(received[1]['delegation_id'])
+        self.assertIn('Speak first now.', received[1]['content'])
+        self.assertIn('personal daily briefing', received[1]['content'])
+        self.assertNotIn('james-daily-briefing', json.dumps(received[1]))
 
     async def test_delegation_failure_commentary_matches_required_nullable_sdk_field(self):
         controller, socket, received = Controller(), Socket(), []

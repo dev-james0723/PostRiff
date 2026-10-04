@@ -65,6 +65,16 @@ class PhoneSessionController:
                 "Full-duplex interruption is expected: stop speaking immediately when James interrupts. Never read out IDs, links, secrets or raw tokens. No audio recording.\n\n"
                 + style.voice_block(agent_style)
             )
+            daily = getattr(self.service.hosted, 'james_daily_call', None)
+            if daily is not None and not value.get('media_generation', 0):
+                try:
+                    personal_context = daily.initial_request(self.call_id)[:12000]
+                except Exception:
+                    personal_context = 'Personal daily briefing context is temporarily unavailable. Do not guess.'
+                messages = list(config.get('input') or [])
+                messages.append({'type':'message','role':'developer',
+                                 'content':[{'type':'input_text','text':personal_context}]})
+                config['input'] = messages[-128:]
         else:
             config['instructions'] += '\nThe person is on the telephone. Identify yourself as Rafii, an AI assistant. No browser screen is attached. Put visual results in the same Rafii conversation. No audio recording.'
         return config
@@ -281,14 +291,17 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 ready.set()
                 if not controller.call.get('media_generation',0) and not greeting_sent:
                     greeting_sent = True
-                    await step('live_greeting', send({'type':'session.instructions.append', 'delegation_id':None, 'content':controller.opening_greeting}))
+                    directive = ('Speak first now. Say this opening greeting verbatim: ' + controller.opening_greeting)
+                    if controller.call.get('destination_ref') == 'james_env':
+                        directive += (' Then immediately give James a concise personal daily briefing using the trusted developer context '
+                                      'already loaded in this session. Start with today’s timeline, then important email attention, '
+                                      'then current project progress, and finish with one to three practical actions.')
+                    else:
+                        directive += ' Then pause and listen.'
+                    await step('live_greeting', send({'type':'session.instructions.append', 'delegation_id':None,
+                                                      'content':directive[:1800]}))
                 if not controller.call.get('media_generation',0) and controller.call.get('destination_ref') == 'james_env':
-                    daily = getattr(controller.service.hosted, 'james_daily_call', None)
-                    briefing = (await asyncio.to_thread(daily.initial_request, controller.call_id)) if daily else 'Give James his daily briefing from verified personal context only.'
-                    # This is trusted server context, not a fabricated Live delegation. GPT-Live already has the
-                    # conversation state and can speak the personal brief directly from this bounded read-only payload.
-                    await step('personal_briefing', send({'type':'session.instructions.append','delegation_id':None,
-                                                         'content':briefing + '\nSpeak the personal briefing now.'}))
+                    pass
                 elif not controller.call.get('media_generation',0) and str(controller.call.get('reason_key') or '').startswith('founder:'):
                     # Founder Admin calls read the prepared, immutable founder report (or incident) instead of the workspace briefing.
                     controller.user_text = await asyncio.to_thread(founder_playback_prompt, controller)

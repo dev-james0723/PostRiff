@@ -1,6 +1,7 @@
 """Synthetic profile/transport checks: no model call or private data."""
 from contextlib import contextmanager
 from types import SimpleNamespace
+import json
 import unittest
 from postriff_phase2.agent_runtime_v2.greeting import first_name, opening
 from postriff_phase2.agent_runtime_v2 import style
@@ -61,7 +62,11 @@ class OpeningTests(unittest.TestCase):
             'kind': 'explicit', 'workspace_id': 'workspace', 'conversation_id': 'conversation',
             'destination_ref': 'james_env'
         }
+        controller.call_id = 'call-personal'
         controller.capability = 'scoped-caller'
+        controller.service = SimpleNamespace(hosted=SimpleNamespace(
+            james_daily_call=SimpleNamespace(initial_request=lambda _call_id: 'PERSONAL_CONTEXT_MARKER')
+        ))
         controller.runtime = SimpleNamespace(
             service=SimpleNamespace(repository=SimpleNamespace(transaction=transaction)),
             cfg=SimpleNamespace(route=lambda *a, **k: SimpleNamespace(model='gpt-live-1'))
@@ -73,6 +78,8 @@ class OpeningTests(unittest.TestCase):
         self.assertNotIn('social-content coworker', result['instructions'])
         self.assertEqual(controller.opening_greeting,
                          'Hi James, this is your AI personal assistant calling with your daily briefing.')
+        rendered_input = json.dumps(result.get('input') or [])
+        self.assertIn('PERSONAL_CONTEXT_MARKER', rendered_input)
 
     def test_each_phone_kind_uses_all_six_saved_voices_for_the_authenticated_caller(self):
         for kind in ('explicit', 'inbound', 'scheduled', 'proactive'):
