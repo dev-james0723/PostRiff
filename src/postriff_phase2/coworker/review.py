@@ -432,8 +432,8 @@ def project_review(state, context, observations, direct_connections, now, *, tra
     observed = [e['observedAt'] for e in results if e['observedAt']]
     coverage = {'eligible':len({e['publicationBinding']['jobId'] for e in measured}),'publications':len(publications),
                 'measured':len(measured),'missing':len(results)-len(measured),'excludedByReason':dict(excluded),
-                'earliestAvailableAt':min(observed) if observed else None,'collectionStartAt':None,
-                'lastSuccessfulRead':max(observed) if observed else None,'cutoffAt':context['cutoffAt'],
+                'earliestAvailableAt':min(observed,key=stamp) if observed else None,'collectionStartAt':None,
+                'lastSuccessfulRead':max(observed,key=stamp) if observed else None,'cutoffAt':context['cutoffAt'],
                 'truncated':all_count>MAX_POSTS,'maximumPosts':MAX_POSTS,'historyLimitations':['Available stored records only; HistoryImport OFF.','Collection start is unknown.']}
     basis = digest({'contextDigest':context['contextDigest'],'nativeResults':results,'coverage':coverage})
     return {'schemaVersion':SCHEMA_VERSION,'resolvedContext':context,'contextDigest':context['contextDigest'],'basisDigest':basis,

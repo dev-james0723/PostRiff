@@ -30,6 +30,7 @@ def seed_review(host,wid,token,now=None):
             m.update(variantId='review-original-'+str(i),payload={'text':text,'language':'en'},contentType={'id':'practice','formatId':'text'},payloadDigest=digest(text),timing={'timestamp':at,'timeZone':'UTC'},idempotencyKey=digest([wid,i]))
             jobs.append(job)
         state['phase2']['jobs']=jobs
+        state['phase2']['channels'][0]['expiresAt']=now+30*86400
         state.pop('accountDeletion',None)
         state.setdefault('coworker',{}).pop('review',None)
         return state

@@ -31,9 +31,9 @@ await page.goto(base+'/app/analytics',{waitUntil:'domcontentloaded',timeout:1200
 const crossPage=panel.getByRole('link',{name:'Open this scope in Growth Studio',exact:true});
 const sharedInput=JSON.parse(new URL(await crossPage.getAttribute('href'),base).searchParams.get('reviewScope'));
 const sharedProjection=await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(sharedInput))}`);
-await crossPage.click();await ready();
+await crossPage.click();await page.waitForURL('**/app/growth?reviewScope=*');await ready();
 assert.deepEqual(JSON.parse(new URL(page.url()).searchParams.get('reviewScope')),sharedInput);
-await panel.getByRole('link',{name:'Open this scope in Analytics',exact:true}).click();await ready();
+await panel.getByRole('link',{name:'Open this scope in Analytics',exact:true}).click();await page.waitForURL('**/app/analytics?reviewScope=*');await ready();
 assert.equal((await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(sharedInput))}`)).contextDigest,sharedProjection.contextDigest);
 checks.push('Analytics to Growth Studio to Analytics preserves exact resolved dates, cutoff, comparison and context digest');
 await panel.locator('summary').filter({hasText:'Metric sources, missing values and exact reading times'}).click();

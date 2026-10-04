@@ -19,7 +19,7 @@ from postriff_phase2.coworker import review
 from growth_phase2_fixtures import ENV,Models,Writer
 from review_fixture import seed_review
 
-ONE='00000000-0000-0000-0000-000000000001';TWO='00000000-0000-0000-0000-000000000002'
+ONE=str(uuid.uuid4());TWO=str(uuid.uuid4())
 DSN=os.environ['POSTRIFF_TEST_DSN']
 assert 'host=127.0.0.1' in DSN and 'port=55404' in DSN,'Dedicated disposable PG only'
 def connection():return psycopg.connect(DSN)
@@ -30,13 +30,17 @@ def refused(status,fn):
     try:fn()
     except AlphaError as exc:assert exc.status==status,(status,exc.status,str(exc));return
     raise AssertionError('Expected refusal '+str(status))
+clock=[time.time()]
+with connection() as db:
+    db.execute('INSERT INTO auth.users(id) VALUES(%s),(%s)',(ONE,TWO))
+host=HostedWorkspaceService(connection,verify,clock=lambda:clock[0],ideas_runtime=Writer())
+host.bootstrap('one','studio');host.bootstrap('two','studio')
 with connection() as db:
     wid=str(db.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s',(ONE,)).fetchone()[0])
     foreign=str(db.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s',(TWO,)).fetchone()[0])
     db.execute("UPDATE public.pr_memberships SET status='active',role='owner' WHERE user_id IN (%s,%s)",(ONE,TWO))
     db.execute("UPDATE public.pr_workspaces SET state='{}' WHERE id=%s",(wid,))
-clock=[time.time()]
-host=HostedWorkspaceService(connection,verify,clock=lambda:clock[0],ideas_runtime=Writer());host.bootstrap('one','studio')
+host.bootstrap('one','studio')
 models=Models();host.growth=GrowthService(host,env={**ENV,'POSTRIFF_METRIC_READS':'1'},router_factory=models.router,clock=lambda:clock[0]);host.metric_reads=SimpleNamespace(workspace_allowed=lambda candidate:candidate==wid)
 co=CoworkerService(host,{'POSTRIFF_SOURCE_SHA':os.environ['POSTRIFF_SOURCE_SHA']},clock=lambda:clock[0]);host.coworker=co;r=co.review
 jobs=seed_review(host,wid,'one',clock[0]);conn=jobs[0]['manifest']['channelId']
@@ -98,6 +102,17 @@ try:
 finally:
     with connection() as db:db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(raw),wid))
 checks.append('current native publication identity blocks snapshot read, replay and all exports after rebinding')
+with connection() as db:
+    expired=copy.deepcopy(raw);expired['phase2']['channels'][0]['expiresAt']=clock[0]-1
+    db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(expired),wid))
+try:
+    for f in (None,'markdown','csv','pdf'):refused(410,lambda:r.snapshot(wid,'one',s['snapshotId'],1,format_=f))
+    refused(410,lambda:r.create_snapshot(wid,'one',snapshot_body))
+    assert all(e['value'] is None and e['reason']=='expired' for e in r.read(wid,'one',scope)['nativeResults'])
+    assert r.views(wid,'one')['views'][0]['resolvedContext'] is None
+finally:
+    with connection() as db:db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(raw),wid))
+checks.append('expired source blocks current values, Saved View resolution, snapshot replay and all export formats')
 # A failure in the same cursor after the state UPDATE must roll everything back.
 p=r.read(wid,'one',scope);rev=current()['revision'];before_count=len(current()['state']['coworker']['review']['snapshots'])
 original=r._snapshot_current

@@ -12,6 +12,7 @@ if (fs.existsSync(file)) {
   const period = { start:'2026-10-01T00:00:00Z',end:'2026-10-04T00:00:00Z',timezone:'America/New_York' };
   test('UTC half-open dates and IANA timezone',()=>{
     assert.ok(t.publicationPeriodSchema.safeParse(period).success);
+    assert.ok(t.publicationPeriodSchema.safeParse({...period,start:'2026-10-01T00:00:00Z',end:'2026-10-01T00:00:00.000001Z'}).success);
     for(const patch of [{end:period.start},{timezone:'bad/zone'},{start:'2026-10-01'}]) assert.equal(t.publicationPeriodSchema.safeParse({...period,...patch}).success,false);
   });
   test('true zero, unknown and invalid numbers are distinct',()=>{

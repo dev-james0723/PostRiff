@@ -8,7 +8,8 @@ const timezone = z.string().min(1).max(80).refine((value) => {
   try { return Boolean(new Intl.DateTimeFormat('en', { timeZone: value }).resolvedOptions().timeZone); } catch { return false; }
 }, 'Choose an IANA timezone');
 export const nativeValueSchema = z.number().finite().nonnegative().nullable();
-export const publicationPeriodSchema = z.object({ start: instant, end: instant, timezone }).strict().refine((p) => p.start < p.end, 'End must follow start');
+const instantKey = (value:string) => value.replace(/(\.\d+)?Z$/,(_,fraction:string='.')=>fraction.replace(/0+$/,'').padEnd(32,'0')+'Z');
+export const publicationPeriodSchema = z.object({ start: instant, end: instant, timezone }).strict().refine((p) => instantKey(p.start) < instantKey(p.end), 'End must follow start');
 export const relativeDateRuleSchema = z.object({ kind: z.enum(['this_week', 'last_week', 'this_month', 'last_month']), timezone }).strict();
 export const nativeMetricSchema = z.object({ provider: z.string().min(1), nativeName: id, definitionVersion: id, unit: z.literal('count') }).strict();
 export const tagSelectionSchema = z.object({ tagId: id, kind: z.enum(['theme', 'campaign', 'series']), classificationVersion: z.number().int().nonnegative() }).strict();
