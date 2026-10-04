@@ -277,6 +277,8 @@ def main():
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
+    if args.review_fixture and not args.growth_phase2_fixture:
+        parser.error('Review fixtures require --growth-phase2-fixture on the disposable harness.')
     if args.growth_phase2_fixture or args.radar_fixture or args.postdoctor_v2_fixture:args.growth_fixture=True
     import psycopg
     dsn, data = start_postgres(args.pg_port)
@@ -314,8 +316,6 @@ def main():
         service.growth=GrowthService(service,env={**ENV,**({'POSTRIFF_METRIC_READS':'1'} if args.review_fixture else {})},router_factory=Models().router)
         if args.radar_fixture:service.growth.radar.sources=Sources()
     if args.review_fixture:
-        if not args.growth_phase2_fixture:
-            raise ValueError('Review fixtures require --growth-phase2-fixture on the disposable harness.')
         from types import SimpleNamespace
         service.metric_reads=SimpleNamespace(workspace_allowed=lambda _:True)
     if args.credit_fixture:
