@@ -46,6 +46,16 @@ export interface Asset {
   processing?: string;
   createdAt?: number;
   uploadedBy?: string;
+  /** Universal Library metadata. Older image/video records legitimately omit these fields. */
+  originalFilename?: string;
+  displayTitle?: string;
+  aiSummary?: string;
+  aiTags?: string[];
+  extractedText?: string;
+  extension?: string;
+  assetKind?: 'image' | 'video' | 'audio' | 'document' | 'file' | string;
+  analysisStatus?: 'pending' | 'processing' | 'ready' | 'failed' | string;
+  indexingStatus?: 'pending' | 'processing' | 'ready' | 'failed' | string;
   id: string;
   hash: string;
   mime: string;
