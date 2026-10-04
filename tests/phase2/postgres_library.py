@@ -102,7 +102,8 @@ library = service.library
 
 # Begin is editor-authorized, normalized, and does not mutate the workspace JSON revision.
 revision = service.get(wid, "one")["revision"]
-ticket = library.begin(wid, "one", {"filename": "rehearsal.md", "mime": "text/markdown", "bytes": 31})["upload"]
+raw = b"Brahms rehearsal\nFingering notes."
+ticket = library.begin(wid, "one", {"filename": "rehearsal.md", "mime": "text/markdown", "bytes": len(raw)})["upload"]
 check("begin: stable asset id", len(ticket["assetId"]) == 32)
 check("begin: signed URL not persisted", "token=fake" in ticket["url"])
 check("begin: workspace revision unchanged", service.get(wid, "one")["revision"] == revision)
@@ -113,8 +114,6 @@ with connection() as db:
     ).fetchone()
 check("begin: pending normalized row", persisted == ("rehearsal.md", "pending", True), persisted)
 
-raw = b"Brahms rehearsal\nFingering notes."
-assert len(raw) == 31
 storage.put(wid, ticket["assetId"] + ".md", raw, "text/markdown")
 committed = library.commit(wid, "one", ticket["assetId"])
 check("commit: ready and hashed", committed["status"] == "ready" and len(committed["asset"]["sha256"]) == 64)
