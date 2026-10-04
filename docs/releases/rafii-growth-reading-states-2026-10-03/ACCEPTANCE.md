@@ -9,12 +9,13 @@ This bounded Stage 3 change distinguishes unavailable native readings from sched
 - A usable retained native observation is inspectable even when new collection is disabled. Observed zero remains distinct from missing data.
 - An empty workspace without a Direct owned Threads/Instagram analytics connection renders an explicit unavailable state and opens the existing Accounts connection flow. A missing post/report cannot crash Results.
 - Measurement status inspection performs no provider or model dispatch. Consent, paid-route grants, publication verification, comparability, calibration and owner approval gates remain enforced.
+- Collection is available only when the native worker is mounted and, for a scoped worker, that same worker admits the workspace. A global flag does not make an unmounted or unadmitted reader appear enabled.
 
 ## Local validation
 
 These are local implementation checks with synthetic external services, not authorized production provider success.
 
-- 51 focused Python tests passed for Beta, closed loop, native metric scheduling, Phase 1 and Post Doctor. The 15 Beta tests were rerun after distinguishing a future missing schedule from queued work.
+- 52 focused Python tests passed for Beta, closed loop, native metric scheduling, Phase 1 and Post Doctor, including mounted-worker and workspace-admission checks. The 15 Beta tests were rerun after distinguishing a future missing schedule from queued work.
 - Disposable PostgreSQL suites for Phase 1, Phase 2 and metric reads passed. Final Phase 2 SQL checks use a separate local port and the runner's `POSTRIFF_TEST_DSN` contract: measured/disabled/scheduled/future/exhausted/missing schedule/revoked rights, including a missing future schedule. Other worktrees' clusters are untouched.
 - Three Node reading-state tests, TypeScript, lint, product copy audit and the final production build passed. Lint retains two existing unrelated warnings.
 - Actual local browser → API → disposable PostgreSQL checks passed at 1440, 390 and 320 pixels, dark mode, reduced motion and keyboard tabs, with no serious/critical axe violations. External browser requests are blocked. Checks cover result review, explicit Genome approval, Audience-to-Ideas persistence, disabled collection, the empty-workspace state and navigation to Accounts.

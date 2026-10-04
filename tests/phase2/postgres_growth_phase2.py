@@ -45,6 +45,11 @@ assert window('24h')['state']=='measured' and window('24h')['available']
 from postriff_phase2.growth.metric_schedule import schedule
 verified=next(j for j in saved()['state']['phase2']['jobs'] if j['id']==job)
 g.env['POSTRIFF_METRIC_READS']='1'
+from types import SimpleNamespace
+assert window('1h')['state']=='disabled'
+host.metric_reads=SimpleNamespace(workspace_allowed=lambda candidate:False)
+assert window('1h')['state']=='disabled'
+host.metric_reads=SimpleNamespace(workspace_allowed=lambda candidate:candidate==wid)
 with connection() as db,db.cursor() as cur:
     schedule(cur,wid,verified['manifest']['channelId'],'threads',verified['providerReference'],job,verified['verification']['at'],'verification')
 assert window('1h')['state']=='scheduled' and window('7d')['state']=='pending_horizon'
@@ -64,6 +69,7 @@ with connection() as db:
     db.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND job_id=%s AND read_offset='7d'",(wid,job))
 assert window('7d')['state']=='unscheduled' and window('7d')['dueAt']>clock[0]
 g.env.pop('POSTRIFF_METRIC_READS')
+del host.metric_reads
 assert not models.calls
 checks.append('real SQL reading states distinguish measured, disabled, scheduled, future horizon, exhausted, unscheduled and revoked rights without dispatch')
 refused(403,lambda:c.report(wid,'one',body(jobId=job,horizon='24h')))

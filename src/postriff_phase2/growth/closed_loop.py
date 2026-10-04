@@ -24,6 +24,14 @@ ACTIONS=('postmortem_lesson_approve','postmortem_dismiss','audience_suggestion_c
          'creator_calibration_propose','creator_calibration_approve','creator_calibration_restore')
 
 
+def collection_enabled(growth,workspace_id):
+    reader=getattr(growth.hosted,'metric_reads',None)
+    if not metric_reads_enabled(growth.env) or reader is None:
+        return False
+    admission=getattr(reader,'workspace_allowed',None)
+    return admission is None or (callable(admission) and bool(admission(workspace_id)))
+
+
 class ClosedLoop:
     def __init__(self,growth):
         self.g=growth
@@ -60,7 +68,7 @@ class ClosedLoop:
         self.g.session(token);self.g.gate('postmortem')
         with self.repository.transaction(token,wid) as (cur,row,_):
             jobs,posts,predictions=self._observations(cur,wid,row[1])
-            enabled=metric_reads_enabled(self.g.env)
+            enabled=collection_enabled(self.g,wid)
             tracked=tracking(cur,wid,{'phase2':{**row[1].get('phase2',{}),'jobs':jobs}},self.g.clock(),enabled=enabled,limit=300)
             windows={p['job_id']:{h['window']:h for h in p['horizons']} for p in tracked['posts']}
             cur.execute("SELECT connection_id FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='analytics' AND level='Direct'",(wid,))
