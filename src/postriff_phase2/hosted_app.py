@@ -169,7 +169,7 @@ def billing_from_environment(values):
         provider = StripePaymentProvider(stripe_key, stripe_secret,
                                          api_version=values.get("POSTRIFF_STRIPE_API_VERSION") or None,
                                          portal_configuration=values.get("POSTRIFF_STRIPE_PORTAL_CONFIGURATION") or None,
-                                         checkout_card_only=values.get("POSTRIFF_STRIPE_CHECKOUT_CARD_ONLY") == "1") if stripe_key and stripe_secret else DisabledPaymentProvider()
+                                         checkout_card_only=values.get("POSTRIFF_ENVIRONMENT") == "staging") if stripe_key and stripe_secret else DisabledPaymentProvider()
     resend_key = values.get("RESEND_API_KEY")
     base_url = values.get("POSTRIFF_PUBLIC_BASE_URL")
     if resend_key:
