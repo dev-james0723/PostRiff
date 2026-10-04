@@ -145,7 +145,7 @@ async function publicScene(width,motion) {
     assert.ok(ld.length,'Actual public JSON-LD must be present');
     const structured=ld.map(v=>JSON.parse(v));
     assert.doesNotMatch(JSON.stringify(structured),/studio-v1|assist-v1|price_local_synthetic/);
-    pass(`public ${width} ${motion}: Free + Starter $29 / 1000 + Creator $59 / 3500 + Studio $149 / 8000, inactive checkout, no overflow/errors`);
+    pass(`public ${width} ${motion}: Free + Starter $29 / 1000 + Creator $59 / 3500 + Studio $149 / 8000, fixed checkout qualified and Creator inactive, no overflow/errors`);
   } finally {await scene.context.close();}
 }
 
@@ -247,8 +247,10 @@ async function billingScene(row,width,motion,member=false,work=false) {
   try {
     const usage=await send('GET',ws+'/usage');
     assert.equal(usage.aiUsageExempt,false,'No guessed developer exemption');
-    assert.equal(usage.billingMode,row.expectedMode);assert.equal(usage.billing.checkoutAvailable,false);
-    assert.ok(usage.planTerms.every(p=>!p.checkoutAvailable));
+    assert.equal(usage.billingMode,row.expectedMode);
+    const canStartFixedPlan=!member&&['free-new','trial-active','trial-expired'].includes(row.scenario);
+    assert.equal(usage.billing.checkoutAvailable,canStartFixedPlan,'Only an owner without a held subscription can start an approved fixed plan');
+    for(const plan of usage.planTerms) assert.equal(plan.checkoutAvailable,canStartFixedPlan&&['starter-v1','studio-v2'].includes(plan.id),`${row.scenario}: exact per-plan checkout qualification`);
     if(member) {
       assert.equal(usage.budget,null);assert.equal(usage.billing.portalAvailable,false);
       for(const entry of usage.ledger) {assert.equal(entry.estimatedUsdMicro,undefined);assert.equal(entry.actualUsdMicro,undefined);}
