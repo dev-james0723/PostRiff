@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,11 +21,12 @@ import type { RecordRow } from './kit/types';
 import { flagIndex, joinFlags } from './customer-risk';
 import { FlagCell, FlagCoverage } from './risk-views';
 import { useCustomerRisk } from './use-customer-risk';
+import { DemoWorkspaceActions } from './demo-workspace-actions';
 
 /**
  * Customer 360 (PRD §5.4): a summary band of server fields and the tabs Summary · Billing · Usage & AI cost ·
- * Connections · Support · Activity · Advanced. Linked records come with the detail query (`linkedRecords`, Demo
- * today; Live says so per tab). "Ask Rafii about this account" carries the opaque customer id only. Risk flags are the
+ * Connections · Support · Activity · Advanced. Linked records come with the detail query in both Live and Demo.
+ * Live uses approved metadata projections, never private workspace content. "Ask Rafii about this account" carries the opaque customer id only. Risk flags are the
  * server's (`GET /customers/risk?view=flagged`, the list's own cached answer), joined onto this customer's workspaces,
  * so the sheet and the list never disagree. Founder actions (block, credits, refund intent; CONTRACTS §8.F) sit under
  * the summary band and run only through their confirm dialog.
@@ -60,7 +61,7 @@ function linkedWorkspaces(customer: RecordRow, workspaces: readonly RecordRow[])
 }
 
 function LinkedUnavailable({ what }: { what: string }) {
-  return <StateMessage kind='partial' layout='inline' title={`${what} are not part of the Live query yet`} description='The Live workspace query returns the customer row only; linked records land with the 054 views (P1). Demo shows the full sandbox.' />;
+  return <StateMessage kind='partial' layout='inline' title={`${what} are unavailable`} description='This source did not return linked records. Check the connection in Settings before relying on this account history.' />;
 }
 
 const subscriptionColumns: SimpleColumn<RecordRow>[] = [
@@ -74,7 +75,7 @@ const invoiceColumns: SimpleColumn<RecordRow>[] = [
   { key: 'number', label: 'Invoice', render: (row) => <span className='font-mono text-xs'>{String(row.number ?? row.id)}</span> },
   { key: 'status', label: 'Status', render: (row) => <StatusChip icon={null}>{stateLabel(row.status)}</StatusChip> },
   { key: 'amount', label: 'Amount', align: 'right', render: (row) => minor(row.amountMinor as number, row.currency as string) },
-  { key: 'issued', label: 'Issued', render: (row) => whenDate(row.issuedAt) }
+  { key: 'recorded', label: 'Recorded', render: (row) => whenDate(row.recordedAt ?? row.issuedAt) }
 ];
 
 const paymentColumns: SimpleColumn<RecordRow>[] = [
@@ -94,14 +95,14 @@ const usageColumns: SimpleColumn<RecordRow>[] = [
 
 const creditColumns: SimpleColumn<RecordRow>[] = [
   { key: 'at', label: 'When', render: (row) => whenDateTime(row.at) },
-  { key: 'kind', label: 'Entry', render: (row) => stateLabel(row.kind) },
+  { key: 'kind', label: 'Entry', render: (row) => stateLabel(row.op ?? row.kind) },
   { key: 'quantity', label: 'Credits', align: 'right', render: (row) => count(row.quantity as number) },
   { key: 'balance', label: 'Balance after', align: 'right', render: (row) => count(row.balanceAfter as number) }
 ];
 
 const ticketColumns: SimpleColumn<RecordRow>[] = [
   { key: 'title', label: 'Request', render: (row) => recordLabel(row) },
-  { key: 'kind', label: 'Kind', render: (row) => stateLabel(row.kind) },
+  { key: 'kind', label: 'Kind', render: (row) => stateLabel(row.category ?? row.kind) },
   { key: 'status', label: 'Status', render: (row) => <StatusChip icon={null}>{stateLabel(row.status)}</StatusChip> },
   { key: 'at', label: 'Opened', render: (row) => whenDate(row.at) }
 ];
@@ -111,6 +112,20 @@ const memberColumns: SimpleColumn<RecordRow>[] = [
   { key: 'role', label: 'Role', render: (row) => stateLabel(row.role) },
   { key: 'status', label: 'Status', render: (row) => stateLabel(row.status) },
   { key: 'joined', label: 'Joined', render: (row) => whenDate(row.joinedAt) }
+];
+
+const connectionColumns: SimpleColumn<RecordRow>[] = [
+  { key: 'provider', label: 'Provider', render: (row) => stateLabel(row.provider) },
+  { key: 'capability', label: 'Use', render: (row) => stateLabel(row.capability) },
+  { key: 'state', label: 'Health', render: (row) => <StatusChip icon={null}>{stateLabel(row.state)}</StatusChip> },
+  { key: 'connectionState', label: 'Connection', render: (row) => stateLabel(row.connectionState) },
+  { key: 'expiresAt', label: 'Expires', render: (row) => whenDateTime(row.expiresAt) },
+  { key: 'lastSyncAt', label: 'Last sync', render: (row) => whenDateTime(row.lastSyncAt) }
+];
+
+const activityColumns: SimpleColumn<RecordRow>[] = [
+  { key: 'label', label: 'Event', render: (row) => stateLabel(row.label) },
+  { key: 'at', label: 'When', render: (row) => whenDateTime(row.at) }
 ];
 
 function SafeFields({ row }: { row: RecordRow }) {
@@ -133,28 +148,41 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
   const ask = useAsk();
   const evidence = useEvidenceDrawer();
   const [tab, setTab] = useState<TabId>('summary');
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const focusRecord = useRef<string | null>(recordId);
   const detail = useRecords(recordId ? { collection: 'customers', search: '', status: 'all', page: 1, recordId } : null);
   // The list's flagged-workspace answer (same key, so no extra request), asked only when the operator may read it.
   const risk = useCustomerRisk('flagged');
   const index = useMemo(() => flagIndex(risk.query.data?.data.rows), [risk.query.data]);
   useEffect(() => {
     setTab('summary');
+    if (recordId) focusRecord.current = recordId;
   }, [recordId]);
 
   const data = detail.data?.data;
   const customer = data?.rows[0] ?? null;
   const linked = data?.linkedRecords;
+  const truncated = Object.entries(data?.linkedRecordCoverage ?? {}).filter(([, coverage]) => coverage.truncated);
   const workspaces = customer ? linkedWorkspaces(customer, data?.workspaces ?? []) : [];
   const flags = customer ? joinFlags(customer.workspaceIds, index) : [];
   const subscription = linked?.subscriptions?.[0] ?? null;
   const workspace = workspaces[0] ?? null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={(opened) => {
+      if (!opened && focusRecord.current) document.querySelector<HTMLElement>(`[data-customer-open="${CSS.escape(focusRecord.current)}"]`)?.focus();
+    }}>
       <SheetContent
         side={isMobile ? 'bottom' : 'right'}
         className={cn('rafii-elevated gap-0 overflow-y-auto border-0 p-0 data-[side=right]:sm:max-w-[36rem]', isMobile ? 'max-h-[88dvh] rounded-t-[var(--rafii-radius-mobile-dialog)]' : 'rounded-l-[var(--rafii-radius-dialog)]')}
         aria-label='Customer 360'
+        initialFocus={() => { if (!returnFocus.current && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) returnFocus.current = document.activeElement; return true; }}
+        finalFocus={() => {
+          // Updating the record in the URL may recreate its table cell while the drawer is open.
+          const target = returnFocus.current?.isConnected ? returnFocus.current : document.querySelector<HTMLElement>(`[data-customer-open="${CSS.escape(focusRecord.current ?? '')}"]`);
+          returnFocus.current = null;
+          return target ?? true;
+        }}
       >
         <QueryState query={detail} label='customer' layout='panel' isEmpty={(result) => result.data.rows.length === 0} emptyTitle='Customer not found' emptyDescription='The record id in the address does not match a customer in this source.'>
           {() =>
@@ -183,7 +211,7 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                   <Fact label='Plan'>{stateLabel(customer.plan ?? workspace?.plan)}</Fact>
                   <Fact label='Status'>{stateLabel(customer.status)}</Fact>
                   <Fact label='Workspaces'>{Array.isArray(customer.workspaceIds) ? count(customer.workspaceIds.length) : count(workspaces.length)}</Fact>
-                  <Fact label='Subscription'>{subscription ? `${minor(subscription.amountMinor as number, subscription.currency as string)} / ${stateLabel(subscription.billingCycle)}` : 'Not linked'}</Fact>
+                  <Fact label='Subscription'>{subscription ? `${typeof subscription.amountMinor === 'number' ? minor(subscription.amountMinor, subscription.currency as string) : 'Price not recorded'}${subscription.billingCycle ? ` / ${stateLabel(subscription.billingCycle)}` : ''}` : 'Not linked'}</Fact>
                   <Fact label='Credits'>{workspace && typeof workspace.creditsUsed === 'number' && typeof workspace.creditsQuota === 'number' ? `${count(workspace.creditsUsed)} of ${count(workspace.creditsQuota)}` : 'Not recorded'}</Fact>
                   <Fact label='Customer since'>{whenDate(customer.createdAt)}</Fact>
                 </dl>
@@ -195,7 +223,9 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                   <FlagCoverage risk={risk} />
                 </div>
 
-                <CustomerActions key={customer.id} customerId={customer.id} workspaces={workspaces.map((row) => ({ id: row.id, label: recordLabel(row) }))} />
+                {mode === 'demo' && workspace && typeof data?.revision === 'number' ? <DemoWorkspaceActions key={workspace.id} workspace={workspace} revision={data.revision} /> : <CustomerActions key={customer.id} customerId={customer.id} workspaces={workspaces.map((row) => ({ id: row.id, label: recordLabel(row) }))} />}
+
+                {truncated.length > 0 && <p className='text-muted-foreground text-xs'>Showing up to 50 records per section. More records exist for: {truncated.map(([section]) => section).join(', ')}.</p>}
 
                 <Tabs value={tab} onValueChange={(value) => setTab(value as TabId)}>
                   <div className='scrollbar-hide -mx-1 overflow-x-auto px-1'>
@@ -209,11 +239,11 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                   </div>
 
                   <TabsContent value='summary' className='flex flex-col gap-3 pt-3'>
-                    <h3 className='rafii-eyebrow'>Material events</h3>
+                    <h3 className='rafii-eyebrow'>Recorded account events</h3>
                     {linked ? (
-                      <SimpleTable rows={linked.activity ?? []} columns={[{ key: 'label', label: 'Event', render: (row) => stateLabel(row.label) }, { key: 'at', label: 'When', render: (row) => whenDateTime(row.at) }]} rowKey={(row) => row.id} caption='Timeline of material events' emptyTitle='No events recorded' />
+                      <SimpleTable rows={linked.activity ?? []} columns={activityColumns} rowKey={(row) => row.id} caption='Recorded account events' emptyTitle='No events recorded' />
                     ) : (
-                      <LinkedUnavailable what='Material events' />
+                      <LinkedUnavailable what='Account events' />
                     )}
                     {workspaces.length > 0 && (
                       <>
@@ -231,8 +261,8 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                         <h3 className='rafii-eyebrow'>Invoices</h3>
                         <SimpleTable rows={linked.invoices ?? []} columns={invoiceColumns} rowKey={(row) => row.id} caption='Invoices' emptyTitle='No invoices linked' />
                         <h3 className='rafii-eyebrow'>Payments</h3>
-                        <SimpleTable rows={linked.payments ?? []} columns={paymentColumns} rowKey={(row) => row.id} caption='Payments' emptyTitle='No payments linked' />
-                        <p className='text-muted-foreground text-xs'>Refunds and disputes per customer arrive with the 054 views (P1); the Revenue page shows them in aggregate.</p>
+                        {linked.payments ? <SimpleTable rows={linked.payments} columns={mode === 'live' ? paymentColumns.filter((column) => column.key !== 'method') : paymentColumns} rowKey={(row) => row.id} caption='Payments' emptyTitle='No payments linked' /> : <StateMessage kind='partial' layout='inline' title='Payment records are not connected' description='The required payment record source is missing. Account billing history is incomplete until this connection is configured.' />}
+                        <p className='text-muted-foreground text-xs'>For refund and dispute records, open <Link href={`/founder/revenue?mode=${mode}`} className='text-foreground underline underline-offset-4'>Revenue</Link>.</p>
                       </>
                     ) : (
                       <LinkedUnavailable what='Billing records' />
@@ -243,34 +273,35 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                     {linked ? (
                       <>
                         <h3 className='rafii-eyebrow'>Usage</h3>
-                        <SimpleTable rows={linked.usage ?? []} columns={usageColumns} rowKey={(row) => row.id} caption='Usage rows' emptyTitle='No usage recorded' />
+                        <SimpleTable rows={linked.usage ?? []} columns={mode === 'live' ? usageColumns.filter((column) => column.key !== 'credits') : usageColumns} rowKey={(row) => row.id} caption='Usage rows' emptyTitle='No usage recorded' />
                         <h3 className='rafii-eyebrow'>Credits</h3>
-                        <SimpleTable rows={linked.credits ?? []} columns={creditColumns} rowKey={(row) => row.id} caption='Credit ledger' emptyTitle='No credit entries' />
+                        <SimpleTable rows={linked.credits ?? []} columns={mode === 'live' ? creditColumns.filter((column) => column.key !== 'balance') : creditColumns} rowKey={(row) => row.id} caption='Credit ledger' emptyTitle='No credit entries' />
+                        {mode === 'live' && <p className='text-muted-foreground text-xs'>These are recorded credit entries. A verified current balance is not included in this history.</p>}
                       </>
                     ) : (
                       <LinkedUnavailable what='Usage rows' />
                     )}
                     <p className='text-muted-foreground text-xs'>
-                      Cost by feature and model for this account is on the{' '}
+                      Explore cost by feature and model on the{' '}
                       <Link href={`/founder/ai-cost?mode=${mode}`} className='text-foreground underline underline-offset-4'>
                         AI & API cost
                       </Link>{' '}
-                      page once the ledger rollup carries a workspace dimension (P1).
+                      page.
                     </p>
                   </TabsContent>
 
                   <TabsContent value='connections' className='pt-3'>
-                    <StateMessage
+                    {linked?.connections ? <SimpleTable rows={linked.connections} columns={connectionColumns} rowKey={(row) => row.id} caption='Workspace connections' emptyTitle='No connections recorded for these workspaces' /> : <StateMessage
                       kind='partial'
                       layout='inline'
-                      title='Connection health per customer is not collected yet'
-                      description='Provider × capability, token expiry and last sync per workspace (M29) are a P1 view. Source-level health is on Operations.'
+                      title={mode === 'demo' ? 'Connection health is not part of this Demo dataset' : 'Connection health is not configured'}
+                      description='Account connection history is unavailable from this source. Open Operations to review connection setup and service health.'
                       action={
                         <Link href={`/founder/operations?mode=${mode}`} className={cn(buttonVariants({ variant: 'glass', size: 'default' }))}>
                           Open Operations
                         </Link>
                       }
-                    />
+                    />}
                   </TabsContent>
 
                   <TabsContent value='support' className='flex flex-col gap-3 pt-3'>
@@ -281,12 +312,14 @@ export function CustomerSheet({ recordId, open, onOpenChange }: { recordId: stri
                     {linked ? (
                       <>
                         <h3 className='rafii-eyebrow'>Members</h3>
-                        <SimpleTable rows={linked.members ?? []} columns={memberColumns} rowKey={(row) => row.id} caption='Workspace members' emptyTitle='No members linked' />
+                        <SimpleTable rows={linked.members ?? []} columns={mode === 'live' ? memberColumns.filter((column) => column.key !== 'joined') : memberColumns} rowKey={(row) => row.id} caption='Workspace members' emptyTitle='No members linked' />
+                        <h3 className='rafii-eyebrow'>Recorded account events</h3>
+                        <SimpleTable rows={linked.activity ?? []} columns={activityColumns} rowKey={(row) => row.id} caption='Recorded account events' emptyTitle='No events recorded' />
                       </>
                     ) : (
                       <LinkedUnavailable what='Members' />
                     )}
-                    <StateMessage kind='partial' layout='inline' title='Security audit per customer is Live-only' description='Session, MFA and token events (business_audit_events) are listed on Advanced › Audit for the operator; a per-customer view is P1.' />
+                    {mode === 'live' && <p className='text-muted-foreground text-xs'>Account events include recorded session, MFA and token changes. Founder actions are in <Link href='/founder/advanced?mode=live&tab=audit' className='text-foreground underline underline-offset-4'>Advanced · Audit</Link>.</p>}
                   </TabsContent>
 
                   <TabsContent value='advanced' className='flex flex-col gap-3 pt-3'>
