@@ -105,7 +105,7 @@ function matchesQuery(asset: LibraryAsset, query: string) {
     .join(' ')
     .toLowerCase();
   if (text.includes(query)) return true;
-  if (asset.hash.toLowerCase().startsWith(query)) return true;
+  if (asset.hash?.toLowerCase().startsWith(query)) return true;
   if (asset.sourceHash?.toLowerCase().startsWith(query)) return true;
   if (asset.width && asset.height) {
     const dims = query.replace(/\s+/g, '').replace(/[x*]/g, '×');
