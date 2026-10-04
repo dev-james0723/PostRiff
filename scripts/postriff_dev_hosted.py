@@ -144,10 +144,11 @@ class DevAssets:
     """In-memory private media boundary for the synthetic harness, with the video bucket's calls (chat-context SPEC §7.3):
     the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`."""
     VIDEO_BUCKET = "postriff-video"
+    file_bucket = "postriff-library"
 
     def __init__(self):
         self.objects = {}
-        self.uploads = {}   # token → (workspace id, object name)
+        self.uploads = {}   # token → (workspace id, category, object name)
         self.storage = self
 
     def signed_url(self, wid, kind, name, ttl=300):
@@ -178,17 +179,18 @@ class DevAssets:
 
     def signed_upload_url(self, workspace_id, category, object_name):
         token = uuid.uuid4().hex
-        self.uploads[token] = (workspace_id, object_name)
-        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{self.VIDEO_BUCKET}/{workspace_id}/video/{object_name}?token={token}"
+        self.uploads[token] = (workspace_id, category, object_name)
+        bucket = self.VIDEO_BUCKET if category == "video" else self.file_bucket
+        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{bucket}/{workspace_id}/{category}/{object_name}?token={token}"
 
     def receive_upload(self, token, raw, mime):
         target = self.uploads.pop(token, None)
         if target is None or not raw:
             return False
-        workspace_id, object_name = target
-        if (workspace_id, "video", object_name) in self.objects:
+        workspace_id, category, object_name = target
+        if (workspace_id, category, object_name) in self.objects:
             return False   # no upsert, like the real signed upload
-        self.objects[(workspace_id, "video", object_name)] = raw
+        self.objects[(workspace_id, category, object_name)] = raw
         self.objects[("mime", workspace_id, object_name)] = mime
         return True
 
@@ -199,12 +201,19 @@ class DevAssets:
     def read_range(self, workspace_id, category, object_name, start, length):
         return {"data": self.get(workspace_id, category, object_name)[start:start + length], "ranged": True}
 
+    def get_bounded(self, workspace_id, category, object_name, max_bytes):
+        raw = self.get(workspace_id, category, object_name)
+        if len(raw) > max_bytes:
+            raise AlphaError("Private file exceeded the safe size limit.", 413)
+        return raw
+
     def delete(self, workspace_id, category, object_name):
         self.objects.pop((workspace_id, category, object_name), None)
 
     def list_prefix(self, prefix, bucket=None):
         workspace_id = prefix.split("/", 1)[0]
-        return [f"{workspace_id}/video/{name}" for (ws, category, name) in list(self.objects) if ws == workspace_id and category == "video"]
+        category = prefix.split("/", 1)[1] if "/" in prefix else "video"
+        return [f"{workspace_id}/{category}/{name}" for key in list(self.objects) if len(key) == 3 for (ws, stored_category, name) in [key] if ws == workspace_id and stored_category == category]
 
 
 class DevMediaReader:
