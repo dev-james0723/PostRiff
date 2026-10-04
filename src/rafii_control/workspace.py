@@ -320,13 +320,55 @@ class WorkspaceService:
                 linked.update(r.get('workspaceIds',[]))
                 if r.get('workspaceId'): linked.add(r['workspaceId'])
             workspaces=serial(con.execute('SELECT * FROM rafii_control.business_workspaces WHERE id=ANY(%s::text[]) ORDER BY id',(list(linked),)).fetchall()) if linked else []
+            detail,coverage=self.live_customer_records(con,workspaces) if record and collection=='customers' and rows else (None,None)
         if collection=='workspaces' or workspaces:
             with self.store.transaction() as con:
                 grants=con.execute('SELECT workspace_id FROM rafii_control.test_workspace_grants WHERE operator_id=%s AND environment=%s AND expires_at>now()',
                                    (self.identity(principal),self.store.environment)).fetchall()
             permitted={str(g['workspace_id']) for g in grants} if 'workspaces.test.rename' in principal['operator']['capabilities'] else set()
             for row in rows if collection=='workspaces' else workspaces: row['renameAllowed']=row['id'] in permitted
-        return dict(mode=mode,rows=rows,workspaces=workspaces,total=total,page=page,pageSize=size,statuses=statuses)
+        response=dict(mode=mode,rows=rows,workspaces=workspaces,total=total,page=page,pageSize=size,statuses=statuses)
+        if detail is not None:
+            response.update(linkedRecords=detail,linkedRecordCoverage=coverage)
+            if len(json.dumps(response,allow_nan=False).encode())>480*1024:raise ControlError('WORKSPACE_RESPONSE_LIMIT',503)
+        return response
+
+    @staticmethod
+    def live_customer_records(con,workspaces):
+        """Read only approved metadata views for the selected customer's visible workspaces.
+
+        No customer prose, credentials, raw workspace state or new financial calculation is admitted.
+        Counts accompany bounded histories so omitted older records are never represented as absent.
+        """
+        identifiers=[row['id'] for row in workspaces]
+        result={};coverage={}
+        sources={
+            'subscriptions':('SELECT * FROM rafii_control.business_subscriptions','"workspaceId"','id'),
+            'invoices':('SELECT "invoiceId" AS id,"invoiceId" AS number,"amountDueMinor" AS "amountMinor",v.* FROM rafii_control.business_invoices v','"workspaceId"','"recordedAt" DESC,"invoiceId"'),
+            'payments':('SELECT * FROM rafii_control.business_payments','"workspaceId"','at DESC,id'),
+            'usage':('SELECT id,"sourceId","workspaceId",kind,dimension,quantity::double precision AS quantity,unit,"costState","actualUsdMicro",at FROM rafii_control.business_usage','"workspaceId"','at DESC,id'),
+            'tickets':('SELECT * FROM rafii_control.business_support_tickets','"workspaceId"','"updatedAt" DESC,id'),
+            'credits':('SELECT v.*,coalesce(milli,"usedMilli")::double precision/1000 AS quantity FROM rafii_control.business_credit_entries v','"workspaceId"','at DESC,id'),
+            'activity':('SELECT v.*,kind AS label FROM rafii_control.business_audit_events v','"workspaceId"','at DESC,id'),
+            'members':('SELECT m.workspace_id::text||\':\'||m.user_id::text AS id,m.workspace_id::text AS "workspaceId",m.user_id::text AS "memberId",c.name,m.role,m.status FROM rafii_control.safe_memberships m LEFT JOIN rafii_control.business_customers c ON c.id=m.user_id::text','m.workspace_id::text','m.workspace_id,m.user_id'),
+        }
+        for key,(select,column,order) in sources.items():
+            if key=='payments' and not con.execute("SELECT to_regclass('rafii_control.business_payments') IS NOT NULL AS ready").fetchone()['ready']:
+                coverage[key]=dict(state='not_configured',total=None,limit=PAGE_SIZE,truncated=False)
+                continue
+            where=' WHERE '+column+'=ANY(%s::text[])'
+            count=con.execute('SELECT count(*) AS total FROM ('+select+where+') linked',(identifiers,)).fetchone()['total']
+            result[key]=serial(con.execute(select+where+' ORDER BY '+order+' LIMIT %s',(identifiers,PAGE_SIZE)).fetchall())
+            coverage[key]=dict(state='connected',total=count,limit=PAGE_SIZE,truncated=count>PAGE_SIZE)
+        # Per-account connections are optional; missing configuration differs from no recorded connections.
+        if con.execute("SELECT to_regclass('rafii_control.business_connection_health') IS NOT NULL AS ready").fetchone()['ready']:
+            select='SELECT "workspaceId"||\':\'||"connectionId"||\':\'||capability AS id,v.* FROM rafii_control.business_connection_health v WHERE "workspaceId"=ANY(%s::text[])'
+            count=con.execute('SELECT count(*) AS total FROM ('+select+') linked',(identifiers,)).fetchone()['total']
+            result['connections']=serial(con.execute(select+' ORDER BY "workspaceId","connectionId",capability LIMIT %s',(identifiers,PAGE_SIZE)).fetchall())
+            coverage['connections']=dict(state='connected',total=count,limit=PAGE_SIZE,truncated=count>PAGE_SIZE)
+        else:
+            coverage['connections']=dict(state='not_configured',total=None,limit=PAGE_SIZE,truncated=False)
+        return result,coverage
 
     def live(self, principal):
         if not {'customers.read','workspaces.read'} <= set(principal['operator']['capabilities']): raise ControlError('SCOPE_DENIED')

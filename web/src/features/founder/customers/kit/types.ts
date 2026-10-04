@@ -37,6 +37,7 @@ export interface RecordsData {
   pageSize: number;
   statuses: string[];
   linkedRecords?: Record<string, RecordRow[]>;
+  linkedRecordCoverage?: Record<string, { state: 'connected' | 'not_configured'; total: number | null; limit: number; truncated: boolean }>;
   revision?: number;
   scenario?: string;
   filters?: Record<string, string>;
