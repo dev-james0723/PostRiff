@@ -120,22 +120,30 @@ export function ConnectSheet({
   const offered = offeredCapabilities(provider);
   const reconnect = request?.reconnect ?? null;
 
-  // Each opening starts from what opened it: the tile's provider, the card's capability, or the first provider.
-  // Providers arrive through React Query and may be replaced by an equivalent array after
-  // the sheet opens. Depending on the whole array here resets a deliberate Instagram /
-  // Analytics selection back to the first provider. Re-initialize only when the sheet
-  // actually opens or the requested provider/capability changes.
+  // Each opening starts from what opened it: the tile's provider, the card's capability,
+  // or the URL deep link. The URL is the final authority for direct-entry flows such as
+  // Analytics → Enable analytics; this avoids losing the intended provider/capability
+  // during hydration or parent state races. Equivalent React Query provider-array refreshes
+  // must not reset an in-progress choice, so depend on the stable provider id signature.
+  const providerSignature = providers.map((provider) => provider.id).join('|');
   useEffect(() => {
     if (!open) return;
-    const initial = providers.find((p) => p.id === request?.providerId) ?? providers[0];
+    const search = new URLSearchParams(window.location.search);
+    const urlProviderId = search.get('connect') ?? undefined;
+    const urlCapabilityValue = search.get('capability');
+    const urlCapability = CONNECT_CAPABILITIES.find((value) => value === urlCapabilityValue);
+    const requestedProviderId = request?.providerId ?? urlProviderId;
+    const requestedCapability = request?.capability ?? urlCapability;
+    const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
+
     setProviderId(initial?.id ?? '');
-    setCapability(defaultCapability(initial, request?.capability));
+    setCapability(defaultCapability(initial, requestedCapability));
     setPending(null);
     setError(null);
     setBusy(false);
     setInputValue('');
     setNotSeenYet(false);
-  }, [open, request?.providerId, request?.capability]);
+  }, [open, providerSignature, request?.providerId, request?.capability]);
 
   function choosePlatform(id: string) {
     const next = providers.find((p) => p.id === id);
