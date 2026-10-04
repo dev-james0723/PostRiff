@@ -57,8 +57,10 @@ export function AssetListRow({
   const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
-  const preview = useAssetImage(asset.id, nearView);
-  const video = kindOf(asset) === 'video';
+  const assetKind = kindOf(asset);
+  const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const preview = useAssetImage(asset.id, nearView && mediaAsset);
+  const video = assetKind === 'video';
   const title = libraryAssetTitle(asset);
   const dims = dimensionsOf(asset);
   const count = uses.length;
@@ -99,7 +101,9 @@ export function AssetListRow({
             className='focus-visible:ring-ring/50 flex min-h-[76px] w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             <span className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
-              {preview.data ? (
+              {!mediaAsset ? (
+                <span className='text-muted-foreground text-[10px] font-semibold'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+              ) : preview.data ? (
                 <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-cover' />
               ) : preview.isError ? (
                 video ? <Icons.video className='text-muted-foreground size-5' aria-hidden /> : <Icons.media className='text-muted-foreground size-5' aria-hidden />
@@ -130,7 +134,7 @@ export function AssetListRow({
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
         </ContextMenuItem>
-        {canApprove ? (
+        {canApprove && mediaAsset ? (
           <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />
             Use in a post
