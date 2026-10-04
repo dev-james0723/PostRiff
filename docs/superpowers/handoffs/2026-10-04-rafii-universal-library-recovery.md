@@ -131,3 +131,12 @@ No production promotion is implied by this recovery. Required gates:
 - browser acceptance for Gallery/List/upload/detail/search at desktop + mobile + reduced motion
 - account deletion/storage cleanup coverage
 - clean secret scan / release gates
+
+
+## 2026-10-04 release closeout checkpoint
+
+- Latest canonical `consumer-saas` was reconciled as a real two-parent merge at `3e54f0b0d451cc90494ac3667e51bf84daa5d72e`; no canonical changes were dropped.
+- Universal Library implementation now includes normalized server-owned asset/chunk storage, private signed file upload, bounded TXT/Markdown/HTML/JSON/CSV/PDF/DOCX/XLSX/PPTX extraction, metadata-only generic binaries, lexical/full-text search, rename, signed original-file access, delete/sweep/account cleanup, and Living Archive Gallery/List UI.
+- Audio remains intentionally unsupported in this release rather than being advertised without a reviewed ingestion/player path.
+- Previous candidate evidence: Growth Studio, Growth Metrics, Control Foundation and Founder Admin passed; Library/workflow browser scenes themselves reported zero failures. Remaining failures were an OAuth fixture compatibility regression already present/fixed in latest canonical and a disposable PostgreSQL startup failure in the browser runner. This checkpoint intentionally triggers a fresh full gate run on the reconciled head.
+- Production activation still requires verification that the configured `POSTRIFF_LIBRARY_BUCKET` exists as a private bucket with the reviewed size/type policy; code success alone is not activation evidence.
