@@ -628,23 +628,54 @@ class OAuthService:
 
     @staticmethod
     def _capabilities(adapter, requested, granted, missing, now, access_token=None):
+        """Build the whole matrix from the live grant, not only the last requested slice.
+
+        Incremental Meta OAuth can return a token containing permissions granted in earlier
+        rounds. Reconnecting Analytics or Comments must therefore preserve and re-verify the
+        other capabilities instead of resetting them to Unsupported. Provider-wide App Review
+        and an account-scoped Standard Access grant remain distinct: the latter can prove Direct
+        execution only for the exact connected account.
+        """
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
+        granted_set = set(granted or [])
+        account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
+        direct_allowed = bool(adapter.production_reviewed or account_scoped)
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
-        if requested in PUBLISH_CAPABILITIES:
+
+        publish_scopes = set(adapter.capability_scopes("publish"))
+        publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
+        publisher_ready = not (
+            getattr(adapter, "publisher", None) is not None and
+            (not getattr(adapter, "publish_live_tested", False) or
+             not getattr(adapter, "publishing_permission", False) or
+             not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
+        )
+        if publish_granted and direct_allowed and publisher_ready:
+            evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
+            set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
+            schedule_scopes = set(adapter.capability_scopes("schedule"))
+            if schedule_scopes and schedule_scopes <= granted_set:
+                if getattr(adapter, "native_schedule", False):
+                    set_level(matrix, "schedule", "Direct", f"Scheduled on {adapter.platform}.", now, adapter.capability_version)
+                elif getattr(adapter, "server_schedule", False):
+                    set_level(matrix, "schedule", "Direct", "Rafii publishes the approved post at the scheduled time.", now, adapter.capability_version)
+                elif adapter.assisted_fallback:
+                    set_level(matrix, "schedule", "Assisted", "Rafii prepares the scheduled post; you finish the last step.", now, adapter.capability_version)
+        elif requested in PUBLISH_CAPABILITIES:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
-            elif (not adapter.production_reviewed or
-                  (getattr(adapter, "publisher", None) is not None and
-                   (not getattr(adapter, "publish_live_tested", False) or
-                    not getattr(adapter, "publishing_permission", False) or
-                    not getattr(adapter, "write_qualified", lambda _token: True)(access_token)))):
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Direct", "You approve each post; Rafii publishes it.", now, adapter.capability_version)
-                set_level(matrix, "schedule", "Direct" if adapter.native_schedule else "Assisted", f"Scheduled on {adapter.platform}." if adapter.native_schedule else "Rafii publishes at the scheduled time.", now, adapter.capability_version)
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
+
         for name in ("analytics", "comments_read", "reply", "moderate"):
-            if name == requested and not missing:
-                set_level(matrix, name, "Direct" if adapter.production_reviewed else "Unsupported", "Granted." if adapter.production_reviewed else f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
+            required = set(adapter.capability_scopes(name))
+            if not required or not required <= granted_set:
+                continue
+            if direct_allowed:
+                evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "Granted."
+                set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
+            elif name == requested:
+                set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------

@@ -11,7 +11,7 @@ from .permissions import require
 from .providers import GRAPH_VERSION
 
 REPLY_LIMIT = 500
-COMMENT_READ_PROVIDERS = ("threads",)
+COMMENT_READ_PROVIDERS = ("threads", "instagram")
 
 
 class AudienceService:
@@ -33,11 +33,15 @@ class AudienceService:
     # --- ingestion (server-only) ---------------------------------------------------
     def ingest_replies(self, cur, workspace_id, connection_id, provider, provider_post_id, now):
         if provider not in COMMENT_READ_PROVIDERS or self.transport is None:
-            return {"availability": "not_supported", "reason": "Only Threads replies are readable in this release."}
+            return {"availability": "not_supported", "reason": "Comments are not readable for this provider in this release."}
         if self._capability(cur, workspace_id, connection_id, "comments_read") != "Direct":
             return {"availability": "unavailable", "reason": "comments_read is not Direct for this connection."}
         grant = self.oauth.token_for_worker(workspace_id, connection_id)
-        response = self.transport("GET", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]}))
+        if provider == "threads":
+            url = f"https://graph.threads.net/{GRAPH_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
+        else:
+            url = f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(provider_post_id)}/comments?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
+        response = self.transport("GET", url)
         count = 0
         for item in (response.get("body", {}).get("data", []) if response.get("status") == 200 else []):
             if not isinstance(item, dict) or not item.get("id"):
@@ -48,7 +52,9 @@ class AudienceService:
 
     def on_post_verified(self, cur, workspace_id, job):
         manifest = job["manifest"]
-        provider = next((pid for pid, adapter in self.oauth.providers.items() if adapter.platform == manifest["platform"] and adapter.production_reviewed), None)
+        provider = next((pid for pid, adapter in self.oauth.providers.items()
+                         if adapter.platform == manifest["platform"] and
+                         (adapter.production_reviewed or getattr(adapter, "account_scoped_direct", False))), None)
         if provider not in COMMENT_READ_PROVIDERS:
             return
         # A failed ingestion must not abort the transaction that stores publication verification.
@@ -146,22 +152,36 @@ class AudienceService:
         if digest(manifest) != row[0]["digest"]:
             return {"state": "held", "confirmed": "Approval digest mismatch"}
         cur.execute("UPDATE public.pr_reply_drafts SET status='submitting',events=events||%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps([{"at": now, "state": "submitting"}]), draft_id))
-        if manifest["provider"] != "threads" or self.transport is None:
+        if manifest["provider"] not in ("threads", "instagram") or self.transport is None:
             outcome = {"state": "held", "confirmed": "No reply transport for this provider"}
         else:
             try:
                 grant = self.oauth.token_for_worker(workspace_id, manifest["connectionId"])
-                user = manifest["providerAccountId"]
-                container = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads", form={"media_type": "TEXT", "text": manifest["text"], "reply_to_id": manifest["replyToCommentId"], "access_token": grant["accessToken"]})
-                cid = str(container.get("body", {}).get("id", ""))
-                if container.get("status") == 200 and cid.isdigit():
-                    publish = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads_publish", form={"creation_id": cid, "access_token": grant["accessToken"]})
-                    mid = str(publish.get("body", {}).get("id", ""))
-                    outcome = {"state": "submitted", "reference": mid, "confirmed": "Threads returned a reply id; verification pending"} if publish.get("status") == 200 and mid.isdigit() else {"state": "uncertain", "confirmed": f"Reply container {cid} inconclusive; do not resend"}
-                elif container.get("status") in (401, 403):
-                    outcome = {"state": "held", "confirmed": "Permission rejected"}
+                if manifest["provider"] == "instagram":
+                    sent = self.transport(
+                        "POST",
+                        f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(manifest['replyToCommentId'])}/replies",
+                        form={"message": manifest["text"], "access_token": grant["accessToken"]},
+                    )
+                    reply_id = str(sent.get("body", {}).get("id", ""))
+                    if sent.get("status") == 200 and reply_id:
+                        outcome = {"state": "submitted", "reference": reply_id, "confirmed": "Instagram returned a reply id; verification pending"}
+                    elif sent.get("status") in (401, 403):
+                        outcome = {"state": "held", "confirmed": "Permission rejected"}
+                    else:
+                        outcome = {"state": "uncertain", "confirmed": "Instagram reply response was inconclusive; do not resend"}
                 else:
-                    outcome = {"state": "uncertain", "confirmed": "No conclusive container; do not resend"}
+                    user = manifest["providerAccountId"]
+                    container = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads", form={"media_type": "TEXT", "text": manifest["text"], "reply_to_id": manifest["replyToCommentId"], "access_token": grant["accessToken"]})
+                    cid = str(container.get("body", {}).get("id", ""))
+                    if container.get("status") == 200 and cid.isdigit():
+                        publish = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads_publish", form={"creation_id": cid, "access_token": grant["accessToken"]})
+                        mid = str(publish.get("body", {}).get("id", ""))
+                        outcome = {"state": "submitted", "reference": mid, "confirmed": "Threads returned a reply id; verification pending"} if publish.get("status") == 200 and mid.isdigit() else {"state": "uncertain", "confirmed": f"Reply container {cid} inconclusive; do not resend"}
+                    elif container.get("status") in (401, 403):
+                        outcome = {"state": "held", "confirmed": "Permission rejected"}
+                    else:
+                        outcome = {"state": "uncertain", "confirmed": "No conclusive container; do not resend"}
             except AlphaError as error:
                 outcome = {"state": "uncertain", "confirmed": f"Send inconclusive: {error}"}
         cur.execute("UPDATE public.pr_reply_drafts SET status=%s,provider_reference=%s,events=events||%s::jsonb,updated_at=now() WHERE id::text=%s", (outcome["state"], outcome.get("reference"), json.dumps([{"at": now, "state": outcome["state"], "message": outcome["confirmed"]}]), draft_id))
