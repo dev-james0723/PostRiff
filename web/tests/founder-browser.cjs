@@ -565,21 +565,42 @@ async function main() {
 
         // Founder Rafii answers a Demo question through the founder runtime (harness model, no provider).
         await attempt('Ask Rafii answers in Demo', async () => {
-          await page.goto(base + '/founder?mode=demo');
-          await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
-          await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
-          const box = page.getByRole('textbox', { name: 'Ask Rafii' });
-          await box.waitFor({ timeout: 15000 });
-          await box.fill('Summarise the three things that need me today.');
-          const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
-          await page.getByRole('button', { name: 'Send' }).click();
-          const response = await turn;
-          check('agent turn is accepted (201)', response.status() === 201, response.status());
-          await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
-          check('Rafii answer is rendered', true);
-          await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
-          const seen = drain(tracker);
-          check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          // Hold the actual session read: a slow session must preserve the draft,
+          // never send into an unknown-environment thread that disappears later.
+          let releaseSession;
+          const sessionGate = new Promise((resolve) => { releaseSession = resolve; });
+          const sessionPath = '**/api/control/v2/session';
+          const holdSession = async (route) => { await sessionGate; await route.continue(); };
+          await page.route(sessionPath, holdSession);
+          try {
+            await page.goto(base + '/founder?mode=demo');
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
+            await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
+            const box = page.getByRole('textbox', { name: 'Ask Rafii' });
+            await box.waitFor({ timeout: 15000 });
+            const question = 'Summarise the three things that need me today.';
+            await box.fill(question);
+            const send = page.getByRole('button', { name: 'Send', exact: true });
+            check('Ask Rafii waits for the known session environment', await send.isDisabled());
+            const suggested = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
+            check('suggested questions wait for the session environment', await suggested.count() > 0 && await suggested.evaluateAll((buttons) => buttons.every((button) => button.disabled)));
+            await box.press('Enter');
+            check('Enter during session loading preserves the draft', await box.inputValue() === question);
+            check('Enter during session loading creates no temporary thread', !(await page.getByRole('log', { name: 'Conversation with Rafii' }).innerText()).includes(question));
+            releaseSession();
+            const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
+            await send.click({ timeout: 30000 });
+            const response = await turn;
+            check('agent turn is accepted (201)', response.status() === 201, response.status());
+            await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
+            check('Rafii answer is rendered', true);
+            await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
+            const seen = drain(tracker);
+            check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          } finally {
+            releaseSession();
+            await page.unroute(sessionPath, holdSession);
+          }
         });
 
         // Founder voice: the strip opens from the panel. Voice is off in this harness, so "Talk to Rafii" is disabled and
