@@ -28,6 +28,10 @@ if (fs.existsSync(file)) {
     assert.equal(t.reviewDisplayState({accessState:'revoked',valueState:'measured',value:0,freshnessState:'current',collectionState:'measured'}),'revoked');
     assert.equal(t.reviewDisplayState({accessState:'allowed',valueState:'measured',value:0,freshnessState:'current',collectionState:'measured'}),'measured_zero');
   });
+  test('completed collection does not turn a missing or unsupported value into measured',()=>{
+    for(const valueState of ['missing','invalid'])assert.equal(t.reviewDisplayState({accessState:'allowed',valueState,value:null,freshnessState:'current',collectionState:'measured'}),'unavailable');
+    assert.equal(t.reviewDisplayState({accessState:'allowed',valueState:'unsupported',value:null,freshnessState:'current',collectionState:'measured'}),'unsupported');
+  });
   test('relative baseline input resolves separately from the fixed report contract',()=>{
     const scope={channelIds:['owned'],relativeDateRule:{kind:'this_week',timezone:'America/New_York'},comparison:{kind:'previous_period',relativeToPublicationPeriod:true}};
     assert.ok(t.reviewContextInputSchema.safeParse(scope).success);

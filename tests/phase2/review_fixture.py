@@ -63,6 +63,15 @@ if __name__=='__main__':
     if mode=='seed':
         jobs=seed_review(host,wid,'fixture')
         print(json.dumps({'execution':'synthetic observations on real disposable PG','jobs':len(jobs)}))
+    elif mode in ('partial','stale'):
+        with host.connection_factory() as db:
+            if mode=='partial':
+                db.execute("UPDATE public.pr_metric_observations SET value=NULL,availability='unavailable' WHERE workspace_id=%s AND provider_post_id='review-native-fixture-0'",(wid,))
+            else:
+                db.execute("""INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,ingested_at,read_offset,source_endpoint)
+                    SELECT workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,NULL,unit,'unavailable',observed_at+interval '30 seconds',ingested_at+interval '30 seconds',read_offset,source_endpoint
+                    FROM public.pr_metric_observations WHERE workspace_id=%s AND provider_post_id='review-native-fixture-0' AND metric='views' ORDER BY observed_at DESC LIMIT 1""",(wid,))
+        print(json.dumps({'execution':'synthetic collection attempt on disposable PG','mode':mode}))
     else:
         def change(state,actor):
             if mode=='revoked':state['phase2']['channels'][0]['revoked']=True

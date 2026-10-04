@@ -37,6 +37,10 @@ def finite(value):
     return type(value) in (int, float) and math.isfinite(value) or isinstance(value, Decimal) and value.is_finite()
 
 
+def connection_expired(channel, now):
+    return finite(channel.get('expiresAt')) and channel['expiresAt']<=now
+
+
 def iso(value):
     return datetime.fromtimestamp(float(value), timezone.utc).isoformat().replace('+00:00', 'Z')
 
@@ -166,7 +170,7 @@ def classify_content(state, workspace_id, body, actor, now):
     if not job or digest([job.get('manifest'),job.get('verification')]) != body.get('manifestDigest'):
         raise AlphaError('Review the current publication before classifying it.',409)
     account = job.get('manifest',{}).get('channelId')
-    if not any(c.get('id')==account and not c.get('revoked') for c in state.get('phase2',{}).get('channels',[])):
+    if not any(c.get('id')==account and not c.get('revoked') and not connection_expired(c,now) for c in state.get('phase2',{}).get('channels',[])):
         raise AlphaError('This publication account is disconnected.',403)
     tags = body.get('tags')
     if not isinstance(tags,list) or len(tags)>30 or body.get('source') not in ('human','ai_suggestion'):
@@ -329,7 +333,7 @@ def scoped_jobs(state, context):
     return sorted(selected,key=lambda j:verified_at(j),reverse=True)
 
 
-def project_review(state, context, observations, direct_connections, now):
+def project_review(state, context, observations, direct_connections, now, *, tracking_index=None):
     """Pure projection. Current rights override even a previously measured zero."""
     cutoff = stamp(context['cutoffAt'])
     selected = context['publicationPeriod']
@@ -359,7 +363,8 @@ def project_review(state, context, observations, direct_connections, now):
         if side is None:
             continue
         channel = channels.get(account,{})
-        access = 'revoked' if channel.get('revoked') or state.get('accountDeletion') else 'disconnected' if not channel else 'allowed' if account in direct_connections else 'not_authorized'
+        expired = connection_expired(channel,now)
+        access = 'revoked' if channel.get('revoked') or state.get('accountDeletion') else 'disconnected' if not channel else 'not_authorized' if expired else 'allowed' if account in direct_connections else 'not_authorized'
         publications.add(job['id'])
         binding = {'workspaceId':context['workspaceId'],'jobId':job['id'],'connectionId':account,'provider':provider,
                    'nativePostId':str(job['providerReference']),'manifestDigest':digest([manifest,job.get('verification')]),'publicationAt':iso(published)}
@@ -385,12 +390,12 @@ def project_review(state, context, observations, direct_connections, now):
             latest = valid[0] if valid else {}
             reading = next((r for r in valid if r.get('availability')=='available' and finite(r.get('value')) and r['value']>=0), latest)
             value = reading.get('value')
-            value_state = 'measured' if reading.get('availability') == 'available' and finite(value) and value >= 0 else 'invalid' if value is not None else 'missing'
+            value_state = 'measured' if reading.get('availability') == 'available' and finite(value) and value >= 0 else 'invalid' if value is not None else 'unsupported' if reading.get('availability')=='not_supported' else 'missing'
             stale = bool(reading and latest != reading)
-            reason = (access if access != 'allowed' else 'stale_reading' if stale else reasons[0] if not valid and reasons else
-                      'invalid_value' if value_state=='invalid' else 'missing_reading' if value_state!='measured' else
+            reason = ('expired' if expired else access if access != 'allowed' else 'stale_reading' if stale else reasons[0] if not valid and reasons else
+                      'invalid_value' if value_state=='invalid' else 'unsupported' if value_state=='unsupported' else 'missing_reading' if value_state!='measured' else
                       'missing_observation_identity' if not reading.get('observationId') else None)
-            collection = latest.get('collectionState','pending_horizon' if published+HORIZONS[context['horizon']] > now else 'unscheduled')
+            collection = (tracking_index or {}).get((job['id'],context['horizon']),{}).get('state',latest.get('collectionState','pending_horizon' if published+HORIZONS[context['horizon']] > now else 'unscheduled'))
             if reason is None and collection != 'measured':
                 reason = collection
             e = {'observationId':reading.get('observationId') if access=='allowed' else None,'publicationBinding':binding,
@@ -581,7 +586,7 @@ def format_snapshot(snapshot, format_):
 
 
 def reuse_candidates(state, projection, now):
-    channels = {c['id']:c for c in state.get('phase2',{}).get('channels',[]) if not c.get('revoked')}
+    channels = {c['id']:c for c in state.get('phase2',{}).get('channels',[]) if not c.get('revoked') and not connection_expired(c,now)}
     if state.get('accountDeletion'):
         return []
     result,seen = [],set()
@@ -624,15 +629,20 @@ def _context_input(context):
 class ReviewService:
     def __init__(self, coworker):
         self.c = coworker
-        self.repository = coworker.repository
+
+    @property
+    def repository(self):
+        return self.c.repository
 
     def _rights(self, cur, workspace_id, state):
         # The same cursor/transaction as membership and workspace state; lock
         # capability rows against concurrent demotion during export/commit.
         cur.execute("SELECT connection_id,level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='analytics' FOR SHARE", (workspace_id,))
         caps = cur.fetchall()
-        direct = {r[0] for r in caps if r[1] == 'Direct'}
-        epoch = digest({'caps':sorted(caps),'channels':state.get('phase2',{}).get('channels',[]),'deletion':bool(state.get('accountDeletion'))})
+        channels = state.get('phase2',{}).get('channels',[])
+        active = {c['id'] for c in channels if not c.get('revoked') and not connection_expired(c,self.c.clock())}
+        direct = {r[0] for r in caps if r[1] == 'Direct' and r[0] in active}
+        epoch = digest({'caps':sorted(caps),'direct':sorted(direct),'channels':channels,'deletion':bool(state.get('accountDeletion'))})
         return direct, epoch
 
     def _project(self, cur, workspace_id, state, actor, value):
@@ -660,7 +670,7 @@ class ReviewService:
                     row['value'] = float(row['value'])
                 row['collectionState'] = tracking_index.get((row['jobId'],row['readOffset']),{}).get('state','unscheduled')
                 rows.append(row)
-        projection = project_review(state,context,rows[:12000],direct,now)
+        projection = project_review(state,context,rows[:12000],direct,now,tracking_index=tracking_index)
         projection['postTracking'] = tracked
         if len(rows)>12000:
             projection['coverage']['truncated'] = True
@@ -729,7 +739,7 @@ class ReviewService:
                 try:
                     resolved = resolve_review_context(workspace_id,view['filterDefinition'],state,self.c.clock(),rights_epoch=epoch)
                     selected = {c['id']:c for c in state.get('phase2',{}).get('channels',[])}
-                    if any(selected[c].get('revoked') for c in resolved['channelIds']):
+                    if any(selected[c].get('revoked') or connection_expired(selected[c],self.c.clock()) for c in resolved['channelIds']):
                         raise AlphaError('Saved View account disconnected.',410)
                     values.append({**view,'resolvedContext':resolved,'blockedReason':None})
                 except AlphaError as error:
@@ -770,7 +780,7 @@ class ReviewService:
         direct,_ = self._rights(cur,workspace_id,state)
         channels = {c['id']:c for c in state.get('phase2',{}).get('channels',[])}
         selected = snapshot['resolvedContext']['channelIds']
-        if any(c not in channels or channels[c].get('revoked') for c in selected):
+        if any(c not in channels or channels[c].get('revoked') or connection_expired(channels[c],self.c.clock()) for c in selected):
             raise AlphaError('A report account is no longer available.',410)
         jobs = {j['id']:j for j in state.get('phase2',{}).get('jobs',[]) if j.get('state')=='verified'}
         from ..growth.trends.service import validate_stored_bindings

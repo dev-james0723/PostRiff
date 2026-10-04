@@ -11,6 +11,15 @@ from test_rafii_analytics_acceptance import native_fixture, outputs, postmortem_
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_legacy_display_ratio_requires_the_same_native_reading(self):
+        fixture=native_fixture(1,unrelated_time=True)
+        likes=list(fixture['rows'][-1]);likes[3]='likes';likes[5]=5;likes[8]+=60;likes[9]+=60
+        fixture['rows'].append(tuple(likes))
+        with patch.object(insights,'latest_observations',return_value=fixture['rows']):
+            post=insights.summary(None,'synthetic',fixture['state']['phase2']['jobs'],NOW)['posts'][0]
+        self.assertIsNone(post['rates']['likesPerView']['value'])
+        self.assertEqual(post['rates']['likesPerView'].get('reason'),'incompatible_readings')
+
     def test_unrelated_refresh_does_not_change_primary_binding(self):
         fixture = native_fixture(unrelated_time=True)
         _, before, _ = outputs(fixture)

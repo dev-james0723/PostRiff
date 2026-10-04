@@ -143,9 +143,16 @@ def summary(cur, workspace_id, jobs, now, basis=None):
         post["contentTypeId"] = manifest.get("contentType", {}).get("id")
         post["cohort"] = {"provider": post["provider"], "account": post["connectionId"], "window": basis,
                           "language": post["language"], "contentTypeId": post["contentTypeId"], "definitionVersion": post["definitionVersion"]}
-        engagement = post["metrics"].get("likes", {}).get("value")
-        reach = (post["metrics"].get("reach") or post["metrics"].get("views") or {}).get("value")
-        post["rates"] = {"likesPerView": rate(int(engagement) if engagement is not None else None, int(reach) if reach is not None else None)}
+        numerator = post["metrics"].get("likes", {})
+        denominator = post["metrics"].get("reach") or post["metrics"].get("views") or {}
+        keys = ("observedAt", "ingestedAt", "definitionVersion", "unit", "readOffset")
+        matched = numerator.get("readOffset") in ("1h", "24h", "7d") and all(numerator.get(k) is not None and numerator.get(k) == denominator.get(k) for k in keys)
+        engagement, reach = numerator.get("value"), denominator.get("value")
+        result = rate(int(engagement) if matched and engagement is not None else None, int(reach) if matched and reach is not None else None)
+        result["reason"] = None if matched and result["value"] is not None else "zero_denominator" if matched and reach == 0 else "missing_reading" if matched else "incompatible_readings"
+        # The original readings remain visible even when a ratio is unavailable.
+        result.update(numerator=engagement,denominator=reach)
+        post["rates"] = {"likesPerView": result}
         items.append(post)
     # Connections without any observation are reported explicitly, never as zeros.
     return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same account, provider, window, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}

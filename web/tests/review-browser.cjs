@@ -11,7 +11,7 @@ async function seed(wid,mode='seed'){execFileSync(python,['tests/phase2/review_f
 assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');
 const {workspaceId:wid}=await api('POST','/api/auth/verify',{plan:'studio'});await seed(wid);
 const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-const browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
+const browser=await chromium.launch({headless:true,channel:'chrome'});const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
 await context.route('**/*',r=>['127.0.0.1','localhost'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());
 await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
 await context.addInitScript(({principal,wid,tours})=>{localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-workspace',wid);localStorage.setItem('postriff-onboarding',JSON.stringify({completed:{},dismissed:tours,nudged:{}}));},{principal,wid,tours});
@@ -28,6 +28,14 @@ async function audit(name){
 }
 try{
 await page.goto(base+'/app/analytics',{waitUntil:'domcontentloaded',timeout:120000});await ready();
+const crossPage=panel.getByRole('link',{name:'Open this scope in Growth Studio',exact:true});
+const sharedInput=JSON.parse(new URL(await crossPage.getAttribute('href'),base).searchParams.get('reviewScope'));
+const sharedProjection=await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(sharedInput))}`);
+await crossPage.click();await ready();
+assert.deepEqual(JSON.parse(new URL(page.url()).searchParams.get('reviewScope')),sharedInput);
+await panel.getByRole('link',{name:'Open this scope in Analytics',exact:true}).click();await ready();
+assert.equal((await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(sharedInput))}`)).contextDigest,sharedProjection.contextDigest);
+checks.push('Analytics to Growth Studio to Analytics preserves exact resolved dates, cutoff, comparison and context digest');
 await panel.locator('summary').filter({hasText:'Metric sources, missing values and exact reading times'}).click();
 await panel.getByText('likes: 0',{exact:false}).waitFor();assert.ok(!(await panel.innerText()).includes('SYNTHETIC-SECRET'));
 await panel.locator('summary').filter({hasText:'Saved Views and classifications'}).click();
@@ -40,10 +48,15 @@ await panel.getByText('Classification version 1 saved for one publication.',{exa
 await panel.getByLabel('Classification filter',{exact:true}).selectOption('practice-series');
 await panel.getByText('1 of 1 publications have qualified readings.',{exact:false}).waitFor();assert.equal(await panel.getByText('Too few comparable publications for a takeaway.',{exact:false}).count(),1);
 await panel.getByLabel('Classification filter',{exact:true}).selectOption('');await ready();
+await panel.getByRole('button',{name:'Propose this controlled test',exact:true}).click();
+await panel.getByText('Existing Growth Loop experiment proposed. Owner acceptance and preparation remain separate.',{exact:true}).waitFor();await ready();
 await audit('desktop');await shot('review-desktop');
-checks.push('real HTTP read projection, measured zero / missing sources, Saved View save, versioned classification and scoped low sample');
+checks.push('real HTTP read projection, measured zero / missing sources, Saved View save, versioned classification and scoped low sample; explicit bounded test creates existing Growth Loop proposal without publication');
 for(const width of [390,430]){await page.setViewportSize({width,height:900});await audit(String(width));await shot('review-'+width);}
-await panel.getByLabel('Post age',{exact:true}).focus();await page.keyboard.press('ArrowUp');await page.keyboard.press('Enter');
+await panel.getByLabel('Post age',{exact:true}).focus();await page.keyboard.press('Tab');
+assert.ok(await panel.getByLabel('Review timezone',{exact:true}).evaluate(e=>e===document.activeElement),'Keyboard focus reaches timezone');
+await page.keyboard.press('ControlOrMeta+A');await page.keyboard.type('America/Indiana/Indianapolis');await ready();
+await panel.getByLabel('Post age',{exact:true}).selectOption('1h');
 await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
 await panel.getByLabel('Post age',{exact:true}).selectOption('24h');await ready();
 checks.push('1440 / 390 / 430px, no page overflow, axe serious/critical, keyboard scope operation');
@@ -65,7 +78,7 @@ await printPage.pdf({path:path.join(out,'report.pdf'),format:'A4',printBackgroun
 await printPage.screenshot({path:path.join(out,'report-print.png'),fullPage:true});await printPage.close();
 for(const f of ['report.md','report.csv']){const text=fs.readFileSync(path.join(out,f),'utf8');assert.ok(text.includes(snapshot.snapshotId)&&text.includes(snapshot.payloadDigest)&&text.includes('最後一行：來源與註記完整保留。'));}
 const extracted=execFileSync('/opt/homebrew/bin/pdftotext',[path.join(out,'report.pdf'),'-'],{encoding:'utf8'});
-for(const text of [snapshot.snapshotId,'繁體中文週回顧','最後一行：來源與註記完整保留。'])assert.ok(extracted.includes(text),'PDF text '+text);
+for(const text of [snapshot.snapshotId,'繁體中文週回顧','最後一行：來源與註記完整保留。'])assert.ok(extracted.replace(/\s/g,'').includes(text),'PDF text '+text);
 fs.writeFileSync(path.join(out,'pdf-text.txt'),extracted);
 assert.ok(extracted.split('\f').length>=3,'Long note should span multiple readable pages');
 await panel.getByLabel('Human notes',{exact:true}).fill('New note');await panel.getByRole('button',{name:'Save new report version',exact:true}).click();
@@ -84,9 +97,14 @@ await panel.getByLabel('Post age',{exact:true}).selectOption('1h');await panel.g
 assert.equal(await panel.getByRole('button',{name:'Download CSV',exact:true}).count(),0);await shot('review-error');await page.unroute(`**/coworker/review?*`);
 await panel.getByLabel('Post age',{exact:true}).selectOption('24h');await ready();
 checks.push('delayed new scope and read error immediately remove old values/actions/hidden report DOM');
-await seed(wid,'revoked');await page.reload();await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
+await seed(wid,'stale');await page.reload();await ready();
+await panel.locator('summary').filter({hasText:'Metric sources, missing values and exact reading times'}).click();
+await panel.getByText('Earlier reading; a later attempt failed',{exact:false}).waitFor();await shot('review-stale');
+await seed(wid,'partial');await page.reload();await panel.getByText('11 of 12 publications have qualified readings.',{exact:false}).waitFor();await shot('review-partial');
+checks.push('real PG later unavailable attempt preserves old value with stale label; partial coverage retains missing values and per-metric sample counts');
+await seed(wid,'revoked');await page.goto(base+'/app/analytics?reviewScope='+encodeURIComponent(JSON.stringify(saved.views[0].filterDefinition)));await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
 assert.equal(await panel.getByText('likes: 0',{exact:false}).count(),0);assert.ok(!(await panel.innerText()).includes('A bounded question about practice?'));await shot('review-revoked');
-await seed(wid,'empty');await page.reload();await panel.getByText('No connected account.',{exact:false}).waitFor();await shot('review-empty');
+await seed(wid,'empty');await page.goto(base+'/app/analytics');await panel.getByText('No connected account.',{exact:false}).waitFor();await shot('review-empty');
 checks.push('real backend revocation removes values and content; empty account state remains actionable');
 const paid=requests.filter(r=>r.method==='POST'&&/postmortem|calibration|generate|publish|quote|model|history-import/.test(r.url));assert.deepEqual(paid,[]);
 assert.deepEqual(errors,[]);const evidence={status:'PASS',execution:'real browser HTTP + disposable PG, synthetic native data; error/latency injected only for transport states',sourceSha:process.env.POSTRIFF_SOURCE_SHA,checks,realProviderCalls:0,realModelCalls:0,nativeAcceptance:false,pdf:{pages:extracted.split('\f').length-1,cjkExtracted:true},consoleErrors:errors};

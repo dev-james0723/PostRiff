@@ -84,6 +84,8 @@ export function reviewDisplayState(e: Pick<MetricEvidence, 'accessState' | 'valu
   if (e.accessState !== 'allowed') return e.accessState;
   if (e.freshnessState === 'stale') return 'stale';
   if (e.valueState === 'measured') return e.value === 0 ? 'measured_zero' : 'measured';
+  if (e.valueState === 'unsupported') return 'unsupported';
+  if (e.collectionState === 'measured') return 'unavailable';
   const collection = e.collectionState === 'rights_unavailable' ? 'not_authorized' : e.collectionState;
   return collection in REVIEW_STATE_LABELS ? collection : 'unavailable';
 }

@@ -145,10 +145,26 @@ class ReviewTests(unittest.TestCase):
         e=next(e for e in p['nativeResults'] if e['publicationBinding']['jobId']=='0')
         self.assertEqual(e['freshnessState'],'stale');self.assertEqual(e['value'],0)
 
+    def test_missing_metric_uses_current_schedule_and_native_unsupported_state(self):
+        tracking={('0','24h'):{'state':'scheduled'}}
+        remaining=[r for r in self.rows if r['jobId']!='0']
+        p=self.review.project_review(self.state,self.context(),remaining,{'own'},NOW,tracking_index=tracking)
+        e=next(e for e in p['nativeResults'] if e['publicationBinding']['jobId']=='0')
+        self.assertEqual(e['collectionState'],'scheduled');self.assertIsNone(e['value'])
+        self.rows[0].update(value=None,availability='not_supported')
+        e=self.projection()['nativeResults'][0]
+        self.assertEqual(e['valueState'],'unsupported');self.assertFalse(e['eligible'])
+
     def test_revoked_rights_remove_value_and_source(self):
         p=self.review.project_review(self.state,self.context(),self.rows,set(),NOW)
         self.assertTrue(all(e['value'] is None and e['sourceRef'] is None for e in p['nativeResults']))
         self.assertEqual(p['groups'],[])
+
+    def test_expired_connection_removes_stored_metrics_and_reuse(self):
+        self.state['phase2']['channels'][0]['expiresAt']=NOW-1
+        p=self.projection()
+        self.assertTrue(all(e['value'] is None and e['reason']=='expired' for e in p['nativeResults']))
+        self.assertEqual(self.review.reuse_candidates(self.state,p,NOW),[])
 
     def test_basis_uses_exact_readings_and_scope_digest(self):
         p=self.projection();self.rows[1]['observedAt']+=10
