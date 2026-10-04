@@ -234,7 +234,8 @@ class TrendStore:
                 cur.execute('SELECT 1 FROM public.pr_trend_author_tombstones WHERE provider_id=%s AND author_digest=%s',(o['provider_id'],author_hash))
                 if cur.fetchone():
                     raise TrendStorageError('author_deleted')
-            if p['provider_contract_version'] != o['provider_contract_version']:
+            from .providers.registry import contract_runtime_version
+            if contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {}) != o['provider_contract_version']:
                 raise TrendStorageError('provider_contract_mismatch')
             if not permits(o['rights'],'retrieve',o['scope_key'],now):
                 raise TrendStorageError('source_right_not_permitted')
