@@ -361,6 +361,7 @@ export function ConnectSheet({
                       <RadioGroupItem
                         key={option.key}
                         value={option.key}
+                        aria-label={option.label}
                         label={option.label}
                         description={option.key === 'analytics' && provider && ['threads', 'instagram'].includes(provider.id) ? importCopy.analyticsAccess : option.description}
                         className='rafii-quiet rounded-[var(--rafii-radius-control)] p-3 transition-colors data-[state=checked]:rafii-glass-selected'
