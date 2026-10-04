@@ -67,7 +67,7 @@ export interface Asset {
   deleted: boolean;
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
-  kind?: 'image' | 'video';
+  kind?: 'image' | 'video' | 'document' | 'file';
   category?: 'media' | 'video' | string;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;
