@@ -84,7 +84,7 @@ Minimum metadata:
 - provenance / creator / timestamps
 - processing, analysis and indexing status
 
-Before assigning a migration number, re-audit canonical plus every open schema-changing PR. At recovery time canonical reached `088_founder_activation_integrity.sql`; no `089_*` file was found on canonical and the sampled open PR diffs did not add a PostRiff migration.
+Before assigning a migration number, re-audit canonical plus every open schema-changing PR. At initial recovery time the Git tree reached `088_founder_activation_integrity.sql`, but live staging later proved that migration numbers 089–092 were already consumed out-of-band (`089_james_daily_call`, `090_james_daily_call_indexes`, support workflow/surveys). Universal Library therefore uses `093_universal_library.sql`; live migration history is authoritative over the stale Git-only assumption.
 
 ### U2 — Private file upload boundary
 Reuse the security shape of `video_uploads.py`: browser-to-private-storage signed upload, pending row, immutable object identity, server HEAD verification, bounded caps, abort/sweep and account-deletion cleanup.
