@@ -44,6 +44,9 @@ def attach(app, service, dsn, pg_bin, web_origins):
     for path in founder_migrations():
         subprocess.run([str(Path(pg_bin) / 'psql'), dsn, '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(path)], check=True, stdout=subprocess.DEVNULL)
     with psycopg.connect(dsn, autocommit=True) as owner:
+        # Supabase's actual auth source includes email. Keep the disposable
+        # schema compatible so explicit support reveal exercises the real SQL.
+        owner.execute('ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text')
         for user in TOKENS.values():
             owner.execute('INSERT INTO auth.users(id) VALUES(%s) ON CONFLICT DO NOTHING', (user,))
             owner.execute('INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING', (user,))

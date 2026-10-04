@@ -312,6 +312,97 @@ async function main() {
           check('record boundary has no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
         });
 
+        // The real ticket APIs, original tenant and production-built controls;
+        // every identity/message here is synthetic and the harness is loopback-only.
+        await attempt('original-tenant support workflow and reveal scope', async () => {
+          await exchange(context, FOUNDER);
+          const headers = { Origin: base, 'X-PostRiff-Request': 'founder-alpha', Authorization: 'Bearer dev:00000000-0000-4000-8000-00000000f0aa' };
+          const bootstrap = await context.request.post(base + '/api/auth/verify', { headers, data: { plan: 'studio' } });
+          check('support customer fixture bootstraps without a provider', bootstrap.status() === 201, bootstrap.status());
+          const workspace = (await bootstrap.json()).workspaceId;
+          if (!workspace) throw new Error('Synthetic support tenant was not created');
+          async function create(category, message) {
+            const response = await context.request.post(`${base}/api/workspaces/${workspace}/support/tickets`, {
+              headers, data: { requestId: require('node:crypto').randomUUID(), category, message }
+            });
+            check(`support ${category} ticket is created in its original tenant`, response.status() === 201, response.status());
+            return (await response.json()).ticket;
+          }
+          const first = await create('technical', 'Synthetic browser support original A');
+          const second = await create('account', 'Synthetic browser support original B');
+          await page.goto(base + '/founder/support?tab=inbox');
+          await page.getByRole('heading', { name: 'In-app support inbox', exact: true }).waitFor({ timeout: 30000 });
+          await settle(page, tracker);
+          const selectFirst = () => page.getByRole('button', { name: new RegExp(first.id.slice(-8)) }).click();
+          const selectSecond = () => page.getByRole('button', { name: new RegExp(second.id.slice(-8)) }).click();
+          await selectFirst();
+          check('support originals are masked before reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          await page.getByLabel('Ticket priority', { exact: true }).selectOption('urgent');
+          await page.getByLabel('Ticket assignee', { exact: true }).selectOption('me');
+          let pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/triage`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Save triage', exact: true }).click();
+          const triage = await pending;
+          check('support triage succeeds through the protected API', triage.status() === 200, triage.status());
+          await settle(page, tracker);
+          const triageResult = (await triage.json()).data.ticket;
+          check('support priority and self assignment are durable', triageResult.priority === 'urgent' && Boolean(triageResult.assigneeId), triageResult);
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/reveal`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+          const revealed = await pending;
+          check('explicit recent-factor support reveal succeeds', revealed.status() === 200, revealed.status());
+          await page.getByText('customer: Synthetic browser support original A', { exact: true }).waitFor({ timeout: 10000 });
+          check('revealed original appears only after the deliberate action', true);
+
+          await selectSecond();
+          check('selecting another ticket clears the earlier reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          let releaseReveal;
+          const heldReveal = new Promise((resolve) => { releaseReveal = resolve; });
+          const pattern = `**/api/control/v2/support/tickets/${second.id}/reveal`;
+          await page.route(pattern, async (route) => { await heldReveal; await route.continue(); });
+          try {
+            const started = page.waitForRequest(pattern, { timeout: 10000 });
+            await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+            await started;
+            await selectFirst();
+          } finally {
+            releaseReveal();
+            await settle(page, tracker);
+            await page.unroute(pattern);
+          }
+          check('a delayed previous-ticket reveal cannot display in the new selection', !(await page.locator('body').innerText()).includes('Synthetic browser support original B'));
+          await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+          await page.getByText('customer: Synthetic browser support original A', { exact: true }).waitFor({ timeout: 10000 });
+          await page.getByRole('radio', { name: 'Demo', exact: true }).click();
+          await settle(page, tracker);
+          const demoText = await page.locator('body').innerText();
+          check('Demo clears support selection and raw original content', !demoText.includes('Synthetic browser support original A') && !demoText.includes('Synthetic browser support original B'));
+          await page.getByRole('radio', { name: 'Live', exact: true }).click();
+          await settle(page, tracker);
+          check('returning to Live does not restore a previous raw reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          await selectFirst();
+          await page.getByLabel('In-app reply', { exact: true }).fill('Synthetic Founder support reply');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/reply`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Send in-app reply', exact: true }).click();
+          const sent = await pending;
+          check('support reply stays in-app', sent.status() === 200 && (await sent.json()).data.delivery === 'in_app', sent.status());
+          await settle(page, tracker);
+          const original = await (await context.request.get(`${base}/api/workspaces/${workspace}/support/tickets/${first.id}`, { headers })).json();
+          check('the original customer reads the Founder reply and its waiting state', original.messages.at(-1)?.body === 'Synthetic Founder support reply' && original.ticket.status === 'waiting_customer', original.ticket);
+          check('original customer workflow includes creation triage and reply', ['created', 'triage', 'message'].every((kind) => original.history.some((event) => event.kind === kind)), original.history.map((event) => event.kind));
+          await page.getByLabel('Related ticket ID', { exact: true }).fill(second.id);
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/link`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Link ticket', exact: true }).click();
+          const linked = await pending;
+          const linkedTicket = (await linked.json()).data.ticket;
+          check('support duplicate relation is durable in the original tenant', linked.status() === 200 && linkedTicket.status === 'duplicate' && linkedTicket.duplicateOfTicketId === second.id, linkedTicket);
+          await settle(page, tracker);
+          const violations = await axe(page);
+          check('support workflow has no critical or serious accessibility violations', violations.length === 0, violations);
+          const seen = drain(tracker);
+          check('support workflow has no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
+          check('support workflow has no page error', seen.pageErrors.length === 0, seen.pageErrors);
+        });
+
         // Evidence drawer from a real receipt; Escape closes it and returns focus.
         await attempt('evidence drawer opens from ?evidence=', async () => {
           const overview = await (await context.request.get(base + '/api/control/v2/overview?mode=demo&period=30d')).json();
