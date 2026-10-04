@@ -247,7 +247,7 @@ def resolve_review_context(workspace_id, value, state, now, *, rights_epoch='unk
     elif set(comparison) != {'kind'}:
         raise AlphaError('A comparison with no baseline cannot contain a period.', 400)
     cutoff = stamp(value['cutoffAt']) if value.get('cutoffAt') else now
-    if cutoff > now:
+    if datetime.fromtimestamp(cutoff,timezone.utc) > datetime.fromtimestamp(now,timezone.utc):
         raise AlphaError('The observation cutoff cannot be in the future.', 400)
     result = {'schemaVersion':SCHEMA_VERSION, 'workspaceId':workspace_id, 'channelIds':selected, 'providers':providers,
               'publicationPeriod':chosen, 'horizon':horizon, 'language':language, 'formatIds':sorted(set(formats)),
@@ -331,7 +331,7 @@ def project_review(state, context, observations, direct_connections, now):
                           else 'wrong_horizon' if row['readOffset'] != context['horizon']
                           else 'definition_mismatch' if row.get('definitionVersion') != metric['definitionVersion'] or row.get('unit') != metric['unit']
                           else 'missing_observation_time' if not finite(row.get('observedAt')) or not finite(row.get('ingestedAt'))
-                          else 'after_cutoff' if row['observedAt'] > cutoff or row['ingestedAt'] > cutoff
+                          else 'after_cutoff' if datetime.fromtimestamp(row['observedAt'],timezone.utc) > datetime.fromtimestamp(cutoff,timezone.utc) or datetime.fromtimestamp(row['ingestedAt'],timezone.utc) > datetime.fromtimestamp(cutoff,timezone.utc)
                           else 'window_unqualified' if datetime.fromtimestamp(row['observedAt'],timezone.utc) < datetime.fromtimestamp(published,timezone.utc)+timedelta(seconds=HORIZONS[context['horizon']])
                           else None)
                 if reason:
