@@ -284,7 +284,7 @@ class StripePaymentProvider:
     """Live provider. `parse_webhook` verifies and maps; `create_*` call Stripe through `transport`."""
     id = "stripe"
 
-    def __init__(self, secret_key, webhook_secret, transport=None, clock=time.time, tolerance=300, *, api_version=None, portal_configuration=None):
+    def __init__(self, secret_key, webhook_secret, transport=None, clock=time.time, tolerance=300, *, api_version=None, portal_configuration=None, checkout_card_only=False):
         if not secret_key or not webhook_secret:
             raise AlphaError("Stripe credentials are required.", 503)
         self.secret_key, self.webhook_secret = secret_key, webhook_secret.encode()
@@ -293,7 +293,10 @@ class StripePaymentProvider:
             raise AlphaError("Configure a valid pinned Stripe API version.", 503)
         if portal_configuration is not None and not re.fullmatch(r"bpc_[A-Za-z0-9]+", portal_configuration):
             raise AlphaError("Configure a valid Stripe Customer Portal configuration.", 503)
+        if type(checkout_card_only) is not bool:
+            raise AlphaError("Checkout payment-method override must be boolean.", 503)
         self.api_version, self.portal_configuration = api_version, portal_configuration
+        self.checkout_card_only = checkout_card_only
         self.transport, self.clock, self.tolerance = transport or http_transport, clock, int(tolerance)
 
     # --- webhooks ------------------------------------------------------------------------
@@ -427,6 +430,8 @@ class StripePaymentProvider:
             "metadata[workspace_id]": workspace_id, "metadata[plan_terms_id]": plan_terms_id,
             "success_url": success_url, "cancel_url": cancel_url, "allow_promotion_codes": "false",
         }
+        if self.checkout_card_only:
+            form["payment_method_types[0]"] = "card"
         if price_variant_id is not None:
             if not isinstance(price_variant_id, str) or not price_variant_id.strip():
                 raise AlphaError("Checkout needs a valid price variant.", 400)
