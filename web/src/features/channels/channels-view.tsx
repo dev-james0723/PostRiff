@@ -299,28 +299,26 @@ function ChannelsPage() {
   );
 
   // Deep link from other pages (Analytics "Enable analytics"): `?connect=<provider>&capability=<cap>`
-  // opens the sheet preselected, once the provider list is known, then clears both params.
+  // is derived directly from the URL instead of copied into local state. Direct-entry flows
+  // therefore cannot hydrate through a stale Connect request or momentarily fall back to
+  // the first provider while React Query refreshes the provider catalog.
   const connectParam = params.get('connect');
   const capabilityParam = params.get('capability');
-  useEffect(() => {
-    if (!connectParam || !data || !canManage) return;
-    if (!providers.some((provider) => provider.id === connectParam)) return;
-
+  const deepLinkRequest = useMemo<ConnectRequest | null>(() => {
+    if (!connectParam || !canManage || !providers.some((provider) => provider.id === connectParam)) return null;
     const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
-    openConnect({ providerId: connectParam, capability });
-  }, [canManage, capabilityParam, connectParam, data, openConnect, providers]);
+    return { providerId: connectParam, capability };
+  }, [canManage, capabilityParam, connectParam, providers]);
 
-  const handleConnectOpenChange = useCallback(
+  const closeDirectConnect = useCallback(
     (open: boolean) => {
-      setConnectOpen(open);
-      if (!open && (connectParam || capabilityParam)) {
-        replaceParams((search) => {
-          search.delete('connect');
-          search.delete('capability');
-        });
-      }
+      if (open) return;
+      replaceParams((search) => {
+        search.delete('connect');
+        search.delete('capability');
+      });
     },
-    [capabilityParam, connectParam, replaceParams]
+    [replaceParams]
   );
 
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
@@ -336,6 +334,14 @@ function ChannelsPage() {
       </>
     )
   }));
+
+  if (deepLinkRequest) {
+    return (
+      <main className='bg-background min-h-dvh'>
+        <ConnectSheet open onOpenChange={closeDirectConnect} providers={providers} request={deepLinkRequest} />
+      </main>
+    );
+  }
 
   // COMMIT: Connect channel is the page's one primary action (DNA §21.6); it stays visible with its label on phones.
   // With no accounts yet, the empty state below carries that action, so the header does not repeat it.
@@ -527,7 +533,7 @@ function ChannelsPage() {
         </div>
       )}
 
-      <ConnectSheet open={connectOpen} onOpenChange={handleConnectOpenChange} providers={providers} request={connectRequest} />
+      <ConnectSheet open={connectOpen} onOpenChange={setConnectOpen} providers={providers} request={connectRequest} />
     </PageContainer>
   );
 }
