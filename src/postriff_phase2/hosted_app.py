@@ -214,7 +214,9 @@ def runtime_from_environment(environ=None):
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
-    social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
+    social = HostedSocial(service.oauth, providers, storage) if any(
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+    ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
