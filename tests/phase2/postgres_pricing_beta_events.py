@@ -142,10 +142,10 @@ class PricingBetaActualPG(unittest.TestCase):
         with connection() as db:
             return self.service.ledger.settle(db.cursor(), self.wid, reservation, outcome, actual)
 
-    def test_00_rollout_flags_catalog_and_pack_sales_are_off(self):
+    def test_00_rollout_gates_and_pack_sales_off_with_approved_fixed_plans(self):
         self.assertFalse(self.service.billing.pricing_v2_enabled)
         with connection() as db:
-            self.assertEqual(db.execute("SELECT new_checkout_enabled FROM pr_plan_terms WHERE id IN ('free-v1','starter-v1','studio-v2') ORDER BY id").fetchall(), [(False,)]*3)
+            self.assertEqual(db.execute("SELECT id,new_checkout_enabled,provider_price_id FROM pr_plan_terms WHERE id IN ('free-v1','starter-v1','studio-v2') ORDER BY id").fetchall(), [("free-v1", False, None), ("starter-v1", True, None), ("studio-v2", True, None)])
             self.assertEqual(db.execute("SELECT entitlements->>'monthlyCredits' FROM pr_plan_terms WHERE id='creator-v1'").fetchone()[0], '3500')
             self.assertEqual(db.execute("SELECT count(*) FROM pr_credit_packs WHERE id IN ('credits-1000-v2','credits-2000-v2') AND active").fetchone()[0], 0)
 
