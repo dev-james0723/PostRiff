@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useSnapshot } from '@/lib/api/hooks';
 import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
-import { isLibraryAsset } from '@/lib/media/asset-kinds';
+import { isLibraryAsset, kindOf } from '@/lib/media/asset-kinds';
 
 /**
  * Everything the Library reads, derived from the workspace snapshot: the live images in a stated order,
@@ -32,6 +32,7 @@ export interface AssetUse {
 }
 
 export type LibraryFilter = 'all' | 'unused' | 'used';
+export type LibraryKindFilter = 'all' | 'image' | 'video';
 /** `newest` is offered only when assets carry an upload time; `stored` is the order the API returns. */
 export type LibrarySort = 'newest' | 'stored' | 'largest';
 
@@ -92,6 +93,16 @@ function buildUsage(reviews: Review[], jobs: Job[]) {
 
 function matchesQuery(asset: LibraryAsset, query: string) {
   if (!query) return true;
+  const text = [
+    asset.displayTitle,
+    asset.originalFilename,
+    asset.aiSummary,
+    ...(asset.aiTags ?? [])
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+  if (text.includes(query)) return true;
   if (asset.hash.toLowerCase().startsWith(query)) return true;
   if (asset.sourceHash?.toLowerCase().startsWith(query)) return true;
   if (asset.width && asset.height) {
@@ -101,7 +112,17 @@ function matchesQuery(asset: LibraryAsset, query: string) {
   return false;
 }
 
-export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sort: LibrarySort; query: string }) {
+export function useLibrary({
+  filter,
+  kindFilter,
+  sort,
+  query
+}: {
+  filter: LibraryFilter;
+  kindFilter: LibraryKindFilter;
+  sort: LibrarySort;
+  query: string;
+}) {
   const snapshot = useSnapshot();
   const phase2 = snapshot.data?.state.phase2;
 
@@ -120,6 +141,11 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
       platforms,
       hasTimestamps,
       counts: { all: live.length, used, unused: live.length - used },
+      kindCounts: {
+        all: live.length,
+        image: live.filter((asset) => kindOf(asset) === 'image').length,
+        video: live.filter((asset) => kindOf(asset) === 'video').length
+      },
       totals: {
         count: live.length,
         bytes: knownBytes.reduce((sum, asset) => sum + (asset.bytes ?? 0), 0),
@@ -137,6 +163,7 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
       const used = derived.usage.has(asset.id);
       if (filter === 'used' && !used) return false;
       if (filter === 'unused' && used) return false;
+      if (kindFilter !== 'all' && kindOf(asset) !== kindFilter) return false;
       return matchesQuery(asset, normalizedQuery);
     });
     if (effectiveSort === 'stored') return filtered;
@@ -150,7 +177,7 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
       if (typeof right !== 'number') return -1;
       return right - left || stable(a, b);
     });
-  }, [derived, filter, normalizedQuery, effectiveSort]);
+  }, [derived, filter, kindFilter, normalizedQuery, effectiveSort]);
 
   return {
     snapshot,
@@ -158,6 +185,7 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
     assets: derived.live,
     visible,
     counts: derived.counts,
+    kindCounts: derived.kindCounts,
     totals: derived.totals,
     hasTimestamps: derived.hasTimestamps,
     platforms: derived.platforms,
