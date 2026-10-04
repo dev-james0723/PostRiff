@@ -424,6 +424,9 @@ class HostedWorkspaceService:
         # change after construction).
         self.commands.writers = lambda: rt if (rt := self.ideas.default_runtime()) and getattr(rt, 'cost_class', None) == 'paid' and getattr(rt, 'provider_class', None) == 'cloud' else None
         self._wire_chat_media(chat_media or {})
+        from .library_assets import UniversalLibrary
+        library_storage = assets.storage if assets is not None else None
+        self.library = UniversalLibrary(self, storage=library_storage, clock=clock, bucket=getattr(library_storage, "file_bucket", "postriff-library"))
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is
