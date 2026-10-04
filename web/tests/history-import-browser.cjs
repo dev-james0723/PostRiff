@@ -65,8 +65,20 @@ async function api(method, url, body) {
     await dialog.getByText(/300 posts and 12 pages/).waitFor();
     await dialog.getByText(/Caption text and caption hashes/).waitFor();
     assert.equal(posts,0);await shot('review-desktop');
+    // Delay this local real POST: a pending request is not an acknowledged queue entry.
+    let releasePost, markPostStarted;
+    const heldPost=new Promise(resolve=>{releasePost=resolve;});
+    const postStarted=new Promise(resolve=>{markPostStarted=resolve;});
+    const holdRequest=async route=>{if(route.request().method()==='POST'){markPostStarted();await heldPost;}await route.continue();};
+    await page.route('**/history-import',holdRequest);
     await confirm.check();await dialog.getByRole('button',{name:'Confirm import',exact:true}).click();
+    await postStarted;
+    assert.equal(await dialog.getByText('Import queued',{exact:true}).count(),0,'Pending POST must never claim queued');
+    await dialog.getByRole('button',{name:'Requesting import…',exact:true}).waitFor();
+    releasePost();
     await dialog.getByText('Import queued',{exact:true}).waitFor();assert.equal(posts,1);
+    await page.unroute('**/history-import',holdRequest);
+    checks.push('delayed real local POST remains requesting; queued is shown only after actual server acknowledgement');
     assert.equal((await api('GET',endpoint)).status,'pending');
     checks.push('opening/review does not POST; unchecked explicit metadata/analytics consent; real 202 request and queued status');
     fixture('retry');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();

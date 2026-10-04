@@ -169,7 +169,7 @@ export default function AppSidebar() {
                         {item.items.map((sub) => (
                           <SidebarMenuSubItem key={sub.title}>
                             <SidebarMenuSubButton
-                              render={<Link href={sub.url} aria-label={sub.title} onClick={closeAfterPick} />}
+                              render={<Link href={sub.url} prefetch={false} aria-label={sub.title} onClick={closeAfterPick} />}
                               isActive={isActivePath(pathname, sub.url)}
                             >
                               <span>{sub.title}</span>
@@ -182,7 +182,7 @@ export default function AppSidebar() {
                 ) : (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      render={<Link href={item.url} aria-label={counts[item.url] ? `${item.title}, ${counts[item.url]} waiting for approval` : item.title} onClick={closeAfterPick} />}
+                      render={<Link href={item.url} prefetch={false} aria-label={counts[item.url] ? `${item.title}, ${counts[item.url]} waiting for approval` : item.title} onClick={closeAfterPick} />}
                       tooltip={item.title}
                       isActive={active}
                     >
