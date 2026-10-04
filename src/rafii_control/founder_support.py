@@ -1,7 +1,7 @@
 """Bounded support workflow; originals stay in their customer tenant."""
 import uuid
 from postriff_alpha.domain import AlphaError
-from postriff_phase2 import support
+from postriff_phase2 import support, support_surveys
 from postriff_phase2.hosted import audit
 from . import founder_ops, http
 from .auth import ControlError
@@ -40,10 +40,11 @@ def list_tickets(app, principal, request):
                 'count("firstResponseAt") AS "firstResponseSampleCount",avg(extract(epoch from ("firstResponseAt"-"createdAt"))) AS "firstResponseSeconds",'
                 'count("resolvedAt") AS "resolutionSampleCount",avg(extract(epoch from ("resolvedAt"-"createdAt"))) AS "resolutionSeconds",'
                 'max("updatedAt") AS watermark FROM rafii_control.business_support_tickets').fetchone()
+            survey_metrics = con.execute('SELECT count(o.id) AS offers,count(r.id) AS responses,count(r.id) FILTER(WHERE r.helpful) AS positive,max(greatest(o.\"offeredAt\",r.\"answeredAt\")) AS watermark FROM rafii_control.business_support_survey_offers o LEFT JOIN rafii_control.business_support_survey_responses r ON r.\"workspaceId\"=o.\"workspaceId\" AND r.\"surveyId\"=o.id').fetchone()
         metrics = {k: v.isoformat() if hasattr(v, 'isoformat') else float(v) if k.endswith('Seconds') and v is not None else v for k, v in dict(metrics).items()}
         return {'tickets': [_serialize(r) for r in rows], 'identityVisibility': 'masked',
                 'metrics': {**metrics, 'source': 'in_app_tickets', 'state': 'measured', 'window': 'retained_history',
-                            'timeBasis': 'elapsed_seconds', 'businessTimeSla': 'not_configured', 'csat': 'not_collected'}}
+                            'timeBasis': 'elapsed_seconds', 'businessTimeSla': 'not_configured', 'csat': {'surveyOffers': survey_metrics['offers'], 'validResponses': survey_metrics['responses'], 'positiveResponses': survey_metrics['positive'], 'ratio': survey_metrics['positive'] / survey_metrics['responses'] if survey_metrics['responses'] else None, 'responseRate': survey_metrics['responses'] / survey_metrics['offers'] if survey_metrics['offers'] else None, 'responseRateBasis': 'observed_resolution_offers', 'coverage': 'observed_resolution_offers_only', 'sourceVersion': support_surveys.SOURCE_VERSION, 'watermark': survey_metrics['watermark'].isoformat() if survey_metrics['watermark'] else None}}}
     except Exception as error:
         _error(error)
 
@@ -118,7 +119,9 @@ def _workflow(cur, ticket, actor, operation, body):
             kind = 'duplicate_link'
             cur.execute("UPDATE public.pr_support_tickets SET duplicate_of=%s,status='duplicate',resolved_at=NULL,revision=revision+1,updated_at=now() WHERE id=%s", (related, ticket['id']))
     after = support.row(cur, ticket['id'])
-    support.event(cur, ticket, after, actor, 'founder', kind, request_id, digest, related_ticket_id=related)
+    event_id = support.event(cur, ticket, after, actor, 'founder', kind, request_id, digest, related_ticket_id=related)
+    if kind == 'status':
+        support_surveys.offer(cur, ticket, after, event_id)
     audit(cur, ticket['workspaceId'], actor, 'support.workflow.changed', ticket['id'], {'operation': kind, 'revision': after['revision']})
     return {'ticket': support.public(after), 'duplicate': False}
 

@@ -261,8 +261,8 @@ def _demo_rows_for(data: dict, metric_id: str, group_by: list[str], interval: di
                 for row in analytics.get("revenueTrend", [])]
     if metric_id == "payment_failures":
         return [{**base, "dimensions": {}, "value": summary.get("failedPayments"), "unit": "count"}]
-    if metric_id == "open_tickets":
-        return [{**base, "dimensions": {}, "value": summary.get("openRequests"), "unit": "count"}]
+    if metric_id in ("open_tickets", "csat"):
+        return [{**base, "definitionVersion": "v1", "dimensions": {}, "value": None, "unit": "count" if metric_id == "open_tickets" else "ratio", "dataState": "unavailable", "reason": "demo_not_simulated"}]
     if metric_id == "active_workspaces":
         return [{**base, "dimensions": {}, "value": summary.get("activeSubscriptions"), "unit": "count"}]
     if metric_id in ("ai_cost_actual", "ai_actual_cost"):

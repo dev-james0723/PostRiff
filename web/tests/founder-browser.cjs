@@ -483,6 +483,59 @@ async function main() {
           const linkedTicket = (await linked.json()).data.ticket;
           check('support duplicate relation is durable in the original tenant', linked.status() === 200 && linkedTicket.status === 'duplicate' && linkedTicket.duplicateOfTicketId === second.id, linkedTicket);
           await settle(page, tracker);
+          // The original customer UI submits one optional response for a new
+          // human-supported resolution. These identities stay loopback-only.
+          await selectSecond();
+          await page.getByLabel('In-app reply', { exact: true }).fill('Synthetic resolution explanation');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/reply`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Send in-app reply', exact: true }).click();
+          check('survey resolution receives a human in-app reply', (await pending).status() === 200);
+          await settle(page, tracker);
+          await page.getByLabel('Ticket status', { exact: true }).selectOption('resolved');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/status`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Update status', exact: true }).click();
+          check('new observed support resolution commits through its API', (await pending).status() === 200);
+          await settle(page, tracker);
+          const offered = await (await context.request.get(`${base}/api/workspaces/${workspace}/support/tickets/${second.id}`, { headers })).json();
+          check('the original customer receives an eligible resolution survey', offered.survey?.state === 'eligible' && offered.survey.helpful === null, offered.survey);
+          const customerContext = await browser.newContext({ viewport: { width: 1440, height: 960 }, colorScheme: 'dark' });
+          const customerErrors = [];
+          try {
+            await customerContext.addCookies([
+              { name: 'postriff_dev', value: '1', url: base },
+              { name: 'postriff_dev_principal', value: '00000000-0000-4000-8000-00000000f0aa', url: base },
+              { name: 'postriff_theme', value: 'rafii', url: base }
+            ]);
+            const tourSource = fs.readFileSync(path.resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8');
+            const tours = [...tourSource.matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((match) => match[1]);
+            await customerContext.addInitScript(({ ids }) => {
+              localStorage.setItem('postriff-dev-principal', '00000000-0000-4000-8000-00000000f0aa');
+              localStorage.setItem('postriff-onboarding', JSON.stringify({ completed: {}, dismissed: Object.fromEntries(ids.map((id) => [id, 1])), nudged: Object.fromEntries(ids.map((id) => [id, 1])) }));
+            }, { ids: tours });
+            const customerPage = await customerContext.newPage();
+            customerPage.on('pageerror', (error) => customerErrors.push(String(error)));
+            await customerPage.goto(base + '/app/account/profile#profile-support');
+            await customerPage.getByRole('heading', { name: 'Support', exact: true }).waitFor({ timeout: 30000 });
+            await customerPage.getByRole('button', { name: 'account · resolved', exact: true }).click();
+            await customerPage.getByText('Was this support resolution helpful?', { exact: true }).waitFor({ timeout: 10000 });
+            const feedback = customerPage.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/survey`) && r.request().method() === 'POST');
+            await customerPage.getByRole('button', { name: 'Yes, it helped', exact: true }).click();
+            const feedbackResponse = await feedback;
+            const savedFeedback = await feedbackResponse.json();
+            check('customer feedback is saved by the actual original-tenant API', feedbackResponse.status() === 201 && savedFeedback.survey?.helpful === true && savedFeedback.duplicate === false, savedFeedback);
+            await customerPage.getByText('Your feedback for this resolution is recorded.', { exact: true }).waitFor({ timeout: 10000 });
+            check('customer feedback controls close after the recorded answer', await customerPage.getByRole('button', { name: 'Yes, it helped', exact: true }).count() === 0);
+            const customerViolations = await axe(customerPage);
+            check('customer support feedback has no critical or serious accessibility violations', customerViolations.length === 0, customerViolations);
+            check('customer support feedback has no page error', customerErrors.length === 0, customerErrors);
+          } finally {
+            await customerContext.close();
+          }
+          await page.reload();
+          await settle(page, tracker);
+          const feedbackSummary = await page.locator('[aria-label="Support satisfaction summary"]').innerText();
+          check('Founder feedback shows actual response and offer counts with qualified scope', feedbackSummary.includes('1 responses') && feedbackSummary.includes('1 resolution offers') && feedbackSummary.includes('100%') && feedbackSummary.includes('does not measure satisfaction across all customers'), feedbackSummary);
+
           const violations = await axe(page);
           check('support workflow has no critical or serious accessibility violations', violations.length === 0, violations);
           const seen = drain(tracker);

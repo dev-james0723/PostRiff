@@ -112,6 +112,8 @@ async function parse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type SupportSurvey = { id: string; resolutionRevision: number; offeredAt: string; sourceVersion: string; helpful: boolean | null; answeredAt: string | null; state: 'eligible' | 'answered' | 'reopened'; question: string };
+
 export function createApi(getToken: TokenSource) {
   async function headers(auth = true): Promise<Record<string, string>> {
     const base: Record<string, string> = { 'Content-Type': 'application/json', ...APP_GUARD_HEADER };
@@ -459,7 +461,8 @@ export function createApi(getToken: TokenSource) {
     phoneDeleteSchedule: (w: string, id: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/schedules/${encodeURIComponent(id)}`),
     supportTickets: (w: string) => get<{ tickets: { id: string; category: string; status: string; revision: number }[] }>(`${ws(w)}/support/tickets`),
     supportTicket: (w: string, id: string) => get<{ messages: { role: string; body: string; createdAt: string }[]; hasEarlierMessages: boolean;
-      history: { kind: string; actorRole: string; occurredAt: string }[]; hasEarlierEvents: boolean }>(`${ws(w)}/support/tickets/${encodeURIComponent(id)}`),
+      history: { kind: string; actorRole: string; occurredAt: string }[]; hasEarlierEvents: boolean; survey: SupportSurvey | null }>(`${ws(w)}/support/tickets/${encodeURIComponent(id)}`),
+    supportSurvey: (w: string, id: string, body: { surveyId: string; requestId: string; helpful: boolean }) => send<{ survey: SupportSurvey; duplicate: boolean }>('POST', `${ws(w)}/support/tickets/${encodeURIComponent(id)}/survey`, body),
     supportMessage: (w: string, body: { requestId: string; message: string; category?: string }, id?: string) => send('POST', `${ws(w)}/support/tickets${id ? '/' + encodeURIComponent(id) : ''}`, body),
     dataRequests: (w: string) => get<{ requests: DataRequest[] }>(`${ws(w)}/data-requests`),
     dataRequest: (w: string, body: Record<string, unknown>) =>

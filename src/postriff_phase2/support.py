@@ -55,10 +55,11 @@ def previous_event(cur, workspace, request_id, digest):
 def event(cur, before, after, actor, role, kind, request_id, digest, *, message_id=None, related_ticket_id=None):
     cur.execute('INSERT INTO public.pr_support_workflow_events(workspace_id,ticket_id,request_id,actor_id,actor_role,kind,fingerprint,'
                 'result_revision,from_status,to_status,from_priority,to_priority,from_assignee_id,to_assignee_id,related_ticket_id,message_id) '
-                'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',
                 (after['workspaceId'], after['id'], request_id, actor, role, kind, digest, after['revision'],
                  before.get('status'), after['status'], before.get('priority'), after['priority'],
                  before.get('assigneeId'), after.get('assigneeId'), related_ticket_id, message_id))
+    return cur.fetchone()[0]
 
 
 def append(cur, ticket, actor, role, body, request_id, *, kind='message'):
@@ -111,7 +112,8 @@ def customer(service, workspace, token, method, ticket_id=None, body=None):
                 rows = cur.fetchall()
                 messages = [{'role': r[0], 'body': r[1], 'createdAt': r[2].isoformat()} for r in reversed(rows[:200])]
                 events, has_earlier = history(cur, ticket)
-                return {'ticket': public(ticket), 'messages': messages, 'hasEarlierMessages': len(rows) > 200,
+                from . import support_surveys
+                return {'ticket': public(ticket), 'survey': support_surveys.read(cur, ticket), 'messages': messages, 'hasEarlierMessages': len(rows) > 200,
                         'history': events, 'hasEarlierEvents': has_earlier}
             cur.execute('SELECT id::text FROM public.pr_support_tickets WHERE workspace_id=%s AND created_by=%s ORDER BY updated_at DESC LIMIT 100', (workspace, actor))
             ids = [r[0] for r in cur.fetchall()]
