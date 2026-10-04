@@ -90,12 +90,30 @@ class BetaStatus(unittest.TestCase):
 
     def test_tracking_states_preserve_missing_and_zero(self):
         from postriff_phase2.growth.trends.beta import horizon_state
-        self.assertEqual(horizon_state(None, 200, 100), "pending_horizon")
+        self.assertEqual(horizon_state(None, 200, 100), "unscheduled")
         self.assertEqual(horizon_state(None, 0, 100), "unscheduled")
         for status, measured, expected in (("done", True, "measured"), ("done", False, "unavailable"),
                 ("claimed", False, "pending"), ("unavailable", False, "unavailable"),
-                ("cancelled", False, "disconnected"), ("pending", False, "scheduled")):
+                ("cancelled", False, "disconnected"), ("pending", False, "scheduled"),
+                ("dead", False, "unavailable")):
             self.assertEqual(horizon_state({"status": status, "measured": measured}, 0, 100), expected)
+
+    def test_growth_tracking_covers_all_visible_posts_without_dispatch(self):
+        from postriff_phase2.growth.trends.beta import tracking
+        class NoQueries:
+            def execute(self, *_):
+                raise AssertionError('Disabled tracking must not query schedules or dispatch work')
+        state={'phase2':{'jobs':[{'id':str(i),'state':'verified','providerReference':str(i),
+                                 'verification':{'at':100},'manifest':{'platform':'Threads','channelId':'owned'}}
+                                for i in range(300)]}}
+        limited=tracking(NoQueries(),'workspace',state,200,enabled=False)
+        self.assertTrue(limited['truncated'])
+        full=tracking(NoQueries(),'workspace',state,200,enabled=False,limit=300)
+        self.assertEqual(len(full['posts']),300)
+        self.assertFalse(full['truncated'])
+        self.assertTrue(all(h['state']=='disabled' for p in full['posts'] for h in p['horizons']))
+        for invalid in (0,301,True):
+            with self.assertRaises(ValueError):tracking(NoQueries(),'workspace',state,200,enabled=False,limit=invalid)
 
 
 class ComparableFeedback(unittest.TestCase):

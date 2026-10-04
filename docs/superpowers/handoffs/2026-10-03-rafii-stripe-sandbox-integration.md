@@ -19,9 +19,11 @@ project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`, team
 `team_PgXY5VdAYKcsv0RLoDPHscNq`. The production alias is
 `https://postriff-phase2-private.vercel.app`. The resumed run used the authenticated Vercel CLI identity
 `jamesau0723-6572` to resolve the alias to READY production deployment
-`dpl_CiLjwauR5atA6dJUavjBhTaR5bTr`, `consumer-saas` source
-`5c477be05e4712fca200c1c9f49ebc1d10393946`. The preserved checkpoint
-`c8165ec5ca0a9955db424d2a055152981dc612f5` is integrated with that newer source. The latest project deployment can be a
+`dpl_4kAyhPLDxLXnN9BfuwpgymMrVBoZ`, `consumer-saas` source
+`72a2eef0c10facf98e63c68a5c84f898b5866071`. The preserved checkpoint
+`c8165ec5ca0a9955db424d2a055152981dc612f5` first integrated production
+`5c477be05e4712fca200c1c9f49ebc1d10393946` in `cfea24f7`, then incorporated
+the subsequent `72a2eef0` production change. The latest project deployment can be a
 Preview; use the production alias to resolve production lineage.
 
 The Phone Call Repair receipt (2026-09-27), Growth Loop release receipt, launch
@@ -43,16 +45,21 @@ The Stripe connector now exposes context `acct_1QYChoJZl100kP8e`, name
 `d-festival.org`, with a separate selectable `livemode=false` context. All Stripe
 calls in this activation use `livemode=false`; the live context is untouched.
 Initial test Products, Prices, webhook endpoints and Portal configurations were
-empty. Required next boundaries are an isolated database branch cost approval
-and secure availability of a runtime test key. Chrome sign-in was completed by
-James; browser automation subsequently disconnected. No credential was printed.
+empty. James completed Chrome sign-in, and browser access recovered. An existing
+standard test key was read without emitting its value. Direct Stripe API reads
+verified the exact account, balance `livemode=false` and both approved Prices.
+No restricted key exists in the sandbox; no new security grant was created.
+Runtime key storage and isolated database cost approval remain pending.
 
 ## Integration and schema
 
 The preserved isolated worktree first merged the reviewed pricing checkpoint
 with production `7156703b`, producing `c8165ec5`. The resumed integration merges
 production `5c477be0` into that checkpoint, preserving both parents and resolving
-three conflicts explicitly. No pricing task is reimplemented. Conflicts preserve current
+three conflicts explicitly. The subsequent production `72a2eef0` merge resolves
+two conflicts by preserving both current Growth reading states and pricing Usage
+integration, plus the isolated PostgreSQL fixture admission checks. No pricing
+task is reimplemented. Conflicts preserve current
 Founder Ops entitlement, spending telemetry, billing records, notification
 cutover and current Next.js 16.3.8 alongside pricing/credit behavior. No reset,
 clean, stash, blind cherry-pick or production database write is part of this work.
@@ -67,7 +74,12 @@ pricing migrations are appended after that chain, with byte-identical SQL bodies
 | 051_pricing_public_four_plans.sql | 091_pricing_public_four_plans.sql | aea8276b95b5edf6f280eea2234df63503e32ef46663421091e15a489e8ce2fb |
 | 052_fixed_plan_checkout_approval.sql | 092_fixed_plan_checkout_approval.sql | 208071b872f5db5167f56839a2e8b7aac8be29d61b837feaf7e77b41ada5114a |
 
-All canonical migration files remain byte-identical. First verify the target's
+All canonical migration files remain byte-identical. A read-only production
+query verified all 57 entries in `postriff_private.schema_migrations`, ending at
+`088_founder_activation_integrity.sql`, against exact local SHA-256 values.
+The Supabase native journal contains only 088 and does not represent the whole
+application migration chain. The `5c477be0` to `72a2eef0` delta adds no migrations.
+First verify the isolated target's
 actual migration journal and checksums. Never replay historical production
 migrations or replace them with the test baseline. Only an isolated Preview
 database may receive sandbox migrations in this phase. Production migration
@@ -85,6 +97,12 @@ isolation from a Preview URL or healthy HTTP response alone.
 
 Branch-scoped Preview settings remain pending isolated database identity and
 secret-hash verification. No environment value has been changed by this phase.
+Vercel rejected the initial branch-specific writes with HTTP 400 because the
+branch was not yet present in the connected Git repository; this is not an
+environment-variable permission denial. Before publishing the branch,
+`vercel.json` disables automatic Git deployment for this exact sandbox branch.
+Explicit canonical Preview deployment remains a later action after isolation
+and credential checks pass. No shared project or Production setting is changed.
 Use branch `codex/rafii-stripe-sandbox-20261003` and preserve shared Preview values:
 
 Candidate Preview settings:
@@ -171,6 +189,15 @@ performed on the Stripe request path. Preview email flags remain off; the local
 synthetic-worker check proves the async path without customer messages.
 
 ## Required real sandbox receipt
+
+Fresh local validation of the integrated production delta uses Python 3.12.13
+and Node 24.15.0: 425 Python tests (411 pass, 14 PostgreSQL-dependent skips),
+149 web tests pass, 11 selected disposable PostgreSQL groups pass, typecheck and
+build pass, and lint passes with three existing warnings. The offline source
+scan passes with 2,604 inputs, 508 reviewed findings and zero unexpected findings.
+These are local checks with synthetic transports, not real Stripe acceptance.
+Detailed logs remain in the ignored continuation receipt directory; prior
+checkpoint evidence is retained under its original source identity.
 
 Deploy the exact integrated SHA to canonical Preview only after the target,
 lineage, scopes and isolation checks pass. Complete real Stripe-hosted sandbox
