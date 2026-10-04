@@ -519,7 +519,7 @@ class MyInvitations(unittest.TestCase):
 
     def test_accept_matches_the_email_and_joins_like_the_link_does(self):
         invitation = ("inv-1", WORKSPACE, "editor", {"can_publish": True})
-        cursor = FakeCursor([((1,), 1), (invitation, 1), (None, 1), (None, 0), (None, 1), (None, 1), (("manual-seats", 10, 1, 2, 2, 200, None, "manual", 1), 1), ((1,), 1), (None, 1), (None, 1), (None, 1), (None, 1)])
+        cursor = FakeCursor([((1,), 1), (invitation, 1), (None, 1), (None, 0), (None, 1), (None, 1), (("manual-seats", 10, 1, 2, 2, 200, None, "manual", 1), 1), ([], 0), ((1,), 1), (None, 1), (None, 1), (None, 1), (None, 1)])
         joined = service(cursor, verifier(), email_lookup=lambda principal: self.EMAIL).accept_my_invitation("t", "inv-1")
         self.assertEqual(joined, {"workspaceId": WORKSPACE, "role": "editor", "can_publish": True, "can_reply": False, "can_moderate": False, "can_manage_connections": False})
         statements = [sql for sql, _ in cursor.executed]
