@@ -67,7 +67,8 @@ class NativeCanary(unittest.TestCase):
                   'POSTRIFF_DATABASE_URL': 'postgresql://synthetic@127.0.0.1:1/postgres',
                   'POSTRIFF_SUPABASE_URL': 'https://synthetic.supabase.co',
                   'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 's' * 32,
-                  'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 's' * 32,
+                  # Opaque local fixture material, never a real provider key.
+                  'POSTRIFF_SUPABASE_SECRET_KEY': CredentialVault.generate_key(),
                   'POSTRIFF_CREDENTIAL_KEY': CredentialVault.generate_key()}
         no_io = Mock(side_effect=AssertionError('This configuration-only test forbids all DB/provider I/O'))
         with patch('postriff_phase2.hosted_app.postgres_factory', return_value=no_io):

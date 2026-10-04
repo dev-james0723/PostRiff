@@ -109,15 +109,16 @@ async function run() {
         },
         { tours, colorScheme }
       );
-      await context.route('**/*', async (route) => {
+      await context.route((url) => url.origin !== base, (route) => {
+        external.push(new URL(route.request().url()).origin);
+        return route.abort();
+      });
+      // Only fixture API traffic needs interception. Let WebKit navigate and
+      // cancel same-origin documents/assets without Playwright route overrides.
+      await context.route(base + '/api/**', async (route) => {
         const req = route.request(),
           url = new URL(req.url()),
           pathname = url.pathname;
-        if (url.origin !== base) {
-          external.push(url.origin);
-          return route.abort();
-        }
-        if (!pathname.startsWith('/api/')) return route.continue();
         const body = req.method() === 'POST' ? req.postDataJSON() : null;
         calls.push({ method: req.method(), path: pathname, query: url.search, body });
         const send = (data, status = 200) =>
