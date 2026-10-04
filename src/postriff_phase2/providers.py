@@ -167,6 +167,14 @@ class InstagramProvider(OAuthProvider):
     account_requirement = "Instagram Creator or Business account. No Facebook Page required."
     read_scope, publish_scope = "instagram_business_basic", "instagram_business_content_publish"
     publish_required = frozenset({"instagram_business_basic", "instagram_business_content_publish"})
+    # Meta Standard Access can legitimately grant these permissions to professional accounts
+    # owned/managed by app-role users before Advanced Access is approved for the public. A
+    # live grant is therefore account-scoped execution evidence; it must never be promoted
+    # into provider-wide "productionReviewed" status.
+    account_scoped_direct = True
+    # Instagram has no native "publish later" endpoint; Rafii's own queue can hold an
+    # approved manifest and call the normal Content Publishing API at the scheduled time.
+    server_schedule = True
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
     EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows Rafii to read available reach, views, likes, comments, saves and shares for this account's own posts. When History Import is available, you can separately confirm reading up to 90 days, 300 posts and 12 pages of historical metadata and analytics. Rafii retains post IDs, dates, media types, links and caption length, never caption text or caption hashes. Disconnecting removes imported metadata and its analytics; delayed purges retry and block further imports. Analytics permission alone does not start an import.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
 

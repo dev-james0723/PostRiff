@@ -206,7 +206,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -214,7 +214,9 @@ def runtime_from_environment(environ=None):
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
-    social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
+    social = HostedSocial(service.oauth, providers, storage) if any(
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+    ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.

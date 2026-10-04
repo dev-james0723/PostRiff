@@ -132,8 +132,8 @@ export function ConnectSheet({
     const urlProviderId = search.get('connect') ?? undefined;
     const urlCapabilityValue = search.get('capability');
     const urlCapability = CONNECT_CAPABILITIES.find((value) => value === urlCapabilityValue);
-    const requestedProviderId = request?.providerId ?? urlProviderId;
-    const requestedCapability = request?.capability ?? urlCapability;
+    const requestedProviderId = urlProviderId ?? request?.providerId;
+    const requestedCapability = urlCapability ?? request?.capability;
     const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
 
     setProviderId(initial?.id ?? '');
@@ -361,6 +361,7 @@ export function ConnectSheet({
                       <RadioGroupItem
                         key={option.key}
                         value={option.key}
+                        aria-label={option.label}
                         label={option.label}
                         description={option.key === 'analytics' && provider && ['threads', 'instagram'].includes(provider.id) ? importCopy.analyticsAccess : option.description}
                         className='rafii-quiet rounded-[var(--rafii-radius-control)] p-3 transition-colors data-[state=checked]:rafii-glass-selected'

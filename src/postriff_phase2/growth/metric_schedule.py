@@ -163,7 +163,11 @@ class MetricScheduler:
 
     def provider_allowed(self, provider):
         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
-        return bool(provider in NATIVE_ANALYTICS_SCOPES and adapter and getattr(adapter, "production_reviewed", False) is True
+        reviewed_or_scoped = bool(adapter and (
+            getattr(adapter, "production_reviewed", False) is True or
+            getattr(adapter, "account_scoped_direct", False) is True
+        ))
+        return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
                     and getattr(adapter, "execution_enabled", True) is True)
 
     # --- scheduling (SQL only, inside the verification transaction) ---------------------------------------------------
