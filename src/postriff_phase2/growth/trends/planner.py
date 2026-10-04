@@ -13,6 +13,7 @@ from . import config
 from .contracts import ContractError, canonical, digest, instant, iso
 from .jobs import TrendJobs, micro_usd
 from .policy import SourcePolicy, admit
+from .providers.registry import contract_runtime_version
 from .store import row, rows, utcnow
 
 
@@ -75,8 +76,10 @@ class FrontierPlanner:
         if instant(controls['start_at']) < instant(current.effective_at):
             raise ContractError('schedule_before_policy')
         cap, policy, _adapter = self.registry.resolve(provider_id, current.operation, scope_key, version, at=at)
+        runtime_version = contract_runtime_version(
+            stored['provider_contract_version'], stored.get('contract_manifest') or {})
         if (canonical(asdict(current)) != canonical(asdict(policy))
-                or stored['provider_contract_version'] != cap.version):
+                or runtime_version != cap.version):
             raise ContractError('planner_contract_mismatch')
         if controls['seconds'] > cap.timeout_seconds:
             raise ContractError('schedule_timeout_exceeded')

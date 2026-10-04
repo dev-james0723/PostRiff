@@ -65,6 +65,7 @@ class FakeStore:
         self.p = p or policy(rights=copy.deepcopy(PERMISSIONS))
         self.manifest = {**asdict(self.p), 'schedule': schedule()}
         self.contract_version = CAP.version
+        self.contract_manifest = {}
         self.health = None
         self.entitlements = [{'workspace_id': WORKSPACE}]
         self.budgets = [dict(budget_key=k, dimension=d, cap_micro_usd=100,
@@ -82,7 +83,8 @@ class FakeStore:
     def _policy(self, cur, scope, provider, version, at):
         if self.denied:
             raise ContractError('source_policy_denied')
-        return {'manifest': copy.deepcopy(self.manifest), 'provider_contract_version': self.contract_version}
+        return {'manifest': copy.deepcopy(self.manifest), 'provider_contract_version': self.contract_version,
+                'contract_manifest': copy.deepcopy(self.contract_manifest)}
 
 
 class FrontierTests(OfflineTest):
@@ -177,6 +179,10 @@ class FrontierTests(OfflineTest):
             self.reject(self.plan)
         self.store.manifest['schedule'] = schedule()
         self.store.contract_version = 'other-v2'
+        self.reject(self.plan)
+        self.store.contract_manifest = {'protocol': CAP.version}
+        self.assertIsNotNone(self.plan())
+        self.store.contract_manifest = {'protocol': 'different-runtime'}
         self.reject(self.plan)
 
     def test_persisted_rights_changes_cannot_use_stale_registry(self):
