@@ -28,9 +28,14 @@ def main():
     env={k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG','TERM','POSTRIFF_PG_BIN','PLAYWRIGHT_MODULE','BROWSER_EXECUTABLE')}
     env.update(LC_ALL='C',POSTRIFF_LOCAL_CLI='0',POSTRIFF_RESEARCH='0',POSTRIFF_DEV_WEB_ORIGIN='http://127.0.0.1:4439')
     env.setdefault('PLAYWRIGHT_MODULE',str(ROOT/'.codex/consumer-ready/web/node_modules/playwright'))
+    history = '--history-import' in sys.argv
+    if history:
+        env.update(RAFII_WEB_URL='http://127.0.0.1:4439',RAFII_HISTORY_PG_PORT='55479',RAFII_FIXTURE_PYTHON=sys.executable,RAFII_HISTORY_REPORT_DIR=str(OUT/'history-import-browser'))
     processes=[];logs=[]
     try:
-        commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port','4438','--pg-port','55479']),('frontend',[sys.executable,'scripts/consumer_ready_web.py','npm','run','start','--','-p','4439','-H','127.0.0.1'])]
+        backend=[sys.executable,'scripts/postriff_dev_hosted.py','--port','4438','--pg-port','55479']
+        if history: backend.append('--history-import-fixture')
+        commands=[('backend',backend),('frontend',[sys.executable,'scripts/consumer_ready_web.py','npm','run','start','--','-p','4439','-H','127.0.0.1'])]
         for name,command in commands:
             log=(OUT/f'durable-{name}.log').open('w');logs.append(log)
             processes.append(subprocess.Popen(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
@@ -43,7 +48,7 @@ def main():
                         if response.status==200:break
                 except Exception:time.sleep(.25)
             else:raise RuntimeError('Local server readiness deadline exceeded')
-        test = 'consumer-performance-browser.cjs' if '--performance' in sys.argv else 'consumer-durable-browser.cjs'
+        test = 'history-import-browser.cjs' if history else ('consumer-performance-browser.cjs' if '--performance' in sys.argv else 'consumer-durable-browser.cjs')
         return subprocess.call(['node','web/tests/' + test],cwd=ROOT,env=env)
     finally:
         import signal

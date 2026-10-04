@@ -1,0 +1,89 @@
+{
+  "execution": "local validation; synthetic providers only; no production import/migration/activation",
+  "baseCommit": "7156703b3725156c6041b059040007ab2ea63fab",
+  "files": {
+    ".github/workflows/consumer-ready.yml": "80b07025f60c44f5030ed0f965d601737798a4018fc7bdda6f9d1962820c4637",
+    "docs/design/growth-phase0/CONTRACTS.md": "32ef72ab17db6fe977711a5e63dae8cf2f2cbe8a1177aa0b1981863ce502b795",
+    "scripts/consumer_ready_browser.py": "5c83d4e780194943d73ecfd35f1e6d1a4934fe2c2157b99f7017575a690d6b43",
+    "scripts/postriff_dev_hosted.py": "32c0886bf55766a75ab2cb7066ab8d4293425dd410914491e68779efc1b936ad",
+    "src/postriff_phase2/growth/history_import.py": "9fb3a6c6bbf20a02d3eac1d6929a587d1e6bf19913605c53650e2362187e1f83",
+    "src/postriff_phase2/hosted_app.py": "875a3ae8caad012fa7dc33c2a0fae5bcfbe2dce25742534e09e1be47bbf5ac00",
+    "src/postriff_phase2/providers.py": "897d4711e8be5fd3cb05b11822ec0a1f2012d91c788e4274449f52dff4d84d79",
+    "tests/phase2/history_import_browser_fixture.py": "0ed34d0d8af67b51d79b54369b11bebd2e8813e6b6792acc51ca0a29cf6fa994",
+    "tests/phase2/postgres_history_import_stage3b.py": "fda29bffd8fcd2b93459e6e65b1ed6e9bf52e5fd7e0aa785f1979d9f7cf88f3b",
+    "tests/test_growth_history_import.py": "8fca914b5a594311dafd4b546be7cf9a473be9890a9dcd1d2c3e9edc99fdece7",
+    "web/src/features/analytics/coverage.ts": "11858fc34080d65f83513849b1764740c747e26849215e3efd0dddc203772e43",
+    "web/src/features/channels/capability-chips.tsx": "17a3cb19c7de160f3c2961ba41d006686317e2023a33b924213fe4dc333026c6",
+    "web/src/features/channels/channel-card.tsx": "9be948cf60a6a8e0ecb3ecfdb7674c0861599b161966a32d5f296c572cf7888f",
+    "web/src/features/channels/connect-sheet.tsx": "432a1a0008759a94b84d984e9bab65955b3b97b2906b393953a45caeada76684",
+    "web/src/features/channels/history-import-control.tsx": "5931fbcf5363f2f5d0b314a8213e8b7ce602cdd9fc93164e46eb5a1fc8aea99d",
+    "web/src/lib/api/client.ts": "9fff433730d7d29b6bc0d108bba4d1b5ec2fc4e221d629cc0fa2bd1409518960",
+    "web/src/lib/channels/capabilities.ts": "65ab9ce005fe5746f2895b5e57abd4135e7d809ccada98d46a83f370871a35ff",
+    "web/src/lib/channels/history-import-copy.json": "30623da1e8a44bc9bfc00d7c9bc087e13173aa1f3f4fb853f155993f2d4fcf0f",
+    "web/src/lib/channels/history-import-copy.ts": "26c5ecdd2a53ea2ea5d1262a131745785f9b1bed781bd3e2f5152f978b858064",
+    "web/src/lib/channels/history-import.ts": "e08a86f88d42397f88c9c1ee6aa4de370956593796686842bf553ca31fd60640",
+    "web/tests/history-import-browser.cjs": "dcfdb38c841bc99afa98d8c602680fb2d310fa42d1c1c7802f8bc26118e433d1",
+    "web/tests/history-import.test.cjs": "c053d19e0e80b7cde56067235e2aceb7b6ce9c8e1364348b0b9206b21b106ba4"
+  },
+  "checks": [
+    {
+      "command": "PYTHONPATH=src:tests .venv/bin/python -m unittest discover -s tests",
+      "result": "PASS",
+      "tests": 3721,
+      "skipped": 367
+    },
+    {
+      "command": "TREND_VISUAL_TEST_PYTHON=$PWD/.venv/bin/python node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs",
+      "result": "PASS",
+      "tests": 659
+    },
+    {
+      "command": "PYTHONPATH=src:tests .venv/bin/python scripts/postriff_pg_suite.py postgres_growth_history postgres_growth_metric_reads postgres_history_import_stage3b",
+      "result": "PASS",
+      "groups": 3
+    },
+    {
+      "command": "npm --prefix web run typecheck",
+      "result": "PASS"
+    },
+    {
+      "command": "npm --prefix web run lint",
+      "result": "PASS",
+      "existingWarnings": 2
+    },
+    {
+      "command": ".venv/bin/python scripts/consumer_ready_web.py npm run build",
+      "result": "PASS",
+      "source": "isolated copy of current web source; pinned dependencies"
+    },
+    {
+      "command": ".venv/bin/python scripts/consumer_ready_browser.py --history-import",
+      "result": "PASS",
+      "checks": 14,
+      "pageErrors": 0,
+      "axeSeriousCritical": 0,
+      "source": "isolated production build; disposable PostgreSQL; synthetic providers/status fixtures; browser faults explicit"
+    },
+    {
+      "command": "node web/scripts/copy-audit.mjs --check",
+      "result": "PASS",
+      "bannedPhrases": 0
+    },
+    {
+      "command": "PYTHONPATH=src:tests .venv/bin/python scripts/consumer_ready_secrets.py",
+      "result": "PASS",
+      "files": 2496,
+      "unexpected": 0
+    }
+  ],
+  "limitations": [
+    "Live provider access and production data/schema acceptance are NOT RUN; follow the separate activation checklist.",
+    "Native-language review remains an activation gate.",
+    "Unrelated broader PostgreSQL groups are delegated to existing CI; locally the three affected groups were run."
+  ],
+  "productionConfiguration": {
+    "project": "postriff-phase2-private",
+    "POSTRIFF_HISTORY_IMPORT": "0",
+    "otherStage3AFlags": "unchanged"
+  }
+}
