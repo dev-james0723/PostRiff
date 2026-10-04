@@ -145,7 +145,9 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const label = `Image${dims ? ` ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const assetKind = kindOf(asset);
+  const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : 'Photo');
+  const label = `${assetKind === 'video' ? 'Video' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
     <ContextMenu>
@@ -195,13 +197,14 @@ export function AssetCard({
               )}
             </TiltCard>
             <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
+              <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
               <AnimatedBadge
                 size='sm'
                 status={publishing ? 'loading' : 'neutral'}
                 showIcon={count > 0}
                 icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
                 className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground')}
-                title={publishing ? 'A post using this image is publishing now' : undefined}
+                title={publishing ? 'A post using this asset is publishing now' : undefined}
               >
                 {usageLabel(count)}
               </AnimatedBadge>
@@ -233,7 +236,7 @@ export function AssetCard({
           )}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel='Image actions'>
+      <ContextMenuContent ariaLabel={`${assetKind === 'video' ? 'Video' : 'Photo'} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
