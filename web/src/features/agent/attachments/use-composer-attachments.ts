@@ -587,7 +587,8 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
     (assets: readonly Asset[], role: MediaRole = 'post') => {
       for (const asset of assets) {
         const kind = kindOf(asset);
-        if (!kind) continue;
+        // Documents/files use the Universal Library reference path, not the photo/video media wire contract.
+        if (kind !== 'image' && kind !== 'video') continue;
         const key = nextKey();
         if (
           add({
