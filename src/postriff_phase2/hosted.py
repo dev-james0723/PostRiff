@@ -356,7 +356,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -400,7 +400,7 @@ class HostedWorkspaceService:
         self.mailer = mailer or Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
         self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
-        self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
+        self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
