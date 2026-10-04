@@ -6,6 +6,17 @@ from ..contracts import ContractError
 from ..policy import ProviderCapability, SourcePolicy
 
 # This catalogue documents admission gaps; it is not a list of active providers.
+def contract_runtime_version(contract_version, manifest):
+    """Bind execution to the reviewed protocol artifact, not a review-row id.
+
+    Provider contracts are immutable review receipts. A later review may renew
+    the same pinned protocol under a new contract version without changing the
+    runtime capability version.
+    """
+    protocol = manifest.get("protocol") if isinstance(manifest, dict) else None
+    return protocol if isinstance(protocol, str) and protocol else contract_version
+
+
 CATALOGUE = {
     "bluesky": {"operations": ["live_sample", "archive_replay"], "kinds": ["raw_post"],
                 "blocker": "Operation-specific host/policy review; archive replay additionally needs metered access and cap."},

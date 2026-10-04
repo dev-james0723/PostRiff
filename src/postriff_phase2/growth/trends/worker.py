@@ -23,7 +23,7 @@ from .retry import fail_attempt
 from . import quarantine
 from .policy import SourcePolicy, admit
 from .providers.base import Batch
-from .providers.registry import ProviderRegistry
+from .providers.registry import ProviderRegistry, contract_runtime_version
 from .store import TrendStore, row, rows, utcnow
 
 LOG = logging.getLogger('postriff.trends')
@@ -50,17 +50,26 @@ def configured_registry(store):
     from .providers import bluesky, runtime
     registry = ProviderRegistry()
     with store.transaction() as cur:
-        cur.execute('''SELECT manifest,provider_contract_version FROM public.pr_trend_source_policies
-            WHERE readiness='ready' AND revoked_at IS NULL AND valid_from<=clock_timestamp()
-            AND expires_at>clock_timestamp() ORDER BY scope_key,provider_id,version LIMIT 100''')
+        cur.execute('''SELECT p.manifest,p.provider_contract_version,c.manifest AS contract_manifest
+            FROM public.pr_trend_source_policies p
+            JOIN public.pr_trend_provider_contracts c
+              ON (c.provider_id,c.version)=(p.provider_id,p.provider_contract_version)
+            WHERE p.readiness='ready' AND p.revoked_at IS NULL AND p.valid_from<=clock_timestamp()
+            AND p.expires_at>clock_timestamp() AND c.revoked_at IS NULL
+            AND c.valid_from<=clock_timestamp() AND c.expires_at>clock_timestamp()
+            ORDER BY p.scope_key,p.provider_id,p.version LIMIT 100''')
         policies = rows(cur)
     keys = {f.name for f in fields(SourcePolicy)}
     for item in policies:
         p = item['manifest']
         try:
             policy = SourcePolicy(**{k: v for k, v in p.items() if k in keys})
-            if (p.get('provider_id'), p.get('operation'), item['provider_contract_version']) == (
-                    'bluesky', 'live_sample', bluesky.PROTOCOL):
+            contract_manifest = item.get('contract_manifest') or {}
+            runtime_version = contract_runtime_version(item['provider_contract_version'], contract_manifest)
+            if ((p.get('provider_id'), p.get('operation'), runtime_version) ==
+                    ('bluesky', 'live_sample', bluesky.PROTOCOL)
+                    and contract_manifest.get('endpoint') == bluesky.CAPABILITY.endpoint
+                    and contract_manifest.get('billable_unit') == bluesky.CAPABILITY.billable_unit):
                 selected = (bluesky.CAPABILITY, _bluesky)
             else:
                 selected = runtime.binding(store, p, item['provider_contract_version'])
