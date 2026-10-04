@@ -569,7 +569,9 @@ export const postTrackingSchema = z.strictObject({
     horizons: z.array(z.strictObject({
       window: z.enum(['t0', '1h', '24h', '7d']),
       state: z.enum(['disabled', 'unsupported', 'disconnected', 'rights_unavailable', 'pending_horizon', 'unscheduled', 'scheduled', 'pending', 'measured', 'unavailable']),
-      due_at: finite.nullable(), reason: text.nullable()
+      due_at: finite.nullable(),
+      deadline_at: finite.nullable().optional(), next_attempt_at: finite.nullable().optional(),
+      reason: text.nullable()
     }))
   })).max(120)
 });

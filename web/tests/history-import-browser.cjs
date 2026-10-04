@@ -1,5 +1,7 @@
 /** Actual Channels screen and hosted endpoint on disposable PG. Synthetic identities/providers/status seeds only. */
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const engine = process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+if (!['chromium','webkit'].includes(engine)) throw new Error('Unsupported browser engine');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,7 +34,7 @@ async function api(method, url, body) {
   const fixture = (kind) => execFileSync(python, ['tests/phase2/history_import_browser_fixture.py',kind,pgPort,principal,wid,conn], {cwd:root,encoding:'utf8'});
   fixture('ready');
   const tours = Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-  const browser = await chromium.launch({headless:true});
+  const browser = await ({chromium,webkit})[engine].launch({headless:true});
   const context = await browser.newContext({viewport:{width:1280,height:960},reducedMotion:'reduce',locale:'en-US'});
   await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
@@ -155,7 +157,7 @@ async function api(method, url, body) {
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);
-    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
+    const report={engine,execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
     fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

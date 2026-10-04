@@ -1,5 +1,8 @@
 /** Actual screens + disposable PG + deterministic AI fixtures. No external host, model or publishing. */
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const engine = process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+const assertEngine = ['chromium','webkit'].includes(engine);
+if (!assertEngine) throw new Error('Unsupported browser engine');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
@@ -9,7 +12,7 @@ const base = process.env.RAFII_WEB_URL || 'http://127.0.0.1:3297';
 assert.equal(new URL(base).hostname, '127.0.0.1');
 const principal = randomUUID();
 const root = path.resolve(__dirname, '../..');
-const out = path.join(root, 'docs/design/postdoctor-v2/evidence');
+const out = process.env.POSTRIFF_GROWTH_EVIDENCE_DIR || path.join(root, 'docs/design/postdoctor-v2/evidence');
 fs.mkdirSync(out, { recursive: true });
 const headers = {
   'Content-Type': 'application/json',
@@ -55,8 +58,8 @@ async function mobile(page, selector) {
   function fixture(kind) {
     return JSON.parse(
       execFileSync(
-        '/tmp/rafii-phase1-env/bin/python',
-        ['tests/phase2/postdoctor_v2_browser_fixture.py', kind, '55797', principal, wid],
+        process.env.POSTRIFF_TEST_PYTHON || 'python3',
+        ['tests/phase2/postdoctor_v2_browser_fixture.py', kind, process.env.POSTRIFF_GROWTH_TEST_PG_PORT || '55797', principal, wid],
         { cwd: root, encoding: 'utf8' }
       ).trim()
     );
@@ -69,7 +72,7 @@ async function mobile(page, selector) {
         .matchAll(/^ {2,4}id: '([a-z-]+)'/gm)
     ].map((m) => [m[1], 1])
   );
-  const browser = await chromium.launch({ headless: true });
+  const browser = await ({chromium,webkit})[engine].launch({ headless: true });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     reducedMotion: 'reduce'
@@ -156,7 +159,7 @@ async function mobile(page, selector) {
     assert.ok(await dialog.getByLabel('Advice goal').evaluate(el=>el===document.activeElement));
     assert.deepEqual(errors,[]);
     checks.push('1440/390/430 composer, goal, missing audience, three actions, both-order comparison, selective acceptance, recheck and frozen synthetic outcome');
-    fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'PASS',execution:'local deterministic providers, synthetic observations, desktop/mobile emulation',checks,realModelCalls:0,pageErrors:errors},null,2));
+    fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'PASS',engine,execution:'local deterministic providers, synthetic observations, desktop/mobile emulation',checks,realModelCalls:0,pageErrors:errors},null,2));
     console.log(JSON.stringify({status:'PASS',checks}));
   } catch(error) {await screenshot(page,'failure');console.log((await page.locator('body').innerText()).slice(-4000));throw error;}
   finally {await browser.close();}

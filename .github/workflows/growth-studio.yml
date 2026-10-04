@@ -13,7 +13,7 @@ jobs:
       matrix:
         engine: [chromium, webkit]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'
@@ -70,6 +70,33 @@ jobs:
           done
           test "$ready" = 1
           node web/tests/growth-phase2-browser.cjs > "$POSTRIFF_GROWTH_EVIDENCE_DIR/browser.log" 2>&1
+          evidence_root="$POSTRIFF_GROWTH_EVIDENCE_DIR"
+          for lane in phase1 postdoctor-v2 history; do
+            kill "$api_pid"
+            wait "$api_pid" || true
+            case "$lane" in
+              phase1) pg_port=55795; fixture_flag=--growth-fixture; harness=growth-phase1-browser.cjs ;;
+              postdoctor-v2) pg_port=55797; fixture_flag=--postdoctor-v2-fixture; harness=postdoctor-v2-browser.cjs ;;
+              history) pg_port=55836; fixture_flag=--history-import-fixture; harness=history-import-browser.cjs ;;
+            esac
+            export POSTRIFF_GROWTH_EVIDENCE_DIR="$evidence_root/$lane"
+            export POSTRIFF_GROWTH_TEST_PG_PORT="$pg_port"
+            export RAFII_HISTORY_PG_PORT="$pg_port"
+            export RAFII_FIXTURE_PYTHON=python3
+            export RAFII_WEB_URL=http://127.0.0.1:3296
+            export RAFII_HISTORY_REPORT_DIR="$POSTRIFF_GROWTH_EVIDENCE_DIR"
+            mkdir -p "$POSTRIFF_GROWTH_EVIDENCE_DIR"
+            python scripts/postriff_dev_hosted.py --port 4396 --pg-port "$pg_port" "$fixture_flag" > "$POSTRIFF_GROWTH_EVIDENCE_DIR/api.log" 2>&1 &
+            api_pid=$!
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent http://127.0.0.1:3296/api/auth/config > /dev/null; then ready=1; break; fi
+              kill -0 "$api_pid" "$web_pid"
+              sleep 1
+            done
+            test "$ready" = 1
+            node "web/tests/$harness" > "$POSTRIFF_GROWTH_EVIDENCE_DIR/browser.log" 2>&1
+          done
       - name: Preserve evidence for the exact source
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
