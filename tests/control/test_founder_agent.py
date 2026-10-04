@@ -328,6 +328,29 @@ class HarnessManagerTests(unittest.TestCase):
         result = asyncio.run(Runner.run(agent, items, context=ctx, max_turns=10, run_config=RunConfig(tracing_disabled=True)))
         return ctx, result, routes
 
+    def test_semantic_progress_failure_preserves_founder_receipts_and_attempt_accounting(self):
+        text = "整理今日最需要我處理的三件事。"
+        ctx = founder_ctx("demo", Control(Scenarios.outage), request_text=text)
+        ctx.config.flags["RAFII_AGENT_THINKING_STATES_ENABLED"] = True
+        attempted = []
+
+        def unavailable(event):
+            attempted.append(event)
+            raise RuntimeError("Synthetic progress sink unavailable")
+
+        ctx.thinking_emit = unavailable
+        agent, _ = founder_agent.build_manager(ctx, model_factory=founder_agent.founder_model_factory())
+        result = asyncio.run(Runner.run(agent, founder_agent.assemble(ctx, text, []), context=ctx,
+                                        max_turns=10, run_config=RunConfig(tracing_disabled=True)))
+        self.assertTrue(attempted, "the enabled progress path must actually be exercised")
+        self.assertGreater(ctx.ledger.model_requests, 0)
+        self.assertEqual(ctx.ledger.model_requests, len(ctx.ledger.spans))
+        self.assertEqual(ctx.ledger.calls, [], "progress failures must not become provider failures")
+        receipts = {row["receiptId"] for row in ctx.extra["founder"]["receipts"]}
+        self.assertTrue(receipts and result.final_output.facts)
+        self.assertTrue(all(fact.receiptId in receipts for fact in result.final_output.facts))
+        self.assertTrue(all(event["type"] == "progress.updated" for event in attempted))
+
     def test_seven_example_questions_call_the_expected_tools_and_cite_receipts(self):
         for text, expected in QUESTIONS:
             with self.subTest(question=text):

@@ -100,7 +100,9 @@ function harness({ connectGate, transcriptGate, endGate, turnGate, initialFailur
   const cache = new Map();
   function load(request, from = path.join(WEB, 'src/lib/agent-runtime/voice-session.ts')) {
     if (stubs[request]) return stubs[request];
-    const filename = path.resolve(path.dirname(from), `${request}.ts`);
+    const filename = request.startsWith('@/')
+      ? path.resolve(WEB, 'src', `${request.slice(2)}.ts`)
+      : path.resolve(path.dirname(from), `${request}.ts`);
     if (cache.has(filename)) return cache.get(filename);
     const exports = {}; cache.set(filename, exports);
     const source = fs.readFileSync(filename, 'utf8');

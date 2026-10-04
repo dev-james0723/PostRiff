@@ -568,7 +568,7 @@ def _build(ctx: RafiiRunContext, *, model_factory, workload):
         route = runtime_config.Route(workload, "scripted", f"scripted:{AGENT_NAME}", "deterministic test model", True)
         raw = model_factory(workload, AGENT_NAME)
     routes = [{**route.trace(), "agent": AGENT_NAME}]
-    model = manager_mod.metered(raw, ctx.ledger, agent=AGENT_NAME, workload=workload, route=route.trace())
+    model = manager_mod.metered(raw, ctx, agent=AGENT_NAME, workload=workload, route=route.trace())
     names = specialists.available(FOUNDER_TOOL_NAMES)
     if set(names) != set(FOUNDER_TOOL_NAMES):
         raise AlphaError("The founder tools are not registered.", 500, code="founder_tools_missing")

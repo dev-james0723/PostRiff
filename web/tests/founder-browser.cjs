@@ -281,6 +281,37 @@ async function main() {
       });
 
       if (width === 1440) {
+        // Hold the real Demo record read: the loading table must clear Live records immediately.
+        await attempt('Live to Demo record boundary with a delayed read', async () => {
+          await page.goto(base + '/founder/customers');
+          await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor({ timeout: 30000 });
+          await settle(page, tracker);
+          const openRecords = page.locator('button[aria-label^="Open "]');
+          const liveLabels = await openRecords.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+          check('record boundary has a nonempty Live population', liveLabels.length > 0, liveLabels);
+          if (!liveLabels.length) return;
+          let releaseRead;
+          const held = new Promise((resolve) => { releaseRead = resolve; });
+          const pattern = '**/api/control/v2/workspace/demo/query';
+          await page.route(pattern, async (route) => { await held; await route.continue(); });
+          try {
+            const nextRead = page.waitForRequest(pattern, { timeout: 10000 });
+            await page.getByRole('radio', { name: 'Demo', exact: true }).click();
+            await nextRead;
+            const pendingLabels = await openRecords.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+            check('pending Demo read never displays Live rows', !pendingLabels.some((label) => liveLabels.includes(label)), pendingLabels);
+            await page.screenshot({ path: path.join(outDir, '1440-demo-record-boundary-pending.png') });
+          } finally {
+            releaseRead();
+            await settle(page, tracker);
+            await page.unroute(pattern);
+          }
+          const demoLabels = await openRecords.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+          check('settled Demo population is nonempty and distinct from Live', demoLabels.length > 0 && !demoLabels.some((label) => liveLabels.includes(label)), demoLabels);
+          const seen = drain(tracker);
+          check('record boundary has no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
+        });
+
         // Evidence drawer from a real receipt; Escape closes it and returns focus.
         await attempt('evidence drawer opens from ?evidence=', async () => {
           const overview = await (await context.request.get(base + '/api/control/v2/overview?mode=demo&period=30d')).json();

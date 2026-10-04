@@ -148,7 +148,11 @@ for name in ('expiry','membership','permission','consent','consent_version','mut
     if name=='consent': sql("UPDATE pr_sms_consents SET status='opted_out' WHERE user_id=%s",ONE)
     if name=='consent_version': sql("UPDATE pr_sms_consents SET version='obsolete' WHERE user_id=%s",ONE)
     if name=='mute': ns.set_preference(wid,ONE,{'scope':'all','category':'*','mute_hours':1})
-    if name=='quiet': ns.set_preference(wid,ONE,{'scope':'all','category':'*','quiet_start':0,'quiet_end':1439,'time_zone':'UTC'})
+    if name=='quiet':
+        # The end is exclusive: 00:00–23:59 leaves 23:59 unquiet. Bracket
+        # the real UTC minute so this refusal test also covers midnight.
+        minute=int(time.time()//60)%1440
+        ns.set_preference(wid,ONE,{'scope':'all','category':'*','quiet_start':(minute-60)%1440,'quiet_end':(minute+60)%1440,'time_zone':'UTC'})
     result=send(event)
     assert result['state'] in ('expired','membership','preference','defer'),(name,result)
     assert not fake.sent,(name,result)
