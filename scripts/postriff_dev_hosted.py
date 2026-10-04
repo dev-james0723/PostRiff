@@ -271,6 +271,7 @@ def main():
     parser.add_argument('--radar-fixture',action='store_true',help='Radar deterministic providers and models; disposable local database only')
     parser.add_argument('--postdoctor-v2-fixture',action='store_true',help='Post Doctor v2 deterministic models, disposable database only')
     parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
+    parser.add_argument('--history-import-fixture', action='store_true', help='History Import review/status on disposable PostgreSQL; synthetic providers only')
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
@@ -304,6 +305,9 @@ def main():
             from growth_postdoctor_v2_fixtures import Models, ENV
         growth_writer=Writer()
     service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
+    if args.history_import_fixture:
+        from postriff_phase2.growth.history_import import HistoryImporter
+        service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
     if args.growth_fixture:
         from postriff_phase2.growth.service import GrowthService
         service.growth=GrowthService(service,env=ENV,router_factory=Models().router)

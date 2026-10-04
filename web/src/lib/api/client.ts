@@ -1,5 +1,6 @@
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
+import type { HistoryImportStatus } from '@/lib/channels/history-import';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -251,6 +252,10 @@ export function createApi(getToken: TokenSource) {
       send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),
     ownedPosts: (w: string, id: string, cursor?: string) =>
       send<import('./types').OwnedPostPage>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts`, { confirmed: true, cursor: cursor ?? null, limit: 25 }),
+    historyImportStatus: (w: string, id: string) =>
+      get<HistoryImportStatus>(`${ws(w)}/channels/${encodeURIComponent(id)}/history-import`),
+    requestHistoryImport: (w: string, id: string, body: { confirmed: boolean }) =>
+      send<HistoryImportStatus>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/history-import`, body),
     importOwnedPosts: (w: string, id: string, receipt: string, postIds: string[], expectedRevision: number) =>
       send<Snapshot>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts/import`, { receipt, postIds, expectedRevision, confirmedAuthorship: true }),
     importOwnedPostSelection: (w: string, id: string, selections: { receipt: string; postIds: string[] }[], labels: Record<string, string>, expectedRevision: number) =>
