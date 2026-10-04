@@ -628,6 +628,10 @@ async function run() {
           await page.getByRole('combobox', { name: /^Platform/ }).selectOption('bluesky');
           await queryHas('platform', 'bluesky');
           await queryHas('cursor', null);
+          // queryHas observes request admission, not the completion of the list
+          // and its dependent panels. Finish this fixture scenario before a hard
+          // reload replaces its document; the separate Lab race stays in flight.
+          await page.waitForLoadState('networkidle');
           scenario = 'fresh';
           await page.reload({ waitUntil: 'domcontentloaded' });
           await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
