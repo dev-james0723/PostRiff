@@ -170,6 +170,12 @@ class BusinessWorkspaceTests(unittest.TestCase):
     def test_live_customer_detail_reads_linked_canonical_records_without_other_tenants_or_private_content(self):
         ticket=str(uuid.uuid4()); invoice='fictional-invoice-'+uuid.uuid4().hex
         other=str(uuid.uuid4()); other_ticket=str(uuid.uuid4())
+        # These two direct SQL fixtures have no workflow events. Remove only
+        # their exact IDs so later global support metrics see their own source.
+        def cleanup_tickets():
+            with psycopg.connect(self.dsn,autocommit=True) as con:
+                con.execute('DELETE FROM public.pr_support_tickets WHERE id=ANY(%s::uuid[])',([ticket,other_ticket],))
+        self.addCleanup(cleanup_tickets)
         with psycopg.connect(self.dsn,autocommit=True) as con:
             con.execute('INSERT INTO auth.users(id) VALUES(%s)',(other,))
             other_workspace=str(con.execute("SELECT public.pr_bootstrap(%s,'studio')",(other,)).fetchone()[0])
