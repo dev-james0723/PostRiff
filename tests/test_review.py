@@ -72,6 +72,13 @@ class ReviewTests(unittest.TestCase):
         self.scope['publicationPeriod']['end'] = self.scope['publicationPeriod']['start']
         with self.assertRaises(AlphaError): self.context()
 
+    def test_sql_microsecond_precision_does_not_make_exact_due_time_early(self):
+        at=1791028800.8240361
+        self.state['phase2']['jobs'][0]['verification']['at']=at-86400
+        self.rows[0]['observedAt']=float('1791028800.824036')
+        self.rows[0]['ingestedAt']=at+1
+        self.assertTrue(self.projection()['nativeResults'][0]['eligible'])
+
     def test_takeaway_cannot_propose_hypothesis_with_other_scope_or_low_arms(self):
         p=self.projection()
         h={'id':'h','cohort':{'connectionId':'own','provider':'instagram','language':'en','contentTypeId':'text','definitionVersion':insights.DEFINITION_VERSION},'metric':'reach','dimension':'length','sample_a':5,'sample_b':5,'evidence_ids':['0'],'counter_evidence_ids':[],'expiresAt':NOW+100}

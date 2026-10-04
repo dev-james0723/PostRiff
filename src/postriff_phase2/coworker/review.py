@@ -332,7 +332,7 @@ def project_review(state, context, observations, direct_connections, now):
                           else 'definition_mismatch' if row.get('definitionVersion') != metric['definitionVersion'] or row.get('unit') != metric['unit']
                           else 'missing_observation_time' if not finite(row.get('observedAt')) or not finite(row.get('ingestedAt'))
                           else 'after_cutoff' if row['observedAt'] > cutoff or row['ingestedAt'] > cutoff
-                          else 'window_unqualified' if row['observedAt'] < published + HORIZONS[context['horizon']]
+                          else 'window_unqualified' if datetime.fromtimestamp(row['observedAt'],timezone.utc) < datetime.fromtimestamp(published,timezone.utc)+timedelta(seconds=HORIZONS[context['horizon']])
                           else None)
                 if reason:
                     reasons.append(reason)
@@ -488,6 +488,10 @@ def format_snapshot(snapshot, format_):
                 f"Publication cohort: [{period_['start']}, {period_['end']}) · {period_['timezone']}",
                 f"Accounts: {', '.join(ctx['channelIds']) or 'None'} · {ctx['horizon']} · {ctx['aggregation']}",
                 f"Filters: {json.dumps(ctx,ensure_ascii=False,sort_keys=True)}",'\n## Scope and coverage',json.dumps(s['coverage'],ensure_ascii=False,sort_keys=True),
+                '\n## Comparable native groups',json.dumps(s['groups'],ensure_ascii=False,sort_keys=True),
+                '\n## Descriptive comparisons',json.dumps(s['comparisons'],ensure_ascii=False,sort_keys=True),
+                '\n## Trends provenance',json.dumps(s.get('trendProvenance',[]),ensure_ascii=False,sort_keys=True),
+                '\n## Trends follow-up (separate permitted workspace scope)',json.dumps(s.get('trendLearning'),ensure_ascii=False,sort_keys=True),
                 '\n## Completed work (separate workspace scope)',json.dumps(s['workProof'],ensure_ascii=False,sort_keys=True),
                 'Time Back (estimated when available): '+json.dumps(s['timeBack'],ensure_ascii=False,sort_keys=True),'\n## Native results']
     metric_lines = [f"{e['publicationBinding']['connectionId']} / {e['publicationBinding']['jobId']} · {e['nativeName']}: {e['value'] if e['value'] is not None else 'null'} · {e['valueState']} · {e['reason'] or 'measured'} · {e['definitionVersion']} · {e['readOffset'] or 'unknown'} · observed {e['observedAt'] or 'unknown'} · ingested {e['ingestedAt'] or 'unknown'} · {e['sourceRef'] or 'source unavailable'}" for e in s['nativeResults']]
@@ -498,20 +502,21 @@ def format_snapshot(snapshot, format_):
     if format_=='markdown':
         content, content_type, extension = markdown,'text/markdown; charset=utf-8','md'
     elif format_=='csv':
-        fields = ['snapshotId','version','payloadDigest','contextDigest','sourceSha','channelId','jobId','nativePostId','observationId','provider','nativeName','value','valueState','reason','definitionVersion','unit','readOffset','nativeWindow','observedAt','ingestedAt','accessState','freshnessState','collectionState','sourceRef','publicationAt','periodStart','periodEnd','timezone','filters','humanNotes','workProof','timeBack','takeaways','limitations']
+        fields = ['snapshotId','version','payloadDigest','contextDigest','basisDigest','sourceSha','rendererVersion','channelId','jobId','nativePostId','manifestDigest','observationId','provider','nativeName','value','valueState','reason','definitionVersion','unit','readOffset','nativeWindow','observedAt','ingestedAt','accessState','freshnessState','collectionState','sourceRef','publicationAt','periodStart','periodEnd','timezone','filters','coverage','groups','comparisons','trendProvenance','trendLearning','humanNotes','workProof','timeBack','takeaways','limitations']
         output = io.StringIO(newline='')
         writer = csv.DictWriter(output,fieldnames=fields,lineterminator='\n');writer.writeheader()
         def cell(value):
             text = '' if value is None else str(value)
             return "'"+text if text.lstrip().startswith(('=','+','-','@','\t','\r')) else text
         for e in s['nativeResults'] or [None]:
-            values = {k:s[k] for k in ('snapshotId','version','payloadDigest','contextDigest','sourceSha')}
+            values = {k:s[k] for k in ('snapshotId','version','payloadDigest','contextDigest','basisDigest','sourceSha','rendererVersion')}
             values.update(periodStart=period_['start'],periodEnd=period_['end'],timezone=period_['timezone'],filters=json.dumps(ctx,ensure_ascii=False,sort_keys=True),
                           humanNotes=' | '.join(s['humanNotes']),workProof=json.dumps(s['workProof'],ensure_ascii=False),timeBack=json.dumps(s['timeBack'],ensure_ascii=False),
                           takeaways=json.dumps(s['takeaways'],ensure_ascii=False),limitations=' | '.join(s['limitations']))
+            values.update({k:json.dumps(s.get(k),ensure_ascii=False,sort_keys=True) for k in ('coverage','groups','comparisons','trendProvenance','trendLearning')})
             if e:
                 values.update({k:e.get(k) for k in fields if k in e})
-                b = e['publicationBinding'];values.update(channelId=b['connectionId'],jobId=b['jobId'],nativePostId=b['nativePostId'],publicationAt=b['publicationAt'])
+                b = e['publicationBinding'];values.update(channelId=b['connectionId'],jobId=b['jobId'],nativePostId=b['nativePostId'],manifestDigest=b['manifestDigest'],publicationAt=b['publicationAt'])
                 values['value'] = e['value'] if e['value'] is not None else 'null'
             else:
                 values.update(value='null',valueState='missing',reason='no_native_readings')
