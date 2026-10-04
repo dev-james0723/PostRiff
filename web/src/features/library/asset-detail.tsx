@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
@@ -93,9 +94,19 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
 
 /** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
-  const image = useAssetImage(asset.id);
+  const assetKind = kindOf(asset);
+  const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const image = useAssetImage(asset.id, mediaAsset);
   const { api, workspaceId } = useWorkspaceApi();
-  const isVideo = kindOf(asset) === 'video';
+  const isVideo = assetKind === 'video';
+  if (!mediaAsset) {
+    return (
+      <div className='rafii-quiet text-muted-foreground flex min-h-40 flex-col items-center justify-center gap-2 rounded-[var(--rafii-radius-card)] p-6 text-center'>
+        <span className='text-foreground text-lg font-semibold'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+        <span className='text-sm'>{assetKind === 'document' ? 'Document' : 'File'} · private workspace asset</span>
+      </div>
+    );
+  }
   if (isVideo) {
     return (
       <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
@@ -135,6 +146,30 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
         <Skeleton className='max-h-[40vh] w-full rounded-none md:max-h-[50vh]' style={{ aspectRatio: ratio }} />
       )}
     </div>
+  );
+}
+
+function DocumentText({ asset }: { asset: LibraryAsset }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const detail = useQuery({
+    queryKey: ['library-file-detail', workspaceId, asset.id],
+    queryFn: () => api.libraryFile(workspaceId, asset.id),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000
+  });
+  return (
+    <section aria-labelledby='asset-extracted-text' className='flex flex-col gap-2'>
+      <h3 id='asset-extracted-text' className='rafii-eyebrow'>Extracted text</h3>
+      {detail.isPending ? (
+        <Skeleton className='h-24 w-full' />
+      ) : detail.isError ? (
+        <p className='text-muted-foreground text-sm'>Text preview unavailable.</p>
+      ) : detail.data.extractedText ? (
+        <pre className='rafii-quiet max-h-72 overflow-auto whitespace-pre-wrap rounded-[var(--rafii-radius-card)] p-3 text-xs leading-relaxed'>{detail.data.extractedText}</pre>
+      ) : (
+        <p className='text-muted-foreground text-sm'>No extractable text. The original file is still stored privately.</p>
+      )}
+    </section>
   );
 }
 
@@ -212,6 +247,7 @@ function DetailBody({
   return (
     <div className='flex flex-col gap-6'>
       <LargeImage asset={asset} />
+      {kindOf(asset) === 'document' || kindOf(asset) === 'file' ? <DocumentText asset={asset} /> : null}
 
       {publishing && (
         <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />
@@ -275,11 +311,13 @@ function DetailActions({
   deleting,
   onDelete
 }: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
   return (
     <>
       {!canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use media in posts.</p>}
       <div className='flex flex-wrap gap-2'>
-        {canApprove ? (
+        {canApprove && mediaAsset ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
             Use in a post
@@ -289,6 +327,15 @@ function DetailActions({
             Open Ideas
             <LearnMoreChevron />
           </Link>
+        ) : null}
+        {!mediaAsset ? (
+          <Button
+            variant='glass'
+            size='control'
+            onClick={() => void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => window.open(url, '_blank', 'noopener,noreferrer')).catch(() => toast.error('File unavailable'))}
+          >
+            Open original
+          </Button>
         ) : null}
         {canEdit && (
           <Button
@@ -313,7 +360,7 @@ export function AssetDetail(props: AssetDetailProps) {
   const isMobile = useIsMobile();
   const dims = asset ? dimensionsOf(asset) : null;
   const assetKind = asset ? kindOf(asset) : null;
-  const fallbackTitle = assetKind === 'video' ? 'Video' : 'Photo';
+  const fallbackTitle = assetKind === 'video' ? 'Video' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo';
   const title = asset?.displayTitle?.trim() || asset?.originalFilename?.trim() || (dims ? `${fallbackTitle} ${dims}` : fallbackTitle);
   const description = props.uses.length === 0 ? 'Not used in a post yet' : `Used in ${props.uses.length} ${props.uses.length === 1 ? 'post' : 'posts'}`;
 
