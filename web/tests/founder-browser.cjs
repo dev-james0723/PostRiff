@@ -179,7 +179,8 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
 async function liveWorkspaceRenamePass(page, tracker, width) {
   const label = `${width}px live approved workspace rename`;
   await attempt(`${label}: rename and restore`, async () => {
-    await page.getByRole('tab', { name: 'Workspaces', exact: true }).click();
+    await page.goto(base + '/founder/customers?tab=workspaces', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('tab', { name: 'Workspaces', exact: true }).waitFor({ state: 'visible' });
     const liveBefore = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
     const approved = liveBefore.workspaces.find((row) => row.renameAllowed === true);
     check(`${label}: server identifies exactly one approved workspace`, Boolean(approved), liveBefore.workspaces.filter((row) => row.renameAllowed === true));
