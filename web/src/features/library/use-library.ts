@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSnapshot } from '@/lib/api/hooks';
 import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
 import { isLibraryAsset, kindOf } from '@/lib/media/asset-kinds';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /**
  * Everything the Library reads, derived from the workspace snapshot: the live images in a stated order,
@@ -125,10 +127,20 @@ export function useLibrary({
 }) {
   const snapshot = useSnapshot();
   const phase2 = snapshot.data?.state.phase2;
+  const { api, workspaceId } = useWorkspaceApi();
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalized = useQuery({
+    queryKey: ['library-assets', workspaceId, normalizedQuery],
+    queryFn: () => api.library(workspaceId, normalizedQuery, 200),
+    enabled: Boolean(workspaceId) && !snapshot.isPending,
+    staleTime: 15_000
+  });
 
   const derived = useMemo(() => {
-    // Photos and videos; a video's poster and frames live inside its record, never as separate tiles.
-    const live = (phase2?.assets ?? []).filter(isLibraryAsset);
+    // The normalized endpoint merges legacy photos/videos with document/file rows. During rollout or a temporary
+    // endpoint failure, the existing snapshot remains a truthful media-only fallback.
+    const source = normalized.data?.assets ?? phase2?.assets ?? [];
+    const live = source.filter(isLibraryAsset);
     const usage = buildUsage(phase2?.reviews ?? [], phase2?.jobs ?? []);
     const hasTimestamps = live.some((asset) => typeof asset.createdAt === 'number');
     const used = live.filter((asset) => usage.has(asset.id)).length;
@@ -152,11 +164,11 @@ export function useLibrary({
         unknownBytes: live.length - knownBytes.length
       }
     };
-  }, [phase2]);
+  }, [phase2, normalized.data]);
 
   // `newest` without timestamps would be a guess, so it falls back to the stored order.
   const effectiveSort: LibrarySort = sort === 'newest' && !derived.hasTimestamps ? 'stored' : sort;
-  const normalizedQuery = query.trim().toLowerCase();
+  const backendSearch = Boolean(normalized.data && normalizedQuery);
 
   const visible = useMemo(() => {
     const filtered = derived.live.filter((asset) => {
@@ -164,7 +176,7 @@ export function useLibrary({
       if (filter === 'used' && !used) return false;
       if (filter === 'unused' && used) return false;
       if (kindFilter !== 'all' && kindOf(asset) !== kindFilter) return false;
-      return matchesQuery(asset, normalizedQuery);
+      return backendSearch || matchesQuery(asset, normalizedQuery);
     });
     if (effectiveSort === 'stored') return filtered;
     const order = new Map(derived.live.map((asset, index) => [asset.id, index]));
@@ -177,10 +189,11 @@ export function useLibrary({
       if (typeof right !== 'number') return -1;
       return right - left || stable(a, b);
     });
-  }, [derived, filter, kindFilter, normalizedQuery, effectiveSort]);
+  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort]);
 
   return {
     snapshot,
+    normalized,
     revision: snapshot.data?.revision ?? null,
     assets: derived.live,
     visible,
