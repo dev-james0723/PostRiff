@@ -44,7 +44,7 @@ def is_postable_image(asset):
     return kind_of(asset) == "image" and is_ready(asset)
 
 
-def is_postable_video(asset):
+def is_postable_video(asset, platform=None):
     """Only a fully inspected, immutable private upload may enter a video approval."""
     if kind_of(asset) != "video" or not is_ready(asset) or asset.get("mime") not in VIDEO_MIMES:
         return False
@@ -53,8 +53,8 @@ def is_postable_video(asset):
     size = asset.get("bytes")
     extension = "mp4" if asset["mime"] == "video/mp4" else "mov"
     return (verified.get("container") is True and verified.get("locationChecked") is True
-            and asset.get("durationSource") == "container" and type(duration) in (int, float) and 0 < duration <= 180
-            and type(size) is int and 0 < size <= 100_000_000
+            and asset.get("durationSource") == "container" and type(duration) in (int, float) and 0 < duration <= (43200 if platform == 'YouTube' else 180)
+            and type(size) is int and 0 < size <= (256 * 1024**3 if platform == 'YouTube' else 100_000_000)
             and isinstance(asset.get("etag"), str) and bool(asset["etag"])
             and isinstance(asset.get("bucket"), str) and bool(asset["bucket"])
             and re.fullmatch(r"[0-9a-f]{32}\." + extension, str(asset.get("objectName") or "")) is not None)

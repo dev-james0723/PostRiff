@@ -121,7 +121,7 @@ class YouTubeAdapter(unittest.TestCase):
             ok({"aud": "someone-else", "scope": YouTubeProvider.UPLOAD_SCOPE}),
             ok({"access_token": "AT2", "expires_in": 3599, "scope": YouTubeProvider.UPLOAD_SCOPE})]))
         query = parse_qs(urlparse(youtube.authorize_url(BASE + "/cb", "S", "CHALLENGE", youtube.capability_scopes("publish"))).query)
-        self.assertEqual((query["access_type"][0], query["prompt"][0], query["include_granted_scopes"][0], query["code_challenge_method"][0]), ("offline", "consent", "true", "S256"))
+        self.assertEqual((query["access_type"][0], query["prompt"][0], query["include_granted_scopes"][0], query["code_challenge_method"][0]), ("offline", "consent select_account", "true", "S256"))
         grant = youtube.exchange("CODE", "VERIFIER", BASE + "/cb")
         self.assertEqual(youtube.transport.calls[0]["form"]["code_verifier"], "VERIFIER")
         self.assertEqual(youtube.identity(grant["accessToken"])["handle"], "@jamesau")
@@ -223,7 +223,7 @@ class TikTokRules(unittest.TestCase):
 
 class OtherOptions(unittest.TestCase):
     def test_youtube(self):
-        good = {"title": "Nocturne rehearsal", "privacyStatus": "unlisted", "madeForKids": False}
+        good = {"title": "Nocturne rehearsal", "privacyStatus": "unlisted", "madeForKids": False, "containsSyntheticMedia": False}
         self.assertEqual(publish_options.normalize("YouTube", good, VIDEO, "notes")["privacyStatus"], "unlisted")
         for bad in ({**good, "title": ""}, {**good, "title": "<b>"}, {**good, "privacyStatus": "friends"}, {**good, "madeForKids": None}):
             with self.subTest(bad=bad), self.assertRaises(AlphaError):
@@ -291,59 +291,38 @@ class FacebookPublishing(unittest.TestCase):
 
 
 class YouTubePublishing(unittest.TestCase):
-    options = {"title": "Nocturne rehearsal", "privacyStatus": "public", "madeForKids": False}
     channel = "UC" + "a" * 22
+    options = {"title": "Nocturne rehearsal", "privacyStatus": "private", "madeForKids": False, "containsSyntheticMedia": False}
 
-    def social(self, wire):
-        youtube = reviewed(YouTubeProvider("c", "s", transport=wire))
-        return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": [YouTubeProvider.UPLOAD_SCOPE]}), [YouTubeProvider.UPLOAD_SCOPE]), {"youtube": youtube}, storage(b"\x00" * 2048))
+    def social(self, wire, enabled=False):
+        youtube = YouTubeProvider("c", "s", transport=wire, creator_enabled=enabled)
+        return HostedSocial(Grants("AT", [YouTubeProvider.READ_SCOPE, YouTubeProvider.UPLOAD_SCOPE]), {"youtube": youtube}, storage())
 
-    def test_no_video_means_nothing_is_attempted(self):
+    def test_provider_review_cannot_unlock_creator_execution(self):
         wire = Wire([])
-        self.assertEqual(self.social(wire).submit(manifest("YouTube", self.channel, options=self.options))["state"], "failed")
+        social = self.social(wire)
+        social.providers["youtube"].production_reviewed = True
+        self.assertEqual(social.submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "held")
         self.assertEqual(wire.calls, [])
 
-    def test_resumable_upload_privacy_note_quota_and_foreign_upload_host(self):
-        wire = Wire([ok({}, 200, {"location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=abc"}), ok({"id": "abcdefghijk", "status": {"uploadStatus": "uploaded"}})])
-        result = self.social(wire).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))
-        self.assertEqual((result["state"], result["reference"]), ("provider_accepted", "abcdefghijk"))
-        self.assertIn("private", result["confirmed"])
-        opened = wire.calls[0]
-        self.assertEqual((opened["headers"]["X-Upload-Content-Length"], opened["body"]["status"]["privacyStatus"]), ("2048", "public"))
-        self.assertEqual((wire.calls[1]["method"], len(wire.calls[1]["data"])), ("PUT", 2048))
-        quota = ok({"error": {"code": 403, "message": "quota", "errors": [{"reason": "quotaExceeded"}]}}, 403)
-        self.assertEqual(self.social(Wire([quota])).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "held")
-        foreign = Wire([ok({}, 200, {"location": "https://evil.example/upload"})])
-        self.assertEqual(self.social(foreign).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "failed")
-        self.assertEqual(len(foreign.calls), 1)  # nothing was sent to the foreign host
+    def test_no_durable_service_means_no_legacy_upload_or_heuristic_recovery(self):
+        wire = Wire([])
+        social = self.social(wire, True)
+        self.assertEqual(social.submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "held")
+        self.assertEqual(social.reconcile(manifest("YouTube", self.channel, media=VIDEO, options=self.options), {})["state"], "uncertain")
+        self.assertEqual(wire.calls, [])
 
-    def test_a_rejected_upload_ends_failed_with_youtubes_reason(self):
-        rejected = ok({"items": [{"snippet": {"channelId": self.channel, "title": self.options["title"]}, "status": {"uploadStatus": "rejected", "rejectionReason": "duplicate"}}]})
-        result = self.social(Wire([rejected])).reconcile(manifest("YouTube", self.channel, options=self.options), {"providerReference": "abcdefghijk"})
-        normalized = normalize_result(result, {"manifest": {"platform": "YouTube"}}, reconciliation=True)
-        self.assertEqual(normalized["state"], "failed")
-        self.assertIn("duplicate", normalized["confirmed"])
-
-    def test_readback_and_finding_an_unanswered_upload(self):
-        processed = ok({"items": [{"snippet": {"channelId": self.channel, "title": self.options["title"]}, "status": {"uploadStatus": "processed", "privacyStatus": "private"}}]})
-        verified = self.social(Wire([processed])).reconcile(manifest("YouTube", self.channel, options=self.options), {"providerReference": "abcdefghijk"})
-        self.assertEqual(normalize_result(verified, {"manifest": {"platform": "YouTube"}})["url"], "https://youtu.be/abcdefghijk")
-        self.assertIn("kept it private", verified["confirmed"])
-    def recover(self, uploads, job):
-        playlist = ok({"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU" + "a" * 22}}}]})
-        items = [{"snippet": {"title": self.options["title"], "description": "Rehearsal notes", "publishedAt": at, "resourceId": {"videoId": vid}}} for vid, at in uploads]
-        return self.social(Wire([playlist, ok({"items": items})])).reconcile(manifest("YouTube", self.channel, options=self.options), job)
-
-    def test_recovery_adopts_one_upload_made_after_this_attempt_never_an_older_one(self):
-        job = {"attempts": [{"number": 1, "startedAt": 1_790_000_000}]}
-        older = ("olderupload", "2026-09-20T10:00:00Z")
-        newer = ("zyxwvutsrqp", datetime.fromtimestamp(1_790_000_030, timezone.utc).isoformat().replace("+00:00", "Z"))
-        self.assertEqual(self.recover([older], job)["state"], "uncertain")  # same words, but uploaded before this job tried
-        found = self.recover([older, newer], job)
-        self.assertEqual((found["state"], found["reference"]), ("provider_accepted", "zyxwvutsrqp"))
-        twin = ("abcdefghijk", datetime.fromtimestamp(1_790_000_040, timezone.utc).isoformat().replace("+00:00", "Z"))
-        self.assertEqual(self.recover([newer, twin], job)["state"], "uncertain")  # two candidates: never guess
-        self.assertEqual(self.social(Wire([])).reconcile(manifest("YouTube", self.channel, options=self.options), {})["state"], "uncertain")  # no attempt time
+    def test_legacy_reconciliation_never_enters_the_new_uploader(self):
+        wire = Wire([])
+        social = self.social(wire, True)
+        calls = []
+        social.youtube = SimpleNamespace(
+            reconcile_legacy=lambda m, ref: calls.append(("legacy-read", ref)) or {"state": "held", "confirmed": "No duplicate upload"},
+            upload=lambda m, cancel=False, reconciliation=False: calls.append(("durable-step", cancel, reconciliation)) or {"state": "provider_accepted"})
+        social.reconcile(manifest("YouTube", self.channel, media=VIDEO, options=self.options), {"providerReference": "abcdefghijk"})
+        social.reconcile(manifest("YouTube", self.channel, media=VIDEO, options=self.options), {"progress": {"version": 2}, "cancelRequested": True})
+        self.assertEqual(calls, [("legacy-read", "abcdefghijk"), ("durable-step", True, True)])
+        self.assertEqual(wire.calls, [])
 
 
 class TikTokPublishing(unittest.TestCase):
@@ -485,7 +464,7 @@ class ApprovalChecks(unittest.TestCase):
         self.assertNotEqual(first["idempotencyKey"], second["idempotencyKey"])
 
     def test_video_platforms_require_verified_media_and_freeze_its_identity(self):
-        for platform, options in (("YouTube", {"title": "t", "privacyStatus": "private", "madeForKids": False}), ("TikTok", tiktok_options())):
+        for platform, options in (("YouTube", {"title": "t", "privacyStatus": "private", "madeForKids": False, "containsSyntheticMedia": False}), ("TikTok", tiktok_options())):
             with self.subTest(platform=platform), self.assertRaises(AlphaError) as refused:
                 self.build(platform, options, image=True)
             self.assertIn("video", str(refused.exception))
@@ -493,15 +472,13 @@ class ApprovalChecks(unittest.TestCase):
                 self.build(platform, options, video=True, location_checked=False)
             approved = self.build(platform, options, video=True)
             self.assertEqual((approved["media"][0]["objectName"], approved["media"][0]["etag"]), (VIDEO[0]["objectName"], VIDEO[0]["etag"]))
-            self.assertEqual(approved["publishOptions"], options if platform == "YouTube" else publish_options.normalize(platform, options, approved["media"], "Rehearsal notes"))
+            self.assertEqual(approved["publishOptions"], publish_options.normalize(platform, options, approved["media"], "Rehearsal notes"))
         self.assertNotIn("publishOptions", self.build("Facebook"))
 
-    def test_youtube_day_is_full_at_one_hundred_planned_uploads(self):
-        day = {"jobs": [{"state": "scheduled", "manifest": {"platform": "YouTube", "timing": {"timestamp": 1_790_000_000 + i}}} for i in range(100)]}
-        with self.assertRaises(AlphaError):
-            self.store._youtube_day_open(day, 1_790_000_500)
-        day["jobs"][0]["state"] = "failed"
-        self.store._youtube_day_open(day, 1_790_000_500)  # a failed job frees its place
+    def test_workspace_jobs_are_not_a_project_quota_counter(self):
+        self.assertFalse(hasattr(self.store, "_youtube_day_open"))
+        from postriff_phase2.youtube.model import METHODS
+        self.assertEqual((METHODS["videos.insert"]["bucket"], METHODS["videos.insert"]["cost"]), ("videoUploads", 1))
 
 
 if __name__ == "__main__":

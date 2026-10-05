@@ -312,7 +312,8 @@ class Phase2Store(Store):
             if limit and len(recent) >= limit:
                 raise AlphaError(f"{channel['platform']} allows {limit} posts per 24 hours for this account; this approval would exceed it.", 409)
             review["status"] = "approved"
-            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
+            youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
+            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
             self.event(job, "approved", "Exact local fixture approval recorded")
             self.event(job, "scheduled", "Waiting for the local durable worker")
             data["jobs"].append(job)
@@ -391,7 +392,7 @@ class Phase2Store(Store):
             if asset_kinds.kind_of(a) == "video":
                 if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
-                if not asset_kinds.is_postable_video(a) or p.get("rightsConfirmed") is not True:
+                if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
                 if c["platform"] in ("Douyin", "Kuaishou") and a["mime"] != "video/mp4":
                     raise AlphaError("This channel needs an approved MP4 video.", 409)
@@ -415,9 +416,22 @@ class Phase2Store(Store):
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
         options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
-        timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
+        immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
+        if immediate_youtube:
+            from datetime import datetime, timezone
+            approved_at = int(self.clock() // 60 * 60 + 60)
+            timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
+            timing['mode'] = 'now'
+        else:
+            timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
-            self._youtube_day_open(data, timing["timestamp"])
+            if options['privacyStatus'] == 'public' and options.get('publicationMode') != 'now':
+                from datetime import datetime, timezone
+                native_time = datetime.fromtimestamp(timing['timestamp'], timezone.utc).isoformat().replace('+00:00', 'Z')
+                if options.get('publishAt') and options['publishAt'] != native_time:
+                    raise AlphaError('The composer and queue publication times must match.', 400)
+                options['publishAt'] = native_time
+                timing['nativeProvider'] = 'YouTube'
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
@@ -427,6 +441,11 @@ class Phase2Store(Store):
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
         if options is not None:
             manifest["publishOptions"] = options
+        if c['platform'] == 'YouTube' and options.get('thumbnailAssetId'):
+            image = find(data['assets'], options['thumbnailAssetId'])
+            if image.get('deleted') or image.get('processing') != 'decoded' or not str(image.get('mime', '')).startswith('image/') or p.get('rightsConfirmed') is not True:
+                raise AlphaError('Choose an immutable workspace thumbnail and confirm its rights.', 400)
+            manifest['youtubeAssets'] = [{k: image[k] for k in ('id', 'hash', 'mime', 'bytes', 'width', 'height', 'objectName') if k in image}]
         if v.get("trendLineage") or v.get("scoutLineage"):
             from .growth.trends.opportunities import freeze_manifest
             freeze_manifest(s, v, manifest, self.clock())
@@ -436,29 +455,23 @@ class Phase2Store(Store):
         from .growth.advice_context import prediction_current
         if prediction_current(advice, s, {**v, "text": text}):
             manifest["postDoctor"] = copy.deepcopy(advice)
-        root_key = digest(manifest)
+        root_key = digest({**manifest, 'timing': {'mode': 'now'}, 'expiresAt': None}) if immediate_youtube else digest(manifest)
+        if immediate_youtube:
+            manifest['retryRoot'] = root_key
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
         ended = [j for j in data["jobs"] if j["state"] in ("failed", "canceled")
                  and j["manifest"].get("retryRoot", j["manifest"]["idempotencyKey"]) == root_key]
         if ended:
+            if c['platform'] == 'YouTube' and (ended[-1].get('reference') or (ended[-1].get('progress') or {}).get('videoId')):
+                raise AlphaError('YouTube already accepted a Video ID for this operation. Manage or reconcile that video; a retry must not upload it again.', 409, code='youtube_existing_video')
             manifest.update({"retryRoot": root_key, "retryOf": ended[-1]["id"]})
-        manifest["idempotencyKey"] = digest(manifest)
+        manifest["idempotencyKey"] = digest({'root': root_key, 'retryOf': manifest.get('retryOf')}) if immediate_youtube else digest(manifest)
+        if immediate_youtube:
+            # A video may take hours to upload/process. Review expiry still guards
+            # initial approval; this is the reviewed operation's dispatch window.
+            manifest['expiresAt'] = timing['timestamp'] + 36 * 3600
         return manifest
-
-    YOUTUBE_DAILY_UPLOADS = 100  # videos.insert calls per day for Rafii's Google Cloud project (default quota)
-
-    def _youtube_day_open(self, data, timestamp):
-        """Refuse gracefully when this workspace already plans a full day of uploads. The quota resets at midnight
-        Pacific time and is shared by every workspace, so the publisher also holds a job when YouTube reports it used up."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        pacific = ZoneInfo("America/Los_Angeles")
-        day = datetime.fromtimestamp(timestamp, pacific).date()
-        booked = sum(1 for j in data["jobs"] if j["manifest"].get("platform") == "YouTube" and j["state"] not in ("failed", "canceled")
-                     and datetime.fromtimestamp(j["manifest"]["timing"]["timestamp"], pacific).date() == day)
-        if booked >= self.YOUTUBE_DAILY_UPLOADS:
-            raise AlphaError(f"YouTube lets Rafii upload {self.YOUTUBE_DAILY_UPLOADS} videos a day, and this workspace already plans that many for {day.isoformat()} (Pacific time). Choose another day.", 409)
 
     def source_digest(self, s, variant):
         # Policy and use-approval are part of the digest: changing either invalidates approvals.
@@ -504,7 +517,7 @@ class Phase2Store(Store):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
+            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).

@@ -45,11 +45,20 @@ class PostgresWorker:
             channel = find(state['phase2']['channels'], manifest['channelId'])
             cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
             member = cur.fetchone()
+            expires = manifest['expiresAt']
+            recovery = job.get('youtubeRecoveryApproval') or {}
+            if (manifest.get('platform') == 'YouTube' and recovery.get('digest') == job.get('approvalDigest')
+                    and recovery.get('approvedBy') == job.get('approvedBy')
+                    and type(recovery.get('approvedAt')) in (int, float)
+                    and type(recovery.get('expiresAt')) in (int, float)
+                    and recovery['approvedAt'] <= self.clock()
+                    and recovery['approvedAt'] < recovery['expiresAt'] <= recovery['approvedAt'] + 36 * 3600):
+                expires = max(expires, recovery['expiresAt'])
             return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve')
                         and job['approvalDigest'] == digest(manifest) and job['approvedBy'] == manifest['actor']
                         and self.commands.engine.current(state, manifest)
                         and self.commands.engine.channel_state(channel) == 'Ready for posting'
-                        and manifest['expiresAt'] >= self.clock())
+                        and expires >= self.clock())
         except (AlphaError, KeyError, TypeError):
             return False
 
@@ -75,12 +84,19 @@ class PostgresWorker:
                         if instagram and job.get('container') and not stage:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
                         forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
+                        youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
+                                           and (stage != 'native_scheduled' or job.get('cancelRequested')))
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
                             self._event(job, "canceled", "Canceled before provider submission")
                             continue
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
+                        # YouTube reconciliation may send a chunk or finish approved private-video steps.
+                        # It needs the same current authority as submission. Accepted native schedules only read back.
+                        if youtube_forward and reconciliation and not self._approved(cur, workspace_id, state, job):
+                            self._event(job, 'held', 'YouTube approval or authority changed; no further bytes or publication actions were sent')
+                            continue
                         if forward and not self._approved(cur, workspace_id, state, job):
                             self._event(job, 'held', 'Approval, account, media, timing or permission changed; a new review is required')
                             continue
@@ -155,12 +171,13 @@ class PostgresWorker:
                 job['resultSchema'] = result.get('schema')
                 if result.get('progress'):
                     job['progress'] = result['progress']
-                if result["state"] == "verified" and self.on_verified:
+                published = result['state'] == 'verified' and (job['manifest']['platform'] != 'YouTube' or (result.get('progress') or {}).get('stage') == 'published')
+                if published and self.on_verified:
                     try:
                         self.on_verified(cur, claimed["workspaceId"], job)
                     except Exception:
                         job["insights"] = {"availability": "unavailable", "note": "Insights ingestion failed; publication verification is unaffected."}
-                if result["state"] == "verified":
+                if published:
                     # Learning signal (ids and numbers only); a failure to record never affects the publication.
                     record_published(cur, claimed["workspaceId"], job, self.clock())
                 if result["state"] in ("verified", "failed"):
@@ -171,11 +188,19 @@ class PostgresWorker:
                     job["attempts"][-1]["endedAt"] = self.clock()
                 job["leaseOwner"], job["leaseUntil"] = None, 0
                 job["nextAt"] = self.clock() + (60 if result["state"] in ('scheduled', 'processing') else 5)
+                youtube_progress = job['manifest']['platform'] == 'YouTube' and (result.get('progress') or {}).get('version') == 2
+                if youtube_progress:
+                    progress = result['progress']
+                    retry_at = progress.get('retryAt')
+                    job['nextAt'] = max(self.clock() + 1, retry_at) if isinstance(retry_at, (int, float)) else self.clock() + 60
+                    if progress.get('stage') == 'native_scheduled':
+                        job['nextAt'] = self.clock() + 300
+                    job['nextAction'] = 'Reconcile the existing YouTube session or immutable Video ID; never re-upload this operation'
                 if result['state'] == 'processing':
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
                     if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
                         self._event(job, 'held', 'Container processing did not finish within bounded checks; review before continuing')
-                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT:
+                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and not youtube_progress:
                     job["nextAt"] = self.clock() + 86400
                     job["nextAction"] = "Manual provider review required; do not resubmit"
                 elif job["state"] == "held":
@@ -234,6 +259,9 @@ class PostgresWorker:
         if type(max_jobs) is not int or not 1 <= max_jobs <= 25 or type(max_seconds) not in (int, float) or not 1 <= max_seconds <= 45:
             raise AlphaError("Use bounded worker limits.")
         started, processed = time.monotonic(), 0
+        youtube = getattr(self.social, 'youtube', None)
+        maintenance = youtube.maintenance() if youtube else {'enabled': False}
         while processed < max_jobs and time.monotonic() - started < max_seconds and self.step():
             processed += 1
-        return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial)}
+        return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
+                "youtubeMaintenance": maintenance}

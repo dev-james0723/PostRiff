@@ -1,0 +1,1208 @@
+{
+  "auditedAt": "2026-10-05T08:42:14.876122+00:00",
+  "branchBase": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+  "dataDiscoveryRevision": "20261001",
+  "sources": {
+    "analytics-discovery": {
+      "url": "https://youtubeanalytics.googleapis.com/$discovery/rest?version=v2",
+      "retrievedAt": "2026-10-05T08:35:57.567327+00:00",
+      "sha256": "36baf7473525a811827ac95cb13412904d2c4f9ea2ffbe6a1f84f2922a116e52",
+      "status": "retrieved"
+    },
+    "reporting-discovery": {
+      "url": "https://youtubereporting.googleapis.com/$discovery/rest?version=v1",
+      "retrievedAt": "2026-10-05T08:35:57.570386+00:00",
+      "sha256": "db34d26b202326cdb0cf790456c98befc8f45e2471f0850f31a97f52e97c2bc4",
+      "status": "retrieved"
+    },
+    "oauth-policy": {
+      "url": "https://developers.google.com/identity/protocols/oauth2/policies",
+      "retrievedAt": "2026-10-05T08:35:57.705518+00:00",
+      "sha256": "cfe311db46d48a08d92e35265f07d4f64fec54446fec62d8943b9d1340744565",
+      "status": "retrieved"
+    },
+    "quota": {
+      "url": "https://developers.google.com/youtube/v3/determine_quota_cost",
+      "retrievedAt": "2026-10-05T08:35:57.715525+00:00",
+      "sha256": "53988a4fe87e87090753b613cb0b67e64cfbe1163756f67cfd28087315e844d4",
+      "status": "retrieved"
+    },
+    "policies": {
+      "url": "https://developers.google.com/youtube/terms/developer-policies",
+      "retrievedAt": "2026-10-05T08:35:57.780499+00:00",
+      "sha256": "687813e055f363def4cff37488a04fe280ebddac03ec30cc3e6d2262c55f7a00",
+      "status": "retrieved"
+    },
+    "oauth-verification": {
+      "url": "https://support.google.com/cloud/answer/13463073?hl=en",
+      "retrievedAt": "2026-10-05T08:35:57.950889+00:00",
+      "sha256": "5f5acb903b2c35762c6cb8cbf24718374c71b50c562ea8c98f042cd65bb35410",
+      "status": "retrieved"
+    },
+    "audit": {
+      "url": "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits",
+      "retrievedAt": "2026-10-05T08:35:57.957338+00:00",
+      "sha256": "ee7051304c5710377bbc54b93c52bccbecfa5b83e0c612f518156f1306dc210a",
+      "status": "retrieved"
+    },
+    "data-discovery": {
+      "url": "https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest",
+      "retrievedAt": "2026-10-05T08:35:58.098356+00:00",
+      "sha256": "3da9936fb68ad74766f3d670401064b2c1405cebf931e9924413400f50c1ea37",
+      "status": "retrieved"
+    },
+    "oauth": {
+      "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+      "retrievedAt": "2026-10-05T08:35:58.147977+00:00",
+      "sha256": "b7537f00c3ba6d91e39a7fcbe8b314f31ba5a3c78d7b6079d8b76b03638dab56",
+      "status": "retrieved"
+    },
+    "resumable": {
+      "url": "https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol",
+      "retrievedAt": "2026-10-05T08:35:58.235056+00:00",
+      "sha256": "c3283c22ed077ad0e6f88740d1c16134578c257c57624b3fe9b648f159cfaa5d",
+      "status": "retrieved"
+    },
+    "terms": {
+      "url": "https://developers.google.com/youtube/terms/api-services-terms-of-service",
+      "retrievedAt": "2026-10-05T08:35:58.311687+00:00",
+      "sha256": "d88267068d1516d997d40148e643afce36b43a634212e5fa6061c47d4f4b7c3d",
+      "status": "retrieved"
+    },
+    "shorts": {
+      "url": "https://support.google.com/youtube/answer/15424877?hl=en",
+      "retrievedAt": "2026-10-05T08:35:58.498144+00:00",
+      "sha256": "fe386821b90b562da04994ca9f53ba160161cb12c8e448da904e1628a2408afa",
+      "status": "retrieved"
+    },
+    "shorts-upload": {
+      "url": "https://support.google.com/youtube/answer/12779649?hl=en",
+      "retrievedAt": "2026-10-05T08:35:58.703159+00:00",
+      "sha256": "f5ed9bac41e0279bb3e2dd9727fccecf1f8d8ab2cf140aab86e070ab28da8aa1",
+      "status": "retrieved"
+    },
+    "video-formats": {
+      "url": "https://support.google.com/youtube/answer/1722171?hl=en",
+      "retrievedAt": "2026-10-05T08:35:58.733567+00:00",
+      "sha256": "0849e19b41333b353d66813a1aa042e1605971997ff7f1ae143024e7ee95e75d",
+      "status": "retrieved"
+    },
+    "thumbnail-help": {
+      "url": "https://support.google.com/youtube/answer/72431?hl=en",
+      "retrievedAt": "2026-10-05T08:35:58.745682+00:00",
+      "sha256": "ad4872e405f4e8c73e2a317cf7f8c9962aad51b0cf472db164c662bc5e2da600",
+      "status": "retrieved"
+    },
+    "analytics-metrics": {
+      "url": "https://developers.google.com/youtube/analytics/metrics",
+      "retrievedAt": "2026-10-05T08:35:58.786918+00:00",
+      "sha256": "78aa649a4816f4ecf93616ce27e8f13a23ba3573a71c39fc45e5ae08eeecc4b5",
+      "status": "retrieved"
+    },
+    "analytics-dimensions": {
+      "url": "https://developers.google.com/youtube/analytics/dimensions",
+      "retrievedAt": "2026-10-05T08:35:58.809888+00:00",
+      "sha256": "1003798832882abfa7e7cffdf0207835df8e503a409c5e4b8dc56caadd4c8d03",
+      "status": "retrieved"
+    },
+    "channel-reports": {
+      "url": "https://developers.google.com/youtube/analytics/channel_reports",
+      "retrievedAt": "2026-10-05T08:35:58.872002+00:00",
+      "sha256": "35ef4d48dcc811ca025fc122aa173a8ae06caab7383f33ca0af9c05745e8c5da",
+      "status": "retrieved"
+    },
+    "stream-list": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList",
+      "retrievedAt": "2026-10-05T08:35:58.962847+00:00",
+      "sha256": "4e79b96962fe2f70a79e170f88311c35e039cf68548bde170f7aeb57c7a0fd13",
+      "status": "retrieved"
+    },
+    "altered": {
+      "url": "https://support.google.com/youtube/answer/14328491?hl=en",
+      "retrievedAt": "2026-10-05T08:35:59.029409+00:00",
+      "sha256": "0ee9c120eb37e16c7900589914f6a0f7be8a5e42cfba6071d50edd8e6535f144",
+      "status": "retrieved"
+    },
+    "live-guide": {
+      "url": "https://developers.google.com/youtube/v3/live/getting-started",
+      "retrievedAt": "2026-10-05T08:35:59.301281+00:00",
+      "sha256": "106e89c0fd517fea69ff5a306ad3b7be7b17d19da83dd89c078dc896fdd7f576",
+      "status": "retrieved"
+    },
+    "live-broadcasts": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveBroadcasts",
+      "retrievedAt": "2026-10-05T08:35:59.307450+00:00",
+      "sha256": "fd6e17875ff84dcf680cca94faeed9eecb90ebdf782ec256790782c49fc4ad22",
+      "status": "retrieved"
+    },
+    "live-bans": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveChatBans/insert",
+      "retrievedAt": "2026-10-05T08:35:59.339066+00:00",
+      "sha256": "956c9d464d50105ca971d24ea993d44bc4e1867e884104c21d799ab19e27c037",
+      "status": "retrieved"
+    },
+    "reporting-overview": {
+      "url": "https://developers.google.com/youtube/reporting/v1/reports",
+      "retrievedAt": "2026-10-05T08:35:59.380211+00:00",
+      "sha256": "9bf83011dd58b953eee1a4bca332bb0d574451a5ee5a9ff1386b724baf605014",
+      "status": "retrieved"
+    },
+    "live-chat-insert": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveChatMessages/insert",
+      "retrievedAt": "2026-10-05T08:35:59.390115+00:00",
+      "sha256": "fc146c4d82d9ddd655eddbf986ec01c3f1975ce97a7e1f912ea2aebfc9fe0b01",
+      "status": "retrieved"
+    },
+    "live-streams": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveStreams",
+      "retrievedAt": "2026-10-05T08:35:59.404166+00:00",
+      "sha256": "c500374ff550db75ce35240ef2b7a3ffd6153edd461785e6355b7834de08f3a2",
+      "status": "retrieved"
+    },
+    "api-reference": {
+      "url": "https://developers.google.com/youtube/v3/docs",
+      "retrievedAt": "2026-10-05T08:35:59.420118+00:00",
+      "sha256": "1ec5408c5e60fe651dfbc1ec11197878a635c0e33964d264b7e5c1c3b7a923d2",
+      "status": "retrieved"
+    },
+    "live-chat-transition": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveChatMessages/transition",
+      "retrievedAt": "2026-10-05T08:35:59.557594+00:00",
+      "sha256": "332933e5df6fdf5504dc53f73ebf4ccfd2d50cd8f8b8db3e97f8a4f24aa680ac",
+      "status": "retrieved"
+    },
+    "videos-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/videos/update",
+      "retrievedAt": "2026-10-05T08:35:59.858646+00:00",
+      "sha256": "7e7013cc084623c9be841f75aa467177cc688f26fc380568578d76b8cb32e05b",
+      "status": "retrieved"
+    },
+    "videos-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/videos/insert",
+      "retrievedAt": "2026-10-05T08:35:59.885325+00:00",
+      "sha256": "1b60b045559866854f33ed54a74b0f934c85e0771667bc8fa9cccf666a7dcb34",
+      "status": "retrieved"
+    },
+    "channels": {
+      "url": "https://developers.google.com/youtube/v3/docs/channels",
+      "retrievedAt": "2026-10-05T08:35:59.926271+00:00",
+      "sha256": "2c96c66179d77423ee94f9c6643ff6430ea4b5d633ef7269f744fcfdf9127e6a",
+      "status": "retrieved"
+    },
+    "thumbnails": {
+      "url": "https://developers.google.com/youtube/v3/docs/thumbnails",
+      "retrievedAt": "2026-10-05T08:35:59.936483+00:00",
+      "sha256": "e05e280bb8949e5e8b34265eeb80f4417708ad7cf24799c040652e3958c7f7d4",
+      "status": "retrieved"
+    },
+    "channels-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/channels/list",
+      "retrievedAt": "2026-10-05T08:35:59.993381+00:00",
+      "sha256": "7701046f10961e55222dfcba0ccc4b05c8d4f24d2085c05420c040c06b519a26",
+      "status": "retrieved"
+    },
+    "videos": {
+      "url": "https://developers.google.com/youtube/v3/docs/videos",
+      "retrievedAt": "2026-10-05T08:35:59.993288+00:00",
+      "sha256": "01263093d08c10cf686b8de17a2f5f8f471f6fe38009d4b5af660074376d04e7",
+      "status": "retrieved"
+    },
+    "captions": {
+      "url": "https://developers.google.com/youtube/v3/docs/captions",
+      "retrievedAt": "2026-10-05T08:36:00.022182+00:00",
+      "sha256": "8f1707d015ad7741213bfa233f6c8f3ebf69180db8803f4cef725a25eef35ac8",
+      "status": "retrieved"
+    },
+    "videos-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/videos/delete",
+      "retrievedAt": "2026-10-05T08:36:00.023732+00:00",
+      "sha256": "e63db67d85af09c81d6969e7d37c311a3f9acf7e0a05a887355f67913ad29f2a",
+      "status": "retrieved"
+    },
+    "thumbnails-set": {
+      "url": "https://developers.google.com/youtube/v3/docs/thumbnails/set",
+      "retrievedAt": "2026-10-05T08:36:00.038172+00:00",
+      "sha256": "9059eab24f034fb3b31fb59a3b20bcfd1ba8ad54697a2f0cd85cd82a80e132da",
+      "status": "retrieved"
+    },
+    "captions-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/captions/list",
+      "retrievedAt": "2026-10-05T08:36:00.091345+00:00",
+      "sha256": "b8cc0de5280768e9988562f9f66121d16260f2a31b5d2785602489204515c039",
+      "status": "retrieved"
+    },
+    "captions-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/captions/insert",
+      "retrievedAt": "2026-10-05T08:36:00.348055+00:00",
+      "sha256": "dc5e9bfa79f466f086e58a39bb4627f8c1c0084f16af26b7143008e24862500a",
+      "status": "retrieved"
+    },
+    "captions-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/captions/delete",
+      "retrievedAt": "2026-10-05T08:36:00.392623+00:00",
+      "sha256": "b542049d5c73b0222e926717b8d69b3fe46e27e9b09ed279fcba64fe1340bc05",
+      "status": "retrieved"
+    },
+    "playlists": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlists",
+      "retrievedAt": "2026-10-05T08:36:00.565600+00:00",
+      "sha256": "83e963f98a3290ef94f24f4d7b7bd65b52a38a5e9c984260a9e293902c42d830",
+      "status": "retrieved"
+    },
+    "playlists-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlists/insert",
+      "retrievedAt": "2026-10-05T08:36:00.565658+00:00",
+      "sha256": "6d7597feccf3c0a9b7f3c87dbd625872938f970c69e7a8944a13813c1839fa18",
+      "status": "retrieved"
+    },
+    "playlists-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlists/delete",
+      "retrievedAt": "2026-10-05T08:36:00.577745+00:00",
+      "sha256": "b22a6dbf3f9a176867079ae389f16aae2a39bb45e13714bc34c28098325f6560",
+      "status": "retrieved"
+    },
+    "playlistItems-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistItems/insert",
+      "retrievedAt": "2026-10-05T08:36:00.602102+00:00",
+      "sha256": "bb18ad8ac3cafc93ca6b32dbdc935e8b6fd8429b75c9388f2b605b8a07f78428",
+      "status": "retrieved"
+    },
+    "playlistItems-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistItems/update",
+      "retrievedAt": "2026-10-05T08:36:00.770806+00:00",
+      "sha256": "1058a9706c5eb684598fb9c2d89b04a3db37a9d2dd239060068942e098ce686b",
+      "status": "retrieved"
+    },
+    "playlistItems-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistItems/delete",
+      "retrievedAt": "2026-10-05T08:36:00.835181+00:00",
+      "sha256": "4fa185aa3962d1c8740a6b8f1b34ae5f209e647bfcc995b6889bbe4dede9c903",
+      "status": "retrieved"
+    },
+    "playlistImages": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistImages",
+      "retrievedAt": "2026-10-05T08:36:00.877342+00:00",
+      "sha256": "06d3ee3f9e06e0c196667b2323bb272bfeb7bd6c8de0dbe4e7249817fb6fbe9b",
+      "status": "retrieved"
+    },
+    "playlists-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlists/update",
+      "retrievedAt": "2026-10-05T08:36:01.101040+00:00",
+      "sha256": "e9cbf4d6138eccf54578888d704385c48f87756f133702d4f253ffda057e4b69",
+      "status": "retrieved"
+    },
+    "captions-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/captions/update",
+      "retrievedAt": "2026-10-05T08:36:01.103484+00:00",
+      "sha256": "2b86d479725f73b25e6c4ceede26f457f592ef75d857534bcdc3f3467aa89c48",
+      "status": "retrieved"
+    },
+    "playlistItems": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistItems",
+      "retrievedAt": "2026-10-05T08:36:01.113240+00:00",
+      "sha256": "872087d33cb7550ed3e875ea72b8d0801ad27755d4c850fdf531de6bdd3ded8b",
+      "status": "retrieved"
+    },
+    "commentThreads": {
+      "url": "https://developers.google.com/youtube/v3/docs/commentThreads",
+      "retrievedAt": "2026-10-05T08:36:01.255997+00:00",
+      "sha256": "14a44fc0ce9c59a35badf4dc7da9d5af1de7e9dfd0ed16c7e4b34f9325e9e89b",
+      "status": "retrieved"
+    },
+    "playlistImages-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistImages/update",
+      "retrievedAt": "2026-10-05T08:36:01.522815+00:00",
+      "sha256": "2a9307066013a0b53b01313e522c6ed1b423448ef87fe791cd7c74effa60ab3a",
+      "status": "retrieved"
+    },
+    "playlistImages-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistImages/delete",
+      "retrievedAt": "2026-10-05T08:36:01.523265+00:00",
+      "sha256": "c056abb9404b5ef160a26763d48e0b58bbce04b4aee04a05ca01397e92692451",
+      "status": "retrieved"
+    },
+    "commentThreads-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/commentThreads/list",
+      "retrievedAt": "2026-10-05T08:36:01.523319+00:00",
+      "sha256": "a06dbae54f907a9bb629cd01ff8ade852400ea006f7454fcca61b8180ec04575",
+      "status": "retrieved"
+    },
+    "playlistImages-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/playlistImages/insert",
+      "retrievedAt": "2026-10-05T08:36:01.536459+00:00",
+      "sha256": "7d1d974cb0585cb336b63f1370379c163bf51820a571558115bae9a1c17572fe",
+      "status": "retrieved"
+    },
+    "commentThreads-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/commentThreads/insert",
+      "retrievedAt": "2026-10-05T08:36:01.539543+00:00",
+      "sha256": "9d01184d0a0628119ad78b9b437db75c44839a0cc1783b43e32cf1c32a7255cb",
+      "status": "retrieved"
+    },
+    "comments-insert": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments/insert",
+      "retrievedAt": "2026-10-05T08:36:01.804396+00:00",
+      "sha256": "9cc89fc1cb646644f84a404f12ad365055eb07bb6eb06801fa80d550b414cff0",
+      "status": "retrieved"
+    },
+    "comments-delete": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments/delete",
+      "retrievedAt": "2026-10-05T08:36:01.819025+00:00",
+      "sha256": "f2d3285a965da90d22d6ebecdabbf347f625df36ed06262341113f5d501c2ac6",
+      "status": "retrieved"
+    },
+    "comments-update": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments/update",
+      "retrievedAt": "2026-10-05T08:36:01.885491+00:00",
+      "sha256": "64c571103dfe025f2722b15fc04292612bc9a0ec3beee7b8ee0f35b53fef452e",
+      "status": "retrieved"
+    },
+    "comments": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments",
+      "retrievedAt": "2026-10-05T08:36:01.935073+00:00",
+      "sha256": "2870a4fe18e285b665e52ae34bcafa5be82345384f13a6e2bce6828c8fa3fbb2",
+      "status": "retrieved"
+    },
+    "comments-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments/list",
+      "retrievedAt": "2026-10-05T08:36:01.936091+00:00",
+      "sha256": "c50d596fbaa155d1d581c70d1690d7ee3da6fe4d738ebe6c4cccce6a9e5b7627",
+      "status": "retrieved"
+    },
+    "membershipsLevels": {
+      "url": "https://developers.google.com/youtube/v3/docs/membershipsLevels",
+      "retrievedAt": "2026-10-05T08:36:01.995150+00:00",
+      "sha256": "8036497783b17031657f8fab5a2e88adfd9832fe63ca05acf6560f60a81f32e6",
+      "status": "retrieved"
+    },
+    "comments-setModerationStatus": {
+      "url": "https://developers.google.com/youtube/v3/docs/comments/setModerationStatus",
+      "retrievedAt": "2026-10-05T08:36:02.043453+00:00",
+      "sha256": "357232a8f5eef0c6e1703027e4d163518367f7e26380737d004dab619f8fe4cc",
+      "status": "retrieved"
+    },
+    "members": {
+      "url": "https://developers.google.com/youtube/v3/docs/members",
+      "retrievedAt": "2026-10-05T08:36:02.061092+00:00",
+      "sha256": "39fb410c1f8755d99582322334c2bf82cfea0030d28599222236f9e166efb7b4",
+      "status": "retrieved"
+    },
+    "membershipsLevels-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/membershipsLevels/list",
+      "retrievedAt": "2026-10-05T08:36:02.085307+00:00",
+      "sha256": "efbd34b30c1ca34605310deb17243f33a66f9db535777e923e392d6373e84263",
+      "status": "retrieved"
+    },
+    "members-list": {
+      "url": "https://developers.google.com/youtube/v3/docs/members/list",
+      "retrievedAt": "2026-10-05T08:36:02.125623+00:00",
+      "sha256": "6a4fdb02922c698e32b26d182f8560fb4032f5d12472fc4bf388f61910596446",
+      "status": "retrieved"
+    },
+    "push-notifications": {
+      "url": "https://developers.google.com/youtube/v3/guides/push_notifications",
+      "retrievedAt": "2026-10-05T12:52:01.447659+00:00",
+      "sha256": "9eb6a9516cc79eab8c011c257e34c129f11b3eb89c29b62e229836b306f83dd9",
+      "status": "retrieved"
+    },
+    "push-hub": {
+      "url": "https://pubsubhubbub.appspot.com/subscribe",
+      "retrievedAt": "2026-10-05T12:52:01.900444+00:00",
+      "sha256": "5864c6d8afb7629c28cd1bbfd0d3cf319cc0d70a8dc763ea359760584a8acf74",
+      "status": "retrieved"
+    },
+    "reporting-channel-reports": {
+      "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+      "retrievedAt": "2026-10-05T12:52:02.539269+00:00",
+      "sha256": "819f22aaab60f2eb81032f81e006fe9e468f3bddcf4351599afea99bf3abbe5e",
+      "status": "retrieved"
+    },
+    "liveStreams-update-current": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveStreams/update",
+      "retrievedAt": "2026-10-05T12:52:03.139577+00:00",
+      "sha256": "255fcdb46d604ffd76c843cb9f62b15d545bf9a81fcfe127dfe7ddc3724c2100",
+      "status": "retrieved"
+    },
+    "liveBroadcasts-insert-current": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveBroadcasts/insert",
+      "retrievedAt": "2026-10-05T12:52:04.242245+00:00",
+      "sha256": "ff6a78280243cbc5c7049cf8d45e79a01c32a4c0f6a0a886c6081c948f33a785",
+      "status": "retrieved"
+    },
+    "liveBroadcasts-update-current": {
+      "url": "https://developers.google.com/youtube/v3/live/docs/liveBroadcasts/update",
+      "retrievedAt": "2026-10-05T12:52:05.647453+00:00",
+      "sha256": "3b1654277db763a449a6d253827908b0e8a6fc8d00bb520897c1d103940fd668",
+      "status": "retrieved"
+    }
+  },
+  "quota": {
+    "resetTimezone": "America/Los_Angeles",
+    "defaultAllocation": {
+      "videoUploads": 100,
+      "search": 100,
+      "general": 10000
+    },
+    "projectActualRemaining": "UNKNOWN",
+    "precedence": "Current normative method tables and per-method quota text override stale generated page summaries. Calculator summary still says 1600, while current body and videos.insert say one separate Video Uploads unit."
+  },
+  "googleProjectAudit": {
+    "projectId": "UNKNOWN",
+    "oauthClientMatch": "NOT VERIFIED",
+    "oauthVerification": "UNKNOWN",
+    "youtubeComplianceAudit": "UNKNOWN",
+    "publicUploadEligibility": "UNKNOWN",
+    "quotaUsage": "UNKNOWN",
+    "localCredentialPresence": false,
+    "deploymentCredentialPresence": "Present by environment-name inspection only; values were not read; project binding is unverified",
+    "consentScreenMode": "UNKNOWN",
+    "authorizedRedirectUris": "UNKNOWN",
+    "verifiedDomains": "UNKNOWN",
+    "sensitiveRestrictedScopeReview": "UNKNOWN",
+    "channelUploadRestrictions": "UNKNOWN",
+    "evidence": [
+      "DEPLOYMENT-AUDIT.json"
+    ],
+    "scopeGrants": "NONE VERIFIED",
+    "consoleObservation": "Observed Google console project was unrelated D Festival; not accepted as Rafii project evidence.",
+    "consoleApiAudit": "Read-only Vercel project-env metadata API returned INVALID_ARGUMENT; gcloud is absent. No credential values were read."
+  },
+  "capabilities": [
+    {
+      "capability": "connected",
+      "officialApi": "Google OAuth authorization code + refresh + revoke",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "quota": "OAuth limits",
+      "prerequisites": "Registered exact HTTPS callback; consent/test-user access",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "identity",
+      "officialApi": "channels.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "quota": "1 general unit",
+      "prerequisites": "Authorized channel; immutable Channel ID",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "upload",
+      "officialApi": "videos.insert",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "1 Video Uploads unit",
+      "prerequisites": "Upload-capable channel; resumable session; explicit asset approval",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Rafii currently ingests MP4/MOV up to its configured limit (100 MB by default), with bounded container checks; maximum YouTube API limits are not a claim of app infrastructure acceptance.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "private_publish",
+      "officialApi": "videos.insert; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "1 Video Uploads + 1 general",
+      "prerequisites": "Processing succeeds; private visibility read back",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "public_publish",
+      "officialApi": "videos.insert; videos.update; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "1 Video Uploads + 50 + 1 general",
+      "prerequisites": "Independent OAuth verification AND YouTube project audit/public-upload evidence",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — GOOGLE APPROVAL",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "unlisted_publish",
+      "officialApi": "videos.insert; videos.update; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "1 Video Uploads + 50 + 1 general",
+      "prerequisites": "Audited public-upload eligibility; unlisted visibility read back",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — GOOGLE APPROVAL",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "schedule",
+      "officialApi": "videos.update; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 + 1 general",
+      "prerequisites": "Private, never-published video; future RFC3339 publishAt; approved public-upload gate",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — GOOGLE APPROVAL",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "shorts",
+      "officialApi": "videos.insert; videos.list; reports.query",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "1 Video Uploads; 1 general; separate Analytics quotas",
+      "prerequisites": "Square/vertical; duration <=180s; content-type classification is provider/Analytics evidence",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "thumbnail",
+      "officialApi": "thumbnails.set; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "50 + 1 general",
+      "prerequisites": "Channel verification/custom-thumbnail eligibility; JPEG/PNG <=50MB API limit",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "captions",
+      "officialApi": "captions.list/insert/update/delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50/400/450/50 general",
+      "prerequisites": "Owner authorized; timed subtitle file; language/name; no automatic-generation control",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "metadata_edit",
+      "officialApi": "videos.update; videos.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 + 1 general",
+      "prerequisites": "Owner; read/merge/write of selected mutable parts; preserve omissions",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "delete",
+      "officialApi": "videos.delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Explicit resource-specific destructive approval; audit; never auto-retry",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "playlists",
+      "officialApi": "playlists.list/insert/update/delete; playlistItems.list/insert/update/delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "list 1, writes 50 general",
+      "prerequisites": "Owned/editable playlist; item insertion separately idempotent",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "podcasts",
+      "officialApi": "playlists.update(status.podcastStatus); playlistImages.list/insert/update/delete; playlistItems.insert",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "playlist writes 50; artwork methods per official method docs",
+      "prerequisites": "Square JPEG/PNG artwork <=50 MB official API; Rafii image ingestion <=8 MB. Native podcast playlist status and separate episode membership.",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Current public playlistImages.list documentation and discovery disagree on list filters. Documented id/playlistId filters are implemented; real acceptance remains required.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "comment_read",
+      "officialApi": "commentThreads.list; comments.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "1 general",
+      "prerequisites": "Available comments; moderation filters require owner authorization",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Authenticated inbox uses creator-management permission. Provider pagination is exposed; unanswered means no replies in the returned page.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "top_level_comment",
+      "officialApi": "commentThreads.insert",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Explicit approved text; channelId + videoId; comments enabled",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "reply",
+      "officialApi": "comments.insert",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Parent top-level comment ID; approved text; never autonomous AI publication",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "comment_edit",
+      "officialApi": "comments.update",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Only owned comments; explicit reviewed update",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "comment_delete",
+      "officialApi": "comments.delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Only permitted owned comments; destructive resource approval",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "moderation",
+      "officialApi": "comments.setModerationStatus",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Actual owner/moderator authority; published/heldForReview/rejected; audit",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "analytics",
+      "officialApi": "YouTube Analytics v2 reports.query",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quota": "Separate Analytics quota; actual project usage unobserved",
+      "prerequisites": "Owner; valid metric/dimension report tables; source provenance and freshness",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Current valid report templates; interactive paging capped at 1000 rows with explicit completeness. Retention/demographics can be withheld by YouTube.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "shorts_analytics",
+      "officialApi": "reports.query(creatorContentType)",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quota": "Separate Analytics quota",
+      "prerequisites": "SHORTS provider dimension; engagedViews differs from views; no geometry inference",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "monetary_analytics",
+      "officialApi": "reports.query revenue/ad metrics",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+      ],
+      "quota": "Separate Analytics quota",
+      "prerequisites": "Intentional owner enablement AND granted monetary scope AND YPP; sensitive data",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "NOT AUTHORIZED",
+      "limitation": "Intentionally off. Requires separate owner authorization, actual sensitive scope and eligible creator account. No sensitive request executed.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "reporting",
+      "officialApi": "reportTypes.list; jobs.create/list/delete; jobs.reports.list/get; reports download",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quota": "Separate Reporting quotas",
+      "prerequisites": "Bulk workload opt-in; coverage/createTime; replacements/late data; official download host",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "20 audited non-monetary channel/playlist report types; explicit ingestion <=32 MB / 50000 rows; corrections and 30-day authorized-data expiry. No large bulk runner proven.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_broadcast",
+      "officialApi": "liveBroadcasts.list/insert/update/delete/bind/transition",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "list 1, writes 50 general",
+      "prerequisites": "Live-enabled channel; actual broadcast lifecycle; broadcasts distinct from streams",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_schedule",
+      "officialApi": "liveBroadcasts.insert/update",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Future start; privacy; public gate; eligibility",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_stream",
+      "officialApi": "liveStreams.list/insert/update/delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "list 1, writes 50 general",
+      "prerequisites": "Ingestion secret restricted server-side; explicit configuration",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_chat_read",
+      "officialApi": "liveChatMessages.streamList (official gRPC); liveChatMessages.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "quota": "list 1; streaming quota not published in calculator",
+      "prerequisites": "Active chat; provider cursor/order; list fallback obeys pollingIntervalMillis",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Official gRPC streamList in bounded eight-second batches with durable cursor; REST fallback honors provider minimum interval. Continuous long-lived operation is not proven.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_chat_write",
+      "officialApi": "liveChatMessages.insert; liveChatMessages.transition",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "Active chat; text/poll official schema; explicit approved text",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "live_moderation",
+      "officialApi": "liveChatMessages.delete; liveChatBans.insert/delete; liveChatModerators.list/insert/delete",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "writes 50, list 1 general",
+      "prerequisites": "Actual moderator/owner authority; bans/timeouts; audit",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "BLOCKED — ACCOUNT ELIGIBILITY",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "memberships",
+      "officialApi": "members.list; membershipsLevels.list",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.channel-memberships.creator"
+      ],
+      "quota": "1 general",
+      "prerequisites": "Intentional membership enablement; API-approved creator; membership-enabled channel",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "NOT AUTHORIZED",
+      "limitation": "Intentionally off. Requires separate owner authorization, actual sensitive scope and eligible creator account. No sensitive request executed.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "localization",
+      "officialApi": "videos.update(localizations); playlists.update(localizations)",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quota": "50 general",
+      "prerequisites": "defaultLanguage required; complete merge preserves omitted locales",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "made_for_kids",
+      "officialApi": "videos.insert/update(status.selfDeclaredMadeForKids); liveBroadcasts status",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "method cost",
+      "prerequisites": "Explicit human audience declaration; affects comments/chat availability",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "synthetic_media",
+      "officialApi": "videos.insert/update(status.containsSyntheticMedia)",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "method cost",
+      "prerequisites": "Human declaration for realistic altered/synthetic media; ordinary AI copy is not inferred",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "subscriber_notifications",
+      "officialApi": "videos.insert(notifySubscribers)",
+      "requiredScopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quota": "included in upload",
+      "prerequisites": "Insert-time only; exact approved boolean; no post-upload notification toggle",
+      "implemented": true,
+      "realE2ETested": false,
+      "status": "IMPLEMENTED / E2E NOT PROVEN",
+      "limitation": "Local implementation only. Ordinary creator account, actual grant, Google project approval and real method acceptance have not been verified.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "community_posts",
+      "officialApi": "No documented public write method",
+      "requiredScopes": [],
+      "quota": "none",
+      "prerequisites": "UNSUPPORTED BY OFFICIAL API",
+      "implemented": false,
+      "realE2ETested": false,
+      "status": "UNSUPPORTED BY OFFICIAL API",
+      "limitation": "No documented official public write API. No Studio automation or private endpoints are used.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    },
+    {
+      "capability": "article",
+      "officialApi": "No native Article resource",
+      "requiredScopes": [],
+      "quota": "none",
+      "prerequisites": "UNSUPPORTED BY OFFICIAL API; explicit video/script/description/external-link adaptation only",
+      "implemented": false,
+      "realE2ETested": false,
+      "status": "UNSUPPORTED BY OFFICIAL API",
+      "limitation": "No documented official public write API. No Studio automation or private endpoints are used.",
+      "implementationEvidence": [
+        "src/postriff_phase2/youtube/",
+        "web/src/features/youtube/",
+        "tests/test_youtube_creator.py",
+        "tests/phase2/postgres_youtube_creator.py"
+      ]
+    }
+  ],
+  "updatedAt": "2026-10-05T14:18:45.175213+00:00",
+  "executionState": "LOCAL CANDIDATE — VALIDATED; NOT DEPLOYED; NO REAL GOOGLE E2E",
+  "releaseGates": {
+    "implementation": "LOCAL CANDIDATE VALIDATED — E2E NOT PROVEN",
+    "googlePlatformApproval": "UNVERIFIED",
+    "accountEligibility": "UNVERIFIED",
+    "realE2E": "NOT PROVEN",
+    "production": "NOT READY"
+  },
+  "localValidation": {
+    "pythonFocusedTests": 220,
+    "pythonFocusedResult": "PASS",
+    "postgresCreatorGroups": 19,
+    "postgresVideoChecks": 24,
+    "postgresCampaignWorker": "PASS",
+    "typescript": "PASS",
+    "productionBuild": "PASS",
+    "lint": {
+      "errors": 0,
+      "existingWarnings": 3
+    },
+    "browserViewports": [
+      1440,
+      390,
+      320
+    ],
+    "browserExecution": "LOCAL SYNTHETIC; NOT REAL GOOGLE E2E",
+    "realPassCount": 0,
+    "realCases": 151,
+    "grpcStubRoundTrip": "PASS — LOCAL ONLY"
+  },
+  "policyNotes": {
+    "proofFreshness": "Rafii conservatively requires project and real-acceptance observations within 30 days; this is not Google approval expiry.",
+    "authorizationMaintenance": "At most one creator per maintenance tick; successful authorization check cached no more than 30 minutes and shortened near access-token expiry.",
+    "recoveryApproval": "Only the original approver can extend dispatch by an exact unchanged digest; same durable known upload session or Video ID only, up to 36 hours.",
+    "remoteRevocation": "Conservatively defer project/account-wide Google revocation while another active Google connector grant exists. Local workspace disconnection and authorized-data purge proceed immediately."
+  }
+}

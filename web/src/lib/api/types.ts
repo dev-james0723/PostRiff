@@ -157,6 +157,8 @@ export interface Manifest {
   styleRevision?: number;
   payloadDigest?: string;
   providerAccountId?: string;
+  publishOptions?: Record<string, unknown>;
+  youtubeAssets?: { id: string; hash: string; mime: string; bytes: number; width?: number; height?: number; objectName?: string }[];
   expiresAt: number;
   idempotencyKey: string;
   execution: string;
