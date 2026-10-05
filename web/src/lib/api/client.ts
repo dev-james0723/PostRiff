@@ -89,6 +89,18 @@ export class ApiError extends Error {
   }
 }
 
+export interface AuditCaptureReceipt {
+  schema: string; signature: string; public_key: string; key_id: string;
+  signed_payload_base64: string; manifest: Record<string, unknown>;
+}
+export interface AuditCapturedAttempt {
+  capture_id: string; state: string; prepared: AuditCaptureReceipt;
+  network_started: AuditCaptureReceipt | null; outcome: AuditCaptureReceipt | null;
+  request: Record<string, string>; response: Record<string, string> | null;
+  request_base64: string; response_base64?: string;
+}
+export interface AuditCreditBalance { balanceUsd: string; totalUsedUsd: string; source: string; modelCalls: number }
+
 export type TokenSource = () => Promise<string | null>;
 
 const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
@@ -310,6 +322,16 @@ export function createApi(getToken: TokenSource) {
       send<CreditEstimate>('POST', `${ws(w)}/ideas/credit-estimates`, body),
     creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
       send<{ quoteId: string; maxMilliCredits: number; expiresAt: number; kind: "spending_limit" }>("POST", `${ws(w)}/ideas/credit-quotes`, body),
+    captureStatus: (w: string) => get<{ enabled: boolean; consentVersion?: string; ttlSeconds?: number; retention?: string; publicKey?: string; keyId?: string }>(`${ws(w)}/ideas/capture/status`),
+    captureCredits: (w: string, model: string) => send<AuditCreditBalance>('POST', `${ws(w)}/ideas/capture/credits`, { model }),
+    captureAttempts: (w: string, grantId: string, serverNonce: string) =>
+      send<{ captures: { capture_id: string; state: string }[] }>('POST', `${ws(w)}/ideas/capture/grants/${encodeURIComponent(grantId)}/attempts`, { serverNonce }),
+    readCaptureAttempt: (w: string, captureId: string, serverNonce: string) =>
+      send<AuditCapturedAttempt>('POST', `${ws(w)}/ideas/capture/receipts/${encodeURIComponent(captureId)}`, { serverNonce }),
+    createCaptureGrant: (w: string, body: { confirmed: true; consentVersion: string; model: string }) =>
+      send<{ id: string; server_nonce: string; expires_at: string }>('POST', `${ws(w)}/ideas/capture/grants`, body),
+    revokeCaptureGrant: (w: string, grantId: string, serverNonce: string) =>
+      send<{ revoked: boolean }>('POST', `${ws(w)}/ideas/capture/grants/${encodeURIComponent(grantId)}/revoke`, { serverNonce }),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
       send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {
         expectedRevision,

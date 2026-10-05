@@ -63,7 +63,7 @@ def pairs_for(state, events, cloud):
     sources = {s["id"]: s for s in state.get("sources") or [] if isinstance(s, dict)}
     grouped = {}
     for event in events:
-        if event.get("kind") != "draft.edited":
+        if event.get("kind") != "draft.edited" or (event.get("scope") or {}).get("ambiguousCampaignScope"):
             continue
         subject = event.get("subject") or {}
         variant = variants.get(subject.get("variantId"))
@@ -75,9 +75,12 @@ def pairs_for(state, events, cloud):
         before, after = by_revision.get(subject.get("fromRevision")), by_revision.get(subject.get("toRevision"))
         if not isinstance(before, str) or not isinstance(after, str) or before == after:
             continue
-        scope = event.get("scope") or {}
-        grouped.setdefault((scope.get("platform"), locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")), []).append({
-            "id": str(event.get("id")), "variantId": variant["id"], "before": signals.redact(before)[:MAX_TEXT_CHARS], "after": signals.redact(after)[:MAX_TEXT_CHARS]})
+        scope = learning.scope_of(event.get("scope"))
+        key = (scope.get("platform"), scope.get("language"))
+        if scope.get("contentTypeId") or scope.get("campaignId"):
+            key += (scope.get("contentTypeId"), scope.get("campaignId"))
+        grouped.setdefault(key, []).append({
+            "scope": scope, "id": str(event.get("id")), "variantId": variant["id"], "before": signals.redact(before)[:MAX_TEXT_CHARS], "after": signals.redact(after)[:MAX_TEXT_CHARS]})
     return grouped
 
 
@@ -101,6 +104,7 @@ def parse_candidates(result, pairs, platform, language, now):
             continue
         weight = CONFIDENCE_WEIGHT.get(candidate.get("confidence"), CONFIDENCE_WEIGHT["low"])
         for pair in cited:
+            scope = pair.get("scope") or scope
             observations.append({"ruleKey": rule, "polarity": polarity, "scope": scope, "scopeKey": learning.scope_key("writing_preference", rule, polarity, scope),
                                  "weight": weight, "at": now, "eventId": pair["id"], "variantId": pair["variantId"], "value": None, "source": "model", "statement": statement})
     return observations
@@ -116,13 +120,16 @@ class ModelExtractor:
 
     def requests(self, state, events):
         grouped = pairs_for(state, events, cloud=self.provider_class == "cloud")
-        already = [item["statement"] for item in learning.active_items(state)]
         requests = []
-        for (platform, language), pairs in sorted(grouped.items(), key=lambda item: -len(item[1]))[:self.max_scopes]:
+        for key, pairs in sorted(grouped.items(), key=lambda item: -len(item[1]))[:self.max_scopes]:
+            platform, language = key[:2]
             if len(pairs) < MIN_PAIRS_PER_SCOPE:
                 continue
             batch = pairs[-MAX_PAIRS_PER_SCOPE:]
-            payload = {"scope": {"platform": platform, "language": language}, "alreadyLearned": already, "pairs": [{k: p[k] for k in ("id", "before", "after")} for p in batch]}
+            scope = pairs[0]["scope"]
+            already = [item["statement"] for item in learning.select(state, [{"platform": platform, "language": language}], scope.get("contentTypeId"), campaign_id=scope.get("campaignId"))[0]]
+            payload_scope = {k: v for k, v in scope.items() if v is not None}
+            payload = {"scope": payload_scope, "alreadyLearned": already, "pairs": [{k: p[k] for k in ("id", "before", "after")} for p in batch]}
             requests.append((platform, language, batch, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1)))
         return requests
 

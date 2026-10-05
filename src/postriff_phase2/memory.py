@@ -59,6 +59,15 @@ def active_profile(state):
     return next((r for r in speaker.get("revisions", []) if r.get("revision") == active), None)
 
 
+def current_profile(revision):
+    """A tone and the VOICE file share the same currentness boundary."""
+    profile = (revision or {}).get("profile") or {}
+    if not revision or revision.get("stale") or profile.get("status") in ("stale", "expired", "revoked"):
+        return False
+    from .voice_sources import unexpired
+    return unexpired(revision) and unexpired(profile)
+
+
 def boundary_fields(state):
     """Boundary answers live on the active voice revision (profiles.profile_finish keeps the approved fields
     there). A top-level `profile` is read as well, so a state that carries one is not silently ignored."""
@@ -77,7 +86,7 @@ def boundary_fields(state):
     return fields
 
 
-def render_files(state, shareable=None, destinations=None, content_type_id=None):
+def render_files(state, shareable=None, destinations=None, content_type_id=None, *, campaign_id=None):
     """Return the five core files as {name, purpose, source, body, editHref}. Never includes private field values.
     With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out.
     With `destinations`, VOICE.md carries only the learned preferences that apply to them (a prompt slice)."""
@@ -88,7 +97,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     revision = active_profile(state)
     profile = (revision or {}).get("profile") or {}
     all_boundaries = boundary_fields(state)
-    if revision and (revision.get('stale') or profile.get('status') == 'stale'):
+    if revision and not current_profile(revision):
         revision, profile = None, {}
     boundaries = all_boundaries if shareable is None else [f for f in all_boundaries if f.get("privacy") in shareable]
     withheld = len(all_boundaries) - len(boundaries)
@@ -108,12 +117,18 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
             f"Tone: {profile.get('tone') or '(not set)'}", "",
             "## Observations", "How to handle what you supply. A trait is never a reason to add a detail, habit or admission you did not supply.",
             *([f"- {item}" for item in profile.get("observations") or []] or ["- (none recorded)"]), "",
-            *learning.render_lines(state, destinations, content_type_id), "",
-            "## Writing example", ("> " + str(profile.get("writingExample")).replace("\n", "\n> ")) if profile.get("writingExample") else "(none supplied)", "",
-            "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
         ])
     else:
         voice = "# Voice\n\nNo active voice profile yet. Drafts still work; review their wording before scheduling.\n\nSet it up in Brand → Voice."
+
+    # Approved preferences have their own revision and do not require a voice profile.
+    voice += "\n\n" + "\n".join(learning.render_lines(state, destinations, content_type_id, campaign_id=campaign_id))
+
+    if revision:
+        voice += "\n\n" + "\n".join([
+            "## Writing example", ("> " + str(profile.get("writingExample")).replace("\n", "\n> ")) if profile.get("writingExample") else "(none supplied)", "",
+            "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
+        ])
 
     if boundaries:
         body = "\n".join(["# Boundaries", ""] + [f"- {f.get('label') or f.get('key') or f.get('id')}: {f.get('value', '')}" + (f" _({f['privacy']})_" if f.get("privacy") else "") for f in boundaries])
@@ -147,9 +162,9 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     ]
 
 
-def prompt_fragments(state, names=PROMPT_FILES, shareable=None, destinations=None, content_type_id=None):
+def prompt_fragments(state, names=PROMPT_FILES, shareable=None, destinations=None, content_type_id=None, *, campaign_id=None):
     """The files a writing route receives, in order. AGENT.md is for people; BRAND.md duplicates IDENTITY.md for prompts."""
-    files = {item["name"]: item["body"] for item in render_files(state, shareable, destinations, content_type_id)}
+    files = {item["name"]: item["body"] for item in render_files(state, shareable, destinations, content_type_id, campaign_id=campaign_id)}
     return [{"name": name, "body": files[name]} for name in names if name in files]
 
 
@@ -159,7 +174,7 @@ def egress(state):
     return decision if isinstance(decision, dict) else {"cloud": False}
 
 
-def projection(state, provider_class, destinations=None, content_type_id=None, voice_route=None):
+def projection(state, provider_class, destinations=None, content_type_id=None, voice_route=None, *, campaign_id=None):
     """What a writing route may read. Local routes get every prompt file; a cloud route gets them only
     when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed.
     `learned` records which learned preferences the slice carried, for the run's usage."""
@@ -174,15 +189,22 @@ def projection(state, provider_class, destinations=None, content_type_id=None, v
         # Raw sample examples never travel through the generic memory channel.
         profile['writingExample'] = ''
         allowed = voice_sources.project(state, evidence, 'generation', voice_route)['samples'] if voice_route else []
-        if len(allowed) != len(evidence):
+        bindings = profile.get('sourceBindings') or []
+        current = {item['id']: item for item in allowed}
+        if len(allowed) != len(evidence) or any(
+            item.get('revision') != current.get(item.get('id'), {}).get('revision')
+            or item.get('contentHash') != current.get(item.get('id'), {}).get('contentHash')
+            for item in bindings
+        ):
             revision['stale'] = True
-    learned = learning.binding(state, destinations, content_type_id)
+    learned = learning.binding(state, destinations, content_type_id, campaign_id=campaign_id)
+    tone = (profile.get("tone") or "warm") if revision and current_profile(revision) else "warm"
     if provider_class != "cloud":
-        return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id), "shared": True, "withheldBoundaries": 0, "learned": learned}
+        return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": 0, "learned": learned, "tone": tone}
     if egress(state).get("cloud") is not True:
-        return {"files": [], "shared": False, "withheldBoundaries": 0, "learned": {**learned, "used": [], "statements": [], "omitted": learned["used"] + learned["omitted"]}}
+        return {"files": [], "shared": False, "withheldBoundaries": 0, "tone": "warm", "learned": {**learned, "used": [], "statements": [], "omitted": learned["used"] + learned["omitted"]}}
     withheld = sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)
-    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE, destinations=destinations, content_type_id=content_type_id), "shared": True, "withheldBoundaries": withheld, "learned": learned}
+    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": withheld, "learned": learned, "tone": tone}
 
 
 def egress_summary(state):

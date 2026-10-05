@@ -104,6 +104,9 @@ def _delete(service, workspace_id, principal):
             for task in state.get('raffi', {}).get('campaignPlanning', {}).get('recurringTasks', []):
                 task['status'] = 'cancelled'
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state),workspace_id))
+        capture = getattr(service.ideas, 'capture', None)
+        if capture is not None and workspace_id == capture.service.allowlisted_workspace:
+            capture.service.revoke_workspace(cur, workspace_id=workspace_id, actor_id=principal)
         receipt_id = pending['receiptId']
     # Retry deletes only the same immutable objects. Storage DELETE treats not-found as success.
     for asset in assets:

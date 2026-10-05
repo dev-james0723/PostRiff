@@ -149,6 +149,11 @@ function HomeWorkspace() {
   useEffect(() => { submission.activate(); return () => submission.dispose(); }, [submission]);
   const [preparing, setPreparing] = useState(false);
   const [creditLimit, setCreditLimit] = useState('');
+  const [captureConsent, setCaptureConsent] = useState(false);
+  const [capturePinnedKey, setCapturePinnedKey] = useState('');
+  const captureNoticeId = useId();
+  const captureStatus = useQuery({ queryKey: ['writer-capture-status', workspaceId], queryFn: () => api.captureStatus(workspaceId),
+    enabled: Boolean(workspaceId) && access.role === 'owner', retry: false, staleTime: 60_000 });
   const ids = { language: useId(), model: useId(), voice: useId() };
 
   const state = snapshot.data?.state;
@@ -354,6 +359,10 @@ function HomeWorkspace() {
     : `${choice.label}${showLevel && choice.level ? ` · ${choice.level.label}` : ''}`;
   const destinationCount = languages.destinations.length;
   const slash = parseSlash(text.trim());
+  const captureEligible = Boolean(captureStatus.data?.enabled && captureStatus.data.consentVersion
+    && choice.option?.provider === 'vercel-ai-gateway' && !imageRequested && !slash
+    && !(chipFields.attachments?.length) && !chipFields.references?.some((reference) => reference.kind === 'connector_item'));
+  useEffect(() => { setCaptureConsent(false); }, [workspaceId, choice.model, captureEligible]);
   const accountsSelected = targets.filter((t) => t.channelId).length;
   const channelsLabel = destinations.selected.length > 0 ? destinations.summary : accounts.length === 0 ? 'Platforms only' : 'Channels';
   const channelsDetail = accountsSelected > 0 ? `${destinationCount} draft${destinationCount === 1 ? '' : 's'}` : `${targets.length} platform${targets.length === 1 ? '' : 's'} · no account`;
@@ -397,6 +406,11 @@ function HomeWorkspace() {
     const body = text.trim();
     const currentSlash = parseSlash(body);
     if (!body || !canGenerate) return;
+    if (captureConsent && !captureEligible) {
+      setCaptureConsent(false);
+      toast.error('Audit capture supports an ordinary text generation only.');
+      return;
+    }
     if (currentSlash?.command.kind === 'client') {
       if (currentSlash.command.name === 'help') {
         setText('/');
@@ -479,6 +493,7 @@ function HomeWorkspace() {
       const sent = attachmentsOn && !imageRequested ? attachments.sentKeys : [];
       const result = await generation.start({ text: body, ownContent: own, destinations: languages.destinations,
         ...choice.requestFields, voiceMode, voiceSourceIds,
+        ...(captureConsent ? { auditCaptureConsent: { consentVersion: captureStatus.data!.consentVersion!, model: choice.model } } : {}),
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
         timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null, ...chipFields }, current);
       if (result && result.status !== 'automation') {
@@ -499,6 +514,7 @@ function HomeWorkspace() {
       if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Couldn’t prepare the drafts. Try again.');
     } finally {
       submission.leave();
+      setCaptureConsent(false);
       if (submission.alive()) setPreparing(false);
     }
   }
@@ -674,6 +690,30 @@ function HomeWorkspace() {
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
                   <Checkbox checked={use} onCheckedChange={setUse} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
                   <Checkbox checked={own} onCheckedChange={setOwn} label='Allow public quotes from my own writing' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
+                  {captureEligible && !generation.captureActive && <div className='w-full space-y-2'>
+                    <Checkbox checked={captureConsent} onCheckedChange={setCaptureConsent} disabled={preparing || generation.busy || generation.running}
+                      aria-describedby={captureNoticeId} label='Keep a private audit record for this generation only' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
+                    <p id={captureNoticeId} className='text-muted-foreground text-xs'>{captureStatus.data?.retention} This includes the full model request and response. Generation uses your normal credits.</p>
+                    <Button type='button' size='sm' variant='quiet' disabled={generation.auditChecking || preparing || generation.busy || generation.running} onClick={() => void generation.checkAuditCredits(choice.model)}>Check existing Gateway credit</Button>
+                  </div>}
+                  {(captureEligible || generation.captureActive) && generation.auditCredits?.model === choice.model && <p role='status' className='w-full text-xs'>Mounted Gateway balance: US${generation.auditCredits.balanceUsd} · cumulative usage: US${generation.auditCredits.totalUsedUsd} · checked {generation.auditCredits.checkedAt}. No model call was made by this balance check.</p>}
+                  {generation.captureActive && <div className='w-full space-y-2 text-xs'>
+                    <p role='status'>Private audit retention is active for the previous run. Verify and download before changing memory or ending retention.</p>
+                    <label className='block'>Pinned public key from the audit deployment receipt
+                      <input aria-label='Pinned audit public key' value={capturePinnedKey} onChange={(event) => setCapturePinnedKey(event.target.value)} autoComplete='off' spellCheck={false} className='rafii-focus mt-1 w-full rounded border p-2 font-mono' />
+                    </label>
+                    <p className='text-muted-foreground'>This owner-only action reads the full capture in memory to verify its signature and byte hashes. The downloaded file contains encrypted bodies and signed receipts only; it remains on your device until you delete it. Keep the private file out of public evidence.</p>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button type='button' size='sm' variant='quiet' disabled={!capturePinnedKey.trim() || generation.captureExporting || preparing || generation.busy || generation.running} onClick={() => void generation.exportCapture(capturePinnedKey)}>Verify and download encrypted capture</Button>
+                      <Button type='button' size='sm' variant='quiet' disabled={generation.captureExporting || preparing || generation.busy || generation.running} onClick={() => void generation.revokeCapture()}>End audit retention</Button>
+                      <Button type='button' size='sm' variant='quiet' disabled={generation.auditChecking || preparing || generation.busy || generation.running} onClick={() => void generation.checkAuditCredits(choice.model)}>Check existing Gateway credit</Button>
+                    </div>
+                    {generation.captureSummaries.map((summary) => <div key={summary.attemptId} className='space-y-1 break-all' role='status'>
+                      <p>Verified attempt {summary.attemptId} · {summary.model} · provider {summary.provider}</p>
+                      <p>Message roles: {summary.roleOrder} · input tokens: {summary.inputTokens ?? 'not reported'} · output tokens: {summary.outputTokens ?? 'not reported'} · reported cost US${summary.costUsd}</p>
+                      <p>Request SHA-256: {summary.requestSha256}</p><p>Response SHA-256: {summary.responseSha256}</p>
+                    </div>)}
+                  </div>}
                 </div>
               }
             />

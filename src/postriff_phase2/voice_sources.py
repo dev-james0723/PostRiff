@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from postriff_alpha.domain import AlphaError, uid
@@ -34,10 +35,24 @@ def route_class(route: str) -> str | None:
     return next((grant for grant, prefix in _CLASS_PREFIXES.items() if isinstance(route, str) and route.startswith(prefix) and len(route) > len(prefix) and not route.endswith("*")), None)
 
 
+def unexpired(value: dict, now=None) -> bool:
+    """Absent expiry is permanent; a supplied malformed or elapsed expiry fails closed."""
+    expiry = value.get("expiresAt")
+    if expiry is None:
+        return True
+    try:
+        deadline = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+        if deadline.tzinfo is None:
+            return False
+        return deadline > (now or datetime.now(timezone.utc))
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def route_granted(source: dict, purpose: str, route: str) -> bool:
     """Whether this sample may be used for this purpose on this exact writer route: an exact grant, or (writing only)
     the class grant that covers the route."""
-    grants = [grant for grant in source.get("useGrants", []) if isinstance(grant, dict) and grant.get("purpose") == purpose]
+    grants = [grant for grant in source.get("useGrants", []) if isinstance(grant, dict) and grant.get("purpose") == purpose and unexpired(grant)]
     if any(grant.get("route") == route for grant in grants):
         return True
     covering = route_class(route) if purpose == "generation" else None
@@ -200,9 +215,14 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
                 raise AlphaError("Choose the exact writer route for every voice-use grant.")
             if route.strip() in _CLASS_PREFIXES and grant["purpose"] != "generation":
                 raise AlphaError("AI analysis needs one exact model; only writing may be allowed for every Rafii AI writer model.")
-            normalized.append({"purpose": grant["purpose"], "route": route.strip()})
-        source["useGrants"] = sorted({(item["purpose"], item["route"]) for item in normalized})
-        source["useGrants"] = [{"purpose": purpose, "route": route} for purpose, route in source["useGrants"]]
+            item = {"purpose": grant["purpose"], "route": route.strip()}
+            if "expiresAt" in grant:
+                if grant["expiresAt"] is None or not unexpired(grant, datetime.fromtimestamp(now, timezone.utc)):
+                    raise AlphaError("A voice-use expiry must be a future timestamp with a timezone.")
+                item["expiresAt"] = grant["expiresAt"]
+            normalized.append(item)
+        unique = {(item["purpose"], item["route"]): item for item in normalized}
+        source["useGrants"] = [unique[key] for key in sorted(unique)]
         source["purposeGrants"] = sorted({item["purpose"] for item in source["useGrants"]})
         source["routeGrants"] = sorted({item["route"] for item in source["useGrants"]})
         source["grantRevision"] = int(source.get("grantRevision") or 0) + 1
@@ -255,6 +275,8 @@ def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dic
         reason = None
         if not source.get("active"):
             reason = "revoked"
+        elif not unexpired(source):
+            reason = "expired"
         elif not source.get("selected"):
             reason = "not_selected"
         elif purpose not in source.get("purposeGrants", []):

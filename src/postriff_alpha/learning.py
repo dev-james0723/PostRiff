@@ -90,6 +90,8 @@ def lint(statement, rule_key="other"):
 def scope_of(value):
     value = value if isinstance(value, dict) else {}
     scope = {key: (value.get(key) if isinstance(value.get(key), str) and value.get(key) else None) for key in ("platform", "language", "contentTypeId")}
+    if isinstance(value.get("campaignId"), str) and value["campaignId"]:
+        scope["campaignId"] = value["campaignId"]
     if scope["language"]:
         # Locale tags since the languages plan; English / 繁體中文 read as en / zh-Hant, `zh` is a Chinese-wide scope.
         scope["language"] = locales.canonical(scope["language"], family_ok=True) or scope["language"]
@@ -97,13 +99,14 @@ def scope_of(value):
 
 
 def scope_key(type_, rule_key, polarity, scope):
-    return "|".join([type_, rule_key, polarity] + [scope.get(key) or "*" for key in ("platform", "language", "contentTypeId")])
+    parts = [type_, rule_key, polarity] + [scope.get(key) or "*" for key in ("platform", "language", "contentTypeId")]
+    return "|".join(parts + ([scope["campaignId"]] if scope.get("campaignId") else []))
 
 
 def canonical_scope_key(key):
     """A scope key written before locale tags (…|Instagram|繁體中文|*) as it is written now (…|Instagram|zh-Hant|*)."""
     parts = key.split("|") if isinstance(key, str) else []
-    if len(parts) != 6 or parts[4] == "*":
+    if len(parts) not in (6, 7) or parts[4] == "*":
         return key
     parts[4] = locales.canonical(parts[4], family_ok=True) or parts[4]
     return "|".join(parts)
@@ -120,10 +123,10 @@ def scope_label(scope):
         label = f"All channels · {language}"
     else:
         label = "All channels"
-    return label + (f" · {content_type}" if content_type else "")
+    return label + (f" · {content_type}" if content_type else "") + (f" · Campaign {scope['campaignId']}" if scope.get("campaignId") else "")
 
 
-def applies(item, platform, language, content_type_id=None):
+def applies(item, platform, language, content_type_id=None, *, campaign_id=None):
     """A scope's language covers the draft's language and its parents: a `zh-Hant` rule reaches `zh-Hant-HK`
     and `yue-Hant-HK` drafts, an `en` rule every English draft."""
     scope = item.get("scope") or {}
@@ -131,7 +134,7 @@ def applies(item, platform, language, content_type_id=None):
         wanted = locales.canonical(scope["language"], family_ok=True) or scope["language"]
         if wanted != language and wanted not in locales.scope_chain(language):
             return False
-    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("contentTypeId", content_type_id)))
+    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("contentTypeId", content_type_id), ("campaignId", campaign_id)))
 
 
 def normalize_proposal(raw):
@@ -143,7 +146,7 @@ def normalize_proposal(raw):
     p["type"] = p.get("type") or "writing_preference"
     p["polarity"] = p.get("polarity") or "do"
     p["ruleKey"] = p.get("ruleKey") or "other"
-    p["scope"] = scope_of(p.get("scope") or {"platform": p.get("platform"), "language": p.get("language"), "contentTypeId": p.get("contentTypeId")})
+    p["scope"] = scope_of(p.get("scope") or {"platform": p.get("platform"), "language": p.get("language"), "contentTypeId": p.get("contentTypeId"), "campaignId": p.get("campaignId")})
     p["params"] = p.get("params") if isinstance(p.get("params"), dict) else {}
     p["source"] = p.get("source") if p.get("source") in SOURCES else "legacy"
     p["applyWhen"] = p.get("applyWhen") if isinstance(p.get("applyWhen"), str) else ""
@@ -327,14 +330,14 @@ def _line(item):
     return f"- [{scope_label(item.get('scope') or {})}] {item['statement']} — {item.get('evidenceSummary') or 'remembered'}" + (f" · {since}" if since else "")
 
 
-def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS, max_chars=MAX_PROMPT_CHARS):
+def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS, max_chars=MAX_PROMPT_CHARS, *, campaign_id=None):
     """Items for one turn (design §5.7): those whose scope covers any destination, the most specific first,
     within a bounded slice. Returns (chosen, omitted ids)."""
-    items = [item for item in active_items(state) if any(applies(item, d.get("platform"), d.get("language"), content_type_id) for d in destinations)]
+    items = [item for item in active_items(state) if any(applies(item, d.get("platform"), d.get("language"), content_type_id, campaign_id=campaign_id) for d in destinations)]
 
     def rank(item):
         scope = item.get("scope") or {}
-        return (bool(scope.get("contentTypeId")), bool(scope.get("platform")), bool(scope.get("language")), item.get("evidenceState") == "user_confirmed", item.get("since") or "")
+        return (bool(scope.get("campaignId")), bool(scope.get("contentTypeId")), bool(scope.get("platform")), bool(scope.get("language")), item.get("evidenceState") == "user_confirmed", item.get("since") or "")
 
     chosen, omitted, used = [], [], 0
     for item in sorted(items, key=rank, reverse=True):
@@ -347,22 +350,22 @@ def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS
     return chosen, omitted
 
 
-def binding(state, destinations=None, content_type_id=None):
+def binding(state, destinations=None, content_type_id=None, *, campaign_id=None):
     """What a run received from learning, recorded on the run so the effect of each item can be measured later."""
     if destinations:
-        chosen, omitted = select(state, destinations, content_type_id)
+        chosen, omitted = select(state, destinations, content_type_id, campaign_id=campaign_id)
     else:
         chosen, omitted = active_items(state), []
     return {"styleRevision": revision(state), "used": [item["id"] for item in chosen], "statements": [item["statement"] for item in chosen], "omitted": omitted}
 
 
-def render_lines(state, destinations=None, content_type_id=None):
+def render_lines(state, destinations=None, content_type_id=None, *, campaign_id=None):
     """The VOICE.md section. Form only; the message and the approved facts always win over these.
     With destinations, only the items that apply to them, within the prompt slice."""
     rev = revision(state)
     lines = ["## Learned from how you edit" + (f" (style rev {rev})" if rev else ""),
              "Form only. The facts and what you ask for in the message win over these."]
-    items = select(state, destinations, content_type_id)[0] if destinations else active_items(state)
+    items = select(state, destinations, content_type_id, campaign_id=campaign_id)[0] if destinations else active_items(state)
     items = sorted(items, key=lambda item: (scope_label(item.get("scope") or {}), item.get("since") or ""))
     lines.extend(_line(item) for item in items)
     return lines + (["- (none yet)"] if not items else [])

@@ -24,7 +24,7 @@ from .cli_runtime import ClaudeCliRuntime
 from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
+from . import capture_access, ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -437,7 +437,7 @@ class IdeasService:
                 self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
         return answer
 
-    def _understand(self, workspace_id, token, text, zone, runtime, parsed):
+    def _understand(self, workspace_id, token, text, zone, runtime, parsed, *, audit_required=False):
         """(parsed, reading): the model's decision wins over the deterministic one where a model may read."""
         from . import automation_edit, request_model, workflow_parse
         wanted = bool(text) and request_model.wants_reading(text)
@@ -445,6 +445,8 @@ class IdeasService:
             # A message that names one of the person's automations ("the Gramophone one") may be changing it.
             names = [item["name"] for item in automation_edit.summaries(self.repository.get(workspace_id, token)["state"])]
             wanted = workflow_parse.names_automation(text, names)
+        if wanted and audit_required:
+            raise AlphaError("This request needs an additional model route not covered by writer capture.", 409, code="audit_capture_blocked")
         understood = self._read_request(workspace_id, token, text, zone, runtime) if wanted else None
         if understood and understood["action"] == "draft" and parsed["intent"] == "automation":
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
@@ -1324,6 +1326,7 @@ class IdeasService:
         if quoted_writer:
             # The credit limit was approved for this writer; the run uses it (prepare() still re-checks the match).
             model_id, writer_note = quoted, None
+        capture_access.validate_payload(self, workspace_id, token, payload, runtime, text)
         if self._wants_image(payload):
             return self._image_turn(workspace_id, token, conversation_id, {**payload, "idempotencyKey": key}, text, model_id, fingerprint, refs=refs)
         reasoning, level = translate_reasoning(runtime, model_id, requested_level(payload))
@@ -1356,7 +1359,7 @@ class IdeasService:
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] and not reworking else "draft"}
         understood = reading = None
         if text and not recurring and not reworking and not chips:
-            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed, audit_required=capture_access.requested(payload))
             understood = (reading or {}).get("automation")
         elif parsed["intent"] == "automation":
             # Quick start already decided to draft this message now.
@@ -1400,6 +1403,7 @@ class IdeasService:
                 workspace_id, token, connector_ids, fingerprint,
                 provider_class=getattr(runtime, "provider_class", "local"),
             )
+        capture_bound = None
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
@@ -1461,6 +1465,7 @@ class IdeasService:
                 raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
+            capture_bound = capture_access.bind(self, cur, workspace_id, principal, run_id, key, payload, runtime, reservation)
             outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
@@ -1553,7 +1558,8 @@ class IdeasService:
                 # The request stays synchronous on hosted functions; no background thread
                 # can be frozen after the HTTP response. An interrupted run is never retried.
                 try:
-                    result = runtime.start_turn(request, sink.emit)
+                    with capture_access.scope(self, capture_bound):
+                        result = runtime.start_turn(request, sink.emit)
                     sink.complete(result["artifact"], result["usage"])
                 except ProviderFailure as error:
                     if not error.dispatched:
@@ -1670,14 +1676,17 @@ class IdeasService:
                 # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
-        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
+        campaign_ref = (resolved or {}).get("materialRef") or {}
+        campaign_id = (recurring or {}).get("campaignId") or (campaign_ref.get("id") if campaign_ref.get("type") == "campaign" else None)
+        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None,
+                                   voice_route=voice_route if voice_mode == 'personalized' else None, campaign_id=campaign_id)
         if voice_projection:
             voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
             style_directives = voice_sources.style_directives(voice_projection)
         else:
             voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
             style_directives = {}
-        request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        request = {"context": context, "idea": idea, "tone": shared["tone"], "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         report = None
@@ -2001,6 +2010,7 @@ class IdeasService:
         # Refuse an unknown model or a reasoning level the writer does not offer before any source is stored.
         runtime, model_id, writer_note = self.resolve_writer(self._state_reader(workspace_id, token), payload.get("model"))
         _, level = translate_reasoning(runtime, model_id, requested_level(payload))
+        capture_access.validate_payload(self, workspace_id, token, payload, runtime, text)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
         # Chips (SPEC §6.1 quick_start): checked for shape now, and a message with chips always drafts, so neither
@@ -2013,7 +2023,7 @@ class IdeasService:
             chip_destinations = turn_references.early(self.repository.get(workspace_id, token)["state"], refs, text, payload,
                                                       platforms=tuple(runtime.supported_platforms() or ()))["destinations"]
         else:
-            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed, audit_required=capture_access.requested(payload))
         understood = (reading or {}).get("automation")
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
@@ -2059,7 +2069,7 @@ class IdeasService:
         source = next(item for item in saved["state"]["sources"] if item["id"] == chosen["id"])
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
         run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": list(dict.fromkeys([source["id"]] + checked_context_ids(saved["state"], payload.get("sourceIds", [])))), "destinations": destinations, **({"reasoning": payload["reasoning"]} if "reasoning" in payload else {}), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration"), "research": payload.get("research"), "idempotencyKey": key,
-                                                                    **{name: payload[name] for name in ("references", "attachments") if name in payload}}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}}, _started=started)
+                                                                    **{name: payload[name] for name in ("references", "attachments", "auditCapture") if name in payload}}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}}, _started=started)
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}
 
     def _quick_start_source(self, state, actor, payload, text, url, own):
