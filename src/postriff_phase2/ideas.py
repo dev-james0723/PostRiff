@@ -427,10 +427,14 @@ class IdeasService:
                     return None
         answer, actual = None, None
         try:
-            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
+            with ai_call_events.scope(feature="understanding", workspace_id=workspace_id, user_id=principal,
+                                      reservation_id=(reservation or {}).get("reservationId"),
+                                      connect=getattr(self.repository, "connection_factory", None)):
+                result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
             actual = getattr(result, "cost_usd_micro", None)
             answer = request_model.reading(result, state, tier, text=text)
-        except Exception:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+        except Exception as error:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+            actual = getattr(error, "cost_usd_micro", actual)
             answer = None
         if reservation is not None:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):

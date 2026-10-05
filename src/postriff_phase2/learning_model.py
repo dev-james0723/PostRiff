@@ -187,6 +187,12 @@ class GatewayCall:
         meter = {}
         try:
             return self._answer(system, user, schema, meter)
+        except AlphaError as error:
+            # A rejected/unparseable answer can still have a measured provider cost.
+            # Carry only accounting metadata so callers do not turn it into unknown spend.
+            error.cost_usd_micro = meter.get("cost_usd_micro")
+            error.cost_source = meter.get("cost_source", "unknown")
+            raise
         finally:
             if meter:
                 began = meter.pop("began")
@@ -233,14 +239,13 @@ class GatewayCall:
         meter.update(status="ok", provider_request_id=gateway_generation(data), input_tokens=usage.get('prompt_tokens'), output_tokens=usage.get('completion_tokens'),
                      cached_input_tokens=(usage.get('prompt_tokens_details') or {}).get('cached_tokens') if isinstance(usage.get('prompt_tokens_details'), dict) else None,
                      reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens') if isinstance(usage.get('completion_tokens_details'), dict) else None)
-        if final_provider and final_provider not in self.allowed_providers:
-            raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
-        cost = usage.get('cost')
-        if not (isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0):
-            cost = gateway_cost
-        if cost is not None:
-            from decimal import ROUND_CEILING, Decimal
-            cost_usd_micro = int((Decimal(str(cost)) * 1_000_000).to_integral_value(rounding=ROUND_CEILING))
+        # Gateway reports may use decimal strings. Use the same finite, nonnegative
+        # money parser as the ledger instead of losing those measurements.
+        reported_cost = ai_call_events.usd_micro(usage.get('cost'))
+        if reported_cost is None:
+            reported_cost = ai_call_events.usd_micro(gateway_cost)
+        if reported_cost is not None:
+            cost_usd_micro = reported_cost
             meter.update(cost_usd_micro=cost_usd_micro, cost_source="gateway")
         else:
             from .model_runtime import DEFAULT_PRICES, DEFAULT_PRICES_VERSION
@@ -249,6 +254,8 @@ class GatewayCall:
                 ip, op = DEFAULT_PRICES[self.model]
                 cost_usd_micro = __import__('math').ceil(prompt * ip + completion * op)
                 meter.update(cost_usd_micro=cost_usd_micro, cost_source="table:" + DEFAULT_PRICES_VERSION)
+        if final_provider and final_provider not in self.allowed_providers:
+            raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
         try:
             value = json.loads(data["choices"][0]["message"]["content"])
             if not isinstance(value, dict):
