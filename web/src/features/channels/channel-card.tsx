@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Icons, type Icon } from '@/components/icons';
@@ -196,9 +195,6 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
 
-  const params = useSearchParams();
-  const metaReview = params.get('metaReview') === '1';
-
   const held = activity?.held ?? 0;
   // Listed only while posts for it are on hold (`listedOnChannels`): the card offers Reconnect and History, nothing else.
   const disconnected = disconnectedByCustomer(channel);
@@ -389,7 +385,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
-        {canManage && metaReview && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
+        {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
           <StatefulButton
             variant='outline'
             className={cn(STATEFUL_GLASS, CONTROL_44)}
