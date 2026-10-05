@@ -32,7 +32,8 @@
   "productionVerdict": "NOT PRODUCTION READY",
   "toolingBlockers": [
     "Live browser request-header policy could not load.",
-    "Current Instagram Login Insights/edit/delete primary contract audit unavailable."
+    "Current Instagram Login Insights/edit/delete primary contract audit unavailable.",
+    "Token Pilot checkpoint unavailable: shared 256-entry registry rejects state loading even with entries=[]; no other-session records deleted."
   ],
   "providerExternalBlockers": [
     "App/product review and restricted scopes unverified.",
@@ -47,5 +48,7 @@
     "TikTok file chunk continuation requires reconciliation; codec/frame-rate preflight deferred to native provider failure.",
     "YouTube CSV report download bounded to 512 KiB/500 displayed rows; large export and gRPC live-chat transport not implemented."
   ],
-  "nextAction": "Complete the secure operator manifest and manual provider approval/OAuth gates in OPERATIONS.md; execute only explicitly approved live cases, then deploy only an approved candidate and verify production independently."
+  "nextAction": "Complete the secure operator manifest and manual provider approval/OAuth gates in OPERATIONS.md; execute only explicitly approved live cases, then deploy only an approved candidate and verify production independently.",
+  "tokenPilotCheckpoint": "ATTEMPTED \u2014 UNAVAILABLE: memory registry full",
+  "durableRecovery": "docs/official-social-20261005/HANDOFF.md"
 }
