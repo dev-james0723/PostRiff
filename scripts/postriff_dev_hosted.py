@@ -18,6 +18,7 @@ import json
 import mimetypes
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -254,7 +255,15 @@ def start_postgres(port=PORT_PG):
     tmp = tempfile.mkdtemp(prefix="postriff-dev-pg-")
     data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
     subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    # Each disposable cluster owns its Unix socket too. CI can run a second harness beside the first.
+    options = shlex.join(["-h", "127.0.0.1", "-p", str(port), "-k", tmp])
+    try:
+        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", options, "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # pg_ctl's generic error hid the actual bind/startup failure in remote browser evidence.
+        if log.is_file():
+            print(log.read_text(errors="replace"), file=sys.stderr, flush=True)
+        raise
     dsn = f"host=127.0.0.1 port={port} dbname=postgres"
     subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
     return dsn, data
