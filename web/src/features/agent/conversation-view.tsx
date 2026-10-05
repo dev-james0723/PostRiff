@@ -220,6 +220,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [deliveryPlannerOpen, setDeliveryPlannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<{ workspaceId: string; conversationId: string; message: string } | null>(null);
   const [voiceChoice, setVoiceChoice] = useState<'neutral' | 'personalized' | null>(null);
   const [imageRequested, setImageRequested] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
@@ -393,6 +394,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     }
     if (slash?.command.kind === 'agent') {
       if (!gate.enter()) return;
+      setSubmitError(null);
       setBusy(true);
       try {
         const references = attachmentsOn ? (attachments.fields.references ?? []).filter((reference) => reference.kind === 'post' || reference.kind === 'template' || reference.kind === 'source') : [];
@@ -419,7 +421,13 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         ]);
         if (anchor) router.replace(`/app/agent/${encodeURIComponent(conversationId)}`, { scroll: false });
       } catch (err) {
-        if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Rafii couldn’t run that command.');
+        if (gate.alive()) {
+          const message = err instanceof Error ? err.message : 'Rafii couldn’t run that command.';
+          setSubmitError({ workspaceId, conversationId, message });
+          toast.error(message);
+          void client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
+          void client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
+        }
       } finally {
         gate.leave();
         if (gate.alive()) setBusy(false);
@@ -437,6 +445,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       return;
     }
     if (creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
+    setSubmitError(null);
     setBusy(true);
     try {
       const withChips = override === undefined;
@@ -465,7 +474,14 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
       if (anchor) router.replace(`/app/agent/${encodeURIComponent(conversationId)}`, { scroll: false });
     } catch (err) {
-      if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Couldn’t send your message.');
+      if (gate.alive()) {
+        const message = err instanceof Error ? err.message : 'Couldn’t send your message.';
+        setSubmitError({ workspaceId, conversationId, message });
+        toast.error(message);
+        // A failed dispatch can already have persisted a turn and charged usage.
+        void client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
+        void client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
+      }
     } finally {
       gate.leave();
       if (gate.alive()) setBusy(false);
@@ -714,6 +730,10 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
           )}
 
           {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
+
+          {submitError?.workspaceId === workspaceId && submitError.conversationId === conversationId && (
+            <StateMessage kind='error' layout='inline' title='Couldn’t complete this turn' description={submitError.message} />
+          )}
 
           {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
           {messages.at(-1)?.body.intent === 'onboarding' ? (

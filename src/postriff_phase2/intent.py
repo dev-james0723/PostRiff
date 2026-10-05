@@ -348,12 +348,15 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
     has_times = any(d["localTime"] for d in destinations) or bool(unattached)
     if is_automation_request(text):
         intent = "automation"
+    elif is_memory_instruction(text) and not has_times:
+        # "From now on ... posts ..." contains both "now" and "post", but asks
+        # for a standing preference, not an immediate publication. Explicit times
+        # and recurring automations retain their existing routing.
+        intent = "memory"
     elif _PUBLISH_NOW.search(text):
         intent = "publish_now"
     elif has_times:
         intent = "schedule"
-    elif is_memory_instruction(text):
-        intent = "memory"
     elif _RESEARCH.search(text):
         intent = "research"
     else:

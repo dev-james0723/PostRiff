@@ -1357,6 +1357,13 @@ class IdeasService:
         if chips and not recurring:
             forced_draft = parsed["intent"] in ("automation", "memory")
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] and not reworking else "draft"}
+        if parsed["intent"] == "memory" and text and not recurring and not reworking and not chips:
+            # A deterministic standing-writing instruction creates an approval proposal.
+            # Do this before request understanding/orchestration: phrases such as "keep my"
+            # also trigger their helper model, which is neither needed nor authorized here.
+            destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
+                                                       settings=lambda: self.repository.get(workspace_id, token)["state"])
+            return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id, writer_note=writer_note)
         understood = reading = None
         if text and not recurring and not reworking and not chips:
             parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed, audit_required=capture_access.requested(payload))
