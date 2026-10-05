@@ -86,8 +86,28 @@ def boundary_fields(state):
     return fields
 
 
+def _genome_applies(statement, destinations, content_type_id, campaign_id):
+    """Intersect evidence platform/language/account with the later approved writing scope."""
+    if destinations is None:  # The Memory page lists reviewed evidence with its scope labels.
+        return True
+    limits = [statement.get("cohort") or {}, statement.get("scope") or {}]
+    return any(
+        all(learning.applies({"scope": scope}, destination.get("platform"), destination.get("language"),
+                             content_type_id, campaign_id=campaign_id)
+            and (scope.get("connectionId") or scope.get("channelId")) in (None, destination.get("channelId"))
+            for scope in limits)
+        for destination in (destinations or [{}])
+    )
+
+
+def _genome_line(statement):
+    scope = {key: value for source in (statement.get("cohort") or {}, statement.get("scope") or {})
+             for key, value in source.items() if value is not None}
+    return f"[{learning.scope_label(scope)}] {statement['text']}"
+
+
 def render_files(state, shareable=None, destinations=None, content_type_id=None, *, campaign_id=None):
-    """Return the five core files as {name, purpose, source, body, editHref}. Never includes private field values.
+    """Return core files and optional scoped strategy as {name, purpose, source, body, editHref}. Never includes private field values.
     With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out.
     With `destinations`, VOICE.md carries only the learned preferences that apply to them (a prompt slice)."""
     state = state or {}
@@ -142,8 +162,12 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None,
     # Approved Genome extends the current voice file; stale/deleted/revoked evidence is excluded.
     from .growth.service import current_genome
     approved_genome=current_genome(state)
+    strategy = []
     if approved_genome:
-        lines=[s['text'] for s in approved_genome.get('statements',[]) if s.get('grade')=='supported'][:12]
+        statements = [s for s in approved_genome.get('statements', [])
+                      if s.get('grade') == 'supported' and _genome_applies(s, destinations, content_type_id, campaign_id)][:12]
+        lines = [_genome_line(s) for s in statements if s.get('kind') == 'writing']
+        strategy = [_genome_line(s) for s in statements if s.get('kind') == 'performance']
         if lines:
             voice+='\n\n## Approved Creator Genome\nObserved writing preferences, never new personal facts or guaranteed outcomes.\n'+'\n'.join('- '+line for line in lines)
     agent = "\n".join(["# Agent", "", "How Rafii works with you.", ""] + [f"- {rule}" for rule in AGENT_RULES])
@@ -153,18 +177,26 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None,
         "Layers: " + (", ".join(hub.get("layers") or []) or "(none)"), "",
         "> One workspace speaks with one brand today. Separate brands belong in their own workspaces.",
     ])
-    return [
+    files = [
         {"name": "AGENT.md", "purpose": "How the agent works with you", "source": "Fixed in this version", "body": agent, "editHref": None},
         {"name": "IDENTITY.md", "purpose": "Who you are, publicly", "source": "From your brand context", "body": identity, "editHref": BRAND_HREF},
         {"name": "VOICE.md", "purpose": f"How you sound · rev {revision.get('revision')}" if revision else "How you sound · not set up", "source": "From your active voice profile" if revision else "No active voice profile yet", "body": voice, "editHref": BRAND_HREF},
         {"name": "BOUNDARIES.md", "purpose": "What stays out of content", "source": "From your profile answers" if boundaries else "Not recorded yet", "body": body, "editHref": BRAND_HREF},
         {"name": "BRAND.md", "purpose": "Brand context for this workspace", "source": "From your brand context", "body": brand, "editHref": BRAND_HREF},
     ]
+    if strategy:
+        files.append({"name": "STRATEGY.md", "purpose": "Scoped historical performance observations", "source": "From your approved Creator Genome",
+                      "body": "# Strategy\n\nHistorical associations for the matching destination and scope only. These are not voice traits, identity facts, guaranteed outcomes or claims to add to a post.\n\n"
+                              + '\n'.join('- ' + line for line in strategy), "editHref": BRAND_HREF})
+    return files
 
 
 def prompt_fragments(state, names=PROMPT_FILES, shareable=None, destinations=None, content_type_id=None, *, campaign_id=None):
     """The files a writing route receives, in order. AGENT.md is for people; BRAND.md duplicates IDENTITY.md for prompts."""
-    files = {item["name"]: item["body"] for item in render_files(state, shareable, destinations, content_type_id, campaign_id=campaign_id)}
+    # An unknown generation destination cannot broaden a scoped statement into global evidence.
+    files = {item["name"]: item["body"] for item in render_files(state, shareable, destinations or [], content_type_id, campaign_id=campaign_id)}
+    if names == PROMPT_FILES and "STRATEGY.md" in files:
+        names = (*names, "STRATEGY.md")
     return [{"name": name, "body": files[name]} for name in names if name in files]
 
 
@@ -210,8 +242,11 @@ def projection(state, provider_class, destinations=None, content_type_id=None, v
 def egress_summary(state):
     """For the Memory page: the current decision and exactly what a cloud model would and would not read."""
     decision = egress(state)
+    shared_files = list(PROMPT_FILES)
+    if any(item["name"] == "STRATEGY.md" for item in render_files(state)):
+        shared_files.append("STRATEGY.md")
     return {"cloud": decision.get("cloud") is True, "decidedAt": decision.get("decidedAt"), "decidedBy": decision.get("decidedBy"),
-            "sharedFiles": list(PROMPT_FILES), "shareablePrivacy": list(CLOUD_SHAREABLE),
+            "sharedFiles": shared_files, "shareablePrivacy": list(CLOUD_SHAREABLE),
             "withheldBoundaries": sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)}
 
 
