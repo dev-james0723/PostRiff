@@ -1,0 +1,93 @@
+{
+  "recordedAt": "2026-10-05T02:41:51.677711+00:00",
+  "execution": "uncommitted scoped CI repairs on HEAD 535d0e0614b83a20eb100720e875750e1d02b84f",
+  "sourceFileSha256": {
+    "tests/phase2/postgres_review.py": "9c27582556bd347d134dc73f6ed22b216ee81162eb14be5f5dd150f9fcf36c63",
+    "tests/phase2/postgres_review_boundaries.py": "e95965d505e24408aa8a3b788825f17eeafe2bd57cb31eca85e5fa26a8002113",
+    "web/src/features/founder/agent/chat.tsx": "535ae5714c3bc4bc65ad457d19f4be7ed91ef9ffd0656c4d8de3a64151387383",
+    "web/tests/founder-session-browser.cjs": "0b876e6615f73e3e05b92707a80068d9253d9c1ba1735c511092d0e3ec4fa16d",
+    ".github/workflows/founder-browser.yml": "f40593f0fa45ed3bae1439a9cd3686c734d655ef60eb80ac3c1aa7a6b395671e"
+  },
+  "postgres": {
+    "status": "PASS",
+    "command": "/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_pg_suite.py postgres_review postgres_review_boundaries",
+    "log": ".codex/rafii-insights-remote-ci/pg-portable-local.log",
+    "externalInputs": "synthetic",
+    "realProviderCalls": 0
+  },
+  "founderDelayedSession": {
+    "dispatchGuard": "PASS",
+    "readyTurn": "validation_unavailable: disposable Founder API returned 503 SOURCE_UNAVAILABLE; full reply check did not pass",
+    "originalRace": "RED: old chat allowed dispatch and cleared draft before environment was available",
+    "latestResult": {
+      "status": "FAIL",
+      "execution": "real browser/API/disposable PG; delayed session transport; synthetic founder and model only",
+      "checks": [
+        {
+          "name": "Send waits for the authenticated environment",
+          "ok": true
+        },
+        {
+          "name": "Suggested questions wait for the authenticated environment",
+          "ok": true
+        },
+        {
+          "name": "Enter while the session loads preserves the typed question",
+          "ok": true
+        },
+        {
+          "name": "No turn is dispatched while the session loads",
+          "ok": true
+        },
+        {
+          "name": "Send becomes available after the real session is ready",
+          "ok": true
+        },
+        {
+          "name": "The ready composer contains the preserved question",
+          "ok": true
+        },
+        {
+          "name": "A ready Demo turn is accepted",
+          "ok": false
+        }
+      ],
+      "pageErrors": [],
+      "controlResponses": [
+        {
+          "path": "/api/control/v2/session",
+          "status": 200
+        },
+        {
+          "path": "/api/control/v2/workspace/demo",
+          "status": 200
+        },
+        {
+          "path": "/api/control/v2/agent/turns",
+          "status": 503
+        },
+        {
+          "path": "/api/control/v2/overview",
+          "status": 500
+        }
+      ],
+      "realProviderCalls": 0
+    },
+    "log": ".codex/rafii-insights-remote-ci/founder-session-green.log"
+  },
+  "typecheck": {
+    "status": "PASS",
+    "command": "/opt/homebrew/opt/node@24/bin/node node_modules/typescript/bin/tsc --noEmit",
+    "exitCode": 0,
+    "log": ".codex/rafii-insights-remote-ci/founder-typecheck.log",
+    "temporaryGeneratedTypesIncludeRemovedAfterCheck": true
+  },
+  "lint": {
+    "status": "PASS",
+    "command": "/opt/homebrew/opt/node@24/bin/node node_modules/oxlint/bin/oxlint src/features/founder/agent/chat.tsx",
+    "errors": 0,
+    "warnings": 0
+  },
+  "localDisposableProcessesStopped": true,
+  "original54CasesRerun": false
+}

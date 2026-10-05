@@ -7,7 +7,7 @@ import uuid
 
 ROOT=Path(__file__).resolve().parents[2]
 proof=runpy.run_path(str(ROOT/'tests/phase2/postgres_review.py'))
-globals().update({key:proof[key] for key in ('host','co','r','wid','foreign','ONE','TWO','clock','connection','refused','models','seed_review','review')})
+globals().update({key:proof[key] for key in ('host','co','r','wid','foreign','ONE','TWO','clock','connection','refused','models','seed_review','review','SOURCE_SHA')})
 jobs=seed_review(host,wid,'one',clock[0]);conn=jobs[0]['manifest']['channelId']
 scope={'channelIds':[conn],'publicationPeriod':{'start':review.iso(clock[0]-7*86400),'end':review.iso(clock[0]),'timezone':'UTC'},'horizon':'24h','cutoffAt':review.iso(clock[0]),'nativeMetric':[{'provider':'threads','nativeName':'views','unit':'count','definitionVersion':review.insights.DEFINITION_VERSION}]}
 checks=[]
@@ -49,6 +49,7 @@ with connection() as db:db.execute("UPDATE public.pr_channel_capabilities SET le
 refused(409,lambda:co.growth_loop.experiment_action(wid,'one',e['id'],{'action':'prepare'}))
 assert not models.calls
 checks.append('changed metric or revoked analytics right invalidates prepare and proposal replay before model dispatch')
-evidence={'status':'PASS','execution':'real owned disposable PG/services; synthetic native data and zero live dispatch','sourceSha':os.environ['POSTRIFF_SOURCE_SHA'],'checks':checks,'realModelCalls':0,'nativeAcceptance':False}
-Path(os.environ['POSTRIFF_REVIEW_EVIDENCE_DIR'],'boundaries.json').write_text(json.dumps(evidence,indent=2)+'\n')
+evidence={'status':'PASS','execution':'real owned disposable PG/services; synthetic native data and zero live dispatch','sourceSha':SOURCE_SHA,'checks':checks,'realModelCalls':0,'nativeAcceptance':False}
+destination=os.environ.get('POSTRIFF_REVIEW_EVIDENCE_DIR')
+if destination:Path(destination,'boundaries.json').write_text(json.dumps(evidence,indent=2)+'\n')
 print(json.dumps(evidence))

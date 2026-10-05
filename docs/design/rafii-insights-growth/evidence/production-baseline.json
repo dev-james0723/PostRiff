@@ -1,0 +1,22 @@
+{
+  "status": "verified_existing_baseline_not_requested_release",
+  "deploymentId": "dpl_Ehgd6XvntSGiefB51qPtsHsoWNqq",
+  "url": "postriff-phase2-private-d0uq2bqby-jamesau0723-6572s-projects.vercel.app",
+  "target": "production",
+  "readyState": "READY",
+  "alias": [
+    "postriff-phase2-private.vercel.app",
+    "postriff-phase2-private-jamesau0723-6572s-projects.vercel.app",
+    "postriff-phase2-private-git-c-a436d2-jamesau0723-6572s-projects.vercel.app"
+  ],
+  "gitSource": {
+    "type": "github",
+    "repoId": 1372872967,
+    "ref": "consumer-saas",
+    "sha": "676397a205de065f6962fb6c3f6a9204681c31b4"
+  },
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "requestedApplicationSourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "requestedBranchHeadSha": "535d0e0614b83a20eb100720e875750e1d02b84f",
+  "requestedReleaseDeployed": false
+}

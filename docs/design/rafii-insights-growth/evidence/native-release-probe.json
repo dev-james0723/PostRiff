@@ -1,0 +1,84 @@
+{
+  "status": "blocked",
+  "execution": "real authenticated production API and browser UI; real existing native Instagram UI; no collection/ingestion/publication executed",
+  "applicationSourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "branchHeadSha": "535d0e0614b83a20eb100720e875750e1d02b84f",
+  "productionAlias": "https://postriff-phase2-private.vercel.app",
+  "productionSourceSha": "676397a205de065f6962fb6c3f6a9204681c31b4",
+  "mfa": {
+    "state": "existing_session_authenticated",
+    "humanCodeRequired": false,
+    "securityChanged": false
+  },
+  "productionApi": {
+    "observedAt": "2026-10-05T01:51:45.398Z",
+    "workspaceId": "0ceb3635-59a6-426f-bfa8-6d0203b8c98e",
+    "workspaceName": "My agency",
+    "workspaceMembershipCount": 1,
+    "responses": [
+      {
+        "path": "/api/workspaces",
+        "httpStatus": 200,
+        "accessibleWorkspaces": 1
+      },
+      {
+        "path": "/api/workspaces/0ceb3635-59a6-426f-bfa8-6d0203b8c98e/channels",
+        "httpStatus": 200,
+        "channels": 0
+      },
+      {
+        "path": "/api/workspaces/0ceb3635-59a6-426f-bfa8-6d0203b8c98e",
+        "httpStatus": 200,
+        "phase2JobCount": 0,
+        "phase2ChannelCount": 0,
+        "phase2IdentityCount": 0
+      }
+    ],
+    "ui": [
+      "All 0",
+      "Direct 0",
+      "No accounts connected",
+      "0 posts read / 0 of 0 accounts reporting"
+    ]
+  },
+  "nativeUi": {
+    "provider": "instagram",
+    "accountHandle": "jamesaucreates",
+    "url": "https://www.instagram.com/insights/media/4000805824623599834/",
+    "uiMediaId": "4000805824623599834",
+    "views": null,
+    "viewers": null,
+    "likes": 0,
+    "comments": 0,
+    "saves": 0,
+    "shares": 0,
+    "profileVisits": 0,
+    "viewsDefinition": "Number of times the post was played or displayed.",
+    "unavailableMarker": "-- means data is currently unavailable.",
+    "nativeWindow": "not shown as exact24h",
+    "publicationAt": null,
+    "mappedRafiiNativePostId": null,
+    "qualifiesExact24h": false,
+    "probeRecordedAt": "2026-10-05T01:51:01.591Z",
+    "providerObservationTimestamp": null,
+    "rafiiIngestionTimestamp": null
+  },
+  "comparison": {
+    "rafiiNativePostId": null,
+    "rafiiDefinitionVersion": null,
+    "rafiiReadOffset": null,
+    "rafiiObservedAt": null,
+    "rafiiIngestedAt": null,
+    "qualifiedExact24hNativeReading": false,
+    "result": "cannot_compare_no_existing_Rafii_connection_or_verified_publication"
+  },
+  "blockedReason": "The only accessible authorized production workspace has zero channels and zero publication jobs. The existing Instagram UI post has no matching Rafii native publication or ingested exact24h observation. Creating a connection/grant/admission, enabling HistoryImport, inserting synthetic observations or publishing content would exceed the requested scope.",
+  "historyImportChange": false,
+  "scopeChange": false,
+  "admissionChange": false,
+  "pricingChange": false,
+  "paymentSettingsChange": false,
+  "publishingExecuted": false,
+  "paidGenerationExecuted": false,
+  "ingestionExecuted": false
+}

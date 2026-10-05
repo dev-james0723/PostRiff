@@ -1,0 +1,67 @@
+{
+  "status": "repair_pending_remote_validation",
+  "recordedAt": "2026-10-05T02:41:51.677711+00:00",
+  "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/126",
+  "baseBranch": "consumer-saas",
+  "originalBranchHead": "535d0e0614b83a20eb100720e875750e1d02b84f",
+  "firstCiCheckoutSha": "91aa427cd06f5bf09fe90ba077db71946b214faf",
+  "runs": [
+    {
+      "name": "Review evidence",
+      "runId": 37252258565,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258565"
+    },
+    {
+      "name": "Growth Studio browser",
+      "runId": 37252258510,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258510"
+    },
+    {
+      "name": "Growth metrics native-learning",
+      "runId": 37252258573,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258573"
+    },
+    {
+      "name": "Rafii browser",
+      "runId": 37252258533,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258533"
+    },
+    {
+      "name": "Founder admin browser",
+      "runId": 37252258527,
+      "conclusion": "failure",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258527"
+    },
+    {
+      "name": "Local release gates",
+      "runId": 37252258559,
+      "conclusion": "failure",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258559"
+    }
+  ],
+  "genuineFailures": [
+    {
+      "runId": 37252258527,
+      "failure": "Demo turn accepted 201 but answer absent from visible thread; 1229 of 1230 Founder checks passed",
+      "repair": "Wait for the authenticated session/environment before dispatch; preserve draft while loading. Add delayed real-session browser regression."
+    },
+    {
+      "runId": 37252258559,
+      "failure": "Review tests hard-coded disposable PG port 55404; standard runner owns 55438. Standard runner does not supply CI-only evidence variables.",
+      "repair": "Parse and restrict DSN to known disposable loopback PG ports; resolve source SHA from actual git if not supplied; optional evidence directory, retain stdout."
+    }
+  ],
+  "firstPreview": {
+    "deploymentId": "dpl_EMyLfXg5at5MZbWPX2Mg3MGyzzud",
+    "status": "READY",
+    "url": "https://postriff-phase2-private-7lp98mt0i-jamesau0723-6572s-projects.vercel.app",
+    "execution": "preview_only"
+  },
+  "requestedReleaseMerged": false,
+  "requestedReleaseDeployed": false,
+  "broadLocalAcceptanceRerun": false
+}

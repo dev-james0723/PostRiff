@@ -30,7 +30,7 @@ Trends 沿用 canonical schema／lineage／current-rights／baseline owners。Co
 - Actual Chrome／HTTP／PG browser：跨頁 exact context、12-post scope、Save View／classification／1-post gate、現有 experiment proposal＋明確 owner accept、delay/error 清除舊 DOM、真 PG stale/partial/revocation、empty recovery 通過。UI-state catalog 23/23 DOM pass，design-state overlays 明確 synthetic。
 - 1440／390／430px 無 whole-page overflow；keyboard、axe serious/critical 0；actual 10-page A4 繁體 PDF 提取最後一行註記，視覺檢查頁1／5／10 及表格／來源／wrap。
 - Web lint：0 errors、3 preexisting warnings；typecheck exit0；production build exit0。臨時 Next dist-dir include 已還原，不留產品配置變更。
-- 新 CI workflow YAML／shell syntax 在本地通過。**沒有 remote CI result**。
+- 新 CI workflow YAML／shell syntax 在本地通過。後續已 push 並取得真實 remote CI，詳見下方及 [remote-ci.json](evidence/remote-ci.json)。
 
 所有技術測試的 external/native inputs 皆 synthetic、實際 provider/model calls 0，不能代替真實原生驗收。未變更 HistoryImport OFF、scopes、價格、正式 admission 或 payment settings。
 
@@ -38,11 +38,12 @@ Trends 沿用 canonical schema／lineage／current-rights／baseline owners。Co
 
 [acceptance.json](evidence/acceptance.json)：54 local pass、3 blocked、1 not_applicable。每項包含 source、環境、方法、output、evidence paths。AC18 不提供 ratio aggregate；只有明確 native count median/mean，matched ratio guard 另由 AC17 驗收。
 
-1. **AC08／AC58 blocked**：[native-probe.json](evidence/native-probe.json)。00:14 UTC 的已登入 production UI 是 0 posts read／0 of 0 accounts reporting／No accounts connected。01:19 UTC 最後 reload 要求 MFA reauthentication。沒有 exact24h native IDs／definition／observedAt／ingestedAt 與 provider native口徑對照；deployment SHA unknown。
-2. **AC57 blocked / validation_unavailable**：此 local branch 尚未 push，沒有該 source SHA 的遠端 CI run。Workflow 是可審閱候選，不是已成功的 CI 執行。
-3. **未 merge／deploy**：未找到可套用此新 branch 的既有明確授權。沒有 publication、paid generation 或 production settings action。
+1. **AC08／AC58 blocked**：[native-release-probe.json](evidence/native-release-probe.json)。既有 production session 已恢復有效登入，MFA 不再阻擋讀取。實際 API HTTP200：唯一可存取 My agency workspace 有 0 channels、0 publication jobs。既有 Instagram post `4000805824623599834` 的原生 Views／Viewers 為 unavailable，未提供 exact24h window；沒有 Rafii native ID mapping、definitionVersion、readOffset、observedAt 或 ingestedAt 可對照。這份真實 native UI probe 是 blocked 證據，不能算合格 reading。
+2. **AC57 blocked，CI 修補待驗證**：[PR126](https://github.com/dev-james0723/PostRiff/pull/126) 已 push 至正常 release base consumer-saas。HEAD `535d0e0614b83a20eb100720e875750e1d02b84f` 的 CI 實際 checkout merge SHA `91aa427cd06f5bf09fe90ba077db71946b214faf`。Review [37252258565](https://github.com/dev-james0723/PostRiff/actions/runs/37252258565)、Growth Studio [37252258510](https://github.com/dev-james0723/PostRiff/actions/runs/37252258510)、Growth metrics [37252258573](https://github.com/dev-james0723/PostRiff/actions/runs/37252258573)、Rafii browser [37252258533](https://github.com/dev-james0723/PostRiff/actions/runs/37252258533) PASS。Founder [37252258527](https://github.com/dev-james0723/PostRiff/actions/runs/37252258527) 1229/1230 pass，但一次 session 未知環境的 turn 回覆未出現在可見 thread。Local release [37252258559](https://github.com/dev-james0723/PostRiff/actions/runs/37252258559) 被 Review test 的固定 PG port／CI-only env 假設阻擋。
+3. **CI 失敗的 scoped 修補**：[repair-validation.json](evidence/repair-validation.json)。PG test 限制為已知 loopback disposable ports 55404/55438，source fallback 讀 actual git，evidence output directory optional；兩 affected PG suites PASS。Founder send 需 session/environment ready，loading 時保留 draft；新增 delayed real-session browser check 的 dispatch guard PASS，但本地 reply validation_unavailable：ready turn 被 disposable API 回覆 `503 SOURCE_UNAVAILABLE`。Targeted lint 0 errors/0 warnings、typecheck exit0。完整遠端驗證會在修補 push 後執行，不把局部 guard 當完整 browser PASS。
+4. **未 merge／deploy**：本次已有明確授權；仍需 CI 與 qualified native gate 通過。Vercel preview READY 不等於 production。[production-baseline.json](evidence/production-baseline.json) 的實際 production alias deployment `dpl_Ehgd6XvntSGiefB51qPtsHsoWNqq` READY，consumer-saas SHA `676397a205de065f6962fb6c3f6a9204681c31b4`，尚未部署此新 application source。新 release merge SHA／deploy SHA／production smoke 均 pending。
 
-下一項需要的是已授權的 native publication／當前 account analytics rights／admitted exact24h read／native UI 對照，以及對應新 source SHA 的 CI。MFA、部署、原生覆蓋與發佈是分開的 gate。不要新增 scopes／admission／history import 或發布素材來補造通過。
+保留原本 54 local cases 的 source 與證據，未重跑或改写成新 SHA 的執行。HistoryImport OFF；沒有新增 scopes、admission、pricing、payment 設定、provider/model paid calls 或 public social content。要完成 native gate 需既有已授權帳戶及 verified publication 的合格 exact24h observation；不新增連接或內容補造證據。
 
 ## 失敗修復與重用規則
 

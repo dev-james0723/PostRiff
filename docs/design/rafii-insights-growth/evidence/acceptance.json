@@ -271,25 +271,26 @@
         "8"
       ],
       "status": "blocked",
-      "actual": "本地身份與 current-rights 拒絕測試通過。native read gate 未通過；登入／Direct grant 不代表 live-tested。",
+      "actual": "Real authenticated Rafii API/UI and existing Instagram native insights inspected; no qualified exact24h Rafii observation exists in the accessible workspace.",
       "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
-      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "executed_at": "2026-10-05T02:41:51.677711+00:00",
       "evidence_paths": [
         "docs/design/rafii-insights-growth/evidence/matrix.log",
         "docs/design/rafii-insights-growth/evidence/native-probe.json",
         "docs/design/rafii-insights-growth/evidence/postgres.json",
-        "docs/design/rafii-insights-growth/evidence/python-final.log"
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/native-release-probe.json",
+        "docs/design/rafii-insights-growth/evidence/production-baseline.json"
       ],
-      "blocked_reason": "Latest live reload requires MFA reauthentication. The earlier authenticated probe at 2026-10-05T00:14:28.269Z had 0 posts read / 0 of 0 accounts reporting / No accounts connected. No exact 24h native reading or definition comparison is available; deployment SHA remains unknown.",
+      "blocked_reason": "Authenticated production workspace My agency (0ceb3635-59a6-426f-bfa8-6d0203b8c98e) has zero channels and zero publication jobs. The existing Instagram UI post 4000805824623599834 has unavailable views and no exact24h window, Rafii mapping or ingested observation. No scope/admission/history-import/publication changes were made. MFA is no longer the blocker. Current production SHA is 676397a205de065f6962fb6c3f6a9204681c31b4.",
       "validation_ids": [
         "unit",
         "review_pg",
         "native"
       ],
       "executed_environment": [
-        "local runtime",
-        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
-        "actual production browser; deployment SHA unknown"
+        "authorized production API/browser; baseline SHA 676397a205de065f6962fb6c3f6a9204681c31b4",
+        "authorized existing Instagram native UI"
       ],
       "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
       "native_acceptance": false
@@ -2162,9 +2163,9 @@
         "8"
       ],
       "status": "blocked",
-      "actual": "local regression/contracts/lint/typecheck/build/PG/browser 全部通過；new CI workflow已本地parse/syntax。尚無此source SHA遠端CIrun，validation_unavailable。",
+      "actual": "Branch pushed; PR126 has real remote CI: four workflows pass, Founder and local release gates fail. Scoped genuine repairs prepared; focused PG/lint/typecheck pass; delayed-session dispatch guard passes, local reply check unavailable after harness503. Remote repair validation pending.",
       "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
-      "executed_at": "2026-10-05T01:26:35.930260+00:00",
+      "executed_at": "2026-10-05T02:41:51.677711+00:00",
       "evidence_paths": [
         ".github/workflows/rafii-review.yml",
         "docs/design/rafii-insights-growth/evidence/boundaries.json",
@@ -2184,9 +2185,11 @@
         "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log",
         "docs/design/rafii-insights-growth/evidence/typecheck-final.log",
         "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
-        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log",
+        "docs/design/rafii-insights-growth/evidence/remote-ci.json",
+        "docs/design/rafii-insights-growth/evidence/repair-validation.json"
       ],
-      "blocked_reason": "validation_unavailable: this local branch has not been pushed and no remote CI run is available for its source SHA; no applicable push/dispatch/merge/deploy authorization was established. The workflow is a locally validated candidate.",
+      "blocked_reason": "Genuine remote CI failures require a repaired source commit and fresh remote validation.",
       "validation_ids": [
         "unit",
         "review_contract",
@@ -2222,7 +2225,9 @@
         "remote CI"
       ],
       "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
-      "native_acceptance": false
+      "native_acceptance": false,
+      "ci_branch_head": "535d0e0614b83a20eb100720e875750e1d02b84f",
+      "ci_checkout_sha": "91aa427cd06f5bf09fe90ba077db71946b214faf"
     },
     {
       "id": "AC58",
@@ -2239,22 +2244,24 @@
         "8"
       ],
       "status": "blocked",
-      "actual": "所有case都有source/environment/method/output/index；但無 exact24h native reading＋原生口徑對照，blocked，fixtures不計native。",
+      "actual": "Real authenticated Rafii API/UI and existing Instagram native insights inspected; no qualified exact24h Rafii observation exists in the accessible workspace.",
       "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
-      "executed_at": "2026-10-05T01:26:36.527363+00:00",
+      "executed_at": "2026-10-05T02:41:51.677711+00:00",
       "evidence_paths": [
         "docs/design/rafii-insights-growth/evidence/initial-state.txt",
         "docs/design/rafii-insights-growth/evidence/integration-final.json",
-        "docs/design/rafii-insights-growth/evidence/native-probe.json"
+        "docs/design/rafii-insights-growth/evidence/native-probe.json",
+        "docs/design/rafii-insights-growth/evidence/native-release-probe.json",
+        "docs/design/rafii-insights-growth/evidence/production-baseline.json"
       ],
-      "blocked_reason": "Latest live reload requires MFA reauthentication. The earlier authenticated probe at 2026-10-05T00:14:28.269Z had 0 posts read / 0 of 0 accounts reporting / No accounts connected. No exact 24h native reading or definition comparison is available; deployment SHA remains unknown.",
+      "blocked_reason": "Authenticated production workspace My agency (0ceb3635-59a6-426f-bfa8-6d0203b8c98e) has zero channels and zero publication jobs. The existing Instagram UI post 4000805824623599834 has unavailable views and no exact24h window, Rafii mapping or ingested observation. No scope/admission/history-import/publication changes were made. MFA is no longer the blocker. Current production SHA is 676397a205de065f6962fb6c3f6a9204681c31b4.",
       "validation_ids": [
         "base",
         "native"
       ],
       "executed_environment": [
-        "local runtime",
-        "actual production browser; deployment SHA unknown"
+        "authorized production API/browser; baseline SHA 676397a205de065f6962fb6c3f6a9204681c31b4",
+        "authorized existing Instagram native UI"
       ],
       "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
       "native_acceptance": false
@@ -2263,7 +2270,7 @@
   "native_validation_passed": false,
   "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
   "integration_base_sha": "676397a205de065f6962fb6c3f6a9204681c31b4",
-  "recorded_at": "2026-10-05T01:26:35.930260+00:00",
+  "recorded_at": "2026-10-05T02:41:51.677711+00:00",
   "scope": "local engineering acceptance with explicit synthetic external identities; AC08/58 require real native evidence",
   "status_counts": {
     "pass": 54,

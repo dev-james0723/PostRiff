@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -21,7 +22,9 @@ from review_fixture import seed_review
 
 ONE=str(uuid.uuid4());TWO=str(uuid.uuid4())
 DSN=os.environ['POSTRIFF_TEST_DSN']
-assert 'host=127.0.0.1' in DSN and 'port=55404' in DSN,'Dedicated disposable PG only'
+dsn_options=psycopg.conninfo.conninfo_to_dict(DSN)
+assert dsn_options.get('host')=='127.0.0.1' and dsn_options.get('port') in {'55404','55438'} and dsn_options.get('dbname')=='postgres','Dedicated disposable PG only'
+SOURCE_SHA=os.environ.get('POSTRIFF_SOURCE_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 def connection():return psycopg.connect(DSN)
 def verify(token):
     if token in ('one','two'):return ONE if token=='one' else TWO
@@ -42,7 +45,7 @@ with connection() as db:
     db.execute("UPDATE public.pr_workspaces SET state='{}' WHERE id=%s",(wid,))
 host.bootstrap('one','studio')
 models=Models();host.growth=GrowthService(host,env={**ENV,'POSTRIFF_METRIC_READS':'1'},router_factory=models.router,clock=lambda:clock[0]);host.metric_reads=SimpleNamespace(workspace_allowed=lambda candidate:candidate==wid)
-co=CoworkerService(host,{'POSTRIFF_SOURCE_SHA':os.environ['POSTRIFF_SOURCE_SHA']},clock=lambda:clock[0]);host.coworker=co;r=co.review
+co=CoworkerService(host,{'POSTRIFF_SOURCE_SHA':SOURCE_SHA},clock=lambda:clock[0]);host.coworker=co;r=co.review
 jobs=seed_review(host,wid,'one',clock[0]);conn=jobs[0]['manifest']['channelId']
 scope={'channelIds':[conn],'publicationPeriod':{'start':review.iso(clock[0]-7*86400),'end':review.iso(clock[0]),'timezone':'UTC'},'horizon':'24h','cutoffAt':review.iso(clock[0]),'nativeMetric':[{'provider':'threads','nativeName':'views','unit':'count','definitionVersion':review.insights.DEFINITION_VERSION}]}
 checks=[]
@@ -141,7 +144,7 @@ with connection() as db:db.execute('DELETE FROM public.pr_metric_observations WH
 refused(410,lambda:r.snapshot(wid,'one',s['snapshotId'],1,format_='csv'))
 checks.append('availability correction and deleted observation invalidate frozen-source replay')
 assert not models.calls
-result={'status':'PASS','execution':'real disposable PG/services; synthetic native evidence','sourceSha':os.environ['POSTRIFF_SOURCE_SHA'],'checks':checks,'realModelCalls':0,'nativeAcceptance':False}
+result={'status':'PASS','execution':'real disposable PG/services; synthetic native evidence','sourceSha':SOURCE_SHA,'checks':checks,'realModelCalls':0,'nativeAcceptance':False}
 destination=os.environ.get('POSTRIFF_REVIEW_EVIDENCE_DIR')
 if destination:Path(destination,'postgres.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result))
