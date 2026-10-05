@@ -19,5 +19,10 @@ if mode=='empty':
     host.repository.command(wid,'fixture',host.repository.get(wid,'fixture')['revision'],empty)
     print(json.dumps({'execution':'disposable empty-workspace fixture'}))
 else:
-    assert mode=='seed','Unknown disposable scenario'
-    print(json.dumps(seed(host,wid,'fixture')))
+    assert mode in ('seed', 'official-contract'), 'Unknown disposable scenario'
+    # Exercise the positive provider trust contract only after the browser has
+    # proved that explicitly synthetic observations cannot create a lesson.
+    # These simulated fields are confined to this guarded disposable database;
+    # they are never a receipt for a real publication or measured outcome.
+    result = seed(host, wid, 'fixture', simulate_official_contract=mode == 'official-contract')
+    print(json.dumps({**result, 'execution': 'disposable simulated provider contract' if mode == 'official-contract' else 'disposable synthetic observations'}))
