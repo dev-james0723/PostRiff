@@ -46,6 +46,16 @@ function harness() {
 const base = { text: 'A short reflection.', ownContent: false, destinations: [{ platform: 'LinkedIn', language: 'en' }], voiceMode: 'neutral', voiceSourceIds: [], timeZone: 'UTC', maxMilliCredits: 1000 };
 const consent = { consentVersion: 'capture-v1', model: 'openai/gpt-4.1-mini' };
 
+test('Auto payload omits model and reasoning; consent metadata alone cannot pin or enable capture', () => {
+  const h = harness();
+  const payload = h.payload({ ...base, auditCaptureConsent: consent });
+  assert.equal(Object.hasOwn(payload, 'model'), false);
+  assert.equal(Object.hasOwn(payload, 'reasoning'), false);
+  assert.equal(Object.hasOwn(payload, 'auditCaptureConsent'), false);
+  assert.equal(Object.hasOwn(payload, 'auditCapture'), false);
+  assert.equal(h.payload({ ...base, model: consent.model }).model, consent.model);
+});
+
 test('one-run consent creates a grant before the identical quote and dispatch body', async () => {
   const h = harness();
   await h.render().start({ ...base, auditCaptureConsent: consent }, 7);

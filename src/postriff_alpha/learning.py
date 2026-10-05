@@ -90,6 +90,11 @@ def lint(statement, rule_key="other"):
 def scope_of(value):
     value = value if isinstance(value, dict) else {}
     scope = {key: (value.get(key) if isinstance(value.get(key), str) and value.get(key) else None) for key in ("platform", "language", "contentTypeId")}
+    # The content catalog's migration sentinel means no content type was selected.
+    # It is not a type or a learned restriction. Match the writer's admission
+    # contract; real selected types stay scoped throughout extraction and recall.
+    if scope["contentTypeId"] == "unclassified":
+        scope["contentTypeId"] = None
     if isinstance(value.get("campaignId"), str) and value["campaignId"]:
         scope["campaignId"] = value["campaignId"]
     if scope["language"]:

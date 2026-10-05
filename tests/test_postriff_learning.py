@@ -59,6 +59,15 @@ class Lint(unittest.TestCase):
 
 
 class StyleRevision(unittest.TestCase):
+    def test_unclassified_is_absent_but_selected_content_and_campaign_stay_scoped(self):
+        general = learning.normalize_proposal(proposal(scope={"contentTypeId": "unclassified", "campaignId": "c1", "language": "English"}))
+        self.assertEqual(general["scope"], {"platform": None, "language": "en", "contentTypeId": None, "campaignId": "c1"})
+        typed = learning.normalize_proposal(proposal(scope={"contentTypeId": "tutorial", "campaignId": "c1"}))
+        self.assertEqual(typed["scope"]["contentTypeId"], "tutorial")
+        self.assertTrue(learning.applies(typed, "LinkedIn", "en", "tutorial", campaign_id="c1"))
+        for content, campaign in ((None, "c1"), ("announcement", "c1"), ("tutorial", "c2")):
+            self.assertFalse(learning.applies(typed, "LinkedIn", "en", content, campaign_id=campaign))
+
     def test_remember_and_retire_move_the_style_revision_not_the_voice_revision(self):
         state = workspace()
         learning.ensure(state, NOW)

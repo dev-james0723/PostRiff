@@ -237,9 +237,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
     setBusy(true);
     try {
       await api.disconnectChannel(workspaceId, channel.id);
+      await refresh();
       // The card leaves the list (`listedOnChannels`), so the toast is the confirmation.
       toast.success(`${channel.platform} disconnected`, { description: channel.account });
-      await refresh();
     } catch (err) {
       // 404: already disconnected (another tab, or a list that had not caught up). Show the list as it is.
       if (err instanceof ApiError && err.status === 404) await refresh();

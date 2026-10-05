@@ -108,7 +108,22 @@ test('every sender spreads the Auto-aware request fields; the Rafii panel names 
   const src = (file) => fs.readFileSync(path.resolve(__dirname, '../src', file), 'utf8');
   const home = src('features/agent/home-view.tsx');
   assert.ok(home.includes('...choice.requestFields'), 'Home estimate, quick start and automation answers');
-  assert.ok(!/model: choice\.model/.test(home) && !/reasoning: choice\.reasoning/.test(home), 'Home never sends the resolved id or level itself');
+  // Inspect the request objects, not nested metadata. Capture consent binds the
+  // resolved writer separately; it must never accidentally pin a normal Auto turn.
+  const tree = ts.createSourceFile('home-view.tsx', home, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const requests = [];
+  function visit(node) {
+    if (ts.isObjectLiteralExpression(node) && node.properties.some(p => ts.isSpreadAssignment(p) && p.expression.getText(tree) === 'choice.requestFields')) {
+      requests.push(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.ok(requests.length >= 3, 'estimate, generation and automation all use Auto-aware fields');
+  for (const request of requests) {
+    assert.ok(!request.properties.some(p => ts.isPropertyAssignment(p) && ['model', 'reasoning'].includes(p.name.getText(tree))),
+      'request-level model and reasoning must come only from choice.requestFields');
+  }
   assert.ok(home.includes('value={choice.dialogValue}') && home.includes('onApply={choice.applyDialog}'), 'the dialog round-trips Auto');
   const conversation = src('features/agent/conversation-view.tsx');
   assert.ok(conversation.includes('...choice.requestFields') && !/model: choice\.model/.test(conversation));
