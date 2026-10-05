@@ -50,10 +50,12 @@ function merge(initial: FounderAgentTurnResponse, run: FounderAgentRun): Founder
 }
 
 export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean }) {
-  const { api, mode, environment } = useFounderSession();
+  const { api, mode, environment, sessionStatus } = useFounderSession();
   const pathname = usePathname() ?? '/founder';
   const { reduced } = useMotionPreference();
   const key = conversationKey(mode, environment);
+  // A cold session changes the thread key when its environment arrives. Keep the draft unsent until that key is stable.
+  const sessionReady = sessionStatus === 'ready' && environment !== null;
   const keyRef = useRef(key);
   keyRef.current = key;
 
@@ -129,7 +131,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
     async (raw: string, retryKey?: string) => {
       const message = raw.trim();
       const k = keyRef.current;
-      if (!message || founderPanelStore.get().busy[k]) return;
+      if (!sessionReady || !message || founderPanelStore.get().busy[k]) return;
       const idempotencyKey = retryKey ?? randomKey();
       const assistantId = `a-${idempotencyKey}`;
       if (!retryKey) {
@@ -166,7 +168,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         founderPanelStore.setBusy(k, false);
       }
     },
-    [api, environment, mode, pathname, waitForRun]
+    [api, environment, mode, pathname, sessionReady, waitForRun]
   );
 
   const stop = useCallback(async () => {
@@ -286,10 +288,11 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             placeholder={`Ask about ${sectionTitle.toLowerCase()}, or anything in the business…`}
             className='placeholder:text-muted-foreground max-h-40 min-h-14 flex-1 resize-none bg-transparent px-2 py-3 text-base leading-snug outline-none field-sizing-content'
           />
-          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!text.trim() || busy}>
+          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!sessionReady || !text.trim() || busy}>
             <Icons.send className='size-4' />
           </Button>
         </div>
+        {!sessionReady && <p role='status' className='text-muted-foreground px-2 pt-1 text-xs'>{sessionStatus === 'error' ? 'Your founder session could not be checked. Reload to try again.' : 'Checking your founder session…'}</p>}
       </form>
     </div>
   );
