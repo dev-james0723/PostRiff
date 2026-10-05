@@ -5,7 +5,7 @@ const {randomUUID}=require('node:crypto'),{execFileSync}=require('node:child_pro
 const root=path.resolve(__dirname,'../..'),base=process.env.POSTRIFF_REVIEW_WEB_ORIGIN||'http://127.0.0.1:33404';
 const out=process.env.POSTRIFF_REVIEW_EVIDENCE_DIR||path.join(root,'docs/design/rafii-insights-growth/evidence');
 const python=process.env.POSTRIFF_TEST_PYTHON||'python3',principal=randomUUID();
-const headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base};
+const headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base,Connection:'close'};
 async function api(method,url,body){let response;try{response=await fetch(base+url,{method,headers,...(body?{body:JSON.stringify(body)}:{})});}catch(e){throw new Error(method+' '+url+' transport failed',{cause:e});}assert.ok(response.ok,await response.clone().text());return response.json();}
 (async()=>{
   assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');

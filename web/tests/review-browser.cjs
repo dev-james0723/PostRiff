@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {randomUUID}=require('node:crypto'),{execFileSync}=require('node:child_process');
 const root=path.resolve(__dirname,'../..'),base=process.env.POSTRIFF_REVIEW_WEB_ORIGIN||'http://127.0.0.1:33404';
 const out=process.env.POSTRIFF_REVIEW_EVIDENCE_DIR||path.join(root,'docs/design/rafii-insights-growth/evidence');fs.mkdirSync(out,{recursive:true});
-const python=process.env.POSTRIFF_TEST_PYTHON||'python3',principal=randomUUID(),headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base};
+const python=process.env.POSTRIFF_TEST_PYTHON||'python3',principal=randomUUID(),headers={'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Authorization:'Bearer dev:'+principal,Origin:base,Connection:'close'};
 async function api(method,url,body){const r=await fetch(base+url,{method,headers,...(body?{body:JSON.stringify(body)}:{})});assert.ok(r.ok,`${method} ${url}: ${r.status} ${await r.clone().text()}`);return r.json();}
 async function seed(wid,mode='seed'){execFileSync(python,['tests/phase2/review_fixture.py','55404',principal,wid,mode],{cwd:root});}
 (async()=>{
@@ -61,7 +61,11 @@ checks.push('real HTTP read projection, measured zero / missing sources, Saved V
 for(const width of [390,430]){await page.setViewportSize({width,height:900});await audit(String(width));await shot('review-'+width);}
 await panel.getByLabel('Post age',{exact:true}).focus();await page.keyboard.press('Tab');
 assert.ok(await panel.getByLabel('Review timezone',{exact:true}).evaluate(e=>e===document.activeElement),'Keyboard focus reaches timezone');
-await page.keyboard.press('ControlOrMeta+A');await page.keyboard.type('America/Indiana/Indianapolis');await ready();
+await page.keyboard.press('ControlOrMeta+A');await page.keyboard.type('America/Indiana/Indianapolis');
+await panel.getByText(/\d+ of \d+ publications have qualified readings\./).waitFor();
+await panel.locator('summary').filter({hasText:'Language, format and comparison'}).click();
+await panel.getByLabel('UTC publication start',{exact:true}).fill(initialScope.publicationPeriod.start);
+await panel.getByLabel('UTC publication end excluded',{exact:true}).fill(initialScope.publicationPeriod.end);await ready();
 await panel.getByLabel('Post age',{exact:true}).selectOption('1h');
 await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
 await panel.getByLabel('Post age',{exact:true}).selectOption('24h');await ready();
