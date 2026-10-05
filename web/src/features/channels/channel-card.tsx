@@ -191,6 +191,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [probing, setProbing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
 
@@ -232,6 +233,24 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   }
 
   const reportChangeError = useChangeError();
+
+  async function runInsightsCanary() {
+    setBusy(true);
+    setProbing(true);
+    try {
+      const result = await api.insightsCanary(workspaceId, channel.id);
+      if (result.state === 'done' && result.providerRead) {
+        toast.success('Instagram analytics test completed', { description: 'Meta returned a native insights response for this account.' });
+      } else {
+        toast.error('Instagram analytics test did not complete', { description: result.state });
+      }
+    } catch (err) {
+      toast.error("Couldn't run the Instagram analytics test", { description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setBusy(false);
+      setProbing(false);
+    }
+  }
 
   async function disconnect() {
     setBusy(true);
@@ -366,6 +385,18 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
+          <StatefulButton
+            variant='outline'
+            className={cn(STATEFUL_GLASS, CONTROL_44)}
+            state={probing ? 'loading' : 'idle'}
+            loadingText='Testing analytics…'
+            disabled={busy}
+            onClick={() => void runInsightsCanary()}
+          >
+            Run analytics test
+          </StatefulButton>
+        )}
         <HistoryImportControl channel={channel} provider={provider} canManage={canManage} />
         {canManage && !disconnected && (
           <StatefulButton
