@@ -16,7 +16,7 @@ async function api(method,url,body){let response;try{response=await fetch(base+u
   const baseline=await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(scope))}`);
   assert.equal(baseline.coverage.eligible,12);
   const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-  const browser=await chromium.launch({headless:true,channel:'chrome'}),context=await browser.newContext({viewport:{width:390,height:900},reducedMotion:'reduce'});
+  const browser=await chromium.launch({headless:true,...(process.env.POSTRIFF_TEST_BROWSER_CHANNEL?{channel:process.env.POSTRIFF_TEST_BROWSER_CHANNEL}:{})}),context=await browser.newContext({viewport:{width:390,height:900},reducedMotion:'reduce'});
   await context.route('**/*',r=>['127.0.0.1','localhost'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());
   await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
   await context.addInitScript(({principal,wid,tours})=>{localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-workspace',wid);localStorage.setItem('postriff-onboarding',JSON.stringify({completed:{},dismissed:tours,nudged:{}}));},{principal,wid,tours});

@@ -11,7 +11,7 @@ async function seed(wid,mode='seed'){execFileSync(python,['tests/phase2/review_f
 assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');
 const {workspaceId:wid}=await api('POST','/api/auth/verify',{plan:'studio'});await seed(wid);
 const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-const browser=await chromium.launch({headless:true,channel:'chrome'});const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
+const browser=await chromium.launch({headless:true,...(process.env.POSTRIFF_TEST_BROWSER_CHANNEL?{channel:process.env.POSTRIFF_TEST_BROWSER_CHANNEL}:{})});const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
 await context.route('**/*',r=>['127.0.0.1','localhost'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());
 await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
 await context.addInitScript(({principal,wid,tours})=>{localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-workspace',wid);localStorage.setItem('postriff-onboarding',JSON.stringify({completed:{},dismissed:tours,nudged:{}}));},{principal,wid,tours});
@@ -83,7 +83,7 @@ const printPage=await context.newPage();await printPage.setContent(pdf.content);
 await printPage.pdf({path:path.join(out,'report.pdf'),format:'A4',printBackground:true,preferCSSPageSize:true});
 await printPage.screenshot({path:path.join(out,'report-print.png'),fullPage:true});await printPage.close();
 for(const f of ['report.md','report.csv']){const text=fs.readFileSync(path.join(out,f),'utf8');assert.ok(text.includes(snapshot.snapshotId)&&text.includes(snapshot.payloadDigest)&&text.includes('最後一行：來源與註記完整保留。'));}
-const extracted=execFileSync('/opt/homebrew/bin/pdftotext',[path.join(out,'report.pdf'),'-'],{encoding:'utf8'});
+const extracted=execFileSync(process.env.POSTRIFF_TEST_PDFTOTEXT||'pdftotext',[path.join(out,'report.pdf'),'-'],{encoding:'utf8'});
 for(const text of [snapshot.snapshotId,'繁體中文週回顧','最後一行：來源與註記完整保留。'])assert.ok(extracted.replace(/\s/g,'').includes(text),'PDF text '+text);
 fs.writeFileSync(path.join(out,'pdf-text.txt'),extracted);
 assert.ok(extracted.split('\f').length>=3,'Long note should span multiple readable pages');

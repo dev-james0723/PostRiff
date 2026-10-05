@@ -1,0 +1,96 @@
+name: Rafii Review evidence acceptance
+on:
+  pull_request:
+    paths:
+      - 'src/postriff_phase2/**'
+      - 'tests/test_review*.py'
+      - 'tests/test_rafii_analytics_acceptance.py'
+      - 'tests/phase2/*review*.py'
+      - 'scripts/postriff_dev_hosted.py'
+      - 'web/src/features/analytics/**'
+      - 'web/src/features/growth/**'
+      - 'web/src/lib/analytics/**'
+      - 'web/src/lib/coworker/**'
+      - 'web/tests/review*.cjs'
+      - 'web/package*.json'
+      - 'docs/design/rafii-insights-growth/review.schema.json'
+      - '.github/workflows/rafii-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rafii-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      POSTRIFF_DEV_WEB_ORIGIN: http://127.0.0.1:33404
+      POSTRIFF_API_ORIGIN: http://127.0.0.1:43404
+      POSTRIFF_DIST_DIR: .next-review-acceptance
+      POSTRIFF_SOURCE_SHA: ${{ github.sha }}
+      POSTRIFF_TEST_DSN: host=127.0.0.1 port=55404 dbname=postgres
+      POSTRIFF_TEST_PYTHON: python3
+      POSTRIFF_REVIEW_EVIDENCE_DIR: ${{ github.workspace }}/.codex/rafii-review-evidence
+      NEXT_PUBLIC_POSTRIFF_DEV_AUTH: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned validation tools and a CJK PDF renderer
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm --prefix web ci
+          npx --prefix web playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common poppler-utils fonts-noto-cjk
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql
+          sudo chmod 1777 /var/run/postgresql
+      - name: Source-bound unit regressions and generated contracts
+        run: |
+          python -m unittest test_review test_review_evidence test_rafii_analytics_acceptance
+          node --test web/tests/review-contract.test.cjs
+          npm --prefix web run lint
+          npm --prefix web run typecheck
+      - name: Browser, immutable exports and real PostgreSQL rights boundaries
+        shell: bash
+        run: |
+          mkdir -p "$POSTRIFF_REVIEW_EVIDENCE_DIR"
+          python scripts/postriff_dev_hosted.py --port 43404 --pg-port 55404 --growth-phase2-fixture --review-fixture > "$POSTRIFF_REVIEW_EVIDENCE_DIR/api.log" 2>&1 &
+          api_pid=$!
+          (cd web && node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 33404) > "$POSTRIFF_REVIEW_EVIDENCE_DIR/web.log" 2>&1 &
+          web_pid=$!
+          cleanup() { kill "$web_pid" "$api_pid" 2>/dev/null || true; wait "$web_pid" "$api_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:33404/api/auth/config > /dev/null; then ready=1; break; fi
+            kill -0 "$api_pid" "$web_pid"
+            sleep 1
+          done
+          test "$ready" = 1
+          node web/tests/review-browser.cjs > "$POSTRIFF_REVIEW_EVIDENCE_DIR/browser.log" 2>&1
+          node web/tests/review-states-browser.cjs > "$POSTRIFF_REVIEW_EVIDENCE_DIR/ui-states.log" 2>&1
+          python tests/phase2/postgres_review_boundaries.py > "$POSTRIFF_REVIEW_EVIDENCE_DIR/postgres.log" 2>&1
+      - name: Preserve synthetic evidence for the exact commit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafii-review-${{ github.sha }}
+          path: .codex/rafii-review-evidence/
+          retention-days: 14
