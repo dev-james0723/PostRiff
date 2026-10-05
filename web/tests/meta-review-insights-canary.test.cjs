@@ -11,9 +11,8 @@ test('Meta review canary uses the guarded native insights endpoint', () => {
   assert.match(client, /confirmed: true/);
 });
 
-test('Meta review canary control stays hidden unless explicitly requested', () => {
-  assert.match(card, /params\.get\('metaReview'\) === '1'/);
-  assert.match(card, /channel\.platform === 'Instagram'/);
+test('Meta review canary control is limited to manageable Direct Instagram analytics connections', () => {
+  assert.match(card, /canManage && channel\.platform === 'Instagram'/);
   assert.match(card, /channel\.capabilities\.analytics\?\.level === 'Direct'/);
   assert.match(card, /Run analytics test/);
 });
