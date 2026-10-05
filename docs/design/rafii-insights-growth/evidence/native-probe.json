@@ -1,0 +1,36 @@
+{
+  "status": "blocked",
+  "execution": "authorized read-only authenticated production browser UI; no native transport/collection invoked by this acceptance",
+  "observedAt": "2026-10-05T00:14:28.269Z",
+  "url": "https://postriff-phase2-private.vercel.app/app/analytics",
+  "deploymentSha": null,
+  "deploymentShaStatus": "unknown; Git integration head is not deployment evidence",
+  "workspaceIdentity": "current open workspace; ID not exposed in the observed AX UI",
+  "actualText": [
+    "No analytics Not read yet",
+    "No comparable hypothesis yet. Collect verified posts with covered metrics; at least five posts per group are needed.",
+    "0 posts read 0 of 0 accounts reporting",
+    "No accounts connected"
+  ],
+  "qualifiedExact24hNativeReading": false,
+  "nativePostId": null,
+  "nativeMethodComparison": null,
+  "blockedReason": "Latest live reload requires MFA reauthentication. The earlier authenticated probe at 2026-10-05T00:14:28.269Z had 0 posts read / 0 of 0 accounts reporting / No accounts connected. No exact 24h native reading or definition comparison is available; deployment SHA remains unknown.",
+  "nextRequiredEvidence": "An already-authorized verified publication, current account analytics rights, admitted read, exact native identity / readOffset 24h / definition / observedAt / ingestedAt and a native provider comparison. New publication or added provider admission is not authorized by this task.",
+  "historyImport": "OFF",
+  "scopeExpansion": false,
+  "publishingExecuted": false,
+  "paidGenerationExecuted": false,
+  "releaseCandidateShaAtEarlierProbe": "8629a463b761fa46bbe9aef20b529009b7a3019a",
+  "evaluationCandidateSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "latestProbe": {
+    "observedAt": "2026-10-05T01:19:12.505Z",
+    "url": "https://postriff-phase2-private.vercel.app/auth/verify?next=%2Fapp%2Fanalytics",
+    "actualText": [
+      "Confirm it's you",
+      "Two-factor authentication is on for this account. Enter the 6-digit code from your authenticator app."
+    ],
+    "state": "reauthentication_required",
+    "nativeReadExecuted": false
+  }
+}

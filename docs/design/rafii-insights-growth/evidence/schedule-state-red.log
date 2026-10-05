@@ -1,0 +1,13 @@
+........E.................
+======================================================================
+ERROR: test_missing_metric_uses_current_schedule_and_native_unsupported_state (test_review.ReviewTests.test_missing_metric_uses_current_schedule_and_native_unsupported_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 151, in test_missing_metric_uses_current_schedule_and_native_unsupported_state
+    p=self.review.project_review(self.state,self.context(),remaining,{'own'},NOW,tracking_index=tracking)
+TypeError: project_review() got an unexpected keyword argument 'tracking_index'
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.041s
+
+FAILED (errors=1)

@@ -1,0 +1,18 @@
+✔ review runtime contract exists (10.521208ms)
+✔ UTC half-open dates and IANA timezone (764.829875ms)
+✔ true zero, unknown and invalid numbers are distinct (0.584375ms)
+✔ input forbids provider claims and client lineage (20.16025ms)
+✔ current access overrides a cached measured zero (0.498042ms)
+✔ completed collection does not turn a missing or unsupported value into measured (0.283125ms)
+✔ expired source has a distinct display state and a recovery instruction (1.145125ms)
+✔ Review reuses canonical tracking states with its own 300-publication limit (79.887417ms)
+✔ relative baseline input resolves separately from the fixed report contract (15.724459ms)
+✔ generated schema matches canonical runtime (379.709125ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3565.744584

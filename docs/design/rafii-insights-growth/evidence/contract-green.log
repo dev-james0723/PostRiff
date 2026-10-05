@@ -1,0 +1,14 @@
+✔ review runtime contract exists (1.3405ms)
+✔ UTC half-open dates and IANA timezone (762.061583ms)
+✔ true zero, unknown and invalid numbers are distinct (0.968542ms)
+✔ input forbids provider claims and client lineage (2.636667ms)
+✔ current access overrides a cached measured zero (0.233333ms)
+✔ generated schema matches canonical runtime (53.172833ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2931.091

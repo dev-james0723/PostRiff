@@ -1,0 +1,237 @@
+{
+  "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "recorded_at": "2026-10-05T01:26:35.930260+00:00",
+  "files": [
+    {
+      "path": ".github/workflows/rafii-review.yml",
+      "bytes": 4276,
+      "sha256": "f786f385c1b812f9025dce10ee419ce30943ec83b8f30618f34105f728184414"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/boundaries.json",
+      "bytes": 750,
+      "sha256": "b21b85ecfae87e1fdc79c655ac8d708e54579e547c8bc165a2aee1268d1ed94d"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/browser-final.log",
+      "bytes": 1328,
+      "sha256": "e0371764568e5c3cf3a815138a808f195fc86b5db85052fb5216e7aa7af8c802"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/browser.json",
+      "bytes": 1423,
+      "sha256": "17ff39dd20046f16e37a2b75fb9d276910923de40cfd02cdf45f0c4530455083"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/build-final.log",
+      "bytes": 2850,
+      "sha256": "fb661e4eaa1316ac55f3132977b4a84b220d835e9f84f13b47cb7d482b453b83"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/ci-config-validation.log",
+      "bytes": 210,
+      "sha256": "71e96b0f7f7a1f79ceff106dc19942cd1ad4a05677a3782e18a2a6356c8c82d3"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/contract-final.log",
+      "bytes": 850,
+      "sha256": "2bb17718bbcfac965d8fdb226b581bac263e0229135e07c13f521cb4399dedf0"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/fixture-guard-green.log",
+      "bytes": 616,
+      "sha256": "691cec700b9ba489163766969f8ede757e9e85d6ca2a48b5ffdafa0e6df6e533"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+      "bytes": 699,
+      "sha256": "0ed201856e872ea2513711c01c6f2b7916313c3555e89d55a163fc6bd588b9f6"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+      "bytes": 1133,
+      "sha256": "5f1d4c29e921000fca524e17c71003657e64d5f92e82b72aff9a9edf837949c9"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/growth-owner/calibration-owner-restored.png",
+      "bytes": 421436,
+      "sha256": "78683680031ced3c7b822603e929376822c9294902e1dc57613a3e97aeee9365"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+      "bytes": 942,
+      "sha256": "a8df6ddf9a0f2b4722986d6335ad28eabdbdf853a05a4d80f3a56644dcf9683d"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/initial-state.txt",
+      "bytes": 273,
+      "sha256": "dc26d781db1ccc9e599010d32f361b178f248e691adfed6dfd7272a609b7240c"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/integration-final.json",
+      "bytes": 941,
+      "sha256": "f97f17c2b383c982885328200590db314de42f09999068063d323640350d9cb9"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/lint-final.log",
+      "bytes": 2597,
+      "sha256": "ace97a5f06f664143279c50fc3c472ada754ceff7ee19d8715a545d7002565f1"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/matrix.json",
+      "bytes": 825,
+      "sha256": "8f4f701fa3f35dd936d2d33b2d8408e53b73543be97e934179013deec368261d"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/matrix.log",
+      "bytes": 2620,
+      "sha256": "1c1018536c7d14eadc517c3c4f86a310e154f30feb7f88a6f998e4de948e0319"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/native-probe.json",
+      "bytes": 2110,
+      "sha256": "d252f4d8fff43c029a48676725ca4c4abe672888bc9fc7f99094bb9a713694e9"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+      "bytes": 110089,
+      "sha256": "254f0a9c9cc53074cfb5d4f12b00900800f5b1d57e0fe199a2a4879fd58b56b7"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+      "bytes": 82297,
+      "sha256": "470dec4d0aa3ef6f5a489f2e23cbadbda769b4b9086ba143c0a40a7664ea413f"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+      "bytes": 152274,
+      "sha256": "58b13da9c8e6435ac5dfcc4ff37dc16ccc43d489ca7dad23b6b936e5d38b4352"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+      "bytes": 26167,
+      "sha256": "037425d6cb4eb53a07bb7a76e5dee0e60b8a6c217efd5c8a17bdc5faf597440f"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/postgres.json",
+      "bytes": 1173,
+      "sha256": "77548e3fbd3e33fccd858ba0ef2ada5dfaaf3363596645fa531a9eb42eabfc26"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/python-final.log",
+      "bytes": 465,
+      "sha256": "030d74e39123e021e57d5e3047a59958c6e703484e1df404194cfbc78a34c583"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/report-print.png",
+      "bytes": 1485433,
+      "sha256": "36151dcf0b99c27f36b48d3d32be6214dc7acb4f152566ba7ca92410f619e26d"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/report.csv",
+      "bytes": 3345300,
+      "sha256": "e8cbe83c6937f174168fb4369df268483fd0ac486176512cc39ba72a362a0f6f"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/report.md",
+      "bytes": 31155,
+      "sha256": "4d905bfb8727b8d8f45e2483803ca5e24ee29e4c64e948aab7676436e9109697"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/report.pdf",
+      "bytes": 224764,
+      "sha256": "d9a2cfc9484b515ce48c46eac58def376f551beab5263962373395f48dc73423"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-390.png",
+      "bytes": 710773,
+      "sha256": "9b9e9fb819ba7454970063d05570980d2b39fff2a01a65cbb1a83f8269b6833a"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-430.png",
+      "bytes": 720038,
+      "sha256": "86bef1a4a54c7fe6d3935c7107ef1f7c18875a60ece8f6677cd4f5e585016c57"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-desktop.png",
+      "bytes": 813953,
+      "sha256": "e0fed6310dc9a924e71842b590a5239361b28faee48944b2019e3c971650ff9e"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-empty.png",
+      "bytes": 572751,
+      "sha256": "3229aab84b051651449813adb90ea83bf82800ee412f9d1baccf469df362f8b0"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-error.png",
+      "bytes": 609017,
+      "sha256": "059581a718357ac8ac1c72597914f48b26613c603da224ee9db96372c01b8beb"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-partial.png",
+      "bytes": 716042,
+      "sha256": "0391983e1dc6704b9fc2b15954159052be18de34f4c550aace2c921fd3f523fc"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-revoked-in-place.png",
+      "bytes": 621632,
+      "sha256": "c7bd21965e9cde6fb6567573dfee5703f741aaa569eb0525b5a34e96c4877cf4"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-revoked.png",
+      "bytes": 660870,
+      "sha256": "a5f21b22a37da633a3f4cc479870f47c463bc79d256b2a4de4e200c6e8ba99c1"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/review-stale.png",
+      "bytes": 999737,
+      "sha256": "6948877189527a0c96c85bb5c36bf3b54b6a3df7ef2bd6b9df82fa0805746bcd"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/run-growth-browser.cjs",
+      "bytes": 4030,
+      "sha256": "fabb8ab76537d886b457c8fce8aabe9422a72f68eba8eff3af897c4e69df927d"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/run-review-matrix.py",
+      "bytes": 5757,
+      "sha256": "bf319c92e0a0d39fc349385f3a5d20d000b4469e0339d0e5f20a2bf6c4b38c29"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/run-trends.py",
+      "bytes": 2381,
+      "sha256": "21891b7e8eb47b62d58c55eb4a60dbbb77daf05ca8472be3aab011b63c98610a"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/transport-diagnostic.log",
+      "bytes": 889,
+      "sha256": "df409a054356bd1382419f439fe0265a28d97a9be974d08eae1726640e8e95c9"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/trend-contract-final.log",
+      "bytes": 110,
+      "sha256": "cf36116f71e7267875be3d53a40e5d87b7b598171fb8f52ccc94b47aab25e873"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log",
+      "bytes": 1557,
+      "sha256": "3fd91b11ec60cad28311438dce7d74d83d05f58fc11403743a79e59d6d37f195"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/typecheck-final.log",
+      "bytes": 48,
+      "sha256": "b13539b82e2ccffed1b0c1ad7af2d320b56f47df84b5263771f5bbe8e32dd217"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+      "bytes": 2673,
+      "sha256": "b86eb9342079018c9ca470ed3ed1a59affc98b522eb5b4caf54654ceef465bfc"
+    },
+    {
+      "path": "docs/design/rafii-insights-growth/evidence/ui-states-browser.log",
+      "bytes": 2230,
+      "sha256": "b0f836537f83734127230fcd87573a4aa488d508f086a0f85f50f9c6780d6aaa"
+    }
+  ],
+  "excludes": "Intermediate failure logs are recoverable historical data in the worktree; not accepted final results. No production private profile/account contents are persisted."
+}

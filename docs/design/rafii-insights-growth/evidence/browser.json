@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "execution": "real browser HTTP + disposable PG, synthetic native data; error/latency injected only for transport states",
+  "sourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "checks": [
+    "Analytics to Growth Studio to Analytics preserves exact resolved dates, cutoff, comparison and context digest",
+    "real HTTP read projection, measured zero / missing sources, Saved View save, versioned classification and scoped low sample; existing Growth Loop proposal and explicit owner acceptance, with no publication or generated job",
+    "1440 / 390 / 430px, no page overflow, axe serious/critical, keyboard scope operation",
+    "UI fixed report, notes create v2, MD / CSV same payload, actual multi-page CJK PDF render and extracted final note",
+    "delayed new scope and read error immediately remove old values/actions/hidden report DOM",
+    "real PG later unavailable attempt preserves old value with stale label; partial coverage retains missing values and per-metric sample counts",
+    "real report current-rights refusal refreshes stale native values, original content and report controls in place without a reload",
+    "real backend revocation removes values and content; empty account state remains actionable"
+  ],
+  "realProviderCalls": 0,
+  "realModelCalls": 0,
+  "nativeAcceptance": false,
+  "pdf": {
+    "pages": 10,
+    "cjkExtracted": true
+  },
+  "consoleErrors": []
+}

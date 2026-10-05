@@ -1,0 +1,14 @@
+......F....................
+======================================================================
+FAIL: test_expired_connection_removes_stored_metrics_and_reuse (test_review.ReviewTests.test_expired_connection_removes_stored_metrics_and_reuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 166, in test_expired_connection_removes_stored_metrics_and_reuse
+    self.assertTrue(all(e['value'] is None and e['reason']=='expired' for e in p['nativeResults']))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 27 tests in 0.041s
+
+FAILED (failures=1)

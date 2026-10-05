@@ -1,0 +1,41 @@
+✔ review runtime contract exists (3.171167ms)
+✔ UTC half-open dates and IANA timezone (51.707375ms)
+✔ true zero, unknown and invalid numbers are distinct (0.687792ms)
+✔ input forbids provider claims and client lineage (3.59875ms)
+✔ current access overrides a cached measured zero (0.330416ms)
+✖ completed collection does not turn a missing or unsupported value into measured (3.6255ms)
+✔ relative baseline input resolves separately from the fixed report contract (7.9185ms)
+✔ generated schema matches canonical runtime (58.949792ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 332.544042
+
+✖ failing tests:
+
+test at web/tests/review-contract.test.cjs:31:3
+✖ completed collection does not turn a missing or unsupported value into measured (3.6255ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'measured'
+  - 'unavailable'
+  
+      at TestContext.<anonymous> (/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-contract.test.cjs:32:58)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'measured',
+    expected: 'unavailable',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,45 @@
+test_ai_classification_is_a_suggestion_until_human_confirmation (test_review.ReviewTests.test_ai_classification_is_a_suggestion_until_human_confirmation) ... FAIL
+test_basis_uses_exact_readings_and_scope_digest (test_review.ReviewTests.test_basis_uses_exact_readings_and_scope_digest) ... ok
+test_classification_versions_do_not_rewrite_old_membership (test_review.ReviewTests.test_classification_versions_do_not_rewrite_old_membership) ... FAIL
+test_dates_require_explicit_timezone_and_half_open_period (test_review.ReviewTests.test_dates_require_explicit_timezone_and_half_open_period) ... ok
+test_duplicate_readings_count_one_publication_and_latest_failure_is_stale (test_review.ReviewTests.test_duplicate_readings_count_one_publication_and_latest_failure_is_stale) ... ok
+test_mixed_readings_cannot_make_a_ratio (test_review.ReviewTests.test_mixed_readings_cannot_make_a_ratio) ... ok
+test_relative_view_resolves_dst_local_week_without_moving_snapshot (test_review.ReviewTests.test_relative_view_resolves_dst_local_week_without_moving_snapshot) ... ok
+test_revoked_rights_remove_value_and_source (test_review.ReviewTests.test_revoked_rights_remove_value_and_source) ... ok
+test_route_workspace_cannot_be_overridden (test_review.ReviewTests.test_route_workspace_cannot_be_overridden) ... ok
+test_saved_view_relative_rule_replay_and_revision_conflict (test_review.ReviewTests.test_saved_view_relative_rule_replay_and_revision_conflict) ... FAIL
+test_strict_offset_definition_cutoff_and_identity (test_review.ReviewTests.test_strict_offset_definition_cutoff_and_identity) ... ok
+test_zero_and_null_and_invalid_values_are_separate (test_review.ReviewTests.test_zero_and_null_and_invalid_values_are_separate) ... ok
+test_zero_baseline_has_no_relative_infinity (test_review.ReviewTests.test_zero_baseline_has_no_relative_infinity) ... ok
+
+======================================================================
+FAIL: test_ai_classification_is_a_suggestion_until_human_confirmation (test_review.ReviewTests.test_ai_classification_is_a_suggestion_until_human_confirmation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 140, in test_ai_classification_is_a_suggestion_until_human_confirmation
+    self.assertTrue(hasattr(self.review,'classify_content'))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_classification_versions_do_not_rewrite_old_membership (test_review.ReviewTests.test_classification_versions_do_not_rewrite_old_membership)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 129, in test_classification_versions_do_not_rewrite_old_membership
+    self.assertTrue(hasattr(self.review,'classify_content'),'Human classification is versioned')
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : Human classification is versioned
+
+======================================================================
+FAIL: test_saved_view_relative_rule_replay_and_revision_conflict (test_review.ReviewTests.test_saved_view_relative_rule_replay_and_revision_conflict)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 120, in test_saved_view_relative_rule_replay_and_revision_conflict
+    self.assertTrue(hasattr(self.review,'save_review_view'),'Saved Views must use the existing aggregate')
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : Saved Views must use the existing aggregate
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.228s
+
+FAILED (failures=3)

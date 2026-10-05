@@ -1,0 +1,39 @@
+✔ review runtime contract exists (1.188333ms)
+✖ UTC half-open dates and IANA timezone (37.451917ms)
+✔ true zero, unknown and invalid numbers are distinct (0.3905ms)
+✔ input forbids provider claims and client lineage (2.265333ms)
+✔ current access overrides a cached measured zero (0.1445ms)
+✔ completed collection does not turn a missing or unsupported value into measured (0.095667ms)
+✔ relative baseline input resolves separately from the fixed report contract (1.541375ms)
+✔ generated schema matches canonical runtime (21.462333ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 305.499875
+
+✖ failing tests:
+
+test at web/tests/review-contract.test.cjs:13:3
+✖ UTC half-open dates and IANA timezone (37.451917ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(t.publicationPeriodSchema.safeParse({...period,start:'2026-10-01T00:00:00Z',end:'2026-10-01T00:00:00.000001Z'}).success)
+  
+      at TestContext.<anonymous> (/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-contract.test.cjs:15:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

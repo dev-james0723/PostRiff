@@ -1,0 +1,8 @@
+usage: postriff_dev_hosted.py [-h] [--port PORT] [--credit-fixture]
+                              [--phone-fixture] [--inbound-phone-fixture]
+                              [--notification-fixture] [--growth-fixture]
+                              [--radar-fixture] [--postdoctor-v2-fixture]
+                              [--growth-phase2-fixture] [--review-fixture]
+                              [--history-import-fixture] [--founder-fixture]
+                              [--pg-port PG_PORT] [--static STATIC]
+postriff_dev_hosted.py: error: Review fixtures require --growth-phase2-fixture on the disposable harness.

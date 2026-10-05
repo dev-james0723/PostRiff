@@ -1,0 +1,288 @@
+EEEEEEEEEEEEEEEEEEEEEEEEEE...
+======================================================================
+ERROR: setUpClass (test_trend_integration.DurableServiceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_account_deletion_blocks_report_and_revoked_channel_suppresses_metric (test_trend_learning.LearningSQL.test_account_deletion_blocks_report_and_revoked_channel_suppresses_metric)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_baseline_excludes_future_availability_and_unknown_promotion (test_trend_learning.LearningSQL.test_baseline_excludes_future_availability_and_unknown_promotion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_changed_and_unknown_treatment_not_credited_to_original_hypothesis (test_trend_learning.LearningSQL.test_changed_and_unknown_treatment_not_credited_to_original_hypothesis)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_current_rights_revocation_and_tenant_membership_are_read_gates (test_trend_learning.LearningSQL.test_current_rights_revocation_and_tenant_membership_are_read_gates)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_denominator_joins_persisted_exposure_decision_and_exact_publication (test_trend_learning.LearningSQL.test_denominator_joins_persisted_exposure_decision_and_exact_publication)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_frozen_context_and_multiple_recommendations_never_claim_treatment (test_trend_learning.LearningSQL.test_frozen_context_and_multiple_recommendations_never_claim_treatment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_missing_delayed_unpublished_and_unselected_never_zero (test_trend_learning.LearningSQL.test_missing_delayed_unpublished_and_unselected_never_zero)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_native_rate_requires_explicit_denominator_and_matching_observations (test_trend_learning.LearningSQL.test_native_rate_requires_explicit_denominator_and_matching_observations)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_owner_adoption_is_bound_to_reviewed_support_and_existing_strategy_store (test_trend_learning.LearningSQL.test_owner_adoption_is_bound_to_reviewed_support_and_existing_strategy_store)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment (test_trend_learning.LearningSQL.test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_reuses_existing_hypotheses_without_persistence_or_adoption (test_trend_learning.LearningSQL.test_reuses_existing_hypotheses_without_persistence_or_adoption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_same_native_post_under_two_jobs_is_not_double_attributed (test_trend_learning.LearningSQL.test_same_native_post_under_two_jobs_is_not_double_attributed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_same_published_revision_native_identity_definition_and_cutoff_guards (test_trend_learning.LearningSQL.test_same_published_revision_native_identity_definition_and_cutoff_guards)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_tracking_is_read_only_exact_identity_and_current_rights (test_trend_learning.LearningSQL.test_tracking_is_read_only_exact_identity_and_current_rights)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_unchosen_freeform_goal_and_posthoc_metric_choice_do_not_measure (test_trend_learning.LearningSQL.test_unchosen_freeform_goal_and_posthoc_metric_choice_do_not_measure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_learning.py", line 20, in setUp
+    DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_acceptance_keeps_real_exposure_but_no_publication_or_outcome (test_trend_exposures.DurableExposureTests.test_acceptance_keeps_real_exposure_but_no_publication_or_outcome)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_dismiss_is_idempotent_decision_without_revision_bump (test_trend_exposures.DurableExposureTests.test_dismiss_is_idempotent_decision_without_revision_bump)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_foreign_actor_cannot_reuse_page_or_exposure (test_trend_exposures.DurableExposureTests.test_foreign_actor_cannot_reuse_page_or_exposure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_forged_page_receipt_context_and_event_replay_denied (test_trend_exposures.DurableExposureTests.test_forged_page_receipt_context_and_event_replay_denied)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_legacy_accept_does_not_invent_exposure (test_trend_exposures.DurableExposureTests.test_legacy_accept_does_not_invent_exposure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_ordered_page_token_rechecks_unshown_candidate_revision (test_trend_exposures.DurableExposureTests.test_ordered_page_token_rechecks_unshown_candidate_revision)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_revocation_invalidates_view_accept_dismiss_even_with_original_token (test_trend_exposures.DurableExposureTests.test_revocation_invalidates_view_accept_dismiss_even_with_original_token)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_stale_context_expired_page_and_viewer_fail_closed (test_trend_exposures.DurableExposureTests.test_stale_context_expired_page_and_viewer_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_superseded_opportunity_revision_rejects_old_page (test_trend_exposures.DurableExposureTests.test_superseded_opportunity_revision_rejects_old_page)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+======================================================================
+ERROR: test_view_retained_without_acceptance_and_retry_dedupes (test_trend_exposures.DurableExposureTests.test_view_retained_without_acceptance_and_retry_dedupes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_exposures.py", line 53, in setUp
+    integration.DurableServiceTests.setUpClass.__func__(type(self))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_trend_integration.py", line 35, in setUpClass
+    raise ValueError("Only explicit disposable service/exposure databases on approved local ports are allowed")
+ValueError: Only explicit disposable service/exposure databases on approved local ports are allowed
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.561s
+
+FAILED (errors=26)

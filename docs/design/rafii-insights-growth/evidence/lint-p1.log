@@ -1,0 +1,53 @@
+
+> postriff-web@0.1.0 lint
+> oxlint src
+
+
+  ! unicorn(consistent-function-scoping): Function `nearestNeedle` does not capture any variables from its parent scope
+    ,-[src/features/context-navigation/thread-navigator.tsx:20:17]
+ 19 | 
+ 20 | export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
+    :                 ^^^^^^^|^^^^^^^
+    :                        `-- Outer scope where this function is defined
+ 21 |   const [active, setActive] = useState('');
+    `----
+    ,-[src/features/context-navigation/thread-navigator.tsx:70:9]
+ 69 | 
+ 70 |   const nearestNeedle = (root: HTMLElement, clientY: number) => {
+    :         ^^^^^^|^^^^^^
+    :               `-- This function does not use any variables from the parent function
+ 71 |     const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-needle-index]'));
+    `----
+  help: Move `nearestNeedle` to the outer scope to avoid recreating it on every call.
+
+  ! eslint(no-new): Do not use 'new' for side effects.
+    ,-[src/features/founder/settings/contact-policy.ts:33:9]
+ 32 |   if (draft.budgetMode === 'limited' && (!draft.budgetUsd.trim() || !Number.isFinite(budget) || budget < 0 || budget > 10_000)) return { error: 'Daily call budget must be from $0 to $10,000, or Unlimited.' };
+ 33 |   try { new Intl.DateTimeFormat('en', { timeZone: draft.timeZone.trim() }); }
+    :         ^^^^^^^^^^^^^^^^^^^^^^^
+ 34 |   catch { return { error: 'A valid IANA time zone is required.' }; }
+    `----
+  help: Assign the result of 'new' to a variable or compare it to a reference.
+
+  ! react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'providers'
+     ,-[src/features/channels/connect-sheet.tsx:146:6]
+ 136 |     const requestedCapability = urlCapability ?? request?.capability;
+ 137 |     const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
+     :                     ^^^^|^^^^
+     :                         `-- useEffect uses `providers` here
+ 138 | 
+ 139 |     setProviderId(initial?.id ?? '');
+ 140 |     setCapability(defaultCapability(initial, requestedCapability));
+ 141 |     setPending(null);
+ 142 |     setError(null);
+ 143 |     setBusy(false);
+ 144 |     setInputValue('');
+ 145 |     setNotSeenYet(false);
+ 146 |   }, [open, providerSignature, request?.providerId, request?.capability]);
+     :      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 147 | 
+     `----
+  help: Either include it or remove the dependency array.
+
+Found 3 warnings and 0 errors.
+Finished in 6.4s on 1034 files with 213 rules using 12 threads.

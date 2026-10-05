@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_sql_microsecond_precision_does_not_make_exact_due_time_early (test_review.ReviewTests.test_sql_microsecond_precision_does_not_make_exact_due_time_early)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 80, in test_sql_microsecond_precision_does_not_make_exact_due_time_early
+    self.assertTrue(self.projection()['nativeResults'][0]['eligible'])
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.159s
+
+FAILED (failures=1)

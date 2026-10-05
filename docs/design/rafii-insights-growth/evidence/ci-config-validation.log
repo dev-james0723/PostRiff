@@ -1,0 +1,1 @@
+{"status": "PASS", "execution": "local YAML parse and bash syntax only; not remote CI execution", "shellBlocks": 3, "permissions": {"contents": "read"}, "sourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a"}

@@ -1,0 +1,109 @@
+
+> postriff-web@0.1.0 build
+> next build
+
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.ts took 3.8s
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.6min
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 2.2s
+  Running TypeScript ...
+✓ Finished writing to filesystem cache in 38.6s
+  Finished TypeScript in 16.7min ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/110) ...
+  Generating static pages using 11 workers (27/110) 
+  Generating static pages using 11 workers (54/110) 
+  Generating static pages using 11 workers (82/110) 
+✓ Generating static pages using 11 workers (110/110) in 14.1s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /app
+├ ƒ /app/account/api
+├ ƒ /app/account/billing
+├ ƒ /app/account/models
+├ ƒ /app/account/notifications
+├ ƒ /app/account/privacy
+├ ƒ /app/account/profile
+├ ƒ /app/agent
+├ ƒ /app/agent/[conversationId]
+├ ƒ /app/analytics
+├ ƒ /app/automations
+├ ƒ /app/calendar
+├ ƒ /app/channels
+├ ƒ /app/channels/connect
+├ ƒ /app/connectors/connect
+├ ƒ /app/growth
+├ ƒ /app/help
+├ ƒ /app/help/[documentId]
+├ ƒ /app/ideas
+├ ƒ /app/inbox
+├ ƒ /app/library
+├ ƒ /app/overview
+├ ƒ /app/phone/verify-call
+├ ƒ /app/pipeline
+├ ƒ /app/queue
+├ ƒ /app/radar
+├ ƒ /app/trends
+├ ƒ /app/weekly
+├ ƒ /app/workspace/audit
+├ ƒ /app/workspace/brand
+├ ƒ /app/workspace/members
+├ ƒ /app/workspace/memory
+├ ƒ /app/workspace/personalization
+├ ƒ /app/workspace/provider-readiness
+├ ƒ /app/workspace/roles
+├ ○ /apple-icon
+├ ƒ /auth/callback
+├ ƒ /auth/reset
+├ ƒ /auth/sign-in
+├ ƒ /auth/sign-up
+├ ƒ /auth/verify
+├ ƒ /changelog
+├ ƒ /channels
+├ ƒ /channels/[slug]
+├ ƒ /channels/connect
+├ ƒ /connectors/connect
+├ ƒ /contact
+├ ƒ /data-deletion
+├ ƒ /dev/calendar-card
+├ ƒ /dev/channel-bloom
+├ ƒ /dev/content-library
+├ ƒ /dev/folder-motion
+├ ƒ /dev/language-dialog
+├ ƒ /dev/model-dialog
+├ ƒ /dev/post-previews
+├ ƒ /dev/preview-deck
+├ ƒ /dna/[token]
+├ ƒ /docs
+├ ƒ /docs/[slug]
+├ ƒ /founder
+├ ƒ /founder/[section]
+├ ƒ /founder/sign-in
+├ ○ /icon
+├ ƒ /invite/[token]
+├ ○ /manifest.webmanifest
+├ ○ /opengraph-image
+├ ƒ /post-doctor
+├ ƒ /pricing
+├ ƒ /privacy
+├ ○ /robots.txt
+├ ƒ /security
+├ ○ /sitemap.xml
+├ ƒ /status
+├ ƒ /terms
+└ ○ /twitter-image
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

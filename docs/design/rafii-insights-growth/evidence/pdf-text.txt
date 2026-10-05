@@ -1,0 +1,480 @@
+Rafii fixed review
+# Rafii weekly review
+Snapshot: rs_5d29adb6131e31396c64dd42 / version 1
+Context: dd50b76334d4dccb6a8c84903fb45fec126181e1ee2806b5f04fd4708a8ac46c
+Payload: 3792c864aeb672d7b947c6d13301a21d314518c8a1fe0d1a3c08fa7b2c7e22b5
+Source SHA: b42da10f87d31dd7398cdcd3512266d3052dfd9a
+Publication cohort: [2026-09-28T01:09:02.970000Z, 2026-10-05T01:09:02.970000Z) ·
+America/Indiana/Indianapolis
+Accounts: phase2-fixture-account · 24h · median
+Filters: {"aggregation": "median", "attributionState": "unknown", "channelIds": ["phase2fixture-account"], "comparison": {"kind": "none"}, "contextDigest":
+"dd50b76334d4dccb6a8c84903fb45fec126181e1ee2806b5f04fd4708a8ac46c",
+"contextRevision": 1, "cutoffAt": "2026-10-05T01:09:10.165508Z", "formatIds": [], "horizon":
+"24h", "language": null, "nativeMetric": [{"definitionVersion": "2026-09", "nativeName": "likes",
+"provider": "threads", "unit": "count"}, {"definitionVersion": "2026-09", "nativeName":
+"quotes", "provider": "threads", "unit": "count"}, {"definitionVersion": "2026-09",
+"nativeName": "replies", "provider": "threads", "unit": "count"}, {"definitionVersion": "202609", "nativeName": "reposts", "provider": "threads", "unit": "count"}, {"definitionVersion":
+"2026-09", "nativeName": "shares", "provider": "threads", "unit": "count"},
+{"definitionVersion": "2026-09", "nativeName": "views", "provider": "threads", "unit": "count"}],
+"providers": ["threads"], "publicationPeriod": {"end": "2026-10-05T01:09:02.970000Z",
+"start": "2026-09-28T01:09:02.970000Z", "timezone": "America/Indiana/Indianapolis"},
+"rightsEpoch":
+"398c670888a403033eed292043b4aa156f31234353b1182ca19d0262f0f1d771",
+"schemaVersion": "1.0", "scopeKind": "published_content_cohort", "tagSelection": [],
+"workspaceId": "aaecb3f7-a598-4429-8bd1-2feab8107014"}
+## Scope and coverage
+{"collectionStartAt": null, "cutoffAt": "2026-10-05T01:09:10.165508Z", "earliestAvailableAt":
+"2026-09-30T21:09:02.277510Z", "eligible": 12, "excludedByReason": {"missing_reading":
+
+48}, "historyLimitations": ["Available stored records only; HistoryImport OFF.", "Collection start
+is unknown."], "lastSuccessfulRead": "2026-10-04T13:09:02.277510Z", "maximumPosts": 300,
+"measured": 24, "missing": 48, "publications": 12, "truncated": false}
+## Comparable native groups
+[{"aggregation": "median", "baselineSampleSize": 0, "baselineValue": null, "cohort":
+{"connectionId": "phase2-fixture-account", "definitionVersion": "2026-09", "formatId": "text",
+"horizon": "24h", "language": "en", "nativeName": "likes", "provider": "threads", "unit":
+"count"}, "evidenceIds": ["d13e2eb1-8ff3-4879-8d6e-f18aef4e5ef8", "2a19f8c8-add3-425d8932-a10c45b0e113", "635222f3-ac5d-424c-88c1-147ef28edc8d", "c65746da-2990-4ae0adb8-22e34bd49ae1", "828af212-fbbf-4e73-a09a-d428fbf85a63", "a2b19a5e-cb33-4cefb8a6-2eb48d605931", "c028e4f8-58a4-48ee-b8e1-be55fff74395", "c3af3951-c4b2-4770a00a-f1a6828dd4ce", "932c1c66-3eba-465b-922b-d60528a762c6", "947a6330-59d048b5-9155-5e057a4b963f", "77de7c39-8244-40ab-ba2c-4d4176297b99", "3bb7055d8da3-4e87-bd9d-8321bd20a61f"], "minimumSample": 3, "sampleSize": 12, "value": 5.5},
+{"aggregation": "median", "baselineSampleSize": 0, "baselineValue": null, "cohort":
+{"connectionId": "phase2-fixture-account", "definitionVersion": "2026-09", "formatId": "text",
+"horizon": "24h", "language": "en", "nativeName": "views", "provider": "threads", "unit":
+"count"}, "evidenceIds": ["57c45de3-09b0-4252-aeab-daaf7be9f7d7", "bdbcbe42-90f74307-a540-a368928b5080", "12c81f33-4a77-43c4-a138-0df377d136cf", "26c7b2e4-1fe84bd4-8316-eecf57397d19", "820cae25-bbef-435f-9020-9d8826528995", "42d11edb-90084b56-ad0b-1207e82c9b38", "f3b2ce80-076d-46ad-8415-59a69cee5670", "d54c9e4b-f89d4ced-8f67-df207685c926", "6222f208-24fb-4bf0-8fca-4f06ede8b714", "89cbabb5-86754fad-a6dc-fc0e7b84e885", "7e101001-3f90-461e-98ef-96f0bcf87d1e", "82c2c4df-6f8c42cb-8a18-5cf663500d22"], "minimumSample": 3, "sampleSize": 12, "value": 68.0}]
+## Descriptive comparisons
+[]
+## Trends provenance
+[]
+## Trends follow-up (separate permitted workspace scope)
+null
+
+## Completed work (separate workspace scope)
+{"countingRules": "Existing Growth Loop proof counting rules; completed, accepted and
+verified are separate.", "counts": {"approvedPosts": 0, "campaigns": 0,
+"completedExperiments": 0, "evidence": {"campaignIds": [], "experimentIds": [], "jobIds":
+["9338feb6-14bc-4470-9380-080a45894d4e", "5eeb1ec9-bdf8-4d51-8ac7-c3c78602a502",
+"363696df-b1dc-403a-b75d-b05ddd8d53b5", "f87c3313-6dac-49f9-bec2-69687e4bec12",
+"bfeaa656-cc26-4201-a519-23ce4b6556ce", "4e6c2ca2-92ea-4d5c-9d1c-ca6ec27b44e7",
+"5c7c95bd-1343-4956-88e2-7ff0642eb483", "bd8c8851-f026-4dcf-b2b8-cf1eaa488a1a",
+"7eabbb6a-6cd5-46cc-9113-c826f38d095f", "2775eeb7-2d39-43b0-87cb-8baca2d5fa13",
+"0f9c7dc5-616d-4c81-80f7-7746d6227897", "5f241976-b02f-45b9-bf8f-4549eaf4d14e"],
+"variantIds": []}, "nextWeekPrepared": 0, "preparedPosts": 0, "runningExperiments": 0,
+"verifiedPublishedPosts": 12}, "proofId": null, "scope": {"end": "2026-10-05T00:00:00Z",
+"kind": "workspace_wide", "start": "2026-09-28T00:00:00Z", "timezone": "UTC"}}
+Time Back (estimated when available): {"estimationMethodVersion": "existing-time-backledger-v1", "inputs": [], "state": "unavailable", "unit": "seconds", "value": null}
+## Native results
+Publication / metric
+
+Value / state
+
+Reading / source
+/ 2026-109338feb6-14bc-4470-9380- 0.0 · measured · 2026-10-04T13:09:02.277510Z
+04T13:09:03.277510Z /
+080a45894d4e / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+9338feb6-14bc-4470-9380- null · missing · unknown / unknown / unavailable
+080a45894d4e / quotes
+missing_reading
+/ 2026-109338feb6-14bc-4470-9380- null · missing · 2026-10-04T13:09:02.277510Z
+/
+080a45894d4e / replies
+missing_reading 04T13:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+9338feb6-14bc-4470-9380- null · missing · unknown / unknown / unavailable
+080a45894d4e / reposts
+missing_reading
+9338feb6-14bc-4470-9380- null · missing · unknown / unknown / unavailable
+080a45894d4e / shares
+missing_reading
+/ 2026-109338feb6-14bc-4470-9380- 100.0 · measured 2026-10-04T13:09:02.277510Z
+04T13:09:03.277510Z
+/
+080a45894d4e / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-105eeb1ec9-bdf8-4d51-8ac7- 1.0 · measured · 2026-10-04T05:09:02.277510Z
+04T05:09:03.277510Z
+/
+c3c78602a502 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+
+Publication / metric
+Value / state
+Reading / source
+5eeb1ec9-bdf8-4d51-8ac7- null · missing · unknown / unknown / unavailable
+c3c78602a502 / quotes
+missing_reading
+/ 2026-105eeb1ec9-bdf8-4d51-8ac7- null · missing · 2026-10-04T05:09:02.277510Z
+/
+c3c78602a502 / replies
+missing_reading 04T05:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+5eeb1ec9-bdf8-4d51-8ac7c3c78602a502 / reposts
+5eeb1ec9-bdf8-4d51-8ac7c3c78602a502 / shares
+
+null · missing · unknown / unknown / unavailable
+missing_reading
+null · missing · unknown / unknown / unavailable
+missing_reading
+/ 2026-105eeb1ec9-bdf8-4d51-8ac7- 110.0 · measured 2026-10-04T05:09:02.277510Z
+04T05:09:03.277510Z /
+c3c78602a502 / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-10363696df-b1dc-403a-b75d- 2.0 · measured · 2026-10-03T21:09:02.277510Z
+03T21:09:03.277510Z /
+b05ddd8d53b5 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+363696df-b1dc-403a-b75d- null · missing · unknown / unknown / unavailable
+b05ddd8d53b5 / quotes
+missing_reading
+/ 2026-10363696df-b1dc-403a-b75d- null · missing · 2026-10-03T21:09:02.277510Z
+/
+b05ddd8d53b5 / replies
+missing_reading 03T21:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+363696df-b1dc-403a-b75d- null · missing · unknown / unknown / unavailable
+b05ddd8d53b5 / reposts
+missing_reading
+363696df-b1dc-403a-b75d- null · missing · unknown / unknown / unavailable
+b05ddd8d53b5 / shares
+missing_reading
+/ 2026-10363696df-b1dc-403a-b75d- 120.0 · measured 2026-10-03T21:09:02.277510Z
+03T21:09:03.277510Z
+/
+b05ddd8d53b5 / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-10f87c3313-6dac-49f9-bec2- 3.0 · measured · 2026-10-03T13:09:02.277510Z
+03T13:09:03.277510Z /
+69687e4bec12 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+f87c3313-6dac-49f9-bec2- null · missing · unknown / unknown / unavailable
+69687e4bec12 / quotes
+missing_reading
+/ 2026-10f87c3313-6dac-49f9-bec2- null · missing · 2026-10-03T13:09:02.277510Z
+03T13:09:03.277510Z
+/
+69687e4bec12 / replies
+missing_reading https://graph.threads.net/v1.0/native/insights
+f87c3313-6dac-49f9-bec269687e4bec12 / reposts
+f87c3313-6dac-49f9-bec269687e4bec12 / shares
+
+null · missing · unknown / unknown / unavailable
+missing_reading
+null · missing · unknown / unknown / unavailable
+missing_reading
+
+Publication / metric
+
+Value / state
+
+Reading / source
+/ 2026-10f87c3313-6dac-49f9-bec2- 130.0 · measured 2026-10-03T13:09:02.277510Z
+03T13:09:03.277510Z
+/
+69687e4bec12 / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-10bfeaa656-cc26-4201-a519- 4.0 · measured · 2026-10-03T05:09:02.277510Z
+03T05:09:03.277510Z
+/
+23ce4b6556ce / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+bfeaa656-cc26-4201-a519- null · missing · unknown / unknown / unavailable
+23ce4b6556ce / quotes
+missing_reading
+/ 2026-10bfeaa656-cc26-4201-a519- null · missing · 2026-10-03T05:09:02.277510Z
+03T05:09:03.277510Z
+/
+23ce4b6556ce / replies
+missing_reading https://graph.threads.net/v1.0/native/insights
+bfeaa656-cc26-4201-a51923ce4b6556ce / reposts
+bfeaa656-cc26-4201-a51923ce4b6556ce / shares
+
+null · missing · unknown / unknown / unavailable
+missing_reading
+null · missing · unknown / unknown / unavailable
+missing_reading
+/ 2026-10bfeaa656-cc26-4201-a519- 140.0 · measured 2026-10-03T05:09:02.277510Z
+03T05:09:03.277510Z /
+23ce4b6556ce / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-104e6c2ca2-92ea-4d5c-9d1c- 5.0 · measured · 2026-10-02T21:09:02.277510Z
+02T21:09:03.277510Z
+/
+ca6ec27b44e7 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+4e6c2ca2-92ea-4d5c-9d1c- null · missing · unknown / unknown / unavailable
+ca6ec27b44e7 / quotes
+missing_reading
+/ 2026-104e6c2ca2-92ea-4d5c-9d1c- null · missing · 2026-10-02T21:09:02.277510Z
+/
+ca6ec27b44e7 / replies
+missing_reading 02T21:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+4e6c2ca2-92ea-4d5c-9d1c- null · missing · unknown / unknown / unavailable
+ca6ec27b44e7 / reposts
+missing_reading
+4e6c2ca2-92ea-4d5c-9d1c- null · missing · unknown / unknown / unavailable
+ca6ec27b44e7 / shares
+missing_reading
+/ 2026-104e6c2ca2-92ea-4d5c-9d1c- 150.0 · measured 2026-10-02T21:09:02.277510Z
+02T21:09:03.277510Z /
+ca6ec27b44e7 / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-105c7c95bd-1343-4956-88e2- 6.0 · measured · 2026-10-02T13:09:02.277510Z
+02T13:09:03.277510Z /
+7ff0642eb483 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+5c7c95bd-1343-4956-88e2- null · missing · unknown / unknown / unavailable
+7ff0642eb483 / quotes
+missing_reading
+
+Publication / metric
+
+Value / state
+
+Reading / source
+/ 2026-105c7c95bd-1343-4956-88e2- null · missing · 2026-10-02T13:09:02.277510Z
+02T13:09:03.277510Z
+/
+7ff0642eb483 / replies
+missing_reading https://graph.threads.net/v1.0/native/insights
+5c7c95bd-1343-4956-88e2- null · missing · unknown / unknown / unavailable
+7ff0642eb483 / reposts
+missing_reading
+5c7c95bd-1343-4956-88e2- null · missing · unknown / unknown / unavailable
+7ff0642eb483 / shares
+missing_reading
+/ 2026-105c7c95bd-1343-4956-88e2- 31.0 · measured · 2026-10-02T13:09:02.277510Z
+02T13:09:03.277510Z /
+7ff0642eb483 / views
+measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-10bd8c8851-f026-4dcf-b2b8- 7.0 · measured · 2026-10-02T05:09:02.277510Z
+02T05:09:03.277510Z
+/
+cf1eaa488a1a / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+bd8c8851-f026-4dcf-b2b8- null · missing · unknown / unknown / unavailable
+cf1eaa488a1a / quotes
+missing_reading
+/ 2026-10bd8c8851-f026-4dcf-b2b8- null · missing · 2026-10-02T05:09:02.277510Z
+/
+cf1eaa488a1a / replies
+missing_reading 02T05:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+bd8c8851-f026-4dcf-b2b8cf1eaa488a1a / reposts
+bd8c8851-f026-4dcf-b2b8cf1eaa488a1a / shares
+
+null · missing · unknown / unknown / unavailable
+missing_reading
+null · missing · unknown / unknown / unavailable
+missing_reading
+/ 2026-10bd8c8851-f026-4dcf-b2b8- 32.0 · measured · 2026-10-02T05:09:02.277510Z
+02T05:09:03.277510Z /
+cf1eaa488a1a / views
+measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-107eabbb6a-6cd5-46cc-9113- 8.0 · measured · 2026-10-01T21:09:02.277510Z
+01T21:09:03.277510Z /
+c826f38d095f / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+7eabbb6a-6cd5-46cc-9113- null · missing · unknown / unknown / unavailable
+c826f38d095f / quotes
+missing_reading
+/ 2026-107eabbb6a-6cd5-46cc-9113- null · missing · 2026-10-01T21:09:02.277510Z
+/
+c826f38d095f / replies
+missing_reading 01T21:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+7eabbb6a-6cd5-46cc-9113- null · missing · unknown / unknown / unavailable
+c826f38d095f / reposts
+missing_reading
+7eabbb6a-6cd5-46cc-9113- null · missing · unknown / unknown / unavailable
+c826f38d095f / shares
+missing_reading
+/ 2026-107eabbb6a-6cd5-46cc-9113- 33.0 · measured · 2026-10-01T21:09:02.277510Z
+01T21:09:03.277510Z
+/
+c826f38d095f / views
+measured
+https://graph.threads.net/v1.0/native/insights
+
+Publication / metric
+
+Value / state
+
+Reading / source
+/ 2026-102775eeb7-2d39-43b0-87cb- 9.0 · measured · 2026-10-01T13:09:02.277510Z
+01T13:09:03.277510Z
+/
+8baca2d5fa13 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+2775eeb7-2d39-43b0-87cb- null · missing · unknown / unknown / unavailable
+8baca2d5fa13 / quotes
+missing_reading
+/ 2026-102775eeb7-2d39-43b0-87cb- null · missing · 2026-10-01T13:09:02.277510Z
+01T13:09:03.277510Z
+/
+8baca2d5fa13 / replies
+missing_reading https://graph.threads.net/v1.0/native/insights
+2775eeb7-2d39-43b0-87cb- null · missing · unknown / unknown / unavailable
+8baca2d5fa13 / reposts
+missing_reading
+2775eeb7-2d39-43b0-87cb- null · missing · unknown / unknown / unavailable
+8baca2d5fa13 / shares
+missing_reading
+/ 2026-102775eeb7-2d39-43b0-87cb- 34.0 · measured 2026-10-01T13:09:02.277510Z
+01T13:09:03.277510Z /
+8baca2d5fa13 / views
+· measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-100f9c7dc5-616d-4c81-80f7- 10.0 · measured · 2026-10-01T05:09:02.277510Z
+01T05:09:03.277510Z /
+7746d6227897 / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+0f9c7dc5-616d-4c81-80f7- null · missing · unknown / unknown / unavailable
+7746d6227897 / quotes
+missing_reading
+/ 2026-100f9c7dc5-616d-4c81-80f7- null · missing · 2026-10-01T05:09:02.277510Z
+/
+7746d6227897 / replies
+missing_reading 01T05:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+0f9c7dc5-616d-4c81-80f77746d6227897 / reposts
+0f9c7dc5-616d-4c81-80f77746d6227897 / shares
+
+null · missing · unknown / unknown / unavailable
+missing_reading
+null · missing · unknown / unknown / unavailable
+missing_reading
+/ 2026-100f9c7dc5-616d-4c81-80f7- 35.0 · measured · 2026-10-01T05:09:02.277510Z
+01T05:09:03.277510Z /
+7746d6227897 / views
+measured
+https://graph.threads.net/v1.0/native/insights
+/ 2026-095f241976-b02f-45b9-bf8f- 11.0 · measured · 2026-09-30T21:09:02.277510Z
+30T21:09:03.277510Z /
+4549eaf4d14e / likes
+measured
+https://graph.threads.net/v1.0/native/insights
+5f241976-b02f-45b9-bf8f- null · missing · unknown / unknown / unavailable
+4549eaf4d14e / quotes
+missing_reading
+/ 2026-095f241976-b02f-45b9-bf8f- null · missing · 2026-09-30T21:09:02.277510Z
+/
+4549eaf4d14e / replies
+missing_reading 30T21:09:03.277510Z
+https://graph.threads.net/v1.0/native/insights
+5f241976-b02f-45b9-bf8f- null · missing · unknown / unknown / unavailable
+4549eaf4d14e / reposts
+missing_reading
+
+Publication / metric
+Value / state
+Reading / source
+5f241976-b02f-45b9-bf8f- null · missing · unknown / unknown / unavailable
+4549eaf4d14e / shares
+missing_reading
+/ 2026-095f241976-b02f-45b9-bf8f- 36.0 · measured · 2026-09-30T21:09:02.277510Z
+30T21:09:03.277510Z /
+4549eaf4d14e / views
+measured
+https://graph.threads.net/v1.0/native/insights
+
+## Observations and one next test
+The median likes was 5.5 across 12 comparable publications in this account cohort. Next:
+Prepare one controlled test in Weekly Operator Support: d13e2eb1-8ff3-4879-8d6ef18aef4e5ef8,2a19f8c8-add3-425d-8932-a10c45b0e113,635222f3-ac5d-424c-88c1147ef28edc8d,c65746da-2990-4ae0-adb8-22e34bd49ae1,828af212-fbbf-4e73-a09ad428fbf85a63,a2b19a5e-cb33-4cef-b8a6-2eb48d605931,c028e4f8-58a4-48ee-b8e1be55fff74395,c3af3951-c4b2-4770-a00a-f1a6828dd4ce,932c1c66-3eba-465b-922bd60528a762c6,947a6330-59d0-48b5-9155-5e057a4b963f,77de7c39-8244-40ab-ba2c4d4176297b99,3bb7055d-8da3-4e87-bd9d-8321bd20a61f Counter-evidence:
+The median views was 68 across 12 comparable publications in this account cohort. Next:
+Propose this controlled test in Growth Loop Support: 57c45de3-09b0-4252-aeabdaaf7be9f7d7,bdbcbe42-90f7-4307-a540-a368928b5080,12c81f33-4a77-43c4-a1380df377d136cf,26c7b2e4-1fe8-4bd4-8316-eecf57397d19,820cae25-bbef-435f-90209d8826528995,42d11edb-9008-4b56-ad0b-1207e82c9b38,f3b2ce80-076d-46ad-841559a69cee5670,d54c9e4b-f89d-4ced-8f67-df207685c926,6222f208-24fb-4bf0-8fca4f06ede8b714,89cbabb5-8675-4fad-a6dc-fc0e7b84e885,7e101001-3f90-461e-98ef96f0bcf87d1e,82c2c4df-6f8c-42cb-8a18-5cf663500d22 Counter-evidence:
+## Human notes
+
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持
+證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文
+週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反
+證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，
+支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體
+中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據
+與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回
+顧，支持證據與反證。繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。
+繁體中文週回顧，支持證據與反證。繁體中文週回顧，支持證據與反證。最後一行：來源與註記
+完整保留。
+## Sources and limitations
+Cumulative native readings at the chosen post age; not events during this week.
+Promotion status unknown.
+Observational evidence; causal=false.
+Platforms and distinct account cohorts are shown separately.
+Collection start is unknown; HistoryImport OFF. Offline downloaded files cannot be remotely
+revoked.
+
+

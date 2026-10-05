@@ -1,0 +1,48 @@
+Review your published content
+
+A fixed post-age window, each platform’s own numbers and a traceable next step.
+
+Account
+Accounts shown separately
+Threads · Practice Studio · fixture
+Publication dates
+This week
+Last week
+This month
+Last month
+Post age
+1 hour
+24 hours
+7 days
+Timezone
+Language, format and comparison
+
+2026-09-28T00:00:00Z → 2026-10-05T00:00:00Z (end excluded) · UTC · cumulative at 24h.
+
+0 of 0 publications have qualified readings. 0 metric readings excluded or missing. Promotion status unknown.
+
+No connected account. Open Channels
+
+Open this scope in Growth Studio
+Filters and reads start no paid work.
+Saved Views and classifications
+Observations and one next test
+
+Too few comparable publications for a takeaway. Collect comparable readings before choosing a treatment.
+
+Fixed weekly / monthly report
+Reusable published content (12)
+Trends provenance and follow-up
+
+Personalized timing, format and frequency: method unavailable. 0 eligible posts in this scope; no measured accuracy. No reviewed out-of-sample timing/format/frequency method is registered.
+locator.waitFor: Timeout 120000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('region', { name: 'Evidence review', exact: true }).getByText('12 of 12 publications have qualified readings.') to be visible[22m
+
+    at ready (/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-browser.cjs:21:110)
+    at /Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-browser.cjs:30:92 {
+  log: [
+    "  - waiting for getByRole('region', { name: 'Evidence review', exact: true }).getByText('12 of 12 publications have qualified readings.') to be visible"
+  ],
+  name: 'TimeoutError'
+}

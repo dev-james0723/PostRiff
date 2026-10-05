@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "execution": "zero-network deterministic fixtures, disposable database",
+  "checks": [
+    "disabled collection is unavailable rather than pending; retained observed readings remain inspectable",
+    "result review, native comparison, explicit Genome approval and no publishing",
+    "Threads privacy abstention, classified evidence, saved idea and normal draft boundary",
+    "1440px, 390px, 320px, dark mode, reduced motion, keyboard tabs and axe serious/critical checks",
+    "shared visual system and Growth Studio entry on Home and Genome",
+    "existing chronological calibration with explicit owner approve, second version and restore; no automatic timing or frequency preference",
+    "missing native connection is explicit on mobile and the connection link opens the Accounts flow"
+  ],
+  "realModelCalls": 0,
+  "consoleErrors": [],
+  "sourceSha": "8629a463b761fa46bbe9aef20b529009b7a3019a",
+  "nativeAcceptance": false,
+  "adapter": "evidence/run-growth-browser.cjs; existing Growth Phase2 browser suite, installed Chrome, owned ports and an added explicit owner calibration approve/restore case"
+}

@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 30, in refused
+    try:fn()
+        ~~^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 104, in <lambda>
+    refused(403,lambda:r.create_snapshot(wid,'one',snapshot_body))
+                       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/src/postriff_phase2/coworker/review.py", line 774, in create_snapshot
+    raise AlphaError('Review the current scope and evidence before saving a report.',409)
+postriff_alpha.domain.AlphaError: Review the current scope and evidence before saving a report.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 104, in <module>
+    refused(403,lambda:r.create_snapshot(wid,'one',snapshot_body))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 31, in refused
+    except AlphaError as exc:assert exc.status==status,(status,exc.status,str(exc));return
+                                    ^^^^^^^^^^^^^^^^^^
+AssertionError: (403, 409, 'Review the current scope and evidence before saving a report.')
