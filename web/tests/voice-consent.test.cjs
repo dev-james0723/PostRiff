@@ -4,7 +4,7 @@ const filename=path.resolve(__dirname,'../src/features/agent/voice-consent.ts');
 loaded._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,filename);
 const {eligibleVoiceSources,effectiveVoiceMode}=loaded.exports;
 test('changing writer never transfers exact sample consent to a different cloud model or CLI',()=>{
- const source={id:'sample',kind:'voice_sample',active:true,selected:true,useGrants:[{purpose:'generation',route:'cloud:gateway:model-a'},{purpose:'analysis',route:'cloud:gateway:model-b'}]};
+ const source={id:'sample',kind:'voice_sample',active:true,selected:true,authoredByConfirmed:'synthetic-owner',label:'representative',useGrants:[{purpose:'generation',route:'cloud:gateway:model-a'},{purpose:'analysis',route:'cloud:gateway:model-b'}]};
  const model={qualified:true,voiceRoute:'cloud:gateway:model-a'};
  assert.deepEqual(eligibleVoiceSources([source],model),['sample']);
  for (const route of ['cloud:gateway:model-b','cloud:claude-code:sonnet','local-cli']) assert.deepEqual(eligibleVoiceSources([source],{...model,voiceRoute:route}),[]);
@@ -15,7 +15,7 @@ test('changing writer never transfers exact sample consent to a different cloud 
 });
 test('one writing grant for every Rafii AI writer model covers exactly the models the server puts in that class',()=>{
  const any='cloud:vercel-ai-gateway:*';
- const source={id:'sample',kind:'voice_sample',active:true,selected:true,useGrants:[{purpose:'generation',route:any}]};
+ const source={id:'sample',kind:'voice_sample',active:true,selected:true,authoredByConfirmed:'synthetic-owner',label:'representative',useGrants:[{purpose:'generation',route:any}]};
  const sol={qualified:true,voiceRoute:'cloud:vercel-ai-gateway:openai/gpt-6-sol',voiceRouteClass:any};
  assert.deepEqual(eligibleVoiceSources([source],sol),['sample']);
  assert.deepEqual(eligibleVoiceSources([source],{...sol,voiceRoute:'cloud:vercel-ai-gateway:anthropic/claude-sonnet-5'}),['sample']);
@@ -27,4 +27,12 @@ test('drafts write like the author by default only when this writer may read an 
  assert.equal(effectiveVoiceMode('neutral',2),'neutral','the person can still choose neutral');
  assert.equal(effectiveVoiceMode(null,0),'neutral');
  assert.equal(effectiveVoiceMode('personalized',0),'neutral','no eligible sample for this writer means neutral');
+});
+test('retention, labels and expired grants never masquerade as eligible owner voice',()=>{
+ const model={qualified:true,voiceRoute:'cloud:gateway:model-a'};
+ const source={id:'sample',kind:'voice_sample',active:true,selected:true,authoredByConfirmed:'synthetic-owner',label:'representative',useGrants:[{purpose:'generation',route:model.voiceRoute}]};
+ assert.deepEqual(eligibleVoiceSources([source],model),['sample']);
+ for(const patch of [{authoredByConfirmed:null},...['guest','ai_generated','outdated','sponsored',null].map(label=>({label})),{expiresAt:'2000-01-01T00:00:00Z'},{expiresAt:'2099-01-01'},{useGrants:[{purpose:'generation',route:model.voiceRoute,expiresAt:'2000-01-01T00:00:00Z'}]}]) {
+  assert.deepEqual(eligibleVoiceSources([{...source,...patch}],model),[]);
+ }
 });

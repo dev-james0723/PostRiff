@@ -43,6 +43,8 @@ ACTION_CLASSES = {
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",
     # This is the durable privacy boundary for analysis/generation routes.
     "voice_sample_grant": "owner",
+    "voice_samples_import_owned": "owner",
+    "voice_sample_review": "owner",
     "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
     "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
     # Deciding on an automation's drafted post is a publication decision, like approving in Queue; the worker

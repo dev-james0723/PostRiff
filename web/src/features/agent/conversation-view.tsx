@@ -50,6 +50,7 @@ import { RafiiAvatar } from '@/features/site-agent/rafii-avatar';
 import { isSiteAgentBody } from '@/lib/site-agent/panel-logic';
 import type { SiteAgentBody } from '@/lib/site-agent/types';
 import { ActivityStrip } from './activity-strip';
+import { GenerationEvidence } from './generation-evidence';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
 import type { DeliveryTargetOption } from './delivery-planner';
 import { useChannelLanguages } from './use-channel-languages';
@@ -107,6 +108,7 @@ interface AssistantBody {
   automation?: ChatAutomation | null;
   /** Which learned preferences the run received (design §5.7). */
   memory?: MemoryBinding | null;
+  generationProvenance?: import('@/lib/api/types').GenerationProvenance | null;
   images?: GeneratedImage[];
 }
 
@@ -626,6 +628,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                     <MessageContent className='items-stretch gap-3'>
                       {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
+                      {message.runId && <GenerationEvidence evidence={body.generationProvenance} />}
                       <UsedThisTime report={reportFrom({ references: (message.body as { references?: unknown }).references })} pending={isCurrent && running} />
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
                       {body.automation && (

@@ -1,8 +1,8 @@
 """Memory files the agent reads before every draft (agent chat design §5), rendered from workspace state.
 
 Plain Markdown, owned by the workspace. This phase renders them from the active voice profile
-and brand context; the agent cannot change them. The same rendering feeds the Memory page and
-the prompt of any writing route, so what the person sees is exactly what the model is given.
+and brand context; the agent cannot change them. The Memory page shows saved availability.
+Each generation projects the eligible scoped subset and records its actual bounded input.
 
 A cloud route is the exception that is decided, not assumed: it reads these files only when the
 workspace allowed it, and never a boundary marked private, local-only or excluded. The Memory page
@@ -166,7 +166,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None,
     if approved_genome:
         statements = [s for s in approved_genome.get('statements', [])
                       if s.get('grade') == 'supported' and _genome_applies(s, destinations, content_type_id, campaign_id)][:12]
-        lines = [_genome_line(s) for s in statements if s.get('kind') == 'writing']
+        lines = [_genome_line(s) for s in statements if s.get('kind') == 'writing' and not state.get('_neutralVoice')]
         strategy = [_genome_line(s) for s in statements if s.get('kind') == 'performance']
         if lines:
             voice+='\n\n## Approved Creator Genome\nObserved writing preferences, never new personal facts or guaranteed outcomes.\n'+'\n'.join('- '+line for line in lines)
@@ -206,24 +206,52 @@ def egress(state):
     return decision if isinstance(decision, dict) else {"cloud": False}
 
 
-def projection(state, provider_class, destinations=None, content_type_id=None, voice_route=None, *, campaign_id=None):
+def projection(state, provider_class, destinations=None, content_type_id=None, voice_route=None, *, campaign_id=None, include_profile=True):
     """What a writing route may read. Local routes get every prompt file; a cloud route gets them only
     when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed.
     `learned` records which learned preferences the slice carried, for the run's usage."""
     import copy
     from . import voice_sources
     state = copy.deepcopy(state)
+    saved_genome = (state.get('brandHub') or {}).get('genome')
+    if isinstance(saved_genome, dict) and saved_genome.get('evidenceBindings'):
+        genome_ids = [b['id'] for b in saved_genome['evidenceBindings']]
+        try:
+            writer_ids = {s['id'] for s in voice_sources.project(state, genome_ids, 'generation', voice_route)['samples']} if voice_route else set()
+        except AlphaError:
+            writer_ids = set()
+        if writer_ids != set(genome_ids):
+            # Analysis consent and a reviewed Genome do not expand a retained
+            # sample's permission to another writing model.
+            saved_genome['statements'] = [s for s in saved_genome.get('statements') or [] if s.get('kind') != 'writing']
+    if not include_profile:
+        # Neutral is an explicit per-turn choice. It does not erase safety
+        # boundaries or independently approved scoped writing preferences.
+        state.setdefault('profile', {})['fields'] = boundary_fields(state)
+        state.setdefault('speaker', {})['activeRevision'] = None
+        state['_neutralVoice'] = True
     revision = active_profile(state)
     profile = (revision or {}).get('profile') or {}
     evidence = profile.get('evidenceSourceIds') or []
+    # Legacy onboarding examples have no revision-bound authorship, representativeness
+    # or writer-route grant. Keep them visible to their owner, but never send raw
+    # examples through generic memory, including when there are no source bindings.
+    profile['writingExample'] = ''
+    profile['observations'] = [item for item in profile.get('observations') or [] if item !=
+        'Your writing example is included in VOICE.md for writing routes to read. It was not analyzed to set this starting tone.']
     if evidence:
         # A workspace-wide memory grant cannot expand a sample's exact-route grant.
         # Raw sample examples never travel through the generic memory channel.
         profile['writingExample'] = ''
-        allowed = voice_sources.project(state, evidence, 'generation', voice_route)['samples'] if voice_route else []
+        try:
+            allowed = voice_sources.project(state, evidence, 'generation', voice_route)['samples'] if voice_route else []
+        except AlphaError:
+            # Removed retained rows are unavailable evidence, never a reason to
+            # revive the archived profile or to send its text via generic memory.
+            allowed = []
         bindings = profile.get('sourceBindings') or []
         current = {item['id']: item for item in allowed}
-        if len(allowed) != len(evidence) or any(
+        if len(allowed) != len(evidence) or len(bindings) != len(evidence) or any(
             item.get('revision') != current.get(item.get('id'), {}).get('revision')
             or item.get('contentHash') != current.get(item.get('id'), {}).get('contentHash')
             for item in bindings
@@ -231,12 +259,16 @@ def projection(state, provider_class, destinations=None, content_type_id=None, v
             revision['stale'] = True
     learned = learning.binding(state, destinations, content_type_id, campaign_id=campaign_id)
     tone = (profile.get("tone") or "warm") if revision and current_profile(revision) else "warm"
+    may_share = provider_class != 'cloud' or egress(state).get('cloud') is True
+    profile_binding = {'revision': revision.get('revision') if revision and current_profile(revision) and may_share else None,
+                       'used': bool(revision and current_profile(revision) and may_share), 'kind': 'sample_derived' if evidence else 'owner_direction',
+                       'reason': 'cloud_sharing_off' if not may_share else 'neutral_choice' if not include_profile else 'no_active_profile' if not revision else 'profile_not_current' if not current_profile(revision) else None}
     if provider_class != "cloud":
-        return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": 0, "learned": learned, "tone": tone}
+        return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": 0, "learned": learned, "tone": tone, 'profileBinding': profile_binding}
     if egress(state).get("cloud") is not True:
-        return {"files": [], "shared": False, "withheldBoundaries": 0, "tone": "warm", "learned": {**learned, "used": [], "statements": [], "omitted": learned["used"] + learned["omitted"]}}
+        return {"files": [], "shared": False, "withheldBoundaries": 0, "tone": "warm", "learned": {**learned, "used": [], "statements": [], "omitted": learned["used"] + learned["omitted"]}, 'profileBinding': profile_binding}
     withheld = sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)
-    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": withheld, "learned": learned, "tone": tone}
+    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE, destinations=destinations, content_type_id=content_type_id, campaign_id=campaign_id), "shared": True, "withheldBoundaries": withheld, "learned": learned, "tone": tone, 'profileBinding': profile_binding}
 
 
 def egress_summary(state):

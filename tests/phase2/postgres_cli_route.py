@@ -191,7 +191,7 @@ assert [f["name"] for f in files] == ["AGENT.md", "IDENTITY.md", "VOICE.md", "BO
 assert "No active voice profile yet" in next(f for f in files if f["name"] == "VOICE.md")["body"]
 # 11. A writer cites the sources it used, usually fewer than it was given. The candidate still saves; the check still
 # covers every source it was given, so narrowing the approved facts of one it did not cite stops the save.
-for notes in ("Focus notes.\nPractise one bar at a time.\nRest between repetitions.", "Warm-up notes.\nStart with slow scales.\nKeep the wrists loose."):
+for notes in ("Focus notes.\nPractise one bar at a time.\nRest between repetitions.", "Warm-up notes.\nFocus on slow scales.\nFocus on keeping the wrists loose."):
     ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": notes, "ownContent": True, "confirmUse": True, "model": "claude-code:default", "timeZone": "Asia/Hong_Kong"})
     fake.threads[-1].join(10)
 sources = [s for s in service.get(wid, "one")["state"]["sources"] if s.get("active") and any(f.get("approved") for f in s.get("facts", []))]

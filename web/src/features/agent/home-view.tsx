@@ -39,6 +39,7 @@ import { IdeaSplits, IdlePreview, type PreviewTarget } from './home/idea-splits'
 import { useHomeGeneration } from './home/use-home-generation';
 import type { VoiceMode } from './home/voice-dialog';
 import { ImageGenerationCard } from './image-generation-card';
+import { GenerationEvidence } from './generation-evidence';
 import { StartVoiceInterview } from './onboarding-chat';
 import { RaffiPlanner } from './raffi-planner';
 import { AUTO_LEVEL } from './reasoning-map';
@@ -751,11 +752,11 @@ function HomeWorkspace() {
           <div className='text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs'>
             <Link href='/app/workspace/brand' className='hover:text-foreground inline-flex min-h-8 items-center gap-1.5'>
               <Icons.user className='size-3.5' />
-              Voice · <span className='text-foreground font-medium' title={voiceActive ? `Revision ${voiceRevision}` : undefined}>{snapshot.isLoading ? '…' : voiceActive ? STATUS.active : 'Not set up'}</span>
+              Saved voice · <span className='text-foreground font-medium' title={voiceActive ? `Revision ${voiceRevision}` : undefined}>{snapshot.isLoading ? '…' : voiceActive ? STATUS.active : 'Not set up'}</span>
             </Link>
             <Link href='/app/workspace/memory' className='hover:text-foreground inline-flex min-h-8 items-center gap-1.5'>
               <Icons.page className='size-3.5' />
-              Memory · <span className='text-foreground font-medium'>{memoryFiles === null ? '…' : `${memoryFiles} files`}</span>
+              Stored memory · <span className='text-foreground font-medium'>{memoryFiles === null ? '…' : `${memoryFiles} files`}</span>
               {pendingProposals > 0 && (
                 <span className='rafii-glass-selected text-foreground rounded-full px-1.5 py-0.5 text-[11px] font-medium' aria-label={`${pendingProposals} learned preference${pendingProposals === 1 ? '' : 's'} waiting for your decision`}>
                   {pendingProposals} to review
@@ -764,7 +765,7 @@ function HomeWorkspace() {
             </Link>
             <Link href='/app/ideas' className='hover:text-foreground inline-flex min-h-8 items-center gap-1.5'>
               <Icons.paperclip className='size-3.5' />
-              Sources · <span className='text-foreground font-medium'>{snapshot.isLoading ? '…' : `${sources.length} usable`}</span>
+              Available sources · <span className='text-foreground font-medium'>{snapshot.isLoading ? '…' : `${sources.length} usable`}</span>
             </Link>
             {canEdit && !voiceActive && <StartVoiceInterview key={workspaceId} />}
           </div>
@@ -779,6 +780,7 @@ function HomeWorkspace() {
           ) : (
             <IdlePreview targets={previewTargets} idea={text} timeZone={timeZone} speaker={speaker} />
           )}
+          {generation.run?.status === 'completed' && <GenerationEvidence evidence={generation.run.artifact?.generationProvenance} />}
         </aside>
       </div>
 

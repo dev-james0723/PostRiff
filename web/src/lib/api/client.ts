@@ -161,7 +161,7 @@ export function createApi(getToken: TokenSource) {
     postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
     postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
     creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
-    analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
+    analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; representativeContent?: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
     performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
     growthOverview: (w: string) => get<GrowthOverview>(`${ws(w)}/growth/postmortems`),
     postmortem: (w: string, body: { jobId: string; horizon: string; confirmed: boolean; requestKey: string }) => send<Postmortem>('POST', `${ws(w)}/growth/postmortems`, body, 90_000),

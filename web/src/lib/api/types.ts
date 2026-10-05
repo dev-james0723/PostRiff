@@ -223,7 +223,30 @@ export interface VariantFeedback {
   revision: number;
 }
 
+export interface GenerationProvenance {
+  schema: 'rafii.generation-provenance.v1';
+  basis: string;
+  execution: 'fixture' | 'cloud_model' | 'local_model';
+  sourceSha?: string | null;
+  model: string;
+  voiceMode: string;
+  voiceRevision: number | null;
+  styleRevision: number;
+  briefRevision: number | null;
+  campaignId: string | null;
+  campaignBinding?: { id: string; version: number; digest: string } | null;
+  contentTypeId: string | null;
+  destinations: { platform: string; language: string }[];
+  profile: { used: boolean; kind: string; reason?: string };
+  voiceBindings: { id: string; revision?: number; contentHash?: string }[];
+  preferences: { id: string; statement: string; source?: string; evidenceState?: string; scope: Record<string, string | null> }[];
+  memory: { shared: boolean; files: { name: string; used: boolean; truncated: boolean }[]; omittedPreferenceIds: string[]; withheldBoundaries: number };
+  sources: { id: string; hash: string; facts: { id: string; locator?: string; sha256: string }[] }[];
+  excludedSources: { id: string; reason: string }[];
+}
+
 export interface SnapshotVariant {
+  generationProvenance?: GenerationProvenance | null;
   postDoctorGoal?: 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
   /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
   media?: RunMedia[];
@@ -313,6 +336,8 @@ export interface SnapshotSource {
   useApprovals?: SourceUseApproval[];
   /** Voice-sample fields are present only when `kind === 'voice_sample'`. */
   voiceOrigin?: 'user_provided' | 'official_api';
+  authoredByConfirmed?: string | null;
+  expiresAt?: string | null;
   provider?: string;
   externalPostId?: string;
   permalink?: string | null;
@@ -333,7 +358,7 @@ export interface SnapshotSource {
   partialCoverage?: boolean;
   purposeGrants?: ('analysis' | 'generation')[];
   routeGrants?: string[];
-  useGrants?: { purpose: 'analysis' | 'generation'; route: string }[];
+  useGrants?: { purpose: 'analysis' | 'generation'; route: string; expiresAt?: string | null }[];
   cleanupStatus?: string;
 }
 
@@ -848,6 +873,7 @@ export interface Run {
   status: string;
   artifactHash: string | null;
   artifact: {
+    generationProvenance?: GenerationProvenance | null;
     variants: RunVariant[];
     plan?: SchedulePlan | null;
     images?: GeneratedImage[];
@@ -1586,7 +1612,7 @@ export interface Usage {
   ledger: LedgerEntry[];
   planTerms: PlanTerms[];
   note: string;
-  lifecycle: { status: string; exportAvailable?: boolean; draftsRetained?: boolean; canPublish?: boolean };
+  lifecycle: { status: string; exportAvailable?: boolean; draftsRetained?: boolean; canPublish?: boolean; canGenerateAI?: boolean };
   billing?: { provider: string; checkoutAvailable: boolean; portalAvailable: boolean };
   membership: Membership;
 }

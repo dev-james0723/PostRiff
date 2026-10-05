@@ -46,6 +46,7 @@ def context_fingerprint(state):
 def bindings_current(state, bindings):
     sources = {s['id']:s for s in state.get('sources',[]) if s.get('active')}
     return all((sources.get(b['id']) or {}).get('revision')==b['revision'] and sources[b['id']].get('selected')
+               and not voice_sources.eligibility_reason(sources[b['id']]) and voice_sources.unexpired(sources[b['id']])
                and b.get('grantsDigest') == digest(sources[b['id']].get('useGrants'))
                for b in bindings)
 
@@ -236,7 +237,7 @@ class GrowthService:
         posts=[]
         for row in cur.fetchall():
             source=sources.get(row[1],{})
-            if not source.get('active') or not source.get('selected') or source.get('revision')!=row[2]:
+            if not source.get('active') or not source.get('selected') or source.get('revision')!=row[2] or voice_sources.eligibility_reason(source):
                 continue
             post=dict(zip(('id','sourceId','sourceRevision','platform','connectionId','providerPostId','language','format','timeBucket','labels','scores','suppliedMetrics'),row))
             post['grantsDigest']=digest(source.get('useGrants'))
@@ -246,11 +247,12 @@ class GrowthService:
                         (workspace_id,post['connectionId'],post['provider'],post['providerPostId']))
             owned=cur.fetchone() is not None
             if not owned:
-                owned=any(j.get('state')=='verified' and j.get('verification') and str(j.get('providerReference'))==post['providerPostId']
+                owned=any(performance.official_job(j) and str(j.get('providerReference'))==post['providerPostId']
                           and (j.get('manifest') or {}).get('channelId')==post['connectionId']
                           and (j.get('manifest') or {}).get('platform')==post['platform'] for j in state.get('phase2',{}).get('jobs',[]))
             if not owned:
                 post['provider']=None
+            post['officialOrigin'] = owned
             posts.append(post)
         return performance.attach_readings(cur,workspace_id,posts)
 
@@ -484,7 +486,8 @@ class GrowthService:
                 if channel and any(r['platform']!=channel['platform'] for r in records):
                     raise AlphaError('The CSV platform must match the selected account.')
                 for rec in records:rec['account']=connection
-                imported=voice_sources.apply_action(state,'voice_samples_import',{'format':'json','records':records},principal,self.clock())
+                imported=voice_sources.apply_action(state,'voice_samples_import_owned',{'format':'json','records':records,
+                    'authorshipConfirmed':True, 'representativeConfirmed': body.get('representativeContent') is True},principal,self.clock())
                 ids=imported['imported']+imported['revised']+imported['unchanged']
                 source_map={s['importIdentity']:s for s in state['sources'] if s.get('kind')=='voice_sample'}
                 for rec,normalized in zip(records,voice_sources.normalize_import({'format':'json','records':records})):
@@ -725,9 +728,9 @@ class GrowthService:
             posts=[]
             for job in jobs:
                 m=job.get('manifest') or {}
-                posts.append({'id':job['id'],'platform':m.get('platform'),'connectionId':m.get('channelId'),'providerPostId':str(job['providerReference']),
+                posts.append({'id':job['id'], 'jobId':job['id'], 'platform':m.get('platform'),'connectionId':m.get('channelId'),'providerPostId':str(job['providerReference']),
                               'provider':{'Threads':'threads','Instagram':'instagram'}.get(m.get('platform')),'language':m.get('payload',{}).get('language'),
-                              'format':m.get('contentType',{}).get('formatId','text'),'timeBucket':'unknown'})
+                              'format':m.get('contentType',{}).get('formatId','text'),'timeBucket':'unknown', 'officialOrigin': performance.official_job(job)})
             posts=performance.attach_readings(cur,workspace_id,posts);post=next(p for p in posts if p['id']==job_id)
             cur.execute('SELECT body FROM public.pr_predictions WHERE workspace_id=%s AND job_id=%s',(workspace_id,job_id));prediction=cur.fetchone()
             return {'status':'observed' if post.get('readings') else 'unavailable','prediction':prediction[0] if prediction else None,

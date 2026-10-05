@@ -13,14 +13,18 @@ import { ApiError } from '@/lib/api/client';
 import { useAct, useModels } from '@/lib/api/hooks';
 import type { SnapshotSource, SnapshotState } from '@/lib/api/types';
 import { OwnedPostsPicker } from './owned-posts-picker';
+import { representativeVoiceSource, voiceUnexpired } from '@/features/agent/voice-consent';
 
 function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : 'Couldn’t update the sample. Try again.';
 }
 
 function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: SnapshotSource; revision: number; isOwner: boolean; analysisRoute?: string }) {
+  const representativeConsentId = useId();
   const act = useAct();
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [representativeRevision, setRepresentativeRevision] = useState<number | null>(null);
+  const confirmRepresentative = representativeRevision === (source.revision ?? 1);
   const models = useModels();
   const [writerRoute, setWriterRoute] = useState('');
   const writers = models.data?.models.filter((model) => model.qualified && model.voiceRoute) ?? [];
@@ -36,8 +40,9 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
     }
   }
 
-  const allowed = source.purposeGrants?.length || source.routeGrants?.length;
-  const aiAllowed = source.useGrants?.some((grant) => grant.purpose === 'analysis' && grant.route === analysisRoute);
+  const eligible = representativeVoiceSource(source);
+  const allowed = eligible && source.useGrants?.some((grant) => voiceUnexpired(grant));
+  const aiAllowed = eligible && source.useGrants?.some((grant) => grant.purpose === 'analysis' && voiceUnexpired(grant) && grant.route === analysisRoute);
   return (
     <Band as='li' className='gap-3'>
       <div className='flex min-w-0 items-start justify-between gap-3'>
@@ -56,6 +61,11 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
         <Checkbox aria-label={`Select ${source.title || 'writing sample'}`} checked={source.selected === true} disabled={act.isPending || !source.active} onCheckedChange={(checked) => void update('voice_sample_select', { selected: checked === true })} />
       </div>
       <p className='text-foreground text-sm whitespace-pre-wrap'>{source.text}</p>
+      {!eligible && source.active && <p className='text-muted-foreground text-xs'>Retained text is not voice evidence until its owner-authorship and current representativeness are confirmed. Guest, AI-generated, sponsored and outdated writing is excluded.</p>}
+      {!eligible && source.active && isOwner && <div className='flex flex-wrap items-center gap-2'>
+        <label htmlFor={representativeConsentId} className='flex items-start gap-2 text-xs'><Checkbox id={representativeConsentId} aria-label={`Confirm representative authorship for ${source.title || 'writing sample'}`} checked={confirmRepresentative} onCheckedChange={(checked) => setRepresentativeRevision(checked === true ? (source.revision ?? 1) : null)} />I wrote this myself and it represents how I write today.</label>
+        <Button variant='quiet' size='default' disabled={!confirmRepresentative || act.isPending} onClick={() => void update('voice_sample_review', { label: 'representative', authorshipConfirmed: true, confirmed: true })}>Confirm as representative</Button>
+      </div>}
       <p className='text-muted-foreground text-xs' title={allowed ? (source.routeGrants ?? []).map((route) => (route.endsWith('*') ? 'any Rafii AI writer model' : route)).join(', ') : undefined}>
         {allowed ? `Allowed for ${(source.purposeGrants ?? []).join(' and ')}.` : 'Not allowed for analysis or writing yet.'}
       </p>
@@ -133,7 +143,9 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
   const [platform, setPlatform] = useState(preferredPlatform ?? '');
   const [format, setFormat] = useState<'pasted' | 'csv' | 'json'>('pasted');
   const [manualConsent, setManualConsent] = useState(false);
+  const [ownRepresentative, setOwnRepresentative] = useState(false);
   const manualConsentId = useId();
+  const manualRepresentativeId = useId();
   const models = useModels();
   const [analysisModel, setAnalysisModel] = useState('');
   const [instructions, setInstructions] = useState(analysisRequest ?? 'Analyse my tone, rhythm and openings. Describe platform differences only when the samples support them.');
@@ -143,15 +155,16 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
   const samples = (state?.sources ?? []).filter((source) => source.kind === 'voice_sample');
   const selected = samples.filter((source) => source.active && source.selected);
   const confirmationKey = JSON.stringify([analysisModel, instructions, selected.map((source) => [source.id, source.revision, source.useGrants])]);
-  const aiAllowed = selected.filter((source) => source.useGrants?.some((grant) => grant.purpose === 'analysis' && grant.route === selectedModel?.voiceRoute));
-  const analyzable = samples.filter((source) => source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'analysis' && grant.route === 'local-rules'));
+  const aiAllowed = selected.filter((source) => representativeVoiceSource(source) && source.useGrants?.some((grant) => grant.purpose === 'analysis' && voiceUnexpired(grant) && grant.route === selectedModel?.voiceRoute));
+  const analyzable = samples.filter((source) => representativeVoiceSource(source) && source.selected && source.useGrants?.some((grant) => grant.purpose === 'analysis' && voiceUnexpired(grant) && grant.route === 'local-rules'));
 
   async function importSample() {
     if (!manualConsent || !text.trim()) return;
     try {
-      await act.mutateAsync({ revision, action: 'voice_samples_import', payload: format === 'pasted' ? { format, text, platform } : { format, data: text } });
+      await act.mutateAsync({ revision, action: ownRepresentative ? 'voice_samples_import_owned' : 'voice_samples_import', payload: { ...(format === 'pasted' ? { format, text, platform } : { format, data: text }), ...(ownRepresentative ? { authorshipConfirmed: true, representativeConfirmed: true } : {}) } });
       setText('');
       setManualConsent(false);
+      setOwnRepresentative(false);
       toast.success('Sample retained. Select it to allow analysis.');
     } catch (error) {
       toast.error(errorMessage(error));
@@ -206,6 +219,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
           onChange={(event) => {
             setFormat(event.target.value as typeof format);
             setManualConsent(false);
+            setOwnRepresentative(false);
           }}
         >
           <option value='pasted'>Pasted text</option>
@@ -220,6 +234,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
             onChange={(event) => {
               setText(event.target.value);
               setManualConsent(false);
+              setOwnRepresentative(false);
             }}
             maxLength={format === 'pasted' ? 8000 : 524288}
             rows={4}
@@ -236,6 +251,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
                 onChange={(event) => {
                   setPlatform(event.target.value);
                   setManualConsent(false);
+                  setOwnRepresentative(false);
                 }}
                 maxLength={80}
                 placeholder='Platform (optional)'
@@ -243,9 +259,10 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
               />
             )}
             <label htmlFor={manualConsentId} data-tour='voice-sample-consent' className='text-foreground flex items-start gap-2 text-xs leading-relaxed'>
-              <Checkbox id={manualConsentId} className='mt-0.5' aria-label='Confirm manual writing sample authorship and retention' checked={manualConsent} onCheckedChange={(checked) => setManualConsent(checked === true)} disabled={act.isPending} />
+              <Checkbox id={manualConsentId} className='mt-0.5' aria-label='Confirm manual writing sample authorship and retention' checked={manualConsent} onCheckedChange={(checked) => { setManualConsent(checked === true); if (checked !== true) setOwnRepresentative(false); }} disabled={act.isPending} />
               I wrote or have permission to use this text and consent to private retention, not AI analysis or generation.
             </label>
+            {isOwner && <label htmlFor={manualRepresentativeId} className='text-foreground flex items-start gap-2 text-xs leading-relaxed'><Checkbox id={manualRepresentativeId} aria-label='Confirm owner-authored representative samples' checked={ownRepresentative && manualConsent} onCheckedChange={(checked) => setOwnRepresentative(checked === true)} disabled={act.isPending || !manualConsent} />I wrote these myself and they represent how I write today. Any non-representative labels in my import remain excluded.</label>}
             <Button variant='action' size='control' data-tour='voice-sample-save' disabled={act.isPending || !text.trim() || !manualConsent} onClick={() => void importSample()}>
               {act.isPending ? (
                 <>

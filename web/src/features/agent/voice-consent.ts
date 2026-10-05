@@ -6,10 +6,18 @@ function covers(route: string, model: ModelOption): boolean {
   return route === model.voiceRoute || (Boolean(model.voiceRouteClass) && route === model.voiceRouteClass);
 }
 
+export function voiceUnexpired(value: { expiresAt?: string | null }, now = Date.now()): boolean {
+  return value.expiresAt == null || (/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value.expiresAt) && Date.parse(value.expiresAt) > now);
+}
+
+export function representativeVoiceSource(source: SnapshotSource): boolean {
+  return source.kind === 'voice_sample' && source.active && Boolean(source.authoredByConfirmed) && source.label === 'representative' && voiceUnexpired(source);
+}
+
 /** UI eligibility follows the routes issued by the server catalogue. */
 export function eligibleVoiceSources(sources: SnapshotSource[], model: ModelOption | undefined): string[] {
   if (!model?.qualified || !model.voiceRoute) return [];
-  return sources.filter((source) => source.kind === 'voice_sample' && source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && covers(grant.route, model))).map((source) => source.id);
+  return sources.filter((source) => representativeVoiceSource(source) && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && voiceUnexpired(grant) && covers(grant.route, model))).map((source) => source.id);
 }
 
 /** The voice a draft is written in: the person's own choice, else writing like them whenever this writer may read a

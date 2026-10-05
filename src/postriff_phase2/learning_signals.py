@@ -89,17 +89,16 @@ def _scope(variant, manifest=None, state=None):
     else:
         scope = {"platform": variant.get("platform"), "language": variant.get("language"), "contentTypeId": variant.get("contentTypeId"), "formatId": variant.get("formatId")}
     campaign_id = (manifest or {}).get("campaignId") or variant.get("campaignId")
-    if campaign_id:
-        scope["campaignId"] = campaign_id
-    elif state and variant.get("id"):
+    linked = {campaign_id} if campaign_id else set()
+    if state and variant.get("id"):
         campaigns = ((state.get("raffi") or {}).get("campaignPlanning") or {}).get("campaigns") or []
-        linked = {c["id"] for c in campaigns if c.get("status") != "cancelled" and any(
-            item.get("kind") == "draft" and item.get("variantId") == variant["id"] for item in c.get("items") or [])}
-        if len(linked) == 1:
-            scope["campaignId"] = next(iter(linked))
-        elif len(linked) > 1:
-            # Do not infer global preferences from an edit with ambiguous campaign provenance.
-            scope["ambiguousCampaignScope"] = True
+        linked.update(c["id"] for c in campaigns if c.get("status") != "cancelled" and any(
+            item.get("kind") == "draft" and item.get("variantId") == variant["id"] for item in c.get("items") or []))
+    if len(linked) == 1:
+        scope["campaignId"] = next(iter(linked))
+    elif len(linked) > 1:
+        # An old explicit origin cannot hide a second live campaign association.
+        scope["ambiguousCampaignScope"] = True
     return scope
 
 

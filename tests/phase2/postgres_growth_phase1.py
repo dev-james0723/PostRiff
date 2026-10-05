@@ -120,7 +120,7 @@ checks.append('memory revocation stops the next model call')
 
 # The CSV corpus remains the existing voice-source store; proposed rules do not silently become approved.
 csv='text,platform,language,post_id\nMy first own teaching note.,Threads,en,g1\nMy second own teaching note.,Threads,en,g2\nMy third own teaching note.,Threads,en,g3\n'
-import_body={'data':csv,'account':'my-owned-account','ownContent':True,'retainText':True,'confirmed':True,'requestKey':str(uuid.uuid4())}
+import_body={'data':csv,'account':'my-owned-account','ownContent':True,'retainText':True,'representativeContent':True,'confirmed':True,'requestKey':str(uuid.uuid4())}
 refused(400,lambda:growth.imports(wid,TOKEN,{**import_body,'ownContent':False}))
 proposed=growth.imports(wid,TOKEN,import_body)['genome']
 assert proposed['postCount']==3 and proposed['measuredPosts']==0 and proposed['statements']
@@ -196,7 +196,8 @@ with connection() as db,db.cursor() as cur:
         cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,read_offset) VALUES(%s,'matching-account','threads',%s,%s,'likes','native-v1',%s,'count','available',now(),'24h')",(wid,job['providerReference'],job['id'],[5,10,15,30][i]))
 feedback=growth.feedback(wid,TOKEN,job_ids[3])
 observed=next(r for r in feedback['readings'] if r['horizon']=='24h')['metrics']['likes']
-assert observed['baselineCount']==3 and observed['median']==10 and observed['multiple']==3
+assert observed['baselineCount']==0 and observed['median'] is None and observed['multiple'] is None
+assert observed['provenance']=='unverified' and observed['learningEligible'] is False
 assert feedback['prediction']['contentRevision']==3
 assert feedback['readings'][0]['status']=='unavailable'
 assert growth.feedback(wid,TOKEN,job_ids[4])['reason']=='publication_not_verified'

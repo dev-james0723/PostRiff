@@ -284,7 +284,7 @@ class Phase2Store(Store):
             v = self._variant(s, p.get("variantId"))
             if p.get("variantRevision") != v["revision"] or p.get("confirmed") is not True:
                 raise AlphaError("Read this exact draft and confirm the source and uncertainty review.", 409)
-            if v.get("sourceReviewRequired") or v["blockedByRetraction"] or v.get("briefRevision") != s["brief"]["revision"] or v["voiceRevision"] != s["speaker"]["activeRevision"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
+            if v.get("sourceReviewRequired") or v["blockedByRetraction"] or v.get("briefRevision") != s["brief"]["revision"] or not self.voice_revision_current(s, v) or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
                 raise AlphaError("Regenerate against current approved sources and voice before reviewing.")
             if p.get("excludedUnknowns") != v["unknowns"]:
                 raise AlphaError("Review every unknown. Confirm that unsupported details are excluded from this draft.")
@@ -373,7 +373,7 @@ class Phase2Store(Store):
         if policy_blockers:
             raise AlphaError(policy_blockers[0]["message"], 409)
         # Language is not part of the match: a channel can carry drafts in several languages (languages plan §6).
-        if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
+        if not self.voice_revision_current(s, v) or v["platform"] != c["platform"]:
             raise AlphaError("The variant and current speaker must match this destination.")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
@@ -420,10 +420,12 @@ class Phase2Store(Store):
             self._youtube_day_open(data, timing["timestamp"])
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
-        manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
+        manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": v["voiceRevision"], "styleRevision": v.get("styleRevision", learning.revision(s)), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
+        if v.get('generationProvenance'):
+            manifest['generationProvenance'] = copy.deepcopy(v['generationProvenance'])
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
         if options is not None:
             manifest["publishOptions"] = options
@@ -487,9 +489,22 @@ class Phase2Store(Store):
                 return False
         return True
 
+    @staticmethod
+    def voice_revision_current(state, variant):
+        record = variant.get('generationProvenance') or {}
+        if (record.get('schema') == 'rafii.generation-provenance.v1'
+                and (record.get('profile') or {}).get('used') is False
+                and variant.get('voiceRevision') is None):
+            # This writer deliberately used no active profile. A later profile must not be
+            # retroactively attributed to its output; sample bindings remain checked separately.
+            return True
+        return variant.get('voiceRevision') == state['speaker'].get('activeRevision')
+
     def current(self, s, m):
         try:
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
+            if m.get('generationProvenance') and m['generationProvenance'] != v.get('generationProvenance'):
+                return False
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]
                     or m.get("briefRevision") != s["brief"]["revision"]
@@ -508,7 +523,7 @@ class Phase2Store(Store):
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).
-            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
+            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and v["voiceRevision"] == m["voiceRevision"] and self.voice_revision_current(s, v) and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
         except (AlphaError, KeyError, TypeError, ValueError):
             return False
 

@@ -17,7 +17,7 @@
     {"key":"subject","question":"What subject or business should the posts draw from?","limit":1500,"modes":["niche","business","hybrid"]},
     {"key":"speaker","question":"Who speaks in the first post?","limit":1500,"modes":["hybrid"]},
     {"key":"tone","question":"How should the writing sound?","options":"tones"},
-    {"key":"writing","question":"Paste something you wrote (optional)","limit":6000,"optional":true,"hint":"Writing routes receive it in VOICE.md as an example of how you write. Use writing you own."},
+    {"key":"writing","question":"Paste something you wrote (optional)","limit":6000,"optional":true,"hint":"Stored for your review. To use writing as voice evidence, add it in Brand and confirm authorship, representativeness and writer permission."},
     {"key":"confirm","question":"Save these answers as a proposed voice for owner review?","options":[{"id":"propose","label":"Propose my voice"}]}
   ]
 }

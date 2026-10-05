@@ -15,7 +15,7 @@ from postriff_phase2.hosted_app import HostedApplication
 def post(i,value,**changes):
     return {'id':str(i),'sourceId':str(i),'sourceRevision':1,'grantsDigest':'a','platform':'Threads','connectionId':'one','language':'en',
             'format':'text','timeBucket':'unknown','labels':{'hook':'question'},'scores':{'hook':.9},
-            'readings':{'24h':{'likes':{'value':value,'availability':'available','definitionVersion':'native-v1'}}},**changes}
+            'readings':{'24h':{'likes':{'value':value,'availability':'available','definitionVersion':'native-v1','provenance':'official'}}},**changes}
 
 
 class Performance(unittest.TestCase):
@@ -65,7 +65,7 @@ class Genome(unittest.TestCase):
         self.assertTrue(result['statements'][0]['counterEvidenceIds'])
         self.assertIsNotNone(genome.fit_winners({'hook':.9},posts,posts[0]))
         self.assertIsNone(genome.fit_winners({'hook':.9},posts[:9],posts[0]))
-        posts[-1]['readings']['24h']={'shares':{'value':20,'availability':'available','definitionVersion':'native-v1'}}
+        posts[-1]['readings']['24h']={'shares':{'value':20,'availability':'available','definitionVersion':'native-v1','provenance':'official'}}
         self.assertIsNone(genome.fit_winners({'hook':.9},posts,posts[0]))
 
     def test_csv_numbers_horizons_and_limits(self):
@@ -85,12 +85,13 @@ class Genome(unittest.TestCase):
                 posts.append(sample)
         statements=genome.proposal(posts)['statements']
         self.assertEqual(len(statements),2)
-        self.assertEqual({s['definitionVersion'] for s in statements},{'native-v1','user-export:24h'})
+        self.assertEqual({s['definitionVersion'] for s in statements},{'native-v1',None})
         self.assertTrue(all(s['grade']=='limited' and len(s['evidenceIds'])==2 for s in statements))
-        self.assertEqual({tuple(s['provenance']) for s in statements},{('official',),('user_supplied',)})
+        self.assertEqual({tuple(s['provenance']) for s in statements},{('official',),()})
+        self.assertEqual({s['kind'] for s in statements}, {'performance', 'writing'}, 'uploaded counts cannot teach outcome strategy')
 
     def test_grant_and_revision_revocation_fence_active_genome(self):
-        source={'id':'s','active':True,'selected':True,'revision':1,'useGrants':{'a':'b'}}
+        source={'id':'s','active':True,'selected':True,'revision':1,'useGrants':{'a':'b'}, 'authoredByConfirmed':'synthetic-owner', 'label':'representative'}
         state={'sources':[source],'growthConsent':{'routes':['test']}}
         binding={'id':'s','revision':1,'grantsDigest':digest(source['useGrants'])}
         state['brandHub']={'genome':{'status':'approved','evidenceBindings':[binding],'consentDigest':digest(state['growthConsent'])}}

@@ -191,7 +191,10 @@ class MemoryFiles(unittest.TestCase):
 
     def test_cloud_byte_cap_cuts_the_voice_tail_never_the_boundaries(self):
         fields = [{"section": "Privacy and boundaries", "key": "boundaries", "label": "Boundaries", "value": "Never name a student", "privacy": "public"}]
-        state = workspace(writing_example="字" * 6000, fields=fields)
+        state = workspace(fields=fields)
+        # Legacy examples are retained for review, never admitted as voice evidence.
+        # Exercise the cap with admitted synthetic owner directions instead.
+        state['speaker']['revisions'][0]['profile']['observations'] = ['字' * 1000] * 6
         state["memoryEgress"] = {"cloud": True}
         shared = memory.projection(state, "cloud")
         self.assertEqual([f["name"] for f in shared["files"]], ["BOUNDARIES.md", "IDENTITY.md", "VOICE.md"])

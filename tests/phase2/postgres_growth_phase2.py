@@ -76,6 +76,12 @@ refused(403,lambda:c.report(wid,'one',body(jobId=job,horizon='24h')))
 consent(False)
 refused(403,lambda:c.mine(wid,'one',body(days=14)))
 consent();checks.append('flags, interactive sessions, cross-workspace isolation and separate comment consent')
+synthetic=c.report(wid,'one',body(jobId=job,horizon='24h'))
+assert synthetic['comparisons']==[] and synthetic['lessons']==[]
+refused(409,lambda:action('postmortem_lesson_approve',{'reportId':synthetic['id'],'lessonId':'fabricated','confirmed':True}))
+assert not current_genome(saved()['state'])
+checks.append('synthetic publication and metric rows cannot create an outcome lesson or active strategy')
+job=seed(host,wid,'one',simulate_official_contract=True)['jobId']
 b=body(jobId=job,horizon='24h');r=c.report(wid,'one',b);n=len(models.calls)
 assert r['comparisons'][0]['status']=='aligned' and r['explanation']['cause']=='not_established'
 assert c.report(wid,'one',b)==r and len(models.calls)==n
@@ -124,7 +130,7 @@ with connection() as db:
 refused(403,lambda:action('creator_calibration_propose',{}))
 with connection() as db:db.execute("UPDATE public.pr_memberships SET role='owner' WHERE workspace_id=%s AND user_id=%s",(wid,ONE))
 refused(409,lambda:action('creator_calibration_propose',{}))
-seed(host,wid,'one',calibration=True)
+seed(host,wid,'one',calibration=True,simulate_official_contract=True)
 p=action('creator_calibration_propose',{});assert c.overview(wid,'one')['calibration']['versions'][0]['status']=='proposed'
 action('creator_calibration_approve',{'calibrationId':p['calibrationId'],'confirmed':True})
 with connection() as db,db.cursor() as cur:assert c.active_calibration(cur,wid,saved()['state'])['candidates']

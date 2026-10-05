@@ -65,7 +65,7 @@ class ClosedLoopTests(unittest.TestCase):
 
     def test_publication_boundaries_and_counterexamples(self):
         posts,predictions=observations(12)
-        job={'id':'11','state':'verified','providerReference':'abc','verification':{'at':1},'manifest':{'channelId':'own','payload':{'text':'Original text'}}}
+        job={'id':'11','state':'verified','providerReference':'abc','verification':{'at':1,'method':'provider_lookup'},'manifest':{'execution':'hosted-live','channelId':'own','payload':{'text':'Original text'}}}
         report=postmortem.build(job,predictions['11'],posts,predictions,'24h')
         self.assertTrue(report['comparisons'])
         self.assertEqual(report['comparisons'][0]['status'],'aligned')

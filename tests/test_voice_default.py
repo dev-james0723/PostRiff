@@ -17,7 +17,7 @@ SONNET = "cloud:vercel-ai-gateway:anthropic/claude-sonnet-5"
 
 def workspace(grants):
     state = {"sources": [], "speaker": {"revisions": []}, "variants": []}
-    imported = voice_sources.apply_action(state, "voice_samples_import", {"format": "pasted", "text": "Short openings. No hashtags."}, "owner", 100)["imported"][0]
+    imported = voice_sources.apply_action(state, "voice_samples_import_owned", {"format": "pasted", "text": "Short openings. No hashtags.", "authorshipConfirmed": True, "representativeConfirmed": True}, "owner", 100)["imported"][0]
     voice_sources.apply_action(state, "voice_sample_select", {"sourceId": imported, "selected": True}, "owner", 101)
     if grants:
         voice_sources.apply_action(state, "voice_sample_grant", {"sourceId": imported, "grants": grants, "confirmed": True}, "owner", 102)
@@ -67,6 +67,7 @@ class ClassGrantTest(unittest.TestCase):
 
 class NeutralFallbackTest(unittest.TestCase):
     def project(self, state, payload):
+        state['memoryEgress'] = {'cloud': True}
         managed = ServerModelRuntime("key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"])
         fixture = FixtureAgentRuntime()
         ideas = IdeasService(None, None, runtime=fixture, runtimes=[fixture, managed], researcher=False)

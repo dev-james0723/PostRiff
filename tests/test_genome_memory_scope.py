@@ -12,7 +12,9 @@ def workspace(statements):
     state = initial_state("genome-scope-regression-only")
     state["memoryEgress"] = {"cloud": True}
     state["growthConsent"] = {"routes": ["test"]}
-    source = {"id": "sample", "active": True, "selected": True, "revision": 1, "useGrants": [{"purpose": "analysis"}]}
+    source = {"id": "sample", "kind": "voice_sample", "active": True, "selected": True, "revision": 1,
+              "authoredByConfirmed": "synthetic-owner", "label": "representative", "text": "Synthetic writing.", "contentHash": "synthetic-hash",
+              "useGrants": [{"purpose": "analysis"}, {"purpose": "generation", "route": "cloud:vercel-ai-gateway:openai/gpt-6-sol"}], "purposeGrants": ["analysis", "generation"]}
     state["sources"] = [source]
     state["brandHub"]["genome"] = {
         "status": "approved", "statements": statements,
@@ -28,7 +30,7 @@ def statement(text="GENOME_MARKER", kind="performance", **changes):
 
 def projected(state, platform="LinkedIn", language="en", content="promotion", campaign="campaign-a", channel="account-a"):
     return memory.projection(state, "cloud", [{"platform": platform, "language": language, "channelId": channel}],
-                             content, campaign_id=campaign)
+                             content, campaign_id=campaign, voice_route="cloud:vercel-ai-gateway:openai/gpt-6-sol")
 
 
 def prompt(shared):
@@ -36,6 +38,12 @@ def prompt(shared):
 
 
 class GenomeMemoryScope(unittest.TestCase):
+    def test_reviewed_writing_genome_cannot_expand_sample_permission_to_a_new_model(self):
+        state = workspace([statement('WRITING_MARKER', 'writing')])
+        route = 'cloud:vercel-ai-gateway:anthropic/claude-sonnet-5'
+        shared = memory.projection(state, 'cloud', [{'platform': 'LinkedIn', 'language': 'en'}], voice_route=route)
+        self.assertNotIn('WRITING_MARKER', prompt(shared))
+        self.assertIn('WRITING_MARKER', prompt(projected(state)))
     def test_matching_performance_is_strategy_never_voice_or_identity(self):
         state = workspace([statement(cohort={"platform": "LinkedIn", "language": "en", "connectionId": "account-a"},
                                      scope={"contentTypeId": "promotion", "campaignId": "campaign-a"})])

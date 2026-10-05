@@ -159,7 +159,7 @@ def build_proposal(state: dict, source_ids: list[str], actor: str, now: float, r
     dimensions.append(_dimension('recurring_patterns', '; '.join(repeated) + '. Counts are not universal style rules.', [source_id for source_id in ids if source_id in repeated_ids])
                       if repeated else _insufficient('recurring_patterns', 'No tracked local marker recurs in at least three selected samples. This does not establish an absence of other stylistic patterns.', ids))
     validated = validate_proposal({'dimensions': dimensions}, projection)
-    observations = [item['observation'] for item in validated['dimensions'] if item['evidenceLevel'] not in ('conflicting', 'insufficient')]
+    observations = [item['observation'] for item in validated['dimensions'] if item['evidenceLevel'] == 'supported']
     insufficient = [item['id'] for item in validated['dimensions'] if item['evidenceLevel'] == 'insufficient']
     return {
         "schema": "postriff.voice-profile-proposal.v1",

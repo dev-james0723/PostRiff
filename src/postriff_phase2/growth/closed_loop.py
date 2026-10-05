@@ -46,7 +46,7 @@ class ClosedLoop:
         posts=[]
         for job in jobs:
             m=job['manifest']
-            posts.append({'id':job['id'],'platform':m['platform'],'connectionId':m.get('channelId'),
+            posts.append({'id':job['id'], 'jobId':job['id'], 'platform':m['platform'],'connectionId':m.get('channelId'), 'officialOrigin': performance.official_job(job),
                           'providerPostId':str(job['providerReference']),'provider':m['platform'].lower(),
                           'language':m.get('payload',{}).get('language'),'format':m.get('contentType',{}).get('formatId','text'),
                           'timeBucket':'unknown'})
@@ -277,7 +277,8 @@ class ClosedLoop:
                 basis=self._basis(cur,wid,state,report['jobId'],report['horizon'])
                 if basis['basisDigest']!=report['basisDigest']:raise AlphaError('Readings changed. Review a fresh report.',409)
                 lesson=next((l for l in basis['lessons'] if l['id']==payload.get('lessonId')),None)
-                if not lesson or lesson['grade']=='conflicting':raise AlphaError('Choose a non-conflicting observed lesson.',409)
+                if not lesson or lesson['grade']=='conflicting' or lesson.get('provenance') != ['official'] or not postmortem.bindings_current(state, basis['outcomeBindings']):
+                    raise AlphaError('Choose a current lesson backed by official publication and metrics.',409)
                 old=copy.deepcopy(current_genome(state) or {'statements':[],'evidenceBindings':[],'postCount':0,'measuredPosts':0,'suppliedMetricsPosts':0})
                 if len(old['statements'])>=60:raise AlphaError('Review your current Genome before adding another lesson.',409)
                 vid=str(uuid.uuid4());lesson={**lesson,'id':'outcome:'+vid,'outcomeLesson':True}

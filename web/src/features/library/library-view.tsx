@@ -50,7 +50,7 @@ const infoContent = {
     },
     {
       title: 'What’s accepted',
-      description: 'JPEG or PNG photos, 320–4096 px per side. Large photos are resized before upload and saved as JPEG with metadata removed. Add videos from a chat with the Add button.'
+      description: 'JPEG or PNG photos, 320–4096 px per side. Large photos are resized before upload and saved as JPEG with metadata removed. Add videos from a chat with the Add button. Ideas accepts UTF-8 .txt/.md documents; PDF, Office and audio parsing is unavailable. AI descriptions of visuals still need review.'
     },
     {
       title: 'Used',

@@ -55,12 +55,13 @@ class RuntimeBoundaries(unittest.TestCase):
         from postriff_alpha.domain import initial_state
         from postriff_phase2 import memory, voice_sources
         state=initial_state('memory-boundary')
-        imported=voice_sources.apply_action(state,'voice_samples_import',{'format':'pasted','text':'SECRET sample factual claim'},'owner',100)
+        imported=voice_sources.apply_action(state,'voice_samples_import_owned',{'format':'pasted','text':'SECRET sample factual claim', 'authorshipConfirmed':True, 'representativeConfirmed':True},'owner',100)
         source_id=imported['imported'][0]
+        source=next(s for s in state['sources'] if s['id']==source_id)
         voice_sources.apply_action(state,'voice_sample_select',{'sourceId':source_id,'selected':True},'owner',101)
         state['memoryEgress']={'cloud':True}
         state['speaker']['activeRevision']=1
-        state['speaker']['revisions']=[{'revision':1,'profile':{'evidenceSourceIds':[source_id],'writingExample':'SECRET sample factual claim','observations':['bounded-form-signal']}}]
+        state['speaker']['revisions']=[{'revision':1,'profile':{'evidenceSourceIds':[source_id], 'sourceBindings':[{'id':source_id,'revision':source['revision'],'contentHash':source['contentHash']}], 'writingExample':'SECRET sample factual claim','observations':['bounded-form-signal']}}]
         withheld=json.dumps(memory.projection(state,'cloud',voice_route='cloud:test:model'))
         self.assertNotIn('SECRET sample factual claim',withheld)
         self.assertNotIn('bounded-form-signal',withheld)

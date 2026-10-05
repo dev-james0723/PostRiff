@@ -55,6 +55,13 @@ try:
 except AlphaError as error:
     assert error.status == 403
 
+try:
+    act("two", "voice_sample_review", {"sourceId": sample["id"], "label": "representative", "authorshipConfirmed": True, "confirmed": True})
+    raise AssertionError("editor attested owner authorship")
+except AlphaError as error:
+    assert error.status == 403
+act("one", "voice_sample_review", {"sourceId": sample["id"], "label": "representative", "authorshipConfirmed": True, "confirmed": True})
+act("one", "voice_sample_select", {"sourceId": sample["id"], "selected": True})
 granted = act("one", "voice_sample_grant", {"sourceId": sample["id"], "grants": [{"purpose": "analysis", "route": "local-rules"}, {"purpose": "generation", "route": "local-cli"}], "confirmed": True})
 saved = next(item for item in granted["state"]["sources"] if item["id"] == sample["id"])
 assert saved["purposeGrants"] == ["analysis", "generation"]

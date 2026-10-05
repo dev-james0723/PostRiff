@@ -72,8 +72,9 @@ class PromptSlice(unittest.TestCase):
 
     def test_slice_is_bounded_and_paused_items_leave_it(self):
         state = workspace()
-        # One active item per scope key, so spread the fifteen across rule keys and polarities.
-        combos = [(rule, polarity) for rule in learning.RULE_KEYS for polarity in learning.POLARITIES][:15]
+        # Fifteen independent free-form preferences exercise the bound. Opposite
+        # decisions for the same known trait are replacements, never independent.
+        combos = [('other', 'do')] * 15
         ids = [item(state, f"Prefer the {chr(97 + n)}-style closing.", {}, rule, polarity=polarity)["id"] for n, (rule, polarity) in enumerate(combos)]
         chosen, omitted = learning.select(state, [{"platform": "LinkedIn", "language": "English"}])
         self.assertEqual((len(chosen), len(omitted)), (12, 3))
