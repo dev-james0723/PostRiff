@@ -399,6 +399,150 @@ async function main() {
           check('record boundary has no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
         });
 
+        // The real ticket APIs, original tenant and production-built controls;
+        // every identity/message here is synthetic and the harness is loopback-only.
+        await attempt('original-tenant support workflow and reveal scope', async () => {
+          await exchange(context, FOUNDER);
+          const headers = { Origin: base, 'X-PostRiff-Request': 'founder-alpha', Authorization: 'Bearer dev:00000000-0000-4000-8000-00000000f0aa' };
+          const bootstrap = await context.request.post(base + '/api/auth/verify', { headers, data: { plan: 'studio' } });
+          check('support customer fixture bootstraps without a provider', bootstrap.status() === 201, bootstrap.status());
+          const workspace = (await bootstrap.json()).workspaceId;
+          if (!workspace) throw new Error('Synthetic support tenant was not created');
+          async function create(category, message) {
+            const response = await context.request.post(`${base}/api/workspaces/${workspace}/support/tickets`, {
+              headers, data: { requestId: require('node:crypto').randomUUID(), category, message }
+            });
+            check(`support ${category} ticket is created in its original tenant`, response.status() === 201, response.status());
+            return (await response.json()).ticket;
+          }
+          const first = await create('technical', 'Synthetic browser support original A');
+          const second = await create('account', 'Synthetic browser support original B');
+          await page.goto(base + '/founder/support?tab=inbox');
+          await page.getByRole('heading', { name: 'In-app support inbox', exact: true }).waitFor({ timeout: 30000 });
+          await settle(page, tracker);
+          const selectFirst = () => page.getByRole('button', { name: new RegExp(first.id.slice(-8)) }).click();
+          const selectSecond = () => page.getByRole('button', { name: new RegExp(second.id.slice(-8)) }).click();
+          await selectFirst();
+          check('support originals are masked before reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          await page.getByLabel('Ticket priority', { exact: true }).selectOption('urgent');
+          await page.getByLabel('Ticket assignee', { exact: true }).selectOption('me');
+          let pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/triage`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Save triage', exact: true }).click();
+          const triage = await pending;
+          check('support triage succeeds through the protected API', triage.status() === 200, triage.status());
+          await settle(page, tracker);
+          const triageResult = (await triage.json()).data.ticket;
+          check('support priority and self assignment are durable', triageResult.priority === 'urgent' && Boolean(triageResult.assigneeId), triageResult);
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/reveal`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+          const revealed = await pending;
+          check('explicit recent-factor support reveal succeeds', revealed.status() === 200, revealed.status());
+          await page.getByText('customer: Synthetic browser support original A', { exact: true }).waitFor({ timeout: 10000 });
+          check('revealed original appears only after the deliberate action', true);
+
+          await selectSecond();
+          check('selecting another ticket clears the earlier reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          let releaseReveal;
+          const heldReveal = new Promise((resolve) => { releaseReveal = resolve; });
+          const pattern = `**/api/control/v2/support/tickets/${second.id}/reveal`;
+          await page.route(pattern, async (route) => { await heldReveal; await route.continue(); });
+          try {
+            const started = page.waitForRequest(pattern, { timeout: 10000 });
+            await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+            await started;
+            await selectFirst();
+          } finally {
+            releaseReveal();
+            await settle(page, tracker);
+            await page.unroute(pattern);
+          }
+          check('a delayed previous-ticket reveal cannot display in the new selection', !(await page.locator('body').innerText()).includes('Synthetic browser support original B'));
+          await page.getByRole('button', { name: 'Reveal original support message and identity', exact: true }).click();
+          await page.getByText('customer: Synthetic browser support original A', { exact: true }).waitFor({ timeout: 10000 });
+          await page.getByRole('radio', { name: 'Demo', exact: true }).click();
+          await settle(page, tracker);
+          const demoText = await page.locator('body').innerText();
+          check('Demo clears support selection and raw original content', !demoText.includes('Synthetic browser support original A') && !demoText.includes('Synthetic browser support original B'));
+          await page.getByRole('radio', { name: 'Live', exact: true }).click();
+          await settle(page, tracker);
+          check('returning to Live does not restore a previous raw reveal', !(await page.locator('body').innerText()).includes('Synthetic browser support original A'));
+          await selectFirst();
+          await page.getByLabel('In-app reply', { exact: true }).fill('Synthetic Founder support reply');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/reply`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Send in-app reply', exact: true }).click();
+          const sent = await pending;
+          check('support reply stays in-app', sent.status() === 200 && (await sent.json()).data.delivery === 'in_app', sent.status());
+          await settle(page, tracker);
+          const original = await (await context.request.get(`${base}/api/workspaces/${workspace}/support/tickets/${first.id}`, { headers })).json();
+          check('the original customer reads the Founder reply and its waiting state', original.messages.at(-1)?.body === 'Synthetic Founder support reply' && original.ticket.status === 'waiting_customer', original.ticket);
+          check('original customer workflow includes creation triage and reply', ['created', 'triage', 'message'].every((kind) => original.history.some((event) => event.kind === kind)), original.history.map((event) => event.kind));
+          await page.getByLabel('Related ticket ID', { exact: true }).fill(second.id);
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${first.id}/link`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Link ticket', exact: true }).click();
+          const linked = await pending;
+          const linkedTicket = (await linked.json()).data.ticket;
+          check('support duplicate relation is durable in the original tenant', linked.status() === 200 && linkedTicket.status === 'duplicate' && linkedTicket.duplicateOfTicketId === second.id, linkedTicket);
+          await settle(page, tracker);
+          // The original customer UI submits one optional response for a new
+          // human-supported resolution. These identities stay loopback-only.
+          await selectSecond();
+          await page.getByLabel('In-app reply', { exact: true }).fill('Synthetic resolution explanation');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/reply`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Send in-app reply', exact: true }).click();
+          check('survey resolution receives a human in-app reply', (await pending).status() === 200);
+          await settle(page, tracker);
+          await page.getByLabel('Ticket status', { exact: true }).selectOption('resolved');
+          pending = page.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/status`) && r.request().method() === 'POST');
+          await page.getByRole('button', { name: 'Update status', exact: true }).click();
+          check('new observed support resolution commits through its API', (await pending).status() === 200);
+          await settle(page, tracker);
+          const offered = await (await context.request.get(`${base}/api/workspaces/${workspace}/support/tickets/${second.id}`, { headers })).json();
+          check('the original customer receives an eligible resolution survey', offered.survey?.state === 'eligible' && offered.survey.helpful === null, offered.survey);
+          const customerContext = await browser.newContext({ viewport: { width: 1440, height: 960 }, colorScheme: 'dark' });
+          const customerErrors = [];
+          try {
+            await customerContext.addCookies([
+              { name: 'postriff_dev', value: '1', url: base },
+              { name: 'postriff_dev_principal', value: '00000000-0000-4000-8000-00000000f0aa', url: base },
+              { name: 'postriff_theme', value: 'rafii', url: base }
+            ]);
+            const tourSource = fs.readFileSync(path.resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8');
+            const tours = [...tourSource.matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((match) => match[1]);
+            await customerContext.addInitScript(({ ids }) => {
+              localStorage.setItem('postriff-dev-principal', '00000000-0000-4000-8000-00000000f0aa');
+              localStorage.setItem('postriff-onboarding', JSON.stringify({ completed: {}, dismissed: Object.fromEntries(ids.map((id) => [id, 1])), nudged: Object.fromEntries(ids.map((id) => [id, 1])) }));
+            }, { ids: tours });
+            const customerPage = await customerContext.newPage();
+            customerPage.on('pageerror', (error) => customerErrors.push(String(error)));
+            await customerPage.goto(base + '/app/account/profile#profile-support');
+            await customerPage.getByRole('heading', { name: 'Support', exact: true }).waitFor({ timeout: 30000 });
+            await customerPage.getByRole('button', { name: 'account · resolved', exact: true }).click();
+            await customerPage.getByText('Was this support resolution helpful?', { exact: true }).waitFor({ timeout: 10000 });
+            const feedback = customerPage.waitForResponse((r) => r.url().endsWith(`/support/tickets/${second.id}/survey`) && r.request().method() === 'POST');
+            await customerPage.getByRole('button', { name: 'Yes, it helped', exact: true }).click();
+            const feedbackResponse = await feedback;
+            const savedFeedback = await feedbackResponse.json();
+            check('customer feedback is saved by the actual original-tenant API', feedbackResponse.status() === 201 && savedFeedback.survey?.helpful === true && savedFeedback.duplicate === false, savedFeedback);
+            await customerPage.getByText('Your feedback for this resolution is recorded.', { exact: true }).waitFor({ timeout: 10000 });
+            check('customer feedback controls close after the recorded answer', await customerPage.getByRole('button', { name: 'Yes, it helped', exact: true }).count() === 0);
+            const customerViolations = await axe(customerPage);
+            check('customer support feedback has no critical or serious accessibility violations', customerViolations.length === 0, customerViolations);
+            check('customer support feedback has no page error', customerErrors.length === 0, customerErrors);
+          } finally {
+            await customerContext.close();
+          }
+          await page.reload();
+          await settle(page, tracker);
+          const feedbackSummary = await page.locator('[aria-label="Support satisfaction summary"]').innerText();
+          check('Founder feedback shows actual response and offer counts with qualified scope', feedbackSummary.includes('1 responses') && feedbackSummary.includes('1 resolution offers') && feedbackSummary.includes('100%') && feedbackSummary.includes('does not measure satisfaction across all customers'), feedbackSummary);
+
+          const violations = await axe(page);
+          check('support workflow has no critical or serious accessibility violations', violations.length === 0, violations);
+          const seen = drain(tracker);
+          check('support workflow has no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
+          check('support workflow has no page error', seen.pageErrors.length === 0, seen.pageErrors);
+        });
+
         // Evidence drawer from a real receipt; Escape closes it and returns focus.
         await attempt('evidence drawer opens from ?evidence=', async () => {
           const overview = await (await context.request.get(base + '/api/control/v2/overview?mode=demo&period=30d')).json();
@@ -421,21 +565,42 @@ async function main() {
 
         // Founder Rafii answers a Demo question through the founder runtime (harness model, no provider).
         await attempt('Ask Rafii answers in Demo', async () => {
-          await page.goto(base + '/founder?mode=demo');
-          await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
-          await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
-          const box = page.getByRole('textbox', { name: 'Ask Rafii' });
-          await box.waitFor({ timeout: 15000 });
-          await box.fill('Summarise the three things that need me today.');
-          const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
-          await page.getByRole('button', { name: 'Send' }).click();
-          const response = await turn;
-          check('agent turn is accepted (201)', response.status() === 201, response.status());
-          await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
-          check('Rafii answer is rendered', true);
-          await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
-          const seen = drain(tracker);
-          check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          // Hold the actual session read: a slow session must preserve the draft,
+          // never send into an unknown-environment thread that disappears later.
+          let releaseSession;
+          const sessionGate = new Promise((resolve) => { releaseSession = resolve; });
+          const sessionPath = '**/api/control/v2/session';
+          const holdSession = async (route) => { await sessionGate; await route.continue(); };
+          await page.route(sessionPath, holdSession);
+          try {
+            await page.goto(base + '/founder?mode=demo');
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
+            await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
+            const box = page.getByRole('textbox', { name: 'Ask Rafii' });
+            await box.waitFor({ timeout: 15000 });
+            const question = 'Summarise the three things that need me today.';
+            await box.fill(question);
+            const send = page.getByRole('button', { name: 'Send', exact: true });
+            check('Ask Rafii waits for the known session environment', await send.isDisabled());
+            const suggested = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
+            check('suggested questions wait for the session environment', await suggested.count() > 0 && await suggested.evaluateAll((buttons) => buttons.every((button) => button.disabled)));
+            await box.press('Enter');
+            check('Enter during session loading preserves the draft', await box.inputValue() === question);
+            check('Enter during session loading creates no temporary thread', !(await page.getByRole('log', { name: 'Conversation with Rafii' }).innerText()).includes(question));
+            releaseSession();
+            const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
+            await send.click({ timeout: 30000 });
+            const response = await turn;
+            check('agent turn is accepted (201)', response.status() === 201, response.status());
+            await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
+            check('Rafii answer is rendered', true);
+            await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
+            const seen = drain(tracker);
+            check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          } finally {
+            releaseSession();
+            await page.unroute(sessionPath, holdSession);
+          }
         });
 
         // Founder voice: the strip opens from the panel. Voice is off in this harness, so "Talk to Rafii" is disabled and

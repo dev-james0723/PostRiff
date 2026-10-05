@@ -796,6 +796,9 @@ class HostedApplication:
                     return self._json(start_response, 200, service.billing_portal(parts[2], token, body.get("returnPath")))
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] in ("usage", "subscription") and method == "GET":
                 return self._json(start_response, 200, service.usage(parts[2], token))
+            if len(parts) == 7 and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['support', 'tickets'] and parts[6] == 'survey' and method == 'POST':
+                from . import support_surveys
+                return self._json(start_response, 201, support_surveys.respond(service, parts[2], token, parts[5], self._body(environ)))
             if len(parts) in (5, 6) and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['support', 'tickets']:
                 from . import support
                 data = support.customer(service, parts[2], token, method, parts[5] if len(parts) == 6 else None,

@@ -1,0 +1,69 @@
+[
+  {
+    "id": "open_tickets",
+    "version": 1,
+    "title": "Open support tickets",
+    "grain": "current ticket snapshot",
+    "unit": "count",
+    "definition": "Current original-tenant tickets in open or waiting_customer, grouped by category, priority or current status. Resolved, closed, spam and duplicate tickets are excluded. No historical status is inferred from the current row.",
+    "source_contract": "pr_support_tickets via rafii_control.business_support_tickets; in_app_support_workflow/v1",
+    "allowed_dimensions": [
+      "category",
+      "priority",
+      "status"
+    ],
+    "query_template_ref": "metrics/open_tickets/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Current snapshot only; previous comparison and historical snapshots are unavailable. Test/demo/internal workspaces are excluded through classification. An installed empty ticket source is a measured zero current count.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.founder_metrics_support",
+      "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+      "snapshot": true,
+      "migration": "092_founder_support_surveys.sql",
+      "prd": "F19 support source acceptance"
+    }
+  },
+  {
+    "id": "csat",
+    "version": 1,
+    "title": "Support resolution feedback",
+    "grain": "observed resolution offer cohort",
+    "unit": "ratio",
+    "definition": "Yes responses / valid yes-or-no responses from the original ticket creator to a new observed human-supported resolution. One immutable answer per resolution episode. Cohorts use offer time; only responses observed before the half-open interval end count. Response rate is valid responses / observed in-app resolution offers in that cohort, including unanswered offers.",
+    "source_contract": "pr_support_survey_offers/responses via restricted business_support_survey_*; in_app_support_csat_yes_no/v1",
+    "allowed_dimensions": [
+      "category",
+      "window"
+    ],
+    "query_template_ref": "metrics/csat/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Only forward-collected resolution offers and optional qualified responses. No backfill, no AI acknowledgement and no overall customer satisfaction inference. Reopening disables an unanswered older offer; a new resolution can offer again. Empty source or zero responses never becomes a zero satisfaction ratio. Response rate denominator is observed offers, not a delivery/read acknowledgement.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.founder_metrics_support",
+      "demoAdapter": "rafii_control.demo_metrics.not_simulated",
+      "snapshot": false,
+      "migration": "092_founder_support_surveys.sql",
+      "prd": "F19 support source acceptance"
+    }
+  }
+]

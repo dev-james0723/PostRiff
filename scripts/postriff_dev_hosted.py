@@ -56,7 +56,7 @@ class DevVerifier:
         if not isinstance(token, str) or not token.startswith("dev:") or not UUID.fullmatch(token[4:]):
             raise AlphaError("Verified session required.", 401)
         with self.connection() as db:
-            db.execute("INSERT INTO auth.users VALUES(%s) ON CONFLICT DO NOTHING", (token[4:],))
+            db.execute("INSERT INTO auth.users(id) VALUES(%s) ON CONFLICT DO NOTHING", (token[4:],))
         return token[4:]
 
     @staticmethod

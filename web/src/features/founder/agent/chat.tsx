@@ -50,10 +50,11 @@ function merge(initial: FounderAgentTurnResponse, run: FounderAgentRun): Founder
 }
 
 export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean }) {
-  const { api, mode, environment } = useFounderSession();
+  const { api, mode, environment, sessionStatus, retrySession } = useFounderSession();
   const pathname = usePathname() ?? '/founder';
   const { reduced } = useMotionPreference();
   const key = conversationKey(mode, environment);
+  const sessionReady = sessionStatus === 'ready' && environment !== null;
   const keyRef = useRef(key);
   keyRef.current = key;
 
@@ -128,8 +129,10 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
   const send = useCallback(
     async (raw: string, retryKey?: string) => {
       const message = raw.trim();
-      const k = keyRef.current;
-      if (!message || founderPanelStore.get().busy[k]) return;
+      // The session determines the thread's environment. Sending before it loads
+      // would strand the question in an unknown-environment thread after hydration.
+      const k = key;
+      if (!sessionReady || !message || founderPanelStore.get().busy[k]) return;
       const idempotencyKey = retryKey ?? randomKey();
       const assistantId = `a-${idempotencyKey}`;
       if (!retryKey) {
@@ -166,7 +169,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         founderPanelStore.setBusy(k, false);
       }
     },
-    [api, environment, mode, pathname, waitForRun]
+    [api, environment, key, mode, pathname, sessionReady, waitForRun]
   );
 
   const stop = useCallback(async () => {
@@ -255,7 +258,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             </div>
             <div className='flex flex-col items-stretch gap-2 self-stretch' role='group' aria-label='Suggested questions'>
               {suggestions.map((item) => (
-                <Button key={item} type='button' variant='glass' className='h-auto min-h-14 justify-between rounded-2xl px-4 py-3 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={busy}>
+                <Button key={item} type='button' variant='glass' className='h-auto min-h-14 justify-between rounded-2xl px-4 py-3 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={!sessionReady || busy}>
                   <span>{item}</span>
                   <Icons.arrowRight aria-hidden className='size-4 shrink-0' />
                 </Button>
@@ -272,6 +275,12 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         <div ref={end} />
       </div>
       <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        {!sessionReady && (
+          <div className='text-muted-foreground flex items-center gap-2 px-2 pb-2 text-xs' role='status'>
+            <span>{sessionStatus === 'loading' ? 'Loading your Founder session… Your question will stay here.' : 'Your Founder session could not be verified. Your question will stay here.'}</span>
+            {sessionStatus !== 'loading' && <Button type='button' variant='quiet' size='xs' onClick={retrySession}>Retry session</Button>}
+          </div>
+        )}
         <div className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <textarea
             ref={input}
@@ -286,7 +295,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             placeholder={`Ask about ${sectionTitle.toLowerCase()}, or anything in the business…`}
             className='placeholder:text-muted-foreground max-h-40 min-h-14 flex-1 resize-none bg-transparent px-2 py-3 text-base leading-snug outline-none field-sizing-content'
           />
-          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!text.trim() || busy}>
+          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!sessionReady || !text.trim() || busy}>
             <Icons.send className='size-4' />
           </Button>
         </div>
