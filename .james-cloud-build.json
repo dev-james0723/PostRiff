@@ -10,7 +10,7 @@
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
     "build": "depot-ubuntu-24.04-16",
-    "e2e": "depot-ubuntu-24.04-16"
+    "e2e": "depot-ubuntu-24.04-8"
   },
   "tasks": {
     "lint": "lint",
