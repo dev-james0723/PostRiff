@@ -9,14 +9,16 @@
   "packageManagerVersion": "11.12.1",
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
-    "build": "depot-ubuntu-24.04-16"
+    "build": "depot-ubuntu-24.04-16",
+    "e2e": "depot-ubuntu-24.04-16"
   },
   "tasks": {
     "lint": "lint",
     "typecheck": "typecheck",
     "test": "test:jcb",
     "build": "build",
-    "ci": "ci:jcb"
+    "ci": "ci:jcb",
+    "e2e": "e2e:jcb"
   },
   "environment": {
     "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
