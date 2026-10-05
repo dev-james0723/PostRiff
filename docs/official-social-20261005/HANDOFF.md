@@ -1,0 +1,11 @@
+# Recovery receipt
+
+Task remains blocked on manual provider gates; do not mark the eight-provider objective completed. Source implementation commit: `6037ff7c594b3f580ed6d13ab6f20e9b0b1590c3`. Documentation-only delivery commit is the later HEAD. Provider implementation revision: `fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e`.
+
+Read REPORT.md, DELIVERY.json, OPERATIONS.md and both matrices. Final cloud evidence: full CI gp922n7frg (480 Node plus 209 Python/15 PostgreSQL/build), synthetic browser 4kxl4rpwqh (1280/390 inspected), affected final backend nd84zg5dg1 (216 Python/15 PostgreSQL). JCB doctor PASS. Existing tests cover unchanged source; do not rerun without a relevant change/failure. All large validation remains remote and no hard guard may be bypassed.
+
+Zero live social E2E passed; 196 cases NOT_RUN. No new actual OAuth grant, app review submission, social post, paid X request, push/PR/merge/deployment or candidate production verification. Existing preview at another branch/SHA does not qualify this candidate. Read-only GitHub query found no open PR headed by consumer-saas. Unrelated untracked work and dirty vendor submodules remain untouched.
+
+Next: obtain the actual provider/manual approval and secure OAuth session; populate and approve exact live test destinations/content/assets/visibility/cost/cleanup before writes; verify restricted scopes/account eligibility. Instagram Login Insights/edit/delete primary audit remains unavailable. Live browser request-header policy failed twice; do not bypass it or export auth cookies to cloud tests. Complete only authorized tests, store exact app/account/destination/grant/revision evidence, deploy only an approved candidate, then verify production. Current consumer advanced editors and bounded media/reporting limits are listed in REPORT.md; do not equate adapter coverage with complete consumer readiness.
+
+Token Pilot registry was at 256 entries; preserve other sessions and use a blocked checkpoint with acceptance evidence instead of deleting their entries. Session: 01a10d3e-92ab-7120-b5f0-5c85433be495. No continuation should dispatch while the next step requires manual external gates.
