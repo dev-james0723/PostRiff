@@ -2,7 +2,7 @@
 import io
 import json
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -12,11 +12,68 @@ from postriff_phase2.ideas import IdeasService, request_fingerprint
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.permissions import Membership
 
-WID = '0ceb3635-59a6-426f-bfa8-6d0203b8c98e'
-AID = '5684cafc-9de2-48b2-a23e-7a914a07e1df'
+WID = '00000000-0000-4000-8000-000000000101'
+AID = '00000000-0000-4000-8000-000000000102'
 
 
 class CaptureBoundaries(unittest.TestCase):
+    def cron(self, repository):
+        """Exercise the real cron route, with unrelated subsystems offline."""
+        service = SimpleNamespace(repository=repository, ideas=None, run_reminders=Mock(return_value={'sent': 0}))
+        worker = Mock()
+        worker.tick.return_value = {'processed': 1, 'externalExecution': False}
+        app = HostedApplication(service=service, worker=worker, cron_secret='offline-cron-secret-123456')
+        environ = {'REQUEST_METHOD': 'GET', 'PATH_INFO': '/api/cron/worker', 'QUERY_STRING': '',
+                   'wsgi.input': io.BytesIO(b''), 'HTTP_AUTHORIZATION': 'Bearer offline-cron-secret-123456'}
+        output = {}
+        with ExitStack() as stack:
+            for target, result in (
+                ('postriff_phase2.growth.history_import.sweep_pending_purges', {'status': 'offline'}),
+                ('postriff_phase2.growth.trends.worker.cron', {'status': 'offline'}),
+                ('postriff_phase2.coworker.runtime.cron', {'status': 'offline'}),
+                ('postriff_phase2.phone.runtime.cron', {'status': 'offline'}),
+                ('postriff_phase2.operational_signals.snapshot', {'status': 'ok'}),
+                ('rafii_control.hosted.founder_tick', {'status': 'offline'}),
+            ):
+                stack.enter_context(patch(target, return_value=result))
+            raw = b''.join(app(environ, lambda status, headers: output.update(status=int(status[:3]))))
+        return output['status'], json.loads(raw), worker
+
+    def test_capture_purge_failure_does_not_stop_unrelated_cron_work(self):
+        repository = SimpleNamespace(connection_factory=Mock(side_effect=AssertionError('No real database permitted.')))
+        with patch('postriff_phase2.capture_access.purge_expired', side_effect=RuntimeError('private-database-detail')) as purge, \
+                self.assertLogs('postriff.capture', level='ERROR') as logs:
+            status, result, worker = self.cron(repository)
+        self.assertEqual((status, result['captureCleanup'], result['processed']), (200, 'failed', 1))
+        worker.tick.assert_called_once_with()
+        purge.assert_called_once_with(repository)
+        self.assertIn('RuntimeError', logs.output[0])
+        self.assertNotIn('private-database-detail', logs.output[0])
+
+    def test_disabled_capture_feature_still_uses_restricted_installed_purge(self):
+        cursor = Mock()
+        cursor.fetchone.return_value = ('audit_private.capture_operation(text,jsonb)',)
+
+        @contextmanager
+        def cursor_context():
+            yield cursor
+
+        @contextmanager
+        def connect():
+            yield SimpleNamespace(cursor=cursor_context)
+
+        repository = SimpleNamespace(connection_factory=connect)
+        # The cron service has no active capture object or private key; cleanup uses only
+        # the installed constrained SQL capability, even after the feature is disabled.
+        with patch('postriff_phase2.request_capture.PostgresCaptureRepository') as restricted:
+            restricted.return_value.call.return_value = {'purged_grants': 1}
+            status, result, worker = self.cron(repository)
+        self.assertEqual((status, result['captureCleanup']), (200, 'ok'))
+        worker.tick.assert_called_once_with()
+        cursor.execute.assert_called_once_with("SELECT to_regprocedure('audit_private.capture_operation(text,jsonb)')")
+        restricted.assert_called_once_with(connect)
+        restricted.return_value.call.assert_called_once_with('purge', {}, cursor=cursor)
+
     def test_understanding_rechecks_helper_need_at_actual_boundary(self):
         service = IdeasService.__new__(IdeasService)
         service.repository = Mock()
