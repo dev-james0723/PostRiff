@@ -90,6 +90,13 @@ def lint(statement, rule_key="other"):
 def scope_of(value):
     value = value if isinstance(value, dict) else {}
     scope = {key: (value.get(key) if isinstance(value.get(key), str) and value.get(key) else None) for key in ("platform", "language", "contentTypeId")}
+    # The content catalog's migration sentinel means no content type was selected.
+    # It is not a type or a learned restriction. Match the writer's admission
+    # contract; real selected types stay scoped throughout extraction and recall.
+    if scope["contentTypeId"] == "unclassified":
+        scope["contentTypeId"] = None
+    if isinstance(value.get("campaignId"), str) and value["campaignId"]:
+        scope["campaignId"] = value["campaignId"]
     if scope["language"]:
         # Locale tags since the languages plan; English / 繁體中文 read as en / zh-Hant, `zh` is a Chinese-wide scope.
         scope["language"] = locales.canonical(scope["language"], family_ok=True) or scope["language"]
@@ -97,19 +104,25 @@ def scope_of(value):
 
 
 def scope_key(type_, rule_key, polarity, scope):
-    return "|".join([type_, rule_key, polarity] + [scope.get(key) or "*" for key in ("platform", "language", "contentTypeId")])
+    scope = scope_of(scope)
+    parts = [type_, rule_key, polarity] + [scope.get(key) or "*" for key in ("platform", "language", "contentTypeId")]
+    return "|".join(parts + ([scope["campaignId"]] if scope.get("campaignId") else []))
 
 
 def canonical_scope_key(key):
     """A scope key written before locale tags (…|Instagram|繁體中文|*) as it is written now (…|Instagram|zh-Hant|*)."""
     parts = key.split("|") if isinstance(key, str) else []
-    if len(parts) != 6 or parts[4] == "*":
+    if len(parts) not in (6, 7):
         return key
-    parts[4] = locales.canonical(parts[4], family_ok=True) or parts[4]
+    if parts[4] != '*':
+        parts[4] = locales.canonical(parts[4], family_ok=True) or parts[4]
+    if parts[5] == 'unclassified':
+        parts[5] = '*'
     return "|".join(parts)
 
 
 def scope_label(scope):
+    scope = scope_of(scope)
     platform, content_type = scope.get("platform"), scope.get("contentTypeId")
     language = locales.display(scope["language"]) if scope.get("language") else None
     if platform and language:
@@ -120,18 +133,20 @@ def scope_label(scope):
         label = f"All channels · {language}"
     else:
         label = "All channels"
-    return label + (f" · {content_type}" if content_type else "")
+    return label + (f" · {content_type}" if content_type else "") + (f" · Campaign {scope['campaignId']}" if scope.get("campaignId") else "")
 
 
-def applies(item, platform, language, content_type_id=None):
+def applies(item, platform, language, content_type_id=None, *, campaign_id=None):
     """A scope's language covers the draft's language and its parents: a `zh-Hant` rule reaches `zh-Hant-HK`
     and `yue-Hant-HK` drafts, an `en` rule every English draft."""
-    scope = item.get("scope") or {}
+    scope = scope_of(item.get("scope"))
+    if content_type_id == 'unclassified':
+        content_type_id = None
     if scope.get("language") is not None:
         wanted = locales.canonical(scope["language"], family_ok=True) or scope["language"]
         if wanted != language and wanted not in locales.scope_chain(language):
             return False
-    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("contentTypeId", content_type_id)))
+    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("contentTypeId", content_type_id), ("campaignId", campaign_id)))
 
 
 def normalize_proposal(raw):
@@ -143,7 +158,7 @@ def normalize_proposal(raw):
     p["type"] = p.get("type") or "writing_preference"
     p["polarity"] = p.get("polarity") or "do"
     p["ruleKey"] = p.get("ruleKey") or "other"
-    p["scope"] = scope_of(p.get("scope") or {"platform": p.get("platform"), "language": p.get("language"), "contentTypeId": p.get("contentTypeId")})
+    p["scope"] = scope_of(p.get("scope") or {"platform": p.get("platform"), "language": p.get("language"), "contentTypeId": p.get("contentTypeId"), "campaignId": p.get("campaignId")})
     p["params"] = p.get("params") if isinstance(p.get("params"), dict) else {}
     p["source"] = p.get("source") if p.get("source") in SOURCES else "legacy"
     p["applyWhen"] = p.get("applyWhen") if isinstance(p.get("applyWhen"), str) else ""
@@ -168,11 +183,47 @@ def _item(p, actor, since, evidence_state, summary):
 def _activate(learning, item):
     """One active item per scope; the item it replaces is kept as retired. Every change is a new style revision."""
     for existing in learning["active"]:
-        if existing["status"] in LISTED and existing["scopeKey"] == item["scopeKey"]:
+        if existing["status"] in LISTED and _slot(existing) == _slot(item):
             existing.update({"status": "retired", "validTo": item["since"], "retiredReason": "replaced"})
             learning["retired"].append(existing)
+    item['decisionRevision'] = learning['revision'] + 1
     learning["active"] = [x for x in learning["active"] if x["status"] in LISTED] + [item]
     learning["revision"] += 1
+
+
+def _slot(item):
+    """Polarity is a decision, not a separate slot for a contradictory instruction.
+    Unstructured `other` preferences remain distinct unless the owner names a replacement.
+    """
+    scope = scope_of(item.get('scope'))
+    return (item.get('type'), item.get('ruleKey'), *(scope.get(k) for k in ('platform', 'language', 'contentTypeId', 'campaignId')),
+            item.get('statement') if item.get('ruleKey') == 'other' else None)
+
+
+def _migrate_scope_integrity(state, learning, now):
+    changed = False
+    for item in list(learning.get('active') or []) + list(learning.get('retired') or []) + list(state.get('preferences') or []):
+        if not isinstance(item, dict) or not isinstance(item.get('scope'), dict):
+            continue
+        scope = scope_of(item['scope'])
+        changed |= scope != item['scope']
+        item['scope'] = scope
+        if item.get('type') and item.get('ruleKey') and item.get('polarity'):
+            item['scopeKey'] = scope_key(item['type'], item['ruleKey'], item['polarity'], scope)
+    latest = {}
+    ordered = sorted(enumerate(learning['active']), key=lambda pair: (pair[1].get('since') or '', pair[1].get('decisionRevision') or 0, pair[0]))
+    for _, item in ordered:
+        if item.get('status') in LISTED:
+            prior = latest.get(_slot(item))
+            if prior:
+                prior.update(status='retired', validTo=item.get('since') or _iso(now), retiredReason='superseded_instruction')
+                learning['retired'].append(prior)
+                changed = True
+            latest[_slot(item)] = item
+    learning['active'] = [item for item in learning['active'] if item.get('status') in LISTED]
+    if changed:
+        learning['revision'] += 1
+    learning['scopeIntegrityAt'] = _iso(now)
 
 
 def _migrate(state, learning, now):
@@ -229,6 +280,8 @@ def ensure(state, now=None):
         _migrate(state, learning, now)
     if not learning.get("localeTagsAt"):
         _migrate_locale_tags(state, learning, now)
+    if not learning.get('scopeIntegrityAt'):
+        _migrate_scope_integrity(state, learning, now)
     _expire(state, now)
     return learning
 
@@ -324,20 +377,38 @@ MAX_PROMPT_CHARS = 1500
 
 def _line(item):
     since = str(item.get("since") or "")[:10]
-    return f"- [{scope_label(item.get('scope') or {})}] {item['statement']} — {item.get('evidenceSummary') or 'remembered'}" + (f" · {since}" if since else "")
+    narrowed = item.get('_forDestinations')
+    targets = ' (this turn: ' + ', '.join(f"{d.get('platform')}/{d.get('language')}" for d in narrowed) + ')' if narrowed else ''
+    return f"- [{scope_label(item.get('scope') or {})}]{targets} {item['statement']} — {item.get('evidenceSummary') or 'remembered'}" + (f" · {since}" if since else "")
 
 
-def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS, max_chars=MAX_PROMPT_CHARS):
+def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS, max_chars=MAX_PROMPT_CHARS, *, campaign_id=None):
     """Items for one turn (design §5.7): those whose scope covers any destination, the most specific first,
     within a bounded slice. Returns (chosen, omitted ids)."""
-    items = [item for item in active_items(state) if any(applies(item, d.get("platform"), d.get("language"), content_type_id) for d in destinations)]
+    items = active_items(state)
+    order = {item['id']: i for i, item in enumerate(items)}
 
     def rank(item):
-        scope = item.get("scope") or {}
-        return (bool(scope.get("contentTypeId")), bool(scope.get("platform")), bool(scope.get("language")), item.get("evidenceState") == "user_confirmed", item.get("since") or "")
+        scope = scope_of(item.get('scope'))
+        return (bool(scope.get("campaignId")), bool(scope.get("contentTypeId")), bool(scope.get("platform")), bool(scope.get("language")),
+                item.get('decisionRevision') or 0, item.get("since") or "", order[item['id']])
 
-    chosen, omitted, used = [], [], 0
-    for item in sorted(items, key=rank, reverse=True):
+    winners, matched = {}, set()
+    for destination in destinations:
+        slots = {}
+        candidates = [item for item in items if applies(item, destination.get('platform'), destination.get('language'), content_type_id, campaign_id=campaign_id)]
+        matched.update(item['id'] for item in candidates)
+        for item in sorted(candidates, key=rank, reverse=True):
+            trait = (item.get('type'), item.get('ruleKey'), item['id'] if item.get('ruleKey') == 'other' else None)
+            if trait not in slots:
+                slots[trait] = item
+                winners.setdefault(item['id'], []).append(destination)
+
+    chosen, omitted, used = [], [item['id'] for item in items if item['id'] in matched and item['id'] not in winners], 0
+    for item in sorted([item for item in items if item['id'] in winners], key=rank, reverse=True):
+        possible = [d for d in destinations if applies(item, d.get('platform'), d.get('language'), content_type_id, campaign_id=campaign_id)]
+        if len(winners[item['id']]) != len(possible):
+            item = {**item, '_forDestinations': winners[item['id']]}
         length = len(_line(item))
         if len(chosen) >= max_items or used + length > max_chars:
             omitted.append(item["id"])
@@ -347,22 +418,22 @@ def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS
     return chosen, omitted
 
 
-def binding(state, destinations=None, content_type_id=None):
+def binding(state, destinations=None, content_type_id=None, *, campaign_id=None):
     """What a run received from learning, recorded on the run so the effect of each item can be measured later."""
     if destinations:
-        chosen, omitted = select(state, destinations, content_type_id)
+        chosen, omitted = select(state, destinations, content_type_id, campaign_id=campaign_id)
     else:
         chosen, omitted = active_items(state), []
     return {"styleRevision": revision(state), "used": [item["id"] for item in chosen], "statements": [item["statement"] for item in chosen], "omitted": omitted}
 
 
-def render_lines(state, destinations=None, content_type_id=None):
+def render_lines(state, destinations=None, content_type_id=None, *, campaign_id=None):
     """The VOICE.md section. Form only; the message and the approved facts always win over these.
     With destinations, only the items that apply to them, within the prompt slice."""
     rev = revision(state)
     lines = ["## Learned from how you edit" + (f" (style rev {rev})" if rev else ""),
              "Form only. The facts and what you ask for in the message win over these."]
-    items = select(state, destinations, content_type_id)[0] if destinations else active_items(state)
+    items = select(state, destinations, content_type_id, campaign_id=campaign_id)[0] if destinations else active_items(state)
     items = sorted(items, key=lambda item: (scope_label(item.get("scope") or {}), item.get("since") or ""))
     lines.extend(_line(item) for item in items)
     return lines + (["- (none yet)"] if not items else [])

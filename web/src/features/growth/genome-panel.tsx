@@ -27,6 +27,7 @@ export function GenomePanel() {
   const [account, setAccount] = useState('');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
+  const [representative, setRepresentative] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [versionId, setVersionId] = useState('');
@@ -43,6 +44,7 @@ export function GenomePanel() {
   function changed() {
     key.current = null;
     setConfirmed(false);
+    setRepresentative(false);
   }
 
   async function analyze() {
@@ -54,6 +56,7 @@ export function GenomePanel() {
         ...(data ? { data, account } : { sourceIds }),
         ownContent: confirmed,
         retainText: confirmed,
+        representativeContent: representative,
         confirmed,
         requestKey: key.current
       });
@@ -176,10 +179,15 @@ export function GenomePanel() {
             These are my own posts. Retain their text in my voice corpus and analyze selected
             samples with the allowed AI routes.
           </label>
+          {data && <label className='flex items-start gap-2 text-sm'>
+            <input type='checkbox' aria-label='Confirm representative owned history' checked={representative} onChange={(e) => setRepresentative(e.target.checked)} />
+            These posts represent how I write now. Exclude guest, sponsored, outdated and AI-generated posts; a CSV label preserves those exclusions.
+          </label>}
           <Button
             variant='glass'
             disabled={
               !confirmed ||
+              (Boolean(data) && !representative) ||
               busy ||
               (!data && !sourceIds.length) ||
               (Boolean(data) && !account.trim())

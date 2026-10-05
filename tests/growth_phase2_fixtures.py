@@ -40,7 +40,7 @@ class Models(BaseModels):
         return json.dumps({'nextStep':'repeat_with_control'}),{}
 
 
-def seed(host,wid,token,*,calibration=False):
+def seed(host,wid,token,*,calibration=False, simulate_official_contract=False):
     """Explicit synthetic verified posts and official-shaped observations, disposable DB only."""
     import time,uuid
     from postriff_phase2.contracts import digest
@@ -57,6 +57,12 @@ def seed(host,wid,token,*,calibration=False):
                 m['postDoctor']={'revision':1,'levels':[{'id':'audience','label':'Audience relevance','level':3,'levelName':'Very strong'}], 'scores':{'shareability':score,'specificity':score,'novelty':score},'evaluation':{'model':'typesafe-ai/jev','rubricDigest':'fixture-rubric'},'questionSet':'postdoctor.v1'}
             jobs.append({'id':str(uuid.uuid4()),'state':'verified','stateReason':'Synthetic verification','providerReference':'p2-fixture-'+str(i),'verification':{'at':now-(n-i)*86400,'method':'fixture_lookup'},'manifest':m,'events':[],'attempts':[]})
         state['phase2']['jobs']=jobs
+        if simulate_official_contract:
+            # Positive trust-contract branch in a disposable database, never
+            # evidence of real publication or real measured outcomes.
+            for job in jobs:
+                job['manifest']['execution'] = 'hosted-live'
+                job['verification']['method'] = 'provider_lookup'
         return state
     result=host.repository.command(wid,token,host.repository.get(wid,token)['revision'],command)
     with host.connection_factory() as db,db.cursor() as cur:
@@ -66,6 +72,11 @@ def seed(host,wid,token,*,calibration=False):
             performance.on_verified(cur,wid,job)
             for metric,value in [('likes',[8,12,19,25,30,96][i%6]),('shares',(i%20)*5)]:
                 cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,read_offset) VALUES(%s,%s,'threads',%s,%s,%s,'fixture-native-v1',%s,'count','available',now(),'24h')",(wid,conn,job['providerReference'],job['id'],metric,value))
+        if simulate_official_contract:
+            from postriff_phase2.insights import insights_endpoint
+            for job in result['state']['phase2']['jobs']:
+                cur.execute("UPDATE public.pr_metric_observations SET definition_version='native-contract-v1',source_endpoint=%s WHERE workspace_id=%s AND job_id=%s",
+                            (insights_endpoint('threads', job['providerReference']), wid, job['id']))
         for i,text in enumerate(['How do I keep practising on a busy day?','Which resource would help a beginner?','I disagree about repeating without listening.','Could you make a sequel about preparing for lessons?','My email is alice@example.com @alice, how can I begin?','private medical information should be withheld']):
             cur.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text) VALUES(%s,%s,'threads',%s,%s,'private_handle',%s) ON CONFLICT(workspace_id,provider,provider_comment_id) DO UPDATE SET text=excluded.text",(wid,conn,'p2-fixture-'+str(n-1),'p2-comment-'+str(i),text))
     return {'jobId':result['state']['phase2']['jobs'][-1]['id']}

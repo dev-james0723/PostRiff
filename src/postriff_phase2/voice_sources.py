@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from postriff_alpha.domain import AlphaError, uid
@@ -34,10 +35,24 @@ def route_class(route: str) -> str | None:
     return next((grant for grant, prefix in _CLASS_PREFIXES.items() if isinstance(route, str) and route.startswith(prefix) and len(route) > len(prefix) and not route.endswith("*")), None)
 
 
+def unexpired(value: dict, now=None) -> bool:
+    """Absent expiry is permanent; a supplied malformed or elapsed expiry fails closed."""
+    expiry = value.get("expiresAt")
+    if expiry is None:
+        return True
+    try:
+        deadline = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+        if deadline.tzinfo is None:
+            return False
+        return deadline > (now or datetime.now(timezone.utc))
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def route_granted(source: dict, purpose: str, route: str) -> bool:
     """Whether this sample may be used for this purpose on this exact writer route: an exact grant, or (writing only)
     the class grant that covers the route."""
-    grants = [grant for grant in source.get("useGrants", []) if isinstance(grant, dict) and grant.get("purpose") == purpose]
+    grants = [grant for grant in source.get("useGrants", []) if isinstance(grant, dict) and grant.get("purpose") == purpose and unexpired(grant)]
     if any(grant.get("route") == route for grant in grants):
         return True
     covering = route_class(route) if purpose == "generation" else None
@@ -132,18 +147,87 @@ def _remove_evidence_quotes(profile: dict, source_id: str) -> None:
             dimension['quotes'] = [quote for quote in dimension.get('quotes', []) if isinstance(quote, dict) and quote.get('sourceId') != source_id]
 
 
+def eligibility_reason(source: dict) -> str | None:
+    """Retention and permission to quote someone are not owner-authored voice evidence."""
+    if not isinstance(source.get('authoredByConfirmed'), str) or not source['authoredByConfirmed']:
+        return 'authorship_not_confirmed'
+    if source.get('label') != 'representative':
+        return 'non_representative' if source.get('label') in LABELS else 'classification_required'
+    return None
+
+
+def invalidate_dependents(state: dict, source_id: str, reason: str, now: float, *, purge=False) -> None:
+    """Persist the source lifecycle, including active pointers and existing drafts.
+
+    Regranting an updated sample cannot revive a profile analysed from an old revision.
+    Historical revisions remain inspectable, but copied excerpts are erased on revocation.
+    """
+    speaker = state.get('speaker') or {}
+    for revision in speaker.get('revisions', []):
+        profile = revision.get('profile') if isinstance(revision.get('profile'), dict) else revision
+        ids = set(profile.get('evidenceSourceIds') or []) | {b.get('id') for b in (profile.get('sourceBindings') or [])}
+        if source_id not in ids:
+            continue
+        revision.update(stale=True, staleReason=reason, staleAt=now)
+        if speaker.get('activeRevision') == revision.get('revision'):
+            speaker['staleActiveRevision'] = speaker['activeRevision']
+            speaker['activeRevision'] = None
+        if purge:
+            revision['writingExample'] = profile['writingExample'] = ''
+            _remove_evidence_quotes(profile, source_id)
+            _remove_evidence_quotes(revision, source_id)
+    provisional = speaker.get('provisional')
+    if isinstance(provisional, dict) and source_id in (set(provisional.get('evidenceSourceIds') or []) | {b.get('id') for b in (provisional.get('sourceBindings') or [])}):
+        provisional.update(status='stale', staleReason=reason, staleAt=now)
+        if purge:
+            provisional['writingExample'] = ''
+            _remove_evidence_quotes(provisional, source_id)
+    for variant in state.get('variants', []):
+        if source_id in ((variant.get('sourceIds') or []) + (variant.get('voiceSourceIds') or [])):
+            variant.update(needsReview=True, voiceStaleReason=reason, proposedUpdate=None)
+            if purge:
+                variant['blockedByRetraction'] = True
+
+
+def reconcile_lifecycle(state: dict, now: float) -> None:
+    """Persist expiry during ordinary workspace commands; projections remain pure."""
+    moment = datetime.fromtimestamp(now, timezone.utc)
+    for source in state.get('sources', []):
+        if source.get('kind') == 'voice_sample' and source.get('active'):
+            if not unexpired(source, moment):
+                invalidate_dependents(state, source['id'], 'supporting_sample_expired', now)
+            elif source.get('selected') and 'generation' in source.get('purposeGrants', []) and not any(
+                g.get('purpose') == 'generation' and unexpired(g, moment) for g in source.get('useGrants', [])
+            ):
+                invalidate_dependents(state, source['id'], 'generation_grants_expired', now)
+    speaker = state.get('speaker') or {}
+    for revision in speaker.get('revisions', []):
+        if speaker.get('activeRevision') == revision.get('revision') and (not unexpired(revision, moment) or not unexpired(revision.get('profile') or {}, moment)):
+            revision.update(stale=True, staleReason='profile_expired', staleAt=now)
+            speaker['staleActiveRevision'], speaker['activeRevision'] = speaker['activeRevision'], None
+
+
 def apply_action(state: dict, action: str, payload: dict, actor: str, now: float) -> dict:
     state.setdefault("sources", [])
-    if action == "voice_samples_import":
+    if action in ("voice_samples_import", "voice_samples_import_owned"):
+        owned = action == 'voice_samples_import_owned'
+        if owned and payload.get('authorshipConfirmed') is not True:
+            raise AlphaError('Confirm that you wrote these samples yourself.')
         records = normalize_import(payload)
         result = {"imported": [], "unchanged": [], "revised": []}
         by_identity = {item.get("importIdentity"): item for item in state["sources"] if item.get("kind") == "voice_sample" and item.get("active")}
         for record in records:
+            record['authoredByConfirmed'] = actor if owned else None
+            if owned and payload.get('representativeConfirmed') is True and record['label'] is None:
+                record['label'] = 'representative'
             existing = by_identity.get(record["importIdentity"])
-            if existing and existing.get("contentHash") == record["contentHash"]:
+            changed_review = existing and ((record['label'] is not None and record['label'] != existing.get('label')) or
+                                          (owned and existing.get('authoredByConfirmed') != actor))
+            if existing and existing.get("contentHash") == record["contentHash"] and not changed_review:
                 result["unchanged"].append(existing["id"])
                 continue
             if existing:
+                invalidate_dependents(state, existing['id'], 'supporting_sample_revised', now)
                 revision = int(existing.get("revision") or 1) + 1
                 existing.update({**record, "revision": revision, "updatedAt": now, "updatedBy": actor, "selected": False})
                 existing.setdefault("revisions", []).append({"revision": revision, "text": record["text"], "contentHash": record["contentHash"], "at": now, "actor": actor})
@@ -177,12 +261,25 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         return result
 
     source = _source(state, payload.get("sourceId"))
+    if action == 'voice_sample_review':
+        if not source.get('active') or payload.get('confirmed') is not True or payload.get('label') not in LABELS or type(payload.get('authorshipConfirmed')) is not bool:
+            raise AlphaError('Review a retained sample, choose its classification and confirm authorship.')
+        authored = actor if payload['authorshipConfirmed'] else None
+        if source.get('authoredByConfirmed') != authored or source.get('label') != payload['label']:
+            invalidate_dependents(state, source['id'], 'supporting_sample_review_changed', now)
+            source.update(authoredByConfirmed=authored, label=payload['label'], revision=int(source.get('revision') or 1) + 1,
+                          selected=False, purposeGrants=[], routeGrants=[], useGrants=[], reviewedBy=actor, reviewedAt=now)
+            source.setdefault('revisions', []).append({'revision': source['revision'], 'text': source['text'], 'contentHash': source['contentHash'],
+                                                      'at': now, 'actor': actor, 'reason': 'eligibility_review'})
+        return {'sourceId': source['id'], 'revision': source['revision'], 'eligibilityReason': eligibility_reason(source)}
     if action == "voice_sample_select":
         if not source.get("active"):
             raise AlphaError("This voice sample was revoked.", 409)
         if type(payload.get("selected")) is not bool:
             raise AlphaError("Choose whether this sample is selected.")
         source["selected"] = payload["selected"]
+        if not source['selected']:
+            invalidate_dependents(state, source['id'], 'supporting_sample_excluded', now)
         source["selectionChangedBy"], source["selectionChangedAt"] = actor, now
         return {"sourceId": source["id"], "selected": source["selected"]}
     if action == "voice_sample_grant":
@@ -200,44 +297,31 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
                 raise AlphaError("Choose the exact writer route for every voice-use grant.")
             if route.strip() in _CLASS_PREFIXES and grant["purpose"] != "generation":
                 raise AlphaError("AI analysis needs one exact model; only writing may be allowed for every Rafii AI writer model.")
-            normalized.append({"purpose": grant["purpose"], "route": route.strip()})
-        source["useGrants"] = sorted({(item["purpose"], item["route"]) for item in normalized})
-        source["useGrants"] = [{"purpose": purpose, "route": route} for purpose, route in source["useGrants"]]
+            item = {"purpose": grant["purpose"], "route": route.strip()}
+            if "expiresAt" in grant:
+                if grant["expiresAt"] is None or not unexpired(grant, datetime.fromtimestamp(now, timezone.utc)):
+                    raise AlphaError("A voice-use expiry must be a future timestamp with a timezone.")
+                item["expiresAt"] = grant["expiresAt"]
+            normalized.append(item)
+        unique = {(item["purpose"], item["route"]): item for item in normalized}
+        source["useGrants"] = [unique[key] for key in sorted(unique)]
         source["purposeGrants"] = sorted({item["purpose"] for item in source["useGrants"]})
         source["routeGrants"] = sorted({item["route"] for item in source["useGrants"]})
         source["grantRevision"] = int(source.get("grantRevision") or 0) + 1
         source["grantedBy"], source["grantedAt"] = actor, now
+        if 'generation' not in source['purposeGrants']:
+            invalidate_dependents(state, source['id'], 'generation_permission_revoked', now)
         return {"sourceId": source["id"], "grants": source["useGrants"], "grantRevision": source["grantRevision"]}
     if action == "voice_sample_exclude":
         source["selected"] = False
+        invalidate_dependents(state, source['id'], 'supporting_sample_excluded', now)
         source["excludedBy"], source["excludedAt"] = actor, now
         return {"sourceId": source["id"], "selected": False}
     if action == "voice_sample_revoke":
         if payload.get("confirmed") is not True:
             raise AlphaError("Confirm that this retained voice sample should be revoked.")
         source.update({"active": False, "selected": False, "text": "", "revisions": [], "purposeGrants": [], "routeGrants": [], "useGrants": [], "revokedBy": actor, "revokedAt": now, "cleanupStatus": "complete"})
-        for profile in state.get("speaker", {}).get("revisions", []):
-            evidence_ids = profile.get("evidenceSourceIds", [])
-            if isinstance(profile.get("profile"), dict):
-                evidence_ids = profile["profile"].get("evidenceSourceIds", evidence_ids)
-            if source["id"] in evidence_ids:
-                profile["stale"] = True
-                profile["staleReason"] = "supporting_sample_revoked"
-                profile['writingExample'] = ''
-                if isinstance(profile.get('profile'), dict):
-                    profile['profile']['writingExample'] = ''
-                    _remove_evidence_quotes(profile['profile'], source['id'])
-                _remove_evidence_quotes(profile, source['id'])
-        provisional = state.get("speaker", {}).get("provisional")
-        if isinstance(provisional, dict) and source["id"] in provisional.get("evidenceSourceIds", []):
-            provisional["status"] = "stale"
-            provisional["staleReason"] = "supporting_sample_revoked"
-            provisional['writingExample'] = ''
-            _remove_evidence_quotes(provisional, source['id'])
-        for variant in state.get("variants", []):
-            if source["id"] in variant.get("sourceIds", []) or source["id"] in variant.get("voiceSourceIds", []):
-                variant["blockedByRetraction"] = True
-                variant["needsReview"] = True
+        invalidate_dependents(state, source['id'], 'supporting_sample_revoked', now, purge=True)
         return {"sourceId": source["id"], "revoked": True, "cleanupStatus": source["cleanupStatus"]}
     raise AlphaError("Unsupported voice sample action.")
 
@@ -255,12 +339,16 @@ def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dic
         reason = None
         if not source.get("active"):
             reason = "revoked"
+        elif not unexpired(source):
+            reason = "expired"
         elif not source.get("selected"):
             reason = "not_selected"
         elif purpose not in source.get("purposeGrants", []):
             reason = "purpose_not_granted"
         elif not route_granted(source, purpose, route):
             reason = "route_not_granted"
+        else:
+            reason = eligibility_reason(source)
         if reason:
             excluded.append({"id": source_id, "revision": source.get("revision"), "reason": reason})
             continue

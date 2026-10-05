@@ -4,6 +4,7 @@
 worker/approval time. Adapters only ever receive the projection. Sources that lack a
 policy (created before this round) are forbidden for public generation until reviewed.
 """
+import re
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
 
@@ -97,7 +98,47 @@ def policy_epoch(state):
     return digest([{"id": s["id"], "policy": s.get("sourcePolicy"), "egress": sorted(s.get("egressConsent", [])), "use": use_approved(s), "active": s.get("active")} for s in state.get("sources", [])])
 
 
-def project_context(state, operation, provider_class, source_ids):
+MAX_RETRIEVED_FACTS = 12
+MAX_RETRIEVED_CHARS = 12000
+_STOP = frozenset('a an and are as at be for from in is it of on or the this to with write draft post about use supplied facts source sources'.split())
+
+
+def _terms(value):
+    text = str(value or '').casefold()
+    words = {w for w in re.findall(r'[\w]+', text) if len(w) > 1 and w not in _STOP}
+    for run in re.findall(r'[\u3400-\u9fff]+', text):
+        words.update(run[i:i + 2] for i in range(len(run) - 1))
+    return words
+
+
+def _retrieve(sources, query):
+    """Deterministic relevant retrieval; no extra model call and no clipped claims."""
+    terms = _terms(query)
+    pool = [(s, f, len(terms & _terms(f['text']))) for s in sources for f in s['facts']]
+    has_match = any(score for _, _, score in pool)
+    selected, omitted, seen, used = {}, [], set(), 0
+    for source, fact, score in sorted(pool, key=lambda row: (-row[2], row[0]['id'], row[1]['id'])):
+        identity = ' '.join(fact['text'].casefold().split())
+        reason = None
+        if terms and has_match and score == 0:
+            reason = 'not_relevant'
+        elif identity in seen:
+            reason = 'duplicate'
+        elif sum(len(fs) for fs in selected.values()) >= MAX_RETRIEVED_FACTS or used + len(fact['text']) > MAX_RETRIEVED_CHARS:
+            reason = 'retrieval_budget'
+        if reason:
+            omitted.append({'sourceId': source['id'], 'factId': fact['id'], 'reason': reason})
+            continue
+        seen.add(identity)
+        selected.setdefault(source['id'], []).append(fact)
+        used += len(fact['text'])
+    chosen = [{**s, 'facts': selected[s['id']], 'hash': digest(selected[s['id']])} for s in sources if s['id'] in selected]
+    metadata = {'method': 'term-overlap-dedup-v1', 'query': query, 'maxFacts': MAX_RETRIEVED_FACTS, 'maxChars': MAX_RETRIEVED_CHARS,
+                'selectedFactIds': [f['id'] for s in chosen for f in s['facts']], 'omitted': omitted, 'chars': used}
+    return chosen, metadata
+
+
+def project_context(state, operation, provider_class, source_ids, *, query=None):
     if operation not in OPERATIONS:
         raise AlphaError("Unsupported context operation.", 400)
     if provider_class not in EGRESS:
@@ -112,12 +153,22 @@ def project_context(state, operation, provider_class, source_ids):
         if not included:
             excluded.append({"id": source_id, "policy": source.get("sourcePolicy"), "reason": reason})
             continue
-        facts = [{"id": f["id"], "text": f["text"], "sourceId": source_id, "locator": f.get("locator", "")} for f in source.get("facts", []) if f.get("approved")]
+        origin = source.get('origin') or {}
+        facts = [{"id": f["id"], "text": f["text"], "sourceId": source_id, "locator": f.get("locator", ""),
+                  **({'verification': 'unverified_web_claim', 'citation': origin.get('url'), 'ownership': 'third_party'} if origin.get('kind') == 'web_research' else {})}
+                 for f in source.get("facts", []) if f.get("approved")]
         if not facts:
             excluded.append({"id": source_id, "policy": source.get("sourcePolicy"), "reason": "no_approved_facts"})
             continue
         sources.append({"id": source_id, "policy": source["sourcePolicy"], "candidateOnly": candidate_only, "facts": facts, "hash": digest(facts)})
-    return {"schema": "postriff.context.v1", "operation": operation, "providerClass": provider_class, "sources": sources, "excluded": excluded, "policyEpoch": policy_epoch(state), "candidateOnly": any(s["candidateOnly"] for s in sources)}
+    retrieval = None
+    if query is not None:
+        before = sources
+        sources, retrieval = _retrieve(sources, str(query)[:3000])
+        selected_ids = {s['id'] for s in sources}
+        excluded.extend({'id': s['id'], 'policy': s['policy'], 'reason': 'no_retrieved_facts'} for s in before if s['id'] not in selected_ids)
+    return {"schema": "postriff.context.v1", "operation": operation, "providerClass": provider_class, "sources": sources, "excluded": excluded, "policyEpoch": policy_epoch(state), "candidateOnly": any(s["candidateOnly"] for s in sources),
+            **({'retrieval': retrieval} if retrieval is not None else {})}
 
 
 def apply_policy_action(state, action, payload, actor, now):

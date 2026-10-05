@@ -92,17 +92,20 @@ jobs:
         # the agent runtime's local QA harness (RAFII_AGENT_HARNESS=1: scripted Manager, GPT-Live session and Open-Meteo
         # stand-ins; refused on Vercel) and the scriptable in-page GPT-Live transport, which only development builds
         # contain (web/src/lib/agent-runtime/live-transport.ts, createTransport). --phone-fixture adds fake-only phone
-        # verification and call delivery for the request-call scene. Nothing here reaches a provider. If this
-        # step fails, the live agent step still runs; its voice sections report what is missing.
-        continue-on-error: true
+        # verification and call delivery for the request-call scene. Nothing here reaches a provider.
+        # Startup must pass before these API-dependent scenes run; PostgreSQL's actual error is retained.
         run: |
-          RAFII_AGENT_HARNESS=1 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4441 nohup python scripts/postriff_dev_hosted.py --port 4440 --pg-port 55480 --phone-fixture > voice-harness.log 2>&1 &
-          (cd web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4440 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4441 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev -p 4441 -H 127.0.0.1 > ../voice-web.log 2>&1 &)
+          # The late-started cluster must not compete with browser sockets in Linux's ephemeral port range.
+          read ephemeral_low ephemeral_high < /proc/sys/net/ipv4/ip_local_port_range
+          if (( 25480 >= ephemeral_low && 25480 <= ephemeral_high )); then echo 'Voice PostgreSQL port overlaps the ephemeral range'; exit 1; fi
+          RAFII_AGENT_HARNESS=1 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4441 nohup python scripts/postriff_dev_hosted.py --port 4440 --pg-port 25480 --phone-fixture > voice-harness.log 2>&1 &
+          # The pinned Next development Turbopack Google-font resolver can return 500 before the app shell mounts.
+          # Webpack is supported by the same pinned runtime; all voice/weather assertions still run against the UI.
+          (cd web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4440 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4441 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev --webpack -p 4441 -H 127.0.0.1 > ../voice-web.log 2>&1 &)
           for i in $(seq 1 150); do
-            if curl -sf http://127.0.0.1:4440/api/health > /dev/null && curl -s -o /dev/null --max-time 120 http://127.0.0.1:4441/; then
+            if curl -sf http://127.0.0.1:4440/api/health > /dev/null && curl -sf -o /dev/null --max-time 120 http://127.0.0.1:4441/; then
               # Compile the app shell and the scenes' page once, so the first scene does not wait for it.
-              curl -s -o /dev/null --max-time 300 -b 'postriff_dev=1' http://127.0.0.1:4441/app/calendar || true
-              echo ready; exit 0
+              if curl -sf -o /dev/null --max-time 300 -b 'postriff_dev=1' http://127.0.0.1:4441/app/calendar; then echo ready; exit 0; fi
             fi
             sleep 2
           done
@@ -111,19 +114,19 @@ jobs:
         env:
           # Weather uses the development build and synthetic voice harness; style and commands use the main build.
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
-          RAFII_VOICE_PG_PORT: '55480'
+          RAFII_VOICE_PG_PORT: '25480'
         run: node web/tests/rafii-live-agent-browser.cjs --browser=chromium --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-chromium
       - name: Rafii Agent Chat and Meshy Live, Chromium
         env:
           RAFII_WEB_URL: http://127.0.0.1:4441
-          RAFII_VOICE_PG_PORT: '55480'
+          RAFII_VOICE_PG_PORT: '25480'
         run: node web/tests/rafii-chat-concepts-browser.cjs --browser=chromium --out=docs/design/rafii-agent-chat-redesign/evidence/ci-browser-chromium
       - name: Rafii phone requests, Chromium (fake calls only)
         # This scene creates its own dev principal/workspace and refuses a real phone transport before verification or dialing.
         shell: bash
         env:
           RAFII_WEB_URL: http://127.0.0.1:4441
-          RAFII_HARNESS_PG_PORT: '55480'
+          RAFII_HARNESS_PG_PORT: '25480'
           RAFII_PYTHON: python3
           RAFII_PHONE_BROWSER_EVIDENCE_DIR: docs/design/rafii-live-agent/evidence/ci-phone-chromium
         run: |
@@ -139,12 +142,12 @@ jobs:
       - name: Rafii style, commands and weather, WebKit
         env:
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
-          RAFII_VOICE_PG_PORT: '55480'
+          RAFII_VOICE_PG_PORT: '25480'
         run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
       - name: Rafii Agent Chat and Meshy Live, WebKit
         env:
           RAFII_WEB_URL: http://127.0.0.1:4441
-          RAFII_VOICE_PG_PORT: '55480'
+          RAFII_VOICE_PG_PORT: '25480'
         run: node web/tests/rafii-chat-concepts-browser.cjs --browser=webkit --out=docs/design/rafii-agent-chat-redesign/evidence/ci-browser-webkit
       - name: Rafii guide, WebKit (safe guide clicks, stop, Escape and phone)
         run: node web/tests/rafii-guide-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-guide-webkit

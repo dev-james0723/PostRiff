@@ -146,6 +146,7 @@ function Provenance({ source }: { source: IdeaSource }) {
             </a>
           ) : null}
           {origin.query && <span className='text-muted-foreground'>Found by web research for “{origin.query}”</span>}
+          <p className='text-muted-foreground text-xs'>Third-party page claims. Approval allows their use; it does not verify them or make them your own biography.</p>
           {(origin.fetchedAt || origin.published) && (
             <span className='text-muted-foreground text-xs'>
               {origin.fetchedAt ? `Read ${formatDateTime(toEpoch(origin.fetchedAt))}` : ''}

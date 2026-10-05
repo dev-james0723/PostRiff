@@ -316,7 +316,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
         {kind === 'file' && (
           <div className='flex flex-col gap-2'>
             <Label htmlFor='ideas-file' className='text-muted-foreground text-xs font-normal'>
-              .txt or .md, up to 20 KB
+              UTF-8 .txt or .md, up to 20 KB. Export PDF, Office or audio transcripts as text first.
             </Label>
             <input
               id='ideas-file'

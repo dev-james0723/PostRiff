@@ -80,12 +80,11 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
       )}
 
       <div className='flex flex-col gap-1.5'>
-        <Caption>Your sample</Caption>
+        <Caption>Your stored example</Caption>
         {sample ? (
           <>
             <ExpandableText as='blockquote' text={sample} lines={6} className='border-foreground/20 border-l-2 pl-3' />
-            {/* memory.py puts the sample in VOICE.md, so every writing route reads it; analysis-only samples never land here. */}
-            <span className='text-muted-foreground text-xs leading-snug'>Every draft reads this sample.</span>
+            <span className='text-muted-foreground text-xs leading-snug'>Stored for review. Drafts use only representative writing samples with the required writer permission.</span>
           </>
         ) : (
           <p className='text-muted-foreground'>No sample supplied.</p>

@@ -79,6 +79,8 @@ jobs:
           python scripts/founder_signin_web.py --prepare npm ci
           python scripts/founder_signin_web.py npm run build
           python scripts/founder_signin_web.py --test
+      - name: Cold founder session keeps the unsent question until environment readiness
+        run: FOUNDER_EVIDENCE_DIR=founder-session-evidence node web/tests/founder-session-browser.cjs
       - name: Founder scenes (sections in Live and Demo at 1440/768/390, axe, deep links, evidence, Ask Rafii, settings, follow-ups, sign-out)
         run: FOUNDER_EVIDENCE_DIR=founder-evidence node web/tests/founder-browser.cjs
       - name: Harness and web logs
@@ -93,6 +95,7 @@ jobs:
           include-hidden-files: true
           path: |
             founder-evidence/
+            founder-session-evidence/
             .founder-signin-evidence/
             harness.log
             web.log

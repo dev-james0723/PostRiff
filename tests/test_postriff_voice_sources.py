@@ -65,8 +65,8 @@ class VoiceSourceImportTests(unittest.TestCase):
     def test_projection_requires_selection_purpose_and_exact_route_consent(self):
         result = voice_sources.apply_action(
             self.state,
-            "voice_samples_import",
-            {"format": "pasted", "text": "Short example", "platform": "LinkedIn", "language": "English"},
+            "voice_samples_import_owned",
+            {"format": "pasted", "text": "Short example", "platform": "LinkedIn", "language": "English", "authorshipConfirmed": True, "representativeConfirmed": True},
             "owner-one",
             100,
         )
@@ -151,7 +151,7 @@ class VoiceSourceImportTests(unittest.TestCase):
     def test_retrieval_is_relevant_bounded_and_returns_revision_bindings(self):
         ids = []
         for index, text in enumerate(("Piano practice notes\nShort ending", "Film editing rhythm\nShort ending", "Long unrelated " + "x" * 200)):
-            result = voice_sources.apply_action(self.state, "voice_samples_import", {"format": "pasted", "text": text, "externalId": str(index)}, "owner-one", 100 + index)
+            result = voice_sources.apply_action(self.state, "voice_samples_import_owned", {"format": "pasted", "text": text, "externalId": str(index), "authorshipConfirmed": True, "representativeConfirmed": True}, "owner-one", 100 + index)
             source_id = result["imported"][0]
             ids.append(source_id)
             voice_sources.apply_action(self.state, "voice_sample_select", {"sourceId": source_id, "selected": True}, "owner-one", 110 + index)

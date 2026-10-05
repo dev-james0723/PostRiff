@@ -12,10 +12,18 @@ from . import locales
 DEFINITION_VERSION = "2026-09"
 FAMILIES = {
     "attention": ("views", "reach"),
-    "resonance": ("likes", "comments", "replies", "reposts", "quotes", "shares", "saved"),
+    "resonance": ("likes", "comments", "replies", "reposts", "quotes", "shares", "saves"),
 }
 INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares")}
 MIN_COMPARABLE = 3
+
+
+def canonical_metric(provider, metric):
+    return 'saves' if provider == 'instagram' and metric in ('saved', 'saves') else metric
+
+
+def native_metric(provider, metric):
+    return 'saved' if provider == 'instagram' and metric == 'saves' else metric
 # Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
 # reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
 COMPARISON_BASIS = "24h"
@@ -71,11 +79,11 @@ def record_observations(cur, workspace_id, connection_id, provider, provider_pos
     extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
     for metric in INSIGHT_METRICS[provider]:
         available = type(found.get(metric)) in (int, float) and math.isfinite(found[metric]) and found[metric] >= 0
-        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
+        params = [workspace_id, connection_id, provider, provider_post_id, job_id, canonical_metric(provider, metric), DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
         if read_offset is not None:
             params += [read_offset, period_start]
         cur.execute(f"INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint{extra_cols}) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s{extra_vals})", params)
-        recorded.append({"metric": metric, "availability": "available" if available else "unavailable"})
+        recorded.append({"metric": canonical_metric(provider, metric), "nativeName": metric, "availability": "available" if available else "unavailable"})
     return recorded
 
 
@@ -99,7 +107,7 @@ def rate(numerator, denominator):
     return {"value": str(Fraction(int(numerator), int(denominator))), "display": f"{numerator}/{denominator}", "numerator": numerator, "denominator": denominator}
 
 
-def latest_observations(cur, workspace_id, basis=None):
+def latest_observations(cur, workspace_id, basis=None, *, include_endpoint=False):
     """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
     take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
     The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); databases without migration 035
@@ -108,7 +116,9 @@ def latest_observations(cur, workspace_id, basis=None):
     offset = read_offset_column(cur)
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
-    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
+    metric = "CASE WHEN provider='instagram' AND metric='saved' THEN 'saves' ELSE metric END"
+    endpoint = ',source_endpoint' if include_endpoint else ''
+    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,{metric}) provider,provider_post_id,job_id,{metric},definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset}{endpoint} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + f" ORDER BY provider,connection_id,provider_post_id,job_id,{metric},(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
 
 
@@ -118,11 +128,12 @@ def summary(cur, workspace_id, jobs, now, basis=None):
     rows = latest_observations(cur, workspace_id, basis)
     posts = {}
     for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
+        metric = canonical_metric(provider, metric)
         post = posts.setdefault((provider, connection_id, post_id, job_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
         if value is None or not math.isfinite(float(value)) or value < 0:
             availability = "unavailable"
         # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
-        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
+        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": native_metric(provider, metric), "readOffset": read_offset, "observedAt": float(observed)}
         post["metrics"][metric]["definitionVersion"] = version
     job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
     items = []

@@ -293,6 +293,8 @@ class Store:
                 raise AlphaError("This alpha reads UTF-8 .txt and .md files, up to 20 KB. Export other documents as text first.")
             if kind == "document" and len(body.encode("utf-8")) > 20000:
                 raise AlphaError("Source documents must be at most 20 KB of UTF-8 text.")
+            if kind == 'document' and (body.startswith(('%PDF-', 'PK\x03\x04', 'RIFF', 'ID3')) or any(ord(c) < 32 and c not in '\n\r\t' for c in body)):
+                raise AlphaError('This is binary document or media content. Export readable UTF-8 .txt or .md first.')
             if not body:
                 raise AlphaError("Add source text before importing.")
             if kind == "link" and not re.match(r"^https?://[^\s]+$", body):
@@ -304,7 +306,12 @@ class Store:
             chunks = [en for en, _ in SAMPLE_FACTS] if kind == "sample" else [line.strip() for line in re.split(r"\n+", body) if line.strip()]
             if kind in ("link", "idea"):
                 chunks = []
-            facts = [{"id": uid(), "text": text, "approved": False, "sourceId": source_id, "locator": f"paragraph {i + 1}", "fixture": kind == "sample"} for i, text in enumerate(chunks[:30])]
+            # Cover the entire bounded document. Group very short paragraphs rather
+            # than silently dropping everything after paragraph 30.
+            group_size = max(1, (len(chunks) + 199) // 200)
+            facts = [{"id": uid(), "text": '\n'.join(chunks[i:i + group_size]), "approved": False, "sourceId": source_id,
+                      "locator": f"paragraph {i + 1}" if group_size == 1 else f"paragraphs {i + 1}-{min(i + group_size, len(chunks))}",
+                      "fixture": kind == "sample"} for i in range(0, len(chunks), group_size)]
             s["sources"].append({"id": source_id, "kind": kind, "title": title, "text": body, "fingerprint": fingerprint, "visibility": "private-local", "active": True, "facts": facts, "createdAt": now(), "unknowns": ["Link contents were not fetched."] if kind == "link" else ["Only selected source statements are approved; missing details stay unknown."]})
             s["brief"]["sourceIds"].append(source_id)
             if not s["brief"]["idea"]:
@@ -348,7 +355,7 @@ class Store:
                 raise AlphaError("Choose a supported starting tone.")
             observations = ["A " + tone + " starting tone (chosen by you).", "Use concrete language; preserve source attribution."]
             if sample:
-                observations.append("Your writing example is included in VOICE.md for writing routes to read. It was not analyzed to set this starting tone.")
+                observations.append("Your example is stored for your review. Only reviewed representative writing samples with writer permission can condition new drafts.")
             s["speaker"]["provisional"] = {"tone": tone, "writingExample": sample, "observations": observations, "unknowns": ["Personal history, qualifications and results are unknown.", "Voice fit has not been tested with a model."], "preferences": []}
             self._answer(s, "writing", sample)
         elif action == "profile_decide":
@@ -356,8 +363,7 @@ class Store:
             profile = s["speaker"]["provisional"]
             if decision == "reject":
                 s["speaker"]["provisional"] = None
-                s["speaker"]["activeRevision"] = None
-                self._mark_stale(s)
+                s['speaker']['lastProfileDecision'] = {'decision': 'reject', 'at': now(), 'activeRevision': s['speaker'].get('activeRevision')}
             elif decision == "approve" and profile:
                 profile = copy.deepcopy(profile)
                 if profile.get("brandContext"):

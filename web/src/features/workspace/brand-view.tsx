@@ -32,7 +32,7 @@ const infoContent: InfobarContent = {
   sections: [
     {
       title: 'What a voice changes',
-      description: 'Every draft uses your approved voice and your brand context.',
+      description: 'Each draft shows which eligible voice, preferences and sources it received.',
       links: [{ title: 'See the files on Memory', url: MEMORY_HREF }]
     },
     {

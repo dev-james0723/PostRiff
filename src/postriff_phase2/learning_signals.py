@@ -82,11 +82,24 @@ def redact(text):
     return out
 
 
-def _scope(variant, manifest=None):
+def _scope(variant, manifest=None, state=None):
     if manifest:
         content = manifest.get("contentType") or {}
-        return {"platform": manifest.get("platform"), "language": (manifest.get("payload") or {}).get("language"), "contentTypeId": content.get("id"), "formatId": content.get("formatId")}
-    return {"platform": variant.get("platform"), "language": variant.get("language"), "contentTypeId": variant.get("contentTypeId"), "formatId": variant.get("formatId")}
+        scope = {"platform": manifest.get("platform"), "language": (manifest.get("payload") or {}).get("language"), "contentTypeId": content.get("id"), "formatId": content.get("formatId")}
+    else:
+        scope = {"platform": variant.get("platform"), "language": variant.get("language"), "contentTypeId": variant.get("contentTypeId"), "formatId": variant.get("formatId")}
+    campaign_id = (manifest or {}).get("campaignId") or variant.get("campaignId")
+    linked = {campaign_id} if campaign_id else set()
+    if state and variant.get("id"):
+        campaigns = ((state.get("raffi") or {}).get("campaignPlanning") or {}).get("campaigns") or []
+        linked.update(c["id"] for c in campaigns if c.get("status") != "cancelled" and any(
+            item.get("kind") == "draft" and item.get("variantId") == variant["id"] for item in c.get("items") or []))
+    if len(linked) == 1:
+        scope["campaignId"] = next(iter(linked))
+    elif len(linked) > 1:
+        # An old explicit origin cannot hide a second live campaign association.
+        scope["ambiguousCampaignScope"] = True
+    return scope
 
 
 def _first_model_text(variant):
@@ -122,12 +135,12 @@ def derive_events(before, after, actor, now, action=None, payload=None):
             origin = (v.get("revisions") or [{}])[-1].get("origin")
             subject = {"variantId": v["id"], "fromRevision": old.get("revision"), "toRevision": v.get("revision"), "origin": origin, "runId": v.get("runId")}
             if origin in EDIT_ORIGINS:
-                events.append(_event("draft.edited", actor, now, subject, _scope(v), {"before": features(old.get("text")), "after": features(v.get("text")), "editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
+                events.append(_event("draft.edited", actor, now, subject, _scope(v, state=after), {"before": features(old.get("text")), "after": features(v.get("text")), "editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
             elif origin == "accepted-fixture-replacement":
-                events.append(_event("draft.update_accepted", actor, now, subject, _scope(v), {"editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
+                events.append(_event("draft.update_accepted", actor, now, subject, _scope(v, state=after), {"editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
         new_feedback = (v.get("feedback") or [])[len(old.get("feedback") or []):]
         for item in new_feedback:
-            events.append(_event("draft.rejected", actor, now, {"variantId": v["id"], "revision": item.get("revision"), "feedbackId": item.get("id"), "runId": v.get("runId")}, _scope(v), {"reasons": list(item.get("reasons") or []), "text": features(v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
+            events.append(_event("draft.rejected", actor, now, {"variantId": v["id"], "revision": item.get("revision"), "feedbackId": item.get("id"), "runId": v.get("runId")}, _scope(v, state=after), {"reasons": list(item.get("reasons") or []), "text": features(v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
     variants = {v["id"]: v for v in (after.get("variants") or []) if isinstance(v, dict) and v.get("id")}
     old_jobs = {j["id"]: j for j in ((before.get("phase2") or {}).get("jobs") or []) if isinstance(j, dict) and j.get("id")}
     for job in (after.get("phase2") or {}).get("jobs") or []:
@@ -141,7 +154,7 @@ def derive_events(before, after, actor, now, action=None, payload=None):
             approved_text = (manifest.get("payload") or {}).get("text") or variant.get("text") or ""
             subject = {"jobId": job["id"], "variantId": manifest.get("variantId"), "contentRevision": manifest.get("contentRevision"), "scheduleId": job.get("scheduleId"), "channelId": manifest.get("channelId")}
             features_ = {"editCount": edits, "editDistance": edit_distance(_first_model_text(variant), approved_text) if variant else None, "approved": features(approved_text)}
-            events.append(_event("draft.approved", actor, now, subject, _scope(variant, manifest), features_, manifest.get("voiceRevision", voice_revision), manifest.get("styleRevision", style_revision)))
+            events.append(_event("draft.approved", actor, now, subject, _scope(variant, manifest, after), features_, manifest.get("voiceRevision", voice_revision), manifest.get("styleRevision", style_revision)))
         elif job.get("state") == "canceled" and old.get("state") != "canceled" or (job.get("cancelRequested") and not old.get("cancelRequested")):
             events.append(_event("job.cancelled", actor, now, {"jobId": job["id"], "variantId": manifest.get("variantId"), "state": job.get("state")}, _scope({}, manifest), {}, manifest.get("voiceRevision", voice_revision), manifest.get("styleRevision", style_revision)))
     old_proposals = {p["id"]: p for p in (before.get("preferences") or []) if isinstance(p, dict) and p.get("id")}

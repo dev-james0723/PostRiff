@@ -63,7 +63,7 @@ def pairs_for(state, events, cloud):
     sources = {s["id"]: s for s in state.get("sources") or [] if isinstance(s, dict)}
     grouped = {}
     for event in events:
-        if event.get("kind") != "draft.edited":
+        if event.get("kind") != "draft.edited" or (event.get("scope") or {}).get("ambiguousCampaignScope"):
             continue
         subject = event.get("subject") or {}
         variant = variants.get(subject.get("variantId"))
@@ -75,9 +75,12 @@ def pairs_for(state, events, cloud):
         before, after = by_revision.get(subject.get("fromRevision")), by_revision.get(subject.get("toRevision"))
         if not isinstance(before, str) or not isinstance(after, str) or before == after:
             continue
-        scope = event.get("scope") or {}
-        grouped.setdefault((scope.get("platform"), locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")), []).append({
-            "id": str(event.get("id")), "variantId": variant["id"], "before": signals.redact(before)[:MAX_TEXT_CHARS], "after": signals.redact(after)[:MAX_TEXT_CHARS]})
+        scope = learning.scope_of(event.get("scope"))
+        key = (scope.get("platform"), scope.get("language"))
+        if scope.get("contentTypeId") or scope.get("campaignId"):
+            key += (scope.get("contentTypeId"), scope.get("campaignId"))
+        grouped.setdefault(key, []).append({
+            "scope": scope, "id": str(event.get("id")), "variantId": variant["id"], "before": signals.redact(before)[:MAX_TEXT_CHARS], "after": signals.redact(after)[:MAX_TEXT_CHARS]})
     return grouped
 
 
@@ -101,6 +104,7 @@ def parse_candidates(result, pairs, platform, language, now):
             continue
         weight = CONFIDENCE_WEIGHT.get(candidate.get("confidence"), CONFIDENCE_WEIGHT["low"])
         for pair in cited:
+            scope = pair.get("scope") or scope
             observations.append({"ruleKey": rule, "polarity": polarity, "scope": scope, "scopeKey": learning.scope_key("writing_preference", rule, polarity, scope),
                                  "weight": weight, "at": now, "eventId": pair["id"], "variantId": pair["variantId"], "value": None, "source": "model", "statement": statement})
     return observations
@@ -116,13 +120,16 @@ class ModelExtractor:
 
     def requests(self, state, events):
         grouped = pairs_for(state, events, cloud=self.provider_class == "cloud")
-        already = [item["statement"] for item in learning.active_items(state)]
         requests = []
-        for (platform, language), pairs in sorted(grouped.items(), key=lambda item: -len(item[1]))[:self.max_scopes]:
+        for key, pairs in sorted(grouped.items(), key=lambda item: -len(item[1]))[:self.max_scopes]:
+            platform, language = key[:2]
             if len(pairs) < MIN_PAIRS_PER_SCOPE:
                 continue
             batch = pairs[-MAX_PAIRS_PER_SCOPE:]
-            payload = {"scope": {"platform": platform, "language": language}, "alreadyLearned": already, "pairs": [{k: p[k] for k in ("id", "before", "after")} for p in batch]}
+            scope = pairs[0]["scope"]
+            already = [item["statement"] for item in learning.select(state, [{"platform": platform, "language": language}], scope.get("contentTypeId"), campaign_id=scope.get("campaignId"))[0]]
+            payload_scope = {k: v for k, v in scope.items() if v is not None}
+            payload = {"scope": payload_scope, "alreadyLearned": already, "pairs": [{k: p[k] for k in ("id", "before", "after")} for p in batch]}
             requests.append((platform, language, batch, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1)))
         return requests
 
@@ -180,6 +187,12 @@ class GatewayCall:
         meter = {}
         try:
             return self._answer(system, user, schema, meter)
+        except AlphaError as error:
+            # A rejected/unparseable answer can still have a measured provider cost.
+            # Carry only accounting metadata so callers do not turn it into unknown spend.
+            error.cost_usd_micro = meter.get("cost_usd_micro")
+            error.cost_source = meter.get("cost_source", "unknown")
+            raise
         finally:
             if meter:
                 began = meter.pop("began")
@@ -226,14 +239,13 @@ class GatewayCall:
         meter.update(status="ok", provider_request_id=gateway_generation(data), input_tokens=usage.get('prompt_tokens'), output_tokens=usage.get('completion_tokens'),
                      cached_input_tokens=(usage.get('prompt_tokens_details') or {}).get('cached_tokens') if isinstance(usage.get('prompt_tokens_details'), dict) else None,
                      reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens') if isinstance(usage.get('completion_tokens_details'), dict) else None)
-        if final_provider and final_provider not in self.allowed_providers:
-            raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
-        cost = usage.get('cost')
-        if not (isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0):
-            cost = gateway_cost
-        if cost is not None:
-            from decimal import ROUND_CEILING, Decimal
-            cost_usd_micro = int((Decimal(str(cost)) * 1_000_000).to_integral_value(rounding=ROUND_CEILING))
+        # Gateway reports may use decimal strings. Use the same finite, nonnegative
+        # money parser as the ledger instead of losing those measurements.
+        reported_cost = ai_call_events.usd_micro(usage.get('cost'))
+        if reported_cost is None:
+            reported_cost = ai_call_events.usd_micro(gateway_cost)
+        if reported_cost is not None:
+            cost_usd_micro = reported_cost
             meter.update(cost_usd_micro=cost_usd_micro, cost_source="gateway")
         else:
             from .model_runtime import DEFAULT_PRICES, DEFAULT_PRICES_VERSION
@@ -242,6 +254,8 @@ class GatewayCall:
                 ip, op = DEFAULT_PRICES[self.model]
                 cost_usd_micro = __import__('math').ceil(prompt * ip + completion * op)
                 meter.update(cost_usd_micro=cost_usd_micro, cost_source="table:" + DEFAULT_PRICES_VERSION)
+        if final_provider and final_provider not in self.allowed_providers:
+            raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
         try:
             value = json.loads(data["choices"][0]["message"]["content"])
             if not isinstance(value, dict):

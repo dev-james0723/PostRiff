@@ -48,7 +48,7 @@ def parse_upload(data):
             raise AlphaError('A supplied metric horizon must be 1h, 24h or 7d.')
         out.append({'text':row['text'], 'platform':row['platform'], 'language':row.get('language') or 'unknown',
                     'externalId':row.get('post_id') or '', 'publishedAt':row.get('published_at') or '',
-                    'title':row.get('title') or 'Owned history post', 'metrics':metrics,
+                    'title':row.get('title') or 'Owned history post', 'metrics':metrics, 'label': row.get('label') or None,
                     'format':row.get('format') or 'text', 'timeBucket':row.get('time_bucket') or 'unknown','horizon':horizon})
     return out
 
@@ -86,7 +86,7 @@ def proposal(posts):
                 metric=reading[0] if reading else 'writing'
                 native=post.get('readings',{}).get('24h',{}).get(metric,{})
                 version=native.get('definitionVersion','')
-                provenance=native.get('provenance','official') if reading else ''
+                provenance=native.get('provenance','unknown') if reading else ''
                 groups[(*performance.cohort(post),metric,version,provenance,key,value)].append((post,reading))
     statements = []
     for group, members in sorted(groups.items()):
@@ -104,7 +104,7 @@ def proposal(posts):
                            'evidenceIds':evidence, 'counterEvidenceIds':counter,
                            'metric':metric if winners else None,
                            'definitionVersion':version if winners else None,
-                           'provenance':sorted({p.get('readings',{}).get('24h',{}).get(metric,{}).get('provenance','official') for p,r in winners}) if winners else [],
+                           'provenance':sorted({p.get('readings',{}).get('24h',{}).get(metric,{}).get('provenance','unknown') for p,r in winners}) if winners else [],
                            'cohort':{'platform':platform,'connectionId':connection,'format':format_,'language':language,'timeBucket':bucket}})
     return {'statements':statements[:60], 'postCount':len(posts), 'measuredPosts':measured,
             'suppliedMetricsPosts':sum(bool(p.get('suppliedMetrics')) for p in posts),
@@ -138,5 +138,5 @@ def fit_winners(draft_scores, posts, target):
     level = sum(proximity>=threshold for threshold in (.35,.55,.75))
     return {'level':level,'measuredPosts':len(eligible),'evidenceIds':[p['id'] for p in winners],
             'basis':'24h','metric':eligible[0][1][0],
-            'provenance':eligible[0][0]['readings']['24h'][eligible[0][1][0]].get('provenance','official'),
+            'provenance':eligible[0][0]['readings']['24h'][eligible[0][1][0]].get('provenance','unknown'),
             'description':'Similarity to your observed winners; association, not a prediction.'}

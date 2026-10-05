@@ -119,6 +119,7 @@ class Ledger:
     """All methods take an open cursor inside the caller's transaction (workspace row locked)."""
 
     def __init__(self, credits_enabled=False, clock=time.time):
+        self.clock = clock
         self._credit_book = CreditBook(clock)
         self.credits = self._credit_book if credits_enabled else None
 
@@ -203,6 +204,8 @@ class Ledger:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        if not ops and not exempt and (charge_batch or estimated_usd_micro > 0):
+            require_ai(cur, workspace_id, self.clock())
         if not ops and not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
@@ -642,7 +645,7 @@ class Billing:
             cur.execute("SELECT extract(epoch from expires_at) FROM public.pr_trials WHERE workspace_id=%s", (workspace_id,))
             trial = cur.fetchone()
             active = bool(trial and trial[0] is not None and now < float(trial[0]))
-            return {"status": "trial" if active else "expired", "exportAvailable": True, "draftsRetained": True, "canPublish": active}
+            return {"status": "trial" if active else "expired", "exportAvailable": True, "draftsRetained": True, "canPublish": active, "canGenerateAI": active}
         status, grace_until, cancel_at_end, period_end = row
         if status == "trial" and (period_end is None or now >= float(period_end)):
             status = "expired"
@@ -651,7 +654,8 @@ class Billing:
         elif status == "active" and cancel_at_end and period_end and now >= float(period_end):
             status = "cancelled"
         cur.execute("UPDATE public.pr_subscriptions SET status=%s,updated_at=now() WHERE workspace_id=%s", (status, workspace_id))
-        return {"status": status, "exportAvailable": True, "draftsRetained": True, "canPublish": status in ("trial", "active", "grace", "past_due")}
+        active = status in ("trial", "active", "grace", "past_due")
+        return {"status": status, "exportAvailable": True, "draftsRetained": True, "canPublish": active, "canGenerateAI": active}
 
 
 def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
@@ -674,6 +678,13 @@ def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
         raise ValueError("Unknown plan dimension")
     if count >= limit:
         raise AlphaError("This plan has no remaining member seats." if dimension == "members" else "This plan has no remaining connected-account slots.", 402, code="plan_limit_reached")
+
+
+def require_ai(cur, workspace_id, now):
+    if ops_metadata(cur, workspace_id):
+        return
+    if not Billing().lifecycle(cur, workspace_id, now).get('canGenerateAI', False):
+        raise AlphaError('AI generation is paused because this trial or subscription has ended. Saved drafts, edits and exports remain available.', 402, code='ai_plan_inactive')
 
 
 def require_publishing(cur, workspace_id, now):

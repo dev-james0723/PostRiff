@@ -8,7 +8,7 @@ import type { MemoryEgress, MemoryFile } from '@/lib/api/types';
 export type DraftGroup = 'given' | 'reference';
 
 export const DRAFT_GROUP_LABEL: Record<DraftGroup, string> = {
-  given: 'Sent to writers',
+  given: 'Available to writers',
   reference: 'For you to read'
 };
 

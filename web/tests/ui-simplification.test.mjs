@@ -103,11 +103,11 @@ test('Usage & plan: a paid plan says when it renews; a failed payment is urgent 
   assert.equal(failed.actionLabel, 'Update payment');
 });
 
-test('Usage & plan: an ended trial says publishing is paused, once', () => {
+test('Usage & plan: an ended trial says AI generation and publishing are paused, once', () => {
   const ended = summaryFor({ ...trialUsage, entitlement: { resetsAt: NOW - DAY, source: 'trial' } }, { checkoutAvailable: true });
   assert.equal(ended.title, 'Trial');
   assert.equal(ended.badge, 'Ended');
-  assert.equal(ended.line, 'Publishing is paused');
+  assert.equal(ended.line, 'AI generation and publishing are paused');
   assert.equal(ended.actionLabel, 'Choose a plan');
 });
 
@@ -156,4 +156,3 @@ test('The product is called Rafii wherever a person can read it (no PostRiff or 
     []
   );
 });
-

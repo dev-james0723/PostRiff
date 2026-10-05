@@ -145,8 +145,16 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
    await page.getByRole('checkbox',{name:/I wrote or have permission to use this text and consent to private retention/}).check();
    await page.getByRole('button',{name:'Retain samples',exact:true}).click();
    const sampleRow=page.locator('li').filter({has:page.getByText(sample,{exact:true})});await sampleRow.waitFor();
-   await sampleRow.getByRole('checkbox').click();
-   await sampleRow.getByRole('checkbox',{checked:true}).waitFor();
+   // These are synthetic localhost samples. Retention alone never confirms owner voice evidence.
+   await sampleRow.getByText(/Retained text is not voice evidence/).waitFor();
+   await sampleRow.getByRole('checkbox',{name:'Select Writing sample',exact:true}).click();
+   await sampleRow.getByRole('checkbox',{name:'Select Writing sample',exact:true,checked:true}).waitFor();
+   await sampleRow.getByRole('checkbox',{name:/I wrote this myself and it represents how I write today/}).check();
+   await sampleRow.getByRole('button',{name:'Confirm as representative',exact:true}).click();
+   await sampleRow.getByText('representative',{exact:true}).waitFor();
+   await sampleRow.getByText('Not selected',{exact:true}).waitFor();
+   await sampleRow.getByRole('checkbox',{name:'Select Writing sample',exact:true}).click();
+   await sampleRow.getByRole('checkbox',{name:'Select Writing sample',exact:true,checked:true}).waitFor();
    await sampleRow.getByRole('button',{name:'Allow local analysis',exact:true}).click();
    await sampleRow.getByText(/Allowed for/).waitFor();
    await sampleRow.getByRole('combobox').selectOption('local-cli');

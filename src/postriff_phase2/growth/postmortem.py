@@ -13,7 +13,7 @@ def binding(job):
 
 
 def bindings_current(state, bindings):
-    jobs={j['id']:j for j in state.get('phase2',{}).get('jobs',[]) if j.get('state')=='verified' and j.get('verification')}
+    jobs={j['id']:j for j in state.get('phase2',{}).get('jobs',[]) if performance.official_job(j)}
     revoked={c['id'] for c in state.get('phase2',{}).get('channels',[]) if c.get('revoked')}
     return all(b['id'] in jobs and binding(jobs[b['id']])==b and
                jobs[b['id']].get('manifest',{}).get('channelId') not in revoked for b in bindings)

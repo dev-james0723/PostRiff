@@ -207,6 +207,10 @@ def runtime_from_environment(environ=None):
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
+    from .capture_access import from_environment as capture_from_environment
+    service.ideas.capture = capture_from_environment(service.ideas, values)
+    if service.ideas.capture is not None:
+        service.repository.effects.append(service.ideas.capture.privacy_changed)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -338,6 +342,26 @@ class HostedApplication:
         """Architecture §21 Ideas routes. Events are cursor-replayable; SSE replays stored events then closes."""
         workspace_id, resource = parts[2], parts[4]
         ideas = service.ideas
+        if resource == "capture":
+            capture = getattr(ideas, "capture", None)
+            if capture is None:
+                if len(parts) == 6 and parts[5] == "status" and method == "GET":
+                    service.repository.get(workspace_id, token)
+                    return self._json(start_response, 200, {"enabled": False})
+                raise AlphaError("Private audit capture is not enabled.", 409)
+            if len(parts) == 6 and parts[5] == "status" and method == "GET":
+                return self._json(start_response, 200, capture.status(workspace_id, token))
+            if len(parts) == 6 and parts[5] == "credits" and method == "POST":
+                body = self._body(environ)
+                return self._json(start_response, 200, capture.credits(workspace_id, token, body.get("model")))
+            if len(parts) == 6 and parts[5] == "grants" and method == "POST":
+                return self._json(start_response, 201, capture.create(workspace_id, token, self._body(environ)))
+            if len(parts) == 7 and parts[5] == "receipts" and method == "POST":
+                return self._json(start_response, 200, capture.read(workspace_id, token, parts[6], self._body(environ)))
+            if len(parts) == 8 and parts[5] == "grants" and parts[7] == "attempts" and method == "POST":
+                return self._json(start_response, 200, capture.list(workspace_id, token, parts[6], self._body(environ)))
+            if len(parts) == 8 and parts[5] == "grants" and parts[7] == "revoke" and method == "POST":
+                return self._json(start_response, 200, capture.revoke(workspace_id, token, parts[6], self._body(environ)))
         if resource == "credit-quotes" and len(parts) == 5 and method == "POST":
             return self._json(start_response, 201, ideas.credit_requests.issue(workspace_id, token, self._body(environ)))
         if resource == "credit-estimates" and len(parts) == 5 and method == "POST":
@@ -614,7 +638,19 @@ class HostedApplication:
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
+                capture_cleanup = None
+                if getattr(service, 'repository', None) is not None:
+                    try:
+                        from .capture_access import purge_expired
+                        capture_cleanup = purge_expired(service.repository)
+                    except Exception as error:
+                        # Retention failure must be visible without blocking unrelated jobs.
+                        # Capture read/dispatch still independently deny expired records.
+                        capture_cleanup = 'failed'
+                        logging.getLogger('postriff.capture').error('capture_cleanup_failed:%s', type(error).__name__)
                 result = self.worker.tick()
+                if capture_cleanup is not None:
+                    result['captureCleanup'] = capture_cleanup
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()

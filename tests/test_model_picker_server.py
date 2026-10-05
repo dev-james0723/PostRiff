@@ -573,11 +573,12 @@ class TurnTest(unittest.TestCase):
         repository = Repository({**initial_phase2_state("w", "u1", "Owner", "studio", 1.0), **workspace("openai/gpt-6-astra"), "sources": []})
         ideas = self.ideas(repository)
         payload = {"text": "A note about practising slowly.", "confirmUse": True, "ownContent": True, "reasoning": "high", "research": False}
-        with mock.patch.dict(os.environ, LAUNCH), mock.patch.object(ideas, "_understand", side_effect=lambda w, t, text, z, r, parsed: (parsed, None)), \
+        with mock.patch.dict(os.environ, LAUNCH), mock.patch.object(ideas, "_understand", side_effect=lambda w, t, text, z, r, parsed, *, audit_required=False: (parsed, None)) as understand, \
                 mock.patch.object(model_runtime.ServerModelRuntime, "_prompt_bytes", return_value=90_000), self.assertRaises(AlphaError) as refused:
             ideas.quick_start("w", "t", 1, payload)
         self.assertEqual((refused.exception.status, refused.exception.code), (402, "reasoning_level_over_limit"))
         self.assertEqual(repository.commands, [], "no source was stored")
+        self.assertIs(understand.call_args.kwargs["audit_required"], False)
 
     def test_quick_start_forwards_the_callers_level_and_its_clock(self):
         repository = Repository(workspace(False))
@@ -588,12 +589,13 @@ class TurnTest(unittest.TestCase):
             seen.update(payload=payload, kwargs=kwargs)
             raise Stop()
         repository.command = lambda workspace_id, token, revision, command: {"revision": 2, "state": command({"sources": [], "speaker": {"revisions": []}, "variants": [], "brandHub": {}}, "u1")}
-        with mock.patch.object(ideas, "_understand", side_effect=lambda w, t, text, z, r, parsed: (parsed, None)), \
+        with mock.patch.object(ideas, "_understand", side_effect=lambda w, t, text, z, r, parsed, *, audit_required=False: (parsed, None)) as understand, \
                 mock.patch.object(ideas, "commands", create=True, new=lambda state, actor, action, payload: state["sources"].append({"id": "s1", "active": True, "facts": [], "kind": "idea"})), \
                 mock.patch.object(ideas, "create_conversation", return_value={"conversationId": "c1"}), mock.patch.object(ideas, "turn", side_effect=turn), self.assertRaises(Stop):
             ideas.quick_start("w", "t", 1, {"text": "A note about practising slowly.", "confirmUse": True, "ownContent": True})
         self.assertNotIn("reasoning", seen["payload"], "an absent level stays absent: the turn's Auto decides")
         self.assertIsInstance(seen["kwargs"]["_started"], float)
+        self.assertIs(understand.call_args.kwargs["audit_required"], False)
 
 
 class CreditIssueTest(unittest.TestCase):

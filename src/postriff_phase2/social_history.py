@@ -256,8 +256,8 @@ class SocialHistoryService:
         def retain(state, actor):
             records = [{'externalId': post_id, 'text': by_id[post_id]['text'], 'platform': adapter.platform, 'account': binding['account'],
                         'title': f"{adapter.platform} post {post_id}", 'publishedAt': by_id[post_id]['publishedAt'], 'partialCoverage': True,
-                        **({'label': labels[post_id]} if post_id in labels else {})} for post_id in ids]
-            result = voice_sources.apply_action(state, 'voice_samples_import', {'format': 'json', 'records': records}, actor, self.clock())
+                        'label': labels.get(post_id, 'representative')} for post_id in ids]
+            result = voice_sources.apply_action(state, 'voice_samples_import_owned', {'format': 'json', 'records': records, 'authorshipConfirmed': True}, actor, self.clock())
             touched = set(result['imported'] + result['revised'])
             for source in state.get('sources', []):
                 if source['id'] in touched:

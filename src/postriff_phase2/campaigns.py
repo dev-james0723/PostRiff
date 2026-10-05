@@ -804,6 +804,15 @@ def _link_targets(state: dict, payload: dict, known_only: bool = True) -> list[t
     return targets
 
 
+def brief_binding(state: dict, campaign_id: str) -> dict:
+    """Freeze generation's campaign brief; organising items does not change the brief."""
+    campaign = _find(_root(state)['campaigns'], campaign_id, 'Campaign')
+    if campaign.get('status') == 'cancelled':
+        raise AlphaError('This campaign is cancelled.', 409)
+    brief = {key: campaign.get(key) for key in ('goal', 'audience', 'facts', 'accountIds', 'assetIds')}
+    return {'id': campaign_id, 'version': campaign.get('version'), 'digest': digest(brief)}
+
+
 def linked_campaigns(state: dict, kind: str, target: str) -> list[dict]:
     """The campaigns a draft or post was linked to, with who linked it and when."""
     key = LINK_KEYS[kind]

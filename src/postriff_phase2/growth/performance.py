@@ -19,6 +19,18 @@ def available(reading):
             and math.isfinite(value) and value >= 0)
 
 
+def learnable(reading):
+    """A numeric reading alone never qualifies as a real platform outcome."""
+    return (available(reading) and reading.get('provenance') == 'official' and not reading.get('synthetic')
+            and not str(reading.get('definitionVersion') or '').startswith(('fixture', 'synthetic', 'user-export')))
+
+
+def official_job(job):
+    return (job.get('state') == 'verified' and bool(job.get('providerReference'))
+            and (job.get('verification') or {}).get('method') in ('provider_lookup', 'provider_receipt')
+            and (job.get('manifest') or {}).get('execution') == 'hosted-live')
+
+
 def compare(post, peers, horizon):
     """Each native metric keeps its own horizon and denominator; exclude the subject itself."""
     if horizon not in HORIZONS:
@@ -35,12 +47,12 @@ def compare(post, peers, horizon):
             if other.get('id') == post.get('id') or cohort(other) != cohort(post):
                 continue
             candidate = (other.get('readings') or {}).get(horizon, {}).get(metric, {})
-            if available(candidate) and candidate.get('definitionVersion') == reading.get('definitionVersion'):
+            if learnable(reading) and learnable(candidate) and candidate.get('definitionVersion') == reading.get('definitionVersion'):
                 values.append(candidate['value'])
                 ids.append(other['id'])
         value = reading['value']
         result = {'value': value, 'availability': 'available', 'observedAt': reading.get('observedAt'),
-                  'provenance':reading.get('provenance','official'),
+                  'provenance':reading.get('provenance','unknown'), 'learningEligible': learnable(reading),
                   'baselineCount': len(values), 'evidenceIds': ids, 'median': None, 'multiple': None, 'percentile': None}
         if len(values) >= MIN_BASELINE:
             median = statistics.median(values)
@@ -53,7 +65,7 @@ def compare(post, peers, horizon):
 
 def attach_readings(cur, workspace_id, posts):
     """Only scheduler readings from the official insights endpoint; backfill has unknown age."""
-    from ..insights import latest_observations
+    from ..insights import latest_observations, canonical_metric, insights_endpoint, native_metric
     posts = copy.deepcopy(posts)
     for post in posts:
         supplied=post.get('suppliedMetrics') or {}
@@ -65,13 +77,16 @@ def attach_readings(cur, workspace_id, posts):
                     'provenance':'user_supplied','observedAt':None}
     index = {(p.get('provider'), p.get('providerPostId'), p.get('connectionId')): p for p in posts}
     for horizon in HORIZONS:
-        for provider, post_id, _, metric, version, value, unit, availability, observed, _, conn, offset in latest_observations(cur, workspace_id, horizon):
+        for provider, post_id, job_id, metric, version, value, unit, availability, observed, _, conn, offset, endpoint in latest_observations(cur, workspace_id, horizon, include_endpoint=True):
             post = index.get((provider, post_id, conn))
             if post is None or offset != horizon:
                 continue
-            post.setdefault('readings', {}).setdefault(horizon, {})[metric] = {
+            if post.get('jobId') and str(post['jobId']) != str(job_id):
+                continue
+            provenance = 'official' if post.get('officialOrigin') is True and provider in ('threads', 'instagram') and endpoint == insights_endpoint(provider, post_id) else 'unverified'
+            post.setdefault('readings', {}).setdefault(horizon, {})[canonical_metric(provider, metric)] = {
                 'value': float(value) if availability == 'available' and value is not None else None,
-                'availability': availability, 'definitionVersion': version, 'unit': unit, 'observedAt': float(observed),'provenance':'official'}
+                'availability': availability, 'definitionVersion': version, 'unit': unit, 'observedAt': float(observed), 'provenance': provenance, 'nativeName': native_metric(provider, metric), 'sourceEndpoint': endpoint}
     return posts
 
 

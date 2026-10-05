@@ -70,6 +70,11 @@ runtime = GatewayImageRuntime('synthetic-key', 'openai/gpt-image-2', transport=t
 service = HostedWorkspaceService(connection, verify, assets=Assets(), image_runtime=runtime, clock=lambda: clock[0])
 wid = service.bootstrap('one', 'studio')['workspaceId']
 approve_budgets(connection, wid)
+# The disposable rls.sql principal predates this synthetic clock. Align its active trial;
+# expiry rejection is separately exercised by postgres_personalization_integrity.py.
+with connection() as db:
+    db.execute("UPDATE public.pr_trials SET expires_at=to_timestamp(%s) WHERE workspace_id=%s", (clock[0] + 14 * 86400, wid))
+    db.execute("UPDATE public.pr_subscriptions SET current_period_end=to_timestamp(%s) WHERE workspace_id=%s", (clock[0] + 14 * 86400, wid))
 conversation = service.ideas.create_conversation(wid, 'one', 'Images')['conversationId']
 
 

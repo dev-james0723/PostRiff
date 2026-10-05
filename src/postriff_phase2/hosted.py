@@ -228,6 +228,7 @@ class HostedPhase2Commands:
         return self.engine._present(state, revision)
 
     def __call__(self, state, principal, action, payload):
+        voice_sources.reconcile_lifecycle(state, self.clock())
         if not isinstance(action, str) or not isinstance(payload, dict):
             raise AlphaError("Expected a structured command.")
         if state.get("workspace", {}).get("sample"):

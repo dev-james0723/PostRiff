@@ -102,7 +102,7 @@ def proposal_from_output(output, projection, actor, now, model, provider):
         dimension['quotes'] = verified
     return {'schema': 'postriff.voice-profile-proposal.v1', 'status': 'proposed', 'tone': None, 'toneBasis': 'see_evidence_dimensions',
             'analysisMethod': 'ai', 'analysisModel': model, 'analysisProvider': provider, 'analysisRoute': projection['route'],
-            'writingExample': '', 'observations': [d['observation'] for d in checked['dimensions'] if d['evidenceLevel'] != 'conflicting'],
+            'writingExample': '', 'observations': [d['observation'] for d in checked['dimensions'] if d['evidenceLevel'] == 'supported'],
             'unknowns': ['This is a provisional interpretation of selected samples, not the complete account history.',
                          'Evidence excerpts are checked for an exact match; interpretations still need your review.',
                          'Identity, beliefs, health and factual claims were not learned. No model was trained.'],

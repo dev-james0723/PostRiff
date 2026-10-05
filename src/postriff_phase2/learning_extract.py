@@ -63,7 +63,7 @@ def _scope(event):
     """Events keep the language they were recorded with (180-day TTL); read as a locale tag so English and en count as one."""
     scope = event.get("scope") or {}
     language = locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")
-    return {"platform": scope.get("platform"), "language": language, "contentTypeId": None}
+    return learning.scope_of({**scope, "language": language})
 
 
 def _observation(event, rule, polarity, weight, value=None):
@@ -106,6 +106,8 @@ def observations(events):
     """Observations (support) and counter-observations from learning events. Text never enters here."""
     support, counter = [], []
     for event in events:
+        if (event.get("scope") or {}).get("ambiguousCampaignScope"):
+            continue
         kind, features = event.get("kind"), event.get("features") or {}
         if kind == "draft.edited" and isinstance(features.get("before"), dict) and isinstance(features.get("after"), dict):
             for rule, polarity, value in _edit_rules(features["before"], features["after"]):
@@ -150,9 +152,9 @@ def accept_rate(decisions):
 def _levels(scope):
     """The scopes an observation counts towards: its own, its language, everyone (deduplicated)."""
     tag = locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")
-    own = {"platform": scope.get("platform"), "language": tag, "contentTypeId": None}
-    language = {"platform": None, "language": tag, "contentTypeId": None}
-    everyone = {"platform": None, "language": None, "contentTypeId": None}
+    own = learning.scope_of({**scope, "language": tag})
+    language = {**own, "platform": None}
+    everyone = {**language, "language": None}
     out = []
     for candidate in (own, language, everyone):
         if candidate not in out:
@@ -218,18 +220,21 @@ def consolidate(support, counter, state, now, dismissed_keys=(), recent_decision
         return group["support"] >= threshold and len(group["drafts"]) >= MIN_DRAFTS and against.get(key, 0.0) / group["support"] <= MAX_COUNTER_RATIO
 
     selected = {}
-    for rule, polarity in sorted({(g["rule"], g["polarity"]) for g in levels.values()}):
-        key1, everyone = group_for(rule, polarity, {"platform": None, "language": None, "contentTypeId": None})
+    # Scope promotion may widen platform/language, never the originating campaign or content type.
+    partitions = {(g["rule"], g["polarity"], g["scope"].get("contentTypeId"), g["scope"].get("campaignId")) for g in levels.values()}
+    for rule, polarity, content_type, campaign in sorted(partitions, key=lambda p: tuple(v or "" for v in p)):
+        base = learning.scope_of({"platform": None, "language": None, "contentTypeId": content_type, "campaignId": campaign})
+        key1, everyone = group_for(rule, polarity, base)
         if qualifies(key1, everyone) and len(everyone["languages"]) >= 2:
             selected[key1] = everyone
             continue
         for language in sorted(everyone["languages"]):
-            key2, per_language = group_for(rule, polarity, {"platform": None, "language": language, "contentTypeId": None})
+            key2, per_language = group_for(rule, polarity, {**base, "language": language})
             if qualifies(key2, per_language) and len(per_language["platforms"]) >= 2:
                 selected[key2] = per_language
                 continue
             for platform in sorted(per_language["platforms"]):
-                key3, own = group_for(rule, polarity, {"platform": platform, "language": language, "contentTypeId": None})
+                key3, own = group_for(rule, polarity, {**base, "platform": platform, "language": language})
                 if qualifies(key3, own):
                     selected[key3] = own
 
@@ -275,7 +280,7 @@ REGRESSION_AFTER, REGRESSION_BEFORE, REGRESSION_MARGIN = 5, 3, 0.05
 
 
 def _in_scope(scope, event_scope):
-    return all(scope.get(key) in (None, event_scope.get(key)) for key in ("platform", "language"))
+    return all(scope.get(key) in (None, event_scope.get(key)) for key in ("platform", "language", "contentTypeId", "campaignId"))
 
 
 def performance_note(candidate, approved_events, metrics_by_job):

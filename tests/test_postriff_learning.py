@@ -59,6 +59,15 @@ class Lint(unittest.TestCase):
 
 
 class StyleRevision(unittest.TestCase):
+    def test_unclassified_is_absent_but_selected_content_and_campaign_stay_scoped(self):
+        general = learning.normalize_proposal(proposal(scope={"contentTypeId": "unclassified", "campaignId": "c1", "language": "English"}))
+        self.assertEqual(general["scope"], {"platform": None, "language": "en", "contentTypeId": None, "campaignId": "c1"})
+        typed = learning.normalize_proposal(proposal(scope={"contentTypeId": "tutorial", "campaignId": "c1"}))
+        self.assertEqual(typed["scope"]["contentTypeId"], "tutorial")
+        self.assertTrue(learning.applies(typed, "LinkedIn", "en", "tutorial", campaign_id="c1"))
+        for content, campaign in ((None, "c1"), ("announcement", "c1"), ("tutorial", "c2")):
+            self.assertFalse(learning.applies(typed, "LinkedIn", "en", content, campaign_id=campaign))
+
     def test_remember_and_retire_move_the_style_revision_not_the_voice_revision(self):
         state = workspace()
         learning.ensure(state, NOW)
@@ -182,7 +191,10 @@ class MemoryFiles(unittest.TestCase):
 
     def test_cloud_byte_cap_cuts_the_voice_tail_never_the_boundaries(self):
         fields = [{"section": "Privacy and boundaries", "key": "boundaries", "label": "Boundaries", "value": "Never name a student", "privacy": "public"}]
-        state = workspace(writing_example="字" * 6000, fields=fields)
+        state = workspace(fields=fields)
+        # Legacy examples are retained for review, never admitted as voice evidence.
+        # Exercise the cap with admitted synthetic owner directions instead.
+        state['speaker']['revisions'][0]['profile']['observations'] = ['字' * 1000] * 6
         state["memoryEgress"] = {"cloud": True}
         shared = memory.projection(state, "cloud")
         self.assertEqual([f["name"] for f in shared["files"]], ["BOUNDARIES.md", "IDENTITY.md", "VOICE.md"])

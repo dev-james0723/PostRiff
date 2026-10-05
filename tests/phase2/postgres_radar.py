@@ -132,7 +132,8 @@ reset_day()
 from postriff_phase2.contracts import digest
 from postriff_phase2.growth.service import current_genome
 def with_genome(state,actor):
-    state['sources'].append({'id':'radar-voice','kind':'voice_sample','active':True,'selected':True,'revision':1,'useGrants':{'analysis':True}})
+    state['sources'].append({'id':'radar-voice','kind':'voice_sample','active':True,'selected':True,'revision':1,
+                             'label':'representative','authoredByConfirmed':'synthetic-owner','useGrants':{'analysis':True}})
     state.setdefault('brandHub',{})['genome']={'status':'approved','consentDigest':digest(state['growthConsent']),'evidenceBindings':[{'id':'radar-voice','revision':1,'grantsDigest':digest({'analysis':True})}],'statements':[{'id':'lesson-1','grade':'supported','text':'Piano practice questions help my audience.'}]}
     return state
 host.repository.command(wid,'one',saved()['revision'],with_genome)

@@ -43,7 +43,8 @@ class Projection(unittest.TestCase):
     def test_a_cloud_route_reads_nothing_until_the_workspace_allows_it(self):
         shared = memory.projection(workspace(), "cloud")
         # `learned` records what the run was given from learned preferences: nothing, and nothing to omit, here.
-        self.assertEqual(shared, {"files": [], "shared": False, "withheldBoundaries": 0, "learned": {"styleRevision": 0, "used": [], "statements": [], "omitted": []}})
+        self.assertEqual(shared, {"files": [], "shared": False, "withheldBoundaries": 0, "tone": "warm", "learned": {"styleRevision": 0, "used": [], "statements": [], "omitted": []},
+                                  "profileBinding": {"revision": None, "used": False, "kind": "owner_direction", "reason": "cloud_sharing_off"}})
 
     def test_with_consent_private_local_only_and_unlabelled_boundaries_never_leave(self):
         state = workspace()

@@ -9,6 +9,7 @@ import base64
 import hashlib
 import inspect
 import json
+import os
 import time
 import math
 import uuid
@@ -24,7 +25,7 @@ from .cli_runtime import ClaudeCliRuntime
 from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
+from . import capture_access, ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -427,17 +428,21 @@ class IdeasService:
                     return None
         answer, actual = None, None
         try:
-            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
+            with ai_call_events.scope(feature="understanding", workspace_id=workspace_id, user_id=principal,
+                                      reservation_id=(reservation or {}).get("reservationId"),
+                                      connect=getattr(self.repository, "connection_factory", None)):
+                result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
             actual = getattr(result, "cost_usd_micro", None)
             answer = request_model.reading(result, state, tier, text=text)
-        except Exception:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+        except Exception as error:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+            actual = getattr(error, "cost_usd_micro", actual)
             answer = None
         if reservation is not None:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
                 self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
         return answer
 
-    def _understand(self, workspace_id, token, text, zone, runtime, parsed):
+    def _understand(self, workspace_id, token, text, zone, runtime, parsed, *, audit_required=False):
         """(parsed, reading): the model's decision wins over the deterministic one where a model may read."""
         from . import automation_edit, request_model, workflow_parse
         wanted = bool(text) and request_model.wants_reading(text)
@@ -445,6 +450,8 @@ class IdeasService:
             # A message that names one of the person's automations ("the Gramophone one") may be changing it.
             names = [item["name"] for item in automation_edit.summaries(self.repository.get(workspace_id, token)["state"])]
             wanted = workflow_parse.names_automation(text, names)
+        if wanted and audit_required:
+            raise AlphaError("This request needs an additional model route not covered by writer capture.", 409, code="audit_capture_blocked")
         understood = self._read_request(workspace_id, token, text, zone, runtime) if wanted else None
         if understood and understood["action"] == "draft" and parsed["intent"] == "automation":
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
@@ -976,7 +983,7 @@ class IdeasService:
             if cur.fetchone():
                 raise AlphaError('The session was revoked while writing.', 403)
         previous = outcome['context']
-        current = project_context(current_state, previous['operation'], previous['providerClass'], [s['id'] for s in previous['sources']])
+        current = project_context(current_state, previous['operation'], previous['providerClass'], [s['id'] for s in previous['sources']], query=(previous.get('retrieval') or {}).get('query'))
         if current['sources'] != previous['sources']:
             raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
@@ -1010,6 +1017,13 @@ class IdeasService:
                                      outcome["trendLineage"], self.clock())
             artifact["trendLineage"] = copy.deepcopy(outcome["trendLineage"])
         artifact["sourceBindings"] = [{"id": item["id"], "hash": item["hash"]} for item in outcome["context"]["sources"]]
+        if outcome['context'].get('retrieval') is not None:
+            artifact['sourceRetrieval'] = copy.deepcopy(outcome['context']['retrieval'])
+        if outcome.get('generationProvenance'):
+            artifact['generationProvenance'] = copy.deepcopy(outcome['generationProvenance'])
+            artifact['voiceRevision'] = outcome['generationProvenance'].get('voiceRevision')
+            artifact['styleRevision'] = outcome['generationProvenance'].get('styleRevision', 0)
+            artifact['briefRevision'] = outcome['generationProvenance'].get('briefRevision')
         references = outcome.get("references")
         if references is not None:
             # Chat-context SPEC §5.10: post media and the per-message content type travel with the artifact and every
@@ -1034,6 +1048,7 @@ class IdeasService:
         total = len(references["used"]) + len(references["unused"]) if references else 0
         attached = f", using {len(references['used'])} of {total} attached items" if total else ""
         summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources{found}{attached}.", "runId": run_id, "research": researched or None, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])], "memory": outcome.get("memoryBindings")}
+        summary["generationProvenance"] = artifact.get("generationProvenance")
         if references is not None:
             summary["references"] = references
         self._settle_message(cur, workspace_id, conversation_id, run_id, summary)
@@ -1106,7 +1121,7 @@ class IdeasService:
                     self.commands(state, actor, "source", {"kind": "text", "text": body, "title": title})
                     source = state["sources"][-1]
                     stamp(state)
-                    source["origin"] = {"kind": "web_research", "url": page["url"], "host": page["host"], "query": result["query"], "published": page.get("published", ""), "fetchedAt": page["fetchedAt"]}
+                    source["origin"] = {"kind": "web_research", "verification": "unverified_web_claim", "ownership": "third_party", "url": page["url"], "host": page["host"], "query": result["query"], "published": page.get("published", ""), "fetchedAt": page["fetchedAt"]}
                     source["unknowns"] = ["Fetched from the public web by Rafii research; verify each claim against the page before publishing."]
                     # Public web pages may travel to any route; publishing their words still needs the person's use approval.
                     source["egressConsent"] = sorted(set(source.get("egressConsent", [])) | {"cloud"})
@@ -1324,6 +1339,7 @@ class IdeasService:
         if quoted_writer:
             # The credit limit was approved for this writer; the run uses it (prepare() still re-checks the match).
             model_id, writer_note = quoted, None
+        capture_access.validate_payload(self, workspace_id, token, payload, runtime, text)
         if self._wants_image(payload):
             return self._image_turn(workspace_id, token, conversation_id, {**payload, "idempotencyKey": key}, text, model_id, fingerprint, refs=refs)
         reasoning, level = translate_reasoning(runtime, model_id, requested_level(payload))
@@ -1354,9 +1370,16 @@ class IdeasService:
         if chips and not recurring:
             forced_draft = parsed["intent"] in ("automation", "memory")
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] and not reworking else "draft"}
+        if parsed["intent"] == "memory" and text and not recurring and not reworking and not chips:
+            # A deterministic standing-writing instruction creates an approval proposal.
+            # Do this before request understanding/orchestration: phrases such as "keep my"
+            # also trigger their helper model, which is neither needed nor authorized here.
+            destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
+                                                       settings=lambda: self.repository.get(workspace_id, token)["state"])
+            return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id, writer_note=writer_note)
         understood = reading = None
         if text and not recurring and not reworking and not chips:
-            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed, audit_required=capture_access.requested(payload))
             understood = (reading or {}).get("automation")
         elif parsed["intent"] == "automation":
             # Quick start already decided to draft this message now.
@@ -1400,6 +1423,7 @@ class IdeasService:
                 workspace_id, token, connector_ids, fingerprint,
                 provider_class=getattr(runtime, "provider_class", "local"),
             )
+        capture_bound = None
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
@@ -1461,7 +1485,9 @@ class IdeasService:
                 raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
+            capture_bound = capture_access.bind(self, cur, workspace_id, principal, run_id, key, payload, runtime, reservation)
             outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            outcome['generationProvenance'] = projected.get('generationProvenance')
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
@@ -1553,7 +1579,8 @@ class IdeasService:
                 # The request stays synchronous on hosted functions; no background thread
                 # can be frozen after the HTTP response. An interrupted run is never retried.
                 try:
-                    result = runtime.start_turn(request, sink.emit)
+                    with capture_access.scope(self, capture_bound):
+                        result = runtime.start_turn(request, sink.emit)
                     sink.complete(result["artifact"], result["usage"])
                 except ProviderFailure as error:
                     if not error.dispatched:
@@ -1632,7 +1659,7 @@ class IdeasService:
             source_ids = resolved["sourceIds"]
         else:
             source_ids = list(dict.fromkeys(list(source_ids) + list(research_ids)))
-        context = project_context(state, "draft", provider_class, source_ids)
+        context = project_context(state, "draft", provider_class, source_ids, query=raw_idea)
         selection = ((state.get("contentSystem") or {}).get("selection") or {})
         rule_ids = content_types.selected_rule_ids(state)
         recurring = getattr(self, 'recurring_binding', None)
@@ -1657,6 +1684,9 @@ class IdeasService:
             raise AlphaError("Choose neutral or personalized writing.")
         voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
         voice_projection = None
+        if voice_mode == 'personalized' and provider_class == 'cloud' and (state.get('memoryEgress') or {}).get('cloud') is not True:
+            voice_mode = 'neutral'
+            reminders.append('Cloud memory sharing is off; writing samples were not sent.')
         if voice_mode == "personalized":
             requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
             try:
@@ -1670,14 +1700,20 @@ class IdeasService:
                 # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
-        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
+        campaign_ref = (resolved or {}).get("materialRef") or {}
+        campaign_id = (recurring or {}).get("campaignId") or (campaign_ref.get("id") if campaign_ref.get("type") == "campaign" else None)
+        from .campaigns import brief_binding
+        campaign_binding = brief_binding(state, campaign_id) if campaign_id else None
+        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None,
+                                   voice_route=voice_route if voice_mode == 'personalized' else None, campaign_id=campaign_id,
+                                   include_profile=payload.get('voiceMode') != 'neutral')
         if voice_projection:
             voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
             style_directives = voice_sources.style_directives(voice_projection)
         else:
             voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
             style_directives = {}
-        request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        request = {"context": context, "idea": idea, "tone": shared["tone"], "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         report = None
@@ -1710,6 +1746,29 @@ class IdeasService:
                                      max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
         projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
+        from .model_runtime import ServerModelRuntime
+        memory_text, memory_files = ServerModelRuntime.memory_slice(request, max_bytes=16000 if runtime.cost_class == 'paid' else None)
+        preferences = {item['id']: item for item in learning.active_items(state)}
+        learned = shared['learned']
+        admitted = [pid for pid in learned['used'] if isinstance(preferences.get(pid, {}).get('statement'), str) and preferences[pid]['statement'] in memory_text]
+        omitted_by_budget = [pid for pid in learned['used'] if pid not in admitted]
+        if omitted_by_budget:
+            learned = shared['learned'] = {**learned, 'used': admitted, 'statements': [preferences[pid]['statement'] for pid in admitted],
+                                          'omitted': list(dict.fromkeys(learned['omitted'] + omitted_by_budget))}
+        profile_binding = shared.get('profileBinding') or {}
+        projected['generationProvenance'] = {
+            'schema': 'rafii.generation-provenance.v1', 'basis': 'application generation input; no hidden upstream provider-body attestation',
+            'execution': 'fixture' if runtime.cost_class == 'none' else 'cloud_model' if runtime.cost_class == 'paid' else 'local_model',
+            'sourceSha': os.environ.get('VERCEL_GIT_COMMIT_SHA'),
+            'model': model_id, 'reasoning': reasoning, 'destinations': copy.deepcopy(destinations), 'campaignId': campaign_id,
+            'campaignBinding': campaign_binding,
+            'contentTypeId': None if content_type_id == 'unclassified' else content_type_id, 'briefRevision': state.get('brief', {}).get('revision'),
+            'voiceMode': voice_mode, 'voiceRevision': profile_binding.get('revision'), 'profile': profile_binding,
+            'voiceBindings': copy.deepcopy(voice_context.get('bindings') or []), 'styleRevision': learned['styleRevision'],
+            'preferences': [{key: preferences[pid].get(key) for key in ('id', 'statement', 'scope', 'source', 'evidenceState')} for pid in admitted],
+            'memory': {'shared': shared['shared'], 'files': memory_files, 'omittedPreferenceIds': learned['omitted'], 'withheldBoundaries': shared['withheldBoundaries']},
+            'sources': [{'id': source['id'], 'hash': source['hash'], 'facts': [{'id': fact['id'], 'locator': fact.get('locator'), 'sha256': digest(fact['text'])} for fact in source['facts']]} for source in context['sources']],
+            'excludedSources': copy.deepcopy(context['excluded']), 'skills': copy.deepcopy(bound.get('bindings') or [])}
         if resolved:
             used_types = selection if resolved["contentType"] and selection.get("contentTypeId") != "unclassified" else None
             projected.update({"references": report, "media": resolved["media"], "materialRef": resolved["materialRef"], "reworkOf": resolved["reworkOf"],
@@ -1890,11 +1949,18 @@ class IdeasService:
 
         def command(state, actor):
             stamp(state)
+            provenance = artifact.get('generationProvenance') or {}
+            campaign = provenance.get('campaignId')
+            if campaign:
+                current_campaign = campaigns.brief_binding(state, campaign)
+                original_campaign = provenance.get('campaignBinding')
+                if original_campaign and current_campaign != original_campaign:
+                    raise AlphaError('This campaign brief changed. Review a fresh campaign draft.', 409)
             # Every source the writer was given is re-checked, not only the ones it cited: a writer cites the subset it
             # used (so comparing only those with all its bindings refused every such candidate), and it may still
             # have leaned on a source it did not cite.
             source_ids = sorted({item["id"] for item in artifact.get("sourceBindings", [])} | {sid for v in artifact["variants"] for sid in v["sourceIds"]} | set(artifact.get("derivedSourceIds") or []))
-            current = project_context(state, "draft", "local", source_ids)
+            current = project_context(state, "draft", "local", source_ids, query=(artifact.get('sourceRetrieval') or {}).get('query'))
             current_bindings = sorted(({"id": item["id"], "hash": item["hash"]} for item in current["sources"]), key=lambda item: item["id"])
             original_bindings = sorted(artifact.get("sourceBindings", []), key=lambda item: item["id"])
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
@@ -1930,12 +1996,14 @@ class IdeasService:
                 media = [m for m in candidate.get("media") or artifact.get("media") or [] if m.get("assetId") in live_assets]
                 media_lost = len(candidate.get("media") or artifact.get("media") or []) > len(media)
                 content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId") if candidate.get(k) is not None}
-                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
+                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": artifact.get('voiceRevision'), "styleRevision": artifact.get('styleRevision'), "briefRevision": artifact.get('briefRevision'), "generationProvenance": copy.deepcopy(artifact.get('generationProvenance')), "runId": run_id}
                 if media or media_lost or "media" in candidate:
                     values["media"] = media
                 if media_lost:
                     values["warnings"] = values["warnings"] + ["A photo attached to this draft was deleted."]
                 values.update(content)
+                if (artifact.get('generationProvenance') or {}).get('campaignId'):
+                    values['campaignId'] = artifact['generationProvenance']['campaignId']
                 # The server-owned accepted selection is destination-specific and frozen
                 # through candidate, variant, approval manifest and observed outcomes.
                 values["trendLineage"] = [copy.deepcopy(b) for b in artifact.get("trendLineage", [])
@@ -2001,6 +2069,7 @@ class IdeasService:
         # Refuse an unknown model or a reasoning level the writer does not offer before any source is stored.
         runtime, model_id, writer_note = self.resolve_writer(self._state_reader(workspace_id, token), payload.get("model"))
         _, level = translate_reasoning(runtime, model_id, requested_level(payload))
+        capture_access.validate_payload(self, workspace_id, token, payload, runtime, text)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
         # Chips (SPEC §6.1 quick_start): checked for shape now, and a message with chips always drafts, so neither
@@ -2013,7 +2082,7 @@ class IdeasService:
             chip_destinations = turn_references.early(self.repository.get(workspace_id, token)["state"], refs, text, payload,
                                                       platforms=tuple(runtime.supported_platforms() or ()))["destinations"]
         else:
-            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed, audit_required=capture_access.requested(payload))
         understood = (reading or {}).get("automation")
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
@@ -2059,7 +2128,7 @@ class IdeasService:
         source = next(item for item in saved["state"]["sources"] if item["id"] == chosen["id"])
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
         run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": list(dict.fromkeys([source["id"]] + checked_context_ids(saved["state"], payload.get("sourceIds", [])))), "destinations": destinations, **({"reasoning": payload["reasoning"]} if "reasoning" in payload else {}), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration"), "research": payload.get("research"), "idempotencyKey": key,
-                                                                    **{name: payload[name] for name in ("references", "attachments") if name in payload}}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}}, _started=started)
+                                                                    **{name: payload[name] for name in ("references", "attachments", "material", "materialRef", "auditCapture") if name in payload}}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}}, _started=started)
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}
 
     def _quick_start_source(self, state, actor, payload, text, url, own):

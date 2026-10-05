@@ -9,8 +9,8 @@ from postriff_phase2.hosted import HostedPhase2Commands
 def add_sample(state, text, source_id_hint, *, platform="Instagram", language="English"):
     result = voice_sources.apply_action(
         state,
-        "voice_samples_import",
-        {"format": "json", "records": [{"externalId": source_id_hint, "platform": platform, "language": language, "text": text}]},
+        "voice_samples_import_owned",
+        {"format": "json", "authorshipConfirmed": True, "representativeConfirmed": True, "records": [{"externalId": source_id_hint, "platform": platform, "language": language, "text": text}]},
         "owner-one",
         100,
     )
@@ -36,6 +36,7 @@ class VoiceAnalysisTests(unittest.TestCase):
         self.assertEqual(proposal["status"], "proposed")
         self.assertEqual(proposal["evidenceSourceIds"], [source_id])
         self.assertTrue(proposal["dimensions"])
+        self.assertEqual(proposal['observations'], [], 'limited sample statistics are reviewable, not durable voice instructions')
         self.assertTrue(all(item['evidenceLevel'] in ('limited', 'insufficient') for item in proposal['dimensions']))
         self.assertTrue(all(item['observation'] not in proposal['observations'] for item in proposal['dimensions'] if item['evidenceLevel'] == 'insufficient'))
         self.assertIn("provisional", " ".join(proposal["unknowns"]).lower())

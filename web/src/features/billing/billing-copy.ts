@@ -100,7 +100,7 @@ export function planSummary(
     case 'trial_left':
       return { ...base, line: `${plural(timeline.daysLeft, 'day')} left`, exactDate: `Ends ${formatDate(timeline.endsAt)}`, ...(portal ? manage : choose) };
     case 'trial_ended':
-      return { ...base, badge: 'Ended', line: 'Publishing is paused', exactDate: `Ended ${formatDate(timeline.endedAt)}`, ...choose };
+      return { ...base, badge: 'Ended', line: 'AI generation and publishing are paused', exactDate: `Ended ${formatDate(timeline.endedAt)}`, ...choose };
     case 'renews':
       return { ...base, line: `Renews ${formatDate(timeline.at)}`, ...manage };
     case 'ends':

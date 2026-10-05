@@ -33,7 +33,8 @@ type WhatDraftsReadProps = {
 function routeLine(file: MemoryFile, group: DraftGroup | null, egress: MemoryEgress | undefined) {
   if (group === null) return 'Couldn’t check which writers receive this file.';
   if (group === 'reference') return 'For you to read. Not sent to writers.';
-  const parts = [egress?.cloud ? 'Sent to local writers and the cloud model.' : 'Sent to local writers. The cloud model needs an owner’s OK.'];
+  const parts = [egress?.cloud ? 'Available to local writers and the cloud model.' : 'Available to local writers. The cloud model needs an owner’s OK.'];
+  parts.push('See “Why this draft” for the inputs included in a particular generation.');
   if (file.name === 'VOICE.md') parts.push('Each draft gets only the learned preferences for its channels.');
   const withheld = egress?.withheldBoundaries ?? 0;
   if (file.name === 'BOUNDARIES.md' && egress?.cloud && withheld > 0) {

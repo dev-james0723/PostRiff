@@ -20,6 +20,10 @@ service = HostedWorkspaceService(connection, verify, clock=lambda:clock[0])
 snap = service.bootstrap('one','studio'); workspace = snap['workspaceId']
 from consumer_fixtures import approve_budgets
 approve_budgets(connection,workspace)
+# Recurrence/restart cases advance beyond a trial. Use an active synthetic subscription
+# for these worker-authority tests; this is not a paid-plan or real billing proof.
+with connection() as db:
+    db.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end,provider) VALUES(%s,'studio-v1','active',to_timestamp(%s),'fixture') ON CONFLICT(workspace_id) DO UPDATE SET status='active',provider='fixture',current_period_end=excluded.current_period_end", (workspace, clock[0] + 365 * 86400))
 def act(action, payload):
     snapshot = service.get(workspace, 'one')
     return service.mutate(workspace, 'one', snapshot['revision'], action, payload)
@@ -85,7 +89,9 @@ assert worker.tick()['state']=='held'; assert paid.calls==0
 act('raffi_recurrence_pause', {'taskId':task['id']})
 task=new_task(paid.model, 50_000)
 paid.during=lambda:act('raffi_recurrence_cancel', {'taskId':task['id'],'confirmed':True})
-assert worker.tick()=={'cancelled':True}; assert paid.calls==1
+cancelled = worker.tick()
+assert cancelled == {'cancelled': True}, cancelled
+assert paid.calls == 1
 with connection() as db:
     assert db.execute('SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s AND model=%s AND artifact IS NOT NULL', (workspace,paid.model)).fetchone()[0]==0
 # Crash after provider completion, before attaching the occurrence: retry only reconciles the same run.
