@@ -263,6 +263,12 @@ export function createApi(getToken: TokenSource) {
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
       ),
+    insightsCanary: (w: string, id: string) =>
+      send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(
+        'POST',
+        `${ws(w)}/channels/${encodeURIComponent(id)}/insights-canary`,
+        { confirmed: true }
+      ),
     disconnectChannel: (w: string, id: string) =>
       send<{ disconnected: boolean; remoteRevoked: boolean; revision: number }>(
         'DELETE',
