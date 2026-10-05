@@ -61,7 +61,9 @@ if __name__=='__main__':
     uuid.UUID(principal);uuid.UUID(wid)
     host=HostedWorkspaceService(lambda:psycopg.connect(f'host=127.0.0.1 port={port} dbname=postgres'),lambda _:principal)
     mode=sys.argv[4] if len(sys.argv)>4 else 'seed'
-    if mode=='seed':
+    if mode in ('growth_seed','calibration_seed'):
+        print(json.dumps(seed(host,wid,'fixture',calibration=mode=='calibration_seed')))
+    elif mode=='seed':
         jobs=seed_review(host,wid,'fixture')
         print(json.dumps({'execution':'synthetic observations on real disposable PG','jobs':len(jobs)}))
     elif mode in ('partial','stale'):

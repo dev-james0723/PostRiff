@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { trendLearningSchema } from '../coworker/trend-types';
+import { postTrackingSchema, trendLearningSchema } from '../coworker/trend-types';
 
 export const REVIEW_SCHEMA_VERSION = '1.0' as const;
 const id = z.string().min(1).max(128);
@@ -52,9 +52,11 @@ export const reviewTakeawaySchema = z.object({ id,contextDigest:id,basisDigest:i
 export const reviewTrendProvenanceSchema = z.object({ jobId:id,receiptBindings:z.array(z.record(z.string(),z.unknown())).max(20),publication:z.record(z.string(),z.unknown()).nullable(),verifiedNativeIdentity:z.object({jobId:id,connectionId:id,nativePostId:id}).strict(),status:z.literal('verified_publication'),horizon:z.enum(['1h','24h','7d']),causal:z.literal(false) }).strict();
 export const reviewReuseSchema = z.object({contentId:id,jobId:id,provider:id,connectionId:id,nativePostId:id,text:z.string(),revision:z.union([z.number().int(),id]),manifestDigest:id,publicationAt:instant.nullable(),language:z.string().nullable(),formatId:z.string().nullable(),state:z.literal('content_only'),rights:z.literal('allowed'),lastReviewedAt:instant,knownMetricHorizons:z.array(z.string()),nextStep:z.object({href:z.literal('/app/weekly'),label:z.string()}).strict()}).strict();
 export const reviewPersonalizationSchema = z.object({status:z.literal('method_unavailable'),methodVersion:z.null(),accuracy:z.null(),period:publicationPeriodSchema,timezone, sampleSize:z.number().int().nonnegative(),variables:z.array(z.enum(['timing','format','frequency'])),reason:z.string(),nextStep:z.string()}).strict();
+// Reuse the canonical wire states; Review retains up to 300 scoped publications.
+export const reviewPostTrackingSchema = postTrackingSchema.extend({posts:z.array(postTrackingSchema.shape.posts.element).max(300)});
 export const reviewProjectionSchema = z.object({ schemaVersion: z.literal('1.0'), resolvedContext: reviewContextSchema, contextDigest: id, basisDigest: id,
   nativeResults: z.array(metricEvidenceSchema), groups: z.array(reviewGroupSchema), comparisons: z.array(reviewComparisonSchema), coverage: reviewCoverageSchema,
-  limitations: z.array(z.string()), workspaceRevision: z.number().int().nonnegative().nullable(), postTracking: z.unknown().optional(),
+  limitations: z.array(z.string()), workspaceRevision: z.number().int().nonnegative().nullable(), postTracking: reviewPostTrackingSchema.optional(),
   takeaways:z.array(reviewTakeawaySchema).max(3),trendProvenance:z.array(reviewTrendProvenanceSchema),trendLearning:trendLearningSchema.nullable(),reuseCandidates:z.array(reviewReuseSchema).max(30),personalization:reviewPersonalizationSchema
 }).strict();
 export const savedReviewViewSchema = z.object({id,workspaceId:id,schemaVersion:z.literal('1.0'),name:z.string(),owner:id,revision:z.number().int().positive(),filterDefinition:reviewContextInputSchema,status:z.enum(['active','archived']),classificationVersion:z.number().int().nonnegative(),createdAt:instant,updatedAt:instant,resolvedContext:reviewContextSchema.nullable().optional(),blockedReason:z.string().nullable().optional()}).strict();
@@ -81,11 +83,45 @@ export const REVIEW_STATE_LABELS: Record<string, string> = {
   insufficient_sample: 'Too few comparable posts', legacy_period_unavailable: 'Legacy evidence period unavailable', method_unavailable: 'No qualified personalization method',
   incompatible_readings: 'Numerator and denominator readings differ', error: 'Unable to read this scope'
 };
-export function reviewDisplayState(e: Pick<MetricEvidence, 'accessState' | 'valueState' | 'value' | 'freshnessState' | 'collectionState'>): string {
+export const REVIEW_STATE_RECOVERY: Record<string,string> = {
+  loading:'Wait for the current reading; previous results are unavailable while this scope loads.',
+  no_account:'Open Channels to use the existing account connection flow.',
+  not_authorized:'Check this account’s current analytics permission in Channels.',
+  unsupported:'Check supported native metrics in Channels or select another metric.',
+  disabled:'Review the available collection scope in Channels. This page does not enable collection.',
+  unscheduled:'Check collection coverage or choose a window with an existing reading. Viewing this page schedules no work.',
+  pending_horizon:'Wait until the recorded due time or choose another existing reading window.',
+  scheduled:'Check the recorded due time. A schedule is not a successful measurement.',
+  pending:'Check the last attempt and retry this read later; no new collection starts here.',
+  measured:'Inspect the native source, definition and exact reading times below.',
+  measured_zero:'Inspect the native source and exact reading times. This measured zero counts toward coverage.',
+  partial:'Inspect missing reasons and per-metric sample counts before comparing.',
+  unavailable:'Inspect the missing reason or choose another qualified native metric or window.',
+  stale:'Inspect the last successful reading and later failed attempt. This earlier value is excluded from current comparisons.',
+  disconnected:'Use the existing recovery flow in Channels.',
+  expired:'Use a current valid source or report version before accepting or exporting.',
+  deleted:'Review another available source. Removed content is unavailable in this report.',
+  revoked:'Check current source permissions in Channels; previous readings do not grant access.',
+  insufficient_sample:'Collect more comparable publications or select an appropriate existing scope.',
+  legacy_period_unavailable:'Inspect which evidence dates are missing. A new qualified reading is needed for a conclusion.',
+  method_unavailable:'Use a bounded test or collect more comparable evidence before a personalized recommendation.',
+  incompatible_readings:'Inspect each native observation time; keep the original values separate.',
+  error:'Retry the current read. Retrying does not start a model or provider job.'
+};
+export function reviewDueTime(due:number|null,zone:string):string|null {
+  if(due===null)return null;
+  const date=new Date(due*1000);
+  if(!Number.isFinite(date.getTime()))return null;
+  return `${date.toISOString()} · ${new Intl.DateTimeFormat('en',{timeZone:zone,dateStyle:'medium',timeStyle:'long'}).format(date)} (${zone})`;
+}
+export function reviewDisplayState(e: Pick<MetricEvidence, 'accessState' | 'valueState' | 'value' | 'freshnessState' | 'collectionState'> & Partial<Pick<MetricEvidence,'reason'>>): string {
+  if(e.accessState==='revoked'||e.accessState==='disconnected')return e.accessState;
+  if(e.reason==='expired')return 'expired';
   if (e.accessState !== 'allowed') return e.accessState;
   if (e.freshnessState === 'stale') return 'stale';
   if (e.valueState === 'measured') return e.value === 0 ? 'measured_zero' : 'measured';
   if (e.valueState === 'unsupported') return 'unsupported';
+  if(e.reason&&['deleted','legacy_period_unavailable','incompatible_readings'].includes(e.reason))return e.reason;
   if (e.collectionState === 'measured') return 'unavailable';
   const collection = e.collectionState === 'rights_unavailable' ? 'not_authorized' : e.collectionState;
   return collection in REVIEW_STATE_LABELS ? collection : 'unavailable';

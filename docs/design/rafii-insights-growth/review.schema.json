@@ -2669,6 +2669,108 @@
       ],
       "additionalProperties": false
     },
+    "reviewPostTrackingSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "as_of": {
+          "type": "number"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "posts": {
+          "maxItems": 300,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "job_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "provider": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "horizons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "window": {
+                      "type": "string",
+                      "enum": [
+                        "t0",
+                        "1h",
+                        "24h",
+                        "7d"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "disabled",
+                        "unsupported",
+                        "disconnected",
+                        "rights_unavailable",
+                        "pending_horizon",
+                        "unscheduled",
+                        "scheduled",
+                        "pending",
+                        "measured",
+                        "unavailable"
+                      ]
+                    },
+                    "due_at": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "window",
+                    "state",
+                    "due_at",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "job_id",
+              "provider",
+              "account",
+              "horizons"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "as_of",
+        "truncated",
+        "posts"
+      ],
+      "additionalProperties": false
+    },
     "reviewProjectionSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -3606,7 +3708,107 @@
             }
           ]
         },
-        "postTracking": {},
+        "postTracking": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "as_of": {
+              "type": "number"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "posts": {
+              "maxItems": 300,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "job_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "horizons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "window": {
+                          "type": "string",
+                          "enum": [
+                            "t0",
+                            "1h",
+                            "24h",
+                            "7d"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "disabled",
+                            "unsupported",
+                            "disconnected",
+                            "rights_unavailable",
+                            "pending_horizon",
+                            "unscheduled",
+                            "scheduled",
+                            "pending",
+                            "measured",
+                            "unavailable"
+                          ]
+                        },
+                        "due_at": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "reason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "window",
+                        "state",
+                        "due_at",
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "provider",
+                  "account",
+                  "horizons"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "as_of",
+            "truncated",
+            "posts"
+          ],
+          "additionalProperties": false
+        },
         "takeaways": {
           "maxItems": 3,
           "type": "array",

@@ -33,6 +33,18 @@ if (fs.existsSync(file)) {
     for(const valueState of ['missing','invalid'])assert.equal(t.reviewDisplayState({accessState:'allowed',valueState,value:null,freshnessState:'current',collectionState:'measured'}),'unavailable');
     assert.equal(t.reviewDisplayState({accessState:'allowed',valueState:'unsupported',value:null,freshnessState:'current',collectionState:'measured'}),'unsupported');
   });
+  test('expired source has a distinct display state and a recovery instruction',()=>{
+    assert.equal(t.reviewDisplayState({accessState:'not_authorized',valueState:'missing',value:null,freshnessState:'unknown',collectionState:'measured',reason:'expired'}),'expired');
+    for(const state of Object.keys(t.REVIEW_STATE_LABELS))assert.ok(t.REVIEW_STATE_RECOVERY?.[state],state+' recovery');
+  });
+  test('Review reuses canonical tracking states with its own 300-publication limit',()=>{
+    assert.ok(t.reviewPostTrackingSchema,'Validated canonical tracking is required for read due times');
+    const post={job_id:'job',provider:'threads',account:'owned',horizons:[{window:'24h',state:'scheduled',due_at:1791115200,reason:null}]};
+    assert.ok(t.reviewPostTrackingSchema.safeParse({enabled:true,as_of:1791126000,truncated:false,posts:Array(121).fill(post)}).success);
+    assert.equal(t.reviewPostTrackingSchema.safeParse({enabled:true,as_of:1791126000,truncated:false,posts:Array(301).fill(post)}).success,false);
+    assert.ok(t.reviewDueTime(1791115200,'America/Indiana/Indianapolis').includes('2026-10-04T12:00:00.000Z'));
+    assert.equal(t.reviewDueTime(1e300,'UTC'),null);
+  });
   test('relative baseline input resolves separately from the fixed report contract',()=>{
     const scope={channelIds:['owned'],relativeDateRule:{kind:'this_week',timezone:'America/New_York'},comparison:{kind:'previous_period',relativeToPublicationPeriod:true}};
     assert.ok(t.reviewContextInputSchema.safeParse(scope).success);

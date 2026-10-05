@@ -27,7 +27,9 @@ async function audit(name){
   assert.deepEqual(violations,[],name+' accessibility');
 }
 try{
-await page.goto(base+'/app/analytics',{waitUntil:'domcontentloaded',timeout:120000});await ready();
+// A fixed seven-day scope keeps acceptance independent of midnight/week rollover.
+const at=Date.now(),initialScope={channelIds:['phase2-fixture-account'],publicationPeriod:{start:new Date(at-7*86400000).toISOString(),end:new Date(at).toISOString(),timezone:'UTC'},horizon:'24h'};
+await page.goto(base+'/app/analytics?reviewScope='+encodeURIComponent(JSON.stringify(initialScope)),{waitUntil:'domcontentloaded',timeout:120000});await ready();
 const crossPage=panel.getByRole('link',{name:'Open this scope in Growth Studio',exact:true});
 const sharedInput=JSON.parse(new URL(await crossPage.getAttribute('href'),base).searchParams.get('reviewScope'));
 const sharedProjection=await api('GET',`/api/workspaces/${wid}/coworker/review?scope=${encodeURIComponent(JSON.stringify(sharedInput))}`);
@@ -40,7 +42,7 @@ await panel.locator('summary').filter({hasText:'Metric sources, missing values a
 await panel.getByText('likes: 0',{exact:false}).waitFor();assert.ok(!(await panel.innerText()).includes('SYNTHETIC-SECRET'));
 await panel.locator('summary').filter({hasText:'Saved Views and classifications'}).click();
 await panel.getByLabel('View name',{exact:true}).fill('Weekly teaching');await panel.getByRole('button',{name:'Save current view',exact:true}).click();
-await panel.getByText('Saved View saved. Relative dates resolve when reopened.',{exact:true}).waitFor();
+await panel.getByText('Saved View saved. Fixed publication dates remain fixed.',{exact:true}).waitFor();
 await panel.getByRole('button',{name:'Update Saved View',exact:true}).waitFor();
 await panel.getByLabel('Classification ID',{exact:true}).fill('practice-series');await panel.getByLabel('Classification label',{exact:true}).fill('Practice series');
 await panel.getByRole('button',{name:'Confirm classification',exact:true}).click();
@@ -50,8 +52,12 @@ await panel.getByText('1 of 1 publications have qualified readings.',{exact:fals
 await panel.getByLabel('Classification filter',{exact:true}).selectOption('');await ready();
 await panel.getByRole('button',{name:'Propose this controlled test',exact:true}).click();
 await panel.getByText('Existing Growth Loop experiment proposed. Owner acceptance and preparation remain separate.',{exact:true}).waitFor();await ready();
+await panel.getByRole('link',{name:'Open this scope in Growth Studio',exact:true}).click();await page.waitForURL('**/app/growth?reviewScope=*');await ready();
+await page.getByRole('button',{name:'Run experiment',exact:true}).click();await page.getByRole('button',{name:'Prepare design',exact:true}).waitFor();
+assert.equal((await api('GET',`/api/workspaces/${wid}`)).state.phase2.jobs.length,12);
+await panel.getByRole('link',{name:'Open this scope in Analytics',exact:true}).click();await page.waitForURL('**/app/analytics?reviewScope=*');await ready();
 await audit('desktop');await shot('review-desktop');
-checks.push('real HTTP read projection, measured zero / missing sources, Saved View save, versioned classification and scoped low sample; explicit bounded test creates existing Growth Loop proposal without publication');
+checks.push('real HTTP read projection, measured zero / missing sources, Saved View save, versioned classification and scoped low sample; existing Growth Loop proposal and explicit owner acceptance, with no publication or generated job');
 for(const width of [390,430]){await page.setViewportSize({width,height:900});await audit(String(width));await shot('review-'+width);}
 await panel.getByLabel('Post age',{exact:true}).focus();await page.keyboard.press('Tab');
 assert.ok(await panel.getByLabel('Review timezone',{exact:true}).evaluate(e=>e===document.activeElement),'Keyboard focus reaches timezone');

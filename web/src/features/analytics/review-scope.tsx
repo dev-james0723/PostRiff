@@ -9,7 +9,7 @@ import { useCoworkerApi } from '@/lib/coworker/hooks';
 import { errorMessage } from '@/lib/coworker/api';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { isVerified } from '@/lib/channels/state';
-import { REVIEW_SCHEMA_VERSION, REVIEW_STATE_LABELS, reviewContextInputSchema, reviewDisplayState, type MetricEvidence, type ReviewInput, type ReviewProjection } from '@/lib/analytics/review-contract';
+import { REVIEW_SCHEMA_VERSION, REVIEW_STATE_LABELS, REVIEW_STATE_RECOVERY, reviewContextInputSchema, reviewDisplayState, reviewDueTime, type MetricEvidence, type ReviewInput, type ReviewProjection } from '@/lib/analytics/review-contract';
 import { ReviewActions } from './review-actions';
 
 function inputFromLocation(): Partial<ReviewInput> {
@@ -27,8 +27,9 @@ export function ReviewPanel({ destination = 'growth' }: { destination?: 'growth'
   return workspaceId ? <ReviewScope key={workspaceId} destination={destination} /> : null;
 }
 
-function Evidence({ evidence }: { evidence: MetricEvidence }) {
+function Evidence({ evidence, dueAt, timezone }: { evidence: MetricEvidence; dueAt:number|null; timezone:string }) {
   const state = reviewDisplayState(evidence);
+  const due=evidence.accessState==='allowed'?reviewDueTime(dueAt,timezone):null;
   return <details className='rounded-lg border p-3'>
     <summary className='rafii-focus cursor-pointer text-sm'>
       <span className='font-medium'>{evidence.nativeName}: {evidence.value === null ? '—' : evidence.value.toLocaleString()}</span>
@@ -43,7 +44,9 @@ function Evidence({ evidence }: { evidence: MetricEvidence }) {
       {evidence.reason && <div><dt className='inline font-medium'>Comparison excluded: </dt><dd className='inline'>{REVIEW_STATE_LABELS[evidence.reason] ?? evidence.reason.replaceAll('_', ' ')}</dd></div>}
       {evidence.sourceRef && <div><dt className='inline font-medium'>Native method: </dt><dd className='inline'>{evidence.sourceRef}</dd></div>}
       <div><dt className='inline font-medium'>Last attempt: </dt><dd className='inline'>{evidence.lastAttemptState ?? evidence.collectionState}</dd></div>
+      {due&&['pending_horizon','scheduled','pending'].includes(evidence.collectionState)&&<div><dt className='inline font-medium'>Read due: </dt><dd className='inline'>{due}</dd></div>}
     </dl>
+    <p className='text-muted-foreground mt-2 text-xs'>{REVIEW_STATE_RECOVERY[state]??REVIEW_STATE_RECOVERY.unavailable} {['not_authorized','unsupported','disabled','disconnected','revoked'].includes(state)&&<Link href='/app/channels' className='rafii-focus underline'>Open Channels</Link>}</p>
   </details>;
 }
 
@@ -113,12 +116,13 @@ function ReviewScope({ destination }: { destination: 'growth' | 'analytics' }) {
       {error ? <div role='alert'><p>{errorMessage(error,'Unable to read this scope.')}</p><Button variant='quiet' onClick={() => { void channels.refetch(); void snapshot.refetch(); void query.refetch(); }}>Retry current reading</Button></div> : !result ? <p role='status'>Loading the current scope…</p> : <>
         <p className='text-muted-foreground break-words text-xs'>{result.resolvedContext.publicationPeriod.start} → {result.resolvedContext.publicationPeriod.end} (end excluded) · {result.resolvedContext.publicationPeriod.timezone} · cumulative at {result.resolvedContext.horizon}.</p>
         <p className='text-sm'>{result.coverage.eligible} of {result.coverage.publications} publications have qualified readings. {result.coverage.missing} metric readings excluded or missing. Promotion status unknown.</p>
+        {result.coverage.eligible>0&&result.coverage.missing>0&&<p className='text-muted-foreground text-sm'>Partial coverage. {REVIEW_STATE_RECOVERY.partial}</p>}
         {result.coverage.truncated&&<p role='status' className='text-sm'>This scope exceeds the loading limit. Showing at most {result.coverage.maximumPosts} matching publications; coverage and summaries are limited to the retained readings.</p>}
         {!channelIds.length ? <p>No connected account. <Link className='underline' href='/app/channels'>Open Channels</Link></p> : !result.groups.length ? <p>No comparable native readings in this scope. <Link className='underline' href='/app/channels'>Check analytics permissions</Link>. Collection start is unknown; HistoryImport is off.</p> : (
           // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users must be able to focus and scroll this comparison table.
           <div role='region' aria-label='Native metric comparison' tabIndex={0} className='rafii-focus overflow-x-auto rounded-lg border'><table className='w-full text-left text-sm'><caption className='sr-only'>Native metrics by account, language, format and definition</caption><thead><tr>{['Account / cohort','Native metric','Aggregation','Current','Previous','Samples'].map((h) => <th key={h} scope='col' className='p-2 font-medium'>{h}</th>)}</tr></thead><tbody>{result.groups.map((g) => <tr key={JSON.stringify(g.cohort)} className='border-t'><td className='p-2'>{g.cohort.provider} · {g.cohort.connectionId}<small className='block'>{g.cohort.language ?? 'Unknown language'} · {g.cohort.formatId ?? 'Unknown format'}</small></td><td className='p-2'>{g.cohort.nativeName}</td><td className='p-2'>{g.aggregation}</td><td className='p-2'>{g.value ?? '—'}</td><td className='p-2'>{g.baselineValue ?? '—'}</td><td className='p-2'>{g.sampleSize} / {g.baselineSampleSize} · need {g.minimumSample} each</td></tr>)}</tbody></table></div>)}
         {result.comparisons.map((c) => <p key={JSON.stringify(c.cohort)} className='text-sm'>{c.cohort.nativeName}: {c.relativeChange === null ? (REVIEW_STATE_LABELS[c.reason ?? 'unavailable'] ?? c.reason?.replaceAll('_',' ')) : `${(c.relativeChange * 100).toFixed(1)}% relative difference`}. Descriptive, causal=false.</p>)}
-        {result.nativeResults.length > 0 && <details><summary className='rafii-focus cursor-pointer text-sm'>Metric sources, missing values and exact reading times ({result.nativeResults.length})</summary><div className='mt-3 grid min-w-0 gap-2 sm:grid-cols-2'>{result.nativeResults.map((e,i) => <Evidence key={`${e.publicationBinding.jobId}:${e.nativeName}:${i}`} evidence={e} />)}</div></details>}
+        {result.nativeResults.length > 0 && <details><summary className='rafii-focus cursor-pointer text-sm'>Metric sources, missing values and exact reading times ({result.nativeResults.length})</summary><div className='mt-3 grid min-w-0 gap-2 sm:grid-cols-2'>{result.nativeResults.map((e,i) => <Evidence key={`${e.publicationBinding.jobId}:${e.nativeName}:${i}`} evidence={e} dueAt={result.postTracking?.posts.find(p=>p.job_id===e.publicationBinding.jobId)?.horizons.find(h=>h.window===result.resolvedContext.horizon)?.due_at??null} timezone={result.resolvedContext.publicationPeriod.timezone} />)}</div></details>}
         <div className='flex flex-wrap items-center gap-3'><Link className='rafii-focus text-sm underline' href={`/app/${destination}?reviewScope=${encodeURIComponent(JSON.stringify(shared))}`}>Open this scope in {destination === 'growth' ? 'Growth Studio' : 'Analytics'}</Link><span className='text-muted-foreground text-xs'>Filters and reads start no paid work.</span></div>
       </>}
     </div>
