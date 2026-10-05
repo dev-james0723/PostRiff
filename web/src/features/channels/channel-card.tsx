@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Icons, type Icon } from '@/components/icons';
@@ -191,8 +192,12 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [probing, setProbing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
+
+  const params = useSearchParams();
+  const metaReview = params.get('metaReview') === '1';
 
   const held = activity?.held ?? 0;
   // Listed only while posts for it are on hold (`listedOnChannels`): the card offers Reconnect and History, nothing else.
@@ -232,6 +237,24 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   }
 
   const reportChangeError = useChangeError();
+
+  async function runInsightsCanary() {
+    setBusy(true);
+    setProbing(true);
+    try {
+      const result = await api.insightsCanary(workspaceId, channel.id);
+      if (result.state === 'done' && result.providerRead) {
+        toast.success('Instagram analytics test completed', { description: 'Meta returned a native insights response for this account.' });
+      } else {
+        toast.error('Instagram analytics test did not complete', { description: result.state });
+      }
+    } catch (err) {
+      toast.error("Couldn't run the Instagram analytics test", { description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setBusy(false);
+      setProbing(false);
+    }
+  }
 
   async function disconnect() {
     setBusy(true);
@@ -366,6 +389,18 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        {canManage && metaReview && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
+          <StatefulButton
+            variant='outline'
+            className={cn(STATEFUL_GLASS, CONTROL_44)}
+            state={probing ? 'loading' : 'idle'}
+            loadingText='Testing analytics…'
+            disabled={busy}
+            onClick={() => void runInsightsCanary()}
+          >
+            Run analytics test
+          </StatefulButton>
+        )}
         <HistoryImportControl channel={channel} provider={provider} canManage={canManage} />
         {canManage && !disconnected && (
           <StatefulButton
