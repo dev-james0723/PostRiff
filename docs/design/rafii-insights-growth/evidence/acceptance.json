@@ -2163,9 +2163,9 @@
         "8"
       ],
       "status": "blocked",
-      "actual": "Branch pushed; PR126 has real remote CI: four workflows pass, Founder and local release gates fail. Scoped genuine repairs prepared; focused PG/lint/typecheck pass; delayed-session dispatch guard passes, local reply check unavailable after harness503. Remote repair validation pending.",
+      "actual": "Real repaired-source CI on def32abb/checkout c8803584: Review, Growth Studio, Growth metrics, Rafii browser and Founder PASS. Local release Python/PG PASS, web671 tests669pass/2fail. The two genuine web contract/copy failures are repaired and focused8+1tests pass; next real remote validation pending.",
       "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
-      "executed_at": "2026-10-05T02:41:51.677711+00:00",
+      "executed_at": "2026-10-05T03:08:26.343412+00:00",
       "evidence_paths": [
         ".github/workflows/rafii-review.yml",
         "docs/design/rafii-insights-growth/evidence/boundaries.json",
@@ -2189,7 +2189,7 @@
         "docs/design/rafii-insights-growth/evidence/remote-ci.json",
         "docs/design/rafii-insights-growth/evidence/repair-validation.json"
       ],
-      "blocked_reason": "Genuine remote CI failures require a repaired source commit and fresh remote validation.",
+      "blocked_reason": "Two genuine web contract/copy failures repaired; fresh remote validation of their committed source remains pending.",
       "validation_ids": [
         "unit",
         "review_contract",
@@ -2226,8 +2226,8 @@
       ],
       "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
       "native_acceptance": false,
-      "ci_branch_head": "535d0e0614b83a20eb100720e875750e1d02b84f",
-      "ci_checkout_sha": "91aa427cd06f5bf09fe90ba077db71946b214faf"
+      "ci_branch_head": "def32abbdcc64415aa373254e6622a3b2352be73",
+      "ci_checkout_sha": "c88035849f0172d672090c071c1085c4259b3a4e"
     },
     {
       "id": "AC58",
@@ -2270,7 +2270,7 @@
   "native_validation_passed": false,
   "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
   "integration_base_sha": "676397a205de065f6962fb6c3f6a9204681c31b4",
-  "recorded_at": "2026-10-05T02:41:51.677711+00:00",
+  "recorded_at": "2026-10-05T03:08:26.343412+00:00",
   "scope": "local engineering acceptance with explicit synthetic external identities; AC08/58 require real native evidence",
   "status_counts": {
     "pass": 54,

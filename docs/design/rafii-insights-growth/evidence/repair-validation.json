@@ -89,5 +89,31 @@
     "warnings": 0
   },
   "localDisposableProcessesStopped": true,
-  "original54CasesRerun": false
+  "original54CasesRerun": false,
+  "webContractRepair": {
+    "recordedAt": "2026-10-05T03:08:26.343412+00:00",
+    "execution": "scoped working changes on committed def32abbdcc64415aa373254e6622a3b2352be73",
+    "sourceFileSha256": {
+      "web/tests/coworker-api.test.cjs": "5aa5a643fb7f810892d541c4af690e0c450c1dadf84270435dd2c3b55928ceef",
+      "web/src/features/analytics/review-actions.tsx": "8aa562e732e8a9440edb1b8f7bf05869665b8f99de995e32aa5d58bdf7fa3bee"
+    },
+    "coworkerApi": {
+      "status": "PASS",
+      "command": "/opt/homebrew/opt/node@24/bin/node --test web/tests/coworker-api.test.cjs",
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "log": ".codex/rafii-insights-remote-ci/coworker-api-repair.log"
+    },
+    "reportCopy": {
+      "status": "PASS",
+      "command": "/opt/homebrew/opt/node@24/bin/node --test --test-name-pattern='Customer screens contain no implementation words' web/tests/ui-simplification.test.mjs",
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "log": ".codex/rafii-insights-remote-ci/review-copy-repair.log"
+    },
+    "runtimeValidationWeakened": false,
+    "original54CasesRerun": false
+  }
 }

@@ -25,7 +25,10 @@ function load(file, modules = {}) {
 }
 
 const client = load('lib/api/client.ts');
-const coworker = load('lib/coworker/api.ts', { '@/lib/api/client': client });
+const zod = require('zod');
+const trendTypes = load('lib/coworker/trend-types.ts', { zod });
+const reviewContract = load('lib/analytics/review-contract.ts', { zod, '../coworker/trend-types': trendTypes });
+const coworker = load('lib/coworker/api.ts', { '@/lib/api/client': client, '@/lib/analytics/review-contract': reviewContract });
 
 function harness(responses = []) {
   const calls = [];
