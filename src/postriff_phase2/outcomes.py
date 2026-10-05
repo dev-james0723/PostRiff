@@ -33,18 +33,20 @@ def unknown(message="Provider outcome is unknown; reconcile before retry"):
 
 
 def normalize_result(result, job, reconciliation=False):
-    allowed = {"uncertain", "processing", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
+    allowed = {"native_scheduled", "canceled", "uncertain", "processing", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
     if (not isinstance(result, dict) or not isinstance(result.get("state"), str) or result["state"] not in allowed
             or not isinstance(result.get("confirmed"), str)
             or not 1 <= len(result["confirmed"]) <= 2000):
         return unknown("Malformed adapter response; reconcile before retry")
+    if result['state'] in ('native_scheduled', 'canceled') and result.get('verification') != 'provider_lookup':
+        return unknown('Native schedule/cancellation needs provider lookup evidence')
     reference = result.get("reference", job.get("providerReference"))
     if reference is not None and (not isinstance(reference, str) or not 1 <= len(reference) <= 500):
         return unknown("Invalid provider reference; reconcile before retry")
     # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
     # rejected) is proof, not a lookup failure, so it may end the job as failed.
     provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
-    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure:
+    if reconciliation and result.get('verification') not in ('resumable_upload_status', 'thread_lookup') and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure:
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:
@@ -68,14 +70,37 @@ def normalize_result(result, job, reconciliation=False):
     progress = result.get('progress')
     if progress is not None:
         if (not isinstance(progress, dict) or progress.get('version') != 1
-                or progress.get('stage') not in ('container_created', 'container_ready', 'provider_accepted')
+                or progress.get('stage') not in ('assets_uploaded', 'children_created', 'children_ready', 'container_created', 'container_ready', 'upload_session', 'upload_finalizable', 'next_asset', 'metadata_pending', 'provider_accepted', 'thread_ready')
                 or not container):
             return unknown('Invalid publishing progress; manual review required')
         normalized['progress'] = {'version': 1, 'stage': progress['stage']}
+    upload = result.get('providerUpload')
+    if upload is not None:
+        if (not isinstance(upload, dict) or set(upload) != {'ciphertext', 'keyId'}
+                or not isinstance(upload['ciphertext'], str) or not 1 <= len(upload['ciphertext']) <= 32000
+                or not isinstance(upload['keyId'], str) or not re.fullmatch(r'[a-f0-9]{12}', upload['keyId'])):
+            return unknown('Invalid encrypted upload receipt; manual review required')
+        normalized['providerUpload'] = dict(upload)
+    assets = result.get('providerAssets')
+    if assets is not None:
+        if (not isinstance(assets, list) or len(assets) > 20 or any(not isinstance(a, dict)
+                or not isinstance(a.get('id'), str) or not re.fullmatch(r'[A-Za-z0-9_:-]{1,500}', a['id']) for a in assets)):
+            return unknown('Invalid provider media receipt; manual review required')
+        normalized['providerAssets'] = [{k: a[k] for k in ('id', 'kind', 'assetId', 'alt') if k in a} for a in assets]
+    thread = result.get('providerThread')
+    if thread is not None:
+        if (job.get('manifest', {}).get('platform') != 'X' or not isinstance(thread, list) or not 1 <= len(thread) <= 25
+                or len(set(thread)) != len(thread) or any(not isinstance(i, str) or not re.fullmatch(r'\d{1,25}', i) for i in thread)):
+            return unknown('Invalid provider thread receipt')
+        normalized['providerThread'] = list(thread)
+    if 'threadChecked' in result:
+        checked = result['threadChecked']
+        if type(checked) is not int or not 0 <= checked <= len(thread or job.get('providerThread') or []): return unknown('Invalid thread verification progress')
+        normalized['threadChecked'] = checked
     normalized['schema'] = 'postriff.result.v1'
     for key, value in (('reference', reference), ('container', container), ('url', url)):
         if value is not None:
             normalized[key] = value
     if job.get('cancelRequested') and normalized['state'] == 'processing':
-        normalized.update(state='canceled', confirmed='Publication canceled before publish; the unpublished container may remain')
+        normalized.update(state='held' if thread or job.get('providerThread') else 'canceled', confirmed='Further creation stopped; prior provider posts remain' if thread or job.get('providerThread') else 'Publication canceled before publish; the unpublished container may remain')
     return normalized

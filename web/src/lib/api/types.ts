@@ -57,7 +57,8 @@ export interface Asset {
   deleted: boolean;
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
-  kind?: 'image' | 'video';
+  kind?: 'image' | 'video' | 'document';
+  pages?: number;
   category?: 'media' | 'video' | string;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;
@@ -1368,7 +1369,26 @@ export interface Capability {
   capabilityVersion: number;
 }
 
+export interface OfficialCapability {
+  key: string;
+  permission_group: string;
+  officialSupport: 'documented' | 'unsupported' | 'audit_unavailable';
+  state: 'READY' | 'BLOCKED';
+  appApproved: boolean;
+  granted: boolean;
+  eligible: boolean;
+  implemented: boolean;
+  liveE2E: boolean;
+  blockers: string[];
+  limitation: string;
+  method: string;
+  scopes: string[];
+  source: string;
+  scheduling: string;
+}
+
 export interface ChannelView {
+  officialCapabilities?: Record<string, OfficialCapability>;
   id: string;
   platform: string;
   account: string;
@@ -1384,6 +1404,7 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  officialCapabilities?: Record<string, OfficialCapability>;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1436,7 +1457,8 @@ export interface ProviderView {
 export interface ChannelDestination {
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'member' | 'organization';
+  tasks?: string[];
   selected: boolean;
 }
 
@@ -1918,3 +1940,20 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+export interface NativeSocialReading {
+  provider: string;
+  feature: string;
+  availability: string;
+  data: unknown;
+  provenance: { kind: 'provider_native'; provider: string; reportingPeriod: Record<string, string> };
+  rate: Record<string, string>;
+  executionState?: string;
+  message?: string;
+}
+
+export interface NativeSocialPreview {
+  id: string;
+  digest: string;
+  state: 'preview';
+  manifest: { action: string; target: string; payload: Record<string, unknown>; platform: string; providerAccountId: string };
+}

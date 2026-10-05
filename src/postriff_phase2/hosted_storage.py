@@ -20,7 +20,7 @@ from .media import decode_upload
 
 
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
+OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.(jpg|pdf|gif)")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
 MAX_BODY = 8 * 1024 * 1024
 MAX_VIDEO_BODY = 100_000_000
@@ -210,6 +210,15 @@ class SupabaseStorage:
     def signed_url(self, workspace_id, category, object_name, expires_in=300):
         if type(expires_in) is not int or not 60 <= expires_in <= 600:
             raise AlphaError("Use a short-lived media delivery window.")
+        return self._sign_delivery(workspace_id, category, object_name, expires_in)
+
+    def tiktok_transfer_url(self, workspace_id, category, object_name):
+        # Official PULL_FROM_URL may download for one hour. This server-only
+        # method permits only an approved rendition and a fixed bounded window;
+        # ordinary library URLs retain their ten-minute maximum.
+        return self._sign_delivery(workspace_id, category, object_name, 4200)
+
+    def _sign_delivery(self, workspace_id, category, object_name, expires_in):
         path = self._path(workspace_id, category, object_name)
         url = f"{self.project_url}/storage/v1/object/sign/{quote(self._bucket(category))}/{quote(path, safe='/')}"
         status, _, body = self.send("POST", url, self._headers("application/json"), json.dumps({"expiresIn": expires_in}).encode())
@@ -338,10 +347,18 @@ class PrivateAssetService:
     def stage_upload(self, workspace_id, payload):
         # Vercel's Python runtime does not guarantee ffmpeg binaries. Pillow is
         # pinned for the hosted function and still performs a full decode.
-        asset = decode_upload(payload, decoder="pillow")
+        if payload.get("mime") == "application/pdf":
+            from .social_documents import decode_pdf
+            asset = decode_pdf(payload)
+        elif payload.get('mime') == 'image/gif':
+            from .social_documents import decode_gif
+            asset = decode_gif(payload)
+        else:
+            asset = decode_upload(payload, decoder="pillow")
         raw = base64.b64decode(asset.pop("data"), validate=True)
-        object_name = f"{asset['id']}-{asset['hash']}.jpg"
-        path = self.storage.put_immutable(workspace_id, "media", object_name, raw)
+        extension = "pdf" if asset["mime"] == "application/pdf" else "gif" if asset['mime'] == 'image/gif' else "jpg"
+        object_name = f"{asset['id']}-{asset['hash']}.{extension}"
+        path = self.storage.put_immutable(workspace_id, "media", object_name, raw, content_type=asset["mime"])
         asset.update({"storagePath": path, "objectName": object_name, "execution": "hosted-private-storage"})
         return asset
 

@@ -587,7 +587,7 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
     (assets: readonly Asset[], role: MediaRole = 'post') => {
       for (const asset of assets) {
         const kind = kindOf(asset);
-        if (!kind) continue;
+        if (!kind || kind === 'document') continue;
         const key = nextKey();
         if (
           add({

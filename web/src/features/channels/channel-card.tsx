@@ -41,6 +41,8 @@ import {
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { OfficialCapabilities } from './official-capabilities';
+import { NativeSocialPanel } from './native-social-panel';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import type { ConnectRequest } from './connect-sheet';
@@ -295,8 +297,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
-      {!disconnected && channel.socialReadiness && (
+      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} offered={provider?.capabilities} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
+      {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
+      {!disconnected && !channel.officialCapabilities && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
           <li>
             {channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE'

@@ -12,7 +12,10 @@
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "audit:copy": "node scripts/copy-audit.mjs",
-    "test:browser:durable": "node tests/consumer-durable-browser.cjs"
+    "test:browser:durable": "node tests/consumer-durable-browser.cjs",
+    "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/social-validation-cloud.sh",
+    "ci:jcb": "npm audit --audit-level=high && npm run lint && npm run typecheck && npm run test:jcb && npm run build",
+    "e2e:social": "bash ../scripts/social-browser-cloud.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -46,7 +49,7 @@
     "kbar": "^0.1.0-beta.48",
     "match-sorter": "^8.2.0",
     "motion": "^11.18.2",
-    "next": "16.3.5",
+    "next": "16.3.6",
     "next-themes": "^0.4.6",
     "nextjs-toploader": "^3.9.17",
     "nuqs": "^2.8.9",

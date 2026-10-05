@@ -84,7 +84,7 @@ class Adapters(unittest.TestCase):
                 self.assertFalse(provider.revoke("LONG"))
 
     def test_threads_scope_inspection_never_substitutes_requested_permissions(self):
-        for body, expected in [({'data':{'is_valid':True,'user_id':'1789','scopes':['threads_basic']}}, ['threads_basic']), ({'data':{'is_valid':False,'user_id':'1789','scopes':['threads_content_publish']}}, None), ({'data':{'is_valid':True,'user_id':'foreign','scopes':['threads_content_publish']}}, None), ({'data':{}}, None)]:
+        for body, expected in [({'data':{'is_valid':True,'app_id':'cid','user_id':'1789','scopes':['threads_basic']}}, ['threads_basic']), ({'data':{'is_valid':False,'user_id':'1789','scopes':['threads_content_publish']}}, None), ({'data':{'is_valid':True,'user_id':'foreign','scopes':['threads_content_publish']}}, None), ({'data':{}}, None)]:
             provider = ThreadsProvider('cid', 'synthetic', transport=Recorder([{'status':200,'body':body}]))
             self.assertEqual(provider.inspect_scopes('SYNTHETIC','1789'),expected)
 

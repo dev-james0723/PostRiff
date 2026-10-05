@@ -6,6 +6,7 @@ never exchanges) → authenticated `complete` (same member, same workspace, sing
 server-side connector worker; they never reach the browser, the agent, or a log.
 """
 import base64
+import copy
 import hashlib
 import hmac
 import json
@@ -69,6 +70,8 @@ class OAuthService:
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
         from .social_history import SocialHistoryService
         self.history = SocialHistoryService(self)
+        from .official_operations import SocialActionsService
+        self.native_social = SocialActionsService(self)
 
     def provider_catalog(self):
         """Secret-free deployment readiness; an unconfigured tile is never an adapter."""
@@ -153,6 +156,13 @@ class OAuthService:
                 entries.append({'id': pid, 'platform': adapter.platform, 'configured': True, 'productionReviewed': adapter.production_reviewed,
                                 'executionPaused': not getattr(adapter, 'execution_enabled', True),
                                 'capabilities': {cap: bool(adapter.capability_scopes(cap)) for cap in ('identity', 'publish', 'analytics', 'comments_read', 'reply')}})
+        from .official_social import CATALOG, capability_states
+        for entry in entries:
+            pid, adapter = entry['id'], self.providers.get(entry['id'])
+            if pid in CATALOG:
+                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), now=self.clock())
+                groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
+                entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
         return entries
 
     @staticmethod
@@ -210,8 +220,15 @@ class OAuthService:
             if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
-        if capability not in (*CAPABILITIES, 'posts_read') or capability in ("media_types", "webhooks"):
+        from .official_social import CATALOG
+        feature_groups = {f.permission_group for f in CATALOG.get(provider_id, {}).values() if f.support == 'documented'}
+        if capability not in (*CAPABILITIES, 'posts_read', *feature_groups) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
+        if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+            # A connection starts before the account ID exists. A separate, narrow
+            # workspace OAuth budget must authorize its first paid identity lookup.
+            from .social_budget import XRequestBudget
+            XRequestBudget(self, workspace_id, 'oauth').available()
         scopes = adapter.capability_scopes(capability)
         if not scopes:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
@@ -223,11 +240,25 @@ class OAuthService:
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else copy.deepcopy(row[1])
+            previous = next((c for c in workspace_state.get('phase2',{}).get('channels',[]) if c.get('id') == (inputs or {}).get('connectionId') and c.get('platform') == adapter.platform and not c.get('revoked')),None)
+            groups = set(previous.get('enabledPermissionGroups') or (['publish'] if previous.get('capabilityVerified') else ['identity'])) if previous and capability != 'identity' else set()
+            groups.add(capability)
+            if previous and capability != 'identity':
+                retained = set(previous.get('scopes') or [])
+                allowed = {scope for group in groups for scope in adapter.capability_scopes(group)}
+                scopes = sorted(set(scopes) | (retained & allowed))
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             ciphertext, key_id = self.vault.encrypt(verifier)
-            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity'), redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
+            if provider_id in CATALOG:
+                requests = workspace_state.setdefault('phase2',{}).setdefault('oauthFeatureRequests',{})
+                requests = {key:value for key,value in requests.items() if self.clock()-value.get('createdAt',0) < TRANSACTION_TTL}
+                requests[transaction_id] = {'capability':capability,'groups':sorted(groups),'expectedAccountId':previous.get('providerAccountId') if previous else None,'createdAt':self.clock()}
+                workspace_state['phase2']['oauthFeatureRequests'] = requests
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(workspace_state),workspace_id))
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
             return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": list(scopes), "permissionExplanation": adapter.explain(capability), "authorizeUrl": adapter.authorize_url(redirect, state, challenge, scopes), "expiresAt": self.clock() + TRANSACTION_TTL}
 
@@ -260,7 +291,7 @@ class OAuthService:
         ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": verifier, **context}))
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
-            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity'), redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
         return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": scopes,
@@ -344,7 +375,15 @@ class OAuthService:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
                 grant = adapter.exchange(code, verifier, redirect)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, 'oauth', cursor=cur))
             identity = adapter.identity(grant["accessToken"])
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else row[1]
+            intent = workspace_state.get('phase2',{}).get('oauthFeatureRequests',{}).get(transaction_id,{})
+            if intent.get('expectedAccountId') and intent['expectedAccountId'] != identity['providerAccountId']:
+                raise AlphaError('Feature authorization must use the connected account. Start a separate connection for another account.',409)
+            enabled_groups = intent.get('groups') or [capability]
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
             if reported is None and hasattr(adapter, 'inspect_scopes'):
@@ -363,12 +402,20 @@ class OAuthService:
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            if not missing:
+                for group in enabled_groups:
+                    scopes_for_group = adapter.capability_scopes(group)
+                    if scopes_for_group and set(scopes_for_group).issubset(granted):
+                        mapped = 'publish' if group in ('organization_publish','upload_inbox') else 'analytics' if group.startswith('organization_') and 'analytics' in group else 'comments_read' if group == 'organization_comments_read' else 'reply' if group == 'organization_reply' else group
+                        candidate = self._capabilities(adapter,mapped,granted,[],now,grant['accessToken'])
+                        for name,value in candidate.items():
+                            if value['level'] == 'Direct': matrix[name] = value
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
         # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
         horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
-        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
         snapshot = self.repository.get(workspace_id, token)
         saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
         self._keep_picture(workspace_id, token, connection_id, identity)
@@ -656,6 +703,19 @@ class OAuthService:
         views = [{**customer_view(c, matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
+            provider = by_platform.get(view['platform']) or {}
+            if provider.get('officialCapabilities') is not None:
+                from .official_social import capability_states
+                adapter = self.providers.get(provider['id'])
+                raw = next(c for c in snapshot['state']['phase2']['channels'] if c['id'] == view['id'])
+                key = str(raw.get('providerAccountId', '')) + ':' + str(raw.get('destinationId') or '')
+                qualification = getattr(adapter, 'official_evidence', {}).get(key, {})
+                trusted = {**raw, 'eligibility': qualification.get('eligibility', {})}
+                view['officialCapabilities'] = capability_states(provider['id'], trusted,
+                    approvals=getattr(adapter, 'official_approvals', {}), evidence=qualification.get('features', {}),
+                    implemented=getattr(adapter, 'official_implemented', ()), now=now)
+                # Compatibility summary never promotes an eight-platform connection to Full Access.
+                view['socialReadiness']['fullyAvailable'] = False
         return {'channels': views, 'providers': catalog}
 
     def token_for_worker(self, workspace_id, connection_id):
@@ -672,11 +732,11 @@ class OAuthService:
                     raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
                 now = self.clock()
                 expired = bool(expires and expires <= now)
-                if provider == 'instagram' and expired:
-                    raise AlphaError('Instagram access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
+                if provider in ('instagram', 'threads') and expired:
+                    raise AlphaError('Access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
                 # Refresh requires a still-valid token at least 24 hours old.
                 # Unknown age never grants permission to renew; reconnect remains available.
-                renew_instagram = (provider == 'instagram' and expires and 0 < expires - now <= 7 * 86400
+                renew_instagram = (provider in ('instagram', 'threads') and expires and 0 < expires - now <= 7 * 86400
                                    and issued_at is not None and now - issued_at >= 86400
                                    and refresh_supported and refresh_ct)
                 # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
@@ -695,6 +755,9 @@ class OAuthService:
                     expires = self.clock() + float(grant.get("expiresIn") or 3600)
                     cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (access_ct, new_refresh, key_id, expires, workspace_id, connection_id))
                 access_token = self.vault.decrypt(access_ct, key_id)
+                if provider == 'x' and getattr(self._provider(provider), 'budget_enforced', False):
+                    from .social_budget import BudgetedToken, XRequestBudget
+                    access_token = BudgetedToken(access_token, XRequestBudget(self, workspace_id, connection_id))
                 inspector = getattr(self._provider(provider), "inspect_scopes", None)
                 if inspector:
                     reported = inspector(access_token, account_id)
@@ -721,6 +784,9 @@ class OAuthService:
         lower_bound = False
         try:
             grant = self.token_for_worker(workspace_id, connection_id)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, 'oauth', cursor=cur))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
@@ -817,6 +883,9 @@ class OAuthService:
         try:
             adapter = self._provider(provider_id)
             grant = self.token_for_worker(workspace_id, connection_id)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, 'oauth', cursor=cur))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")

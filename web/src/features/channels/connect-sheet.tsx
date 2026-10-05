@@ -142,7 +142,7 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
+      const input: Record<string, string> = { ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}), ...(reconnect ? { connectionId: reconnect.channelId } : {}) };
       const started = await api.oauthStart(workspaceId, provider.id, capability, input);
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });

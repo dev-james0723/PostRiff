@@ -70,12 +70,15 @@ class PostgresWorker:
                         if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
                             continue
                         stage = job.get('progress', {}).get('stage')
-                        instagram = job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram')
+                        from .official_publishers import ASYNC_PLATFORMS, FORWARD_STAGES
+                        official = (job['manifest']['platform'] in ASYNC_PLATFORMS and hasattr(self.social, 'official_enabled')
+                                    and self.social.official_enabled(job['manifest']))
+                        instagram = official or (job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram'))
                         if instagram and job.get('container') and not stage:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
-                        forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
+                        forward = instagram and stage in FORWARD_STAGES and job['state'] == 'processing'
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
-                            self._event(job, "canceled", "Canceled before provider submission")
+                            self._event(job, "held" if job.get('providerThread') else "canceled", "Further thread creation stopped; already-created provider posts remain" if job.get('providerThread') else "Canceled before provider submission")
                             continue
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
@@ -111,12 +114,16 @@ class PostgresWorker:
                             job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                             self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if official and reconciliation and job.get('cancelRequested') and job['manifest'].get('nativeScheduleAt') and job.get('providerReference'):
+                            if job.get('progress', {}).get('stage') != 'cancel_attempted':
+                                job['progress'] = {'version': 1, 'stage': 'cancel_attempted'}
+                                selected.update(job=copy.deepcopy(job), nativeCancel=True)
                         if instagram and not reconciliation:
-                            action = 'status' if stage == 'container_created' else 'publish' if stage == 'container_ready' else 'create'
+                            action = 'status' if stage in ('container_created', 'children_created', 'assets_uploaded') else 'parent' if stage == 'children_ready' else 'publish' if stage in ('container_ready', 'thread_ready') else 'upload' if stage == 'upload_session' else 'finalize' if stage == 'upload_finalizable' else 'metadata' if stage == 'metadata_pending' else 'create'
                             if action != 'status':
                                 job['progress'] = {'version': 1, 'stage': action + '_attempted'}
-                                self._event(job, 'submitting', 'Durable Instagram ' + action + ' intent recorded')
-                            selected.update(job=copy.deepcopy(job), instagramAction=action)
+                                self._event(job, 'submitting', 'Durable provider ' + action + ' intent recorded')
+                            selected.update(job=copy.deepcopy(job), instagramAction=action, officialAction=official)
                         break
                     if selected or json.dumps(state, sort_keys=True) != original:
                         cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), workspace_id, revision))
@@ -143,6 +150,12 @@ class PostgresWorker:
                 self._event(job, result["state"], result["confirmed"])
                 if result.get("reference"):
                     job["providerReference"] = result["reference"]
+                if "providerUpload" in result:
+                    job["providerUpload"] = result["providerUpload"]
+                if "providerAssets" in result:
+                    job["providerAssets"] = result["providerAssets"]
+                for key in ('providerThread', 'threadChecked'):
+                    if key in result: job[key] = result[key]
                 job["providerConfirmed"] = result["confirmed"]
                 job["verification"] = {"method": result.get("verification"), "at": self.clock()} if result["state"] == "verified" else None
                 if result.get("container"):
@@ -166,9 +179,11 @@ class PostgresWorker:
                 job["nextAt"] = self.clock() + (60 if result["state"] in ('scheduled', 'processing') else 5)
                 if result['state'] == 'processing':
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
-                    if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
+                    if job['processingChecks'] >= (20 if getattr(self.social, 'official_enabled', lambda _: False)(job.get('manifest') or {}) else 6) and job.get('progress', {}).get('stage') in ('container_created', 'children_created', 'assets_uploaded'):
                         self._event(job, 'held', 'Container processing did not finish within bounded checks; review before continuing')
-                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT:
+                if result['state'] == 'native_scheduled':
+                    job['nextAt'] = max(self.clock()+60, job['manifest']['nativeScheduleAt'])
+                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and job['state'] != 'native_scheduled':
                     job["nextAt"] = self.clock() + 86400
                     job["nextAction"] = "Manual provider review required; do not resubmit"
                 elif job["state"] == "held":
@@ -197,7 +212,7 @@ class PostgresWorker:
                     return False
                 if job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
-                    self._event(job, 'canceled' if job.get('cancelRequested') else 'held', 'Stopped before provider dispatch; cancellation or approval changed')
+                    self._event(job, 'canceled' if job.get('cancelRequested') and not job.get('providerThread') else 'held', 'Stopped before provider dispatch; prior provider posts, if any, remain')
                     job['leaseOwner'], job['leaseUntil'] = None, 0
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
@@ -211,7 +226,10 @@ class PostgresWorker:
             return True
         try:
             if claimed.get('instagramAction'):
-                result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+                advance = self.social.advance_official if claimed.get('officialAction') else self.social.advance_instagram
+                result = advance(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+            elif claimed.get("nativeCancel"):
+                result = self.social.cancel_native(claimed["job"]["manifest"], claimed["job"])
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
             else:

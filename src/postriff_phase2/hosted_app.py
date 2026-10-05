@@ -800,6 +800,15 @@ class HostedApplication:
                     body = self._body(environ)
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                if len(parts) == 6 and parts[5] == 'native-read' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.read(parts[2], token, parts[4], body.get('feature'), body.get('target'), body.get('options')))
+                if len(parts) == 6 and parts[5] == 'native-action' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 201, oauth.native_social.preview(parts[2], token, parts[4], body.get('action'), body.get('target'), body.get('payload')))
+                if len(parts) == 8 and parts[5] == 'native-action' and parts[7] == 'approve' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.approve(parts[2], token, parts[6], body.get('digest'), body.get('confirmed')))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
                     return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":

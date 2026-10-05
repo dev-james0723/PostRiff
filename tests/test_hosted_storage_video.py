@@ -71,6 +71,12 @@ class Recorder:
 
 
 class ApprovedVideoStreamTests(unittest.TestCase):
+    def test_tiktok_one_hour_download_window_does_not_extend_library_urls(self):
+        recorder=Recorder((200,{},json.dumps({'signedURL':f'/object/sign/postriff-private/{WS}/media/{IMG}?token=approved'}).encode()))
+        store=SupabaseStorage(PROJECT,KEY);store.send=recorder
+        with self.assertRaises(AlphaError): store.signed_url(WS,'media',IMG,4200)
+        address=store.tiktok_transfer_url(WS,'media',IMG)
+        self.assertIn('token=approved',address);self.assertEqual(json.loads(recorder.calls[0][3]),{'expiresIn':4200})
     def test_stream_checks_head_and_get_and_never_reads_more_than_a_chunk(self):
         headers = {"Content-Length": "6", "Content-Type": "video/mp4", "ETag": '"fixed"'}
         storage, handler = storage_with([(200, headers, b""), (200, headers, b"abcdef")])

@@ -75,11 +75,11 @@ export function useUploadQueue() {
   );
 
   const send = useCallback(
-    async (data: string) => {
+    async (data: string, mime?: string) => {
       const attempt = async () => {
         const revision = currentRevision();
         if (typeof revision !== 'number') throw new ApiError('The workspace is still loading. Try again in a moment.', 409);
-        return act.mutateAsync({ revision, action: 'p2_media_upload', payload: { data } });
+        return act.mutateAsync({ revision, action: 'p2_media_upload', payload: { data, ...(mime ? { mime } : {}) } });
       };
       try {
         return await attempt();
@@ -105,21 +105,23 @@ export function useUploadQueue() {
       } else {
         update(next.key, { status: 'reading' });
         let data: string | null = null;
+        const preserve = next.file.type === 'application/pdf' || next.file.type === 'image/gif';
         try {
-          const fitted = await fitForUpload(next.file, SAFE_SEND_BYTES);
+          if (preserve && next.file.size > SAFE_SEND_BYTES) throw new Error('Original file exceeds the request limit');
+          const fitted = preserve ? next.file : await fitForUpload(next.file, SAFE_SEND_BYTES);
           if (fitted) {
             data = await toBase64(fitted);
           } else {
             update(next.key, { status: 'failed', message: 'This image is too large to send, even scaled down. Try a smaller one.' });
           }
         } catch (error) {
-          const message = error instanceof UnreadableImage ? error.message : 'This file could not be read from your device.';
+          const message = preserve && next.file.size > SAFE_SEND_BYTES ? 'PDFs and GIFs must be under 3.3 MB for this upload path. Their original bytes are preserved.' : error instanceof UnreadableImage ? error.message : 'This file could not be read from your device.';
           update(next.key, { status: 'failed', message });
         }
         if (data !== null) {
           update(next.key, { status: 'sending' });
           try {
-            await send(data);
+            await send(data, preserve ? next.file.type : undefined);
             tally.current.done += 1;
             update(next.key, { status: 'done', message: undefined });
             setBlocker(null);

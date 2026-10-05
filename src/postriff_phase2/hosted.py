@@ -334,8 +334,10 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", 'enabledPermissionGroups'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
+        groups = channel.get('enabledPermissionGroups',[])
+        if not isinstance(groups,list) or len(groups) > 30 or any(not isinstance(g,str) or not re.fullmatch(r'[a-z_]{1,40}',g) for g in groups): raise AlphaError('Invalid enabled permission groups.',400)
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when
         # publish scopes were granted to a production-reviewed app (see OAuthService._capabilities).
@@ -377,6 +379,7 @@ class HostedWorkspaceService:
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
         self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.oauth.native_social.assets = self.assets
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,

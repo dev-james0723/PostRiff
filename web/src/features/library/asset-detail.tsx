@@ -93,9 +93,11 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
 
 /** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
-  const image = useAssetImage(asset.id);
+  const isDocument = kindOf(asset) === 'document';
+  const image = useAssetImage(asset.id, !isDocument);
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = kindOf(asset) === 'video';
+  if (isDocument) return <div className='rafii-quiet flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--rafii-radius-card)] p-4 text-sm'><span>Verified PDF · {asset.pages ?? 'Unknown'} pages</span><button type='button' className='rafii-focus underline' onClick={() => void api.media(workspaceId, asset.id).then((blob) => { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `rafii-${asset.id}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch((error) => toast.error(error instanceof Error ? error.message : 'Document unavailable'))}>Download original PDF</button></div>;
   if (isVideo) {
     return (
       <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>

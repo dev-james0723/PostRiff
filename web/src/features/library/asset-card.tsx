@@ -134,7 +134,8 @@ export function AssetCard({
   const ref = useRef<HTMLDivElement>(null);
   // Thumbnails are the stored renditions (up to 4096 px), so a card fetches only once it is near the viewport.
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
-  const image = useAssetImage(asset.id, nearView);
+  const document = asset.mime === 'application/pdf';
+  const image = useAssetImage(asset.id, nearView && !document);
   const storageMissing = image.storageNotConfigured;
   const loaded = Boolean(image.data);
   useEffect(() => {
@@ -145,7 +146,7 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const label = `Image${dims ? ` ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const label = `${document ? 'PDF document' : 'Image'}${dims ? ` ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
     <ContextMenu>
@@ -170,7 +171,7 @@ export function AssetCard({
           >
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
-              {image.data ? (
+              {document ? <div className='rafii-quiet flex aspect-square w-full flex-col items-center justify-center gap-2 text-sm'><span className='font-medium'>PDF document</span><span className='text-muted-foreground'>{asset.pages ?? 'Verified'} pages · LinkedIn</span></div> : image.data ? (
                 <div className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (

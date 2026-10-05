@@ -28,7 +28,7 @@ import {
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
-export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
+export const NEEDS_OPTIONS = new Set(['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X', 'TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
 
 export type PublishOptionsValue = Record<string, unknown> | null;
 
@@ -140,14 +140,16 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
     retry: false
   });
   const info = creator.data ?? null;
-  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : null;
-  const video = isVideo(asset) ? { durationSec } : null;
+  const photo = Boolean(asset?.mime.startsWith('image/'));
+  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : photo ? 1 : null;
+  const video = isVideo(asset) || photo ? { durationSec } : null;
   const issues = problems(choice, info, video);
   const branded = choice.commercial.enabled && choice.commercial.brandedContent;
 
   useEffect(() => {
-    onChange(toOptions(choice, info, isVideo(asset) ? { durationSec } : null));
-  }, [choice, info, asset, durationSec, onChange]);
+    const result = toOptions(choice, info, isVideo(asset) || photo ? { durationSec } : null);
+    onChange(result && photo ? { ...result, allowDuet: false, allowStitch: false, coverIndex: 0 } : result);
+  }, [choice, info, asset, durationSec, photo, onChange]);
 
   const interaction = (kind: 'comment' | 'duet' | 'stitch', key: 'allowComment' | 'allowDuet' | 'allowStitch', label: string) => (
     <Label className='flex items-center gap-2 text-sm font-normal'>
@@ -227,7 +229,7 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
       <div className='flex flex-col gap-1'>
         <span className='text-muted-foreground text-xs'>Preview</span>
         <div className='rafii-quiet rounded-md p-2 text-sm whitespace-pre-wrap'>{text || 'No caption'}</div>
-        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : 'No video chosen'}</span>
+        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : photo ? 'Photo post' : 'No media chosen'}</span>
       </div>
 
       <Caution>{UNAUDITED_NOTICE}</Caution>
@@ -252,15 +254,19 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
 function YouTubeFields({ asset, onChange }: Props) {
   const [title, setTitle] = useState('');
   const [privacy, setPrivacy] = useState('');
+  const [synthetic, setSynthetic] = useState(false);
+  const [notifySubscribers, setNotifySubscribers] = useState(true);
   const [audience, setAudience] = useState<'' | 'kids' | 'not-kids'>('');
   const titleOk = title.trim().length > 0 && !/[<>]/.test(title);
 
   useEffect(() => {
-    onChange(isVideo(asset) && titleOk && privacy && audience ? { title: title.trim(), privacyStatus: privacy, madeForKids: audience === 'kids' } : null);
-  }, [asset, title, titleOk, privacy, audience, onChange]);
+    onChange(isVideo(asset) && titleOk && privacy && audience ? { title: title.trim(), privacyStatus: privacy, madeForKids: audience === 'kids', containsSyntheticMedia: synthetic, notifySubscribers } : null);
+  }, [asset, title, titleOk, privacy, audience, synthetic, notifySubscribers, onChange]);
 
   return (
     <section className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] border p-3' aria-labelledby='youtube-options-title'>
+      <Label className='flex items-center gap-2'><Checkbox checked={synthetic} onCheckedChange={(value) => setSynthetic(value === true)} />Contains altered or synthetic media</Label>
+      <Label className='flex items-center gap-2'><Checkbox checked={notifySubscribers} onCheckedChange={(value) => setNotifySubscribers(value === true)} />Notify subscribers</Label>
       <h3 id='youtube-options-title' className='text-sm font-medium'>
         YouTube
       </h3>
@@ -312,18 +318,20 @@ function PinterestFields({ channelId, asset, onChange }: Props) {
     retry: false
   });
   const image = Boolean(asset && asset.mime.startsWith('image/'));
+  const pinVideo = isVideo(asset);
   const linkOk = !link || /^https?:\/\/\S+$/i.test(link);
 
   useEffect(() => {
-    onChange(image && board && linkOk ? { boardId: board, title: title.trim(), link: link.trim() } : null);
-  }, [image, board, title, link, linkOk, onChange]);
+    onChange((image || pinVideo) && board && linkOk ? { boardId: board, title: title.trim(), link: link.trim() } : null);
+  }, [image, pinVideo, board, title, link, linkOk, onChange]);
 
   return (
     <section className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] border p-3' aria-labelledby='pinterest-options-title'>
       <h3 id='pinterest-options-title' className='text-sm font-medium'>
         Pinterest
       </h3>
-      {!image && <Caution>A Pin needs one image. Choose it above.</Caution>}
+      {!image && !pinVideo && <Caution>A Pin needs one image or video. Choose it above.</Caution>}
+      {pinVideo && <p className='text-muted-foreground text-xs'>Uses the video’s verified cover frame. Review it in your Library before approving.</p>}
       <div className='flex flex-col gap-1.5'>
         <Label htmlFor='pinterest-board'>Board</Label>
         <Select value={board} onValueChange={(value) => setBoard(value ?? '')}>

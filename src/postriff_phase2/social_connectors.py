@@ -56,6 +56,10 @@ class XProvider(OAuthProvider):
     SCOPES = {"identity": ["tweet.read", "users.read", "offline.access"],
               "publish": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
               "schedule": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"]}
+    SCOPES = {**SCOPES, "posts_read": ["tweet.read", "users.read", "offline.access"],
+              "analytics": ["tweet.read", "users.read", "offline.access"],
+              "comments_read": ["tweet.read", "users.read", "offline.access"],
+              "reply": ["tweet.read", "tweet.write", "users.read", "offline.access"]}
     EXPLAIN = {"identity": "Connect your X account. Rafii reads nothing else from it.",
                "publish": "Rafii will post to this X account only when you approve each exact post. X charges Rafii for every post and read."}
     account_requirement = "An X account."
@@ -86,7 +90,7 @@ class XProvider(OAuthProvider):
         return _load(access_token)["at"]
 
     def identity(self, access_token):
-        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"user.fields": "profile_image_url"}), headers={"Authorization": "Bearer " + self.bearer(access_token)}), "data")
+        body = self._ok(self.api(access_token, "GET", "/2/users/me?" + urlencode({"user.fields": "profile_image_url"})), "data")
         data = body["data"] if isinstance(body["data"], dict) else {}
         if not re.fullmatch(r"\d{1,25}", str(data.get("id", ""))):
             raise AlphaError("The provider did not complete this authorization step.", 502)
@@ -113,6 +117,10 @@ class XProvider(OAuthProvider):
                               form={"token": self.bearer(token), "token_type_hint": "access_token", "client_id": self.client_id}).get("status") == 200
 
     def api(self, access_token, method, path, **kwargs):
+        if getattr(self, 'budget_enforced', False):
+            budget = getattr(access_token, 'budget', None)
+            if budget is None: raise AlphaError('X request-cost authorization is missing.', 409, code='x_budget_required')
+            budget.reserve(method, path)
         headers = {"Authorization": "Bearer " + self.bearer(access_token), **kwargs.pop("headers", {})}
         return self.transport(method, "https://api.x.com" + path, headers=headers, **kwargs)
 

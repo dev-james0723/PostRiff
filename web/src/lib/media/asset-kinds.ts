@@ -3,7 +3,7 @@
  * `kind` from `mime` (never a stored or client kind), `category` defaulting to `media`, readiness per kind.
  */
 
-export type AssetKind = 'image' | 'video';
+export type AssetKind = 'image' | 'video' | 'document';
 
 export interface AssetLike {
   mime?: string | null;
@@ -17,7 +17,7 @@ export interface AssetLike {
   deletionPending?: boolean | null;
 }
 
-const READY: Record<AssetKind, string> = { image: 'decoded', video: 'ready' };
+const READY: Record<AssetKind, string> = { image: 'decoded', video: 'ready', document: 'validated' };
 
 export function kindOf(asset: AssetLike | null | undefined): AssetKind | null {
   if (!asset) return null;
@@ -26,6 +26,7 @@ export function kindOf(asset: AssetLike | null | undefined): AssetKind | null {
   if (!mime) return 'image';
   if (mime.startsWith('video/')) return 'video';
   if (mime.startsWith('image/')) return 'image';
+  if (mime === 'application/pdf') return 'document';
   return null;
 }
 

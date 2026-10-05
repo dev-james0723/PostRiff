@@ -22,6 +22,7 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Asset, SnapshotVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { SocialOptions } from './social-options';
 import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
@@ -174,6 +175,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   // Time back: reviewing and scheduling this draft is part of its work; measured only while the dialog is open.
   useActiveWorkTimer({ workflowKey: workflowKey('variant', variantId || preselected), taskKind: 'draft', enabled: open });
   const [chosenChannelId, setChannelId] = useState<string>('');
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const [mediaAlt, setMediaAlt] = useState<Record<string, string>>({});
+  const [extraCandidate, setExtraCandidate] = useState('');
+  const [tiktokPhoto, setTiktokPhoto] = useState(false);
+  const [nativeSchedule, setNativeSchedule] = useState(false);
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
@@ -192,15 +198,21 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
-  const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
+  const socialPlatform = ['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X'].includes(variant?.platform ?? '');
+  const flexibleMedia = socialPlatform || variant?.platform === 'Pinterest' || (variant?.platform === 'TikTok' && tiktokPhoto);
+  const needsVideo = ['YouTube', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || (variant?.platform === 'TikTok' && !tiktokPhoto);
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
     (needsVideo ? isPostableVideo(candidate) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (flexibleMedia && isPostableVideo(candidate)) || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated'))), [libraryAssets, needsVideo, variant?.platform, flexibleMedia]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
+  const selectedMedia = [asset, ...extraIds.map((id) => assets.find((item) => item.id === id))].filter((item): item is Asset => Boolean(item));
+  const multiLimit = ({ LinkedIn: 20, Threads: 20, Instagram: 10, Facebook: 10, X: 4, TikTok: 35 } as Record<string, number>)[variant?.platform ?? ''] ?? 1;
+  const story = publishOptions?.format === 'story';
+  useEffect(() => { setExtraIds([]); setMediaAlt({}); setExtraCandidate(''); setNativeSchedule(false); }, [channelId, assetId]);
   // The draft's own post-role media is the default, unless the dialog was opened for a specific asset.
   const defaultAsset = preselectedAsset ? null : needsVideo
     ? variant?.media?.find((item) => item.role === 'post' && item.kind === 'video' && assets.some((candidate) => candidate.id === item.assetId))?.assetId ?? null
@@ -221,7 +233,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       (!needsImage || Boolean(asset)) &&
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
-      (!asset || kindOf(asset) === 'video' || alt.trim()) &&
+      selectedMedia.every((item, index) => kindOf(item) !== 'image' || (index === 0 ? alt.trim() : mediaAlt[item.id]?.trim())) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
       (!needsOptions || publishOptions !== null)
   );
@@ -257,13 +269,16 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           variantId: current.id,
           channelId,
           assetId: asset?.id,
+          assetIds: selectedMedia.length > 1 || tiktokPhoto ? selectedMedia.map((item) => item.id) : undefined,
+          mediaAlt,
+          omitCaption: story || undefined,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
           fold: askFold ? fold : undefined,
-          publishOptions: needsOptions ? publishOptions : undefined
+          publishOptions: needsOptions ? { ...publishOptions, ...(nativeSchedule && channel?.platform === 'YouTube' && wallTime.kind === 'exact' ? { publishAt: new Date(wallTime.at).toISOString(), privacyStatus: 'private' } : {}), ...(nativeSchedule && channel?.platform === 'Facebook' && wallTime.kind === 'exact' ? { scheduledPublishTime: Math.floor(wallTime.at / 1000) } : {}) } : undefined
         }
       });
       // The Queue (or the Calendar) shows the new review; a short toast says where it went.
@@ -417,10 +432,17 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : flexibleMedia ? 'Media' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : flexibleMedia ? variant?.platform === 'LinkedIn' ? ['image', 'video', 'document'] : ['image', 'video'] : ['image']} />
             </div>
           </div>
+
+          {variant?.platform === 'TikTok' && <Label className='flex items-center gap-2'><Checkbox checked={tiktokPhoto} onCheckedChange={(value) => { setTiktokPhoto(value === true); setAssetId(''); }} />Photo post</Label>}
+          {asset && multiLimit > 1 && <section className='flex flex-col gap-2' aria-label='Ordered media'>
+            {extraIds.map((id, index) => <div key={id} className='flex flex-col gap-1.5 rounded-lg border p-2'><span className='text-sm'>Media {index+2} · {assets.find((item) => item.id === id)?.hash.slice(0,8)}</span>{kindOf(assets.find((item) => item.id === id)) === 'image' && <Input aria-label={`Alt text for media ${index+2}`} placeholder='Describe this image' value={mediaAlt[id] ?? ''} onChange={(event) => setMediaAlt((old) => ({ ...old, [id]: event.target.value }))} />}<div className='flex gap-3'><button type='button' disabled={index === 0} className='rafii-focus text-xs underline disabled:opacity-40' onClick={() => setExtraIds((old) => { const next = [...old]; [next[index-1], next[index]] = [next[index], next[index-1]]; return next; })}>Move earlier</button><button type='button' className='rafii-focus text-xs underline' onClick={() => setExtraIds((old) => old.filter((item) => item !== id))}>Remove</button></div></div>)}
+            {selectedMedia.length < multiLimit && <><AssetPicker assets={assets.filter((item) => !selectedMedia.some((selected) => selected.id === item.id) && (['Threads','Instagram'].includes(variant?.platform ?? '') || kindOf(item) === 'image'))} value={extraCandidate} onValueChange={setExtraCandidate} kinds={['image','video']} noneLabel='Choose another media item' /><button type='button' className='rafii-focus self-start text-sm underline disabled:opacity-40' disabled={!extraCandidate} onClick={() => { setExtraIds((old) => [...old, extraCandidate]); setExtraCandidate(''); }}>Add in this order</button></>}
+          </section>}
+          {channel && ['YouTube','Facebook'].includes(channel.platform) && <Label className='flex items-center gap-2'><Checkbox checked={nativeSchedule} onCheckedChange={(value) => setNativeSchedule(value === true)} />Use platform scheduling {channel.platform === 'Facebook' ? '(feed text/photos only)' : '(initially private)'}</Label>}
 
           {askFold && (
             <div className='flex flex-col gap-1.5'>
@@ -450,7 +472,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </div>
           )}
 
-          {channel && needsOptions && (
+          {channel && socialPlatform && <SocialOptions key={channel.id} platform={channel.platform} channelId={channel.id} media={selectedMedia} onChange={setPublishOptions} />}
+          {channel && needsOptions && !socialPlatform && (
             // Keyed by account: switching accounts starts the choices again instead of carrying them over.
             <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
           )}

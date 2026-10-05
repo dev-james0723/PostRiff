@@ -232,6 +232,12 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    nativeSocialRead: (w: string, id: string, feature: string, target: string, options: Record<string, string> = {}) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-read`, { feature, target, options }),
+    nativeSocialPreview: (w: string, id: string, action: string, target: string, payload: Record<string, unknown>) =>
+      send<import('./types').NativeSocialPreview>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action`, { action, target, payload }),
+    nativeSocialApprove: (w: string, id: string, actionId: string, digest: string) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action/${encodeURIComponent(actionId)}/approve`, { digest, confirmed: true }),
     oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, string>) =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>

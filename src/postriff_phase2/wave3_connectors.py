@@ -47,9 +47,14 @@ class FacebookPagesProvider(OAuthProvider):
     id, platform, capability_version = "facebook", "Facebook", 1
     GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
     AUTH = f"https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth"
-    SCOPES = {"identity": ["pages_show_list", "business_management"],
-              "publish": ["pages_show_list", "business_management", "pages_read_engagement", "pages_manage_posts"],
-              "schedule": ["pages_show_list", "business_management", "pages_read_engagement", "pages_manage_posts"]}
+    SCOPES = {"identity": ["pages_show_list"],
+              "publish": ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
+              "schedule": ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
+              "analytics": ["pages_show_list", "pages_read_engagement", "read_insights"],
+              "comments_read": ["pages_show_list", "pages_read_engagement", "pages_read_user_content"],
+              "reply": ["pages_show_list", "pages_read_engagement", "pages_manage_engagement"],
+              "moderate": ["pages_show_list", "pages_read_engagement", "pages_manage_engagement"],
+              "messaging": ["pages_show_list", "pages_messaging"]}
     EXPLAIN = {"identity": "Connect your Facebook account and choose a Page. Rafii posts nothing until you approve a post.",
                "publish": "Rafii will post to the Facebook Page you choose only when you approve each exact post."}
     account_requirement = "A Facebook Page where you can create content."
@@ -88,19 +93,34 @@ class FacebookPagesProvider(OAuthProvider):
     def authorize_url(self, redirect, state, challenge, scopes):
         params = {"client_id": self.client_id, "redirect_uri": redirect, "state": state, "response_type": "code"}
         if self.config_id:
-            params["config_id"] = self.config_id  # Facebook Login for Business: the configuration names the permissions
+            # Business Login configurations have fixed permissions. Reusing a broad
+            # publishing/Messenger config for identity would violate progressive consent.
+            configured = getattr(self, "login_configs", {}).get(tuple(sorted(scopes)))
+            if not configured:
+                raise AlphaError("Configure a Facebook Login for Business configuration for these exact permissions.", 409)
+            params["config_id"] = configured
         else:
             params["scope"] = ",".join(scopes)
         return self.AUTH + "?" + urlencode(params)
 
     def _pages(self, user_token):
-        response = self.graph("GET", "/me/accounts", user_token, {"fields": "id,name,tasks,access_token", "limit": "100"})
-        body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") != 200 or not isinstance(body.get("data"), list):
-            raise AlphaError("Facebook didn't list your Pages. Try again.", 502)
-        return [{"id": str(p["id"]), "name": str(p.get("name") or p["id"]), "token": p["access_token"]}
-                for p in body["data"] if isinstance(p, dict) and re.fullmatch(r"\d{5,25}", str(p.get("id", "")))
-                and "CREATE_CONTENT" in (p.get("tasks") or []) and isinstance(p.get("access_token"), str)]
+        pages, cursor, seen = {}, None, set()
+        for _ in range(10):
+            params = {"fields": "id,name,tasks,access_token", "limit": "100"}
+            if cursor: params['after'] = cursor
+            response = self.graph("GET", "/me/accounts", user_token, params)
+            body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            if response.get("status") != 200 or not isinstance(body.get("data"), list):
+                raise AlphaError("Facebook didn't list your Pages. Try again.", 502)
+            for p in body['data']:
+                if isinstance(p, dict) and re.fullmatch(r'\d{5,25}', str(p.get('id', ''))) and isinstance(p.get('access_token'), str):
+                    pages[str(p['id'])] = {'id':str(p['id']), 'name':str(p.get('name') or p['id']), 'token':p['access_token'], 'tasks':list(p.get('tasks') or [])}
+            paging = body.get('paging') or {}
+            if not paging.get('next'): return list(pages.values())
+            cursor = (paging.get('cursors') or {}).get('after')
+            if not isinstance(cursor, str) or not 1 <= len(cursor) <= 4096 or cursor in seen: break
+            seen.add(cursor)
+        raise AlphaError('Page discovery exceeded its safe pagination bound; select a narrower Business account.', 409)
 
     def _granted(self, user_token):
         response = self.graph("GET", "/me/permissions", user_token)
@@ -150,20 +170,14 @@ class FacebookPagesProvider(OAuthProvider):
         live = self._granted(session["ut"])
         if live is not None:
             return live
-        # The 60-day user token may have lapsed while the Page token keeps working: then the grant recorded at connect
-        # time stands, but only after the Page token itself answers.
-        if isinstance(session.get("page"), dict):
-            try:
-                self.identity(access_token)
-            except AlphaError:
-                return None
-            return sorted(set(session.get("scope") or []))
+        # A surviving Page token proves identity, not that historic permissions
+        # remain granted. Reconnect when the live grant cannot be inspected.
         return None
 
     def destinations(self, access_token):
         session = self.session(access_token)
         chosen = (session.get("page") or {}).get("id")
-        return [{"id": p["id"], "name": p["name"], "kind": "page", "selected": p["id"] == chosen} for p in self._pages(session["ut"])]
+        return [{"id": p["id"], "name": p["name"], "kind": "page", "tasks": p.get("tasks", []), "selected": p["id"] == chosen} for p in self._pages(session["ut"])]
 
     def with_destination(self, access_token, destination_id):
         session = self.session(access_token)
@@ -171,6 +185,14 @@ class FacebookPagesProvider(OAuthProvider):
         if page is None:
             raise AlphaError("Choose a Page you can create content on.", 409)
         return json.dumps({**session, "page": page})
+
+    def revalidate_page(self, access_token, task):
+        session = self.session(access_token)
+        selected = (session.get("page") or {}).get("id")
+        page = next((p for p in self._pages(session["ut"]) if p["id"] == selected), None)
+        if page is None or (task and not ({task, "PROFILE_PLUS_"+task, "MANAGE", "PROFILE_PLUS_FULL_CONTROL"} & set(page.get("tasks", [])))):
+            raise AlphaError("The selected Page no longer grants the required task. Reconnect and review.", 409)
+        return page
 
     def revoke(self, token):
         response = self.graph("DELETE", "/me/permissions", self.session(token)["ut"])
@@ -188,6 +210,15 @@ class YouTubeProvider(OAuthProvider):
     UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos"
     UPLOAD_SCOPE, READ_SCOPE = "https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"
     SCOPES = {"identity": [READ_SCOPE], "publish": [UPLOAD_SCOPE, READ_SCOPE], "schedule": [UPLOAD_SCOPE, READ_SCOPE]}
+    SCOPES = {**SCOPES,
+              "posts_read": [READ_SCOPE],
+              "analytics": [READ_SCOPE, "https://www.googleapis.com/auth/yt-analytics.readonly"],
+              "monetary_analytics": [READ_SCOPE, "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"],
+              "comments_read": [READ_SCOPE],
+              "reply": [READ_SCOPE, "https://www.googleapis.com/auth/youtube.force-ssl"],
+              "moderate": [READ_SCOPE, "https://www.googleapis.com/auth/youtube.force-ssl"],
+              "manage": [READ_SCOPE, "https://www.googleapis.com/auth/youtube.force-ssl"],
+              "memberships": [READ_SCOPE, "https://www.googleapis.com/auth/youtube.channel-memberships.creator"]}
     EXPLAIN = {"identity": "Connect your YouTube channel. Rafii reads only the channel's name.",
                "publish": "Rafii will upload videos to this channel only when you approve each exact upload. Until Google audits Rafii, YouTube keeps every upload private."}
     account_requirement = "A Google account with a YouTube channel."
@@ -253,6 +284,7 @@ class TikTokProvider(OAuthProvider):
     AUTH = "https://www.tiktok.com/v2/auth/authorize/"
     API = "https://open.tiktokapis.com"
     SCOPES = {"identity": ["user.info.basic"], "publish": ["user.info.basic", "video.publish"], "schedule": ["user.info.basic", "video.publish"]}
+    SCOPES = {**SCOPES, "posts_read": ["user.info.basic", "video.list"], "upload_inbox": ["user.info.basic", "video.upload"]}
     EXPLAIN = {"identity": "Connect your TikTok account. Rafii reads only your display name and avatar.",
                "publish": "Rafii will post to this TikTok account only when you approve each exact post. Until TikTok audits Rafii, posts are private: only you can see them."}
     account_requirement = "A TikTok account. Until TikTok audits Rafii, posts are private."
@@ -372,6 +404,15 @@ class PinterestProvider(OAuthProvider):
     API, SANDBOX = "https://api.pinterest.com", "https://api-sandbox.pinterest.com"
     SCOPES = {"identity": ["user_accounts:read"], "publish": ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
               "schedule": ["user_accounts:read", "boards:read", "pins:read", "pins:write"]}
+    SCOPES = {**SCOPES,
+              "posts_read": ["user_accounts:read", "pins:read"],
+              "analytics": ["user_accounts:read", "pins:read"],
+              "boards": ["user_accounts:read", "boards:read", "boards:write"],
+              "trends": ["user_accounts:read"],
+              'commerce':['user_accounts:read','catalogs:read'],
+              'commerce_write':['user_accounts:read','catalogs:read','catalogs:write'],
+              'product_tag':['user_accounts:read','boards:read','boards:write','pins:read','pins:write'],
+              'audience_insights':['user_accounts:read','ads:read']}
     EXPLAIN = {"identity": "Connect your Pinterest account. Rafii reads only your profile.",
                "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin."}
     account_requirement = "A Pinterest account with at least one board."

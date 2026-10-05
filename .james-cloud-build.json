@@ -1,0 +1,59 @@
+{
+  "provider": "depot",
+  "checkoutPersistCredentials": true,
+  "orgId": "jf34f85hr0",
+  "baseRef": "refs/remotes/origin/consumer-saas",
+  "packageRoot": "web",
+  "nodeVersion": "24.15.0",
+  "packageManager": "npm",
+  "packageManagerVersion": "11.12.1",
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
+  },
+  "tasks": {
+    "lint": "lint",
+    "typecheck": "typecheck",
+    "build": "build",
+    "test": "test:jcb",
+    "ci": "ci:jcb",
+    "e2e": "e2e:social"
+  },
+  "environment": {
+    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1",
+    "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
+    "POSTRIFF_DEV_SSR": "1",
+    "LC_ALL": "C"
+  },
+  "envAllowlist": [],
+  "localFallback": false,
+  "outputs": [],
+  "inputExcludes": [
+    "docs/**",
+    "downloads/**",
+    "motion/**",
+    "artifacts/**",
+    "vendor/**",
+    ".preview/**",
+    "audio-reactive-fix/**",
+    "PostRiff_Research_2026-09-18/**",
+    "*.zip"
+  ],
+  "installCommand": "npm ci",
+  "taskArgs": {
+    "lint": [
+      "--format",
+      "json"
+    ],
+    "test": [
+      "--backend-only"
+    ]
+  },
+  "framework": "next",
+  "cacheScope": "e408bbcd8242",
+  "lockfile": "package-lock.json",
+  "lockfileSha256": "28a8b452939d55d45e7423c759c0c49f4d7ad8e7c13e5c0a06e2de7348c13434"
+}

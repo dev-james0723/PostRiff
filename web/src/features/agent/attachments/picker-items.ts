@@ -220,7 +220,7 @@ export function allPickerItems(
     const like = asset as AssetLike;
     if (!id || !isLibraryAsset(like) || !isReady(like)) return;
     const kind = kindOf(like);
-    if (!kind) return;
+    if (!kind || kind === 'document') return;
     items.push({
       kind,
       id,

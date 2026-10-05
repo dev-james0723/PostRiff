@@ -18,7 +18,7 @@ export const CAPABILITY_CHIPS: readonly CapabilityChipDef[] = [
   { key: 'identity', label: 'Identity', meaning: 'The account you signed in with.' },
   { key: 'publish', label: 'Publish', meaning: 'Posts you approve.' },
   { key: 'schedule', label: 'Schedule', meaning: 'Approved posts go out at their time.' },
-  { key: 'analytics', label: 'Analytics', meaning: 'Reach and engagement for your posts.' },
+  { key: 'analytics', label: 'Analytics', meaning: 'Metrics returned by the platform.' },
   { key: 'comments_read', label: 'Comments', meaning: 'Comments and replies on your posts.' },
   { key: 'reply', label: 'Reply', meaning: 'Replies you approve.' }
 ];
@@ -39,9 +39,10 @@ export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
   { key: 'identity', label: 'Account only', description: 'Confirms the account. No posting.' },
   { key: 'posts_read', label: 'Read my posts', description: 'To learn your voice. You pick the posts and approve analysis. No posting.' },
   { key: 'publish', label: 'Publish', description: 'Posts only what you approve.' },
-  { key: 'analytics', label: 'Analytics', description: 'Reads reach and engagement.' },
+  { key: 'analytics', label: 'Analytics', description: 'Reads metrics supplied by the platform.' },
   { key: 'comments_read', label: 'Comments', description: 'Reads comments and replies.' },
-  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' }
+  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' },
+  ...(['organization_identity', 'organization_publish', 'organization_analytics', 'organization_video_analytics', 'organization_posts_read', 'organization_comments_read', 'organization_reply', 'moderate', 'manage', 'monetary_analytics', 'memberships', 'boards', 'trends', 'upload_inbox', 'delete', 'mentions', 'location', 'audience_insights', 'product_tag', 'messaging', 'commerce', 'commerce_write'] as const).map((key) => ({ key, label: key.replace(/_/g, ' '), description: 'Enable this feature separately. The platform lists the exact permissions before you grant them.' }))
 ];
 
 /** One line per capability level, for hover cards and InfoTips (never inline on the card). */

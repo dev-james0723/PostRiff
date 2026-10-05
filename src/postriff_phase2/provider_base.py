@@ -1,7 +1,7 @@
 """Shared base for hosted channel adapters. `providers.py` re-exports these names and owns `http_transport`."""
 from postriff_alpha.domain import AlphaError
 
-GRAPH_VERSION = "v24.0"  # current Graph API version read in the 2026-09-15 audit; re-verify at review time
+GRAPH_VERSION = "v26.0"  # Meta's official SDK API_VERSION, verified 2026-10-05; app/live eligibility remains separate.
 
 NORMALIZED_CAPABILITY_KEYS = (
     "identity", "account_discovery", "publish_text", "publish_image", "publish_video",
