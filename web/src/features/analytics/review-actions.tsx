@@ -2,16 +2,19 @@
 
 import Link from 'next/link';
 import { useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { useCoworkerApi } from '@/lib/coworker/hooks';
 import { errorMessage } from '@/lib/coworker/api';
+import { ApiError } from '@/lib/api/client';
+import { growthLoopQueryKey } from '@/features/growth/growth-loop';
 import type { ClassificationTag, ReviewInput, ReviewProjection, ReviewSnapshot } from '@/lib/analytics/review-contract';
 
 const field = 'rafii-field rafii-focus mt-1 w-full min-w-0 rounded-md border p-2';
 
 export function ReviewActions({projection:p,scope,onScope,refresh,visible=true}:{projection:ReviewProjection;scope:ReviewInput;onScope:(v:Partial<ReviewInput>)=>void;refresh:()=>Promise<void>;visible?:boolean}) {
   const {api,w,enabled}=useCoworkerApi();
+  const cache=useQueryClient();
   const views=useQuery({queryKey:['review-views',w,p.resolvedContext.rightsEpoch,p.workspaceRevision],enabled,retry:false,queryFn:()=>api.reviewViews(w)});
   const [busy,setBusy]=useState<string|null>(null),[message,setMessage]=useState(''),[error,setError]=useState('');
   const [viewId,setViewId]=useState(''),[name,setName]=useState('');
@@ -24,7 +27,7 @@ export function ReviewActions({projection:p,scope,onScope,refresh,visible=true}:
   const setReport=(record:ReviewSnapshot|null)=>setSavedReport(record?{scopeKey,record}:null);
   const keys=useRef(new Map<string,string>());
   function key(body:unknown){const hash=JSON.stringify(body);if(!keys.current.has(hash))keys.current.set(hash,crypto.randomUUID());return keys.current.get(hash)!;}
-  async function run(label:string,action:()=>Promise<void>){if(busy)return;setBusy(label);setError('');setMessage('');try{await action();}catch(e){setError(errorMessage(e,'This action could not be verified. Retry the same request.'));}finally{setBusy(null);}}
+  async function run(label:string,action:()=>Promise<void>){if(busy)return;setBusy(label);setError('');setMessage('');try{await action();}catch(e){setError(errorMessage(e,'This action could not be verified. Retry the same request.'));if(e instanceof ApiError&&[401,403,409,410].includes(e.status)){setReport(null);await refresh();}}finally{setBusy(null);}}
   const selected=views.data?.views.find(v=>v.id===viewId);
   const publications=[...new Map(p.nativeResults.filter(e=>e.accessState==='allowed'&&e.displayPermission==='allowed').map(e=>[e.publicationBinding.jobId,e.publicationBinding])).values()];
   const publication=publications.find(b=>b.jobId===jobId)??publications[0];
@@ -84,7 +87,7 @@ export function ReviewActions({projection:p,scope,onScope,refresh,visible=true}:
         <label className='text-sm'>Aggregate<select className={field} value={scope.aggregation??'median'} onChange={e=>onScope({...scope,cutoffAt:undefined,aggregation:e.target.value as 'median'|'mean'})}><option value='median'>Median</option><option value='mean'>Mean</option></select></label>
       </div>{views.error&&<p role='alert' className='mt-3 text-sm'>{errorMessage(views.error,'Saved Views are unavailable.')}</p>}
     </details>
-    <div><h3 className='text-sm font-medium'>Observations and one next test</h3>{!p.takeaways.length?<p className='text-muted-foreground text-sm'>Too few comparable publications for a takeaway. Collect comparable readings before choosing a treatment.</p>:<div className='mt-2 space-y-3'>{p.takeaways.map(t=><article key={t.id} className='rounded-lg border p-3 text-sm'><p>{t.statement}</p><p className='text-muted-foreground mt-1 text-xs'>{t.sampleSize} posts · {t.actualPeriod.start} → {t.actualPeriod.end} · {t.supportBindings.length} supporting / {t.counterEvidenceBindings.length} counter-evidence readings · causal=false</p><details className='mt-2'><summary className='rafii-focus cursor-pointer'>Exact sources</summary><ul className='mt-2 break-all text-xs'>{[...t.supportBindings,...t.counterEvidenceBindings].map(e=><li key={e.observationId}>{e.publicationBinding.jobId} · {e.observationId} · {e.value} · {e.observedAt}</li>)}</ul></details>{t.nextStep.kind==='propose'&&t.nextStep.hypothesisId?<Button variant='quiet' disabled={Boolean(busy)} onClick={()=>void run('experiment',async()=>{const body={hypothesisId:t.nextStep.hypothesisId!,minimumPerArm:5,windowDays:14,reviewScope:fixedScope,reviewContextDigest:p.contextDigest,reviewBasisDigest:p.basisDigest};const saved=await api.proposeGrowthExperiment(w,{...body,idempotencyKey:key(body)});if(!saved.verified)throw new Error('Experiment proposal not verified.');setMessage('Existing Growth Loop experiment proposed. Owner acceptance and preparation remain separate.');await refresh();})}>Propose this controlled test</Button>:<Link className='rafii-focus mt-2 inline-block underline' href={t.nextStep.href}>{t.nextStep.label}</Link>}</article>)}</div>}</div>
+    <div><h3 className='text-sm font-medium'>Observations and one next test</h3>{!p.takeaways.length?<p className='text-muted-foreground text-sm'>Too few comparable publications for a takeaway. Collect comparable readings before choosing a treatment.</p>:<div className='mt-2 space-y-3'>{p.takeaways.map(t=><article key={t.id} className='rounded-lg border p-3 text-sm'><p>{t.statement}</p><p className='text-muted-foreground mt-1 text-xs'>{t.sampleSize} posts · {t.actualPeriod.start} → {t.actualPeriod.end} · {t.supportBindings.length} supporting / {t.counterEvidenceBindings.length} counter-evidence readings · causal=false</p><details className='mt-2'><summary className='rafii-focus cursor-pointer'>Exact sources</summary><ul className='mt-2 break-all text-xs'>{[...t.supportBindings,...t.counterEvidenceBindings].map(e=><li key={e.observationId}>{e.publicationBinding.jobId} · {e.observationId} · {e.value} · {e.observedAt}</li>)}</ul></details>{t.nextStep.kind==='propose'&&t.nextStep.hypothesisId?<Button variant='quiet' disabled={Boolean(busy)} onClick={()=>void run('experiment',async()=>{const body={hypothesisId:t.nextStep.hypothesisId!,minimumPerArm:5,windowDays:14,reviewScope:fixedScope,reviewContextDigest:p.contextDigest,reviewBasisDigest:p.basisDigest};const saved=await api.proposeGrowthExperiment(w,{...body,idempotencyKey:key(body)});if(!saved.verified)throw new Error('Experiment proposal not verified.');setMessage('Existing Growth Loop experiment proposed. Owner acceptance and preparation remain separate.');await cache.invalidateQueries({queryKey:growthLoopQueryKey(w)});await refresh();})}>Propose this controlled test</Button>:<Link className='rafii-focus mt-2 inline-block underline' href={t.nextStep.href}>{t.nextStep.label}</Link>}</article>)}</div>}</div>
     <details open={reportOpen} onToggle={e=>setReportOpen(e.currentTarget.open)}><summary className='rafii-focus cursor-pointer text-sm font-medium'>Fixed weekly / monthly report</summary><div className='mt-3 space-y-3'>
       <label className='block text-sm'>Report frequency<select className={field} value={frequency} onChange={e=>setFrequency(e.target.value as 'weekly'|'monthly')}><option value='weekly'>Weekly</option><option value='monthly'>Monthly</option></select></label>
       <label className='block text-sm'>Human notes<textarea aria-label='Human notes' className={field} value={notes} maxLength={4000} rows={4} onChange={e=>setNotes(e.target.value)}/></label>

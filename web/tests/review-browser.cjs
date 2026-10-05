@@ -112,7 +112,14 @@ await panel.locator('summary').filter({hasText:'Metric sources, missing values a
 await panel.getByText('Earlier reading; a later attempt failed',{exact:false}).waitFor();await shot('review-stale');
 await seed(wid,'partial');await page.reload();await panel.getByText('11 of 12 publications have qualified readings.',{exact:false}).waitFor();await shot('review-partial');
 checks.push('real PG later unavailable attempt preserves old value with stale label; partial coverage retains missing values and per-metric sample counts');
-await seed(wid,'revoked');await page.goto(base+'/app/analytics?reviewScope='+encodeURIComponent(JSON.stringify(saved.views[0].filterDefinition)));await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
+await seed(wid,'revoked');
+await panel.locator('summary').filter({hasText:'Fixed weekly / monthly report'}).click();
+await panel.getByLabel('Reopen a saved version',{exact:true}).selectOption(last.snapshotId+':2');
+await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor({timeout:15000});
+assert.ok(!(await panel.textContent()).includes('A bounded question about practice?'));
+assert.equal(await panel.getByRole('button',{name:'Download CSV',exact:true}).count(),0);await shot('review-revoked-in-place');
+checks.push('real report current-rights refusal refreshes stale native values, original content and report controls in place without a reload');
+await page.goto(base+'/app/analytics?reviewScope='+encodeURIComponent(JSON.stringify(saved.views[0].filterDefinition)));await panel.getByText('No comparable native readings in this scope.',{exact:false}).waitFor();
 assert.equal(await panel.getByText('likes: 0',{exact:false}).count(),0);assert.ok(!(await panel.innerText()).includes('A bounded question about practice?'));await shot('review-revoked');
 await seed(wid,'empty');await page.goto(base+'/app/analytics');await panel.getByText('No connected account.',{exact:false}).waitFor();await shot('review-empty');
 checks.push('real backend revocation removes values and content; empty account state remains actionable');
