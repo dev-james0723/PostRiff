@@ -570,6 +570,18 @@ def route(app,environ,start_response,method,path):
         return app._json(start_response,200,readiness(service,values),extra_headers=[('Cache-Control','private, no-store')])
     if not enabled(values):raise AlphaError('Agent Team is disabled.',503,code='agent_team_disabled')
     service=app._runtime();store=TeamStore(service.connection_factory)
+    if tail == '/live-call-test' or tail.startswith('/live-call-test/'):
+        from . import staging_live_call
+        authorize(environ, values, 'verifier')
+        if tail == '/live-call-test' and method == 'GET':
+            result = staging_live_call.preview(service, values)
+        elif tail == '/live-call-test' and method == 'POST':
+            result = staging_live_call.start(service, values, body(environ))
+        elif method == 'GET' and tail.count('/') == 2:
+            result = staging_live_call.status(service, values, tail.rsplit('/', 1)[1])
+        else:
+            raise AlphaError('Unknown voice test route.', 404)
+        return app._json(start_response, 200, result, extra_headers=[('Cache-Control', 'private, no-store')])
     if tail.startswith('/acceptance/'):
         from .agent_team_acceptance import require_acceptance, acceptance_report, call_acceptance
         require_acceptance(values)

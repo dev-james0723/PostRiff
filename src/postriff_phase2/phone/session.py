@@ -11,6 +11,7 @@ from postriff_alpha.domain import AlphaError
 
 from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.greeting import opening
+from ..staging_live_call import is_voice_test_call
 from . import billing, resume, store
 from .providers.base import TelephonyMediaTransport
 from .diagnostics import MediaFailure, report_failure, handshake_request_id
@@ -38,6 +39,21 @@ class PhoneSessionController:
 
     def configuration(self):
         value = self.call
+        if is_voice_test_call(value):
+            # No daily briefing/history, personal tools, decisions or native agent dependency.
+            self.opening_greeting = 'James，你好，我係用 GPT Live 同你通話嘅 AI 助手。你而家聽唔聽到我？'
+            config = live.session_config(self.runtime.cfg.route('voice_front_end', reason='phone media').model,
+                                         'yue', 'marin')
+            config['audio']['format'] = {'type': 'audio/pcmu', 'rate': 8000}
+            config['instructions'] = (
+                'You are an AI assistant speaking with James through GPT Live on a real telephone call. '
+                'Use natural Cantonese unless he requests another language. This is a two-way voice test. '
+                'Keep replies short, answer conversational questions directly, and pause to listen. '
+                'Stop speaking when interrupted. You have no personal data or task tools in this test. '
+                'Do not delegate, start agents, record decisions, or claim any external action. '
+                'Do not invent current facts. If asked for tools or fresh data, explain this voice test cannot access them. '
+                'No audio recording. Say goodbye when asked to end the call.')
+            return config
         with self.runtime.service.repository.transaction(self.capability, value['workspace_id']) as (cur, _row, principal):
             agent_style = style.load(cur, principal)
             locale, voice = live.locale_and_voice({}, agent_style)
@@ -144,6 +160,11 @@ class PhoneSessionController:
         with self.lock:
             if self.closed:
                 return None
+            if is_voice_test_call(self.call):
+                self.user_text = ''
+                return self._commentary(delegation_id,
+                    'This is a voice-only test with no backend tools. Answer conversationally from this call; '
+                    'explain that external data or actions are unavailable. Do not delegate again.')
             text = self.user_text.strip()
             personal_call = self.call.get('destination_ref') == 'james_env'
             with self.runtime.service.repository.transaction(self.capability, self.call['workspace_id']) as (cur, _row, principal):
@@ -329,7 +350,9 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 if not controller.call.get('media_generation',0) and not greeting_sent:
                     greeting_sent = True
                     directive = ('Speak first now. Say this opening greeting verbatim: ' + controller.opening_greeting)
-                    if controller.call.get('destination_ref') == 'james_env':
+                    if is_voice_test_call(controller.call):
+                        directive += ' Then pause and listen for James to answer. This is only a two-way voice test.'
+                    elif controller.call.get('destination_ref') == 'james_env':
                         if getattr(controller,'agent_team_report_call',False):
                             directive += (' Then immediately brief the immutable Agent Team report loaded in developer context: '
                                           'verified progress, attempts, impact, and evidence gaps. Ask its exact original mission decision question. '
