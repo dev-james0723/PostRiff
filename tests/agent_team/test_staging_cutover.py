@@ -34,6 +34,11 @@ class AgentTeamStagingCutoverTests(unittest.TestCase):
         self.assertTrue(call_enabled(values))
         self.assertEqual(cutover_source(values), "environment")
 
+    def test_direct_daily_call_gate_preserves_call_flag_semantics(self):
+        values={"JAMES_AGENT_TEAM_ENABLED":"0","JAMES_AGENT_TEAM_CALL_ENABLED":"1"}
+        self.assertFalse(team_enabled(values))
+        self.assertTrue(call_enabled(values))
+
     def test_emergency_disable_wins_over_staging_and_environment(self):
         values=self.staging(JAMES_AGENT_TEAM_ENABLED="1",JAMES_AGENT_TEAM_CALL_ENABLED="1",
                             JAMES_AGENT_TEAM_EMERGENCY_DISABLE="1")
