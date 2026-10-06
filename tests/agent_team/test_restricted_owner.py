@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 from agent_team.recovery import RecoveryBlocked
 from agent_team.restricted_owner import (native_argv, parse_native_result, private,
-    sandbox_profile, verify_ancestry, workspace_snapshot, authenticated_envelope, authenticated_body)
+    sandbox_profile, verify_ancestry, workspace_snapshot, authenticated_envelope, authenticated_body,
+    parse_quota_rejection)
 
 SESSION='11111111-2222-3333-4444-555555555555'
 TURN='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
@@ -44,6 +45,37 @@ class RestrictedOwnerTests(unittest.TestCase):
         rows=copy.deepcopy(self.rows)
         rows.insert(1,{'type':'assistant','message':{'content':[{'type':'tool_use','name':'Write'}]}})
         with self.assertRaisesRegex(RecoveryBlocked,'tool_dispatch'):parse_native_result(rows,session=SESSION)
+
+    def rejected_rows(self):
+        return [copy.deepcopy(self.rows[0]),
+            {'type':'rate_limit_event','session_id':SESSION,'rate_limit_info':{
+                'status':'rejected','isUsingOverage':False,'overageStatus':'rejected','resetsAt':2000000000}},
+            {'type':'result','session_id':SESSION,'uuid':TURN,'is_error':True,'api_error_status':429,
+             'terminal_reason':'api_error','num_turns':1,'total_cost_usd':0,'modelUsage':{},
+             'permission_denials':[],'usage':{'input_tokens':0,'output_tokens':0,
+                 'cache_creation_input_tokens':0,'cache_read_input_tokens':0}}]
+
+    def test_proven_zero_usage_quota_rejection_never_becomes_a_successful_turn(self):
+        rows=self.rejected_rows();receipt=parse_quota_rejection(rows,session=SESSION)
+        self.assertFalse(receipt['successfulNativeTurn'])
+        self.assertEqual(receipt['terminalState'],'provider_quota_rejected')
+        self.assertEqual(receipt['providerUsageTokens'],0)
+        with self.assertRaises(RecoveryBlocked):parse_native_result(rows,session=SESSION)
+
+    def test_reconciliation_rejects_usage_tools_partial_result_and_other_errors(self):
+        for index,key,value in [(0,'tools',['Bash']),(0,'mcp_servers',[{'name':'unexpected'}]),
+                (2,'is_error',False),(2,'api_error_status',500),(2,'num_turns',2),
+                (2,'total_cost_usd',.01),(2,'modelUsage',{'model':{'inputTokens':1}}),
+                (2,'uuid',None),(2,'session_id',TURN),(2,'permission_denials',[{'tool':'Bash'}])]:
+            rows=self.rejected_rows();rows[index][key]=value
+            with self.subTest(key=key),self.assertRaises(RecoveryBlocked):parse_quota_rejection(rows,session=SESSION)
+        rows=self.rejected_rows();rows[-1]['usage']['input_tokens']=1
+        with self.assertRaises(RecoveryBlocked):parse_quota_rejection(rows,session=SESSION)
+        rows=self.rejected_rows();rows.insert(1,{'type':'assistant','message':{'content':[{'type':'tool_use'}]}})
+        with self.assertRaises(RecoveryBlocked):parse_quota_rejection(rows,session=SESSION)
+        rows=self.rejected_rows();rows[1]['rate_limit_info']['isUsingOverage']=True
+        with self.assertRaises(RecoveryBlocked):parse_quota_rejection(rows,session=SESSION)
+        with self.assertRaises(RecoveryBlocked):parse_quota_rejection(self.rejected_rows()[:-1],session=SESSION)
 
     def test_native_argv_preserves_session_and_removes_all_tool_authority(self):
         args=native_argv('/installed/claude','/private/native-settings.json',SESSION,resume=True)

@@ -14,6 +14,7 @@ from dataclasses import asdict
 import hashlib
 import hmac
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -213,6 +214,118 @@ def registration_from(body):
     return Registration(**d)
 
 
+def parse_quota_rejection(rows, *, session):
+    """A terminal zero-usage rejection is never a successful native turn."""
+    init = next((r for r in rows if r.get('type') == 'system' and r.get('subtype') == 'init'), None)
+    result = rows[-1] if rows else None
+    quota = next((r.get('rate_limit_info') for r in rows if r.get('type') == 'rate_limit_event'
+                  and r.get('session_id') == session), None)
+    def zero_counts(value):
+        if isinstance(value, dict): return all(zero_counts(v) for v in value.values())
+        if isinstance(value, list): return not value
+        if type(value) in (int, float): return math.isfinite(value) and value == 0
+        return value is None or isinstance(value, str)
+    usage = result.get('usage') if isinstance(result, dict) else None
+    if (not init or init.get('session_id') != session or init.get('tools') != []
+            or init.get('mcp_servers') not in ([], {}) or not isinstance(init.get('model'), str)
+            or not init['model'] or not isinstance(result, dict) or result.get('type') != 'result'
+            or result.get('session_id') != session or result.get('is_error') is not True
+            or result.get('api_error_status') != 429 or result.get('terminal_reason') != 'api_error'
+            or type(result.get('num_turns')) is not int or result['num_turns'] != 1
+            or type(result.get('total_cost_usd')) not in (int, float) or result['total_cost_usd'] != 0
+            or result.get('modelUsage') != {} or result.get('permission_denials') != []
+            or not isinstance(usage, dict) or not zero_counts(usage)
+            or any(type(usage.get(k)) is not int or usage[k] != 0 for k in
+                   ('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'))
+            or not isinstance(quota, dict) or quota.get('status') != 'rejected'
+            or quota.get('isUsingOverage') is not False or quota.get('overageStatus') != 'rejected'
+            or type(quota.get('resetsAt')) not in (int, float) or not math.isfinite(quota['resetsAt'])
+            or quota['resetsAt'] <= 0
+            or any(r.get('type') == 'assistant' and any(c.get('type') in ('tool_use', 'tool_result')
+                   for c in r.get('message', {}).get('content', []) if isinstance(c, dict)) for r in rows)):
+        raise RecoveryBlocked('native_terminal_rejection_unproven')
+    try:
+        if str(UUID(session)) != session or str(UUID(result['uuid'])) != result['uuid']: raise ValueError()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise RecoveryBlocked('native_terminal_identity_unproven') from None
+    return {'sessionId': session, 'model': init['model'], 'terminalResultId': result['uuid'],
+            'terminalState': 'provider_quota_rejected', 'quotaResetsAt': quota['resetsAt'],
+            'successfulNativeTurn': False, 'providerUsageTokens': 0, 'apiEquivalentCostUsd': 0}
+
+
+def reconcile_rejected_seed(root, *, request_id, checkpoint_sha, output_sha):
+    """Offline CAS reconciliation after the owning daemon has stopped.
+
+    Only its one sealed, tool-free, zero-usage quota rejection is recognized.
+    The immutable native output/checkpoint remain intact. No resume, retry,
+    guard attestation, source event or successful-result file is produced.
+    """
+    root = private(root, directory=True)
+    policy = json.loads(private(root/'policy.json').read_text())
+    ready = json.loads(private(root/'owner-ready.json').read_text())
+    r = registration_from(json.loads(private(root/'registration.json').read_text()))
+    if (ready.get('bootstrappedByOrc') is not True or ready.get('policySha256') != digest(policy)
+            or NativeOwner(**ready['owner']) != r.owner or r.engine != 'claude-code'
+            or policy['sessionId'] != r.native_session_id or policy['worktree'] != r.worktree
+            or policy['authorizationSha256'] != r.authorization_sha256
+            or r.descendant_refs or r.background_refs or r.ci_refs):
+        raise RecoveryBlocked('terminal_reconciliation_binding_mismatch')
+    try:
+        _, start = process_identity(r.owner.pid)
+    except subprocess.CalledProcessError:
+        pass
+    else:
+        raise RecoveryBlocked('native_owner_must_stop_before_reconciliation' if start == r.owner.process_start
+                              else 'owner_pid_reused')
+    for name, expected in policy['guardedFiles'].items():
+        if file_sha256(name) != expected: raise RecoveryBlocked('native_guard_configuration_changed')
+    output = private(root/'native-output.jsonl')
+    if output.stat().st_size > MAX_MESSAGE or file_sha256(output) != output_sha:
+        raise RecoveryBlocked('native_terminal_output_changed')
+    result = parse_quota_rejection([json.loads(line) for line in output.read_text().splitlines() if line.strip()],
+                                  session=r.native_session_id)
+    store = RecoveryStore(str(private(root/'recovery.sqlite3')))
+    cp = _checkpoint(store, r, checkpoint_sha)
+    current = workspace_snapshot(r.worktree)
+    if (current.head, current.dirty_sha256) != (cp.workspace.head, cp.workspace.dirty_sha256):
+        raise RecoveryBlocked('terminal_checkpoint_workspace_changed')
+    if store.db.execute('SELECT 1 FROM recovery_leases WHERE worktree=? AND expires_at>?',
+                        (r.worktree, time.time())).fetchone():
+        raise RecoveryBlocked('terminal_reconciliation_active_lease')
+    ledger = sqlite3.connect(str(private(root/'owner-delivery.sqlite3')), isolation_level=None)
+    ledger.execute('BEGIN IMMEDIATE')
+    try:
+        row = ledger.execute('SELECT method,payload_sha,state FROM operations WHERE id=?', (request_id,)).fetchone()
+        if (not row or row[:2] != ('seed', digest({'checkpointSha256': checkpoint_sha}))
+                or row[2] not in ('unknown', 'rejected')
+                or ledger.execute("SELECT 1 FROM operations WHERE id<>? AND state IN ('unknown','reserved')",
+                                  (request_id,)).fetchone()):
+            raise RecoveryBlocked('terminal_reconciliation_operation_mismatch')
+        if row[2] == 'rejected':
+            existing = json.loads(private(root/'native-terminal-rejection.json').read_text())
+            if any(existing.get(k) != v for k, v in
+                   {'requestId': request_id, 'checkpointSha256': checkpoint_sha, 'outputSha256': output_sha,
+                    'registrationSha256': r.fingerprint, **result}.items()):
+                raise RecoveryBlocked('terminal_reconciliation_receipt_mismatch')
+            ledger.execute('COMMIT')
+            return existing
+        receipt = {**result, 'executionState': 'known_rejected_seed_reconciled', 'requestId': request_id,
+                   'checkpointSha256': checkpoint_sha, 'outputSha256': output_sha,
+                   'registrationSha256': r.fingerprint, 'observedAt': time.time(),
+                   'ownerStopped': True, 'nativeGuardVerified': False, 'retryDispatched': False}
+        write_private(root/'native-terminal-rejection.json', receipt)
+        if row[2] == 'unknown':
+            ledger.execute("UPDATE operations SET state='rejected' WHERE id=? AND state='unknown'", (request_id,))
+            if ledger.execute('SELECT changes()').fetchone()[0] != 1:
+                raise RecoveryBlocked('terminal_reconciliation_cas_failed')
+        ledger.execute('COMMIT')
+        return receipt
+    except BaseException:
+        ledger.execute('ROLLBACK'); raise
+    finally:
+        ledger.close(); store.db.close()
+
+
 class RestrictedOwner:
     """One serial owner; every admitted continuation is tied to a durable attempt."""
     def __init__(self, root, *, clock=time.time):
@@ -352,7 +465,7 @@ class RestrictedOwner:
             raise RecoveryBlocked('native_readonly_workspace_changed')
         result.update(workspaceHead=after.head,workspaceDirtySha256=after.dirty_sha256,guardRef=self.guard_ref)
         write_private(self.root/'native-result.json',result)
-        return result
+    return result
 
     def dispatch(self, method, data, request_id):
         if method=='observe':
@@ -492,7 +605,14 @@ class RestrictedClaudeTransport(NativeOwnerTransport):
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--hook',action='store_true');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--hook',action='store_true')
+    p.add_argument('--reconcile-rejected-seed', action='store_true')
+    p.add_argument('--request-id');p.add_argument('--checkpoint-sha');p.add_argument('--output-sha');args=p.parse_args()
+    if args.reconcile_rejected_seed:
+        if args.hook or not all((args.request_id, args.checkpoint_sha, args.output_sha)):
+            raise RecoveryBlocked('terminal_reconciliation_arguments_required')
+        print(json.dumps(reconcile_rejected_seed(args.root, request_id=args.request_id,
+            checkpoint_sha=args.checkpoint_sha, output_sha=args.output_sha))); return
     if args.hook:
         # Only genuine CLI-delivered lifecycle events reach the Token Pilot
         # adapter. A tool hook always denies; no shell/editor tool is admitted.
