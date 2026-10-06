@@ -28,8 +28,15 @@ def team_enabled(values):
 
 
 def call_enabled(values):
-    if not team_enabled(values) or _truthy(values.get("JAMES_AGENT_TEAM_CALL_EMERGENCY_DISABLE")):
+    if _truthy(values.get("JAMES_AGENT_TEAM_EMERGENCY_DISABLE")):
         return False
+    if _truthy(values.get("JAMES_AGENT_TEAM_CALL_EMERGENCY_DISABLE")):
+        return False
+    # Preserve the existing JamesDailyCallService contract: its report-call
+    # gate has historically been controlled by the call flag itself. The
+    # Agent Team runtime separately checks team_enabled before it can schedule
+    # a report call. Requiring the team flag here breaks direct service
+    # validation and unnecessarily couples two independent safety gates.
     return _truthy(values.get("JAMES_AGENT_TEAM_CALL_ENABLED")) or staging_cutover(values)
 
 
