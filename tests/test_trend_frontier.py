@@ -116,6 +116,29 @@ class FrontierSQL(unittest.TestCase):
     def fetch(self, sql, args=()):
         with self.connect() as db: return db.execute(sql,args).fetchone()
 
+    def maintain_cancelled(self, job_ids):
+        # Each case has its own random workspace in the shared isolated DB.
+        # Follow the bounded global scan instead of assuming our rows are in
+        # its first page, and verify transitions for these exact jobs.
+        for jid in job_ids:
+            self.assertEqual(self.job(jid)['state'],'queued')
+        after = None
+        cancelled = 0
+        for _ in range(100):
+            receipt = self.engine.maintenance(limit=100,after=after)
+            self.assertEqual(receipt['status'],'ok')
+            cancelled += receipt['cancelled']
+            next_key = receipt['next_key']
+            if next_key is None:
+                for jid in job_ids:
+                    self.assertEqual(self.job(jid)['state'],'cancelled')
+                self.assertGreaterEqual(cancelled,len(job_ids))
+                return
+            if after is not None:
+                self.assertGreater(next_key,after)
+            after = next_key
+        self.fail('maintenance did not exhaust its cursor within the bounded scan')
+
     def details(self, expression='原生 話題', kind='language_pattern', object_id=None, revision=1):
         refs = [{'scope_key':self.scope,'node_id':sid} for sid in self.sources]
         raw = {'patterns':[{'expression':expression,'language':'zh','kind':'phrase','evidence_refs':self.sources}]}
@@ -230,12 +253,17 @@ class FrontierSQL(unittest.TestCase):
         with self.assertRaisesRegex(C.ContractError,'frontier_reservation_required'): self.engine.dispatch_context(claim)
 
     def test_source_deletion_cancels_query_and_purges_dependent_audit(self):
-        d = self.admitted(self.produce([self.proposal()]))
+        result = self.produce([self.proposal()])
+        d = self.admitted(result)
+        self.assertEqual(len(result['jobs']),2)
+        sample = next(jid for jid in result['jobs'] if jid!=d['job_id'])
         with self.connect() as db:
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertEqual(self.engine.maintenance()['cancelled'],1)
+        self.maintain_cancelled([d['job_id']])
         self.assertEqual(self.job(d['job_id'])['payload'],{})
+        self.assertEqual(self.job(sample)['state'],'queued')
+        self.assertTrue(self.job(sample)['payload'])
         # The suite intentionally shares an isolated database and earlier tests
         # leave many independently purgeable nodes. This assertion is about the
         # revoked dependency cascade, not the worker's 100-row page boundary.
@@ -243,13 +271,16 @@ class FrontierSQL(unittest.TestCase):
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
     def test_revoked_policy_cannot_read_dispatch_or_retain_query(self):
-        d = self.admitted(self.produce([self.proposal()]))
+        result = self.produce([self.proposal()])
+        d = self.admitted(result)
+        self.assertEqual(len(result['jobs']),2)
         with self.connect() as db:
             db.execute('UPDATE pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s AND provider_id=%s',(self.scope,self.provider))
         with self.assertRaises(C.ContractError): self.engine.report(self.scope,self.provider,self.version)
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertEqual(self.engine.maintenance()['cancelled'],2)
-        self.assertEqual(self.job(d['job_id'])['payload'],{})
+        self.maintain_cancelled(result['jobs'])
+        for jid in result['jobs']:
+            self.assertEqual(self.job(jid)['payload'],{})
 
     def test_private_evidence_never_becomes_a_cross_scope_parent(self):
         first = self.admitted(self.produce([self.proposal()]))
