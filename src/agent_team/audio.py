@@ -110,7 +110,12 @@ def validate_report(document: Mapping[str, Any], *, now: datetime | str | None =
     limits.validate()
     if not isinstance(document, dict):
         raise AudioBlocked("report_object_required")
+    acceptance = (document.get("executionMode") == "staging_acceptance"
+                  and isinstance(document.get("period"), dict)
+                  and document["period"].get("executionMode") == "staging_acceptance")
     allowed = REPORT_KEYS | {"version", "supplementOf", "initialGeneratedAt"}
+    if acceptance:
+        allowed |= {"executionMode"}
     if set(document) - allowed or not REPORT_KEYS <= set(document):
         raise AudioBlocked("report_fields_not_allowlisted")
     if type(document["schemaVersion"]) is not int or document["schemaVersion"] != 1:
@@ -169,7 +174,8 @@ def validate_report(document: Mapping[str, Any], *, now: datetime | str | None =
         raise AudioBlocked("summary_invalid_or_out_of_bounds")
     narration = _narration(summary, limits.max_narration_chars)
     eligible = (version is not None and document["executionState"] == "generated"
-                and expected.kind == "whole_day" and generated >= expected.cutoff and current >= expected.cutoff)
+                and (expected.kind == "whole_day" or acceptance)
+                and generated >= expected.cutoff and current >= expected.cutoff)
     return ValidatedReport(fingerprint, fingerprint_policy, version, expected.key, expected.kind,
                            _text_hash(summary), _text_hash(narration), len(summary), narration,
                            narration != summary, "generated_local_audio" if eligible else "preview_audio", eligible)

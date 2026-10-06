@@ -5,6 +5,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 from agent_team.acceptance import as_of_now, acceptance_key, document_period, question_report_key
 from agent_team.events import Event
+from agent_team.audio import AudioBlocked, narration_for_report, validate_report
 from agent_team.periods import period
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_team_acceptance import require_acceptance, acceptance_report
@@ -31,6 +32,31 @@ class Store:
         return self.accepted, True
 
 class StagingAcceptanceTests(unittest.TestCase):
+    def test_production_acceptance_document_has_verified_narration(self):
+        document, created = acceptance_report(SimpleNamespace(clock=lambda: NOW.timestamp()),
+            VALUES, Store([]), {'acceptanceId': ID})
+        document['initialGeneratedAt'] = document['generatedAt']
+        self.assertTrue(created)
+        verified = validate_report(document, now=NOW)
+        self.assertTrue(verified.delivery_eligible)
+        self.assertEqual(verified.period_key, as_of_now(ID, NOW).key)
+        self.assertEqual(narration_for_report(document), verified.narration)
+        self.assertTrue(verified.narration)
+
+    def test_acceptance_narration_rejects_changed_mode_or_period_identity(self):
+        document, _ = acceptance_report(SimpleNamespace(clock=lambda: NOW.timestamp()),
+            VALUES, Store([]), {'acceptanceId': ID})
+        for changed in ('ordinary', None):
+            candidate = {**document, 'executionMode': changed}
+            candidate['fingerprint'] = content_fingerprint(candidate)
+            with self.subTest(mode=changed), self.assertRaises(AudioBlocked):
+                validate_report(candidate, now=NOW)
+        candidate = {**document, 'period': {**document['period'],
+            'acceptanceId': '22222222-2222-4222-8222-222222222222'}}
+        candidate['fingerprint'] = content_fingerprint(candidate)
+        with self.assertRaises(AudioBlocked):
+            validate_report(candidate, now=NOW)
+
     def test_exact_staging_target_and_opt_in_are_both_required(self):
         require_acceptance(VALUES, phone=True)
         for changed in ({'VERCEL_PROJECT_ID': 'founder-production'}, {'VERCEL_ENV': 'preview'},
