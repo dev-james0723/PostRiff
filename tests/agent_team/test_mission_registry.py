@@ -134,7 +134,7 @@ class MissionRegistryTests(unittest.TestCase):
         app=SimpleNamespace(_runtime=lambda:service,_json=lambda _s,_c,value,**_kw:value)
         raw=json.dumps(self.document).encode()
         for token in ('o'*40,'r'*40):
-            for path,method in (('/mission-registry','POST'),('/native-work','GET'),('/native-receipts','POST')):
+            for path,method in (('/mission-registry','POST'),('/native-work','GET'),('/native-receipts','POST'),('/decisions/33333333-3333-4333-8333-333333333333','GET')):
                 environ={'HTTP_AUTHORIZATION':'Bearer '+token,'CONTENT_LENGTH':str(len(raw)),'wsgi.input':io.BytesIO(raw)}
                 with patch.dict('os.environ',VALUES),self.assertRaises(AlphaError) as raised:route(app,environ,MagicMock(),method,PREFIX+path)
                 self.assertEqual(raised.exception.status,401)

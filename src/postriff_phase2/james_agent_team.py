@@ -73,6 +73,10 @@ READINESS_MIGRATIONS={
         'pr_agent_team_mission_registry':('mission_id','actor_id','workspace_id','registration_sha256','execution_sha256','ordinal','registration_document','execution_document','attestation_document','attestation_sha256','observed_at','created_at'),
         'pr_agent_team_native_receipts':('decision_key','resume_request_id','receipt_sha256','execution_state','document','observed_at','created_at'),
     },
+    '095':{
+        'pr_agent_team_spoken_choices':('call_run_id','question_sha256','call_id','choice','candidate_sha256','document','captured_at'),
+        'pr_agent_team_decisions':('spoken_choice_sha256',),
+    },
 }
 READINESS_BINDING_COLUMNS={
     'pr_profiles':('user_id','deleted_at'),
@@ -391,28 +395,33 @@ class TeamStore:
                 return {'state':'blocked','executionState':'not_dispatched','reason':error.code or 'decision_question_unavailable'}
             if question['reportKey']!='agent-team:v1:'+team['workday']+':half_day' or (question['missionId'],question['scopeVersion'],question['questionVersion'])!=(d['missionId'],d['scopeVersion'],d['questionVersion']):
                 raise AlphaError('Decision does not match the authenticated mission call.',403)
+            from .agent_team_spoken import pending_choice
+            spoken=pending_choice(cur,d['callRunId'],question,d['choice'])
             # completed/answered/socket/clock alone do not prove an attended call.
             # Positive human + bidirectional receipts are private server observations.
             call_ids=list(dict.fromkeys(value for value in row[4:6] if value))
             cur.execute("SELECT c.id::text,c.provider,c.state,c.answered_at IS NOT NULL,c.ended_at IS NOT NULL,coalesce(c.duration_seconds,0)>0,c.media_claimed_at IS NOT NULL,EXISTS(SELECT 1 FROM public.pr_phone_provider_events e WHERE e.call_id=c.id AND e.provider=c.provider AND e.state='completed'),(SELECT e.evidence_sha256 FROM public.pr_agent_team_call_evidence e WHERE e.call_id=c.id AND e.provider=c.provider AND e.evidence_kind='human' AND e.source='signed_provider_human_detection'),(SELECT e.evidence_sha256 FROM public.pr_agent_team_call_evidence e WHERE e.call_id=c.id AND e.provider=c.provider AND e.evidence_kind='media' AND e.source='authenticated_bidirectional_media' AND e.input_frames>0 AND e.output_frames>0 AND e.playback_ack_sha256 ~ '^[0-9a-f]{64}$') FROM public.pr_phone_calls c WHERE c.id=ANY(%s::uuid[]) AND c.user_id=%s AND c.workspace_id=%s AND c.direction='outbound' AND c.destination_ref='james_env' AND c.reason_key=%s AND c.provider IN ('twilio','dial','telnyx') AND c.provider_call_ref IS NOT NULL AND c.state='completed' ORDER BY c.ended_at DESC LIMIT 2",
                         (call_ids,user_id,workspace_id,'james_daily:'+d['callRunId']))
             attended=next((call for call in cur.fetchall() if call[1] in ('twilio','dial','telnyx') and call[2]=='completed' and
-                           all(value is True for value in call[3:8]) and all(isinstance(value,str) and HASH.fullmatch(value) for value in call[8:10])),None)
+                           all(value is True for value in call[3:8]) and all(isinstance(value,str) and HASH.fullmatch(value) for value in call[8:10]) and
+                           (not spoken or call[0]==spoken[1])),None)
             if not attended:return {'state':'blocked','executionState':'not_dispatched','reason':'attended_call_unverified'}
             effect_key=decision_effect_key(d['callRunId'],question)
             cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',(effect_key,))
             expected=(question['missionId'],question['scopeVersion'],d['callRunId'],question['questionVersion'],d['choice'],user_id,
                       workspace_id,question['questionSha256'],question['authorizationSha256'],question['registrationSha256'],
-                      question['executionBindingSha256'],question['completionRequirementRefs'],attended[0],effect_key)
-            cur.execute('INSERT INTO public.pr_agent_team_decisions(decision_key,mission_id,scope_version,call_run_id,question_version,choice,authenticated_user_id,workspace_id,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id,effect_key) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(call_run_id,mission_id,scope_version,question_version) DO NOTHING RETURNING decision_key',
+                      question['executionBindingSha256'],question['completionRequirementRefs'],attended[0],effect_key,spoken[2] if spoken else None)
+            cur.execute('INSERT INTO public.pr_agent_team_decisions(decision_key,mission_id,scope_version,call_run_id,question_version,choice,authenticated_user_id,workspace_id,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id,effect_key,spoken_choice_sha256) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(call_run_id,mission_id,scope_version,question_version) DO NOTHING RETURNING decision_key',
                         (effect_key,)+expected)
             created=bool(cur.fetchone())
-            cur.execute('SELECT mission_id,scope_version,call_run_id::text,question_version,choice,authenticated_user_id::text,workspace_id::text,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id::text,effect_key FROM public.pr_agent_team_decisions WHERE call_run_id=%s AND mission_id=%s AND scope_version=%s AND question_version=%s',
+            cur.execute('SELECT mission_id,scope_version,call_run_id::text,question_version,choice,authenticated_user_id::text,workspace_id::text,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id::text,effect_key,spoken_choice_sha256 FROM public.pr_agent_team_decisions WHERE call_run_id=%s AND mission_id=%s AND scope_version=%s AND question_version=%s',
                         (d['callRunId'],question['missionId'],question['scopeVersion'],question['questionVersion']))
             old=cur.fetchone()
             if not old or tuple(old)!=expected:raise AlphaError('This mission question already records another immutable choice.',409,code='decision_choice_conflict')
             db.commit()
-        return {'state':'recorded','executionState':'not_dispatched','decisionKey':effect_key,'effectKey':effect_key,'replayed':not created}
+        return {'state':'recorded','executionState':'not_dispatched','decisionKey':effect_key,'effectKey':effect_key,'replayed':not created,
+                'decisionSource':'authenticated_session_confirmed_phone_choice' if spoken else 'authenticated_session',
+                'spokenChoiceSha256':spoken[2] if spoken else None}
 
 
 def source_coverage(events,p,generated_at=None):
@@ -587,6 +596,11 @@ def route(app,environ,start_response,method,path):
     if tail=='/decisions' and method=='POST':
         principal=authenticated_user(app,environ,service,values)
         return app._json(start_response,200,store.decision(body(environ),principal,service.james_daily_call.cfg.workspace_id,service.clock()))
+    if tail.startswith('/decisions/') and method=='GET':
+        principal=authenticated_user(app,environ,service,values)
+        from .agent_team_spoken import read_pending_choice
+        result=read_pending_choice(service.connection_factory,tail[len('/decisions/'):],principal,service.james_daily_call.cfg.workspace_id,service.clock())
+        return app._json(start_response,200,result,extra_headers=[('Cache-Control','private, no-store')])
     if tail=='/status' and method=='GET':
         authorize_reader(app,environ,service,values)
         return app._json(start_response,200,{'state':'enabled','schedulerOwner':'existing_vercel_worker','timezone':'America/Indiana/Indianapolis',

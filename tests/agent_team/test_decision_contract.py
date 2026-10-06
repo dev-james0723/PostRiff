@@ -38,10 +38,11 @@ def registration():
 
 
 class DecisionDB:
-    def __init__(self,context,attendance=None):
+    def __init__(self,context,attendance=None,spoken=None):
         self.context=context;self.actor=USER;self.workspace=WORKSPACE;self.origin='agent_team_report'
         self.attendance=[(CALL,'twilio','completed',True,True,True,True,True,'c'*64,'d'*64)] if attendance is None else attendance
         self.records={};self.result=None;self.queries=[];self.commits=0
+        self.spoken=spoken
 
     def __enter__(self):return self
     def __exit__(self,*args):return False
@@ -52,6 +53,7 @@ class DecisionDB:
         self.queries.append((sql,parameters))
         if 'SELECT context' in sql:self.result=(self.context,self.actor,self.workspace,self.origin,CALL,None)
         elif 'FROM public.pr_phone_calls c' in sql:self.result=self.attendance
+        elif sql.startswith('SELECT choice,call_id::text,candidate_sha256'):self.result=self.spoken
         elif 'pg_advisory_xact_lock' in sql:self.result=None
         elif sql.startswith('INSERT INTO public.pr_agent_team_decisions'):
             key=parameters[0]
@@ -143,6 +145,24 @@ class DecisionContractTests(unittest.TestCase):
         self.assertEqual(raised.exception.code,'decision_choice_conflict');self.assertEqual(len(db.records),1)
         sql=next(sql for sql,_ in db.queries if sql.startswith('INSERT'))
         self.assertIn('ON CONFLICT(call_run_id,mission_id,scope_version,question_version)',sql)
+
+    def test_authenticated_session_confirms_same_spoken_choice_and_same_attended_call(self):
+        candidate=('continue',CALL,'e'*64)
+        db=DecisionDB(self.context,spoken=candidate)
+        result=TeamStore(lambda:db).decision(self.request(),USER,WORKSPACE,NOW)
+        self.assertEqual(result['decisionSource'],'authenticated_session_confirmed_phone_choice')
+        self.assertEqual(result['spokenChoiceSha256'],'e'*64)
+        self.assertEqual(result['executionState'],'not_dispatched')
+        self.assertEqual(next(iter(db.records.values()))[-1],'e'*64)
+        for candidate in (('wait',CALL,'e'*64),('continue',RUN,'e'*64)):
+            db=DecisionDB(self.context,spoken=candidate)
+            if candidate[0]=='wait':
+                with self.assertRaises(AlphaError) as raised:TeamStore(lambda:db).decision(self.request(),USER,WORKSPACE,NOW)
+                self.assertEqual(raised.exception.code,'spoken_choice_confirmation_mismatch')
+            else:
+                result=TeamStore(lambda:db).decision(self.request(),USER,WORKSPACE,NOW)
+                self.assertEqual(result['reason'],'attended_call_unverified')
+            self.assertEqual(db.records,{})
 
     def test_mission_scope_question_actor_and_workspace_cannot_cross_bind(self):
         for changes in ({'scopeVersion':'12'},{'questionVersion':'e'*64},{'missionId':'different-mission'}):
