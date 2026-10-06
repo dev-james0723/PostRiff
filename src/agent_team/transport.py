@@ -1,16 +1,22 @@
 """Explicit bounded ingress transport; no redirects, cookies, profiles or raw source bodies."""
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from .events import canonical
+from .periods import aware
 
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 
-def send_pending(journal, endpoint, token_file, delivered_at, limit=100):
+def send_pending(journal, endpoint, token_file, delivered_at, limit=100, *,
+                 clock=lambda: datetime.now(timezone.utc)):
+    # The caller's timestamp is the scan start, not an observed delivery.
+    # Keep the positional contract, but timestamp only an actual accepted ACK.
+    aware(delivered_at)
     u=urlsplit(endpoint)
     if u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment or u.path!='/api/internal/james-agent-team/events':
         raise ValueError('dedicated_https_ingress_required')
@@ -29,5 +35,8 @@ def send_pending(journal, endpoint, token_file, delivered_at, limit=100):
     payload=json.loads(raw);accepted=payload.get('accepted')
     known={e['key'] for e in rows}
     if not isinstance(accepted,list) or len(accepted)!=len(set(accepted)) or not set(accepted)<=known:raise ValueError('ingress_ack_invalid')
-    journal.acknowledge(accepted,delivered_at)
+    acknowledged_at = aware(clock())
+    if any(aware(event['observed_at']) > acknowledged_at for event in rows if event['key'] in accepted):
+        raise ValueError('ingress_ack_clock_precedes_observation')
+    journal.acknowledge(accepted,acknowledged_at.isoformat())
     return {'state':'acknowledged','count':len(accepted)}
