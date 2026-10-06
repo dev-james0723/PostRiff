@@ -243,7 +243,9 @@ class TeamDeliveryStore:
                 if notifications is None:
                     disabled = True
                 else:
-                    result = notifications.emit(cur, workspace_id=None, user_id=self.user_id, actor=self.user_id,
+                    emit_report=getattr(notifications,'emit_james_report_in_app',None)
+                    emit=(lambda cursor,**event:emit_report(cursor,document=document,**event)) if callable(emit_report) else notifications.emit
+                    result = emit(cur, workspace_id=None, user_id=self.user_id, actor=self.user_id,
                         event_type=EVENT_TYPE, dedupe_key=plan['dedupeKey'], grouping_key=plan['groupingKey'],
                         entity_type='agent_team_report', entity_id=document['fingerprint'],
                         payload={'title': READY_TITLE, 'detail': READY_DETAIL, 'href': plan['href'], 'count': document['version']},
@@ -280,7 +282,15 @@ class TeamDeliveryService:
         self.store = TeamDeliveryStore(service.connection_factory, getattr(cfg, 'user_id', None), clock=service.clock)
 
     def queue(self, document):
-        return self.store.queue(document, self.notifications)
+        return self._surface(self.store.queue(document, self.notifications))
 
     def receipt(self, document):
-        return self.store.receipt(document)
+        return self._surface(self.store.receipt(document))
+
+    def _surface(self,receipt):
+        enabled=getattr(self.notifications,'enabled',False)
+        enabled=enabled() if callable(enabled) else enabled
+        # A persisted private report receipt does not turn on the general bell
+        # or show that James read either the report or its notification.
+        return {**receipt,'generalNotificationCenterEnabled':bool(enabled),
+                'inAppReceiptSurface':'general_notification_center' if enabled else 'private_agent_team_report'}
