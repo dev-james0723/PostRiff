@@ -22,23 +22,35 @@ STATUS = {'queued':'ringing','initiated':'ringing','ringing':'ringing','in-progr
 
 
 class TwilioMediaTransport:
-    def __init__(self, socket, stream_id):
+    def __init__(self, socket, stream_id, *, evidence=None):
         self.socket, self.stream_id = socket, stream_id
+        self.evidence=evidence
 
     async def receive_audio(self):
         while True:
             event = await self.socket.receive_json()
+            if self.evidence and event.get('streamSid')!=self.stream_id:
+                raise ValueError('Phone proof stream identity mismatch')
             if event.get('event') == 'stop':
                 return None
+            if self.evidence and event.get('event')=='mark':
+                await self.evidence.mark_ack((event.get('mark') or {}).get('name'))
             if event.get('event') == 'media':
                 payload = (event.get('media') or {}).get('payload')
                 if isinstance(payload,str) and len(payload)<=65536:
+                    if self.evidence:
+                        if (event.get('media') or {}).get('track')!='inbound':raise ValueError('Phone proof track mismatch')
+                        await self.evidence.inbound(payload)
                     return payload
 
     async def send_audio(self, audio):
         await self.socket.send_json({'event':'media','streamSid':self.stream_id,'media':{'payload':audio}})
+        if self.evidence:
+            mark=self.evidence.outbound_sent(audio)
+            if mark:await self.socket.send_json({'event':'mark','streamSid':self.stream_id,'mark':{'name':mark}})
 
     async def interrupt(self):
+        if self.evidence:self.evidence.cleared()
         await self.socket.send_json({'event':'clear','streamSid':self.stream_id})
 
 

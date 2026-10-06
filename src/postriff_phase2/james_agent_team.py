@@ -55,6 +55,133 @@ def authorize_reader(app,environ,service,values):
         authenticated_user(app,environ,service,values)
 
 
+READINESS_MIGRATIONS={
+    '091':{
+        'pr_agent_team_events':('event_key','source','source_id','revision','happened_at','observed_at','received_at','mission_id','project_id','document','immutable_digest'),
+        'pr_agent_team_reports':('report_key','fingerprint','kind','workday','cutoff','generated_at','document'),
+        'pr_agent_team_effects':('effect_key','report_key','kind','state','external_id','failure_class','created_at','updated_at'),
+        'pr_agent_team_leases':('scope','owner','generation','expires_at','updated_at'),
+        'pr_agent_team_decisions':('decision_key','mission_id','scope_version','call_run_id','question_version','choice','authenticated_user_id','received_at','execution_state'),
+    },
+    '092':{'pr_agent_team_audio_assets':('report_key','fingerprint','report_version','summary_hash','narration_hash','excerpt','sha256','mime','producer','observed_at','byte_count','duration_ms','wav_data','created_at')},
+    '093':{
+        'pr_agent_team_call_evidence':('call_id','evidence_kind','provider','source','evidence_sha256','observed_at','input_frames','output_frames','playback_ack_sha256','created_at'),
+        'pr_agent_team_decisions':('workspace_id','question_sha256','authorization_sha256','registration_sha256','execution_binding_sha256','completion_requirement_refs','attended_call_id','effect_key'),
+    },
+}
+READINESS_BINDING_COLUMNS={
+    'pr_profiles':('user_id','deleted_at'),
+    'pr_memberships':('user_id','workspace_id','status','role'),
+    'pr_connector_credentials':('workspace_id','member_id','provider','connection_id','provider_account_id','revoked_at'),
+}
+
+
+def _readiness_reader(environ,values):
+    # Readiness has no human-session fallback, including while the feature is off.
+    authorize(environ,values,'reader')
+    supplied=environ.get('HTTP_AUTHORIZATION','')
+    for role in ('observer','verifier'):
+        token=str(values.get('JAMES_AGENT_TEAM_'+role.upper()+'_TOKEN') or '')
+        if 32<=len(token)<=512 and hmac.compare_digest(supplied,'Bearer '+token):
+            raise AlphaError('Agent Team authorization failed.',401,code='agent_team_unauthorized')
+
+
+def readiness(service,values):
+    """Bounded metadata/EXISTS reads. This never admits a call or native action."""
+    from .james_daily_call import DailyCallConfig
+    cfg=getattr(getattr(service,'james_daily_call',None),'cfg',None) or DailyCallConfig(values)
+    team_enabled=enabled(values)
+    call_enabled=str(values.get('JAMES_AGENT_TEAM_CALL_ENABLED','0')).lower() in ('1','true')
+    tokens=[str(values.get('JAMES_AGENT_TEAM_'+role.upper()+'_TOKEN') or '') for role in ('observer','reader','verifier')]
+    roles_ready=all(32<=len(token)<=512 for token in tokens) and len(set(tokens))==3
+    blockers=[]
+    policy={}
+    for name,attribute in (('dailyCallEnabled','enabled'),('outboundEnabled','outbound_enabled'),
+            ('dailyScheduledEnabled','scheduled_enabled'),('acceptanceEnabled','acceptance_enabled'),
+            ('requireBriefingSources','require_sources'),('maxSeconds','max_seconds'),
+            ('dailyCapUsdMicro','daily_cap'),('monthlyCapUsdMicro','monthly_cap'),
+            ('quietStartMinute','quiet_start'),('quietEndMinute','quiet_end'),('timeZone','time_zone')):
+        try:policy[name]=getattr(cfg,attribute)
+        except (AlphaError,ValueError,TypeError,AttributeError):
+            policy[name]=None
+            if 'call_policy_invalid' not in blockers:blockers.append('call_policy_invalid')
+    policy['reportCallMaxSeconds']=min(policy['maxSeconds'],90) if policy['maxSeconds'] is not None else None
+    if not policy['dailyCallEnabled']:blockers.append('daily_call_disabled')
+    if not policy['outboundEnabled']:blockers.append('outbound_disabled')
+    if not policy['dailyCapUsdMicro'] or not policy['monthlyCapUsdMicro']:blockers.append('cost_cap_unset')
+    if policy['timeZone']!='America/Indiana/Indianapolis':blockers.append('report_time_zone_mismatch')
+    try:
+        user_id=cfg.user_id;workspace_id=cfg.workspace_id
+        # Keep invalid configuration away from row queries, even with test doubles.
+        user_id=str(uuid.UUID(user_id));workspace_id=str(uuid.UUID(workspace_id))
+        principal_configured=True
+    except (AlphaError,ValueError,TypeError,AttributeError):
+        user_id=workspace_id=None;principal_configured=False
+        blockers.append('principal_unconfigured')
+    try:bindings=cfg.briefing_bindings;bindings_configured=True
+    except (AlphaError,ValueError,TypeError,AttributeError):
+        bindings={};bindings_configured=False;blockers.append('personal_binding_unconfigured')
+    binding={'principalConfigured':principal_configured,'profileActive':False,'membershipActive':False,
+             'membershipCanEdit':False,'personalBindingsConfigured':bindings_configured,
+             'gmailConnectionBound':False,'calendarConnectionBound':False,
+             'providerIdentityState':'unverified'}
+    required={**READINESS_BINDING_COLUMNS}
+    for tables in READINESS_MIGRATIONS.values():
+        for table,columns in tables.items():required[table]=tuple(sorted(set(required.get(table,()))|set(columns)))
+    present={table:set() for table in required}
+    database_available=False
+    try:
+        if service is None:raise RuntimeError('runtime_unavailable')
+        with service.connection_factory() as db,db.cursor() as cur:
+            cur.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=ANY(%s) AND column_name=ANY(%s) LIMIT 256",
+                        (list(required),sorted({column for columns in required.values() for column in columns})))
+            for table,column in cur.fetchall():
+                if table in required and column in required[table]:present[table].add(column)
+            database_available=True
+            profile_schema=set(READINESS_BINDING_COLUMNS['pr_profiles'])<=present['pr_profiles']
+            member_schema=set(READINESS_BINDING_COLUMNS['pr_memberships'])<=present['pr_memberships']
+            if principal_configured and profile_schema and member_schema:
+                cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL), EXISTS(SELECT 1 FROM public.pr_memberships WHERE user_id=%s AND workspace_id=%s AND status='active'), EXISTS(SELECT 1 FROM public.pr_memberships WHERE user_id=%s AND workspace_id=%s AND status='active' AND role IN ('owner','admin','editor'))",
+                            (user_id,user_id,workspace_id,user_id,workspace_id))
+                row=cur.fetchone()
+                if row:binding.update(profileActive=row[0] is True,membershipActive=row[1] is True,membershipCanEdit=row[2] is True)
+            connector_schema=set(READINESS_BINDING_COLUMNS['pr_connector_credentials'])<=present['pr_connector_credentials']
+            if principal_configured and bindings_configured and connector_schema:
+                for provider,field in (('gmail','gmailConnectionBound'),('google_calendar','calendarConnectionBound')):
+                    expected=bindings[provider]
+                    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s AND provider=%s AND connection_id=%s AND lower(provider_account_id)=%s AND revoked_at IS NULL)",
+                                (workspace_id,user_id,provider,expected['connectionId'],expected['account']))
+                    row=cur.fetchone();binding[field]=bool(row and row[0] is True)
+    except Exception:
+        # No SQL, endpoint, identity, provider error or private value reaches the receipt.
+        database_available=False
+        for field in ('profileActive','membershipActive','membershipCanEdit','gmailConnectionBound','calendarConnectionBound'):binding[field]=False
+    migrations={}
+    for migration,tables in READINESS_MIGRATIONS.items():
+        missing_tables=sorted(table for table in tables if not present[table])
+        missing_columns=sorted(table+'.'+column for table,columns in tables.items() if present[table] for column in columns if column not in present[table])
+        migrations[migration]={'ready':database_available and not missing_tables and not missing_columns,
+                               'missingTables':missing_tables,'missingColumns':missing_columns}
+    binding_schema=all(set(columns)<=present[table] for table,columns in READINESS_BINDING_COLUMNS.items())
+    if not database_available:blockers.append('database_unavailable')
+    if not all(item['ready'] for item in migrations.values()):blockers.append('database_migrations_incomplete')
+    if not binding_schema:blockers.append('binding_schema_incomplete')
+    if not roles_ready:blockers.append('role_secrets_unconfigured')
+    for field,problem in (('profileActive','profile_inactive'),('membershipActive','membership_inactive'),
+                          ('membershipCanEdit','membership_cannot_edit'),('gmailConnectionBound','gmail_binding_unverified'),
+                          ('calendarConnectionBound','calendar_binding_unverified')):
+        if not binding[field]:blockers.append(problem)
+    configuration_ready=not blockers
+    if not team_enabled:blockers.append('team_disabled')
+    if not call_enabled:blockers.append('team_call_disabled')
+    return {'readiness':'ready' if not blockers else 'blocked','configurationReady':configuration_ready,
+            'enabled':team_enabled,'callEnabled':call_enabled,'roleSecretsConfigured':roles_ready,
+            'databaseAvailable':database_available,'databaseMigrations':migrations,
+            'migrationCheck':'required_tables_and_columns','binding':binding,'callPolicy':policy,
+            'blockers':blockers,'nativeState':'unverified','scheduleState':'unverified',
+            'callAdmissionState':'not_evaluated'}
+
+
 def content_fingerprint(document):
     # Generation time changes every cron tick. Observed-at and late-arrival facts
     # remain in the content because they change cutoff/evidence semantics.
@@ -159,26 +286,55 @@ class TeamStore:
         with self.connection_factory() as db,db.cursor() as cur:
             cur.execute('UPDATE public.pr_agent_team_effects SET state=%s,external_id=%s,failure_class=%s,updated_at=now() WHERE effect_key=%s',(state,external_id,failure_class,key));db.commit()
 
-    def decision(self,d,user_id):
+    def decision(self,d,user_id,workspace_id=None,now=None):
+        from .agent_team_decision import HASH,validate_question,decision_effect_key
         required={'decisionKey','missionId','scopeVersion','callRunId','questionVersion','choice'}
-        if set(d)!=required or d['choice'] not in ('continue','wait','needs_human'):raise AlphaError('Invalid decision.',400)
+        if not isinstance(d,dict) or set(d)!=required or d['choice'] not in ('continue','wait','needs_human'):raise AlphaError('Invalid decision.',400)
         for key in required-{'callRunId'}:
             if not isinstance(d[key],str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,200}',d[key]):raise AlphaError('Invalid decision identity.',400)
-        try:uuid.UUID(d['callRunId']);uuid.UUID(user_id)
+        try:
+            uuid.UUID(d['callRunId']);uuid.UUID(user_id)
+            if workspace_id is None:return {'state':'blocked','executionState':'not_dispatched','reason':'decision_binding_unconfigured'}
+            workspace_id=str(uuid.UUID(workspace_id))
         except (ValueError,TypeError):raise AlphaError('Invalid call identity.',400) from None
+        now=datetime.now(timezone.utc).timestamp() if now is None else now
         with self.connection_factory() as db,db.cursor() as cur:
-            cur.execute('SELECT context,user_id::text,state FROM public.pr_james_daily_call_runs WHERE id=%s',(d['callRunId'],));row=cur.fetchone()
+            cur.execute('SELECT context,user_id::text,workspace_id::text,origin,first_call_id::text,retry_call_id::text FROM public.pr_james_daily_call_runs WHERE id=%s',(d['callRunId'],));row=cur.fetchone()
+            if not row or row[1]!=user_id or row[2]!=workspace_id or row[3]!='agent_team_report':
+                raise AlphaError('Decision does not match the authenticated mission call.',403)
             context=row[0] if row and isinstance(row[0],dict) else {}
             team=context.get('agentTeamReport',{})
-            if not row or row[1]!=user_id or row[2] not in ('dialing','completed') or team.get('missionId')!=d['missionId'] or str(team.get('version'))!=d['scopeVersion'] or str(team.get('questionVersion',team.get('version')))!=d['questionVersion']:
+            if not isinstance(team,dict) or not all(key in team for key in ('missionId','reportId','version','workday')):
+                return {'state':'blocked','executionState':'not_dispatched','reason':'decision_report_binding_unavailable'}
+            try:
+                question=validate_question(context.get('agentTeamDecisionQuestion'),actor_id=user_id,workspace_id=workspace_id,
+                    mission_id=team.get('missionId'),report_id=team.get('reportId'),report_version=team.get('version'),now=now)
+            except AlphaError as error:
+                return {'state':'blocked','executionState':'not_dispatched','reason':error.code or 'decision_question_unavailable'}
+            if question['reportKey']!='agent-team:v1:'+team['workday']+':half_day' or (question['missionId'],question['scopeVersion'],question['questionVersion'])!=(d['missionId'],d['scopeVersion'],d['questionVersion']):
                 raise AlphaError('Decision does not match the authenticated mission call.',403)
-            cur.execute('INSERT INTO public.pr_agent_team_decisions(decision_key,mission_id,scope_version,call_run_id,question_version,choice,authenticated_user_id) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING',
-                        tuple(d[k] for k in ('decisionKey','missionId','scopeVersion','callRunId','questionVersion','choice'))+(user_id,))
-            cur.execute('SELECT mission_id,scope_version,call_run_id::text,question_version,choice,authenticated_user_id::text FROM public.pr_agent_team_decisions WHERE decision_key=%s',(d['decisionKey'],));old=cur.fetchone()
-            expected=tuple(d[k] for k in ('missionId','scopeVersion','callRunId','questionVersion','choice'))+(user_id,)
-            if tuple(old)!=expected:raise AlphaError('Decision key already records another choice.',409)
+            # completed/answered/socket/clock alone do not prove an attended call.
+            # Positive human + bidirectional receipts are private server observations.
+            call_ids=list(dict.fromkeys(value for value in row[4:6] if value))
+            cur.execute("SELECT c.id::text,c.provider,c.state,c.answered_at IS NOT NULL,c.ended_at IS NOT NULL,coalesce(c.duration_seconds,0)>0,c.media_claimed_at IS NOT NULL,EXISTS(SELECT 1 FROM public.pr_phone_provider_events e WHERE e.call_id=c.id AND e.provider=c.provider AND e.state='completed'),(SELECT e.evidence_sha256 FROM public.pr_agent_team_call_evidence e WHERE e.call_id=c.id AND e.provider=c.provider AND e.evidence_kind='human' AND e.source='signed_provider_human_detection'),(SELECT e.evidence_sha256 FROM public.pr_agent_team_call_evidence e WHERE e.call_id=c.id AND e.provider=c.provider AND e.evidence_kind='media' AND e.source='authenticated_bidirectional_media' AND e.input_frames>0 AND e.output_frames>0 AND e.playback_ack_sha256 ~ '^[0-9a-f]{64}$') FROM public.pr_phone_calls c WHERE c.id=ANY(%s::uuid[]) AND c.user_id=%s AND c.workspace_id=%s AND c.direction='outbound' AND c.destination_ref='james_env' AND c.reason_key=%s AND c.provider IN ('twilio','dial','telnyx') AND c.provider_call_ref IS NOT NULL AND c.state='completed' ORDER BY c.ended_at DESC LIMIT 2",
+                        (call_ids,user_id,workspace_id,'james_daily:'+d['callRunId']))
+            attended=next((call for call in cur.fetchall() if call[1] in ('twilio','dial','telnyx') and call[2]=='completed' and
+                           all(value is True for value in call[3:8]) and all(isinstance(value,str) and HASH.fullmatch(value) for value in call[8:10])),None)
+            if not attended:return {'state':'blocked','executionState':'not_dispatched','reason':'attended_call_unverified'}
+            effect_key=decision_effect_key(d['callRunId'],question)
+            cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',(effect_key,))
+            expected=(question['missionId'],question['scopeVersion'],d['callRunId'],question['questionVersion'],d['choice'],user_id,
+                      workspace_id,question['questionSha256'],question['authorizationSha256'],question['registrationSha256'],
+                      question['executionBindingSha256'],question['completionRequirementRefs'],attended[0],effect_key)
+            cur.execute('INSERT INTO public.pr_agent_team_decisions(decision_key,mission_id,scope_version,call_run_id,question_version,choice,authenticated_user_id,workspace_id,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id,effect_key) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(call_run_id,mission_id,scope_version,question_version) DO NOTHING RETURNING decision_key',
+                        (effect_key,)+expected)
+            created=bool(cur.fetchone())
+            cur.execute('SELECT mission_id,scope_version,call_run_id::text,question_version,choice,authenticated_user_id::text,workspace_id::text,question_sha256,authorization_sha256,registration_sha256,execution_binding_sha256,completion_requirement_refs,attended_call_id::text,effect_key FROM public.pr_agent_team_decisions WHERE call_run_id=%s AND mission_id=%s AND scope_version=%s AND question_version=%s',
+                        (d['callRunId'],question['missionId'],question['scopeVersion'],question['questionVersion']))
+            old=cur.fetchone()
+            if not old or tuple(old)!=expected:raise AlphaError('This mission question already records another immutable choice.',409,code='decision_choice_conflict')
             db.commit()
-        return {'state':'recorded','executionState':'not_dispatched'}
+        return {'state':'recorded','executionState':'not_dispatched','decisionKey':effect_key,'effectKey':effect_key,'replayed':not created}
 
 
 def source_coverage(events,p,generated_at=None):
@@ -190,14 +346,22 @@ def source_coverage(events,p,generated_at=None):
         source=e['source_id'];payload=e['payload']
         if source not in result:continue
         try:
-            observed=aware(e['observed_at']);effective=aware(payload.get('sourceFreshAt') or e['happened_at'])
+            observed=aware(e['observed_at'])
+            effective=aware(payload['sourceFreshAt']) if payload.get('sourceFreshAt') is not None else None
+            # Scan/observation clocks rank unknown evidence but never prove source freshness.
+            rank_at=effective or aware(payload.get('scannedAt') or e['happened_at'])
         except (TypeError,ValueError):continue
-        if observed>generated or effective>p.cutoff:continue
-        rank=(effective,observed,e['revision'],e['key'])
+        if observed>generated or rank_at>p.cutoff or (effective is not None and effective>observed):continue
+        rank=(rank_at,observed,e['revision'],e['key'])
         if source in latest and rank<=latest[source]:continue
         latest[source]=rank
-        age=(p.cutoff-effective).total_seconds();gaps=payload.get('gaps',[])
+        gaps=payload.get('gaps',[])
         if not isinstance(gaps,list) or any(not isinstance(gap,str) for gap in gaps):gaps=['invalid_source_coverage']
+        if effective is None:
+            if 'source_freshness_unknown' not in gaps:gaps=gaps+['source_freshness_unknown']
+            result[source]={'status':'unknown','freshAt':None,'complete':False,'gaps':gaps}
+            continue
+        age=(p.cutoff-effective).total_seconds()
         status=payload.get('sourceStatus','unknown')
         if age>120:status='stale';gaps=['local_source_stale_or_offline']
         complete=payload.get('scanComplete') is True and age<=120 and status=='ok' and not gaps
@@ -280,8 +444,13 @@ def route(app,environ,start_response,method,path):
     if path!=PREFIX and not path.startswith(PREFIX+'/'):return None
     import os
     values=os.environ
-    if not enabled(values):raise AlphaError('Agent Team is disabled.',503,code='agent_team_disabled')
     tail=path[len(PREFIX):]
+    if tail=='/readiness' and method=='GET':
+        _readiness_reader(environ,values)
+        try:service=app._runtime()
+        except Exception:service=None
+        return app._json(start_response,200,readiness(service,values),extra_headers=[('Cache-Control','private, no-store')])
+    if not enabled(values):raise AlphaError('Agent Team is disabled.',503,code='agent_team_disabled')
     service=app._runtime();store=TeamStore(service.connection_factory)
     if tail=='/audio-work' and method=='GET':
         authorize(environ,values,'observer')
@@ -303,7 +472,7 @@ def route(app,environ,start_response,method,path):
         return app._json(start_response,200,store.ingest(body(environ).get('events'),role=='verifier'))
     if tail=='/decisions' and method=='POST':
         principal=authenticated_user(app,environ,service,values)
-        return app._json(start_response,200,store.decision(body(environ),principal))
+        return app._json(start_response,200,store.decision(body(environ),principal,service.james_daily_call.cfg.workspace_id,service.clock()))
     if tail=='/status' and method=='GET':
         authorize_reader(app,environ,service,values)
         return app._json(start_response,200,{'state':'enabled','schedulerOwner':'existing_vercel_worker','timezone':'America/Indiana/Indianapolis',

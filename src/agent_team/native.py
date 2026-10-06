@@ -8,8 +8,29 @@ from .observers import ObservationBatch
 from .collector import coverage_event
 
 
+CONDUCTOR_READ_SHA256='c996f7dd6e4f4b2b4acbaefaab798a74330c321b8340c0ab573f344472ed19a7'
+
+
+def conductor_read_source():
+    """Reuse the reviewed private snapshot or exact installed Conductor release.
+
+    The public cloud package intentionally contains no private Conductor copy.
+    This fallback is a local dependency, never an owner transport or a discovery
+    scan. A changed installed release requires review before its code is loaded.
+    """
+    packaged=Path(__file__).resolve().parents[1]/'vendor/conductor/daily_conductor.py'
+    source=packaged if packaged.exists() else Path.home()/'.agents/skills/james-daily-conductor/scripts/daily_conductor.py'
+    if source.is_symlink() or not source.is_file() or source.resolve()!=source:
+        raise ValueError('reviewed_conductor_dependency_missing')
+    if source.stat().st_size>256*1024:
+        raise ValueError('reviewed_conductor_dependency_changed')
+    if hashlib.sha256(source.read_bytes()).hexdigest()!=CONDUCTOR_READ_SHA256:
+        raise ValueError('reviewed_conductor_dependency_changed')
+    return source
+
+
 def installed_read_client():
-    source=Path(__file__).resolve().parents[1]/'vendor/conductor/daily_conductor.py'
+    source=conductor_read_source()
     spec=importlib.util.spec_from_file_location('conductor_read_adapter',source)
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module.CodexReadClient()

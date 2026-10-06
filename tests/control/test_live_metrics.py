@@ -294,6 +294,40 @@ class LiveMetricTests(unittest.TestCase):
         with self.assertRaises(ControlError): overview(self.principal, 'live', '12d', self.service)
         with self.assertRaises(ControlError): overview(self.principal, 'staging', '30d', self.service)
 
+    def test_overview_instrumented_empty_publish_interval_keeps_null_rate_and_receipts(self):
+        self.store.instrumented = {'business_notification_events'}
+        self.store.rows['publish_outcomes'] = [aggregate(0, known=0, unknown=0, numerator=0, denominator=0, sample_count=0, watermark=None)]
+        result = overview(self.principal, 'live', '30d', self.service)
+        publishing = next(tile for tile in result['pulse'] if tile['id'] == 'publish_outcomes')
+        self.assertIsNone(publishing['value'])
+        self.assertIsNone(publishing['delta'])
+        self.assertEqual(publishing['dataState'], 'measured')
+        self.assertEqual(publishing['coverage'], dict(known=0, unknown=0, numerator=0, denominator=0))
+        self.assertIn('Publishing success (7d): no events in this interval.', result['brief']['text'])
+        self.assertNotIn('Publishing success (7d): 0.0%', result['brief']['text'])
+        self.assertEqual(set(result['trends']), {'revenueVsCost', 'activeVsPublish'})
+        self.assertEqual(len(result['_receiptIds']), 16)
+        self.assertEqual(len(set(result['_receiptIds'])), 16)
+        self.assertEqual(result['brief']['receiptIds'], result['_receiptIds'])
+        self.assertEqual([receipt['id'] for receipt in self.store.receipts], result['_receiptIds'])
+        receipt = next(receipt for receipt in self.store.receipts if receipt['id'] == publishing['receiptId'])
+        self.assertEqual(receipt['normalizedQuery']['metricIds'], ['publish_outcomes'])
+        self.assertEqual(receipt['normalizedQuery']['comparison'], 'previous_equal_elapsed')
+        self.assertEqual((receipt['rows'][0]['value'], receipt['rows'][0]['coverage']['denominator']), (0, 0))
+
+    def test_overview_brief_requires_nonempty_all_measured_sources_for_current_claim(self):
+        current = dict(sourceId='database', state='measured')
+        text = live_metrics._brief([], [], [current], 'live', '30d')
+        self.assertIn('All probed sources are current.', text)
+        for state in ('partial', 'stale', 'unavailable', 'suppressed', 'not_applicable'):
+            with self.subTest(state=state):
+                text = live_metrics._brief([], [], [current, dict(sourceId='phone_provider', state=state)], 'live', '30d')
+                self.assertNotIn('All probed sources are current.', text)
+                self.assertIn('Sources not current: phone provider.', text)
+        text = live_metrics._brief([], [], [], 'live', '30d')
+        self.assertNotIn('All probed sources are current.', text)
+        self.assertIn('no source observations were returned', text)
+
     def test_unknown_reservations_is_a_fixed_reader_statement(self):
         self.store.rows['unknown_reservations'] = [dict(id='u1', workspaceId='w1', runId=None, kind='reserve', dimension='text_model', provider='p', model='m', feature='writer', estimatedUsdMicro=5, at='2026-09-30T00:00:00+00:00')]
         result = unknown_reservations(self.principal, 'live', self.service, limit=50)

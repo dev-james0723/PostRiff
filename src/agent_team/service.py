@@ -39,6 +39,8 @@ from .native import collect_codex_metadata
 from .periods import aware
 from .transport import send_pending
 from .audio_bridge import produce_pending
+from .evidence_sources import (ClaudeMetadataConfig, GitMetadataConfig, TokenPilotMetadataConfig,
+                               read_claude_metadata, read_git_metadata, read_token_pilot_metadata)
 
 
 CANONICAL_ROOT = Path.home()/"Documents/James-Agent-Team"
@@ -93,14 +95,22 @@ class NativeRegistration:
 
 
 @dataclass(frozen=True)
+class ClaudeLogRegistration:
+    log_path: Path
+    workspace: Path
+    project_id: str
+
+
+@dataclass(frozen=True)
 class ServicePolicy:
     canonical_root: Path
     approved_native_projects: tuple[NativeRegistration, ...] = ()
     allowed_upload_hosts: tuple[str, ...] = ()
+    approved_claude_logs: tuple[ClaudeLogRegistration, ...] = ()
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any], *, canonical_root: Path = CANONICAL_ROOT) -> "ServicePolicy":
-        data = _keys(payload, {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts"},
+        data = _keys(payload, {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts", "approved_claude_logs"},
                      {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts"})
         if type(data["version"]) is not int or data["version"] != 1:
             raise ValueError("policy_version_unsupported")
@@ -121,7 +131,18 @@ class ServicePolicy:
                 or any(not isinstance(host, str) or not _HOST.fullmatch(host) for host in hosts)
                 or len(set(hosts)) != len(hosts)):
             raise ValueError("exact_upload_host_allowlist_required")
-        return cls(root, tuple(sorted(registrations, key=lambda item: str(item.workspace))), tuple(hosts))
+        logs=data.get('approved_claude_logs',{})
+        if not isinstance(logs,dict) or len(logs)>8:
+            raise ValueError('claude_registration_limit')
+        approved_projects={str(item.workspace):item.project_id for item in registrations}
+        selected_logs=[]
+        for log_path, details in logs.items():
+            item=_keys(details,{'workspace','project_id'},{'workspace','project_id'})
+            path=_exact_absolute(log_path);workspace=_exact_absolute(item['workspace'])
+            if str(workspace) not in approved_projects or approved_projects[str(workspace)]!=item['project_id']:
+                raise ValueError('claude_workspace_project_not_approved')
+            selected_logs.append(ClaudeLogRegistration(path,workspace,item['project_id']))
+        return cls(root, tuple(sorted(registrations, key=lambda item: str(item.workspace))), tuple(hosts),tuple(selected_logs))
 
 
 @dataclass(frozen=True)
@@ -142,25 +163,39 @@ class ServiceConfig:
     native_workspaces: tuple[NativeRegistration, ...] = ()
     upload: UploadConfig | None = None
     audio: bool = False
+    evidence_workspaces: tuple[NativeRegistration, ...] = ()
+    claude_logs: tuple[ClaudeLogRegistration, ...] = ()
 
     def validate(self) -> "ServiceConfig":
         """Recheck even directly constructed configs at every public entry point."""
+        if len({str(item.workspace) for item in self.policy.approved_native_projects})!=len(self.policy.approved_native_projects):
+            raise ValueError('duplicate_native_policy_registration')
+        policy=ServicePolicy.from_mapping({
+            'version':1,'canonical_root':str(self.policy.canonical_root),
+            'approved_native_projects':{str(item.workspace):item.project_id for item in self.policy.approved_native_projects},
+            'allowed_upload_hosts':list(self.policy.allowed_upload_hosts),
+            'approved_claude_logs':{str(item.log_path):{'workspace':str(item.workspace),'project_id':item.project_id}
+                                    for item in self.policy.approved_claude_logs}},canonical_root=self.policy.canonical_root)
+        if any(item not in policy.approved_claude_logs for item in self.claude_logs):
+            raise ValueError('claude_registration_tuple_not_approved')
         payload = {"version": 1, "journal_path": str(self.journal_path),
                    "interval_seconds": self.interval_seconds, "window_seconds": self.window_seconds,
                    "typeless": self.typeless, "luci": self.luci,
                    "audio": self.audio,
                    "native_workspaces": [{"workspace": str(item.workspace), "project_id": item.project_id}
                                          for item in self.native_workspaces],
+                   "evidence_workspaces": [{"workspace":str(item.workspace),"project_id":item.project_id}
+                                           for item in self.evidence_workspaces],
+                   "claude_logs": [str(item.log_path) for item in self.claude_logs],
                    "upload": None if self.upload is None else {
                        "endpoint": self.upload.endpoint, "token_file": str(self.upload.token_file),
                        "limit": self.upload.limit}}
-        ServiceConfig.from_mapping(payload, self.policy)
-        return self
+        return ServiceConfig.from_mapping(payload, policy)
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any], policy: ServicePolicy) -> "ServiceConfig":
         data = _keys(payload, {"version", "journal_path", "interval_seconds", "window_seconds", "audio",
-                               "typeless", "luci", "native_workspaces", "upload"},
+                               "typeless", "luci", "native_workspaces", "upload", "evidence_workspaces", "claude_logs"},
                      {"version", "journal_path", "interval_seconds", "window_seconds",
                       "typeless", "luci", "native_workspaces", "upload"})
         if type(data["version"]) is not int or data["version"] != 1:
@@ -190,6 +225,29 @@ class ServiceConfig:
             if any(existing.workspace == workspace for existing in selected):
                 raise ValueError("duplicate_native_workspace")
             selected.append(NativeRegistration(workspace, project_id))
+        evidence_requested=data.get('evidence_workspaces',[])
+        if not isinstance(evidence_requested,list) or len(evidence_requested)>8:
+            raise ValueError('evidence_registration_limit')
+        evidence_selected=[]
+        for item in evidence_requested:
+            entry=_keys(item,{'workspace','project_id'},{'workspace','project_id'})
+            workspace=_exact_absolute(entry['workspace']);project_id=entry['project_id']
+            if str(workspace) not in projects or projects[str(workspace)]!=project_id:
+                raise ValueError('evidence_workspace_project_not_approved')
+            if any(old.workspace==workspace for old in evidence_selected):
+                raise ValueError('duplicate_evidence_workspace')
+            evidence_selected.append(NativeRegistration(workspace,project_id))
+        log_requested=data.get('claude_logs',[])
+        if (not isinstance(log_requested,list) or len(log_requested)>8
+                or any(not isinstance(name,str) for name in log_requested)
+                or len(set(log_requested))!=len(log_requested)):
+            raise ValueError('claude_registration_limit')
+        approved_logs={str(item.log_path):item for item in policy.approved_claude_logs}
+        logs_selected=[]
+        for name in log_requested:
+            path=_exact_absolute(name)
+            if str(path) not in approved_logs:raise ValueError('claude_log_not_approved')
+            logs_selected.append(approved_logs[str(path)])
         upload = None
         if data["upload"] is not None:
             details = _keys(data["upload"], {"endpoint", "token_file", "limit"}, {"endpoint", "token_file", "limit"})
@@ -208,7 +266,7 @@ class ServiceConfig:
             upload = UploadConfig(endpoint, token, limit)
         if data.get("audio",False) and upload is None:
             raise ValueError("audio_requires_authenticated_upload")
-        return cls(policy, journal, interval, window, data["typeless"], data["luci"], tuple(selected), upload, data.get("audio",False))
+        return cls(policy, journal, interval, window, data["typeless"], data["luci"], tuple(selected), upload, data.get("audio",False),tuple(evidence_selected),tuple(logs_selected))
 
 
 def _read_private_json(path: Path, expected: Path) -> Mapping[str, Any]:
@@ -248,11 +306,21 @@ def _source_connected(source: str, path: Path) -> bool:
     return False
 
 
+def collect_registered_evidence(config: ServiceConfig, now: datetime):
+    """Read only the finite policy map; never scan for new projects or sessions."""
+    for item in config.evidence_workspaces:
+        yield item.project_id,read_git_metadata(GitMetadataConfig(item.workspace,item.workspace,item.project_id),observed_at=now)
+        yield item.project_id,read_token_pilot_metadata(TokenPilotMetadataConfig(item.workspace,item.workspace,item.project_id),observed_at=now)
+    for item in config.claude_logs:
+        yield item.project_id,read_claude_metadata(ClaudeMetadataConfig(item.log_path,item.log_path,item.workspace,item.workspace,item.project_id),observed_at=now)
+
+
 @dataclass(frozen=True)
 class ServiceDependencies:
     audio: Callable[..., Mapping[str, Any]] = produce_pending
     collect: Callable[..., Mapping[str, Any]] = collect_once
     collect_native: Callable[..., Mapping[str, Any]] = collect_codex_metadata
+    evidence: Callable[..., Any] = collect_registered_evidence
     send: Callable[..., Mapping[str, Any]] = send_pending
     source_connected: Callable[[str, Path], bool] = _source_connected
     wall_clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
@@ -261,10 +329,13 @@ class ServiceDependencies:
 
 
 def _health(journal: Any, source: str, status: str, gaps: list[str], now: datetime,
-            *, project_id: str | None = None, kind: str = "source_coverage") -> bool:
+            *, project_id: str | None = None, kind: str = "source_coverage", fresh_at: Any = ...) -> bool:
     stamp = aware(now).isoformat()
-    payload = {"kind": kind, "sourceStatus": status, "sourceFreshAt": stamp,
-               "scanComplete": False, "gaps": gaps[:20], "count": 0}
+    payload = {"kind": kind, "sourceStatus": status,
+               "scanComplete": False, "gaps": gaps[:19], "count": 0}
+    if fresh_at is ...:payload['sourceFreshAt']=stamp
+    elif fresh_at is not None:payload['sourceFreshAt']=fresh_at
+    else:payload['gaps'].append('source_freshness_unknown')
     revision = hashlib.sha256(canonical([source, stamp, payload, project_id]).encode()).hexdigest()
     event = Event("health", source, revision, stamp, stamp, payload, project_id=project_id)
     try:
@@ -278,7 +349,7 @@ def _health(journal: Any, source: str, status: str, gaps: list[str], now: dateti
 
 def one_tick(config: ServiceConfig, journal: Any,
              dependencies: ServiceDependencies | None = None) -> dict[str, Any]:
-    config.validate()
+    config=config.validate()
     deps = dependencies or ServiceDependencies()
     now = aware(deps.wall_clock())
     states: dict[str, str] = {}
@@ -331,6 +402,34 @@ def one_tick(config: ServiceConfig, journal: Any,
         states[source_ref] = status
         if not _health(journal, source_ref, status, source_gaps, now, project_id=registration.project_id):
             gaps.add("journal_write_failed")
+    aggregate={}
+    allowed_evidence={('git',item.project_id) for item in config.evidence_workspaces}
+    allowed_evidence|={('token_pilot',item.project_id) for item in config.evidence_workspaces}
+    allowed_evidence|={('claude',item.project_id) for item in config.claude_logs}
+    try:
+        for project_id,batch in deps.evidence(config,now):
+            if (batch.source,project_id) not in allowed_evidence:
+                raise ValueError('unregistered_evidence_scope')
+            if any(event.source!=batch.source or event.project_id!=project_id for event in batch.events):
+                raise ValueError('evidence_event_scope_mismatch')
+            for event in batch.events:event.validate()
+            journal.ingest(batch.events)
+            ref=batch.source+':'+hashlib.sha256(project_id.encode()).hexdigest()[:24]
+            states[ref]=batch.status if batch.status in {'ok','partial','unavailable','not_connected'} else 'unavailable'
+            aggregate.setdefault(batch.source,[]).append(batch)
+            if not _health(journal,ref,states[ref],list(batch.gaps)+['bounded_scan_only'],now,
+                           project_id=project_id,kind='source_project_coverage',fresh_at=batch.fresh_at):
+                gaps.add('journal_write_failed')
+    except Exception:
+        gaps.add('registered_evidence_poll_failed')
+        _health(journal,'registered_evidence','unavailable',['registered_evidence_poll_failed'],now)
+    for source,batches in aggregate.items():
+        ranks={'ok':0,'partial':1,'not_connected':2,'unavailable':3}
+        status=max((batch.status if batch.status in ranks else 'unavailable' for batch in batches),key=ranks.get)
+        all_fresh=all(batch.fresh_at is not None for batch in batches)
+        fresh=min((batch.fresh_at for batch in batches),key=aware) if all_fresh else None
+        source_gaps=sorted({gap for batch in batches for gap in batch.gaps}|{'bounded_scan_only'})
+        if not _health(journal,source,status,source_gaps,now,fresh_at=fresh):gaps.add('journal_write_failed')
     collector_status = "ok" if all(state == "ok" for state in states.values()) else "partial"
     if not _health(journal, "collector_service", collector_status, sorted(gaps), now, kind="collector_heartbeat"):
         gaps.add("journal_write_failed")
@@ -370,7 +469,7 @@ def run_daemon(config: ServiceConfig, journal: Any, dependencies: ServiceDepende
                *, stop_event: threading.Event | None = None, max_ticks: int | None = None,
                on_tick: Callable[[Mapping[str, Any]], Any] | None = None) -> int:
     """Sequential polls on monotonic deadlines. Overruns skip catch-up bursts."""
-    config.validate()
+    config=config.validate()
     if max_ticks is not None and (type(max_ticks) is not int or not 1 <= max_ticks <= 10_000):
         raise ValueError("tick_limit_out_of_bounds")
     deps = dependencies or ServiceDependencies()

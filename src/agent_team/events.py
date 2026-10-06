@@ -1,17 +1,25 @@
 """Sanitized observation journal. This is evidence/outbox state, never a project todo registry."""
 from dataclasses import dataclass, asdict
 import hashlib
+import ipaddress
 import json
 import math
 import re
 import sqlite3
+import unicodedata
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 from .periods import aware
 
 SOURCES = frozenset({"typeless", "luci", "codex", "claude", "browser", "health", "mission", "git", "token_pilot", "acceptance", "incident"})
 SAFE_KEYS = frozenset({"state", "status", "app", "mode", "textLength", "audioAvailable", "kind", "count", "sha", "deploymentId", "url", "requirements", "evidenceRefs", "scopeVersion", "verified", "withoutHuman", "phase", "accepted", "total", "summary", "gaps", "sourceFreshAt", "sourceStatus", "origin", "sessionHandle", "timestamp", "reportedState", "scanComplete"})
 SECRET = re.compile(r"(?i)(?:\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{15,}|github_pat_\w+)|\bBearer\s+\S+|\b(?:password|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret)\s*[:=]\s*\S+)")
+_URL_EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
+_URL_PHONE = re.compile(r"(?<!\d)(?:\+\d{10,15}|\(?\d{3}\)?[ -]\d{3}[ -]\d{4})(?!\d)|(?:^|/)\d{10,15}(?=/|$)")
+_URL_LOCAL_PATH = re.compile(r"(?i)/(?:Users|home|private|var|tmp|etc|Volumes|Library|Applications)(?:/|$)|(?:^|/)[a-z]:[/\\]|(?:^|/)file:")
+_URL_SECRET_PATH = re.compile(r"(?i)(?:^|/)(?:api[_-]?key|token|access[_-]?token|refresh[_-]?token|password|secret|authorization|bearer)(?:[/=:]|$)|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}|\bAIza[A-Za-z0-9_-]{20,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_URL_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+_URL_LOCAL_SUFFIXES = (".local", ".internal", ".localhost", ".test", ".invalid", ".localdomain", ".lan", ".home", ".home.arpa")
 
 
 def canonical(value):
@@ -28,10 +36,61 @@ def safe_text(value, limit=240):
 
 
 def safe_url(value):
-    u = urlsplit(str(value))
-    if u.scheme != "https" or not u.hostname or u.username or u.password:
-        raise ValueError("evidence_url_requires_public_https")
-    return urlunsplit((u.scheme, u.netloc, u.path, "", ""))
+    """Offline privacy gate, not DNS/publication proof or permission to fetch.
+
+    Reject ambiguous/nested escaping and private-looking path contents. Query
+    and fragment are discarded, never inspected or returned as evidence. Only
+    port 443 is accepted and canonical output omits it. Reserved local domain
+    suffixes and nonglobal literal IPs are rejected without resolving a host.
+    Caller-specific evidence host/repository/path registration remains required.
+    """
+    if (not isinstance(value, str) or not 1 <= len(value) <= 2_048
+            or any(char.isspace() or unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in value)
+            or "\\" in value):
+        raise ValueError("evidence_url_invalid")
+    try:
+        u = urlsplit(value)
+        host, port = u.hostname, u.port
+        if (u.scheme != "https" or not host or u.username is not None or u.password is not None
+                or "@" in u.netloc or "%" in u.netloc or port not in {None, 443}):
+            raise ValueError("evidence_url_requires_public_https")
+        if not host.isascii() or host.endswith(".") or len(host) > 253:
+            raise ValueError("evidence_url_requires_public_https")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            labels = host.split(".")
+            if (len(labels) < 2 or any(not _URL_LABEL.fullmatch(label) for label in labels)
+                    or not re.fullmatch(r"[a-z][a-z0-9-]{1,62}", labels[-1])
+                    or host == "localhost" or host.endswith(_URL_LOCAL_SUFFIXES)):
+                raise ValueError("evidence_url_requires_public_https")
+            authority = host
+        else:
+            mapped = getattr(address, "ipv4_mapped", None)
+            if (not address.is_global or address.is_multicast or address.is_reserved
+                    or mapped is not None and not mapped.is_global):
+                raise ValueError("evidence_url_requires_public_https")
+            authority = "[" + address.compressed + "]" if address.version == 6 else address.compressed
+        # Reject empty/ambiguous ports and parser/browser authority differences.
+        raw_authority = u.netloc.lower()
+        lexical_authority = "[" + host + "]" if ":" in host else host
+        if raw_authority not in {lexical_authority, lexical_authority + ":443"}:
+            raise ValueError("evidence_url_invalid")
+        if re.search(r"%(?![0-9a-fA-F]{2})", u.path):
+            raise ValueError("evidence_url_invalid")
+        decoded = unquote(u.path, encoding="utf-8", errors="strict")
+        normalized = unicodedata.normalize("NFKC", decoded)
+        if ("%" in normalized or "\\" in normalized
+                or any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in normalized)
+                or any(part in {".", ".."} for part in normalized.split("/"))
+                or SECRET.search(normalized) or _URL_SECRET_PATH.search(normalized)
+                or _URL_LOCAL_PATH.search(normalized) or _URL_EMAIL.search(normalized)
+                or _URL_PHONE.search(normalized)):
+            raise ValueError("evidence_url_path_not_public")
+        return urlunsplit(("https", authority, u.path, "", ""))
+    except (ValueError, UnicodeError):
+        # Do not retain original values or low-level parser errors in receipts.
+        raise ValueError("evidence_url_not_public") from None
 
 
 def projection(payload):

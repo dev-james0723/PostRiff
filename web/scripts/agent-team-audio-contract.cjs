@@ -15,9 +15,25 @@ const sandbox = {module: moduleStub, exports: moduleStub.exports,
   ArrayBuffer, Uint8Array, DataView, TextDecoder, Response, Blob, URL,
   AbortController, DOMException, fetch, crypto: crypto.webcrypto, console};
 vm.runInNewContext(compiled, sandbox, {filename: 'report-view.tsx'});
-const {parseAgentTeamPcmWav, fetchAgentTeamAudio} = moduleStub.exports;
+const {parseAgentTeamPcmWav, fetchAgentTeamAudio, parseAgentTeamReport} = moduleStub.exports;
 const selection = {workday: '2026-10-04', kind: 'whole_day', version: 1};
 const fingerprint = 'a'.repeat(64);
+function reportFixture(sources) {
+  return {schemaVersion:1, executionState:'generated', version:1, fingerprint, summary:'Synthetic coverage fixture',
+    asOf:'2026-10-05T05:00:00Z', generatedAt:'2026-10-05T05:00:00Z',
+    period:{workday:'2026-10-04', kind:'whole_day', key:'agent-team:v1:2026-10-04:whole_day',
+      timezone:'America/Indiana/Indianapolis', start:'2026-10-04T05:00:00Z', cutoff:'2026-10-05T05:00:00Z'},
+    counts:{completed:0, autonomouslyResolved:0, running:null, needsHuman:null},
+    coverage:sources.map(source=>({source,status:'unknown',count:0,complete:false,gaps:['source_not_verified'],freshAt:null})),
+    gaps:['synthetic_fixture'],evidence:[]};
+}
+test('coverage accepts immutable legacy and new Git projections, rejects missing scope sources', () => {
+  const original=['luci','typeless','codex','claude','browser','mission','token_pilot'];
+  assert.equal(parseAgentTeamReport(reportFixture(original),selection).coverage.length,7);
+  assert.equal(parseAgentTeamReport(reportFixture([...original,'git']),selection).coverage.length,8);
+  assert.throws(()=>parseAgentTeamReport(reportFixture([...original.slice(1),'git']),selection));
+  assert.throws(()=>parseAgentTeamReport(reportFixture([...original,'git','git']),selection));
+});
 function wav(seconds = .01) {
   const data = Math.floor(seconds * 16000) * 2;
   const b = Buffer.alloc(44 + data);

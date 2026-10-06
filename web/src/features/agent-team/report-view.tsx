@@ -35,7 +35,8 @@ type AudioState =
 type AudioRequest = { key: string; abort: AbortController; timeout: ReturnType<typeof setTimeout> | null; url: string | null };
 
 const TIMEZONE = 'America/Indiana/Indianapolis';
-const SOURCES = ['luci', 'typeless', 'codex', 'claude', 'browser', 'mission', 'token_pilot'];
+const ORIGINAL_SOURCES = ['luci', 'typeless', 'codex', 'claude', 'browser', 'mission', 'token_pilot'];
+const SOURCES = [...ORIGINAL_SOURCES, 'git'];
 const VERSION_HEADER = 'X-Agent-Team-Report-Version';
 const FINGERPRINT_HEADER = 'X-Agent-Team-Report-Fingerprint';
 const INVALID_REPORT = '報告資料與指定日期或版本不符，暫時無法顯示。';
@@ -103,7 +104,7 @@ export function parseAgentTeamReport(value: unknown, selection: Selection): Repo
     Date.parse(value.generatedAt) < Date.parse(value.asOf) || !object(counts) ||
     !count(counts.completed) || !count(counts.autonomouslyResolved) ||
     !(counts.running === null || count(counts.running)) || !(counts.needsHuman === null || count(counts.needsHuman)) ||
-    !Array.isArray(coverage) || coverage.length !== SOURCES.length || !strings(gaps) ||
+    !Array.isArray(coverage) || ![ORIGINAL_SOURCES.length, SOURCES.length].includes(coverage.length) || !strings(gaps) ||
     !Array.isArray(evidence) || evidence.length > 10000
   ) return invalid();
   const nextDay = new Date(dayStart.getTime());
@@ -123,6 +124,9 @@ export function parseAgentTeamReport(value: unknown, selection: Selection): Repo
     seen.add(row.source);
     return { source: row.source, status: row.status, count: row.count, complete: row.complete, gaps: row.gaps, freshAt: row.freshAt };
   });
+  // Immutable earlier versions keep their original seven-source projection.
+  // New versions add Git/CI; another source cannot replace a required one.
+  if (!ORIGINAL_SOURCES.every((source) => seen.has(source))) return invalid();
   const parsedEvidence: Evidence[] = evidence.map((row: unknown) => {
     if (!object(row) || !text(row.id, 64) || !/^[a-f0-9]{64}$/.test(row.id) || !text(row.source, 80) || !timestamp(row.capturedAt) || !timestamp(row.observedAt)) return invalid();
     return { id: row.id, source: row.source, capturedAt: row.capturedAt, observedAt: row.observedAt, url: safeEvidenceUrl(row.url) };

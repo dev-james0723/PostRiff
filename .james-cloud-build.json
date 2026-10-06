@@ -11,19 +11,19 @@
   },
   "envAllowlist": [],
   "inputExcludes": [
-    ".vercel",
-    "docs",
-    "studio",
-    "desktop",
-    "companion-ios",
-    "vendor",
-    "control-web",
-    ".claude",
-    ".token-pilot",
-    "web/public",
-    "web/tests",
-    "web/.next",
-    "web/node_modules"
+    ".vercel/**",
+    "docs/**",
+    "studio/**",
+    "desktop/**",
+    "companion-ios/**",
+    "vendor/**",
+    "control-web/**",
+    ".claude/**",
+    ".token-pilot/**",
+    "web/public/**",
+    "web/tests/**",
+    "web/.next/**",
+    "web/node_modules/**"
   ],
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
@@ -42,5 +42,5 @@
   "cacheScope": "e408bbcd8242",
   "lockfile": "package-lock.json",
   "lockfileSha256": "72494342c0aaf26355149cd714ef2b7c46c971c1447e9ff1b9a2a53f68ef2ca7",
-  "baseRef": "refs/remotes/origin/feat/james-daily-call-20261002"
+  "baseRef": "refs/remotes/origin/codex/james-agent-team-20261005"
 }

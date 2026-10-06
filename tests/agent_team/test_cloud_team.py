@@ -17,6 +17,7 @@ OTHER='22222222-2222-4222-8222-222222222222'
 VALUES={'JAMES_AGENT_TEAM_ENABLED':'1','JAMES_AGENT_TEAM_OBSERVER_TOKEN':'o'*40,
         'JAMES_AGENT_TEAM_READER_TOKEN':'r'*40,'JAMES_AGENT_TEAM_VERIFIER_TOKEN':'v'*40}
 HALF=period('2026-10-05','half_day')
+MISSING_FRESHNESS=object()
 
 
 def observation(revision='v1',observed='2026-10-05T20:41:00Z',fresh='2026-10-05T20:40:00Z',state='running'):
@@ -25,8 +26,10 @@ def observation(revision='v1',observed='2026-10-05T20:41:00Z',fresh='2026-10-05T
 
 
 def coverage(source='mission',observed='2026-10-05T21:03:00Z',fresh='2026-10-05T20:59:00Z',**changes):
+    payload={'kind':'source_coverage','sourceStatus':'ok','scanComplete':True,'gaps':[],**changes}
+    if fresh is not MISSING_FRESHNESS:payload['sourceFreshAt']=fresh
     return Event('health',source,'coverage-1',observed,observed,
-                 {'kind':'source_coverage','sourceFreshAt':fresh,'sourceStatus':'ok','scanComplete':True,'gaps':[],**changes}).cloud()
+                 payload).cloud()
 
 
 class MemoryStore:
@@ -177,6 +180,20 @@ class CloudTeamTests(unittest.TestCase):
         sources=source_coverage([coverage(observed='2026-10-05T21:05:00Z')],HALF,HALF.cutoff+timedelta(minutes=4))
         self.assertFalse(sources['mission']['complete'])
 
+    def test_missing_source_freshness_is_unknown_even_when_scan_time_is_recent(self):
+        row=coverage(observed='2026-10-05T20:59:30Z',fresh=MISSING_FRESHNESS,gaps=['source_freshness_unknown'])
+        self.assertNotIn('sourceFreshAt',row['payload'])
+        result=source_coverage([row],HALF,HALF.cutoff+timedelta(minutes=1))['mission']
+        self.assertEqual((result['status'],result['freshAt'],result['complete']),('unknown',None,False))
+        self.assertIn('source_freshness_unknown',result['gaps'])
+
+    def test_post_cutoff_unknown_scan_cannot_replace_positive_cutoff_freshness(self):
+        unknown=coverage(observed='2026-10-05T21:04:00Z',fresh=MISSING_FRESHNESS,gaps=['source_freshness_unknown'])
+        self.assertNotIn('sourceFreshAt',unknown['payload'])
+        sources=source_coverage([unknown,coverage()],HALF,HALF.cutoff+timedelta(minutes=5))
+        self.assertTrue(sources['mission']['complete'])
+        self.assertEqual(sources['mission']['freshAt'],'2026-10-05T20:59:00+00:00')
+
     def test_query_truncation_invalidates_all_required_source_coverage(self):
         store=MemoryStore();store.inputs[HALF.key]=([observation(),coverage()],True)
         result,_=self.run_cron(store,HALF.cutoff+timedelta(minutes=4))
@@ -314,22 +331,22 @@ class CloudPersistenceTests(unittest.TestCase):
             with self.assertRaises(AlphaError):TeamStore(factory).ingest([row])
             factory.assert_not_called()
 
-    def test_stale_question_version_cannot_record_authenticated_decision(self):
+    def test_legacy_report_version_cannot_supply_question_authority(self):
         store,cur=self.store()
-        cur.fetchone.return_value=({'agentTeamReport':{'missionId':'james-agent-team','version':2}},USER,'completed')
+        workspace='22222222-2222-4222-8222-222222222222'
+        cur.fetchone.return_value=({'agentTeamReport':{'missionId':'james-agent-team','version':2,'reportId':'a'*64,'workday':'2026-10-05'}},USER,workspace,'agent_team_report',None,None)
         d={'decisionKey':'d1','missionId':'james-agent-team','scopeVersion':'2',
            'callRunId':'33333333-3333-4333-8333-333333333333','questionVersion':'1','choice':'continue'}
-        with self.assertRaises(AlphaError) as raised:store.decision(d,USER)
-        self.assertEqual(raised.exception.status,403)
+        result=store.decision(d,USER,workspace,HALF.cutoff.timestamp())
+        self.assertEqual((result['state'],result['executionState']),('blocked','not_dispatched'))
         self.assertFalse(any(c.args[0].startswith('INSERT') for c in cur.execute.call_args_list))
 
-    def test_exact_authenticated_mission_and_question_record_without_dispatch(self):
+    def test_matching_legacy_report_version_cannot_bypass_question_and_attendance_evidence(self):
         store,cur=self.store()
+        workspace='22222222-2222-4222-8222-222222222222'
         d={'decisionKey':'d1','missionId':'james-agent-team','scopeVersion':'2',
            'callRunId':'33333333-3333-4333-8333-333333333333','questionVersion':'2','choice':'continue'}
-        cur.fetchone.side_effect=[({'agentTeamReport':{'missionId':'james-agent-team','version':2}},USER,'completed'),
-                                 ('james-agent-team','2',d['callRunId'],'2','continue',USER)]
-        result=store.decision(d,USER)
-        self.assertEqual(result,{'state':'recorded','executionState':'not_dispatched'})
-        insert=next(c for c in cur.execute.call_args_list if c.args[0].startswith('INSERT'))
-        self.assertEqual(insert.args[1][-1],USER)
+        cur.fetchone.return_value=({'agentTeamReport':{'missionId':'james-agent-team','version':2,'reportId':'a'*64,'workday':'2026-10-05'}},USER,workspace,'agent_team_report',None,None)
+        result=store.decision(d,USER,workspace,HALF.cutoff.timestamp())
+        self.assertEqual((result['state'],result['executionState']),('blocked','not_dispatched'))
+        self.assertFalse(any(c.args[0].startswith('INSERT') for c in cur.execute.call_args_list))

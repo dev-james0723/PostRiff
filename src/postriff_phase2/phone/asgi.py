@@ -87,7 +87,9 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False, 
                 db.commit()
             phase='controller_init'
             controller=PhoneSessionController(phone,call_id)
-            transport=TwilioMediaTransport(socket,meta['streamSid'])
+            from .agent_team_media import TeamMediaEvidence
+            proof=await asyncio.to_thread(TeamMediaEvidence.create,phone,controller.call,meta['streamSid'])
+            transport=TwilioMediaTransport(socket,meta['streamSid'],evidence=proof)
             if live_connect:
                 phase='live_connect'
                 async with live_connect() as connection:

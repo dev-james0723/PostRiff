@@ -17,6 +17,9 @@ from agent_team.service import (
     one_tick,
     run_daemon,
 )
+from agent_team.evidence_sources import EvidenceBatch
+from agent_team.events import Event
+from agent_team.service import ClaudeLogRegistration
 
 
 class FakeJournal:
@@ -123,7 +126,82 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "native_workspace_project_not_approved"):
             self.config(native_workspaces=[{"workspace": str(self.root / "other"), "project_id": "fixture-project"}])
         with self.assertRaisesRegex(ValueError, "duplicate_native_workspace"):
-            self.config(native_workspaces=self.native_selection() * 2)
+                self.config(native_workspaces=self.native_selection() * 2)
+
+    def test_metadata_sources_use_exact_registered_scope(self):
+        config=self.config(evidence_workspaces=self.native_selection())
+        self.assertEqual(config.evidence_workspaces[0].workspace,self.workspace)
+        with self.assertRaisesRegex(ValueError,'evidence_workspace_project_not_approved'):
+            self.config(evidence_workspaces=[{'workspace':str(self.root/'other'),'project_id':None}])
+        with self.assertRaisesRegex(ValueError,'duplicate_evidence_workspace'):
+            self.config(evidence_workspaces=self.native_selection()*2)
+        with self.assertRaisesRegex(ValueError,'claude_log_not_approved'):
+            self.config(claude_logs=[str(self.root/'unapproved.jsonl')])
+        with self.assertRaisesRegex(ValueError,'claude_registration_limit'):
+            self.config(claude_logs=[{}])
+
+    def test_claude_path_requires_both_log_and_project_policy(self):
+        log=self.root/'existing.jsonl';log.touch()
+        data={**self.policy_data,'approved_claude_logs':{str(log):{'workspace':str(self.workspace),'project_id':'fixture-project'}}}
+        policy=ServicePolicy.from_mapping(data,canonical_root=self.root)
+        config=ServiceConfig.from_mapping({**self.config_data,'claude_logs':[str(log)]},policy)
+        self.assertEqual(config.claude_logs[0].workspace,self.workspace)
+        bad={**self.policy_data,'approved_claude_logs':{str(log):{'workspace':str(self.root/'other'),'project_id':None}}}
+        with self.assertRaisesRegex(ValueError,'claude_workspace_project_not_approved'):
+            ServicePolicy.from_mapping(bad,canonical_root=self.root)
+
+    def test_partial_metadata_evidence_does_not_become_daily_coverage_or_dispatch(self):
+        batch=EvidenceBatch('token_pilot','partial',gaps=('budget_unknown',),fresh_at=self.now.isoformat())
+        deps=self.dependencies(evidence=lambda config,now:[('fixture-project',batch)])
+        journal=FakeJournal();result=one_tick(self.config(evidence_workspaces=self.native_selection()),journal,deps)
+        self.assertEqual(result['taskDispatch'],'not_requested')
+        self.assertFalse(result['dailyCoverageComplete'])
+        health=next(e for e in journal.events if e['source_id']=='token_pilot')
+        self.assertFalse(health['payload']['scanComplete'])
+        self.assertIn('budget_unknown',health['payload']['gaps'])
+
+    def test_evidence_scope_is_checked_before_journal_ingest(self):
+        event=Event('git','evil','1',self.now.isoformat(),self.now.isoformat(),{'kind':'git_metadata'})
+        deps=self.dependencies(evidence=lambda config,now:[(None,EvidenceBatch('git','ok',events=(event,)))])
+        journal=FakeJournal();result=one_tick(self.config(evidence_workspaces=self.native_selection()),journal,deps)
+        self.assertFalse(any(e['source']=='git' for e in journal.events))
+        self.assertIn('registered_evidence_poll_failed',result['gaps'])
+
+    def test_unknown_evidence_freshness_is_not_replaced_by_clock(self):
+        batch=EvidenceBatch('token_pilot','partial',fresh_at=None)
+        deps=self.dependencies(evidence=lambda config,now:[('fixture-project',batch)])
+        journal=FakeJournal();one_tick(self.config(evidence_workspaces=self.native_selection()),journal,deps)
+        health=next(e for e in journal.events if e['source_id']=='token_pilot')
+        self.assertNotIn('sourceFreshAt',health['payload'])
+        self.assertIn('source_freshness_unknown',health['payload']['gaps'])
+
+    def test_unconnected_project_is_not_hidden_by_fresh_project(self):
+        other=self.root/'second';other.mkdir()
+        policy=ServicePolicy.from_mapping({**self.policy_data,'approved_native_projects':{
+            str(self.workspace):'fixture-project',str(other):'second-project'}},canonical_root=self.root)
+        selected=self.native_selection()+[{'workspace':str(other),'project_id':'second-project'}]
+        config=ServiceConfig.from_mapping({**self.config_data,'evidence_workspaces':selected},policy)
+        deps=self.dependencies(evidence=lambda config,now:[
+            ('fixture-project',EvidenceBatch('git','ok',fresh_at=self.now.isoformat())),
+            ('second-project',EvidenceBatch('git','not_connected',gaps=('source_missing',),fresh_at=None))])
+        journal=FakeJournal();one_tick(config,journal,deps)
+        health=next(e for e in journal.events if e['source_id']=='git')
+        self.assertEqual(health['payload']['sourceStatus'],'not_connected')
+        self.assertIn('source_missing',health['payload']['gaps'])
+        self.assertNotIn('sourceFreshAt',health['payload'])
+        scoped=[e for e in journal.events if e['payload'].get('kind')=='source_project_coverage']
+        self.assertEqual(len(scoped),2)
+        self.assertEqual(len({e['source_id'] for e in scoped}),2)
+
+    def test_direct_claude_config_cannot_replace_registered_workspace(self):
+        from dataclasses import replace
+        log=self.root/'existing.jsonl';log.touch()
+        policy=ServicePolicy.from_mapping({**self.policy_data,'approved_claude_logs':{
+            str(log):{'workspace':str(self.workspace),'project_id':'fixture-project'}}},canonical_root=self.root)
+        config=ServiceConfig.from_mapping({**self.config_data,'claude_logs':[str(log)]},policy)
+        forged=replace(config,claude_logs=(ClaudeLogRegistration(log,self.root,'wrong-project'),))
+        with self.assertRaisesRegex(ValueError,'claude_registration_tuple_not_approved'):
+            one_tick(forged,FakeJournal(),self.dependencies())
 
     def test_private_runtime_and_symlink_alias_are_rejected(self):
         self.runtime.chmod(0o755)

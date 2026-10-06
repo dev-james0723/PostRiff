@@ -6,7 +6,7 @@ import hashlib
 from .events import canonical, safe_text, safe_url
 from .periods import aware, TZ
 
-EXPECTED_SOURCES=("luci","typeless","codex","claude","browser","mission","token_pilot")
+EXPECTED_SOURCES=("luci","typeless","codex","claude","browser","mission","token_pilot","git")
 
 
 def report(period, events, generated_at=None, sources=None, preview=False):

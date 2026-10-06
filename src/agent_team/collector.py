@@ -14,7 +14,9 @@ TYPELESS_INFO=Path('/Applications/Typeless.app/Contents/Info.plist')
 
 def from_observation(observation):
     d=observation.cloud_projection();m=d['metadata']
-    payload={'kind':d['event_type'],'sourceFreshAt':d['updated_at'] or d['occurred_at'] or d['observed_at']}
+    payload={'kind':d['event_type']}
+    # Receipt time is not evidence that the underlying activity was recent.
+    if d['updated_at'] or d['occurred_at']:payload['sourceFreshAt']=d['updated_at'] or d['occurred_at']
     if 'text_length' in m:payload['textLength']=m['text_length']
     if 'audio_exists' in m and observation.local_reference.get('audio_path'):payload['audioAvailable']=m['audio_exists']
     if m.get('text_hash'):payload['sha']=m['text_hash']
@@ -23,10 +25,19 @@ def from_observation(observation):
 
 
 def coverage_event(source,batch,observed_at,start_at,end_at):
-    # A successful bounded scan is not complete daily or whole-mission coverage.
+    """Record scan receipt time separately from a verified scan watermark.
+
+    Only a successful, gap-free finished bounded query gets sourceFreshAt.
+    This watermark describes a source scan, including an empty result, not the
+    latest activity or daily/whole-mission coverage. Failure or an unfinished
+    scan leaves source freshness unknown; observed_at still records the scan.
+    """
     gaps=list(batch.gaps)+['bounded_scan_only']
-    payload={'kind':'source_coverage','sourceStatus':batch.status,'sourceFreshAt':observed_at,
+    payload={'kind':'source_coverage','sourceStatus':batch.status,
              'scanComplete':False,'gaps':gaps,'count':batch.scanned}
+    if batch.status=='ok' and batch.complete is True and not batch.gaps:
+        payload['sourceFreshAt']=observed_at
+    else:gaps.append('source_freshness_unknown')
     revision=hashlib.sha256(canonical([source,start_at,end_at,observed_at,payload]).encode()).hexdigest()
     return Event('health',source,revision,observed_at,observed_at,payload)
 
@@ -50,9 +61,12 @@ def collect_once(journal,now=None,*,typeless=True,luci=False,window_seconds=1800
             items.extend(last.observations);scanned+=last.scanned;gaps.update(last.gaps)
             added+=journal.ingest([from_observation(x) for x in last.observations],source='typeless',cursor=last.cursor)
             cursor=last.cursor
-            if last.complete or last.status=='unavailable':break
-        if last.complete:gaps.discard('page_remaining')
-        batches['typeless']=ObservationBatch('partial' if gaps else last.status,tuple(items),cursor,tuple(sorted(gaps)),scanned,last.complete)
+            if last.complete or last.status not in {'ok','partial'}:break
+        successful=last.status in {'ok','partial'}
+        complete=successful and last.complete is True
+        if complete:gaps.discard('page_remaining')
+        status='partial' if successful and (gaps or not complete) else last.status
+        batches['typeless']=ObservationBatch(status,tuple(items),cursor,tuple(sorted(gaps)),scanned,complete)
     if luci:
         adapter=luci_observer or LuciObserver(LUCI_SHIM,LUCI_SHIM)
         batch=adapter.poll(start_ms=int(start.timestamp()*1000),end_ms=int(now.timestamp()*1000),limit=20)
@@ -67,9 +81,19 @@ def collect_once(journal,now=None,*,typeless=True,luci=False,window_seconds=1800
 
 
 def coverage_from_journal(events):
+    """Recover health metadata; failed legacy receipts cannot claim freshness.
+
+    scannedAt is the health event receipt time. freshAt may be a documented
+    bounded-scan watermark, and never establishes activity or daily coverage.
+    """
     sources={}
     for e in events:
         if e['source']=='health' and e['payload'].get('kind')=='source_coverage':
-            p=e['payload'];sources[e['source_id']]={'status':p['sourceStatus'],'freshAt':p['sourceFreshAt'],
-                'complete':p['scanComplete'],'gaps':p['gaps']}
+            p=e['payload'];status=p['sourceStatus'];gaps=p['gaps']
+            successful=status in {'ok','partial'}
+            sources[e['source_id']]={'status':status,
+                'freshAt':p.get('sourceFreshAt') if successful else None,
+                'scannedAt':e['observed_at'],
+                'complete':successful and p['scanComplete'] is True and 'bounded_scan_only' not in gaps,
+                'gaps':gaps}
     return sources
