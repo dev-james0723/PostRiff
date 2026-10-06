@@ -25,6 +25,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from postriff_alpha.domain import AlphaError, clean
 
+from .agent_team_cutover import call_enabled as agent_team_call_enabled
+
 from .agent_runtime_v2.http import runtime_for
 from .automation_runs import principal_repository
 from .notifications.planner import in_quiet_hours
@@ -351,7 +353,7 @@ class DailyCallService:
 
     def _report_call_gate(self, context):
         report = context["agentTeamReport"]
-        if not _truthy(self.values.get("JAMES_AGENT_TEAM_CALL_ENABLED")):
+        if not agent_team_call_enabled(self.values):
             raise AlphaError("Agent Team phone delivery is disabled.", 409, code="agent_team_call_disabled")
         now = self.clock()
         local = datetime.fromtimestamp(now, ZoneInfo(TEAM_REPORT_ZONE))
