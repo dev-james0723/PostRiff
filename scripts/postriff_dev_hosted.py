@@ -254,7 +254,15 @@ def start_postgres(port=PORT_PG):
     tmp = tempfile.mkdtemp(prefix="postriff-dev-pg-")
     data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
     subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # pg_ctl only says "Examine the log output". Retain the actual startup
+        # cause in the harness artifact without flooding CI with the whole log.
+        if log.exists():
+            print(f"Disposable PostgreSQL startup log ({log}):", file=sys.stderr)
+            print(log.read_text(errors="replace")[-16_384:], file=sys.stderr, flush=True)
+        raise
     dsn = f"host=127.0.0.1 port={port} dbname=postgres"
     subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
     return dsn, data
