@@ -465,7 +465,7 @@ class RestrictedOwner:
             raise RecoveryBlocked('native_readonly_workspace_changed')
         result.update(workspaceHead=after.head,workspaceDirtySha256=after.dirty_sha256,guardRef=self.guard_ref)
         write_private(self.root/'native-result.json',result)
-    return result
+        return result
 
     def dispatch(self, method, data, request_id):
         if method=='observe':
