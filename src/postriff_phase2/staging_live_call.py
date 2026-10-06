@@ -47,16 +47,26 @@ def _prior(service, daily, identity):
 
 
 def preview(service, values):
+    from .credit_meter import millicredits
     daily = _gate(service, values)
     seconds = min(120, daily.cfg.max_seconds, daily.phone.config.cap_seconds)
     if daily.cfg.quiet(service.clock()):
         raise AlphaError('Voice test is inside quiet hours.', 409, code='quiet_hours')
+    book = service.ledger.credits
+    if book is None:
+        raise AlphaError('The staging credit ledger is paused; no call was requested.', 503)
     with service.connection_factory() as db, db.cursor() as cur:
-        daily._budget_check(cur, service.clock(), extra=daily._estimate(seconds))
+        estimate = daily._estimate(seconds)
+        daily._budget_check(cur, service.clock(), extra=estimate)
+        if not book.policy(cur, daily.cfg.workspace_id):
+            raise AlphaError('The staging voice test requires active credit terms.', 409)
+        wallet = book.view(cur, daily.cfg.workspace_id)
+        if wallet['debtMilliCredits'] or wallet['availableMilliCredits'] < millicredits(estimate):
+            raise AlphaError('Existing credits cannot cover this bounded voice test. No call was requested.', 402)
     return {'executionMode': 'staging_voice_test', 'provider': daily.phone.provider.name,
             'model': 'gpt-live-1', 'maxSeconds': seconds, 'destinationConfigured': True,
             'dailyCapUsdMicro': daily.cfg.daily_cap, 'monthlyCapUsdMicro': daily.cfg.monthly_cap,
-            'automaticRetry': False, 'nativeAgentRequired': False}
+            'automaticRetry': False, 'nativeAgentRequired': False, 'creditLedgerReady': True}
 
 
 def start(service, values, request):

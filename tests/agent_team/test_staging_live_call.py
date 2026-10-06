@@ -30,6 +30,8 @@ class StagingLiveCallTests(unittest.TestCase):
         daily.phone.provider.real = True
         daily.phone.provider.name = 'twilio'
         daily.phone.config.cap_seconds = 3600
+        daily._estimate.return_value = 100000
+        service.ledger.credits.view.return_value = {'availableMilliCredits': 1000000, 'debtMilliCredits': 0}
         return service
 
     def test_exact_staging_and_emergency_gates_precede_dial(self):
@@ -88,6 +90,16 @@ class StagingLiveCallTests(unittest.TestCase):
                  patch('postriff_phase2.phone.runtime.principal_phone') as principal, self.assertRaises(AlphaError):
                 subject.start(service, VALUES, {'testId': ID})
             principal.assert_not_called()
+
+    def test_preflight_rejects_paused_inactive_or_insufficient_credits(self):
+        for blocker in ('paused', 'inactive', 'balance', 'debt'):
+            service = self.service()
+            if blocker == 'paused': service.ledger.credits = None
+            if blocker == 'inactive': service.ledger.credits.policy.side_effect = AlphaError('Inactive policy', 409)
+            if blocker == 'balance': service.ledger.credits.view.return_value['availableMilliCredits'] = 0
+            if blocker == 'debt': service.ledger.credits.view.return_value['debtMilliCredits'] = 1
+            with self.subTest(blocker=blocker), self.assertRaises(AlphaError):
+                subject.preview(service, VALUES)
 
     def test_http_requires_verifier_and_does_not_accept_reader_or_observer(self):
         app = SimpleNamespace(_runtime=MagicMock(return_value=self.service()),

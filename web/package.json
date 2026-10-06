@@ -17,7 +17,7 @@
     "validate:agent-team": "npm run prepare:agent-team:python && npm run test:agent-team && npm run test:agent-team:audio && npm run test:phone:agent-team && npm run test:founder:agent-team && npm run typecheck",
     "test:agent-team:audio": "node --test scripts/agent-team-audio-contract.cjs",
     "test:founder:agent-team": "cd .. && PYTHONPATH=src:tests/control python3 -m unittest -v test_live_metrics.LiveMetricTests.test_overview_live_contract test_live_metrics.LiveMetricTests.test_overview_instrumented_empty_publish_interval_keeps_null_rate_and_receipts test_live_metrics.LiveMetricTests.test_overview_brief_requires_nonempty_all_measured_sources_for_current_claim test_demo_metrics",
-    "test:phone:agent-team": "cd .. && PYTHONPATH=src:tests python3 -m unittest -v test_rafii_phone_media test_rafii_phone test_james_daily_call",
+    "test:phone:agent-team": "cd .. && PYTHONPATH=src:tests python3 -m unittest -v test_rafii_phone_media test_rafii_phone test_james_daily_call test_credit_wallet test_credit_meter_preview",
     "prepare:agent-team:python": "cd .. && python3 -m pip install --break-system-packages -r requirements.txt"
   },
   "dependencies": {
