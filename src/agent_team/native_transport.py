@@ -372,6 +372,7 @@ class CodexUnixProxy:
 
 
 class NativeOwnerTransport:
+    supported_engine = "codex"
     def __init__(self, control: ControlPort, ledger: DeliveryLedger, proxy: ProxyPort,
                  observer: Callable[[NativeContext], NativeOwnerSnapshot], *, clock: Callable[[], float] = time.time,
                  socket_check: Callable[[NativeOwner, NativeOwnerSnapshot], None] = verify_socket,
@@ -386,7 +387,7 @@ class NativeOwnerTransport:
         now = self.clock()
         reservation = self.control.assert_reserved(context, now=now)
         r, b = context.registration, context.execution
-        if b.engine != "codex":
+        if b.engine != self.supported_engine:
             raise RecoveryBlocked("native_transport_codex_only")
         if snapshot.execution_sha256 != b.fingerprint or snapshot.thread_id != b.native_session_id:
             raise RecoveryBlocked("native_snapshot_execution_mismatch")

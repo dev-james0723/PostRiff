@@ -22,10 +22,18 @@ def save(path, value):
 
 def prepare(root):
     root = Path(root).absolute()
+    if root.exists() and (root.is_symlink() or root.resolve()!=root):
+        raise ValueError('private_capture_root_required')
+    marker = root / 'capture-owner.json'
+    if root.exists() and any(root.iterdir()) and not marker.is_file():
+        raise ValueError('existing_directory_not_owned_by_capture')
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if root.is_symlink() or root.resolve() != root:
         raise ValueError('private_capture_root_required')
     os.chmod(root, 0o700)
+    if not marker.exists():save(marker,{'schemaVersion':1,'ownerUid':os.getuid(),'purpose':'bounded_screen_system_audio'})
+    if marker.is_symlink() or json.loads(marker.read_text())!={'schemaVersion':1,'ownerUid':os.getuid(),'purpose':'bounded_screen_system_audio'}:
+        raise ValueError('capture_owner_identity_changed')
     return root
 
 def capture(root, helper, seconds):
@@ -36,10 +44,13 @@ def capture(root, helper, seconds):
                             text=True, timeout=seconds+30)
     try: metadata = json.loads(result.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError): raise ValueError('native_capture_outcome_unverified') from None
-    if result.returncode != 0 or metadata.get('executionState') != 'captured_screen_and_system_audio':
+    if result.returncode != 0 or metadata.get('executionState') not in (
+            'captured_screen_and_system_audio', 'captured_screen_system_audio_unobserved'):
         raise ValueError(metadata.get('reason', 'native_capture_failed'))
-    if path.is_symlink() or path.parent != root or metadata.get('videoTracks') != 1 or metadata.get('systemAudioTracks') != 1:
-        raise ValueError('screen_system_audio_tracks_required')
+    if path.is_symlink() or path.parent != root or metadata.get('videoTracks') != 1 or metadata.get('systemAudioTracks') not in (0,1):
+        raise ValueError('native_recorded_tracks_unverified')
+    if (metadata.get('systemAudioTracks')==0)!=(metadata['executionState']=='captured_screen_system_audio_unobserved'):
+        raise ValueError('native_audio_observation_mismatch')
     os.chmod(path, 0o600)
     metadata.update(id=identifier, path=path.name, byteCount=path.stat().st_size,
                     sha256=hashlib.sha256(path.read_bytes()).hexdigest(), storedAt=time.time(), retentionState='retained')
@@ -74,6 +85,7 @@ def run(root, helper, seconds, *, once=False):
             'policy': {'maxBytes': MAX_BYTES, 'retentionSeconds': RETENTION_SECONDS, 'minFreeBytes': MIN_FREE_BYTES,
                        'chunkSeconds': seconds, 'screenSamplingFps': 1, 'systemAudio': True, 'microphone': False},
             'fullDayCoverageMatured': False, 'gaps': [], 'continuousCollection': not once}
+        state.update(continuousCollection=not once,collectorPid=os.getpid(),collectorStartedAt=time.time())
         while True:
             start = time.time()
             try:
@@ -83,6 +95,9 @@ def run(root, helper, seconds, *, once=False):
                     gap = max(0, datetime.fromisoformat(row['startedAt'].replace('Z', '+00:00')).timestamp() - previous)
                     if gap: state['gaps'].append({'startedAt': previous, 'seconds': gap, 'reason': 'native_chunk_rotation'})
                 state['chunks'].append(row); state['executionState'] = 'running' if not once else 'bounded_capture_complete'
+                if row['systemAudioTracks']==0:
+                    state['gaps'].append({'startedAt':start,'seconds':row['durationSeconds'],
+                        'reason':'no_recorded_system_audio_samples'})
                 total = sum(r['byteCount'] for r in state['chunks'] if r['retentionState'] == 'retained')
                 for old in state['chunks']:
                     if old['retentionState'] != 'retained': continue
@@ -94,8 +109,12 @@ def run(root, helper, seconds, *, once=False):
                 retained = [r for r in state['chunks'] if r['retentionState'] == 'retained']
                 state.update(updatedAt=time.time(), retainedBytes=total,
                     capturedSeconds=sum(r['durationSeconds'] for r in retained),
+                    recordedSystemAudioSeconds=sum(r['durationSeconds'] for r in retained if r['systemAudioTracks']==1),
                     elapsedSeconds=time.time()-state['startedAt'],
-                    fullDayCoverageMatured=False, maturationReason='requires_24h_measured_coverage_and_gap_review')
+                    fullDayDurationMatured=time.time()-state['startedAt']>=86400,
+                    measuredCaptureDurationMatured=sum(r['durationSeconds'] for r in retained)>=86400,
+                    fullDayCoverageMatured=False,
+                    maturationReason='duration_matures_from_real_time; recorded_gaps_require_coverage_review')
                 save(manifest, state)
                 if once: return row
             except Exception as error:

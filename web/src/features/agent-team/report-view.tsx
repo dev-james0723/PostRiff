@@ -495,7 +495,7 @@ export function AgentTeamReportView({ workday, kind, version, acceptanceId }: Se
   ] : [];
 
   return (
-    <PageContainer width='reading' pageTitle='James Agent Team' pageEyebrow={acceptanceId ? 'Staging acceptance · 截至目前' : '私人報告'} pageDescription={`${workday} · ${acceptanceId ? '驗收報告，非歷史排程' : kind === 'whole_day' ? '全日報告' : '半日報告'} · 固定版本 ${version}`}>
+    <PageContainer width='reading' pageTitle='James Agent Team' pageEyebrow={acceptanceId ? '驗收報告 · 截至目前' : '私人報告'} pageDescription={`${workday} · ${acceptanceId ? '驗收報告，非歷史排程' : kind === 'whole_day' ? '全日報告' : '半日報告'} · 固定版本 ${version}`}>
       <div lang='zh-Hant' className='flex min-w-0 flex-col gap-5'>
         {status === 'loading' && <p role='status' className='text-muted-foreground'>正在核對登入狀態…</p>}
         {status !== 'loading' && status !== 'signed-in' && <Surface><p role='status'>{status === 'mfa-required' ? '請完成目前帳戶的登入驗證，再查看這份私人報告。' : '請登入有權查看報告的 Rafii 帳戶。'}</p></Surface>}

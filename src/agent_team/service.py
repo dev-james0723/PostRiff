@@ -41,6 +41,7 @@ from .transport import send_pending
 from .audio_bridge import produce_pending
 from .evidence_sources import (ClaudeMetadataConfig, GitMetadataConfig, TokenPilotMetadataConfig,
                                read_claude_metadata, read_git_metadata, read_token_pilot_metadata)
+from .mission_evidence import MissionEvidenceBinding, associate_mission
 
 
 CANONICAL_ROOT = Path.home()/"Documents/James-Agent-Team"
@@ -99,6 +100,7 @@ class ClaudeLogRegistration:
     log_path: Path
     workspace: Path
     project_id: str
+    mission_binding: MissionEvidenceBinding | None = None
 
 
 @dataclass(frozen=True)
@@ -145,11 +147,12 @@ class ServicePolicy:
         approved_projects={str(item.workspace):item.project_id for item in registrations}
         selected_logs=[]
         for log_path, details in logs.items():
-            item=_keys(details,{'workspace','project_id'},{'workspace','project_id'})
+            item=_keys(details,{'workspace','project_id','mission_binding'},{'workspace','project_id'})
             path=_exact_absolute(log_path);workspace=_exact_absolute(item['workspace'])
             if str(workspace) not in approved_projects or approved_projects[str(workspace)]!=item['project_id']:
                 raise ValueError('claude_workspace_project_not_approved')
-            selected_logs.append(ClaudeLogRegistration(path,workspace,item['project_id']))
+            binding=MissionEvidenceBinding.from_mapping(item['mission_binding']) if 'mission_binding' in item else None
+            selected_logs.append(ClaudeLogRegistration(path,workspace,item['project_id'],binding))
         repositories=data.get('approved_git_repositories',{})
         if not isinstance(repositories,dict) or len(repositories)>8:
             raise ValueError('git_repository_registration_limit')
@@ -197,7 +200,8 @@ class ServiceConfig:
             'version':1,'canonical_root':str(self.policy.canonical_root),
             'approved_native_projects':{str(item.workspace):item.project_id for item in self.policy.approved_native_projects},
             'allowed_upload_hosts':list(self.policy.allowed_upload_hosts),
-            'approved_claude_logs':{str(item.log_path):{'workspace':str(item.workspace),'project_id':item.project_id}
+            'approved_claude_logs':{str(item.log_path):{'workspace':str(item.workspace),'project_id':item.project_id,
+                                    **({'mission_binding':item.mission_binding.as_dict()} if item.mission_binding else {})}
                                     for item in self.policy.approved_claude_logs},
             'approved_git_repositories':{str(item.workspace):{'repository':item.repository,'gh_binary':str(item.gh_binary)}
                                         for item in self.policy.approved_git_repositories}},canonical_root=self.policy.canonical_root)
@@ -355,7 +359,9 @@ def collect_registered_evidence(config: ServiceConfig, now: datetime):
         yield item.project_id,read_git_metadata(GitMetadataConfig(item.workspace,item.workspace,item.project_id,**options),observed_at=now)
         yield item.project_id,read_token_pilot_metadata(TokenPilotMetadataConfig(item.workspace,item.workspace,item.project_id),observed_at=now)
     for item in config.claude_logs:
-        yield item.project_id,read_claude_metadata(ClaudeMetadataConfig(item.log_path,item.log_path,item.workspace,item.workspace,item.project_id),observed_at=now)
+        batch=read_claude_metadata(ClaudeMetadataConfig(item.log_path,item.log_path,item.workspace,item.workspace,item.project_id,
+            session_id=item.mission_binding.session_id if item.mission_binding else None),observed_at=now)
+        yield item.project_id,associate_mission(batch,item.mission_binding,workspace=item.workspace,project_id=item.project_id)
 
 
 @dataclass(frozen=True)
