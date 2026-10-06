@@ -11,6 +11,7 @@ import re
 import uuid
 from urllib.parse import parse_qs
 from postriff_alpha.domain import AlphaError
+from .agent_team_cutover import call_enabled as agent_team_call_enabled, cutover_source, team_enabled
 from agent_team.events import Event, canonical
 from agent_team.periods import aware, latest_due, period
 from agent_team.reports import EXPECTED_SOURCES, report, svg, html
@@ -19,7 +20,7 @@ PREFIX='/api/internal/james-agent-team'
 
 
 def enabled(values):
-    return str(values.get('JAMES_AGENT_TEAM_ENABLED','0')).lower() in ('1','true')
+    return team_enabled(values)
 
 
 def authorize(environ, values, role):
@@ -91,7 +92,7 @@ def readiness(service,values):
     from .james_daily_call import DailyCallConfig
     cfg=getattr(getattr(service,'james_daily_call',None),'cfg',None) or DailyCallConfig(values)
     team_enabled=enabled(values)
-    call_enabled=str(values.get('JAMES_AGENT_TEAM_CALL_ENABLED','0')).lower() in ('1','true')
+    team_call_enabled=agent_team_call_enabled(values)
     tokens=[str(values.get('JAMES_AGENT_TEAM_'+role.upper()+'_TOKEN') or '') for role in ('observer','reader','verifier')]
     roles_ready=all(32<=len(token)<=512 for token in tokens) and len(set(tokens))==3
     blockers=[]
@@ -173,9 +174,9 @@ def readiness(service,values):
         if not binding[field]:blockers.append(problem)
     configuration_ready=not blockers
     if not team_enabled:blockers.append('team_disabled')
-    if not call_enabled:blockers.append('team_call_disabled')
+    if not team_call_enabled:blockers.append('team_call_disabled')
     return {'readiness':'ready' if not blockers else 'blocked','configurationReady':configuration_ready,
-            'enabled':team_enabled,'callEnabled':call_enabled,'roleSecretsConfigured':roles_ready,
+            'enabled':team_enabled,'callEnabled':team_call_enabled,'cutoverSource':cutover_source(values),'roleSecretsConfigured':roles_ready,
             'databaseAvailable':database_available,'databaseMigrations':migrations,
             'migrationCheck':'required_tables_and_columns','binding':binding,'callPolicy':policy,
             'blockers':blockers,'nativeState':'unverified','scheduleState':'unverified',
@@ -410,7 +411,7 @@ def _generate_period(service,values,store,p,now,prior=None,historical=False):
     if p.kind=='whole_day':return status
     if supplement or historical:
         status['callState']='supplement_no_call';return status
-    if str(values.get('JAMES_AGENT_TEAM_CALL_ENABLED','0')).lower() not in ('1','true'):return status
+    if not agent_team_call_enabled(values):return status
     if (now-p.cutoff).total_seconds()>900:
         status['callState']='missed_window';return status
     effect=p.key+':call'
@@ -476,7 +477,7 @@ def route(app,environ,start_response,method,path):
     if tail=='/status' and method=='GET':
         authorize_reader(app,environ,service,values)
         return app._json(start_response,200,{'state':'enabled','schedulerOwner':'existing_vercel_worker','timezone':'America/Indiana/Indianapolis',
-            'workdayBoundary':'01:00','cutoffs':['17:00','01:00'],'nightPhone':False,'callEnabled':str(values.get('JAMES_AGENT_TEAM_CALL_ENABLED','0')).lower() in ('1','true'),
+            'workdayBoundary':'01:00','cutoffs':['17:00','01:00'],'nightPhone':False,'callEnabled':agent_team_call_enabled(values),'cutoverSource':cutover_source(values),
             'nativeRecoveryState':'not_connected','audioState':'not_connected','reportDeliveryState':'not_connected'})
     if tail.startswith('/reports/') and method=='GET':
         authorize_reader(app,environ,service,values)
