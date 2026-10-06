@@ -66,7 +66,12 @@ PUBLISH_STATE_EVENTS = {"verified": "publish.verified", "failed": "publish.faile
 # Events an embedded service registers at runtime (Founder mode: rafii_control.founder_incidents). They live beside EVENTS,
 # never inside it: the locked notification-planning policy (skills/rafii-registry.json) hashes EVENTS, so the shipped
 # customer catalogue stays byte-stable, and public() never lists these events on the customer settings page.
-EXTENSION_EVENTS = {}
+EXTENSION_EVENTS = {
+    # Private, person-scoped report readiness. The caller narrows whole-day
+    # reports to in-app; existing preferences and quiet hours still apply.
+    'james.team_report_ready': {'category': 'automation', 'severity': 'info', 'audience': 'actor',
+                              'email': 'off', 'push': 'immediate', 'sms': 'off', 'template': 'digest'},
+}
 
 
 def register_extension_events(events):

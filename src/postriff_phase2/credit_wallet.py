@@ -7,7 +7,7 @@ import json
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import POLICY_VERSION, millicredits
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits
 
 
 def amount(value):
@@ -70,7 +70,7 @@ class CreditBook:
         cur.execute("SELECT p.entitlements->>'creditPolicy',p.status FROM public.pr_entitlements e JOIN public.pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace_id,))
         row = cur.fetchone()
         if not row or not row[0]: return None
-        if row[0] != POLICY_VERSION or row[1] != 'active':
+        if row[0] not in SUPPORTED_POLICY_VERSIONS or row[1] != 'active':
             raise AlphaError('This credit policy is not active. No charge was made.',409)
         return row[0]
 

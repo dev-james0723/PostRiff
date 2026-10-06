@@ -1,0 +1,46 @@
+{
+  "provider": "depot",
+  "packageRoot": "web",
+  "packageManager": "npm",
+  "nodeVersion": "24",
+  "packageManagerVersion": "11.12.1",
+  "tasks": {
+    "test": "test:agent-team",
+    "typecheck": "typecheck",
+    "ci": "validate:agent-team"
+  },
+  "envAllowlist": [],
+  "inputExcludes": [
+    ".vercel/**",
+    "docs/**",
+    "studio/**",
+    "desktop/**",
+    "companion-ios/**",
+    "vendor/**",
+    "control-web/**",
+    ".claude/**",
+    ".token-pilot/**",
+    "web/public/**",
+    "web/tests/**",
+    "web/.next/**",
+    "web/node_modules/**"
+  ],
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
+  },
+  "localFallback": false,
+  "outputs": [],
+  "orgId": "jf34f85hr0",
+  "installCommand": "npm ci",
+  "environment": {
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1"
+  },
+  "taskArgs": {},
+  "checkoutPersistCredentials": true,
+  "framework": "next",
+  "cacheScope": "e408bbcd8242",
+  "lockfile": "package-lock.json",
+  "lockfileSha256": "b1a1154498a57e116172ffeec52ebf19881326aabd171d9eb058b5a17acbf076",
+  "baseRef": "refs/remotes/origin/codex/james-agent-team-20261005"
+}

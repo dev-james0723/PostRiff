@@ -505,6 +505,11 @@ class HostedApplication:
             if path == "/api/privacy/notice" and method == "GET":
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
+            # Dedicated role tokens: observer ingress cannot dial or record acceptance.
+            # Personal tool queries remain read-only and never route through this surface.
+            from . import james_agent_team
+            if (team_response := james_agent_team.route(self, environ, start_response, method, path)) is not None:
+                return team_response
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
             from .phone import http as phone_http
             if (routed := phone_http.public(self, environ, start_response, method, path)) is not None:
@@ -612,6 +617,11 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                from . import james_agent_team
+                try:
+                    result['jamesAgentTeam'] = james_agent_team.cron(service)
+                except Exception:
+                    result['jamesAgentTeam'] = {'state': 'unavailable'}
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()

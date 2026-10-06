@@ -6,7 +6,8 @@
   isolated and bounded so one failing step never stops the others;
 - person-facing API: notification centre, read/acted/dismissed, preferences, push subscribe/unsubscribe/list,
   one-click unsubscribe, provider webhook.
-Every method is a no-op or `feature_disabled` while RAFII_NOTIFICATIONS_V2_ENABLED is off.
+General notification methods are a no-op or `feature_disabled` while RAFII_NOTIFICATIONS_V2_ENABLED is off.
+The exact-staging James report adapter below admits a private in-app receipt only.
 """
 from __future__ import annotations
 
@@ -72,6 +73,57 @@ class NotificationService:
         return store.emit(cur, **event, now=self.clock(), email_available=self.email_available(), push_enabled=self.push_enabled(),
                           phone_context_for=phone.notification_context if phone and phone.config.enabled('RAFII_PHONE_ENABLED') and phone.config.enabled('RAFII_PHONE_PROACTIVE_ENABLED') else None,
                           sms_context_for=self.sms_context if self.sms_enabled() else None)
+
+    def emit_james_report_in_app(self, cur, *, document, **event):
+        """Exact staging report cutover, preserving the general notification switch.
+
+        This has no egress worker and admits only the configured James report's
+        in-app outbox row through the existing profile/preferences planner.
+        It does not turn on the public notification center or any other event.
+        """
+        if self.enabled():
+            return self.emit(cur, **event)
+        from ..agent_team_cutover import staging_cutover, team_enabled
+        disabled={'eventId':None,'created':False,'deliveries':[],'disabled':True}
+        if not staging_cutover(self.values) or not team_enabled(self.values):
+            return disabled
+        from datetime import datetime, timezone
+        from agent_team.events import canonical
+        from ..agent_team_delivery import EVENT_TYPE, READY_TITLE, READY_DETAIL, delivery_plan
+        cfg=getattr(getattr(self.hosted,'james_daily_call',None),'cfg',None)
+        user=getattr(cfg,'user_id',None)
+        import uuid
+        try:
+            if not isinstance(user,str) or str(uuid.UUID(user))!=user:raise ValueError()
+        except (ValueError,TypeError,AttributeError):
+            return disabled
+        plan=delivery_plan(document,datetime.fromtimestamp(self.clock(),timezone.utc))
+        expected={'workspace_id':None,'user_id':user,'actor':user,'event_type':EVENT_TYPE,
+            'dedupe_key':plan['dedupeKey'],'grouping_key':plan['groupingKey'],'entity_type':'agent_team_report',
+            'entity_id':document['fingerprint'],
+            'payload':{'title':READY_TITLE,'detail':READY_DETAIL,'href':plan['href'],'count':document['version']},
+            'channel_filter':plan['channels'],'expires_at':plan['expiresAt']}
+        if event!=expected:
+            raise AlphaError('Staging report notification binding is invalid.',409,code='agent_team_delivery_scope_mismatch')
+        # Queue already takes this lock. Re-enter it here so a future private
+        # caller cannot race reconciliation of a previously submitted effect.
+        cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',(plan['effectKey'],))
+        cur.execute('SELECT document FROM public.pr_agent_team_reports WHERE report_key=%s AND fingerprint=%s',
+                    (plan['reportKey'],document['fingerprint']))
+        row=cur.fetchone()
+        if not row or canonical(row[0])!=canonical(document):
+            raise AlphaError('Delivery must match an immutable stored report.',409,code='agent_team_delivery_report_mismatch')
+        cur.execute('SELECT report_key,kind,state,external_id,failure_class FROM public.pr_agent_team_effects WHERE effect_key=%s',
+                    (plan['effectKey'],))
+        effect=cur.fetchone()
+        if (not effect or effect[0]!=plan['reportKey'] or effect[1]!='notification'
+                or effect[2] not in ('reserved','disabled') or effect[3]):
+            raise AlphaError('Report delivery requires reconciliation.',409,code='agent_team_delivery_reconciliation_required')
+        # The broad flag, email/push availability and phone/SMS contexts remain
+        # unchanged. No transport can be reached from this in-app-only planner.
+        result=store.emit(cur,**{**event,'channel_filter':('in_app',)},now=self.clock(),
+                          email_available=False,push_enabled=False,phone_context_for=None,sms_context_for=None)
+        return {**result,'privateReportOnly':True,'generalNotificationCenterEnabled':False}
 
     def scan(self, cur, workspace_id, state, include_database=True, baseline=False):
         """Emit every event the workspace's authoritative state implies (idempotent). With `baseline` (the first scan of

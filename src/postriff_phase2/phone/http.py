@@ -47,6 +47,9 @@ def answer(service, call_id, url, parameters, signature):
         if value['state'] in contracts.TERMINAL or value['state'] == 'ending' or not service.config.enabled('RAFII_PHONE_ENABLED'):
             return provider.answer_xml(call_id, voicemail=True)
         if not voicemail:
+            from ..agent_team_decision import record_verified_human_answer
+            record_verified_human_answer(cur,value,provider=provider,call_ref=ref,answered_by=answered_by,
+                                         amd_bypassed=bool(bypass_amd),observed_at=service.clock())
             store.set_state(cur, value, 'answered')
         db.commit()
     if voicemail:

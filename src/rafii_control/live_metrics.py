@@ -619,11 +619,20 @@ def _brief(tiles, attention, sources, mode, period):
         if tile['dataState'] in ('unavailable', 'suppressed'):
             sentences.append(f"{tile['label']}: {_reason_text(tile.get('reason'))}.")
             continue
+        if tile['value'] is None:
+            reason = 'no events in this interval' if tile['unit'] == 'ratio' and (tile.get('coverage') or {}).get('denominator') == 0 else _reason_text(tile.get('reason'))
+            sentences.append(f"{tile['label']}: {reason}.")
+            continue
         value = f"{tile['value'] * 100:.1f}%" if tile['unit'] == 'ratio' else _money(dict(value=tile['value'], unit=tile['unit'], currency=tile['currency']))
         sentences.append(f"{tile['label']}: {value}{_delta_text(tile)}, {tile['dataState']}.")
     sentences.append('Nothing needs a decision right now.' if not attention else f"{len(attention)} item{'s' if len(attention) != 1 else ''} need attention: " + '; '.join(item['title'] for item in attention) + '.')
-    degraded = [str(row['sourceId']).replace('_', ' ') for row in sources if row['state'] in ('stale', 'unavailable')]
-    sentences.append('All probed sources are current.' if not degraded else 'Sources not current: ' + ', '.join(degraded) + '. Treat affected metrics as incomplete, not as zero.')
+    degraded = [str(row['sourceId']).replace('_', ' ') for row in sources if row['state'] != 'measured']
+    if sources and not degraded:
+        sentences.append('All probed sources are current.')
+    elif degraded:
+        sentences.append('Sources not current: ' + ', '.join(degraded) + '. Treat affected metrics as incomplete, not as zero.')
+    else:
+        sentences.append('Source health is unavailable; no source observations were returned.')
     return ' '.join(sentences)
 
 

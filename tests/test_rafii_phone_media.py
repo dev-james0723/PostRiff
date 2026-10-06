@@ -280,6 +280,25 @@ class Socket:
 
 
 class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
+    async def test_standalone_voice_test_greets_and_listens_without_daily_briefing(self):
+        controller, socket, received = Controller(), Socket(), []
+        controller.call.update(destination_ref='james_env',
+                               reason_key='james_live_test:11111111-1111-4111-8111-111111111111')
+        async def server(ws):
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.started', 'session': {'id': 'local-live-session'}}))
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.closed', 'usage': {'seconds': 0.5}}))
+        async with serve(server, '127.0.0.1', 0) as local:
+            port = local.sockets[0].getsockname()[1]
+            async with AsyncOpenAI(api_key='local-test', base_url=f'http://127.0.0.1:{port}/v1', max_retries=0) as client:
+                async with client.live.connect() as connection:
+                    await asyncio.wait_for(bridge(controller, TwilioMediaTransport(socket, 'MZ-local'), connection), 8)
+        TypeAdapter(InstructionsAppendEventParam).validate_python(received[1])
+        self.assertIn('pause and listen for James', received[1]['content'])
+        self.assertNotIn('daily briefing', received[1]['content'])
+        self.assertNotIn('mission decision', received[1]['content'])
+
     async def test_actual_sdk_and_twilio_transport_exchange_pcmu_and_final_usage(self):
         controller, socket, received = Controller(), Socket(), []
         async def server(ws):

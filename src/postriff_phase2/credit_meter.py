@@ -1,9 +1,12 @@
-"""Versioned, non-billable credit proposal. Does not replace Ledger or create a wallet.
+"""Versioned managed-credit arithmetic and the historical non-billable preview.
 
 One USD of verified provider cost maps to 300 credits. Display resolution is 0.1
 credit, rounded once per task. Existing plan terms and balances remain unchanged.
 """
+# Preserve historical preview/purchase semantics while recognizing existing v2 terms.
 POLICY_VERSION = 'credits-candidate-2026-09-23-v1'
+V2_POLICY_VERSION = 'credits-v2-2026-09-28'
+SUPPORTED_POLICY_VERSIONS = frozenset((POLICY_VERSION, V2_POLICY_VERSION))
 MICRO_USD = 1_000_000
 CREDITS_PER_USD = 300
 MILLI_STEP = 100

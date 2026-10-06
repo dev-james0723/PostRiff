@@ -367,6 +367,10 @@ class GmailProvider(ProductivityProvider):
     def _headers(access_token):
         return {"Authorization": "Bearer " + access_token}
 
+    def authenticated_account(self, access_token):
+        profile = _api_body(self.transport("GET", f"{self.API}/profile", headers=self._headers(access_token)))
+        return str(profile.get("emailAddress") or "").strip().lower()
+
     def search(self, access_token, query, limit=MAX_RESULTS):
         query = clean(query, 500).strip()
         if not query:
@@ -445,6 +449,10 @@ class GoogleCalendarProvider(ProductivityProvider):
     @staticmethod
     def _headers(access_token):
         return {"Authorization": "Bearer " + access_token}
+
+    def authenticated_account(self, access_token):
+        primary = _api_body(self.transport("GET", f"{self.API}/calendars/primary", headers=self._headers(access_token)))
+        return str(primary.get("id") or "").strip().lower()
 
     @staticmethod
     def _event(event):
@@ -835,25 +843,33 @@ class ProductivityConnectorService:
                          sum(1 for item in results.values() if item.get("source"))))
         return results
 
-    def _personal_access(self, cur, workspace_id, principal, provider_id):
+    def _personal_access(self, cur, workspace_id, principal, provider_id, *, account_bindings=None):
         """Internal read-only connector access for James Personal Agent. No HTTP surface."""
+        binding = (account_bindings or {}).get(provider_id) or {}
+        expected_account = str(binding.get("account") or "").strip().lower()
+        connection_id = str(binding.get("connectionId") or "")
+        if not expected_account or not CONNECTION_ID.fullmatch(connection_id):
+            raise AlphaError("Personal briefing account binding is missing.", 409, code="briefing_identity_unbound")
         if not self.flags.get(provider_id, False):
             raise AlphaError("This personal data source is disabled.", 503, code="connector_disabled")
         provider = self.providers.get(provider_id)
         if provider is None:
             raise AlphaError("This personal data source is unavailable.", 503, code="connector_not_configured")
         cur.execute("SELECT connection_id FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s "
-                    "AND provider=%s AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1",
-                    (workspace_id, principal, provider_id))
+                    "AND provider=%s AND connection_id=%s AND lower(provider_account_id)=%s AND revoked_at IS NULL",
+                    (workspace_id, principal, provider_id, connection_id, expected_account))
         row = cur.fetchone()
         if not row:
             raise AlphaError("Connect this personal data source first.", 409, code="connector_not_connected")
         connection = self._connection(cur, workspace_id, principal, row[0], lock=True)
         if not connection:
             raise AlphaError("This connected account is unavailable.", 409, code="connector_not_connected")
-        return provider, self._access_token(cur, workspace_id, connection), connection
+        access = self._access_token(cur, workspace_id, connection)
+        if provider.authenticated_account(access) != expected_account:
+            raise AlphaError("The connected personal account does not match its binding.", 409, code="briefing_identity_mismatch")
+        return provider, access, connection
 
-    def personal_calendar_range(self, workspace_id, principal, time_zone, start_at, end_at, limit=20):
+    def personal_calendar_range(self, workspace_id, principal, time_zone, start_at, end_at, limit=20, *, account_bindings=None):
         """Bounded read-only Google Calendar range for James Personal Agent."""
         try:
             zone = ZoneInfo(time_zone)
@@ -871,7 +887,7 @@ class ProductivityConnectorService:
                         (workspace_id, principal))
             if not cur.fetchone():
                 raise AlphaError("Workspace unavailable.", 403)
-            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar")
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar", account_bindings=account_bindings)
             try:
                 events = provider.events_between(access, to_utc(start_at), to_utc(end_at), count)
             except AlphaError as error:
@@ -885,7 +901,7 @@ class ProductivityConnectorService:
                  "end": clean(item.get("end") or "", 80),
                  "location": clean(item.get("location") or "", 240)} for item in events[:count]]
 
-    def personal_calendar_search(self, workspace_id, principal, query, limit=12):
+    def personal_calendar_search(self, workspace_id, principal, query, limit=12, *, account_bindings=None):
         """Search upcoming Google Calendar event titles/locations over the provider's bounded horizon."""
         query = clean(query, 200).strip()
         if not query:
@@ -897,7 +913,7 @@ class ProductivityConnectorService:
                         (workspace_id, principal))
             if not cur.fetchone():
                 raise AlphaError("Workspace unavailable.", 403)
-            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar")
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "google_calendar", account_bindings=account_bindings)
             try:
                 items = provider.search(access, query, count)
             except AlphaError as error:
@@ -909,7 +925,7 @@ class ProductivityConnectorService:
                  "title": clean(item.get("title") or "Busy", 240),
                  "excerpt": clean(item.get("excerpt") or "", 360)} for item in items[:count]]
 
-    def personal_gmail_search(self, workspace_id, principal, query, limit=8):
+    def personal_gmail_search(self, workspace_id, principal, query, limit=8, *, account_bindings=None):
         """Bounded Gmail metadata/snippet search for James Personal Agent."""
         query = clean(query, 500).strip()
         if not query:
@@ -921,7 +937,7 @@ class ProductivityConnectorService:
                         (workspace_id, principal))
             if not cur.fetchone():
                 raise AlphaError("Workspace unavailable.", 403)
-            provider, access, connection = self._personal_access(cur, workspace_id, principal, "gmail")
+            provider, access, connection = self._personal_access(cur, workspace_id, principal, "gmail", account_bindings=account_bindings)
             try:
                 messages = provider.search(access, query, count)
             except AlphaError as error:
@@ -935,13 +951,15 @@ class ProductivityConnectorService:
                  "snippet": clean(item.get("excerpt") or "", 360),
                  "date": clean(item.get("date") or "", 100)} for item in messages[:count]]
 
-    def daily_brief_context(self, workspace_id, principal, time_zone):
+    def daily_brief_context(self, workspace_id, principal, time_zone, *, account_bindings=None):
         """Internal, bounded read for James Daily Call. No message body or calendar description is fetched.
 
         This method has no HTTP route. The caller must already be a trusted server-side worker bound to the configured
         user/workspace. It reuses encrypted OAuth custody and returns only short display metadata plus opaque source ids.
         Provider text is data, never instructions.
         """
+        if not account_bindings or any(not account_bindings.get(p, {}).get("account") or not CONNECTION_ID.fullmatch(str(account_bindings.get(p, {}).get("connectionId") or "")) for p in ("gmail", "google_calendar")):
+            raise AlphaError("Personal briefing account binding is missing.", 409, code="briefing_identity_unbound")
         try:
             zone = ZoneInfo(time_zone)
         except (ZoneInfoNotFoundError, ValueError, TypeError):
@@ -965,8 +983,11 @@ class ProductivityConnectorService:
                 if provider_id not in self.providers:
                     out[bucket]["status"] = "unconfigured"
                     continue
+                binding = account_bindings[provider_id]
+                expected_account = binding["account"].strip().lower()
                 cur.execute("SELECT connection_id FROM public.pr_connector_credentials WHERE workspace_id=%s AND member_id=%s "
-                            "AND provider=%s AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1", (workspace_id, principal, provider_id))
+                            "AND provider=%s AND connection_id=%s AND lower(provider_account_id)=%s AND revoked_at IS NULL",
+                            (workspace_id, principal, provider_id, binding["connectionId"], expected_account))
                 row = cur.fetchone()
                 if not row:
                     out[bucket]["status"] = "not_connected"
@@ -975,8 +996,13 @@ class ProductivityConnectorService:
                 try:
                     access = self._access_token(cur, workspace_id, connection)
                     provider = self.providers[provider_id]
+                    if provider.authenticated_account(access) != expected_account:
+                        out[bucket]["status"] = "identity_mismatch"
+                        continue
+                    out[bucket]["account"] = expected_account
+                    out[bucket]["connectionId"] = binding["connectionId"]
                     if provider_id == "gmail":
-                        primary = provider.search(access, "in:inbox newer_than:7d {is:important is:starred} -category:promotions -category:social", 6)
+                        primary = provider.search(access, "in:inbox newer_than:1d {is:important is:starred} -category:promotions -category:social", 6)
                         if not primary:
                             primary = provider.search(access, "in:inbox newer_than:1d -category:promotions -category:social", 6)
                         out[bucket]["items"] = [{"sourceId": "gmail:" + str(item["itemId"])[:180],
