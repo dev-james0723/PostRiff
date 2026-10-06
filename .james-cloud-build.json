@@ -41,6 +41,6 @@
   "framework": "next",
   "cacheScope": "e408bbcd8242",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "72494342c0aaf26355149cd714ef2b7c46c971c1447e9ff1b9a2a53f68ef2ca7",
+  "lockfileSha256": "cbee0cad6f863ffc7c4800426da4dbf0430a79490d1fc6f50816a5b18bbf40dd",
   "baseRef": "refs/remotes/origin/codex/james-agent-team-20261005"
 }

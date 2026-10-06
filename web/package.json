@@ -93,7 +93,10 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "postcss": "8.5.25",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "oxfmt": {
+      "tinypool": "2.1.2"
+    }
   },
   "engines": {
     "node": "24.x"
