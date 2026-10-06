@@ -68,4 +68,14 @@ class CaptureStorageTests(unittest.TestCase):
                     capture.run(root,Path('/helper'),1)
                 native.assert_not_called()
 
+    def test_storage_preflight_cannot_exhaust_native_retry_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=capture.prepare(directory)
+            with patch.object(capture,'capture',side_effect=ValueError('capture_storage_reserve_unavailable')):
+                with self.assertRaisesRegex(ValueError,'storage_reserve'):
+                    capture.run(root,Path('/helper'),1)
+            state=json.loads((root/'manifest.json').read_text())
+            self.assertEqual(state['executionState'],'waiting_external')
+            self.assertEqual(state['consecutiveFailures'],0)
+
 if __name__=='__main__':unittest.main()

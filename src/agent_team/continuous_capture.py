@@ -142,6 +142,9 @@ def run(root, helper, seconds, *, once=False):
         reconcile_artifacts(root, state); retain(root, state)
         state.update(continuousCollection=not once,collectorPid=os.getpid(),collectorStartedAt=time.time())
         state.setdefault('consecutiveFailures', 0)
+        if state.get('reason') == 'capture_storage_reserve_unavailable':
+            # No native operation was dispatched at this preflight gate.
+            state['consecutiveFailures'] = 0
         if state['consecutiveFailures'] >= MAX_CONSECUTIVE_FAILURES:
             state.update(executionState='capture_failed', reason='native_capture_retry_ceiling', updatedAt=time.time())
             save(manifest, state)
@@ -173,8 +176,11 @@ def run(root, helper, seconds, *, once=False):
                 save(manifest, state)
                 if once: return row
             except Exception as error:
-                state.update(executionState='capture_failed', updatedAt=time.time(), reason=str(error),
-                             consecutiveFailures=state['consecutiveFailures']+1)
+                external = str(error) in {'capture_storage_reserve_unavailable',
+                                         'macos_screen_system_audio_permission_required'}
+                state.update(executionState='waiting_external' if external else 'capture_failed',
+                             updatedAt=time.time(), reason=str(error),
+                             consecutiveFailures=state['consecutiveFailures']+(0 if external else 1))
                 if isinstance(error, CaptureError):
                     state['diagnostic'] = error.diagnostic
                     if error.artifact:
