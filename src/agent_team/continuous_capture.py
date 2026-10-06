@@ -14,6 +14,47 @@ import uuid
 MAX_BYTES = 2 * 1024**3
 RETENTION_SECONDS = 48 * 3600
 MIN_FREE_BYTES = 2 * 1024**3
+MAX_CONSECUTIVE_FAILURES = 3
+
+class CaptureError(ValueError):
+    def __init__(self, reason, *, artifact=None, diagnostic=None):
+        super().__init__(reason)
+        self.artifact = artifact
+        self.diagnostic = diagnostic or {}
+
+def stored_artifact(root, identifier):
+    path = root / (str(uuid.UUID(identifier)) + '.mp4')
+    if not path.exists(): return None
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('capture_artifact_identity_conflict')
+    os.chmod(path, 0o600)
+    return {'id': identifier, 'path': path.name, 'byteCount': path.stat().st_size,
+            'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+            'storedAt': path.stat().st_mtime, 'retentionState': 'retained'}
+
+def reconcile_artifacts(root, state):
+    """A crashed/failed native output is storage, never verified capture evidence."""
+    attempts = state.setdefault('failedAttempts', [])
+    registered = {r['path'] for r in state['chunks'] + attempts}
+    for path in sorted(root.glob('*.mp4')):
+        if path.name in registered: continue
+        try: identifier = str(uuid.UUID(path.stem))
+        except ValueError: raise ValueError('unregistered_capture_artifact') from None
+        row = stored_artifact(root, identifier)
+        row.update(executionState='unverified_native_artifact', reason='previous_native_outcome_unknown')
+        attempts.append(row)
+
+def retain(root, state):
+    rows = state['chunks'] + state.setdefault('failedAttempts', [])
+    total = sum(r['byteCount'] for r in rows if r['retentionState'] == 'retained')
+    for old in sorted(rows, key=lambda r: r['storedAt']):
+        if old['retentionState'] != 'retained': continue
+        if time.time() - old['storedAt'] <= RETENTION_SECONDS and total <= MAX_BYTES: break
+        target = root / (str(uuid.UUID(old['id'])) + '.mp4')
+        if target.is_symlink() or not target.is_file() or target.stat().st_size != old['byteCount'] or hashlib.sha256(target.read_bytes()).hexdigest() != old['sha256']:
+            raise ValueError('retention_identity_conflict')
+        target.unlink(); total -= old['byteCount']; old['retentionState'] = 'retention_removed'
+    state['retainedBytes'] = total
 
 def save(path, value):
     temp = path.with_suffix('.tmp')
@@ -40,13 +81,26 @@ def capture(root, helper, seconds):
     if shutil.disk_usage(root).free < MIN_FREE_BYTES:
         raise ValueError('capture_storage_reserve_unavailable')
     identifier = str(uuid.uuid4()); path = root / (identifier + '.mp4')
-    result = subprocess.run([str(helper), 'capture', str(path), str(seconds)], capture_output=True,
-                            text=True, timeout=seconds+30)
+    try:
+        result = subprocess.run([str(helper), 'capture', str(path), str(seconds)], capture_output=True,
+                                text=True, timeout=seconds+45)
+    except subprocess.TimeoutExpired:
+        raise CaptureError('native_capture_timeout', artifact=stored_artifact(root, identifier)) from None
     try: metadata = json.loads(result.stdout.strip().splitlines()[-1])
-    except (ValueError, IndexError): raise ValueError('native_capture_outcome_unverified') from None
+    except (ValueError, IndexError):
+        raise CaptureError('native_capture_outcome_unverified', artifact=stored_artifact(root, identifier)) from None
     if result.returncode != 0 or metadata.get('executionState') not in (
             'captured_screen_and_system_audio', 'captured_screen_system_audio_unobserved'):
-        raise ValueError(metadata.get('reason', 'native_capture_failed'))
+        reason = 'macos_screen_system_audio_permission_required' if metadata.get('reason') == 'macos_screen_system_audio_permission_required' else 'native_capture_failed'
+        diagnostic = {}
+        if metadata.get('phase') in {'arguments', 'screen_audio_permission', 'shareable_content', 'start_capture',
+                'recording', 'stop_capture', 'recording_finalization', 'inspect_recorded_tracks'}:
+            diagnostic['phase'] = metadata['phase']
+        if type(metadata.get('errorCode')) is int: diagnostic['errorCode'] = metadata['errorCode']
+        if metadata.get('captureFailure') in {'invalidArguments', 'permissionRequired', 'recordingFailed',
+                'invalidTracks', 'playbackTimeout', 'system_error'}:
+            diagnostic['captureFailure'] = metadata['captureFailure']
+        raise CaptureError(reason, artifact=stored_artifact(root, identifier), diagnostic=diagnostic)
     if path.is_symlink() or path.parent != root or metadata.get('videoTracks') != 1 or metadata.get('systemAudioTracks') not in (0,1):
         raise ValueError('native_recorded_tracks_unverified')
     if (metadata.get('systemAudioTracks')==0)!=(metadata['executionState']=='captured_screen_system_audio_unobserved'):
@@ -85,7 +139,13 @@ def run(root, helper, seconds, *, once=False):
             'policy': {'maxBytes': MAX_BYTES, 'retentionSeconds': RETENTION_SECONDS, 'minFreeBytes': MIN_FREE_BYTES,
                        'chunkSeconds': seconds, 'screenSamplingFps': 1, 'systemAudio': True, 'microphone': False},
             'fullDayCoverageMatured': False, 'gaps': [], 'continuousCollection': not once}
+        reconcile_artifacts(root, state); retain(root, state)
         state.update(continuousCollection=not once,collectorPid=os.getpid(),collectorStartedAt=time.time())
+        state.setdefault('consecutiveFailures', 0)
+        if state['consecutiveFailures'] >= MAX_CONSECUTIVE_FAILURES:
+            state.update(executionState='capture_failed', reason='native_capture_retry_ceiling', updatedAt=time.time())
+            save(manifest, state)
+            raise ValueError('native_capture_retry_ceiling')
         while True:
             start = time.time()
             try:
@@ -95,19 +155,14 @@ def run(root, helper, seconds, *, once=False):
                     gap = max(0, datetime.fromisoformat(row['startedAt'].replace('Z', '+00:00')).timestamp() - previous)
                     if gap: state['gaps'].append({'startedAt': previous, 'seconds': gap, 'reason': 'native_chunk_rotation'})
                 state['chunks'].append(row); state['executionState'] = 'running' if not once else 'bounded_capture_complete'
+                state['consecutiveFailures'] = 0
+                state.pop('reason', None); state.pop('diagnostic', None)
                 if row['systemAudioTracks']==0:
                     state['gaps'].append({'startedAt':start,'seconds':row['durationSeconds'],
                         'reason':'no_recorded_system_audio_samples'})
-                total = sum(r['byteCount'] for r in state['chunks'] if r['retentionState'] == 'retained')
-                for old in state['chunks']:
-                    if old['retentionState'] != 'retained': continue
-                    if time.time() - old['storedAt'] <= RETENTION_SECONDS and total <= MAX_BYTES: break
-                    target = root / (str(uuid.UUID(old['id'])) + '.mp4')
-                    if target.is_symlink() or hashlib.sha256(target.read_bytes()).hexdigest() != old['sha256']:
-                        raise ValueError('retention_identity_conflict')
-                    target.unlink(); total -= old['byteCount']; old['retentionState'] = 'retention_removed'
+                retain(root, state)
                 retained = [r for r in state['chunks'] if r['retentionState'] == 'retained']
-                state.update(updatedAt=time.time(), retainedBytes=total,
+                state.update(updatedAt=time.time(),
                     capturedSeconds=sum(r['durationSeconds'] for r in retained),
                     recordedSystemAudioSeconds=sum(r['durationSeconds'] for r in retained if r['systemAudioTracks']==1),
                     elapsedSeconds=time.time()-state['startedAt'],
@@ -118,8 +173,16 @@ def run(root, helper, seconds, *, once=False):
                 save(manifest, state)
                 if once: return row
             except Exception as error:
-                state.update(executionState='waiting_external', updatedAt=time.time(), reason=str(error))
+                state.update(executionState='capture_failed', updatedAt=time.time(), reason=str(error),
+                             consecutiveFailures=state['consecutiveFailures']+1)
+                if isinstance(error, CaptureError):
+                    state['diagnostic'] = error.diagnostic
+                    if error.artifact:
+                        error.artifact.update(executionState='unverified_native_artifact', reason=str(error), diagnostic=error.diagnostic)
+                        state['failedAttempts'].append(error.artifact)
                 state['gaps'].append({'startedAt': start, 'seconds': time.time()-start, 'reason': str(error)})
+                reconcile_artifacts(root, state)
+                retain(root, state)
                 save(manifest, state)
                 raise
 
