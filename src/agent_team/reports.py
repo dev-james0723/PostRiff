@@ -50,6 +50,9 @@ def report(period, events, generated_at=None, sources=None, preview=False):
             "count":source_counts.get(source,0),"freshAt":meta.get("freshAt"),
             "gaps":meta.get("gaps",["source_not_verified"]),"complete":meta.get("complete",False) is True})
     gaps=[f"{c['source']}:{gap}" for c in coverage for gap in c["gaps"]]
+    # Healthy source metadata does not establish continuous capture coverage.
+    # Keep these report-wide limits even when source health replaces its gaps.
+    gaps.extend(("bounded_metadata_only","full_day_screen_audio_unverified"))
     if generated<period.cutoff:gaps.append("preview_before_cutoff")
     if preview:gaps.append("preview_not_scheduled_delivery")
     mission_complete=next(c for c in coverage if c["source"]=="mission")["complete"]
@@ -59,6 +62,7 @@ def report(period, events, generated_at=None, sources=None, preview=False):
     summary=f"本報告涵蓋 {period.start.astimezone(TZ):%m/%d %H:%M} 至 {as_of.astimezone(TZ):%m/%d %H:%M}。已有完成證據的任務 {counts['completed']} 項，自主解決事件 {counts['autonomouslyResolved']} 項。"
     summary+="觀察資料只證明來源曾記錄活動，不能據此判斷任務已完成或實際工時。仍在進行及需要你處理的總數，只有完整任務來源核對後才顯示。"
     summary+="圖像、摘要及電話內容沿用同一份資料。未取得的背景頁、session 擁有者與驗收資料已列為缺口，沒有用舊狀態補作最新成果。詳細證據可按來源記錄回查。"
+    summary+="目前觀察只有有限時間窗口的 metadata 記錄，未取得全日連續電腦畫面與系統音訊的擷取、儲存及回放證據。"
     after17=sum(aware(e["happened_at"]).astimezone(TZ).date().isoformat()==period.workday and aware(e["happened_at"]).astimezone(TZ).hour>=17 for e in selected)
     manifest=[{"id":e["key"],"source":e["source"],"sourceId":e["source_id"],"revision":e["revision"],
         "capturedAt":e["happened_at"],"observedAt":e["observed_at"],"projectId":e.get("project_id"),"missionId":e.get("mission_id"),

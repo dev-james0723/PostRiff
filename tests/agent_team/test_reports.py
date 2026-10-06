@@ -1,7 +1,7 @@
 import unittest
 from agent_team.periods import period, latest_due, next_due, aware
 from agent_team.events import Event
-from agent_team.reports import report, svg
+from agent_team.reports import EXPECTED_SOURCES, report, svg
 
 
 class ReportTests(unittest.TestCase):
@@ -38,3 +38,18 @@ class ReportTests(unittest.TestCase):
         a=report(*args);self.assertEqual(a,report(*args));self.assertEqual(svg(a),svg(a))
         a['period']['workday']='<script>'
         self.assertNotIn('<script>',svg(a));self.assertIn('&lt;script&gt;',svg(a))
+
+    def test_healthy_source_metadata_never_erases_full_day_capture_gaps(self):
+        sources={source:{'status':'ok','freshAt':'2026-10-05T20:59:00Z','gaps':[],'complete':True}
+                 for source in EXPECTED_SOURCES}
+        events=[self.event('luci','metadata1',{'kind':'metadata'}),self.event('mission','task1',{'state':'running'})]
+        for kind,generated in (('half_day','2026-10-05T21:03:00Z'),('whole_day','2026-10-06T05:03:00Z')):
+            with self.subTest(kind=kind):
+                data=report(period('2026-10-05',kind),events,generated,sources)
+                self.assertTrue(all(c['complete'] and not c['gaps'] for c in data['coverage']))
+                self.assertEqual(data['gaps'],['bounded_metadata_only','full_day_screen_audio_unverified'])
+                self.assertIn('未取得全日連續電腦畫面與系統音訊的擷取、儲存及回放證據',data['summary'])
+                self.assertEqual(data['screenshots'],[])
+                self.assertTrue(all(e['captureMode']=='metadata' for e in data['evidence']))
+                self.assertEqual(data['counts']['completed'],0)
+                self.assertEqual(data['counts']['running'],1)
