@@ -24,14 +24,15 @@ function validWorkday(value: string): boolean {
 
 export default async function Page({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const { workday, kind, version } = params;
+  const { workday, kind, version, acceptanceId } = params;
   if (
-    Object.keys(params).some((key) => !['workday', 'kind', 'version'].includes(key)) ||
+    Object.keys(params).some((key) => !['workday', 'kind', 'version', 'acceptanceId'].includes(key)) ||
+    (acceptanceId !== undefined && (typeof acceptanceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(acceptanceId) || kind !== 'half_day')) ||
     typeof workday !== 'string' || !validWorkday(workday) ||
     (kind !== 'half_day' && kind !== 'whole_day') ||
     typeof version !== 'string' || !/^[1-9]\d{0,3}$/.test(version) ||
     !Number.isSafeInteger(Number(version))
   ) notFound();
 
-  return <AgentTeamReportView key={`${workday}:${kind}:${version}`} workday={workday} kind={kind} version={Number(version)} />;
+  return <AgentTeamReportView key={`${workday}:${kind}:${version}:${acceptanceId ?? ''}`} workday={workday} kind={kind} version={Number(version)} acceptanceId={acceptanceId as string | undefined} />;
 }

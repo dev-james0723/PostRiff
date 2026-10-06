@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/session';
 
 type ReportKind = 'half_day' | 'whole_day';
-type Selection = { workday: string; kind: ReportKind; version: number };
+type Selection = { workday: string; kind: ReportKind; version: number; acceptanceId?: string };
 type Coverage = { source: string; status: string; count: number; complete: boolean; gaps: string[]; freshAt: string | null };
 type Evidence = { id: string; source: string; capturedAt: string; observedAt: string; url: string | null };
 type Report = {
@@ -88,6 +88,8 @@ export function safeEvidenceUrl(value: unknown): string | null {
 
 export function parseAgentTeamReport(value: unknown, selection: Selection): Report {
   const invalid = () => { throw new Error(INVALID_REPORT); };
+  const acceptance = selection.acceptanceId !== undefined;
+  if (acceptance && (selection.kind !== 'half_day' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(selection.acceptanceId ?? ''))) return invalid();
   const dayStart = new Date(`${selection.workday}T00:00:00Z`);
   if (
     !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(selection.workday) || !Number.isFinite(dayStart.getTime()) ||
@@ -100,7 +102,8 @@ export function parseAgentTeamReport(value: unknown, selection: Selection): Repo
     value.version !== selection.version || !text(value.fingerprint, 64) || !/^[a-f0-9]{64}$/.test(value.fingerprint) ||
     !text(value.summary, 12000) || !value.summary.trim() || !timestamp(value.asOf) || !timestamp(value.generatedAt) ||
     !object(period) || period.workday !== selection.workday || period.kind !== selection.kind ||
-    period.key !== `agent-team:v1:${selection.workday}:${selection.kind}` || period.timezone !== TIMEZONE ||
+    period.key !== (acceptance ? `agent-team:acceptance:v1:${selection.workday}:${selection.acceptanceId}:half_day` : `agent-team:v1:${selection.workday}:${selection.kind}`) || period.timezone !== TIMEZONE ||
+    (acceptance && (value.executionMode !== 'staging_acceptance' || period.executionMode !== 'staging_acceptance' || period.acceptanceId !== selection.acceptanceId)) ||
     !timestamp(period.start) || !timestamp(period.cutoff) || Date.parse(period.start) >= Date.parse(period.cutoff) ||
     Date.parse(value.asOf) > Date.parse(period.cutoff) || Date.parse(value.asOf) < Date.parse(period.start) ||
     Date.parse(value.generatedAt) < Date.parse(value.asOf) || !object(counts) ||
@@ -114,7 +117,8 @@ export function parseAgentTeamReport(value: unknown, selection: Selection): Repo
   const cutoffDay = selection.kind === 'whole_day' ? nextDay.toISOString().slice(0, 10) : selection.workday;
   if (
     localBoundary(period.start) !== `${selection.workday} 01:00:00` ||
-    localBoundary(period.cutoff) !== `${cutoffDay} ${selection.kind === 'whole_day' ? '01' : '17'}:00:00`
+    (!acceptance && localBoundary(period.cutoff) !== `${cutoffDay} ${selection.kind === 'whole_day' ? '01' : '17'}:00:00`) ||
+    (acceptance && (value.asOf !== period.cutoff || value.generatedAt !== period.cutoff || !gaps.includes('acceptance_as_of_now_not_historical_or_scheduled')))
   ) return invalid();
   const seen = new Set<string>();
   const parsedCoverage: Coverage[] = coverage.map((row: unknown) => {
@@ -220,13 +224,13 @@ async function boundedAudioBytes(response: Response, signal: AbortSignal): Promi
 // Called by the explicit audio button only. Dependency injection permits cloud fixtures.
 export async function fetchAgentTeamAudio(selection: Selection, fingerprint: string, getToken: () => Promise<string | null>, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<VerifiedAudio> {
   const day = new Date(`${selection.workday}T00:00:00Z`);
-  if (selection.kind !== 'whole_day' || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(selection.workday) || !Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== selection.workday || !Number.isSafeInteger(selection.version) || selection.version < 1 || selection.version > 9999 || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error(INVALID_AUDIO);
+  if ((selection.kind !== 'whole_day' && !(selection.kind === 'half_day' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(selection.acceptanceId ?? ''))) || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(selection.workday) || !Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== selection.workday || !Number.isSafeInteger(selection.version) || selection.version < 1 || selection.version > 9999 || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error(INVALID_AUDIO);
   const token = await getToken();
   if (signal.aborted) throw new DOMException('Audio request aborted', 'AbortError');
   if (!token) throw new Error('登入已失效，請重新登入後取得音訊檔。');
   let response: Response | null = null;
   try {
-    response = await fetcher(`/api/internal/james-agent-team/reports/${selection.workday}/whole_day/wav?version=${selection.version}`, {
+    response = await fetcher(selection.acceptanceId ? `/api/internal/james-agent-team/acceptance/${selection.acceptanceId}/wav` : `/api/internal/james-agent-team/reports/${selection.workday}/whole_day/wav?version=${selection.version}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'audio/wav' }, signal,
       cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer'
     });
@@ -314,7 +318,7 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat('zh-Hant-HK', { timeZone: TIMEZONE, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-export function AgentTeamReportView({ workday, kind, version }: Selection) {
+export function AgentTeamReportView({ workday, kind, version, acceptanceId }: Selection) {
   const { status, user, getToken } = useAuth();
   const [reload, setReload] = useState(0);
   const [load, setLoad] = useState<LoadState | null>(null);
@@ -327,7 +331,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
   const audioElement = useRef<HTMLAudioElement | null>(null);
   const audioRequest = useRef<AudioRequest | null>(null);
   const userId = user?.id ?? '';
-  const key = `${userId}:${workday}:${kind}:${version}:${reload}`;
+  const key = `${userId}:${workday}:${kind}:${version}:${acceptanceId ?? ''}:${reload}`;
   const ready = status === 'signed-in' && load?.key === key && load.state === 'ready' ? load : null;
   const audioKey = `${status}:${key}:${ready?.report.fingerprint ?? ''}`;
   const currentAudioKey = useRef(audioKey);
@@ -353,12 +357,12 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
           signal: abort.signal, cache: 'no-store',
           credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer'
         };
-        const base = `/api/internal/james-agent-team/reports/${workday}/${kind}`;
+        const base = acceptanceId ? `/api/internal/james-agent-team/acceptance/${acceptanceId}` : `/api/internal/james-agent-team/reports/${workday}/${kind}`;
         const jsonResponse = await fetch(`${base}/json?version=${version}`, { ...init, headers: { ...headers, Accept: 'application/json' } });
         if (!jsonResponse.ok) throw new Error(jsonResponse.status === 401 || jsonResponse.status === 403 ? '目前登入的帳戶無法查看這份報告。' : jsonResponse.status === 404 ? '指定版本的報告尚未提供，請核對原本的報告連結。' : '報告服務暫時無法使用，請稍後重試。');
         responseIdentity(jsonResponse, version);
         if (!/^application\/json(?:\s*;|$)/i.test(jsonResponse.headers.get('Content-Type') ?? '')) throw new Error(INVALID_REPORT);
-        const report = parseAgentTeamReport(JSON.parse(await boundedText(jsonResponse, 4 * 1024 * 1024)), { workday, kind, version });
+        const report = parseAgentTeamReport(JSON.parse(await boundedText(jsonResponse, 4 * 1024 * 1024)), { workday, kind, version, acceptanceId });
         responseIdentity(jsonResponse, version, report.fingerprint);
         const svgResponse = await fetch(`${base}/svg?version=${version}`, { ...init, headers: { ...headers, Accept: 'image/svg+xml' } });
         if (!svgResponse.ok) throw new Error('指定版本的報告圖像暫時無法取得。');
@@ -376,7 +380,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
     }
     void fetchReport();
     return () => { disposed = true; abort.abort(); clearTimeout(timeout); if (imageUrl) URL.revokeObjectURL(imageUrl); };
-  }, [status, userId, getToken, key, workday, kind, version]);
+  }, [status, userId, getToken, key, workday, kind, version, acceptanceId]);
 
   const releaseAudio = useCallback(() => {
     const request = audioRequest.current;
@@ -399,7 +403,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
   }, [audioKey, releaseAudio]);
 
   async function loadAudio() {
-    if (!ready || kind !== 'whole_day' || (audioRequest.current?.key === audioKey && audioRequest.current.timeout !== null)) return;
+    if (!ready || (kind !== 'whole_day' && !acceptanceId) || (audioRequest.current?.key === audioKey && audioRequest.current.timeout !== null)) return;
     releaseAudio();
     const request: AudioRequest = { key: audioKey, abort: new AbortController(), timeout: null, url: null, captionsUrl: null };
     audioRequest.current = request;
@@ -415,7 +419,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
         if (audioRequest.current !== request || currentAudioKey.current !== request.key) request.abort.abort();
         return token;
       };
-      const result = await fetchAgentTeamAudio({ workday, kind, version }, ready.report.fingerprint, ownedGetToken, request.abort.signal);
+      const result = await fetchAgentTeamAudio({ workday, kind, version, acceptanceId }, ready.report.fingerprint, ownedGetToken, request.abort.signal);
       if (audioRequest.current !== request || currentAudioKey.current !== request.key || request.abort.signal.aborted) return;
       const captions = await verifiedAgentTeamAudioCaptions(ready.report.summary, result.pcm.durationSeconds, result.narrationSha256);
       if (audioRequest.current !== request || currentAudioKey.current !== request.key || request.abort.signal.aborted) return;
@@ -491,7 +495,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
   ] : [];
 
   return (
-    <PageContainer width='reading' pageTitle='James Agent Team' pageEyebrow='私人報告' pageDescription={`${workday} · ${kind === 'whole_day' ? '全日報告' : '半日報告'} · 固定版本 ${version}`}>
+    <PageContainer width='reading' pageTitle='James Agent Team' pageEyebrow={acceptanceId ? 'Staging acceptance · 截至目前' : '私人報告'} pageDescription={`${workday} · ${acceptanceId ? '驗收報告，非歷史排程' : kind === 'whole_day' ? '全日報告' : '半日報告'} · 固定版本 ${version}`}>
       <div lang='zh-Hant' className='flex min-w-0 flex-col gap-5'>
         {status === 'loading' && <p role='status' className='text-muted-foreground'>正在核對登入狀態…</p>}
         {status !== 'loading' && status !== 'signed-in' && <Surface><p role='status'>{status === 'mfa-required' ? '請完成目前帳戶的登入驗證，再查看這份私人報告。' : '請登入有權查看報告的 Rafii 帳戶。'}</p></Surface>}
@@ -522,7 +526,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
             <p className='text-muted-foreground text-xs'>裝置語音只會在你按下播放後，使用可用的本機語音朗讀以上摘要。</p>
             <p role={speech === 'error' ? 'alert' : 'status'} aria-live='polite' className='text-muted-foreground text-sm'>{speech === 'unavailable' ? '這部裝置未提供語音朗讀。' : speechMessage}</p>
           </Surface>
-          {kind === 'whole_day' && <Surface as='section' aria-labelledby='agent-team-audio' className='space-y-4'>
+          {(kind === 'whole_day' || acceptanceId) && <Surface as='section' aria-labelledby='agent-team-audio' className='space-y-4'>
             <h2 id='agent-team-audio' className='font-medium'>報告音訊檔</h2>
             <p className='text-muted-foreground text-sm'>可用的報告音訊檔使用本機 macOS Sinji（zh_HK）語音朗讀本版摘要節錄。按下取得後才會下載音訊，播放由下方控制選擇。</p>
             {visibleAudio?.state !== 'ready' && <div className='flex flex-wrap gap-2'>

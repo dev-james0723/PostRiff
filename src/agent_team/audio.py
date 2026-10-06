@@ -144,7 +144,11 @@ def validate_report(document: Mapping[str, Any], *, now: datetime | str | None =
         raise AudioBlocked("report_supplement_invalid")
     try:
         supplied_period = document["period"]
-        expected = period(supplied_period["workday"], supplied_period["kind"])
+        if supplied_period.get('executionMode') == 'staging_acceptance':
+            from .acceptance import document_period
+            expected = document_period(document)
+        else:
+            expected = period(supplied_period["workday"], supplied_period["kind"])
         if supplied_period != expected.as_dict():
             raise AudioBlocked("report_period_mismatch")
         generated = aware(document["generatedAt"])

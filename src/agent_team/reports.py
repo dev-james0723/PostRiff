@@ -84,7 +84,7 @@ def svg(data):
     esc=lambda v:escape(safe_text(v,300))
     count=data["counts"];p=data["period"]
     title="全日報告" if p["kind"]=="whole_day" else "半日報告"
-    status="本機真實來源預覽 · 未送達" if data["executionState"]=="preview" else "已生成 · 送達另行核對"
+    status="Staging acceptance · 截至目前，非歷史排程" if data.get('executionMode')=='staging_acceptance' else "本機真實來源預覽 · 未送達" if data["executionState"]=="preview" else "已生成 · 送達另行核對"
     out=['<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1420" viewBox="0 0 1080 1420">',
       '<rect width="1080" height="1420" fill="#10212b"/>',
       '<g font-family="PingFang TC, Noto Sans CJK TC, sans-serif" fill="#e9f1f3">',

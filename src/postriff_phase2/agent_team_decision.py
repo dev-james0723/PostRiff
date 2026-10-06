@@ -13,6 +13,7 @@ import uuid
 
 from postriff_alpha.domain import AlphaError
 from agent_team.recovery import Registration,ExecutionBinding,RecoveryBlocked
+from agent_team.acceptance import acceptance_key, question_report_key
 
 HASH=re.compile(r'[0-9a-f]{64}')
 IDENTITY=re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}')
@@ -47,7 +48,7 @@ def validate_question(document,*,actor_id=None,workspace_id=None,mission_id=None
     if not isinstance(document['prompt'],str) or not document['prompt'].strip() or len(document['prompt'])>800 or '\0' in document['prompt']:raise invalid()
     if document['choices']!=list(CHOICES):raise invalid()
     if type(document['reportVersion']) is not int or not 1<=document['reportVersion']<=9999:raise invalid()
-    if not isinstance(document['reportKey'],str) or not re.fullmatch(r'agent-team:v1:20[0-9]{2}-[0-9]{2}-[0-9]{2}:half_day',document['reportKey']):raise invalid()
+    if not isinstance(document['reportKey'],str) or not (re.fullmatch(r'agent-team:v1:20[0-9]{2}-[0-9]{2}-[0-9]{2}:half_day',document['reportKey']) or acceptance_key(document['reportKey'])):raise invalid()
     for name in ('issuedAt','expiresAt'):
         if type(document[name]) not in (int,float) or not math.isfinite(document[name]) or document[name]<0:raise invalid()
     if not 0<document['expiresAt']-document['issuedAt']<=3600:raise invalid()
@@ -124,9 +125,9 @@ def _question_call(cur,call):
     if not isinstance(report,dict) or not all(key in report for key in ('missionId','reportId','version','workday')):return None
     try:
         question=validate_question((row[0] or {}).get('agentTeamDecisionQuestion'),actor_id=row[1],workspace_id=row[2],mission_id=report.get('missionId'),report_id=report.get('reportId'),report_version=report.get('version'))
-        if question['reportKey']!='agent-team:v1:'+report['workday']+':half_day':return None
+        if question['reportKey']!=question_report_key(row[0] or {}):return None
         return question
-    except AlphaError:return None
+    except (AlphaError, ValueError):return None
 
 
 def _insert_evidence(cur,call,kind,source,evidence_hash,observed_at,*,input_frames=None,output_frames=None,playback_ack_sha256=None):

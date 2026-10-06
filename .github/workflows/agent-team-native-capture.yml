@@ -1,0 +1,29 @@
+name: Agent Team macOS capture helper
+on:
+  pull_request:
+    paths:
+      - src/agent_team/screen_audio_capture.swift
+      - .github/workflows/agent-team-native-capture.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: agent-team-native-capture-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  capture-helper:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bounded screen and system audio helper
+        run: |
+          mkdir -p capture-helper
+          swiftc -swift-version 5 -parse-as-library -target arm64-apple-macosx15.0 src/agent_team/screen_audio_capture.swift -o capture-helper/screen-audio-capture
+          shasum -a 256 capture-helper/screen-audio-capture > capture-helper/sha256.txt
+          git rev-parse HEAD > capture-helper/source-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-team-screen-audio-capture
+          path: capture-helper/
+          retention-days: 7

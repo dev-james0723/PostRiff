@@ -14,6 +14,7 @@ import re
 import time
 
 from agent_team.periods import TZ, aware, period
+from agent_team.acceptance import AcceptancePeriod, acceptance_key, document_period
 from postriff_alpha.domain import AlphaError
 
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
@@ -32,6 +33,10 @@ def invalid(message='Invalid report audio upload.', status=400, code='agent_team
 
 
 def identity(report_key, fingerprint):
+    accepted = acceptance_key(report_key)
+    if accepted and isinstance(fingerprint, str) and re.fullmatch(r'[0-9a-f]{64}', fingerprint):
+        p = period(accepted[0], 'half_day')
+        return AcceptancePeriod(p.workday, p.kind, p.start, p.cutoff, accepted[1])
     match = re.fullmatch(r'agent-team:v1:(20\d{2}-\d{2}-\d{2}):whole_day', report_key or '') if isinstance(report_key, str) else None
     if not match or not isinstance(fingerprint, str) or not re.fullmatch(r'[0-9a-f]{64}', fingerprint):
         raise invalid()
@@ -71,7 +76,7 @@ class TeamAudioStore:
 
     def _report(self, cur, report_key, fingerprint, now):
         p = identity(report_key, fingerprint)
-        if p.cutoff > now:
+        if not isinstance(p, AcceptancePeriod) and p.cutoff > now:
             raise invalid('This whole-day report is not due.', 409, 'agent_team_audio_not_due')
         cur.execute('SELECT document FROM public.pr_agent_team_reports WHERE report_key=%s AND fingerprint=%s',
                     (report_key, fingerprint))
@@ -80,6 +85,9 @@ class TeamAudioStore:
             raise invalid('The immutable report is unavailable.', 404, 'agent_team_audio_report_missing')
         doc = row[0]
         try:
+            if isinstance(p, AcceptancePeriod):
+                p = document_period(doc)
+                if p.key != report_key: raise ValueError('acceptance_key_mismatch')
             if (not isinstance(doc, dict) or doc.get('executionState') != 'generated'
                     or doc.get('fingerprint') != fingerprint or doc.get('period') != p.as_dict()
                     or type(doc.get('version')) is not int or not 1 <= doc['version'] <= 9_999
@@ -111,6 +119,10 @@ class TeamAudioStore:
                        for key in ('summaryHash', 'narrationHash', 'sha256'))):
             raise invalid()
         now = datetime.fromtimestamp(self.clock(), timezone.utc)
+        if isinstance(p, AcceptancePeriod):
+            with self.connection_factory() as db, db.cursor() as cur:
+                document, _, _, _ = self._report(cur, p.key, payload['fingerprint'], now)
+            p = document_period(document)
         try:
             observed = aware(payload['observedAt'])
         except (TypeError, ValueError, AttributeError):
@@ -189,6 +201,24 @@ class TeamAudioStore:
                 return {'state': 'no_due_report', 'audioState': 'unavailable'}
             doc = row[0]
             doc, summary_hash, narration_hash, excerpt = self._report(cur, p.key, doc.get('fingerprint'), now)
+            existing = self._stored(cur, p.key, doc['fingerprint'])
+        if existing:
+            return {'state': 'already_stored', 'asset': metadata(existing)}
+        return {'state': 'pending', 'audioState': 'audio_required', 'reportKey': p.key, 'fingerprint': doc['fingerprint'],
+                'version': doc['version'], 'workday': p.workday, 'kind': p.kind,
+                'summaryHash': summary_hash, 'narrationHash': narration_hash, 'excerpt': excerpt,
+                'mime': MIME, 'producer': PRODUCER, 'maxSeconds': 45, 'maxBytes': MAX_AUDIO_BYTES,
+                'sampleRate': 16000, 'channels': 1, 'sampleWidth': 2}
+
+    def work_for_report(self, document, now):
+        """One explicitly selected immutable acceptance; never historical fanout."""
+        try:
+            p = document_period(document)
+            if not isinstance(p, AcceptancePeriod): raise ValueError()
+        except (ValueError, TypeError, KeyError):
+            raise invalid() from None
+        with self.connection_factory() as db, db.cursor() as cur:
+            doc, summary_hash, narration_hash, excerpt = self._report(cur, p.key, document['fingerprint'], aware(now))
             existing = self._stored(cur, p.key, doc['fingerprint'])
         if existing:
             return {'state': 'already_stored', 'asset': metadata(existing)}

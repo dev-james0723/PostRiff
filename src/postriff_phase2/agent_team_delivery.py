@@ -14,6 +14,7 @@ import uuid
 
 from agent_team.events import canonical
 from agent_team.periods import aware, period
+from agent_team.acceptance import document_period
 from postriff_alpha.domain import AlphaError
 
 EVENT_TYPE = 'james.team_report_ready'
@@ -27,7 +28,7 @@ def report_identity(document):
     """Validate a generated report identity; DB read-back supplies its authority."""
     try:
         p = document['period']
-        expected = period(p['workday'], p['kind'])
+        expected = document_period(document)
         if any(p.get(key) != value for key, value in expected.as_dict().items()):
             raise ValueError('report_period_mismatch')
         fingerprint = document['fingerprint']
@@ -50,7 +51,8 @@ def report_href(document):
     # The shared short-payload sanitizer redacts long digit/hyphen runs. Percent
     # encoded separators preserve the date and URLSearchParams decodes it.
     workday = p.workday.replace('-', '%2D')
-    return f'/app/agent-team?workday={workday}&kind={p.kind}&version={version}'
+    acceptance = '&acceptanceId=' + p.acceptance_id if hasattr(p, 'acceptance_id') else ''
+    return f'/app/agent-team?workday={workday}&kind={p.kind}&version={version}' + acceptance
 
 
 def browser_voice_payload(document):
@@ -277,11 +279,15 @@ class TeamDeliveryStore:
 class TeamDeliveryService:
     """Hosted-service facade: recipient is always its configured James UUID."""
     def __init__(self, service):
+        self.service = service
         self.notifications = getattr(service, 'notifications', None)
         cfg = getattr(getattr(service, 'james_daily_call', None), 'cfg', None)
         self.store = TeamDeliveryStore(service.connection_factory, getattr(cfg, 'user_id', None), clock=service.clock)
 
     def queue(self, document):
+        if document.get('executionMode') == 'staging_acceptance':
+            from .agent_team_acceptance import require_acceptance
+            require_acceptance(getattr(self.service.james_daily_call, 'values', {}))
         return self._surface(self.store.queue(document, self.notifications))
 
     def receipt(self, document):

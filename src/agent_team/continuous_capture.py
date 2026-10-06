@@ -1,0 +1,123 @@
+"""Private bounded native collection; elapsed time and gaps remain explicit."""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+import uuid
+
+MAX_BYTES = 2 * 1024**3
+RETENTION_SECONDS = 48 * 3600
+MIN_FREE_BYTES = 2 * 1024**3
+
+def save(path, value):
+    temp = path.with_suffix('.tmp')
+    temp.write_text(json.dumps(value, indent=2) + '\n'); os.chmod(temp, 0o600)
+    os.replace(temp, path)
+
+def prepare(root):
+    root = Path(root).absolute()
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if root.is_symlink() or root.resolve() != root:
+        raise ValueError('private_capture_root_required')
+    os.chmod(root, 0o700)
+    return root
+
+def capture(root, helper, seconds):
+    if shutil.disk_usage(root).free < MIN_FREE_BYTES:
+        raise ValueError('capture_storage_reserve_unavailable')
+    identifier = str(uuid.uuid4()); path = root / (identifier + '.mp4')
+    result = subprocess.run([str(helper), 'capture', str(path), str(seconds)], capture_output=True,
+                            text=True, timeout=seconds+30)
+    try: metadata = json.loads(result.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError): raise ValueError('native_capture_outcome_unverified') from None
+    if result.returncode != 0 or metadata.get('executionState') != 'captured_screen_and_system_audio':
+        raise ValueError(metadata.get('reason', 'native_capture_failed'))
+    if path.is_symlink() or path.parent != root or metadata.get('videoTracks') != 1 or metadata.get('systemAudioTracks') != 1:
+        raise ValueError('screen_system_audio_tracks_required')
+    os.chmod(path, 0o600)
+    metadata.update(id=identifier, path=path.name, byteCount=path.stat().st_size,
+                    sha256=hashlib.sha256(path.read_bytes()).hexdigest(), storedAt=time.time(), retentionState='retained')
+    return metadata
+
+def retrieve(root, identifier, *, playback=False, helper=None):
+    state = json.loads((root / 'manifest.json').read_text())
+    rows = [r for r in state['chunks'] if r['id'] == identifier]
+    if len(rows) != 1: raise ValueError('capture_identity_unavailable')
+    row = rows[0]; path = root / (str(uuid.UUID(identifier)) + '.mp4')
+    if row['retentionState'] != 'retained' or path.is_symlink() or not path.is_file():
+        raise ValueError('capture_not_retained')
+    if path.stat().st_size != row['byteCount'] or hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']:
+        raise ValueError('capture_retrieval_hash_mismatch')
+    receipt = {k: row[k] for k in ('id', 'sha256', 'byteCount', 'startedAt', 'finishedAt')}
+    receipt.update(executionState='capture_retrieval_verified', retrievedAt=datetime.now(timezone.utc).isoformat())
+    if playback:
+        result = subprocess.run([str(helper), 'verify', str(path)], capture_output=True, text=True, timeout=150)
+        verified = json.loads(result.stdout.strip().splitlines()[-1])
+        if result.returncode != 0 or verified.get('playbackEnded') is not True:
+            raise ValueError('capture_playback_unverified')
+        receipt.update(playback=verified, executionState='capture_storage_retrieval_playback_verified')
+    save(root / ('receipt-' + identifier + '.json'), receipt)
+    return receipt
+
+def run(root, helper, seconds, *, once=False):
+    with (root / 'collector.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        manifest = root / 'manifest.json'
+        state = json.loads(manifest.read_text()) if manifest.exists() else {
+            'schemaVersion': 1, 'executionState': 'starting', 'startedAt': time.time(), 'chunks': [],
+            'policy': {'maxBytes': MAX_BYTES, 'retentionSeconds': RETENTION_SECONDS, 'minFreeBytes': MIN_FREE_BYTES,
+                       'chunkSeconds': seconds, 'screenSamplingFps': 1, 'systemAudio': True, 'microphone': False},
+            'fullDayCoverageMatured': False, 'gaps': [], 'continuousCollection': not once}
+        while True:
+            start = time.time()
+            try:
+                row = capture(root, helper, seconds)
+                if state['chunks']:
+                    previous = datetime.fromisoformat(state['chunks'][-1]['finishedAt'].replace('Z', '+00:00')).timestamp()
+                    gap = max(0, datetime.fromisoformat(row['startedAt'].replace('Z', '+00:00')).timestamp() - previous)
+                    if gap: state['gaps'].append({'startedAt': previous, 'seconds': gap, 'reason': 'native_chunk_rotation'})
+                state['chunks'].append(row); state['executionState'] = 'running' if not once else 'bounded_capture_complete'
+                total = sum(r['byteCount'] for r in state['chunks'] if r['retentionState'] == 'retained')
+                for old in state['chunks']:
+                    if old['retentionState'] != 'retained': continue
+                    if time.time() - old['storedAt'] <= RETENTION_SECONDS and total <= MAX_BYTES: break
+                    target = root / (str(uuid.UUID(old['id'])) + '.mp4')
+                    if target.is_symlink() or hashlib.sha256(target.read_bytes()).hexdigest() != old['sha256']:
+                        raise ValueError('retention_identity_conflict')
+                    target.unlink(); total -= old['byteCount']; old['retentionState'] = 'retention_removed'
+                retained = [r for r in state['chunks'] if r['retentionState'] == 'retained']
+                state.update(updatedAt=time.time(), retainedBytes=total,
+                    capturedSeconds=sum(r['durationSeconds'] for r in retained),
+                    elapsedSeconds=time.time()-state['startedAt'],
+                    fullDayCoverageMatured=False, maturationReason='requires_24h_measured_coverage_and_gap_review')
+                save(manifest, state)
+                if once: return row
+            except Exception as error:
+                state.update(executionState='waiting_external', updatedAt=time.time(), reason=str(error))
+                state['gaps'].append({'startedAt': start, 'seconds': time.time()-start, 'reason': str(error)})
+                save(manifest, state)
+                raise
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('mode', choices=('once', 'continuous', 'retrieve', 'playback', 'status'))
+    parser.add_argument('--root', required=True); parser.add_argument('--helper', required=True)
+    parser.add_argument('--seconds', type=int, default=120); parser.add_argument('--id')
+    args = parser.parse_args(); root = prepare(args.root); helper = Path(args.helper).resolve(strict=True)
+    if not 1 <= args.seconds <= 120: raise ValueError('bounded_capture_required')
+    if args.mode in ('once', 'continuous'):
+        value = run(root, helper, args.seconds, once=args.mode == 'once')
+    elif args.mode == 'status':
+        value = json.loads((root / 'manifest.json').read_text())
+        value = {k: v for k, v in value.items() if k != 'chunks'} | {'chunkCount': len(value['chunks'])}
+    else:
+        value = retrieve(root, args.id, playback=args.mode == 'playback', helper=helper)
+    print(json.dumps(value))
+
+if __name__ == '__main__': main()

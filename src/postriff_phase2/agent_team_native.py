@@ -35,7 +35,8 @@ class NativeDecisionBridge:
         report=context.get('agentTeamReport') or {}
         question=validate_question(context.get('agentTeamDecisionQuestion'),actor_id=self.actor_id,workspace_id=self.workspace_id,
             mission_id=decision['missionId'],report_id=report.get('reportId'),report_version=report.get('version'),now=float(row[19]))
-        if (report.get('missionId')!=question['missionId'] or question['reportKey']!='agent-team:v1:'+str(report.get('workday'))+':half_day'
+        from agent_team.acceptance import question_report_key
+        if (report.get('missionId')!=question['missionId'] or question['reportKey']!=question_report_key(context)
                 or decision['decisionKey']!=decision['effectKey'] or decision['effectKey']!=decision_effect_key(decision['callRunId'],question)):
             raise invalid('native_decision_binding_mismatch')
         for name in ('scopeVersion','questionVersion','questionSha256','authorizationSha256','registrationSha256','completionRequirementRefs'):

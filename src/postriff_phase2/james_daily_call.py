@@ -352,6 +352,9 @@ class DailyCallService:
                 "context": context}, True
 
     def _report_call_gate(self, context):
+        if 'agentTeamAcceptance' in context:
+            from .agent_team_acceptance import call_gate
+            return call_gate(self.values, context, self.cfg, self.clock())
         report = context["agentTeamReport"]
         if not agent_team_call_enabled(self.values):
             raise AlphaError("Agent Team phone delivery is disabled.", 409, code="agent_team_call_disabled")
@@ -394,6 +397,32 @@ class DailyCallService:
         return {key: value for key, value in result.items() if key != "context"} | {
             "reportId": actual["reportId"], "missionId": actual["missionId"], "workday": actual["workday"],
             "version": actual["version"], "callsCreated": 0 if result.get("replayed") else 1}
+
+    def call_report_acceptance(self, document, mission_id, decision_question):
+        """Separate exact-staging admission; same Twilio/model/human/media contract."""
+        from .agent_team_acceptance import require_acceptance
+        from .agent_team_decision import TrustedDecisionQuestion
+        from agent_team.acceptance import document_period
+        require_acceptance(self.values, phone=True)
+        p = document_period(document)
+        if document.get('executionMode') != 'staging_acceptance' or not isinstance(decision_question, TrustedDecisionQuestion):
+            raise AlphaError('Trusted acceptance question required.', 409, code='decision_question_untrusted')
+        context = _team_report_context(document['fingerprint'], mission_id, p.workday, document['version'], {
+            'kind': 'half_day', 'verified': True, 'timeZone': TEAM_REPORT_ZONE, 'cutoffLocalTime': '17:00',
+            'generatedAt': datetime.fromisoformat(document['generatedAt']).timestamp(),
+            'summary': document['summary'], 'coverageGaps': document['gaps'][:20],
+            'evidenceRefs': [e['id'] for e in document['evidence']][:20]})
+        context['agentTeamAcceptance'] = {'schemaVersion': 1, 'acceptanceId': p.acceptance_id, 'reportKey': p.key}
+        context['agentTeamDecisionQuestion'] = decision_question.document(actor_id=self.cfg.user_id,
+            workspace_id=self.cfg.workspace_id, mission_id=mission_id, report_id=document['fingerprint'],
+            report_version=document['version'], now=self.clock())
+        self._report_call_gate(context)
+        self._require_base()
+        slot = 'team-acceptance:' + hashlib.sha256(json.dumps([p.key, mission_id]).encode()).hexdigest()
+        result = self._start_context(slot, TEAM_REPORT_ORIGIN, context)
+        return {k: v for k, v in result.items() if k != 'context'} | {
+            'reportId': document['fingerprint'], 'reportKey': p.key, 'missionId': mission_id,
+            'executionMode': 'staging_acceptance', 'callsCreated': 0 if result.get('replayed') else 1}
 
     def _dial(self, run, attempt):
         if attempt not in (1, 2):

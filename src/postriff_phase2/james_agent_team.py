@@ -357,6 +357,15 @@ class TeamStore:
             row=cur.fetchone()
         return row[0] if row else None
 
+    def get_acceptance(self, acceptance_id):
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT document FROM public.pr_agent_team_reports WHERE report_key LIKE %s ORDER BY generated_at LIMIT 2",
+                        ('agent-team:acceptance:v1:%:' + acceptance_id + ':half_day',))
+            rows = cur.fetchall()
+        if len(rows) > 1:
+            raise AlphaError('Acceptance identity conflict.', 409)
+        return rows[0][0] if rows else None
+
     def reserve_effect(self,key,report_key,kind):
         with self.connection_factory() as db,db.cursor() as cur:
             cur.execute('INSERT INTO public.pr_agent_team_effects(effect_key,report_key,kind,state) VALUES(%s,%s,%s,\'reserved\') ON CONFLICT DO NOTHING RETURNING effect_key',(key,report_key,kind));new=cur.fetchone()
@@ -393,7 +402,8 @@ class TeamStore:
                     mission_id=team.get('missionId'),report_id=team.get('reportId'),report_version=team.get('version'),now=now)
             except AlphaError as error:
                 return {'state':'blocked','executionState':'not_dispatched','reason':error.code or 'decision_question_unavailable'}
-            if question['reportKey']!='agent-team:v1:'+team['workday']+':half_day' or (question['missionId'],question['scopeVersion'],question['questionVersion'])!=(d['missionId'],d['scopeVersion'],d['questionVersion']):
+            from agent_team.acceptance import question_report_key
+            if question['reportKey']!=question_report_key(context) or (question['missionId'],question['scopeVersion'],question['questionVersion'])!=(d['missionId'],d['scopeVersion'],d['questionVersion']):
                 raise AlphaError('Decision does not match the authenticated mission call.',403)
             from .agent_team_spoken import pending_choice
             spoken=pending_choice(cur,d['callRunId'],question,d['choice'])
@@ -560,6 +570,59 @@ def route(app,environ,start_response,method,path):
         return app._json(start_response,200,readiness(service,values),extra_headers=[('Cache-Control','private, no-store')])
     if not enabled(values):raise AlphaError('Agent Team is disabled.',503,code='agent_team_disabled')
     service=app._runtime();store=TeamStore(service.connection_factory)
+    if tail.startswith('/acceptance/'):
+        from .agent_team_acceptance import require_acceptance, acceptance_report, call_acceptance
+        require_acceptance(values)
+        if tail == '/acceptance/as-of-now' and method == 'POST':
+            authorize(environ, values, 'verifier')
+            doc, created = acceptance_report(service, values, store, body(environ))
+            result = _with_delivery(service, doc, {'state': 'generated' if created else 'already_generated',
+                'executionMode': 'staging_acceptance', 'reportKey': doc['period']['key'],
+                'reportId': doc['fingerprint'], 'version': doc['version'], 'evidenceCount': len(doc['evidence'])})
+            return app._json(start_response, 200, result, extra_headers=[('Cache-Control', 'private, no-store')])
+        match = re.fullmatch(r'/acceptance/([0-9a-f-]{36})/(json|svg|html|wav|delivery|call)', tail)
+        try:
+            valid_id = bool(match and str(uuid.UUID(match[1])) == match[1])
+        except ValueError:
+            valid_id = False
+        if not valid_id:
+            raise AlphaError('Unknown acceptance route.', 404)
+        acceptance_id, fmt = match.groups()
+        if fmt == 'call' and method == 'POST':
+            authorize(environ, values, 'verifier')
+            request = body(environ)
+            if set(request) != {'missionId'} or not isinstance(request['missionId'], str):
+                raise AlphaError('Invalid acceptance call request.', 400)
+        elif method == 'GET':
+            authorize_reader(app, environ, service, values)
+        else:
+            raise AlphaError('Unknown acceptance method.', 404)
+        doc = store.get_acceptance(acceptance_id)
+        if not doc:
+            raise AlphaError('Acceptance report unavailable.', 404)
+        if fmt == 'call':
+            result = call_acceptance(service, values, store, doc, request['missionId'])
+            return app._json(start_response, 200, result, extra_headers=[('Cache-Control', 'private, no-store')])
+        if fmt == 'delivery':
+            from .agent_team_delivery import TeamDeliveryService
+            return app._json(start_response, 200, TeamDeliveryService(service).receipt(doc), extra_headers=[('Cache-Control', 'private, no-store')])
+        headers = [('Cache-Control', 'private, no-store'), ('X-Agent-Team-Report-Version', str(doc['version'])),
+                   ('X-Agent-Team-Report-Fingerprint', doc['fingerprint'])]
+        if fmt == 'json':
+            return app._json(start_response, 200, doc, extra_headers=headers)
+        if fmt == 'wav':
+            from .agent_team_audio import TeamAudioStore
+            asset = TeamAudioStore(service.connection_factory).get(doc['period']['key'], doc['fingerprint'])
+            if not asset: raise AlphaError('Acceptance audio unavailable.', 404)
+            metadata, data = asset
+            start_response('200 OK', headers + [('Content-Type', 'audio/wav'), ('Content-Length', str(len(data))),
+                ('X-Agent-Team-Audio-Sha256', metadata['sha256']), ('X-Agent-Team-Audio-Narration-Sha256', metadata['narrationHash'])])
+            return [data]
+        data = (svg(doc) if fmt == 'svg' else html(doc)).encode()
+        mime = 'image/svg+xml' if fmt == 'svg' else 'text/html; charset=utf-8'
+        start_response('200 OK', headers + [('Content-Type', mime), ('Content-Length', str(len(data))),
+            ('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")])
+        return [data]
     if tail=='/mission-registry' and method=='POST':
         # A projection is native verifier authority, never ordinary observation.
         authorize(environ,values,'verifier')
@@ -578,7 +641,22 @@ def route(app,environ,start_response,method,path):
     if tail=='/audio-work' and method=='GET':
         authorize(environ,values,'observer')
         from .agent_team_audio import TeamAudioStore
-        job=TeamAudioStore(service.connection_factory).work(datetime.fromtimestamp(service.clock(),timezone.utc))
+        audio_store=TeamAudioStore(service.connection_factory)
+        query=parse_qs(environ.get('QUERY_STRING',''),keep_blank_values=True)
+        if query:
+            from .agent_team_acceptance import require_acceptance
+            require_acceptance(values)
+            if set(query)!={'acceptanceId'} or len(query['acceptanceId'])!=1:
+                raise AlphaError('Invalid acceptance audio query.',400)
+            try:
+                acceptance_id=str(uuid.UUID(query['acceptanceId'][0]))
+                if acceptance_id!=query['acceptanceId'][0]:raise ValueError()
+            except ValueError:raise AlphaError('Invalid acceptance audio identity.',400) from None
+            document=store.get_acceptance(acceptance_id)
+            if not document:raise AlphaError('Acceptance unavailable.',404)
+            job=audio_store.work_for_report(document,datetime.fromtimestamp(service.clock(),timezone.utc))
+        else:
+            job=audio_store.work(datetime.fromtimestamp(service.clock(),timezone.utc))
         if job.get('state')=='pending':
             document=store.get_report(job['reportKey'],job['version'])
             if not document or document['fingerprint']!=job['fingerprint']:
