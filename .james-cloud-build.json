@@ -1,0 +1,46 @@
+{
+  "provider": "depot",
+  "packageRoot": "web",
+  "packageManager": "npm",
+  "nodeVersion": "24",
+  "packageManagerVersion": "11.12.1",
+  "tasks": {
+    "test": "test:agent-team",
+    "typecheck": "typecheck",
+    "ci": "validate:agent-team"
+  },
+  "envAllowlist": [],
+  "inputExcludes": [
+    ".vercel",
+    "docs",
+    "studio",
+    "desktop",
+    "companion-ios",
+    "vendor",
+    "control-web",
+    ".claude",
+    ".token-pilot",
+    "web/public",
+    "web/tests",
+    "web/.next",
+    "web/node_modules"
+  ],
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
+  },
+  "localFallback": false,
+  "outputs": [],
+  "orgId": "jf34f85hr0",
+  "installCommand": "npm ci",
+  "environment": {
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1"
+  },
+  "taskArgs": {},
+  "checkoutPersistCredentials": true,
+  "framework": "next",
+  "cacheScope": "e408bbcd8242",
+  "lockfile": "package-lock.json",
+  "lockfileSha256": "72494342c0aaf26355149cd714ef2b7c46c971c1447e9ff1b9a2a53f68ef2ca7",
+  "baseRef": "refs/remotes/origin/feat/james-daily-call-20261002"
+}

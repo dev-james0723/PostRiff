@@ -227,6 +227,11 @@ class DeliveryWorker:
             payload = ctx['payload'] or {}
             body = push_module.payload(payload.get('title') or 'Daily call missed', payload.get('body') or 'Your daily brief is ready.',
                 self._ack_path(payload.get('href'), row), ctx.get('grouping') or ctx['type'], spec['category'])
+        elif ctx['type'] == 'james.team_report_ready':
+            payload = ctx['payload'] or {}
+            body = push_module.payload(payload.get('title') or 'James Agent Team report ready',
+                payload.get('detail') or 'Your report is ready. Sign in to review it.',
+                self._ack_path(payload.get('href'), row), ctx.get('grouping') or ctx['type'], spec['category'])
         else:
             body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
         results = []

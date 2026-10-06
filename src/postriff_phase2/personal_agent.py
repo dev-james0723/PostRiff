@@ -292,12 +292,14 @@ class JamesPersonalRouter:
                 terms = _search_terms(question)
                 if terms:
                     items = self.connectors.personal_calendar_search(
-                        self.daily.cfg.workspace_id, self.daily.cfg.user_id, terms, 12
+                        self.daily.cfg.workspace_id, self.daily.cfg.user_id, terms, 12,
+                        account_bindings=self.daily.cfg.briefing_bindings,
                     )
                     return PersonalToolResult("ok", "calendar", _calendar_search_speakable(items), len(items), self.daily.clock())
             start, end, label = calendar_window(question, self.daily.clock(), self.daily.cfg.time_zone)
             items = self.connectors.personal_calendar_range(
-                self.daily.cfg.workspace_id, self.daily.cfg.user_id, self.daily.cfg.time_zone, start, end, 20
+                self.daily.cfg.workspace_id, self.daily.cfg.user_id, self.daily.cfg.time_zone, start, end, 20,
+                account_bindings=self.daily.cfg.briefing_bindings,
             )
         except AlphaError:
             return PersonalToolResult("unavailable", "calendar", "I couldn't read your Google Calendar just now.")
@@ -309,7 +311,8 @@ class JamesPersonalRouter:
             return PersonalToolResult("unavailable", "gmail", "Your Gmail connection is unavailable right now.")
         try:
             items = self.connectors.personal_gmail_search(
-                self.daily.cfg.workspace_id, self.daily.cfg.user_id, gmail_query(question), 8
+                self.daily.cfg.workspace_id, self.daily.cfg.user_id, gmail_query(question), 8,
+                account_bindings=self.daily.cfg.briefing_bindings,
             )
         except AlphaError:
             return PersonalToolResult("unavailable", "gmail", "I couldn't search your Gmail just now.")
