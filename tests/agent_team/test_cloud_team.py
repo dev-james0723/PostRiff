@@ -93,9 +93,44 @@ class CloudTeamTests(unittest.TestCase):
 
     def run_cron(self,store,now,call=False):
         service=fake_service(now)
-        with patch('postriff_phase2.james_agent_team.TeamStore',return_value=store):
+        question=MagicMock();question.document.return_value={'missionId':'registered-mission'}
+        with patch('postriff_phase2.james_agent_team.TeamStore',return_value=store),patch('postriff_phase2.james_agent_team._report_question',return_value=question):
             result=cron(service,{'JAMES_AGENT_TEAM_ENABLED':'1','JAMES_AGENT_TEAM_CALL_ENABLED':'1' if call else '0'})
         return result,service
+
+    def test_cron_binds_actual_mission_and_server_owned_question_before_phone_reservation(self):
+        store=MemoryStore();store.inputs[HALF.key]=([observation()],False)
+        result,service=self.run_cron(store,HALF.cutoff+timedelta(minutes=1),call=True)
+        arguments=service.james_daily_call.call_report.call_args.kwargs
+        self.assertEqual(arguments['mission_id'],'registered-mission')
+        self.assertEqual(arguments['decision_question'].document.return_value['missionId'],arguments['mission_id'])
+        self.assertEqual(result['callState'],'dialing')
+
+    def test_missing_native_registry_never_reserves_or_originates_generic_report_call(self):
+        from postriff_phase2.agent_team_decision import invalid
+        for error in (invalid('decision_registration_unavailable'),RuntimeError('database unavailable')):
+            store=MemoryStore();store.inputs[HALF.key]=([observation()],False)
+            service=fake_service(HALF.cutoff+timedelta(minutes=1))
+            with patch('postriff_phase2.james_agent_team.TeamStore',return_value=store),patch('postriff_phase2.james_agent_team._report_question',side_effect=error):
+                result=cron(service,{'JAMES_AGENT_TEAM_ENABLED':'1','JAMES_AGENT_TEAM_CALL_ENABLED':'1'})
+            self.assertEqual(result['callState'],'blocked');self.assertEqual(store.reservations,[])
+            self.assertEqual(len(store.versions),1)
+            service.james_daily_call.call_report.assert_not_called()
+
+    def test_fresh_registry_can_admit_original_unchanged_report_inside_existing_window(self):
+        from postriff_phase2.agent_team_decision import invalid
+        store=MemoryStore();store.inputs[HALF.key]=([observation()],False)
+        service=fake_service(HALF.cutoff+timedelta(minutes=1))
+        with patch('postriff_phase2.james_agent_team.TeamStore',return_value=store),patch('postriff_phase2.james_agent_team._report_question',side_effect=invalid('decision_registration_unavailable')):
+            first=cron(service,{'JAMES_AGENT_TEAM_ENABLED':'1','JAMES_AGENT_TEAM_CALL_ENABLED':'1'})
+        self.assertEqual(first['callState'],'blocked');self.assertEqual(store.reservations,[])
+        second,recovered=self.run_cron(store,HALF.cutoff+timedelta(minutes=2),call=True)
+        self.assertEqual(second['state'],'already_generated');self.assertEqual(second['callState'],'dialing')
+        recovered.james_daily_call.call_report.assert_called_once()
+        self.assertEqual(len(store.reservations),1)
+        third,replayed=self.run_cron(store,HALF.cutoff+timedelta(minutes=3),call=True)
+        self.assertEqual(third['callState'],'reconciliation_required')
+        replayed.james_daily_call.call_report.assert_not_called()
 
     def test_night_report_never_reserves_phone(self):
         store=MemoryStore();now=datetime.fromisoformat('2026-10-06T05:01:00+00:00')

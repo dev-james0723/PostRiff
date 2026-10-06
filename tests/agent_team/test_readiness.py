@@ -1,4 +1,5 @@
-"""Synthetic metadata and scoped EXISTS only; no provider or live database."""
+"""Synthetic bounded metadata reads only; no provider or live database."""
+from datetime import datetime,timedelta,timezone
 import json
 from types import SimpleNamespace
 import unittest
@@ -12,6 +13,7 @@ from postriff_phase2.james_agent_team import (
 
 USER='11111111-1111-4111-8111-111111111111'
 WORKSPACE='22222222-2222-4222-8222-222222222222'
+NOW=datetime(2026,10,6,4,0,tzinfo=timezone.utc)
 VALUES={
     'JAMES_AGENT_TEAM_ENABLED':'0','JAMES_AGENT_TEAM_CALL_ENABLED':'0',
     'JAMES_AGENT_TEAM_READER_TOKEN':'r'*40,'JAMES_AGENT_TEAM_OBSERVER_TOKEN':'o'*40,
@@ -37,11 +39,12 @@ def columns():
 
 
 class ReadOnlyCursor:
-    def __init__(self,metadata=None,profile=True,membership=True,editor=True,connections=None,error=None):
+    def __init__(self,metadata=None,profile=True,membership=True,editor=True,connections=None,error=None,ingress_rows=None,ingress_error=None):
         self.metadata=columns() if metadata is None else metadata
         self.profile=profile;self.membership=membership;self.editor=editor
         self.connections=connections or {'gmail':True,'google_calendar':True}
         self.error=error;self.queries=[];self.result=None
+        self.ingress_rows=[] if ingress_rows is None else ingress_rows;self.ingress_error=ingress_error
 
     def __enter__(self):return self
     def __exit__(self,*args):return False
@@ -53,6 +56,9 @@ class ReadOnlyCursor:
         if 'information_schema.columns' in sql:self.result=self.metadata
         elif 'public.pr_profiles' in sql:self.result=(self.profile,self.membership,self.editor)
         elif 'public.pr_connector_credentials' in sql:self.result=(self.connections[parameters[2]],)
+        elif 'public.pr_agent_team_events' in sql:
+            if self.ingress_error:raise self.ingress_error
+            self.result=self.ingress_rows
         else:raise AssertionError('Unbounded or unknown readiness query')
 
     def fetchall(self):return self.result
@@ -74,8 +80,14 @@ def app_for(values=None,**cursor_options):
 
 def fetch(app,values,token=None,method='GET',path=None):
     token=values['JAMES_AGENT_TEAM_READER_TOKEN'] if token is None else token
-    with patch.dict('os.environ',values,clear=True):
+    with patch.dict('os.environ',values,clear=True),patch('postriff_phase2.james_agent_team.datetime',wraps=datetime) as clock:
+        clock.now.return_value=NOW
         return route(app,{'HTTP_AUTHORIZATION':'Bearer '+token},MagicMock(),method,path or PREFIX+'/readiness')
+
+
+def ingress_row(source='luci',*,observed=None,received=None,health_source=None,status='partial',fresh=None,gaps=None):
+    return (source,health_source,observed or NOW-timedelta(seconds=30),received or NOW-timedelta(seconds=10),
+            'source_coverage' if source=='health' else 'metadata',status,fresh,gaps or [])
 
 
 class ReadinessTests(unittest.TestCase):
@@ -94,7 +106,10 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(result['binding']['providerIdentityState'],'unverified')
         self.assertTrue(all(x['ready'] for x in result['databaseMigrations'].values()))
         self.assertIn(('Cache-Control','private, no-store'),app._json.call_args.kwargs['extra_headers'])
-        self.assertEqual(len(cursor.queries),4)
+        self.assertEqual(len(cursor.queries),5)
+        self.assertEqual(result['ingress']['state'],'empty')
+        self.assertFalse(result['ingress']['healthy'])
+        self.assertFalse(result['ingress']['dailyCoverageComplete'])
         db.commit.assert_not_called()
         service.verify_session.assert_not_called();app._token.assert_not_called()
         service.james_daily_call.call_report.assert_not_called()
@@ -211,6 +226,75 @@ class ReadinessTests(unittest.TestCase):
         result=fetch(app,values)
         self.assertIn('cost_cap_unset',result['blockers']);self.assertIn('call_policy_invalid',result['blockers'])
         self.assertIsNone(result['callPolicy']['maxSeconds'])
+
+    def test_recent_ingress_uses_received_and_observed_timestamps_and_keeps_coverage_partial(self):
+        rows=[ingress_row('luci'),ingress_row('luci'),ingress_row('codex'),
+              ingress_row('health',health_source='luci',status='ok',fresh=(NOW-timedelta(seconds=30)).isoformat(),
+                          gaps=['bounded_scan_only'])]
+        app,_,db,cursor,values=app_for(ingress_rows=rows)
+        result=fetch(app,values);ingress=result['ingress']
+        self.assertEqual(ingress['state'],'healthy');self.assertTrue(ingress['healthy'])
+        self.assertEqual(ingress['boundedRowCount'],4);self.assertEqual(ingress['recentObservedRowCount'],4)
+        self.assertEqual(ingress['sourceCounts'],{'luci':2,'codex':1,'health':1})
+        self.assertEqual((ingress['receivedAgeSeconds'],ingress['observedAgeSeconds']),(10,30))
+        self.assertEqual(ingress['latestReceivedAt'],(NOW-timedelta(seconds=10)).isoformat())
+        self.assertEqual(ingress['latestObservedAt'],(NOW-timedelta(seconds=30)).isoformat())
+        self.assertFalse(ingress['dailyCoverageComplete']);self.assertTrue(ingress['countsComplete'])
+        luci=next(item for item in ingress['coverageHealth'] if item['source']=='luci')
+        self.assertTrue(luci['fresh']);self.assertFalse(luci['dailyCoverageComplete'])
+        self.assertIn('bounded_scan_only',luci['gaps'])
+        claude=next(item for item in ingress['coverageHealth'] if item['source']=='claude')
+        self.assertEqual(claude['gaps'],['recent_source_health_missing'])
+        self.assertIn('full_day_screen_audio_unverified',ingress['gaps'])
+        sql,parameters=cursor.queries[-1]
+        self.assertIn('LIMIT 1001',sql);self.assertIn('received_at>=%s AND received_at<=%s',sql)
+        self.assertEqual(parameters,(NOW-timedelta(seconds=600),NOW))
+        self.assertNotIn('SELECT document ',sql)
+        db.commit.assert_not_called()
+
+    def test_fresh_upload_of_old_backlog_does_not_claim_fresh_observations(self):
+        app,_,_,_,values=app_for(ingress_rows=[ingress_row(observed=NOW-timedelta(hours=2))])
+        result=fetch(app,values);ingress=result['ingress']
+        self.assertTrue(result['configurationReady'])
+        self.assertEqual(ingress['state'],'stale');self.assertFalse(ingress['healthy'])
+        self.assertEqual(ingress['receivedAgeSeconds'],10);self.assertEqual(ingress['observedAgeSeconds'],7200)
+        self.assertIn('recent_upload_contains_only_stale_observations',ingress['gaps'])
+
+    def test_ingress_query_limit_and_future_observations_are_visible(self):
+        app,_,_,_,values=app_for(ingress_rows=[ingress_row()]*1001)
+        ingress=fetch(app,values)['ingress']
+        self.assertEqual(ingress['boundedRowCount'],1000)
+        self.assertEqual(ingress['state'],'partial');self.assertFalse(ingress['healthy'])
+        self.assertFalse(ingress['countsComplete']);self.assertIn('recent_ingress_query_limit',ingress['gaps'])
+        app,_,_,_,values=app_for(ingress_rows=[ingress_row(observed=NOW+timedelta(seconds=30))])
+        ingress=fetch(app,values)['ingress']
+        self.assertFalse(ingress['healthy']);self.assertEqual(ingress['recentObservedRowCount'],0)
+        self.assertIn('future_observation_not_fresh',ingress['gaps'])
+
+    def test_untrusted_health_text_is_not_returned_and_future_watermark_is_not_fresh(self):
+        private='Bearer '+VALUES['JAMES_AGENT_TEAM_OBSERVER_TOKEN']
+        rows=[ingress_row('health',health_source='luci',fresh=(NOW+timedelta(seconds=30)).isoformat(),
+                          gaps=['bounded_scan_only',private,'/Users/private-path'])]
+        app,_,_,_,values=app_for(ingress_rows=rows)
+        ingress=fetch(app,values)['ingress']
+        health=next(item for item in ingress['coverageHealth'] if item['source']=='luci')
+        self.assertFalse(health['fresh']);self.assertIsNone(health['freshAt'])
+        self.assertIn('additional_reported_coverage_gaps',health['gaps'])
+        self.assertIn('source_freshness_unknown',health['gaps'])
+        self.assertNotIn(private,json.dumps(ingress));self.assertNotIn('/Users/private-path',json.dumps(ingress))
+
+    def test_ingress_unavailable_does_not_rewrite_verified_configuration(self):
+        app,_,db,_,values=app_for(ingress_error=RuntimeError('private endpoint token'))
+        result=fetch(app,values)
+        self.assertTrue(result['configurationReady']);self.assertTrue(result['databaseAvailable'])
+        self.assertEqual(result['ingress']['state'],'unavailable')
+        self.assertEqual(result['ingress']['reason'],'ingress_query_unavailable')
+        self.assertNotIn('private endpoint token',json.dumps(result));db.commit.assert_not_called()
+        metadata=[row for row in columns() if row!=('pr_agent_team_events','received_at')]
+        app,_,_,cursor,values=app_for(metadata=metadata)
+        result=fetch(app,values)
+        self.assertEqual(result['ingress']['reason'],'ingress_schema_incomplete')
+        self.assertEqual(len(cursor.queries),4)
 
     def test_feature_flag_exception_is_only_readiness_get(self):
         for method,path in (('POST',PREFIX+'/readiness'),('GET',PREFIX+'/status'),('POST',PREFIX+'/events'),

@@ -31,7 +31,7 @@ from uuid import UUID, uuid4
 from .recovery import (ActiveAttemptEvidence, Attempt, Checkpoint, ExecutionBinding,
                        Lease, NativeOwner, RecoveryBlocked, RecoveryEvidence,
                        RecoveryStore, Registration, WorkspaceSnapshot,
-                       validate_active_attempt, validate_recovery)
+                       _digest as recovery_digest, validate_active_attempt, validate_recovery)
 
 
 def digest(value: object) -> str:
@@ -175,7 +175,7 @@ class SQLiteRecoveryControl:
         if not linked or not cp or cp["digest"] != context.checkpoint_sha256:
             raise RecoveryBlocked("transport_durable_checkpoint_required")
         data = json.loads(cp["body"])
-        if digest(data) != cp["digest"]:
+        if recovery_digest(data) != cp["digest"]:
             raise RecoveryBlocked("transport_checkpoint_digest_mismatch")
         data["workspace"] = WorkspaceSnapshot(**data["workspace"])
         for name in ("verified_done", "incomplete", "blockers", "acceptance_criteria", "side_effect_ledger_refs", "evidence_refs"):
@@ -426,8 +426,9 @@ class NativeOwnerTransport:
         self._validate_snapshot(context, snapshot, active=active)
         initial = context.initial_snapshot
         if (snapshot.socket_device, snapshot.socket_inode, snapshot.socket_uid, snapshot.session_root_id,
-                snapshot.configuration_sha256) != (initial.socket_device, initial.socket_inode, initial.socket_uid,
-                                                  initial.session_root_id, initial.configuration_sha256):
+                snapshot.configuration_sha256, snapshot.exclusion_ref) != (
+                initial.socket_device, initial.socket_inode, initial.socket_uid,
+                initial.session_root_id, initial.configuration_sha256, initial.exclusion_ref):
             raise RecoveryBlocked("native_owner_identity_or_configuration_changed")
         return snapshot
 

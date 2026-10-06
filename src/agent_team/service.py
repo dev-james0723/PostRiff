@@ -102,15 +102,23 @@ class ClaudeLogRegistration:
 
 
 @dataclass(frozen=True)
+class GitRepositoryRegistration:
+    workspace: Path
+    repository: str
+    gh_binary: Path
+
+
+@dataclass(frozen=True)
 class ServicePolicy:
     canonical_root: Path
     approved_native_projects: tuple[NativeRegistration, ...] = ()
     allowed_upload_hosts: tuple[str, ...] = ()
     approved_claude_logs: tuple[ClaudeLogRegistration, ...] = ()
+    approved_git_repositories: tuple[GitRepositoryRegistration, ...] = ()
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any], *, canonical_root: Path = CANONICAL_ROOT) -> "ServicePolicy":
-        data = _keys(payload, {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts", "approved_claude_logs"},
+        data = _keys(payload, {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts", "approved_claude_logs", "approved_git_repositories"},
                      {"version", "canonical_root", "approved_native_projects", "allowed_upload_hosts"})
         if type(data["version"]) is not int or data["version"] != 1:
             raise ValueError("policy_version_unsupported")
@@ -142,7 +150,21 @@ class ServicePolicy:
             if str(workspace) not in approved_projects or approved_projects[str(workspace)]!=item['project_id']:
                 raise ValueError('claude_workspace_project_not_approved')
             selected_logs.append(ClaudeLogRegistration(path,workspace,item['project_id']))
-        return cls(root, tuple(sorted(registrations, key=lambda item: str(item.workspace))), tuple(hosts),tuple(selected_logs))
+        repositories=data.get('approved_git_repositories',{})
+        if not isinstance(repositories,dict) or len(repositories)>8:
+            raise ValueError('git_repository_registration_limit')
+        selected_repositories=[]
+        for workspace,details in repositories.items():
+            item=_keys(details,{'repository','gh_binary'},{'repository','gh_binary'})
+            path=_exact_absolute(workspace);binary=_exact_absolute(item['gh_binary'])
+            if str(path) not in approved_projects:
+                raise ValueError('git_repository_workspace_not_approved')
+            repo=item['repository']
+            if (not isinstance(repo,str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo)
+                    or any(part in {'.','..'} for part in repo.split('/'))):
+                raise ValueError('git_repository_identity_required')
+            selected_repositories.append(GitRepositoryRegistration(path,repo,binary))
+        return cls(root, tuple(sorted(registrations, key=lambda item: str(item.workspace))), tuple(hosts),tuple(selected_logs),tuple(selected_repositories))
 
 
 @dataclass(frozen=True)
@@ -165,6 +187,7 @@ class ServiceConfig:
     audio: bool = False
     evidence_workspaces: tuple[NativeRegistration, ...] = ()
     claude_logs: tuple[ClaudeLogRegistration, ...] = ()
+    ci_workspaces: tuple[Path, ...] = ()
 
     def validate(self) -> "ServiceConfig":
         """Recheck even directly constructed configs at every public entry point."""
@@ -175,7 +198,9 @@ class ServiceConfig:
             'approved_native_projects':{str(item.workspace):item.project_id for item in self.policy.approved_native_projects},
             'allowed_upload_hosts':list(self.policy.allowed_upload_hosts),
             'approved_claude_logs':{str(item.log_path):{'workspace':str(item.workspace),'project_id':item.project_id}
-                                    for item in self.policy.approved_claude_logs}},canonical_root=self.policy.canonical_root)
+                                    for item in self.policy.approved_claude_logs},
+            'approved_git_repositories':{str(item.workspace):{'repository':item.repository,'gh_binary':str(item.gh_binary)}
+                                        for item in self.policy.approved_git_repositories}},canonical_root=self.policy.canonical_root)
         if any(item not in policy.approved_claude_logs for item in self.claude_logs):
             raise ValueError('claude_registration_tuple_not_approved')
         payload = {"version": 1, "journal_path": str(self.journal_path),
@@ -187,6 +212,7 @@ class ServiceConfig:
                    "evidence_workspaces": [{"workspace":str(item.workspace),"project_id":item.project_id}
                                            for item in self.evidence_workspaces],
                    "claude_logs": [str(item.log_path) for item in self.claude_logs],
+                   "ci_workspaces": [str(path) for path in self.ci_workspaces],
                    "upload": None if self.upload is None else {
                        "endpoint": self.upload.endpoint, "token_file": str(self.upload.token_file),
                        "limit": self.upload.limit}}
@@ -195,7 +221,7 @@ class ServiceConfig:
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any], policy: ServicePolicy) -> "ServiceConfig":
         data = _keys(payload, {"version", "journal_path", "interval_seconds", "window_seconds", "audio",
-                               "typeless", "luci", "native_workspaces", "upload", "evidence_workspaces", "claude_logs"},
+                               "typeless", "luci", "native_workspaces", "upload", "evidence_workspaces", "claude_logs", "ci_workspaces"},
                      {"version", "journal_path", "interval_seconds", "window_seconds",
                       "typeless", "luci", "native_workspaces", "upload"})
         if type(data["version"]) is not int or data["version"] != 1:
@@ -237,6 +263,18 @@ class ServiceConfig:
             if any(old.workspace==workspace for old in evidence_selected):
                 raise ValueError('duplicate_evidence_workspace')
             evidence_selected.append(NativeRegistration(workspace,project_id))
+        ci_requested=data.get('ci_workspaces',[])
+        if not isinstance(ci_requested,list) or len(ci_requested)>8:
+            raise ValueError('ci_registration_limit')
+        approved_ci={item.workspace for item in policy.approved_git_repositories}
+        selected_evidence={item.workspace for item in evidence_selected}
+        ci_selected=[]
+        for name in ci_requested:
+            workspace=_exact_absolute(name)
+            if workspace not in approved_ci or workspace not in selected_evidence:
+                raise ValueError('ci_workspace_not_approved')
+            if workspace in ci_selected:raise ValueError('duplicate_ci_workspace')
+            ci_selected.append(workspace)
         log_requested=data.get('claude_logs',[])
         if (not isinstance(log_requested,list) or len(log_requested)>8
                 or any(not isinstance(name,str) for name in log_requested)
@@ -266,7 +304,7 @@ class ServiceConfig:
             upload = UploadConfig(endpoint, token, limit)
         if data.get("audio",False) and upload is None:
             raise ValueError("audio_requires_authenticated_upload")
-        return cls(policy, journal, interval, window, data["typeless"], data["luci"], tuple(selected), upload, data.get("audio",False),tuple(evidence_selected),tuple(logs_selected))
+        return cls(policy, journal, interval, window, data["typeless"], data["luci"], tuple(selected), upload, data.get("audio",False),tuple(evidence_selected),tuple(logs_selected),tuple(ci_selected))
 
 
 def _read_private_json(path: Path, expected: Path) -> Mapping[str, Any]:
@@ -309,7 +347,12 @@ def _source_connected(source: str, path: Path) -> bool:
 def collect_registered_evidence(config: ServiceConfig, now: datetime):
     """Read only the finite policy map; never scan for new projects or sessions."""
     for item in config.evidence_workspaces:
-        yield item.project_id,read_git_metadata(GitMetadataConfig(item.workspace,item.workspace,item.project_id),observed_at=now)
+        repository=next((entry for entry in config.policy.approved_git_repositories if entry.workspace==item.workspace),None)
+        options={}
+        if item.workspace in config.ci_workspaces and repository is not None:
+            options={'gh_binary':repository.gh_binary,'allowed_gh_binary':repository.gh_binary,
+                     'repository':repository.repository,'gh_authorized':True,'ci':True}
+        yield item.project_id,read_git_metadata(GitMetadataConfig(item.workspace,item.workspace,item.project_id,**options),observed_at=now)
         yield item.project_id,read_token_pilot_metadata(TokenPilotMetadataConfig(item.workspace,item.workspace,item.project_id),observed_at=now)
     for item in config.claude_logs:
         yield item.project_id,read_claude_metadata(ClaudeMetadataConfig(item.log_path,item.log_path,item.workspace,item.workspace,item.project_id),observed_at=now)

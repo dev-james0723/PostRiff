@@ -69,6 +69,10 @@ READINESS_MIGRATIONS={
         'pr_agent_team_call_evidence':('call_id','evidence_kind','provider','source','evidence_sha256','observed_at','input_frames','output_frames','playback_ack_sha256','created_at'),
         'pr_agent_team_decisions':('workspace_id','question_sha256','authorization_sha256','registration_sha256','execution_binding_sha256','completion_requirement_refs','attended_call_id','effect_key'),
     },
+    '094':{
+        'pr_agent_team_mission_registry':('mission_id','actor_id','workspace_id','registration_sha256','execution_sha256','ordinal','registration_document','execution_document','attestation_document','attestation_sha256','observed_at','created_at'),
+        'pr_agent_team_native_receipts':('decision_key','resume_request_id','receipt_sha256','execution_state','document','observed_at','created_at'),
+    },
 }
 READINESS_BINDING_COLUMNS={
     'pr_profiles':('user_id','deleted_at'),
@@ -175,12 +179,85 @@ def readiness(service,values):
     configuration_ready=not blockers
     if not team_enabled:blockers.append('team_disabled')
     if not team_call_enabled:blockers.append('team_call_disabled')
+    # Configuration and transport freshness are separate evidence. A role flag,
+    # a newly received backlog, or an empty successful scan is not activity or
+    # full-day coverage. Read only bounded metadata; never return event bodies.
+    now=datetime.now(timezone.utc);window_start=now-timedelta(seconds=600)
+    ingress={'state':'unavailable','healthy':False,'checkedAt':now.isoformat(),
+             'windowStart':window_start.isoformat(),'windowSeconds':600,'rowLimit':1000,
+             'boundedRowCount':0,'recentObservedRowCount':0,'countsComplete':False,
+             'sourceCounts':{},'latestReceivedAt':None,'latestObservedAt':None,
+             'receivedAgeSeconds':None,'observedAgeSeconds':None,
+             'dailyCoverageComplete':False,'gaps':['bounded_metadata_only','full_day_screen_audio_unverified'],
+             'coverageHealth':[]}
+    ingress_columns={'source','source_id','observed_at','received_at','document','event_key'}
+    ingress_binding=principal_configured and all(binding[field] for field in
+        ('profileActive','membershipActive','membershipCanEdit','gmailConnectionBound','calendarConnectionBound'))
+    if not database_available:ingress['reason']='database_unavailable'
+    elif not ingress_binding:ingress['reason']='binding_unverified'
+    elif not ingress_columns<=present['pr_agent_team_events']:ingress['reason']='ingress_schema_incomplete'
+    else:
+        try:
+            with service.connection_factory() as db,db.cursor() as cur:
+                cur.execute("SELECT source,CASE WHEN source='health' THEN source_id END,observed_at,received_at,document#>>'{payload,kind}',document#>>'{payload,sourceStatus}',document#>>'{payload,sourceFreshAt}',CASE WHEN source='health' THEN document#>'{payload,gaps}' END FROM public.pr_agent_team_events WHERE received_at>=%s AND received_at<=%s ORDER BY received_at DESC,event_key LIMIT 1001",
+                            (window_start,now))
+                rows=cur.fetchall()
+            truncated=len(rows)>1000;latest_received=None;latest_observed=None;health={}
+            safe_gaps={'bounded_scan_only','source_freshness_unknown','source_missing','source_stale',
+                       'source_timestamp_unknown_or_future','permission_denied','query_limit','event_limit',
+                       'line_limit','record_size_limit','tail_window_only','incomplete_jsonl_tail',
+                       'thread_page_limit','thread_timestamp_unknown','exact_workspace_mismatch',
+                       'codex_metadata_query_failed','workspace_not_connected','native_poll_failed',
+                       'writer_ownership_unproven','budget_unknown','recorded_state_not_live_writer_proof',
+                       'untracked_files_not_scanned','submodules_not_scanned','gh_metadata_not_authorized',
+                       'gh_metadata_unavailable','gh_ci_page_limit','gh_deployment_page_limit',
+                       'token_pilot_usage_receipt_unavailable','source_not_verified'}
+            for source,source_id,observed,received,kind,status,fresh,gaps in rows[:1000]:
+                observed=aware(observed);received=aware(received)
+                if not window_start<=received<=now:continue
+                if source not in (*EXPECTED_SOURCES,'health','acceptance','incident'):continue
+                ingress['boundedRowCount']+=1
+                ingress['sourceCounts'][source]=ingress['sourceCounts'].get(source,0)+1
+                latest_received=max(latest_received or received,received)
+                latest_observed=max(latest_observed or observed,observed)
+                if window_start<=observed<=now:ingress['recentObservedRowCount']+=1
+                if observed>now:ingress['gaps'].append('future_observation_not_fresh')
+                if source!='health' or source_id not in EXPECTED_SOURCES or kind!='source_coverage':continue
+                if source_id in health and observed<=aware(health[source_id]['observedAt']):continue
+                status=status if status in ('ok','partial','not_connected','unavailable','blocked','disabled','unknown') else 'unknown'
+                reported_gaps=gaps if isinstance(gaps,list) else ['invalid_source_coverage']
+                known_gaps=sorted({gap for gap in reported_gaps if isinstance(gap,str) and gap in safe_gaps})
+                if len(known_gaps)!=len(set(gap for gap in reported_gaps if isinstance(gap,str))):known_gaps.append('additional_reported_coverage_gaps')
+                try:fresh_at=aware(fresh) if fresh is not None else None
+                except (TypeError,ValueError):fresh_at=None
+                if fresh_at is not None and (fresh_at>observed or fresh_at>now):fresh_at=None
+                if fresh_at is None:known_gaps.append('source_freshness_unknown')
+                health[source_id]={'source':source_id,'status':status,'observedAt':observed.isoformat(),
+                    'receivedAt':received.isoformat(),'freshAt':fresh_at.isoformat() if fresh_at else None,
+                    'fresh':fresh_at is not None and window_start<=fresh_at<=now,
+                    'dailyCoverageComplete':False,'gaps':sorted(set(known_gaps))}
+            ingress['countsComplete']=not truncated
+            if latest_received is not None:
+                ingress.update(latestReceivedAt=latest_received.isoformat(),latestObservedAt=latest_observed.isoformat(),
+                    receivedAgeSeconds=(now-latest_received).total_seconds(),observedAgeSeconds=(now-latest_observed).total_seconds())
+            ingress['healthy']=bool(ingress['recentObservedRowCount']) and not truncated
+            ingress['state']='partial' if truncated else 'healthy' if ingress['healthy'] else 'stale' if ingress['boundedRowCount'] else 'empty'
+            if truncated:ingress['gaps'].append('recent_ingress_query_limit')
+            if ingress['boundedRowCount'] and not ingress['recentObservedRowCount']:ingress['gaps'].append('recent_upload_contains_only_stale_observations')
+            for source in EXPECTED_SOURCES:
+                ingress['coverageHealth'].append(health.get(source,{'source':source,'status':'unknown',
+                    'observedAt':None,'receivedAt':None,'freshAt':None,'fresh':False,
+                    'dailyCoverageComplete':False,'gaps':['recent_source_health_missing']}))
+        except Exception:
+            # An ingress read failure does not rewrite already verified config.
+            ingress.update(state='unavailable',healthy=False,countsComplete=False,reason='ingress_query_unavailable')
+    ingress['gaps']=sorted(set(ingress['gaps']))
     return {'readiness':'ready' if not blockers else 'blocked','configurationReady':configuration_ready,
             'enabled':team_enabled,'callEnabled':team_call_enabled,'cutoverSource':cutover_source(values),'roleSecretsConfigured':roles_ready,
             'databaseAvailable':database_available,'databaseMigrations':migrations,
             'migrationCheck':'required_tables_and_columns','binding':binding,'callPolicy':policy,
             'blockers':blockers,'nativeState':'unverified','scheduleState':'unverified',
-            'callAdmissionState':'not_evaluated'}
+            'callAdmissionState':'not_evaluated','ingress':ingress}
 
 
 def content_fingerprint(document):
@@ -397,35 +474,56 @@ def _generate_period(service,values,store,p,now,prior=None,historical=False):
         for meta in sources.values():meta.update(complete=False,gaps=meta.get('gaps',[])+['observation_query_limit'])
     doc=report(p,events,now,sources)
     if prior and content_fingerprint(prior)==content_fingerprint(doc):
-        return _with_delivery(service,prior,{'state':'already_generated','reportKey':p.key,'fingerprint':prior['fingerprint'],
-                'version':prior.get('version',1),'deliveryState':'inspect_effect_receipt'})
+        status=_with_delivery(service,prior,{'state':'already_generated','reportKey':p.key,'fingerprint':prior['fingerprint'],
+                'version':prior.get('version',1),'deliveryState':'inspect_effect_receipt','callState':'disabled'})
+        return _report_call(service,values,store,p,now,prior,status,historical=historical)
     doc,created=store.put_report(doc)
     if not created:
-        return _with_delivery(service,doc,{'state':'already_generated','reportKey':p.key,'fingerprint':doc['fingerprint'],
-                'version':doc.get('version',1),'deliveryState':'inspect_effect_receipt'})
+        status=_with_delivery(service,doc,{'state':'already_generated','reportKey':p.key,'fingerprint':doc['fingerprint'],
+                'version':doc.get('version',1),'deliveryState':'inspect_effect_receipt','callState':'disabled'})
+        return _report_call(service,values,store,p,now,doc,status,historical=historical)
     # Persist report independently of call/delivery; unavailable connector cannot hold it indefinitely.
     supplement=bool(prior or doc.get('supplementOf'))
     status={'state':'supplemented' if supplement else 'generated','reportKey':p.key,'fingerprint':doc['fingerprint'],
             'version':doc['version'],'deliveryState':'not_delivered','callState':'disabled','audioState':'unavailable'}
     status=_with_delivery(service,doc,status)
+    return _report_call(service,values,store,p,now,doc,status,supplement=supplement,historical=historical)
+
+
+def _report_call(service,values,store,p,now,doc,status,supplement=False,historical=False):
     if p.kind=='whole_day':return status
-    if supplement or historical:
+    if supplement or doc.get('supplementOf') or historical:
         status['callState']='supplement_no_call';return status
     if not agent_team_call_enabled(values):return status
     if (now-p.cutoff).total_seconds()>900:
         status['callState']='missed_window';return status
+    try:
+        question=_report_question(service,doc)
+        question_document=question.document(now=now.timestamp())
+    except AlphaError as error:
+        # No phone effect is reserved until the original native mission binding
+        # is verified. A generic report call cannot collect decision evidence.
+        status.update(callState='blocked',callFailure=error.code or 'decision_registration_unavailable');return status
+    except Exception:
+        status.update(callState='blocked',callFailure='decision_registry_unavailable');return status
     effect=p.key+':call'
     if not store.reserve_effect(effect,p.key,'phone'):status['callState']='reconciliation_required';return status
     try:
-        result=service.james_daily_call.call_report(report_id=doc['fingerprint'],mission_id='james-agent-team',workday=p.workday,version=doc['version'],briefing={
+        result=service.james_daily_call.call_report(report_id=doc['fingerprint'],mission_id=question_document['missionId'],workday=p.workday,version=doc['version'],briefing={
             'kind':p.kind,'verified':True,'timeZone':'America/Indiana/Indianapolis','cutoffLocalTime':'17:00',
-            'generatedAt':now.timestamp(),'summary':doc['summary'],'coverageGaps':doc['gaps'][:20],'evidenceRefs':[x['id'] for x in doc['evidence']][:20]})
+            'generatedAt':aware(doc.get('initialGeneratedAt') or doc['generatedAt']).timestamp(),'summary':doc['summary'],'coverageGaps':doc['gaps'][:20],'evidenceRefs':[x['id'] for x in doc['evidence']][:20]},decision_question=question)
         store.effect(effect,'submitted',result.get('id'));status['callState']=result.get('state','unknown')
     except AlphaError as error:
         store.effect(effect,'failed',failure_class=error.code or 'admission_blocked');status['callState']='blocked'
     except Exception:
         store.effect(effect,'unknown',failure_class='reconciliation_required');status['callState']='unknown'
     return status
+
+
+def _report_question(service,document,mission_id=None):
+    from .agent_team_registry import CloudMissionRegistry
+    cfg=service.james_daily_call.cfg
+    return CloudMissionRegistry(service.connection_factory,cfg.user_id,cfg.workspace_id,service.clock).for_report(document,mission_id)
 
 
 def _with_delivery(service,document,status):
@@ -453,6 +551,21 @@ def route(app,environ,start_response,method,path):
         return app._json(start_response,200,readiness(service,values),extra_headers=[('Cache-Control','private, no-store')])
     if not enabled(values):raise AlphaError('Agent Team is disabled.',503,code='agent_team_disabled')
     service=app._runtime();store=TeamStore(service.connection_factory)
+    if tail=='/mission-registry' and method=='POST':
+        # A projection is native verifier authority, never ordinary observation.
+        authorize(environ,values,'verifier')
+        from .agent_team_registry import CloudMissionRegistry
+        cfg=service.james_daily_call.cfg
+        result=CloudMissionRegistry(service.connection_factory,cfg.user_id,cfg.workspace_id,service.clock).put(body(environ))
+        return app._json(start_response,200,result,extra_headers=[('Cache-Control','private, no-store')])
+    if tail in ('/native-work','/native-receipts'):
+        authorize(environ,values,'verifier')
+        from .agent_team_native import NativeDecisionBridge
+        bridge=NativeDecisionBridge(service)
+        if tail=='/native-work' and method=='GET':result=bridge.work()
+        elif tail=='/native-receipts' and method=='POST':result=bridge.receipt(body(environ))
+        else:raise AlphaError('Unknown native verifier route.',404)
+        return app._json(start_response,200,result,extra_headers=[('Cache-Control','private, no-store')])
     if tail=='/audio-work' and method=='GET':
         authorize(environ,values,'observer')
         from .agent_team_audio import TeamAudioStore
