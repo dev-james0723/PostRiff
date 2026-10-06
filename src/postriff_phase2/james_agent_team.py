@@ -604,8 +604,11 @@ def route(app,environ,start_response,method,path):
             result = call_acceptance(service, values, store, doc, request['missionId'])
             return app._json(start_response, 200, result, extra_headers=[('Cache-Control', 'private, no-store')])
         if fmt == 'delivery':
-            from .agent_team_delivery import TeamDeliveryService
-            return app._json(start_response, 200, TeamDeliveryService(service).receipt(doc), extra_headers=[('Cache-Control', 'private, no-store')])
+            from .agent_team_delivery import TeamDeliveryService, with_stored_audio
+            from .agent_team_audio import TeamAudioStore
+            receipt = TeamDeliveryService(service).receipt(doc)
+            asset = TeamAudioStore(service.connection_factory).get_metadata(doc['period']['key'], doc['fingerprint'])
+            return app._json(start_response, 200, with_stored_audio(receipt, doc, asset), extra_headers=[('Cache-Control', 'private, no-store')])
         headers = [('Cache-Control', 'private, no-store'), ('X-Agent-Team-Report-Version', str(doc['version'])),
                    ('X-Agent-Team-Report-Fingerprint', doc['fingerprint'])]
         if fmt == 'json':

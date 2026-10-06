@@ -1,5 +1,6 @@
 """Synthetic transactional outbox tests. No provider, model, push or phone calls."""
 import copy
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ from agent_team.reports import report
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_team_delivery import (
     EVENT_TYPE, TeamDeliveryService, TeamDeliveryStore, browser_voice_controls,
-    browser_voice_payload, delivery_plan, report_href,
+    browser_voice_payload, delivery_plan, report_href, with_stored_audio,
 )
 from postriff_phase2.notifications import catalog, store as notifications_store
 from postriff_phase2.notifications.email_render import safe_app_path
@@ -162,6 +163,26 @@ class FakeNotifications:
 
 
 class TeamDeliveryTests(unittest.TestCase):
+    def test_stored_audio_reconciles_availability_without_promoting_delivery_or_view(self):
+        doc = document('whole_day')
+        receipt = {'deliveryState': 'provider_accepted', 'notificationAcknowledged': False,
+                   'reportViewState': 'unverified', 'audioState': 'unavailable'}
+        asset = {'reportKey': doc['period']['key'], 'fingerprint': doc['fingerprint'],
+                 'version': doc['version'], 'audioState': 'ready', 'sha256': 'a' * 64,
+                 'summaryHash': hashlib.sha256(doc['summary'].encode('utf-8')).hexdigest()}
+        self.assertEqual(with_stored_audio(receipt, doc, None), receipt)
+        result = with_stored_audio(receipt, doc, asset)
+        self.assertEqual(result['audioState'], 'ready')
+        self.assertEqual(result['audioPlaybackState'], 'unverified')
+        self.assertEqual(result['deliveryState'], 'provider_accepted')
+        self.assertEqual(result['reportViewState'], 'unverified')
+        self.assertFalse(result['notificationAcknowledged'])
+        self.assertEqual(receipt['audioState'], 'unavailable')
+        for changed in ({'reportKey': 'another'}, {'fingerprint': 'b' * 64},
+                        {'version': 2}, {'summaryHash': 'c' * 64}, {'sha256': 'invalid'}):
+            with self.subTest(changed=changed), self.assertRaises(AlphaError):
+                with_stored_audio(receipt, doc, {**asset, **changed})
+
     def setup_delivery(self, doc=None, now=None):
         doc = doc or document()
         db = FakeDatabase()

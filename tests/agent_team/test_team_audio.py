@@ -167,6 +167,18 @@ class TeamAudioTests(unittest.TestCase):
         self.assertEqual(first['observedAt'], second['observedAt'])
         self.assertEqual(len(db.assets), 1)
 
+    def test_delivery_metadata_read_does_not_load_wav_or_claim_playback(self):
+        doc, _raw, payload, db, store = self.setup_audio()
+        self.assertIsNone(store.get_metadata(doc['period']['key'], doc['fingerprint']))
+        store.put(payload)
+        start = len(db.history)
+        receipt = store.get_metadata(doc['period']['key'], doc['fingerprint'])
+        self.assertEqual(receipt['sha256'], payload['sha256'])
+        self.assertEqual(receipt['deliveryState'], 'not_proven')
+        self.assertNotIn('data', receipt)
+        self.assertNotIn('wav_data', receipt)
+        self.assertTrue(all('wav_data' not in sql for sql, _ in db.history[start:]))
+
     def test_different_sha_for_same_report_conflicts_and_preserves_original(self):
         _doc, raw, payload, db, store = self.setup_audio()
         store.put(payload)

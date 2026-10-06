@@ -184,6 +184,13 @@ class TeamAudioStore:
             row = self._stored(cur, reportKey, fingerprint, data=True)
         return (metadata(row[:-1]), bytes(row[-1])) if row else None
 
+    def get_metadata(self, reportKey, fingerprint):
+        """Stored asset receipt only; never load audio bytes for a delivery read."""
+        identity(reportKey, fingerprint)
+        with self.connection_factory() as db, db.cursor() as cur:
+            row = self._stored(cur, reportKey, fingerprint)
+        return metadata(row) if row else None
+
     def work(self, now):
         """One latest-due whole-day version, without an asset; no historical fanout."""
         try:

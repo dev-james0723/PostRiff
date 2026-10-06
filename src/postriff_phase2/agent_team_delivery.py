@@ -160,6 +160,20 @@ def delivery_receipt(document, plan, event_id, effect_state, rows, *, created=Fa
             'failureClass': failure}
 
 
+def with_stored_audio(receipt, document, asset):
+    """Reconcile asset availability without claiming delivery or playback."""
+    if asset is None:
+        return receipt
+    p, fingerprint, version = report_identity(document)
+    if (asset.get('reportKey') != p.key or asset.get('fingerprint') != fingerprint
+            or asset.get('version') != version or asset.get('audioState') != 'ready'
+            or asset.get('summaryHash') != hashlib.sha256(document['summary'].encode('utf-8')).hexdigest()
+            or not isinstance(asset.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', asset['sha256'])):
+        raise AlphaError('Report audio receipt identity mismatch.', 409, code='agent_team_audio_receipt_mismatch')
+    return {**receipt, 'audioState': 'ready', 'audioAsset': asset,
+            'playbackState': 'on_demand_authenticated_wav', 'audioPlaybackState': 'unverified'}
+
+
 class TeamDeliveryStore:
     def __init__(self, connection_factory, user_id, *, clock):
         # Only the configured James principal enters this store, never a body or
