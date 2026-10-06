@@ -54,13 +54,14 @@ class AudioRouteTests(unittest.TestCase):
         self.audio.put.assert_not_called();self.audio.work.assert_not_called()
 
     def test_reader_stream_is_private_and_binds_report_identity(self):
-        self.audio.get.return_value=({'sha256':'a'*64},b'fixture-wav')
+        self.audio.get.return_value=({'sha256':'a'*64,'narrationHash':'b'*64},b'fixture-wav')
         result=self.invoke('/reports/2026-10-04/whole_day/wav',token='r')
         self.assertEqual(result,[b'fixture-wav']);headers=dict(self.headers)
         self.assertEqual(headers['Cache-Control'],'private, no-store')
         self.assertEqual(headers['X-Agent-Team-Report-Fingerprint'],self.doc['fingerprint'])
         self.assertEqual(headers['X-Agent-Team-Report-Version'],'1')
         self.assertEqual(headers['X-Agent-Team-Audio-Sha256'],'a'*64)
+        self.assertEqual(headers['X-Agent-Team-Audio-Narration-Sha256'],'b'*64)
 
     def test_missing_audio_is_404_without_affecting_report(self):
         self.audio.get.return_value=None

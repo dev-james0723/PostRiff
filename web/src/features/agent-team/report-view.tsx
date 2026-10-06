@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import PageContainer from '@/components/layout/page-container';
 import { Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -27,12 +28,12 @@ type LoadState =
   | { key: string; state: 'error'; message: string }
   | { key: string; state: 'ready'; report: Report; imageUrl: string };
 type PcmWav = { channels: number; sampleRate: number; bitsPerSample: number; frames: number; durationSeconds: number; byteCount: number };
-type VerifiedAudio = { bytes: ArrayBuffer; sha256: string; pcm: PcmWav };
+type VerifiedAudio = { bytes: ArrayBuffer; sha256: string; narrationSha256: string; pcm: PcmWav };
 type AudioState =
   | { key: string; state: 'loading' }
   | { key: string; state: 'error'; message: string }
-  | { key: string; state: 'ready'; url: string; sha256: string; pcm: PcmWav };
-type AudioRequest = { key: string; abort: AbortController; timeout: ReturnType<typeof setTimeout> | null; url: string | null };
+  | { key: string; state: 'ready'; url: string; captionsUrl: string; transcript: string; sha256: string; pcm: PcmWav };
+type AudioRequest = { key: string; abort: AbortController; timeout: ReturnType<typeof setTimeout> | null; url: string | null; captionsUrl: string | null };
 
 const TIMEZONE = 'America/Indiana/Indianapolis';
 const ORIGINAL_SOURCES = ['luci', 'typeless', 'codex', 'claude', 'browser', 'mission', 'token_pilot'];
@@ -41,6 +42,7 @@ const VERSION_HEADER = 'X-Agent-Team-Report-Version';
 const FINGERPRINT_HEADER = 'X-Agent-Team-Report-Fingerprint';
 const INVALID_REPORT = '報告資料與指定日期或版本不符，暫時無法顯示。';
 const AUDIO_SHA_HEADER = 'X-Agent-Team-Audio-Sha256';
+const NARRATION_SHA_HEADER = 'X-Agent-Team-Audio-Narration-Sha256';
 export const MAX_REPORT_AUDIO_BYTES = 2 * 1024 * 1024;
 const INVALID_AUDIO = '音訊檔的版本、指紋或格式未能核對，暫時無法播放。';
 
@@ -231,7 +233,8 @@ export async function fetchAgentTeamAudio(selection: Selection, fingerprint: str
     if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? '目前登入的帳戶無法取得這份音訊檔。' : response.status === 404 ? '本版音訊檔尚未提供。' : '音訊服務暫時無法使用，請稍後重試。');
     try { responseIdentity(response, selection.version, fingerprint); } catch { throw new Error(INVALID_AUDIO); }
     const sha256 = response.headers.get(AUDIO_SHA_HEADER) ?? '';
-    if (!/^[a-f0-9]{64}$/.test(sha256) || !/^audio\/wav(?:\s*;|$)/i.test(response.headers.get('Content-Type') ?? '')) throw new Error(INVALID_AUDIO);
+    const narrationSha256 = response.headers.get(NARRATION_SHA_HEADER) ?? '';
+    if (!/^[a-f0-9]{64}$/.test(sha256) || !/^[a-f0-9]{64}$/.test(narrationSha256) || !/^audio\/wav(?:\s*;|$)/i.test(response.headers.get('Content-Type') ?? '')) throw new Error(INVALID_AUDIO);
     const bytes = await boundedAudioBytes(response, signal);
     const pcm = parseAgentTeamPcmWav(bytes);
     if (!globalThis.crypto?.subtle) throw new Error('這部裝置無法核對音訊檔雜湊，暫時無法播放。');
@@ -239,11 +242,34 @@ export async function fetchAgentTeamAudio(selection: Selection, fingerprint: str
     const actualHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     if (actualHash !== sha256) throw new Error('音訊檔 SHA-256 與服務記錄不符，暫時無法播放。');
     if (signal.aborted) throw new DOMException('Audio request aborted', 'AbortError');
-    return { bytes, sha256, pcm };
+    return { bytes, sha256, narrationSha256, pcm };
   } catch (error) {
     await response?.body?.cancel().catch(() => undefined);
     throw error;
   }
+}
+
+// Mirrors agent_team/audio.py _narration's 64 Unicode-code-point excerpt.
+// Its hash must match this exact stored asset before we expose a transcript.
+export async function verifiedAgentTeamAudioCaptions(summary: string, durationSeconds: number, narrationSha256: string): Promise<{ transcript: string; vtt: string }> {
+  const characters = Array.from(summary);
+  const hasControl = characters.some((character) => (character.codePointAt(0) ?? 0) < 32 || character.codePointAt(0) === 127);
+  if (!characters.length || characters.length > 800 || hasControl || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 45 || !/^[a-f0-9]{64}$/.test(narrationSha256) || !globalThis.crypto?.subtle) throw new Error(INVALID_AUDIO);
+  let transcript = summary;
+  if (characters.length > 64) {
+    const prefix = characters.slice(0, 64);
+    let lastStop = -1;
+    for (let index = 0; index < prefix.length; index++) if (/[。！？.!?]/.test(prefix[index])) lastStop = index;
+    transcript = lastStop >= 0 ? prefix.slice(0, lastStop + 1).join('') : prefix.slice(0, 63).join('') + '…';
+  }
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(transcript)));
+  const actualHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  if (actualHash !== narrationSha256) throw new Error('音訊逐字稿與服務記錄不符，暫時無法播放。');
+  const endMilliseconds = Math.ceil(durationSeconds * 1000);
+  const end = `00:00:${String(Math.floor(endMilliseconds / 1000)).padStart(2, '0')}.${String(endMilliseconds % 1000).padStart(3, '0')}`;
+  const cue = transcript.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // One cue spans the measured clip. No word-level timing is inferred.
+  return { transcript, vtt: `WEBVTT\n\n00:00:00.000 --> ${end}\n${cue}\n` };
 }
 
 async function boundedText(response: Response, maxBytes: number): Promise<string> {
@@ -363,6 +389,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
       request.abort.abort();
       if (request.timeout !== null) clearTimeout(request.timeout);
       if (request.url) URL.revokeObjectURL(request.url);
+      if (request.captionsUrl) URL.revokeObjectURL(request.captionsUrl);
     }
   }, []);
 
@@ -374,7 +401,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
   async function loadAudio() {
     if (!ready || kind !== 'whole_day' || (audioRequest.current?.key === audioKey && audioRequest.current.timeout !== null)) return;
     releaseAudio();
-    const request: AudioRequest = { key: audioKey, abort: new AbortController(), timeout: null, url: null };
+    const request: AudioRequest = { key: audioKey, abort: new AbortController(), timeout: null, url: null, captionsUrl: null };
     audioRequest.current = request;
     setAudio({ key: audioKey, state: 'loading' });
     request.timeout = setTimeout(() => {
@@ -390,11 +417,15 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
       };
       const result = await fetchAgentTeamAudio({ workday, kind, version }, ready.report.fingerprint, ownedGetToken, request.abort.signal);
       if (audioRequest.current !== request || currentAudioKey.current !== request.key || request.abort.signal.aborted) return;
+      const captions = await verifiedAgentTeamAudioCaptions(ready.report.summary, result.pcm.durationSeconds, result.narrationSha256);
+      if (audioRequest.current !== request || currentAudioKey.current !== request.key || request.abort.signal.aborted) return;
       request.url = URL.createObjectURL(new Blob([result.bytes], { type: 'audio/wav' }));
-      setAudio({ key: request.key, state: 'ready', url: request.url, sha256: result.sha256, pcm: result.pcm });
+      request.captionsUrl = URL.createObjectURL(new Blob([captions.vtt], { type: 'text/vtt' }));
+      setAudio({ key: request.key, state: 'ready', url: request.url, captionsUrl: request.captionsUrl, transcript: captions.transcript, sha256: result.sha256, pcm: result.pcm });
     } catch (error) {
       if (audioRequest.current !== request || currentAudioKey.current !== request.key) return;
       const message = request.abort.signal.aborted ? '音訊檔讀取逾時，請重試。' : error instanceof Error && !(error instanceof TypeError) ? error.message : '音訊檔未能讀取或核對，請重試。';
+      releaseAudio();
       setAudio({ key: request.key, state: 'error', message });
     } finally {
       if (request.timeout !== null) clearTimeout(request.timeout);
@@ -474,7 +505,7 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
             <p className='text-muted-foreground break-all text-xs'>報告識別：{report.fingerprint}</p>
           </Surface>
           <figure className='rafii-quiet overflow-hidden rounded-[var(--rafii-radius-card)]'>
-            {imageFailed ? <p role='alert' className='p-5'>報告圖像未能顯示，摘要與來源資料如下。</p> : <img src={ready.imageUrl} alt={`${report.period.workday} ${kind === 'whole_day' ? '全日' : '半日'}報告，版本 ${report.version}；相同數字及來源缺口於下方提供文字。`} width={1080} height={1420} className='h-auto w-full' onError={() => setImageFailed(true)} />}
+            {imageFailed ? <p role='alert' className='p-5'>報告圖像未能顯示，摘要與來源資料如下。</p> : <Image unoptimized src={ready.imageUrl} alt={`${report.period.workday} ${kind === 'whole_day' ? '全日' : '半日'}報告，版本 ${report.version}；相同數字及來源缺口於下方提供文字。`} width={1080} height={1420} className='h-auto w-full' onError={() => setImageFailed(true)} />}
             <figcaption className='text-muted-foreground px-5 py-3 text-xs'>圖像與摘要已核對為同一版本。報告生成與送達狀態分開記錄。</figcaption>
           </figure>
           <dl className='grid grid-cols-2 gap-3 sm:grid-cols-4' aria-label='任務與事件數量'>
@@ -501,7 +532,11 @@ export function AgentTeamReportView({ workday, kind, version }: Selection) {
             {visibleAudio?.state === 'loading' && <p role='status' aria-live='polite' className='text-muted-foreground text-sm'>正在讀取與圖像相同版本的 WAV，核對指紋、格式及 SHA-256…</p>}
             {visibleAudio?.state === 'error' && <p role='alert' className='text-muted-foreground text-sm'>{visibleAudio.message} 圖像報告與摘要仍可查看。</p>}
             {visibleAudio?.state === 'ready' && <>
-              <audio ref={audioElement} controls preload='none' src={visibleAudio.url} aria-label={`全日報告摘要節錄音訊，版本 ${report.version}`} className='w-full' onPlay={stopSpeech} onError={() => { releaseAudio(); setAudio({ key: audioKey, state: 'error', message: '這部裝置未能播放 WAV，可重試取得音訊檔。' }); }}>這部裝置未提供音訊播放控制。</audio>
+              <audio ref={audioElement} controls preload='none' src={visibleAudio.url} aria-label={`全日報告摘要節錄音訊，版本 ${report.version}`} aria-describedby='agent-team-audio-transcript' className='w-full' onPlay={stopSpeech} onError={() => { releaseAudio(); setAudio({ key: audioKey, state: 'error', message: '這部裝置未能播放 WAV，可重試取得音訊檔。' }); }}>
+                <track kind='captions' src={visibleAudio.captionsUrl} srcLang='zh-HK' label='廣東話摘要節錄' default />
+                這部裝置未提供音訊播放控制。
+              </audio>
+              <p id='agent-team-audio-transcript' className='whitespace-pre-line break-words text-sm leading-7'><span className='font-medium'>已核對的音訊逐字稿：</span>{visibleAudio.transcript}</p>
               <p role='status' aria-live='polite' className='text-muted-foreground text-xs'>已核對版本 {report.version} · RIFF PCM · 單聲道 · {visibleAudio.pcm.sampleRate.toLocaleString('zh-Hant-HK')} Hz · {visibleAudio.pcm.bitsPerSample}-bit · {visibleAudio.pcm.durationSeconds.toFixed(1)} 秒 · {(visibleAudio.pcm.byteCount / 1024).toFixed(1)} KiB</p>
               <p className='text-muted-foreground break-all text-xs'>音訊 SHA-256（已核對）：{visibleAudio.sha256}</p>
               <a href={visibleAudio.url} download={`james-agent-team-${workday}-whole-day-v${report.version}.wav`} className='rafii-focus inline-flex min-h-11 items-center text-sm underline underline-offset-4'>下載此版本 WAV</a>

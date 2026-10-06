@@ -12,10 +12,10 @@ const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.Module
 const moduleStub = {exports: {}};
 const sandbox = {module: moduleStub, exports: moduleStub.exports,
   require: name => name.startsWith('@/') ? {} : require(name),
-  ArrayBuffer, Uint8Array, DataView, TextDecoder, Response, Blob, URL,
+  ArrayBuffer, Uint8Array, DataView, TextDecoder, TextEncoder, Response, Blob, URL,
   AbortController, DOMException, fetch, crypto: crypto.webcrypto, console};
 vm.runInNewContext(compiled, sandbox, {filename: 'report-view.tsx'});
-const {parseAgentTeamPcmWav, fetchAgentTeamAudio, parseAgentTeamReport} = moduleStub.exports;
+const {parseAgentTeamPcmWav, fetchAgentTeamAudio, parseAgentTeamReport, verifiedAgentTeamAudioCaptions} = moduleStub.exports;
 const selection = {workday: '2026-10-04', kind: 'whole_day', version: 1};
 const fingerprint = 'a'.repeat(64);
 function reportFixture(sources) {
@@ -48,6 +48,7 @@ function response(raw = wav(), extra = {}, status = 200) {
   return new Response(status === 200 ? raw : null, {status, headers: {
     'Cache-Control': 'private, no-store', 'Content-Type': 'audio/wav', 'Content-Length': String(raw.length),
     'X-Agent-Team-Report-Version': '1', 'X-Agent-Team-Report-Fingerprint': fingerprint,
+    'X-Agent-Team-Audio-Narration-Sha256': crypto.createHash('sha256').update('Synthetic narration').digest('hex'),
     'X-Agent-Team-Audio-Sha256': crypto.createHash('sha256').update(raw).digest('hex'), ...extra}});
 }
 function invoke(fetcher, chosen = selection, signal = new AbortController().signal) {
@@ -73,6 +74,7 @@ test('invalid report selections do not request a token or contact ingress', asyn
 test('wrong headers, lengths and bytes never expose an audio Blob', async () => {
   for (const headers of [{'Cache-Control':'public'}, {'X-Agent-Team-Report-Version':'2'},
     {'X-Agent-Team-Report-Fingerprint':'b'.repeat(64)}, {'X-Agent-Team-Audio-Sha256':'0'.repeat(64)},
+    {'X-Agent-Team-Audio-Narration-Sha256':''}, {'X-Agent-Team-Audio-Narration-Sha256':'invalid'},
     {'Content-Type':'text/html'}, {'Content-Length':'46'}]) {
     await assert.rejects(invoke(async () => response(wav(), headers)));
   }
@@ -90,4 +92,28 @@ test('authentication failure, unavailable audio and cancellation remain audio er
   const abort = new AbortController(); abort.abort(); let calls = 0;
   await assert.rejects(invoke(async () => {calls++;return response();}, selection, abort.signal));
   assert.equal(calls, 0);
+});
+test('captions use the exact Unicode sentence excerpt and measured duration', async () => {
+  const cases = [
+    ['短篇完整摘要。', '短篇完整摘要。'],
+    ['甲'.repeat(58) + '。下一句也包含在前64字內，後面另有內容。', '甲'.repeat(58) + '。'],
+    ['😀'.repeat(70), '😀'.repeat(63) + '…'],
+    ['a'.repeat(60) + '!tail'.repeat(5), 'a'.repeat(60) + '!'],
+    ['甲'.repeat(63) + '！' + '乙'.repeat(10), '甲'.repeat(63) + '！']
+  ];
+  for (const [summary, transcript] of cases) {
+    const sha = crypto.createHash('sha256').update(transcript, 'utf8').digest('hex');
+    const captions = await verifiedAgentTeamAudioCaptions(summary, 12.345, sha);
+    assert.equal(captions.transcript, transcript);
+    assert.ok(captions.vtt.startsWith('WEBVTT\n\n00:00:00.000 --> 00:00:12.345\n'));
+  }
+});
+test('captions escape cue markup and reject mismatched narration or invalid duration', async () => {
+  const summary = '<tag>& text';
+  const sha = crypto.createHash('sha256').update(summary).digest('hex');
+  const captions = await verifiedAgentTeamAudioCaptions(summary, .01, sha);
+  assert.ok(captions.vtt.includes('&lt;tag&gt;&amp; text'));
+  for (const duration of [0, -1, 46, NaN]) await assert.rejects(verifiedAgentTeamAudioCaptions(summary, duration, sha));
+  await assert.rejects(verifiedAgentTeamAudioCaptions(summary, 1, '0'.repeat(64)));
+  await assert.rejects(verifiedAgentTeamAudioCaptions('😀'.repeat(801), 1, sha));
 });

@@ -624,7 +624,7 @@ def route(app,environ,start_response,method,path):
             asset=TeamAudioStore(service.connection_factory).get(p.key,d['fingerprint'])
             if not asset:raise AlphaError('Report audio unavailable.',404,code='agent_team_audio_unavailable')
             metadata,data=asset
-            start_response('200 OK',identity_headers+[('Content-Type','audio/wav'),('Content-Length',str(len(data))),('Cache-Control','private, no-store'),('X-Content-Type-Options','nosniff'),('X-Agent-Team-Audio-Sha256',metadata['sha256'])])
+            start_response('200 OK',identity_headers+[('Content-Type','audio/wav'),('Content-Length',str(len(data))),('Cache-Control','private, no-store'),('X-Content-Type-Options','nosniff'),('X-Agent-Team-Audio-Sha256',metadata['sha256']),('X-Agent-Team-Audio-Narration-Sha256',metadata['narrationHash'])])
             return [data]
         if parts[4]=='json':
             def private_response(status,headers,exc_info=None):
