@@ -25,9 +25,12 @@ class NativeDecisionBridge:
         self.actor_id=cfg.user_id;self.workspace_id=cfg.workspace_id
         self.registry=CloudMissionRegistry(service.connection_factory,self.actor_id,self.workspace_id,service.clock)
 
-    def _decision(self,cur,decision_key=None):
-        conditions=' AND d.decision_key=%s' if decision_key is not None else " AND d.execution_state='recorded'"
+    def _decision(self,cur,decision_key=None,mission_id=None):
+        conditions=' AND d.decision_key=%s' if decision_key is not None else " AND d.execution_state='recorded' AND d.choice='continue'"
         parameters=(self.actor_id,self.workspace_id)+((decision_key,) if decision_key is not None else ())
+        if mission_id is not None:
+            conditions+=' AND d.mission_id=%s'
+            parameters+=(mission_id,)
         cur.execute("SELECT d.decision_key,d.effect_key,d.mission_id,d.scope_version,d.call_run_id::text,d.question_version,d.choice,d.authenticated_user_id::text,d.workspace_id::text,d.question_sha256,d.authorization_sha256,d.registration_sha256,d.execution_binding_sha256,d.completion_requirement_refs,d.attended_call_id::text,r.context,h.evidence_sha256,m.evidence_sha256,m.playback_ack_sha256,extract(epoch from d.received_at),d.execution_state FROM public.pr_agent_team_decisions d JOIN public.pr_james_daily_call_runs r ON r.id=d.call_run_id JOIN public.pr_phone_calls c ON c.id=d.attended_call_id JOIN public.pr_agent_team_call_evidence h ON h.call_id=c.id AND h.provider=c.provider AND h.evidence_kind='human' AND h.source='signed_provider_human_detection' JOIN public.pr_agent_team_call_evidence m ON m.call_id=c.id AND m.provider=c.provider AND m.evidence_kind='media' AND m.source='authenticated_bidirectional_media' WHERE d.authenticated_user_id=%s AND d.workspace_id=%s AND r.user_id=d.authenticated_user_id AND r.workspace_id=d.workspace_id AND r.origin='agent_team_report' AND c.user_id=d.authenticated_user_id AND c.workspace_id=d.workspace_id AND c.provider='twilio' AND c.state='completed' AND c.direction='outbound' AND c.destination_ref='james_env' AND c.reason_key='james_daily:'||d.call_run_id::text AND m.input_frames>0 AND m.output_frames>0 AND m.playback_ack_sha256 ~ '^[0-9a-f]{64}$'"+conditions+' ORDER BY d.received_at LIMIT 1',parameters)
         row=cur.fetchone()
         if not row:return None
@@ -46,8 +49,11 @@ class NativeDecisionBridge:
         decision.update(humanEvidenceId=row[16],mediaEvidenceId=row[17],playbackAckSha256=row[18],recordedAt=float(row[19]))
         return decision,question,row[20]
 
-    def work(self):
-        with self.service.connection_factory() as db,db.cursor() as cur:record=self._decision(cur)
+    def work(self,mission_id=None):
+        if mission_id is not None and (not isinstance(mission_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,160}',mission_id)):
+            raise invalid('native_work_mission_invalid')
+        with self.service.connection_factory() as db,db.cursor() as cur:
+            record=self._decision(cur,mission_id=mission_id) if mission_id is not None else self._decision(cur)
         if record is None:return {'state':'idle','nativeExecutionState':'not_dispatched'}
         decision,question,_=record
         return {'state':'ready','decision':decision,'question':question,'nativeExecutionState':'not_dispatched',

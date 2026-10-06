@@ -10,7 +10,7 @@ from unittest.mock import Mock
 from agent_team.native_decision import (NativeGuardAttestation, STAGING_NATIVE_WORK,
                                        UnavailableOwnerGuard, VerifiedDecision,
                                        continue_verified_decision, publish_mission_binding,
-                                       publish_native_receipt, read_native_work)
+                                       publish_native_receipt, read_native_work, refresh_guarded_checkpoint)
 from agent_team.native_transport import (DeliveryLedger, ModelPermit, NativeOwnerSnapshot,
                                         NativeOwnerTransport, SQLiteRecoveryControl, digest)
 from agent_team.recovery import (ContinuityEvidence, NativeOwner, RecoveryBlocked,
@@ -155,6 +155,25 @@ class NativeDecisionTests(unittest.TestCase):
         self.guard.observe.assert_not_called()
         self.assertEqual(self.proxy.sent, [])
 
+    def test_real_hook_revision_requires_new_guarded_checkpoint_preserving_original_scope(self):
+        self.guard.observe.return_value=(replace(self.snapshot,evidence=replace(self.evidence,
+            continuity=replace(self.evidence.continuity,revision=8))),self.attestation)
+        fresh=refresh_guarded_checkpoint(self.store,self.reg,self.cp_sha,self.guard,
+            clock=lambda:101,socket_check=lambda *args:None)
+        self.assertNotEqual(fresh,self.cp_sha)
+        rows=self.store.db.execute('SELECT body,digest FROM recovery_checkpoints').fetchall()
+        self.assertEqual(len(rows),2)
+        body=json.loads(next(row['body'] for row in rows if row['digest']==fresh))
+        self.assertEqual(body['token_pilot_revision'],8)
+        self.assertEqual(body['next_action'],self.cp.next_action)
+        self.assertEqual(body['incomplete'],list(self.cp.incomplete))
+        self.assertEqual(body['workspace'],json.loads(next(row['body'] for row in rows if row['digest']==self.cp_sha))['workspace'])
+
+    def test_unavailable_guard_cannot_refresh_checkpoint_or_relabel_history(self):
+        with self.assertRaises(RecoveryBlocked):refresh_guarded_checkpoint(
+            self.store,self.reg,self.cp_sha,UnavailableOwnerGuard(),clock=lambda:101)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM recovery_checkpoints').fetchone()[0],1)
+
     def test_verifier_read_is_pinned_to_staging_and_errors_hide_private_values(self):
         directory = self.root / ".runtime"
         directory.mkdir()
@@ -168,6 +187,20 @@ class NativeDecisionTests(unittest.TestCase):
         request.side_effect = ValueError("private-token-body-must-not-escape")
         with self.assertRaisesRegex(RecoveryBlocked, "^native_cloud_decision_read_unavailable$"):
             read_native_work(self.root, request=request)
+
+    def test_mission_filter_is_encoded_and_other_mission_is_never_returned(self):
+        directory = self.root / '.runtime'; directory.mkdir()
+        token = directory / 'cloud-verifier.token'; token.write_text('synthetic-verifier-only-credential-0000'); token.chmod(0o600)
+        request = Mock(return_value={'state':'ready','decision':self.decision.document})
+        read_native_work(self.root, mission_id='mission-1', request=request)
+        self.assertEqual(request.call_args.args[0], STAGING_NATIVE_WORK+'?missionId=mission-1')
+        with self.assertRaisesRegex(RecoveryBlocked, 'mission_mismatch'):
+            read_native_work(self.root, mission_id='another-mission', request=request)
+        request.reset_mock()
+        for invalid in ('', 'mission&other=1', '../escape', 'x'*161):
+            with self.assertRaisesRegex(RecoveryBlocked, 'mission_invalid'):
+                read_native_work(self.root, mission_id=invalid, request=request)
+        request.assert_not_called()
 
     def test_native_writer_epoch_change_cannot_reach_rpc(self):
         observed = []

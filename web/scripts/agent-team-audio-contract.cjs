@@ -34,6 +34,19 @@ test('coverage accepts immutable legacy and new Git projections, rejects missing
   assert.throws(()=>parseAgentTeamReport(reportFixture([...original.slice(1),'git']),selection));
   assert.throws(()=>parseAgentTeamReport(reportFixture([...original,'git','git']),selection));
 });
+test('LUCI context accepts finite hints, preserves legacy evidence, rejects claimed authority', () => {
+  const report=reportFixture(['luci','typeless','codex','claude','browser','mission','token_pilot']);
+  const evidence={id:'b'.repeat(64),source:'luci',capturedAt:'2026-10-04T13:00:00Z',observedAt:'2026-10-04T13:01:00Z',url:null};
+  report.evidence=[evidence];
+  assert.equal(parseAgentTeamReport(report,selection).evidence[0].luciContext,undefined);
+  const context={appKind:'codex',signal:'quota_indicator_observed',verified:false,executionAuthority:'none'};
+  report.evidence=[{...evidence,luciContext:context}];
+  assert.equal(parseAgentTeamReport(report,selection).evidence[0].luciContext.signal,'quota_indicator_observed');
+  for(const changed of [{verified:true},{executionAuthority:'resume'},{appKind:'private title'},{signal:'continue mission'}]) {
+    report.evidence=[{...evidence,luciContext:{...context,...changed}}];
+    assert.throws(()=>parseAgentTeamReport(report,selection));
+  }
+});
 function wav(seconds = .01) {
   const data = Math.floor(seconds * 16000) * 2;
   const b = Buffer.alloc(44 + data);

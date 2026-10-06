@@ -10,7 +10,7 @@ No model, socket, process or registry is started on import.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import hmac
 import json
@@ -30,7 +30,7 @@ from uuid import UUID
 from .native_decision import NativeGuardAttestation, _checkpoint
 from .native_transport import (NativeContext, NativeOwnerSnapshot, NativeOwnerTransport,
     NativeThread, ModelPermit, SQLiteRecoveryControl, digest, verify_socket)
-from .recovery import (Attempt, ContinuityEvidence, ExecutionBinding, Lease,
+from .recovery import (ActiveAttemptEvidence, Attempt, ContinuityEvidence, ExecutionBinding, Lease,
     NativeOwner, RecoveryBlocked, RecoveryEvidence, RecoveryStore, Registration,
     WorkspaceSnapshot, WriterProof, validate_recovery)
 from .recovery import _digest as checkpoint_digest
@@ -335,7 +335,7 @@ class RestrictedOwner:
         self.token = private(self.root/'owner.token').read_bytes()
         self.store = RecoveryStore(str(private(self.root/'recovery.sqlite3')))
         self.control = SQLiteRecoveryControl(self.store)
-        self.job = None; self.context = None; self.permit = None
+        self.job = None; self.context = None; self.permit = None; self.inflight_request = None
         verify_ancestry(self.policy['orcAgentPid'], self.policy['orcAgentStart'])
         self.owner = NativeOwner('orc-restricted-'+self.policy['missionId'], str(self.root/'owner.sock'),
                                  os.getpid(), process_identity(os.getpid())[1])
@@ -372,8 +372,9 @@ class RestrictedOwner:
             state['revision'], 'ready', r.authorization_ref, r.authorization_sha256, r.scope_version,
             'token-pilot:'+task['contract_hash'], r.native_session_id)
 
-    def validate_host(self):
-        if self.job and self.job.poll() is None: raise RecoveryBlocked('native_owned_turn_running')
+    def validate_host(self, *, owned_active=False):
+        if self.job and self.job.poll() is None and not owned_active:
+            raise RecoveryBlocked('native_owned_turn_running')
         if process_identity(self.owner.pid)[1] != self.owner.process_start:
             raise RecoveryBlocked('owner_pid_reused')
         if process_identity(self.policy['orcAgentPid'])[1] != self.policy['orcAgentStart']:
@@ -386,6 +387,76 @@ class RestrictedOwner:
         for name, expected in self.policy['guardedFiles'].items():
             if file_sha256(name) != expected:
                 raise RecoveryBlocked('native_guard_configuration_changed')
+
+    def heartbeat_native(self):
+        """Renew only this owner's actual, fenced child; never admit a retry."""
+        if not self.context or not self.job or self.job.poll() is not None or not self.inflight_request:
+            raise RecoveryBlocked('owned_active_native_child_required')
+        self.validate_host(owned_active=True)
+        if process_identity(self.job.pid)[0] != self.owner.pid:
+            raise RecoveryBlocked('owned_native_child_changed')
+        context = self.context; r, b = self.binding()
+        if (context.registration.fingerprint, context.execution.fingerprint) != (r.fingerprint, b.fingerprint):
+            raise RecoveryBlocked('active_owner_binding_changed')
+        cp = _checkpoint(self.store, r, context.checkpoint_sha256)
+        ws = workspace_snapshot(r.worktree)
+        if (ws.head, ws.dirty_sha256) != (cp.workspace.head, cp.workspace.dirty_sha256):
+            raise RecoveryBlocked('native_readonly_workspace_changed')
+        # The in-flight model request is owned and fenced. Any *other* unknown
+        # operation still blocks renewal; this exclusion cannot launch a model.
+        current = self.db.execute('SELECT method,state FROM operations WHERE id=?', (self.inflight_request,)).fetchone()
+        if current != ('turn/start', 'unknown'):
+            raise RecoveryBlocked('owned_active_operation_unverified')
+        unknown = tuple(row[0] for row in self.db.execute(
+            "SELECT id FROM operations WHERE state IN ('reserved','unknown') AND id<>?", (self.inflight_request,)))
+        now = self.clock()
+        writer = WriterProof(r.mission_id, b.native_session_id, self.owner, now, self.guard_ref,
+                             'same-owner-native', True, 'running', True, 0, True)
+        evidence = ActiveAttemptEvidence(b.fingerprint, context.checkpoint_sha256, writer,
+            self.continuity(r), ws, now, True, self.guard_ref, True, not unknown,
+            'owned-model-intent:'+self.inflight_request, unknown)
+        lease = self.store.renew_active_attempt(context.lease, r, context.attempt, evidence, now=now)
+        self.context = replace(context, lease=lease)
+
+    def settle_turn(self, receipt):
+        """Settle a real completed subscription turn, never mission acceptance."""
+        if not isinstance(receipt, dict) or receipt.get('receiptSha256') != digest(
+                {k:v for k,v in receipt.items() if k != 'receiptSha256'}):
+            raise RecoveryBlocked('native_settlement_receipt_invalid')
+        r, b = self.binding()
+        if receipt.get('source') != 'kynlo_orc_native_transport' or receipt.get('nativeGuardVerified') is not True or receipt.get('registrationSha256') != r.fingerprint:
+            raise RecoveryBlocked('native_settlement_binding_mismatch')
+        if not self.context or (receipt.get('attemptId'), receipt.get('generation'), receipt.get('executionBindingSha256'),
+                receipt.get('checkpointSha256'), receipt.get('executionState'), receipt.get('nativeGuardRef')) != (
+                self.context.attempt.id, self.context.lease.generation, b.fingerprint,
+                self.context.checkpoint_sha256, 'turn_started', self.guard_ref):
+            raise RecoveryBlocked('native_settlement_binding_mismatch')
+        delivered = self.store.db.execute('SELECT receipt FROM native_decision_delivery WHERE effect_key=?', (receipt.get('decisionKey'),)).fetchone()
+        if not delivered or json.loads(delivered['receipt']) != receipt:
+            raise RecoveryBlocked('native_settlement_receipt_unverified')
+        operation = self.db.execute('SELECT method,state FROM operations WHERE id=?', (receipt.get('turnRequestId'),)).fetchone()
+        if operation != ('turn/start','acknowledged'):
+            raise RecoveryBlocked('native_settlement_operation_unverified')
+        self.observe(self.context.checkpoint_sha256)
+        output = private(self.root/'native-output.jsonl')
+        if output.stat().st_size > MAX_MESSAGE: raise RecoveryBlocked('native_settlement_output_bounds')
+        rows = [json.loads(line) for line in output.read_text().splitlines() if line.strip()]
+        result = parse_native_result(rows, session=b.native_session_id)
+        native = json.loads(private(self.root/'native-result.json').read_text())
+        if (result['turnId'], result['resultSha256'], result['model']) != (
+                receipt.get('turnId'), native.get('resultSha256'), native.get('model')):
+            raise RecoveryBlocked('native_settlement_result_mismatch')
+        # This owner strips API keys and admits the existing OAuth subscription
+        # only. API-equivalent usage is retained separately from incremental cost.
+        self.store.record_attempt(self.context.lease, self.context.attempt, outcome='succeeded',
+            failure_signature='verified_phone_continuation', measured_cost_microusd=0,
+            receipt_ref='native-owner:'+result['resultSha256'], now=self.clock())
+        self.store.release(self.context.lease, now=self.clock())
+        self.context = None
+        return {'state':'native_turn_finished', 'turnId':result['turnId'],
+                'resultSha256':result['resultSha256'], 'billingBasis':'existing_subscription',
+                'incrementalCostMicrousd':0, 'apiEquivalentCostUsd':result['apiEquivalentCostUsd'],
+                'missionComplete':False}
 
     def observe(self, checkpoint_sha):
         r, b = self.binding(); cp = _checkpoint(self.store, r, checkpoint_sha)
@@ -448,12 +519,14 @@ class RestrictedOwner:
             self.job = subprocess.Popen(native_argv(p['claudeBinary'],settings,p['sessionId'],resume=resume),
                 cwd=p['worktree'],env=env,stdin=subprocess.PIPE,stdout=out,stderr=err,start_new_session=False)
             self.job.stdin.write(text.encode());self.job.stdin.close()
-            deadline = self.clock()+120
+            deadline = self.clock()+120; next_heartbeat = self.clock()+5
             while self.job.poll() is None:
                 if self.context:
                     # An expiring/changed generation stops this owner's child;
                     # it never creates a new lease or retries the model call.
                     self.store.assert_fence(self.context.lease,now=self.clock())
+                    if self.clock() >= next_heartbeat:
+                        self.heartbeat_native(); next_heartbeat = self.clock()+5
                 if self.clock() > deadline: raise RecoveryBlocked('native_turn_deadline')
                 time.sleep(.1)
         if self.job.returncode or output.stat().st_size > MAX_MESSAGE:
@@ -471,6 +544,7 @@ class RestrictedOwner:
         if method=='observe':
             s,a=self.observe(data['checkpointSha256']);return {'snapshot':asdict(s),'attestation':asdict(a)}
         if method=='authorize': return self.authorize(data)
+        if method=='settle': return self.settle_turn(data.get('receipt'))
         if method not in ('seed','thread/resume','turn/start'): raise RecoveryBlocked('owner_method_denied')
         r,b=self.binding(); cp_sha=data.get('checkpointSha256')
         if method=='seed':
@@ -507,8 +581,12 @@ class RestrictedOwner:
                 self.observe(self.context.checkpoint_sha256)
                 self.control.assert_reserved(self.context,now=self.clock())
                 self.permit=None
-                result=self.execute_native(cp.next_action,resume=True,before_dispatch=lambda:
-                    self.db.execute("UPDATE operations SET state='unknown' WHERE id=?",(request_id,)))
+                self.inflight_request = request_id
+                try:
+                    result=self.execute_native(cp.next_action,resume=True,before_dispatch=lambda:
+                        self.db.execute("UPDATE operations SET state='unknown' WHERE id=?",(request_id,)))
+                finally:
+                    self.inflight_request = None
                 reply={'turn':{'id':result['turnId'],'status':'completed'},'result':result}
             self.db.execute("UPDATE operations SET state='acknowledged' WHERE id=?",(request_id,))
             return reply

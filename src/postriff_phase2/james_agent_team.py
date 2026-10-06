@@ -637,7 +637,11 @@ def route(app,environ,start_response,method,path):
         authorize(environ,values,'verifier')
         from .agent_team_native import NativeDecisionBridge
         bridge=NativeDecisionBridge(service)
-        if tail=='/native-work' and method=='GET':result=bridge.work()
+        if tail=='/native-work' and method=='GET':
+            query=parse_qs(environ.get('QUERY_STRING',''),keep_blank_values=True)
+            if query and (set(query)!={'missionId'} or len(query['missionId'])!=1):
+                raise AlphaError('Invalid native work query.',400)
+            result=bridge.work(query['missionId'][0] if query else None)
         elif tail=='/native-receipts' and method=='POST':result=bridge.receipt(body(environ))
         else:raise AlphaError('Unknown native verifier route.',404)
         return app._json(start_response,200,result,extra_headers=[('Cache-Control','private, no-store')])

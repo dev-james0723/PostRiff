@@ -28,6 +28,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
+from .luci_context import APP_KINDS, SIGNALS, classify
 
 
 TYPELESS_HISTORY_V2_SCHEMA = (
@@ -128,10 +129,10 @@ class SourceObservation:
         return result
 
     def cloud_projection(self) -> dict[str, Any]:
-        """Only adapter-selected numeric/boolean/digest metadata crosses here."""
+        """Only adapter-selected numeric/boolean/digest and finite context enums."""
         allowed = {"text_length", "text_hash", "audio_exists", "has_app", "app_hash",
                    "has_screenshot", "display_hash", "is_error", "tool_name_hash",
-                   "tool_id_hash", "session_hash", "role", "text_truncated"}
+                   "tool_id_hash", "session_hash", "role", "text_truncated", "app_kind", "context_signal"}
         safe: dict[str, Any] = {}
         for key, value in self.safe_metadata.items():
             if key not in allowed:
@@ -141,6 +142,9 @@ class SourceObservation:
             elif key.endswith("_hash") and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value):
                 safe[key] = value
             elif key == "role" and value in ("user", "assistant"):
+                safe[key] = value
+            elif self.source == 'luci' and isinstance(value, str) and ((key == 'app_kind' and value in APP_KINDS)
+                                            or (key == 'context_signal' and value in SIGNALS)):
                 safe[key] = value
         return {"source": self.source, "source_ref": _digest([self.source, self.source_id]),
                 "source_version": self.source_version, "event_type": self.event_type,
@@ -445,6 +449,7 @@ class LuciObserver:
                             "has_app": bool(app), "app_hash": _digest(app) if app else None,
                             "has_screenshot": bool(screenshot_ref), "display_hash": _digest(display) if display else None,
                             "text_truncated": include_text and len(content) > max_text_chars}
+                metadata.update(classify(app, content))
                 version = _digest([str(source_id), captured_at,
                                    {k: v for k, v in metadata.items() if k != "text_truncated"}])
                 item = SourceObservation("luci", str(source_id), version, "capture", timestamp,

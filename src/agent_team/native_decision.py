@@ -12,10 +12,11 @@ import json
 import math
 import re
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Callable, Protocol
 from uuid import UUID
+from urllib.parse import urlencode
 
 from .audio_bridge import request_json
 from .native_transport import (ModelPermit, NativeContext, NativeOwnerSnapshot,
@@ -92,11 +93,14 @@ def _verifier_token(canonical_root):
     return token
 
 
-def read_native_work(canonical_root, *, request=request_json):
+def read_native_work(canonical_root, *, mission_id=None, request=request_json):
     """Read one bounded decision; the observer credential can never authorize it."""
+    if mission_id is not None and (not isinstance(mission_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,160}", mission_id)):
+        raise RecoveryBlocked("native_work_mission_invalid")
+    url = STAGING_NATIVE_WORK + ("?" + urlencode({"missionId": mission_id}) if mission_id is not None else "")
     token = _verifier_token(canonical_root)
     try:
-        value = request(STAGING_NATIVE_WORK, token)
+        value = request(url, token)
     except Exception:
         # HTTP errors may contain private headers/provider bodies. Never retain them.
         raise RecoveryBlocked("native_cloud_decision_read_unavailable") from None
@@ -104,6 +108,8 @@ def read_native_work(canonical_root, *, request=request_json):
         return None
     if not isinstance(value, dict) or value.get("state") != "ready" or not isinstance(value.get("decision"), dict):
         raise RecoveryBlocked("native_cloud_decision_unverified")
+    if mission_id is not None and value["decision"].get("missionId") != mission_id:
+        raise RecoveryBlocked("native_work_mission_mismatch")
     return VerifiedDecision(json.loads(json.dumps(value["decision"])), STAGING_NATIVE_WORK)
 
 
@@ -173,6 +179,39 @@ def _checkpoint(store, registration, checkpoint_sha256):
     for name in ("verified_done", "incomplete", "blockers", "acceptance_criteria", "side_effect_ledger_refs", "evidence_refs"):
         data[name] = tuple(data[name])
     return Checkpoint(**data)
+
+
+def refresh_guarded_checkpoint(store, registration, checkpoint_sha256, guard, *,
+                               clock=time.time, socket_check=verify_socket):
+    """Save a new checkpoint after real native hooks advance continuity.
+
+    The original checkpoint stays immutable. Scope, action, worktree/HEAD/dirty
+    state and acceptance requirements cannot change here. An unseeded, active,
+    stale or uncertain owner cannot refresh anything. This is required after
+    genuine native Stop hooks; copying the old continuity revision would make
+    start_attempt correctly reject the later human-approved continuation.
+    """
+    execution = store.current_execution(registration)
+    checkpoint = _checkpoint(store, registration, checkpoint_sha256)
+    snapshot, attestation = guard.observe(registration, execution, checkpoint)
+    attestation.validate(registration, execution, now=clock())
+    gate = validate_recovery(registration, snapshot.evidence, now=clock(), max_proof_age=5, execution=execution)
+    if not gate.ready: raise RecoveryBlocked(gate.reason)
+    if (snapshot.execution_sha256 != execution.fingerprint or snapshot.thread_id != execution.native_session_id
+            or snapshot.exclusion_ref != attestation.native_guard_ref or snapshot.exclusion_verified is not True
+            or asdict(snapshot.evidence.checkpoint_workspace) != asdict(checkpoint.workspace)
+            or (snapshot.evidence.current_workspace.worktree, snapshot.evidence.current_workspace.head,
+                snapshot.evidence.current_workspace.dirty_sha256) != (
+                checkpoint.workspace.worktree, checkpoint.workspace.head, checkpoint.workspace.dirty_sha256)):
+        raise RecoveryBlocked('native_checkpoint_refresh_binding_mismatch')
+    socket_check(execution.owner, snapshot)
+    revision = snapshot.evidence.continuity.revision
+    if revision < checkpoint.token_pilot_revision:
+        raise RecoveryBlocked('native_checkpoint_continuity_rollback')
+    if revision == checkpoint.token_pilot_revision: return checkpoint_sha256
+    fresh = replace(checkpoint, token_pilot_revision=revision, saved_at=clock(),
+                    evidence_refs=checkpoint.evidence_refs+(attestation.evidence_ref,))
+    return store.save_checkpoint(registration, fresh)
 
 
 def publish_mission_binding(canonical_root, store, registration, checkpoint_sha256, guard, *,

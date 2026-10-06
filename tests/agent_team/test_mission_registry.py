@@ -200,5 +200,25 @@ class NativeReceiptTests(unittest.TestCase):
         self.assertEqual(result['state'],'ready');self.assertEqual(result['nativeExecutionState'],'not_dispatched')
         self.db.commit.assert_not_called()
 
+    def test_native_queue_filters_exact_mission_and_excludes_noncontinue_decisions(self):
+        self.bridge.work('mission-1')
+        self.bridge._decision.assert_called_once_with(self.cur,mission_id='mission-1')
+        real=NativeDecisionBridge._decision
+        self.cur.fetchone.return_value=None
+        real(self.bridge,self.cur,mission_id='mission-1')
+        sql,params=self.cur.execute.call_args.args
+        self.assertIn('d.mission_id=%s',sql);self.assertIn("d.choice='continue'",sql)
+        self.assertEqual(params,(USER,WORKSPACE,'mission-1'))
+        with self.assertRaises(AlphaError):self.bridge.work('mission&other=1')
+
+    def test_native_work_route_rejects_duplicate_and_unknown_query_keys(self):
+        service=SimpleNamespace(james_daily_call=SimpleNamespace(cfg=SimpleNamespace(user_id=USER,workspace_id=WORKSPACE)),
+            connection_factory=MagicMock(),clock=lambda:NOW)
+        app=SimpleNamespace(_runtime=lambda:service,_json=lambda _s,_c,value,**_kw:value)
+        for query in ('missionId=a&missionId=b','other=a','missionId=','missionId=../../other'):
+            environ={'HTTP_AUTHORIZATION':'Bearer '+'v'*40,'QUERY_STRING':query}
+            with patch.dict('os.environ',VALUES),self.assertRaises(AlphaError):route(app,environ,MagicMock(),'GET',PREFIX+'/native-work')
+        service.connection_factory.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

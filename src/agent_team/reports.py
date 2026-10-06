@@ -5,6 +5,7 @@ from html import escape
 import hashlib
 from .events import canonical, safe_text, safe_url
 from .periods import aware, TZ
+from .luci_context import event_context
 
 EXPECTED_SOURCES=("luci","typeless","codex","claude","browser","mission","token_pilot","git")
 
@@ -69,6 +70,9 @@ def report(period, events, generated_at=None, sources=None, preview=False):
         "url":safe_url(e["payload"]["url"]) if e["payload"].get("url") else None,
         "sha":e["payload"].get("sha"),"deploymentId":e["payload"].get("deploymentId"),
         "captureMode":"metadata" if e["source"] not in ("browser","acceptance") else e["payload"].get("kind","unknown")} for e in selected]
+    for item, event in zip(manifest, selected):
+        context = event_context(event['payload']) if event['source'] == 'luci' else None
+        if context is not None: item['luciContext'] = context
     result={"schemaVersion":1,"executionState":"preview" if preview else "generated",
         "period":period.as_dict(),"asOf":as_of.isoformat(),"generatedAt":generated.isoformat(),
         "counts":counts,"coverage":coverage,"gaps":gaps,"projects":list(projects.values()),

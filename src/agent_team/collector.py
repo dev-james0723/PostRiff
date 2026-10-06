@@ -21,6 +21,9 @@ def from_observation(observation):
     if 'audio_exists' in m and observation.local_reference.get('audio_path'):payload['audioAvailable']=m['audio_exists']
     if m.get('text_hash'):payload['sha']=m['text_hash']
     if d['source']=='claude':payload['reportedState']='error_observed' if m.get('is_error') else 'message_observed'
+    if d['source']=='luci' and 'app_kind' in m and 'context_signal' in m:
+        payload.update(app=m['app_kind'], reportedState=m['context_signal'],
+                       origin='read_only_luci_capture_context', verified=False)
     return Event(d['source'],d['source_ref'],d['source_version'],d['occurred_at'] or d['updated_at'] or d['observed_at'],d['observed_at'],payload)
 
 

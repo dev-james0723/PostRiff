@@ -10,7 +10,8 @@ import { useAuth } from '@/lib/auth/session';
 type ReportKind = 'half_day' | 'whole_day';
 type Selection = { workday: string; kind: ReportKind; version: number; acceptanceId?: string };
 type Coverage = { source: string; status: string; count: number; complete: boolean; gaps: string[]; freshAt: string | null };
-type Evidence = { id: string; source: string; capturedAt: string; observedAt: string; url: string | null };
+type LuciContext = { appKind: string; signal: string; verified: false; executionAuthority: 'none' };
+type Evidence = { id: string; source: string; capturedAt: string; observedAt: string; url: string | null; luciContext?: LuciContext };
 type Report = {
   version: number;
   fingerprint: string;
@@ -45,6 +46,11 @@ const AUDIO_SHA_HEADER = 'X-Agent-Team-Audio-Sha256';
 const NARRATION_SHA_HEADER = 'X-Agent-Team-Audio-Narration-Sha256';
 export const MAX_REPORT_AUDIO_BYTES = 2 * 1024 * 1024;
 const INVALID_AUDIO = '音訊檔的版本、指紋或格式未能核對，暫時無法播放。';
+const LUCI_APPS = ['codex', 'claude', 'terminal', 'editor', 'browser', 'luci', 'other'];
+const LUCI_SIGNALS: Record<string, string> = {
+  activity_observed: '活動記錄', quota_indicator_observed: '畫面可能顯示用量限制',
+  approval_indicator_observed: '畫面可能顯示等待批准', error_indicator_observed: '畫面可能顯示錯誤'
+};
 
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -135,7 +141,14 @@ export function parseAgentTeamReport(value: unknown, selection: Selection): Repo
   if (!ORIGINAL_SOURCES.every((source) => seen.has(source))) return invalid();
   const parsedEvidence: Evidence[] = evidence.map((row: unknown) => {
     if (!object(row) || !text(row.id, 64) || !/^[a-f0-9]{64}$/.test(row.id) || !text(row.source, 80) || !timestamp(row.capturedAt) || !timestamp(row.observedAt)) return invalid();
-    return { id: row.id, source: row.source, capturedAt: row.capturedAt, observedAt: row.observedAt, url: safeEvidenceUrl(row.url) };
+    let luciContext: LuciContext | undefined;
+    if (row.luciContext !== undefined) {
+      const context = row.luciContext;
+      if (row.source !== 'luci' || !object(context) || !text(context.appKind, 30) || !LUCI_APPS.includes(context.appKind) ||
+        !text(context.signal, 80) || !Object.hasOwn(LUCI_SIGNALS, context.signal) || context.verified !== false || context.executionAuthority !== 'none') return invalid();
+      luciContext = { appKind: context.appKind, signal: context.signal, verified: false, executionAuthority: 'none' };
+    }
+    return { id: row.id, source: row.source, capturedAt: row.capturedAt, observedAt: row.observedAt, url: safeEvidenceUrl(row.url), luciContext };
   });
   return {
     version: selection.version, fingerprint: value.fingerprint, summary: value.summary, asOf: value.asOf, generatedAt: value.generatedAt,
@@ -559,7 +572,7 @@ export function AgentTeamReportView({ workday, kind, version, acceptanceId }: Se
             <p className='text-muted-foreground text-xs'>來源記錄只證明曾觀察到活動；完成數仍須有驗收證據。</p>
             {report.evidence.length === 0 ? <p className='text-muted-foreground text-sm'>本版沒有可回查的來源記錄。</p> : <>
               <p role='status' className='text-muted-foreground text-xs'>顯示 {evidenceStart + 1}–{Math.min(evidenceStart + 40, report.evidence.length)}／{report.evidence.length} 筆</p>
-              <ul className='divide-border/50 divide-y'>{shownEvidence.map((item, index) => <li key={`${item.id}:${index}`} className='py-3 text-sm'><p className='break-words'>{item.url ? <a href={item.url} target='_blank' rel='noopener noreferrer' referrerPolicy='no-referrer' className='rafii-focus inline-flex min-h-11 items-center underline underline-offset-4'>{item.source} · {item.id.slice(0, 12)}<span className='sr-only'>（在新分頁開啟 HTTPS 證據）</span></a> : <span>{item.source} · {item.id.slice(0, 12)} · 未提供可開啟的 HTTPS 證據連結</span>}</p><p className='text-muted-foreground text-xs'>來源記錄 <time dateTime={item.capturedAt}>{dateLabel(item.capturedAt)}</time> · 收到觀察 <time dateTime={item.observedAt}>{dateLabel(item.observedAt)}</time></p></li>)}</ul>
+              <ul className='divide-border/50 divide-y'>{shownEvidence.map((item, index) => <li key={`${item.id}:${index}`} className='space-y-1 py-3 text-sm'><p className='break-words'>{item.url ? <a href={item.url} target='_blank' rel='noopener noreferrer' referrerPolicy='no-referrer' className='rafii-focus inline-flex min-h-11 items-center underline underline-offset-4'>{item.source} · {item.id.slice(0, 12)}<span className='sr-only'>（在新分頁開啟 HTTPS 證據）</span></a> : <span>{item.source} · {item.id.slice(0, 12)} · 未提供可開啟的 HTTPS 證據連結</span>}</p>{item.luciContext && <p className='text-sm'>LUCI · {item.luciContext.appKind} · {LUCI_SIGNALS[item.luciContext.signal]}<span className='text-muted-foreground'>，待 agent 狀態核實</span></p>}<p className='text-muted-foreground text-xs'>來源記錄 <time dateTime={item.capturedAt}>{dateLabel(item.capturedAt)}</time> · 收到觀察 <time dateTime={item.observedAt}>{dateLabel(item.observedAt)}</time></p></li>)}</ul>
               {report.evidence.length > 40 && <div className='flex flex-wrap gap-2'><Button variant='quiet' size='control' disabled={evidencePage === 0} onClick={() => setEvidencePage((value) => Math.max(0, value - 1))}>上一頁證據</Button><Button variant='glass' size='control' disabled={evidenceStart + 40 >= report.evidence.length} onClick={() => setEvidencePage((value) => value + 1)}>下一頁證據</Button></div>}
             </>}
           </Surface>
