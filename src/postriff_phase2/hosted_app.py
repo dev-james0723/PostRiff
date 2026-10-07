@@ -688,6 +688,8 @@ class HostedApplication:
                 return self._json(start_response, 200, service.security_events(token))
             if path == "/api/me/invitations" and method == "GET":
                 return self._json(start_response, 200, service.my_invitations(token))
+            if len(oauth_parts) == 4 and oauth_parts[:2] == ['api', 'oauth'] and oauth_parts[3] == 'context' and method == 'POST':
+                return self._json(start_response, 200, service.oauth.completion_context(token, oauth_parts[2], self._body(environ).get('state')))
             if path == "/api/workspaces" and method == "GET":
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":

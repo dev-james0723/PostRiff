@@ -25,7 +25,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
    await context.addCookies([{name:'postriff_dev',value:'1',url:base}]);
    await context.addInitScript(()=>{localStorage.setItem('postriff-dev-principal','00000000-0000-0000-0000-000000000001');localStorage.setItem('postriff-onboarding:00000000-0000-0000-0000-000000000001',JSON.stringify({completed:{},dismissed:{welcome:1},nudged:{}}));});
-   let sends=0,reads=0;const page=await context.newPage();page.setDefaultTimeout(30000);
+   let sends=0,reads=0,completionWorkspace=null;const page=await context.newPage();page.setDefaultTimeout(30000);
    await context.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url()),p=url.pathname;
     if(url.origin!==base)return route.abort();if(!p.startsWith('/api/'))return route.continue();
@@ -33,6 +33,8 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
     if(p.endsWith('/native-read')){reads++;return send({provider:'instagram',feature:'comments_read',availability:'available',data:{data:[{id:'comment-7',text:'Question from reader',username:'Reader',parent_id:'post-1'}]},provenance:{kind:'provider_native',provider:'instagram',reportingPeriod:{}},rate:{}});}
     if(p.endsWith('/native-action'))return send({id:'action-1',state:'preview',digest:'immutable-digest',manifest:{action:'reply',target:'comment-7',platform:'Instagram',providerAccountId:'1789',payload:{text:request.postDataJSON().payload.text}}},201);
     if(p.endsWith('/approve')){sends++;return send({executionState:'uncertain',message:'Synthetic timeout: reconcile before any new approval.'});}
+    if(p==='/api/oauth/instagram/context')return send({workspaceId:wid});
+    if(p.endsWith('/oauth/complete')){completionWorkspace=p.split('/')[3];return send({connected:true,connectionId:channel.id,account:channel.account,missingScopes:[]});}
     if(request.method()!=='GET')return send({error:'Unexpected synthetic mutation'},400);
     if(p==='/api/catalog')return send({authMode:'dev',execution:'dev-synthetic',phase2:true,templates:[],routes:[],profileMetadata:{}});
     if(p==='/api/workspaces')return send({workspaces:[{workspaceId:wid,membership:fixture.snapshot.membership,name:'Social fixture',plan:'studio',memberCounts:{owner:1}}]});
@@ -66,7 +68,10 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    // JCB's reviewed workflow currently exports logs rather than arbitrary output
    // artifacts. This bounded fixture-only image is recovered from those logs.
    console.log('RAFII_BROWSER_IMAGE '+width+' '+pixels.toString('base64'));
-   checks.push({width,granularCapabilities:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
+   await page.waitForURL('**/app/channels?connected=fixture-ig');
+   assert.equal(completionWorkspace,wid);
+   checks.push({callbackThroughNormalUI:true,width,granularCapabilities:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}

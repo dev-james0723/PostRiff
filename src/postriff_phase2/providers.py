@@ -370,10 +370,13 @@ def registry_from_environment(values, transport=None):
             except (ValueError, TypeError):
                 return {}
         adapter.official_approvals = records('PRODUCT_APPROVALS_JSON')
+        if provider_id in CATALOG:
+            adapter.connection_review = records('CONNECTION_REVIEW_JSON')
         adapter.official_evidence = records('E2E_EVIDENCE_JSON')
         if provider_id == 'x':
             adapter.budget_enforced = True
             adapter.budget_policies = records('BUDGET_POLICIES_JSON')
+            adapter.onboarding_budget_policy = records('ONBOARDING_BUDGET_JSON')
         if provider_id == 'facebook':
             configs = records('LOGIN_CONFIGS_JSON')
             adapter.login_configs = {tuple(sorted(key.split(','))): value for key, value in configs.items()

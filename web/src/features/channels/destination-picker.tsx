@@ -44,7 +44,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     try {
       await api.chooseChannelDestination(workspaceId, channelId, id);
       setItems((current) => current?.map((item) => ({ ...item, selected: item.id === id })) ?? null);
-      toast.success(label === 'Location' ? 'Business Profile location selected' : 'Rafii will post in this channel');
+      toast.success(`${label} selected. Publishing requires its own permission and approval.`);
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Try again in a moment.');

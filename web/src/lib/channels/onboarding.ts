@@ -29,7 +29,8 @@ export function providerReadinessLabel(provider: ProviderView): string {
     provider.configured === false
   )
     return 'Coming soon';
+  if (provider.readinessState === 'provider_review_pending') return 'Provider review pending';
   if (provider.connectReady === false) return provider.wave ? 'Needs approval' : 'Coming soon';
   if (provider.executionPaused) return 'Limited';
-  return provider.productionReviewed ? 'Connect' : 'Limited';
+  return (provider.publicConnectionReady ?? provider.productionReviewed) ? 'Connect' : 'Limited';
 }

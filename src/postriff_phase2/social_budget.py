@@ -27,6 +27,14 @@ class XRequestBudget:
     def policy(self):
         adapter = self.oauth._provider('x')
         record = getattr(adapter, 'budget_policies', {}).get(self.workspace+':'+self.connection) or {}
+        if not record:
+            candidate = getattr(adapter, 'onboarding_budget_policy', {})
+            if (candidate.get('appId') == adapter.client_id and candidate.get('purpose') == 'connection_identity'
+                    and candidate.get('allowedEndpoints') == ['GET /2/users/me']
+                    and type(candidate.get('appLimitMicros')) is int
+                    and type(candidate.get('limitMicros')) is int
+                    and 0 < candidate['limitMicros'] <= candidate['appLimitMicros'] <= 1_000_000_000):
+                record = candidate
         if (record.get('currency') != 'USD' or not record.get('approvalRef')
                 or type(record.get('limitMicros')) is not int or not 0 < record['limitMicros'] <= 1_000_000_000
                 or type(record.get('perRequestMicros')) is not int or not 0 < record['perRequestMicros'] <= record['limitMicros']
@@ -49,22 +57,22 @@ class XRequestBudget:
         if not match:
             raise AlphaError('This X endpoint has no approved request-cost ceiling.', 409, code='x_budget_required')
         fingerprint = hashlib.sha256(json.dumps(policy, sort_keys=True).encode()).hexdigest()
-        def persist(cur):
-            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (self.workspace,))
-            row = cur.fetchone()
-            if not row: raise AlphaError('Workspace unavailable.', 404)
-            state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-            ledger = state['phase2'].setdefault('apiCostReservations', [])
-            reserved = sum(item['ceilingMicros'] for item in ledger if item.get('policyHash') == fingerprint)
-            if reserved+policy['perRequestMicros'] > policy['limitMicros'] or len(ledger) >= 10000:
-                raise AlphaError('X API spending ceiling is exhausted. Review costs before increasing it.', 409, code='x_budget_exhausted')
-            ledger.append({'id': secrets.token_hex(12), 'provider': 'x', 'connectionId': self.connection, 'method': method,
-                           'path': route, 'policyHash': fingerprint, 'ceilingMicros': policy['perRequestMicros'],
-                           'currency': 'USD', 'kind': 'approved_ceiling_reservation', 'at': self.oauth.clock()})
-            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), self.workspace))
-        if self.cursor is not None:
-            persist(self.cursor)
-        else:
-            with self.oauth.repository.connection_factory() as db:
-                with db.cursor() as cur: persist(cur)
+        # The independent transaction commits before dispatch and survives rollback of
+        # the OAuth transaction. Never take a workspace lock here: the caller may hold it.
+        with self.oauth.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('x-budget:'+fingerprint,))
+                cur.execute('SELECT coalesce(sum(ceiling_micros),0),coalesce(sum(ceiling_micros) FILTER (WHERE workspace_id=%s),0) FROM public.pr_social_cost_reservations WHERE policy_hash=%s', (self.workspace, fingerprint))
+                app_reserved, workspace_reserved = cur.fetchone()
+                # Include pre-migration reservations; never reset an approved allowance.
+                cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,))
+                row = cur.fetchone()
+                if not row: raise AlphaError('Workspace unavailable.', 404)
+                state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                legacy = sum(item['ceilingMicros'] for item in state.get('phase2', {}).get('apiCostReservations', []) if item.get('policyHash') == fingerprint)
+                if (workspace_reserved + legacy + policy['perRequestMicros'] > policy['limitMicros']
+                        or app_reserved + policy['perRequestMicros'] > policy.get('appLimitMicros', policy['limitMicros'])):
+                    raise AlphaError('X API spending ceiling is exhausted. Review costs before increasing it.', 409, code='x_budget_exhausted')
+                cur.execute('INSERT INTO public.pr_social_cost_reservations(id,workspace_id,connection_id,policy_hash,endpoint,ceiling_micros) VALUES(%s,%s,%s,%s,%s,%s)',
+                            (secrets.token_hex(12), self.workspace, self.connection, fingerprint, method+' '+route, policy['perRequestMicros']))
         return True

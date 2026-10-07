@@ -31,11 +31,12 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(self.catalog({})['instagram'].get('readinessState'), 'not_configured')
         values = {'POSTRIFF_OAUTH_INSTAGRAM_CLIENT_ID': 'id', 'POSTRIFF_OAUTH_INSTAGRAM_CLIENT_SECRET': 'synthetic'}
         item = self.catalog(values)['instagram']
-        self.assertTrue(item['connectReady'])
-        self.assertEqual(item.get('readinessState'), 'configured_awaiting_provider_review')
+        self.assertFalse(item['connectReady'])
+        self.assertEqual(item.get('readinessState'), 'provider_review_pending')
         self.assertFalse(item.get('publicConnectionReady', True))
         item = self.catalog({**values, 'POSTRIFF_OAUTH_INSTAGRAM_REVIEWED': 'true'})['instagram']
-        self.assertEqual(item.get('readinessState'), 'identity_connection_available')
+        self.assertEqual(item.get('readinessState'), 'provider_review_pending')
+        self.assertFalse(item['publicConnectionReady'])
         self.assertFalse(item.get('liveVerified', True))
 
     def test_blank_and_placeholder_credentials_do_not_mount_adapters(self):
@@ -215,3 +216,36 @@ class StableCallbackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ConnectionRecoveryTests(unittest.TestCase):
+    def test_facebook_person_is_not_a_connected_page(self):
+        channel = {'platform': 'Facebook', 'connectionState': 'read_verified', 'accountType': 'person', 'scopes': ['pages_show_list']}
+        result = OAuthService.connection_readiness(channel, {'configured': True, 'connectReady': True})
+        self.assertEqual(result['connection'], 'DESTINATION_REQUIRED')
+
+    def test_transient_verification_preserves_existing_grant(self):
+        repo = fixtures.Repository()
+        repo.credential = ('instagram', '1789', ['instagram_business_basic'], 'ciphertext')
+        adapter = providers.InstagramProvider('app', 'secret')
+        service = OAuthService(repo, None, CredentialVault(CredentialVault.generate_key()), {'instagram': adapter}, 'https://app.example')
+        service.token_for_worker = Mock(side_effect=AlphaError('Temporary provider failure', 503))
+        result = service.verify('workspace', 'session', 'connection')
+        self.assertEqual(result['state'], 'verification_unavailable')
+        self.assertEqual(result['scopes'], ['instagram_business_basic'])
+        self.assertFalse(any('UPDATE public.pr_encrypted_credentials' in call.args[0] for call in repo.cur.execute.call_args_list))
+
+
+class PublicConnectionReviewTests(unittest.TestCase):
+    def test_member_oidc_review_is_independent_of_publication_and_e2e(self):
+        from postriff_phase2.connection_review import public_connection_review
+        adapter = providers.LinkedInProvider('app', 'secret')
+        callback = 'https://app.example/api/oauth/linkedin/callback'
+        self.assertFalse(public_connection_review(adapter, callback))
+        adapter.production_reviewed = True
+        self.assertFalse(public_connection_review(adapter, callback))
+        adapter.connection_review = {'state':'approved','audience':'external','appId':'app','callbackUri':callback,'approvedScopes':['openid','profile'],'evidenceRef':'synthetic-unit-only'}
+        self.assertTrue(public_connection_review(adapter, callback))
+        self.assertFalse(public_connection_review(adapter, 'https://other.example/api/oauth/linkedin/callback'))
+        self.assertEqual(adapter.capability_scopes('organization_identity'), [])
+        self.assertFalse(getattr(adapter, 'official_evidence', {}))

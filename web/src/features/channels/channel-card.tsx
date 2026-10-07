@@ -299,6 +299,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
 
       {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} offered={provider?.capabilities} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
       {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
+      {!disconnected && channel.platform === 'Facebook' && channel.accountType !== 'page' && <p className='text-sm'>Choose an eligible Page to finish connecting Facebook.</p>}
       {!disconnected && !channel.officialCapabilities && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
           <li>

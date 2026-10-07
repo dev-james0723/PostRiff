@@ -42,6 +42,8 @@ def connection_state(channel, now):
         return "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"
+    if channel.get("platform") == "Facebook" and channel.get("accountType") != "page":
+        return "identity_known"
     if channel.get("capabilityVerified"):
         return "publish_verified"
     return "read_verified"

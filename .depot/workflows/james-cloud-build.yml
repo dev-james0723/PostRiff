@@ -47,12 +47,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-lint"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-lint"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -117,12 +117,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-typecheck"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-typecheck"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -190,12 +190,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-build"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-build"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -260,12 +260,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-test"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-test"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -330,12 +330,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-ci"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-ci"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -375,6 +375,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: ""
       NEXT_TELEMETRY_DISABLED: "1"
       NPM_CONFIG_CACHE: "/mnt/jcb-package-cache"
+      PLAYWRIGHT_BROWSERS_PATH: "/mnt/jcb-playwright-cache"
       POSTRIFF_API_ORIGIN: "http://127.0.0.1:4438"
       POSTRIFF_DEV_SSR: "1"
     steps:
@@ -403,12 +404,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-28a8b452-next-e2e"
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-next-e2e"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -419,8 +420,13 @@ jobs:
             rm -rf .next/cache
           fi
           ln -sfn /mnt/jcb-framework-cache .next/cache
+      - name: Mount durable Playwright browser cache
+        uses: depot/cache-mount@v1
+        with:
+          name: "jcb-e408bbcd8242-3f8771e7-fe60b694-playwright"
+          path: "/mnt/jcb-playwright-cache"
       - name: Observe cache before
-        run: "printf 'JCB cache before: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
+        run: "printf 'JCB cache before: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"', '\"'\"'/mnt/jcb-playwright-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
       - name: Frozen dependency install
         working-directory: "web"
         run: "npm ci"
@@ -429,4 +435,4 @@ jobs:
         run: "npm run e2e:social"
       - name: Observe cache after
         if: always()
-        run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
+        run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"', '\"'\"'/mnt/jcb-playwright-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"

@@ -238,6 +238,8 @@ export function createApi(getToken: TokenSource) {
       send<import('./types').NativeSocialPreview>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action`, { action, target, payload }),
     nativeSocialApprove: (w: string, id: string, actionId: string, digest: string) =>
       send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action/${encodeURIComponent(actionId)}/approve`, { digest, confirmed: true }),
+    oauthContext: (provider: string, state: string) =>
+      send<{ workspaceId: string }>('POST', `/api/oauth/${encodeURIComponent(provider)}/context`, { state }),
     oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, string>) =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>

@@ -43,6 +43,81 @@ class OfficialPersistence(unittest.TestCase):
         # another connection has write access in this workspace.
         initial=oauth.start(wid,'fixture-one','threads','identity')
         self.assertEqual(parse_qs(urlsplit(initial['authorizeUrl']).query)['scope'][0],'threads_basic')
+    def test_failed_exchange_is_single_use_and_foreign_user_cannot_claim(self):
+        from unittest.mock import Mock
+        adapter = ThreadsProvider('app', 'secret')
+        adapter.exchange = Mock(side_effect=AlphaError('Exchange outcome unknown', 503))
+        oauth = OAuthService(service.repository, service.commands, CredentialVault(CredentialVault.generate_key()), {'threads': adapter}, 'https://example.invalid', clock=lambda: self.now)
+        begun = oauth.start(wid, 'fixture-one', 'threads', 'identity')
+        state = parse_qs(urlsplit(begun['authorizeUrl']).query)['state'][0]
+        self.assertEqual(oauth.completion_context('fixture-one', 'threads', state)['workspaceId'], wid)
+        with self.assertRaises(AlphaError): oauth.completion_context('fixture-two', 'threads', state)
+        with self.assertRaises(AlphaError):
+            oauth.complete(wid, 'fixture-two', 'threads', state, 'code')
+        adapter.exchange.assert_not_called()
+        with self.assertRaises(AlphaError):
+            oauth.complete(wid, 'fixture-one', 'threads', state, 'code')
+        with self.assertRaises(AlphaError):
+            oauth.complete(wid, 'fixture-one', 'threads', state, 'code')
+        self.assertEqual(adapter.exchange.call_count, 1)
+        with connection() as db:
+            row = db.execute('SELECT consumed_at IS NOT NULL,outcome FROM public.pr_oauth_transactions WHERE id=%s', (begun['transactionId'],)).fetchone()
+        self.assertEqual(row, (True, None))
+
+    def test_x_onboarding_reservation_survives_outer_rollback_and_has_shared_cap(self):
+        from postriff_phase2.social_budget import XRequestBudget
+        from postriff_phase2.social_connectors import XProvider
+        adapter = XProvider('app', 'secret')
+        adapter.onboarding_budget_policy = {'appId':'app','purpose':'connection_identity','currency':'USD','approvalRef':'synthetic-only','limitMicros':20,'appLimitMicros':30,'perRequestMicros':10,'expiresAt':self.now+600,'allowedEndpoints':['GET /2/users/me']}
+        oauth = OAuthService(service.repository, service.commands, CredentialVault(CredentialVault.generate_key()), {'x':adapter}, 'https://example.invalid', clock=lambda:self.now)
+        with self.assertRaises(AlphaError):
+            with service.repository.transaction('fixture-one', wid) as (cur, _, _):
+                XRequestBudget(oauth,wid,'oauth',cursor=cur).reserve('GET','/2/users/me')
+                raise AlphaError('Synthetic provider timeout',503)
+        XRequestBudget(oauth,wid,'oauth').reserve('GET','/2/users/me')
+        with self.assertRaises(AlphaError): XRequestBudget(oauth,wid,'oauth').reserve('GET','/2/users/me')
+        XRequestBudget(oauth,fixture.foreign,'oauth').reserve('GET','/2/users/me')
+        with self.assertRaises(AlphaError): XRequestBudget(oauth,fixture.foreign,'oauth').reserve('GET','/2/users/me')
+        with self.assertRaises(AlphaError): XRequestBudget(oauth,fixture.foreign,'oauth').reserve('POST','/2/tweets')
+
+    def test_partial_consent_persists_basic_identity_without_publishing(self):
+        from unittest.mock import Mock
+        adapter = ThreadsProvider('app', 'secret')
+        adapter.exchange = Mock(return_value={'accessToken':'synthetic-token','scopes':['threads_basic'],'expiresIn':3600})
+        adapter.identity = Mock(return_value={'providerAccountId':'ordinary-synthetic','handle':'Synthetic ordinary account','accountType':'profile'})
+        oauth = OAuthService(service.repository, service.commands, CredentialVault(CredentialVault.generate_key()), {'threads':adapter}, 'https://example.invalid', clock=lambda:self.now)
+        oauth._keep_picture = Mock()
+        begun = oauth.start(wid,'fixture-one','threads','publish')
+        state = parse_qs(urlsplit(begun['authorizeUrl']).query)['state'][0]
+        result = oauth.complete(wid,'fixture-one','threads',state,'code')
+        self.assertTrue(result['connected'])
+        self.assertEqual(result['missingScopes'], ['threads_content_publish'])
+        self.assertNotEqual(result['capabilities']['publish']['level'], 'Direct')
+        persisted = service.repository.get(wid,'fixture-one')['state']['phase2']['channels']
+        channel = next(c for c in persisted if c['id'] == result['connectionId'])
+        self.assertEqual(channel['scopes'], ['threads_basic'])
+        with connection() as db:
+            stored = db.execute('SELECT access_ciphertext,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(wid,result['connectionId'])).fetchone()
+        self.assertNotEqual(stored[0],'synthetic-token')
+        self.assertEqual(stored[1], ['threads_basic'])
+        with self.assertRaises(AlphaError): oauth.complete(fixture.foreign,'fixture-two','threads',state,'code')
+        with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
+        self.assertEqual(adapter.exchange.call_count,1)
+
+    def test_denied_and_expired_requests_never_exchange(self):
+        from unittest.mock import Mock
+        adapter = ThreadsProvider('app','secret'); adapter.exchange = Mock()
+        oauth = OAuthService(service.repository,service.commands,CredentialVault(CredentialVault.generate_key()),{'threads':adapter},'https://example.invalid',clock=lambda:self.now)
+        for expired in (False,True):
+            begun=oauth.start(wid,'fixture-one','threads','identity')
+            state=parse_qs(urlsplit(begun['authorizeUrl']).query)['state'][0]
+            if expired:
+                with connection() as db: db.execute("UPDATE public.pr_oauth_transactions SET expires_at=now()-interval '1 hour' WHERE id=%s",(begun['transactionId'],))
+                with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
+            else:
+                self.assertFalse(oauth.complete(wid,'fixture-one','threads',state,None,'access_denied')['connected'])
+        adapter.exchange.assert_not_called()
+
     def test_processing_forward_intent_survives_crash_without_duplicate(self):
         j=self.state['phase2']['jobs'][0];m=j['manifest'];j.update(state='processing',progress={'version':1,'stage':'thread_ready'},providerThread=['123456'],container='123456',cancelRequested=False,leaseUntil=0,leaseOwner=None,nextAt=0,checks=0)
         j['approvalDigest']=digest(m);self.save()

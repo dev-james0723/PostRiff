@@ -415,7 +415,7 @@ class PinterestProvider(OAuthProvider):
               'audience_insights':['user_accounts:read','ads:read']}
     EXPLAIN = {"identity": "Connect your Pinterest account. Rafii reads only your profile.",
                "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin."}
-    account_requirement = "A Pinterest account with at least one board."
+    account_requirement = "An eligible Pinterest business account. A board is needed only when publishing Pins."
     publish_scope = "pins:write"
     publish_required = frozenset({"pins:write", "boards:read"})
     refresh_margin = 300

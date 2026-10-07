@@ -334,7 +334,7 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language", 'enabledPermissionGroups'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", 'enabledPermissionGroups', 'destinationId'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         groups = channel.get('enabledPermissionGroups',[])
         if not isinstance(groups,list) or len(groups) > 30 or any(not isinstance(g,str) or not re.fullmatch(r'[a-z_]{1,40}',g) for g in groups): raise AlphaError('Invalid enabled permission groups.',400)
