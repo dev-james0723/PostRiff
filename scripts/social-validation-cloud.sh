@@ -54,6 +54,6 @@ if [ "$jcb_social_connection_only" -eq 0 ]; then
 fi
 # Each legacy connection suite requires a fresh cluster. Keep these in the
 # scoped Depot gate too so its coverage cannot hide GitHub scope-drift failures.
-for jcb_social_connection_suite in postgres_channels postgres_reverify; do
+for jcb_social_connection_suite in postgres_channels postgres_reverify postgres_x_oauth; do
   python scripts/postriff_disposable_postgres.py "tests/phase2/$jcb_social_connection_suite.py"
 done

@@ -1,0 +1,54 @@
+{
+  "execution": "cloud-regression-with-synthetic-providers-and-real-disposable-postgres",
+  "sourceBase": "40fcf9a9b6e457ccf7f39943a0622d6226d94ff6",
+  "runId": "bl1sgrspq8",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/bl1sgrspq8",
+  "remoteExitCode": 0,
+  "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261007T072628953334Z-test.json",
+  "snapshot": {
+    "transportMode": "remote_patch",
+    "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "baseRef": "refs/remotes/origin/consumer-saas",
+    "branch": "codex/social-connection-recovery-20261007",
+    "sourceHead": "40fcf9a9b6e457ccf7f39943a0622d6226d94ff6",
+    "includedFileCount": 3037,
+    "sourceFingerprint": "d1c99d10bbee6cd2a846003f48ac87c17eaa9ae370e0fc987ca4c7339eac890e",
+    "patchBytes": 563023,
+    "patchSha256": "a43003ff6937105d15ca0998cd34fe99075cb499cd820a7f3fc1dbdec06afefc"
+  },
+  "coverage": {
+    "pythonUnitTests": 252,
+    "nodeDeploymentChecks": 2,
+    "postgresPrograms": [
+      "postgres_instagram_lifecycle",
+      "postgres_safety",
+      "postgres_official_social",
+      "postgres_channels",
+      "postgres_reverify",
+      "postgres_x_oauth"
+    ],
+    "xRegressionChecks": 4,
+    "realProviderCalls": 0
+  },
+  "fileSha256": {
+    "migrations/postriff/101_x_oauth_provider.sql": "788d90d4cd32219beda2a0de306deee352d3a906cbb66246c428465e9f753f55",
+    "tests/phase2/postgres_x_oauth.py": "93e9dcc8068a238b54df8cd85108f1a4be305229e11177d3ee4f7bbd002d77b8",
+    "tests/phase2/rls.sql": "d3df02c77917dbacde8fdf087249d8cceadf57d6df625dbf52ef3a421e048e03",
+    "scripts/social-validation-cloud.sh": "c6c80c476f6564d6439bd0ffa485890e4525839cd52bc09ab6e30a86b22080ca"
+  },
+  "localValidation": [
+    "Python AST",
+    "bash -n",
+    "JSON decode and unchanged ordinary-pass count",
+    "git diff --check"
+  ],
+  "priorFailedRun": {
+    "runId": "31hlkzxdkf",
+    "exit": 1,
+    "cause": "New test scripts path shadowed postriff_alpha package",
+    "repair": "Append scripts path after source/package resolution",
+    "supersededBy": "bl1sgrspq8"
+  },
+  "productionApplied": false,
+  "ordinaryExternalPasses": 0
+}
