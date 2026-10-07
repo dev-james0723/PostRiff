@@ -249,3 +249,16 @@ class PublicConnectionReviewTests(unittest.TestCase):
         self.assertFalse(public_connection_review(adapter, 'https://other.example/api/oauth/linkedin/callback'))
         self.assertEqual(adapter.capability_scopes('organization_identity'), [])
         self.assertFalse(getattr(adapter, 'official_evidence', {}))
+
+    def test_facebook_public_gate_requires_matching_minimum_business_configuration(self):
+        from postriff_phase2.connection_review import public_connection_review
+        from postriff_phase2.wave3_connectors import FacebookPagesProvider
+        adapter = FacebookPagesProvider('app','secret')
+        callback = 'https://app.example/api/oauth/facebook/callback'
+        adapter.connection_review = {'state':'approved','audience':'external','appId':'app','callbackUri':callback,'approvedScopes':['pages_show_list'],'evidenceRef':'synthetic-unit-only'}
+        self.assertFalse(public_connection_review(adapter,callback))
+        adapter.config_id = '123456'
+        adapter.login_configs = {('pages_show_list',):'123456'}
+        self.assertFalse(public_connection_review(adapter,callback))
+        adapter.connection_review['loginConfigId'] = '123456'
+        self.assertTrue(public_connection_review(adapter,callback))

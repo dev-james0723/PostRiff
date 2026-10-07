@@ -112,6 +112,9 @@ class OAuthService:
             reviewed = bool(adapter and adapter.production_reviewed)
             from .connection_review import public_connection_review
             public_ready = bool(adapter and connect_ready and public_connection_review(adapter, callback))
+            if pid == 'facebook' and adapter and hasattr(adapter, 'connection_review') and (not adapter.config_id or not getattr(adapter, 'login_configs', {}).get(tuple(sorted(adapter.capability_scopes('identity'))))):
+                issues.append('The operator must configure Facebook Login for Business for the exact basic Page connection permissions.')
+                connect_ready = False
             if adapter and hasattr(adapter, 'connection_review') and not public_ready:
                 issues.append('Provider review pending: external-user access for the minimum connection permissions and this callback has not been verified.')
                 connect_ready = False
@@ -454,15 +457,22 @@ class OAuthService:
             from . import product_events
             # Product taxonomy (PRD §8.6): one event per completed connect flow (the OAuth transaction is the version).
             product_events.record(cur, workspace_id, principal, "channel.connected", connection_id, transaction_id, {"provider": provider_id})
-        # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
-        horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
-        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
-        if provider_id == 'facebook':
-            page = adapter.session(grant['accessToken']).get('page') or {}
-            if page.get('id'):
-                channel['destinationId'] = page['id']
-        snapshot = self.repository.get(workspace_id, token)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
+            # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
+            horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
+            channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+            if provider_id == 'facebook':
+                page = adapter.session(grant['accessToken']).get('page') or {}
+                if page.get('id'):
+                    channel['destinationId'] = page['id']
+            # Credentials, capabilities and customer-visible state commit together.
+            # The workspace row is already locked; a second command transaction
+            # would allow an intervening edit to strand a successfully exchanged grant.
+            import copy
+            updated = self.commands.upsert_verified_channel(copy.deepcopy(workspace_state), principal, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct")
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(updated), workspace_id))
+            for effect in getattr(self.repository, 'effects', []):
+                effect(cur, workspace_id, workspace_state, updated, principal)
+            saved = {"revision": row[0] + 1}
         self._keep_picture(workspace_id, token, connection_id, identity)
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 

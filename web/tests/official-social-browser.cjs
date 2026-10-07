@@ -9,6 +9,7 @@ assert.ok(process.env.CI,'Cloud CI required');
 const base='http://127.0.0.1:4439';
 const fixture=JSON.parse(readFileSync(join(__dirname,'fixtures/wp04a-workspace.json'),'utf8'));
 const wid=fixture.snapshot.state.workspace.id;
+const otherWid='00000000-0000-0000-0000-000000000099';
 const out=join(__dirname,'../../.depot/social-browser-evidence');mkdirSync(out,{recursive:true});
 const app=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','-p','4439','-H','127.0.0.1'],{cwd:join(__dirname,'..'),env:process.env,stdio:['ignore','pipe','pipe']});
 app.stdout.on('data',chunk=>process.stdout.write(chunk));app.stderr.on('data',chunk=>process.stderr.write(chunk));
@@ -37,8 +38,9 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
     if(p.endsWith('/oauth/complete')){completionWorkspace=p.split('/')[3];return send({connected:true,connectionId:channel.id,account:channel.account,missingScopes:[]});}
     if(request.method()!=='GET')return send({error:'Unexpected synthetic mutation'},400);
     if(p==='/api/catalog')return send({authMode:'dev',execution:'dev-synthetic',phase2:true,templates:[],routes:[],profileMetadata:{}});
-    if(p==='/api/workspaces')return send({workspaces:[{workspaceId:wid,membership:fixture.snapshot.membership,name:'Social fixture',plan:'studio',memberCounts:{owner:1}}]});
+    if(p==='/api/workspaces')return send({workspaces:[{workspaceId:wid,membership:fixture.snapshot.membership,name:'Social fixture',plan:'studio',memberCounts:{owner:1}},{workspaceId:otherWid,membership:fixture.snapshot.membership,name:'Other workspace',plan:'studio',memberCounts:{owner:1}}]});
     if(p==='/api/me')return send({userId:'00000000-0000-0000-0000-000000000001',displayName:'Fixture',preferences:{timeZone:'UTC',locale:'en'},mfa:{}});
+    if(p===`/api/workspaces/${otherWid}`)return send({...fixture.snapshot,state:{...fixture.snapshot.state,workspace:{...fixture.snapshot.state.workspace,id:otherWid}}});
     if(p===`/api/workspaces/${wid}`)return send(fixture.snapshot);
     if(p.endsWith('/channels'))return send({channels:[channel],providers:[provider]});
     if(p.endsWith('/usage'))return send({entitlement:{planTermsId:'synthetic-studio',writingBatchesRemaining:1,mediaCreditsRemaining:0,connectedAccounts:10,members:1,storageMb:100,resetsAt:null,source:'fixture',version:1},subscription:null,budget:null,overage:'disabled',ledger:[],planTerms:[],note:'Synthetic browser acceptance',lifecycle:{status:'active',canPublish:false},membership:fixture.snapshot.membership});
@@ -68,10 +70,11 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    // JCB's reviewed workflow currently exports logs rather than arbitrary output
    // artifacts. This bounded fixture-only image is recovered from those logs.
    console.log('RAFII_BROWSER_IMAGE '+width+' '+pixels.toString('base64'));
+   await page.evaluate(id=>localStorage.setItem('postriff-workspace',id),otherWid);
    await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
    await page.waitForURL('**/app/channels?connected=fixture-ig');
    assert.equal(completionWorkspace,wid);
-   checks.push({callbackThroughNormalUI:true,width,granularCapabilities:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}

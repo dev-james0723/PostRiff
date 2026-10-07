@@ -55,6 +55,6 @@
   "framework": "next",
   "cacheScope": "e408bbcd8242",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "fe60b694ac860fd663c20d4345f5f1b00c4d8a17fbd409d696a0ceb285c404db",
+  "lockfileSha256": "960b21616c6467f1e54fce9238ccb6684c959b168ac46734b3668d25b5507d72",
   "transportMode": "remote_patch"
 }

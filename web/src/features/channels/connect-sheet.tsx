@@ -371,7 +371,7 @@ export function ConnectSheet({
                 )}
                 {provider && (provider.executionPaused || !provider.productionReviewed) && (
                   <p className='text-muted-foreground text-xs leading-relaxed'>
-                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Publishing awaits platform review. Test accounts can still connect.'}
+                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Connection and publishing permissions are reviewed separately. See the connection requirements above.'}
                   </p>
                 )}
               </section>

@@ -104,6 +104,22 @@ class OfficialPersistence(unittest.TestCase):
         with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
         self.assertEqual(adapter.exchange.call_count,1)
 
+    def test_connection_state_failure_rolls_back_credentials_and_capabilities(self):
+        from unittest.mock import Mock, patch
+        adapter = ThreadsProvider('app', 'secret')
+        adapter.exchange = Mock(return_value={'accessToken':'synthetic-atomic','scopes':['threads_basic'],'expiresIn':3600})
+        adapter.identity = Mock(return_value={'providerAccountId':'atomic-failure','accountType':'profile'})
+        oauth = OAuthService(service.repository,service.commands,CredentialVault(CredentialVault.generate_key()),{'threads':adapter},'https://example.invalid',clock=lambda:self.now)
+        begun = oauth.start(wid,'fixture-one','threads','identity')
+        state = parse_qs(urlsplit(begun['authorizeUrl']).query)['state'][0]
+        with patch.object(service.commands,'upsert_verified_channel',side_effect=AlphaError('Synthetic save failure',500)):
+            with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND provider_account_id='atomic-failure'",(wid,)).fetchone()[0],0)
+            self.assertTrue(db.execute('SELECT consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE id=%s',(begun['transactionId'],)).fetchone()[0])
+        with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
+        self.assertEqual(adapter.exchange.call_count,1)
+
     def test_denied_and_expired_requests_never_exchange(self):
         from unittest.mock import Mock
         adapter = ThreadsProvider('app','secret'); adapter.exchange = Mock()
@@ -112,7 +128,8 @@ class OfficialPersistence(unittest.TestCase):
             begun=oauth.start(wid,'fixture-one','threads','identity')
             state=parse_qs(urlsplit(begun['authorizeUrl']).query)['state'][0]
             if expired:
-                with connection() as db: db.execute("UPDATE public.pr_oauth_transactions SET expires_at=now()-interval '1 hour' WHERE id=%s",(begun['transactionId'],))
+                with connection() as db: expiry=db.execute('SELECT extract(epoch from expires_at) FROM public.pr_oauth_transactions WHERE id=%s',(begun['transactionId'],)).fetchone()[0]
+                oauth.clock=lambda:float(expiry)+1  # Synthetic expiry boundary, never live aging evidence.
                 with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
             else:
                 self.assertFalse(oauth.complete(wid,'fixture-one','threads',state,None,'access_denied')['connected'])

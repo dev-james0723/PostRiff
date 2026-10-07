@@ -334,7 +334,11 @@ class Cursor:
 
     def execute(self, sql, params=()):
         s, db = " ".join(sql.split()), self.db
-        if s.startswith("INSERT INTO public.pr_auth_throttle"):
+        if s.startswith("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1"):
+            assert params[1] == "workspace"
+            db.repository.state = json.loads(params[0])
+            db.repository.revision += 1
+        elif s.startswith("INSERT INTO public.pr_auth_throttle"):
             self.result = (1,)
         elif s.startswith("INSERT INTO public.pr_oauth_transactions"):
             workspace, member, provider, capability, redirect, scopes, state_hash, ciphertext, key_id, ttl = params
@@ -406,6 +410,7 @@ class Cursor:
 class Repository:
     def __init__(self, clock):
         self.db = Database(clock)
+        self.db.repository = self
         self.state = initial_phase2_state("workspace", "owner", "Owner", "studio", 100)
         self.revision = 1
 
