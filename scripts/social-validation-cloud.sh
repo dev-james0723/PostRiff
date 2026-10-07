@@ -35,13 +35,14 @@ jcb_social_connection_only=0
 case "${1:-}" in
   --connection-regression) jcb_social_connection_only=1 ;;
   '') node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs ;;
-  --backend-only) ;;
+  # Deployment isolation spans Python and the browser build configuration.
+  --backend-only) node --test tests/deployment-env.test.mjs ;;
   *) echo 'Unknown social validation mode.' >&2; exit 64 ;;
 esac
 cd -- "$jcb_social_root"
 export PYTHONPATH="$jcb_social_root/src:$jcb_social_root/tests"
 if [ "$jcb_social_connection_only" -eq 0 ]; then
-python -m unittest test_postriff_phase2 test_postriff_audience_contract test_official_social test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video test_asset_consumers test_asset_kinds test_instagram_full_capabilities test_social_voice_preflight test_postriff_hosted_deployment
+python -m unittest test_postriff_phase2 test_postriff_audience_contract test_official_social test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video test_asset_consumers test_asset_kinds test_instagram_full_capabilities test_social_voice_preflight test_postriff_hosted_deployment test_consumer_deployment
 fi
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
