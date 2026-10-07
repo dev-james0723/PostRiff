@@ -1,3 +1,5 @@
+> Connection-first recovery update (2026-10-07): see [current recovery](../official-social-20261007/HANDOFF.md). This historical receipt is retained; it does not identify the current production source or prove public connection.
+
 # Candidate operation and live release gates
 
 No commands in this file authorize a deployment, new app review submission, credential transfer, metered request or social publication. Existing user instructions govern every external action. Test accounts, destinations, exact content/assets, visibility, spending ceiling and cleanup actions must be explicitly approved before real writes.

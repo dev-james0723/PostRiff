@@ -9,9 +9,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "TOOL_ACCESS",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "linkedin",
@@ -19,9 +29,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "TOOL_ACCESS",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "linkedin",
@@ -299,9 +319,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Recover existing Threads product credentials in Vercel secure store after app/callback/public access verification. Do not create a replacement app. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "threads",
@@ -309,9 +339,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Recover existing Threads product credentials in Vercel secure store after app/callback/public access verification. Do not create a replacement app. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "threads",
@@ -319,9 +359,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Recover existing Threads product credentials in Vercel secure store after app/callback/public access verification. Do not create a replacement app. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "threads",
@@ -329,9 +379,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Recover existing Threads product credentials in Vercel secure store after app/callback/public access verification. Do not create a replacement app. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary profile, client configuration and Meta Threads Advanced Access/actual scopes unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "threads",
@@ -549,9 +609,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Inspect Instagram Login product and minimum permission advanced/public access. Insights audit is independent. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "instagram",
@@ -559,9 +629,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Inspect Instagram Login product and minimum permission advanced/public access. Insights audit is independent. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "instagram",
@@ -569,9 +649,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Inspect Instagram Login product and minimum permission advanced/public access. Insights audit is independent. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Professional account/client actual grant and Meta Advanced Access unverified; Insights primary contract audit unavailable.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "instagram",
@@ -769,9 +859,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "facebook",
@@ -779,9 +879,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "facebook",
@@ -789,9 +899,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "facebook",
@@ -799,9 +919,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "facebook",
@@ -809,9 +939,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "facebook",
@@ -1019,9 +1159,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Match runtime client to existing app; inspect/approve client type/callback and bounded GET /2/users/me onboarding policy. No metered calls authorized yet. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "BILLING_AUTHORIZATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "x",
@@ -1029,9 +1179,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Match runtime client to existing app; inspect/approve client type/callback and bounded GET /2/users/me onboarding policy. No metered calls authorized yet. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "BILLING_AUTHORIZATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "x",
@@ -1039,9 +1199,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Match runtime client to existing app; inspect/approve client type/callback and bounded GET /2/users/me onboarding policy. No metered calls authorized yet. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Actual product/account/tier/scopes and explicit cost ceiling/credits unverified; no paid API requests authorized.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "BILLING_AUTHORIZATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "x",
@@ -1269,9 +1439,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Google OAuth verification, eligible owned channel, API/project/public-upload compliance and feature grants unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Review minimum YouTube read scope and external production/verification requirements. Shared Google project also has upload/calendar/gmail scope declarations; do not delete unrelated scopes. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Google OAuth verification, eligible owned channel, API/project/public-upload compliance and feature grants unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "youtube",
@@ -1279,9 +1459,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Google OAuth verification, eligible owned channel, API/project/public-upload compliance and feature grants unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Review minimum YouTube read scope and external production/verification requirements. Shared Google project also has upload/calendar/gmail scope declarations; do not delete unrelated scopes. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Google OAuth verification, eligible owned channel, API/project/public-upload compliance and feature grants unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "youtube",
@@ -1589,9 +1779,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Creator actual grants/current capabilities, URL ownership and TikTok audit unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Match existing runtime key to correct app; complete Login Kit metadata/scopes and genuine authentication demo; approve submission separately. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Creator actual grants/current capabilities, URL ownership and TikTok audit unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "tiktok",
@@ -1599,9 +1799,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Creator actual grants/current capabilities, URL ownership and TikTok audit unverified.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Match existing runtime key to correct app; complete Login Kit metadata/scopes and genuine authentication demo; approve submission separately. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Creator actual grants/current capabilities, URL ownership and TikTok audit unverified.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "tiktok",
@@ -1769,9 +1979,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Business/client actual grants, Trial/Standard and optional merchant/ad eligibility unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Sign in to existing operator account, identify existing app/tier and reuse credentials. Prepare genuine identity demo for access review; no sandbox-to-public promotion. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Business/client actual grants, Trial/Standard and optional merchant/ad eligibility unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "pinterest",
@@ -1779,9 +1999,19 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Business/client actual grants, Trial/Standard and optional merchant/ad eligibility unverified; production client pair absent.",
-      "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
-      "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      "externalBlocker": "Sign in to existing operator account, identify existing app/tier and reuse credentials. Prepare genuine identity demo for access review; no sandbox-to-public promotion. Account-owner minimum read consent and ordinary-user acceptance pending.",
+      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "historicalBlockers20261005": {
+        "externalBlocker": "Business/client actual grants, Trial/Standard and optional merchant/ad eligibility unverified; production client pair absent.",
+        "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
+        "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
+      },
+      "blockerClass": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
+      ]
     },
     {
       "provider": "pinterest",
@@ -1963,5 +2193,7 @@
       "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
       "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
     }
-  ]
+  ],
+  "connectionRecovery": "../official-social-20261007/CONNECTION-ACCEPTANCE.json",
+  "connectionRecoveryDate": "2026-10-07"
 }

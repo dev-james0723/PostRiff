@@ -1,3 +1,5 @@
+> Connection-first recovery update (2026-10-07): see [current recovery](../official-social-20261007/HANDOFF.md). This historical receipt is retained; it does not identify the current production source or prove public connection.
+
 # Rafii official social integration — 2026-10-05
 
 **Verdict: engineering candidate validated in cloud; NOT PRODUCTION READY.** Eight providers have 205 granular capability rows. Zero rows have new real-provider E2E evidence in this task. No new OAuth grant, social publication, provider-review submission, production configuration, Git push, merge or deployment happened.

@@ -1,3 +1,5 @@
+> Connection-first recovery update (2026-10-07): see [current recovery](../official-social-20261007/HANDOFF.md). This historical receipt is retained; it does not identify the current production source or prove public connection.
+
 # Recovery receipt
 
 Task remains blocked on manual provider gates; do not mark the eight-provider objective completed. Source implementation commit: `6037ff7c594b3f580ed6d13ab6f20e9b0b1590c3`. Documentation-only delivery commit is the later HEAD. Provider implementation revision: `fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e`.
