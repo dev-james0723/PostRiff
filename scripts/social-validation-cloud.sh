@@ -6,6 +6,31 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
   exit 64
 fi
 jcb_social_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# Reproduce the required GitHub History Import browser suite without unrelated suites.
+if [ "${1:-}" = --history-import-regression ]; then
+  cd -- "$jcb_social_root"
+  export PYTHONPATH="$jcb_social_root/src:$jcb_social_root/tests"
+  if ! command -v pg_config >/dev/null; then
+    sudo -n apt-get -qq update
+    sudo -n apt-get -y -qq install postgresql
+  fi
+  export POSTRIFF_PG_BIN="$(pg_config --bindir)"
+  # Match the required GitHub job: its disposable backend uses the default socket directory.
+  sudo -n mkdir -p /var/run/postgresql
+  sudo -n chmod 1777 /var/run/postgresql
+  python scripts/consumer_ready_web.py --prepare npm ci
+  python scripts/consumer_ready_web.py npm run build
+  node .codex/consumer-ready/web/node_modules/playwright/cli.js install --with-deps chromium
+  if python scripts/consumer_ready_browser.py --history-import; then
+    exit 0
+  else
+    jcb_social_history_status=$?
+    for jcb_social_history_log in docs/consumer-ready/evidence/durable-backend.log docs/consumer-ready/evidence/durable-frontend.log; do
+      if [ -f "$jcb_social_history_log" ]; then tail -100 "$jcb_social_history_log"; fi
+    done
+    exit "$jcb_social_history_status"
+  fi
+fi
 jcb_social_connection_only=0
 case "${1:-}" in
   --connection-regression) jcb_social_connection_only=1 ;;

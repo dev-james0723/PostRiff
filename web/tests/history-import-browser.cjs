@@ -152,10 +152,13 @@ async function api(method, url, body) {
     const alert=page.getByRole('alertdialog');await alert.getByText(/removes imported metadata/).waitFor();
     await alert.getByRole('button',{name:'Disconnect',exact:true}).click();
     await page.getByText('Threads disconnected',{exact:true}).waitFor();
+    // The success toast precedes the channel-query refresh; wait for its rendered result.
+    const historyControlAtToast = await page.getByRole('button',{name:'Past analytics',exact:true}).count();
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden'});
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);
-    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
+    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,disconnectRefresh:{controlCountAtToast:historyControlAtToast,controlCountAfterRefresh:0},screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
     fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
