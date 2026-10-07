@@ -132,3 +132,5 @@ do $$ begin
 end $$;
 reset role;
 select 'PASS: two-user RLS, 9 object families, service-only chat media tables, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone' as result;
+
+\ir ../../migrations/postriff/094_universal_library_lifecycle.sql

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSnapshot } from '@/lib/api/hooks';
 import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
@@ -34,7 +34,7 @@ export interface AssetUse {
 }
 
 export type LibraryFilter = 'all' | 'unused' | 'used';
-export type LibraryKindFilter = 'all' | 'image' | 'video' | 'document' | 'file';
+export type LibraryKindFilter = 'all' | 'image' | 'video' | 'audio' | 'document' | 'file';
 /** `newest` is offered only when assets carry an upload time; `stored` is the order the API returns. */
 export type LibrarySort = 'newest' | 'stored' | 'largest';
 
@@ -118,20 +118,27 @@ export function useLibrary({
   filter,
   kindFilter,
   sort,
-  query
+  query,
+  tag = '',
+  collection = ''
 }: {
   filter: LibraryFilter;
   kindFilter: LibraryKindFilter;
   sort: LibrarySort;
   query: string;
+  tag?: string;
+  collection?: string;
 }) {
   const snapshot = useSnapshot();
   const phase2 = snapshot.data?.state.phase2;
   const { api, workspaceId } = useWorkspaceApi();
   const normalizedQuery = query.trim().toLowerCase();
-  const normalized = useQuery({
-    queryKey: ['library-assets', workspaceId, normalizedQuery],
-    queryFn: () => api.library(workspaceId, normalizedQuery, 200),
+  const normalized = useInfiniteQuery({
+    queryKey: ['library-assets', workspaceId, normalizedQuery, kindFilter, tag, collection, sort],
+    queryFn: ({ pageParam }) => api.library(workspaceId, normalizedQuery, 200, pageParam, { kind: kindFilter, tag, collection, sort }),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    refetchInterval: (q) => q.state.data?.pages.some((p) => p.assets.some((a) => ["pending", "queued", "processing"].includes(a.processing ?? ""))) ? 3_000 : false,
     enabled: Boolean(workspaceId) && !snapshot.isPending,
     staleTime: 15_000
   });
@@ -139,7 +146,7 @@ export function useLibrary({
   const derived = useMemo(() => {
     // The normalized endpoint merges legacy photos/videos with document/file rows. During rollout or a temporary
     // endpoint failure, the existing snapshot remains a truthful media-only fallback.
-    const source = normalized.data?.assets ?? phase2?.assets ?? [];
+    const source = normalized.data?.pages.flatMap((p) => p.assets) ?? phase2?.assets ?? [];
     const live = source.filter(isLibraryAsset);
     const usage = buildUsage(phase2?.reviews ?? [], phase2?.jobs ?? []);
     const hasTimestamps = live.some((asset) => typeof asset.createdAt === 'number');
@@ -157,6 +164,7 @@ export function useLibrary({
         all: live.length,
         image: live.filter((asset) => kindOf(asset) === 'image').length,
         video: live.filter((asset) => kindOf(asset) === 'video').length,
+        audio: live.filter((asset) => kindOf(asset) === 'audio').length,
         document: live.filter((asset) => kindOf(asset) === 'document').length,
         file: live.filter((asset) => kindOf(asset) === 'file').length
       },
@@ -178,6 +186,8 @@ export function useLibrary({
       if (filter === 'used' && !used) return false;
       if (filter === 'unused' && used) return false;
       if (kindFilter !== 'all' && kindOf(asset) !== kindFilter) return false;
+      if (tag && !(asset.tags ?? asset.aiTags ?? []).includes(tag)) return false;
+      if (collection && !asset.collections?.includes(collection)) return false;
       return backendSearch || matchesQuery(asset, normalizedQuery);
     });
     if (effectiveSort === 'stored') return filtered;
@@ -191,7 +201,7 @@ export function useLibrary({
       if (typeof right !== 'number') return -1;
       return right - left || stable(a, b);
     });
-  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort]);
+  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort, tag, collection]);
 
   return {
     snapshot,
@@ -202,6 +212,8 @@ export function useLibrary({
     counts: derived.counts,
     kindCounts: derived.kindCounts,
     totals: derived.totals,
+    tags: [...new Set(derived.live.flatMap((a) => a.tags ?? a.aiTags ?? []))].toSorted(),
+    storage: normalized.data?.pages[0]?.storage,
     hasTimestamps: derived.hasTimestamps,
     platforms: derived.platforms,
     sort: effectiveSort,

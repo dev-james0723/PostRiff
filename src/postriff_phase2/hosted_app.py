@@ -893,7 +893,14 @@ class HostedApplication:
                 if len(parts) == 4 and method == "GET":
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
-                    return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0]))
+                    return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
+                    return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
+                if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":
+                    self._body(environ)
+                    return self._json(start_response, 200, library.collections(workspace_id, token, collection_id=parts[5], delete=True))
+                if len(parts) == 6 and parts[4] == "assets" and method == "PATCH":
+                    return self._json(start_response, 200, library.metadata(workspace_id, token, parts[5], self._body(environ)))
                 if len(parts) == 5 and parts[4] == "files" and method == "POST":
                     return self._json(start_response, 201, library.begin(workspace_id, token, self._body(environ)))
                 if len(parts) == 6 and parts[4] == "files":
@@ -901,16 +908,23 @@ class HostedApplication:
                     if method == "GET": return self._json(start_response, 200, library.detail(workspace_id, token, asset_id))
                     if method == "PATCH":
                         body = self._body(environ)
-                        return self._json(start_response, 200, library.rename(workspace_id, token, asset_id, body.get("title")))
+                        return self._json(start_response, 200, library.metadata(workspace_id, token, asset_id, body))
                     if method == "DELETE":
                         self._body(environ)
                         return self._json(start_response, 200, library.delete(workspace_id, token, asset_id))
                 if len(parts) == 7 and parts[4] == "files":
                     asset_id, verb = parts[5], parts[6]
+                    if verb == "retry" and method == "POST":
+                        self._body(environ)
+                        return self._json(start_response, 202, library.retry(workspace_id, token, asset_id))
+                    if verb == "transcript" and method == "POST":
+                        return self._json(start_response, 200, library.transcript(workspace_id, token, asset_id, self._body(environ).get("text")))
+                    if verb == "source" and method == "POST":
+                        return self._json(start_response, 200, library.as_source(workspace_id, token, asset_id, self._body(environ)))
                     if verb == "commit" and method == "POST":
                         self._body(environ)
                         return self._json(start_response, 200, library.commit(workspace_id, token, asset_id))
-                    if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id))
+                    if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id, "download=1" in environ.get("QUERY_STRING", "")))
                 raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
                 # Chat-context SPEC §5.7: the bytes go browser → storage on a signed URL; these only begin, commit and abort.

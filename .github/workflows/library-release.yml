@@ -1,0 +1,80 @@
+name: Universal Library release validation
+on:
+  pull_request:
+    branches: [consumer-saas]
+    paths:
+      - 'src/postriff_phase2/**'
+      - 'web/**'
+      - 'tests/**'
+      - 'migrations/postriff/**'
+      - 'scripts/*library*'
+      - '.github/workflows/library-release.yml'
+  workflow_dispatch:
+    inputs:
+      prepare_dependency_lock:
+        description: Prepare reviewed security lock updates as an artifact; never commit or deploy
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: library-release-${{ github.ref }}-${{ inputs.prepare_dependency_lock || false }}
+  cancel-in-progress: true
+jobs:
+  library:
+    if: ${{ inputs.prepare_dependency_lock != true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: 'true'
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:4439
+      NEXT_PUBLIC_SUPABASE_URL: ''
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ''
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      POSTRIFF_API_ORIGIN: http://127.0.0.1:4438
+      POSTRIFF_DEV_SSR: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+      LC_ALL: C
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - run: npm --prefix web run ci:library
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: universal-library-${{ github.sha }}
+          path: |
+            docs/consumer-ready/evidence/library/
+            .codex/library-samples/
+          retention-days: 14
+  dependency-lock:
+    if: ${{ inputs.prepare_dependency_lock == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+      - working-directory: web
+        run: |
+          npm pkg set 'devDependencies.oxfmt=^0.72.0' 'overrides.sharp=^0.35.5'
+          npm install --package-lock-only --ignore-scripts
+          npm update source-map-js --package-lock-only --ignore-scripts
+          npm audit --audit-level=high
+          git diff --stat -- package.json package-lock.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: library-security-lock-${{ github.sha }}
+          path: |
+            web/package.json
+            web/package-lock.json
+          retention-days: 3

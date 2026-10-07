@@ -264,6 +264,12 @@ export function createApi(getToken: TokenSource) {
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
       ),
+    insightsCanary: (w: string, id: string) =>
+      send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(
+        'POST',
+        `${ws(w)}/channels/${encodeURIComponent(id)}/insights-canary`,
+        { confirmed: true }
+      ),
     disconnectChannel: (w: string, id: string) =>
       send<{ disconnected: boolean; remoteRevoked: boolean; revision: number }>(
         'DELETE',
@@ -318,20 +324,28 @@ export function createApi(getToken: TokenSource) {
       }, DRAFT_TIMEOUT_MS),
 
     /* Universal Library: normalized documents/files use the same signed private-storage boundary as video. */
-    library: (w: string, query = '', limit = 100) =>
-      get<{ assets: Asset[]; query: string }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit) })}`),
+    library: (w: string, query = '', limit = 100, offset = 0, filters: { kind: string; tag: string; collection: string; sort: string } = { kind: 'all', tag: '', collection: '', sort: 'newest' }) =>
+      get<{ assets: Asset[]; query: string; nextOffset: number | null; storage: { usedBytes: number; limitBytes: number } }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit), offset: String(offset), ...filters })}`),
     beginLibraryFile: (w: string, body: { filename: string; mime: string; bytes: number }) =>
       send<{ upload: { assetId: string; url: string; mime: string; bytes: number; filename: string; expiresIn: number } }>('POST', `${ws(w)}/library/files`, body),
     commitLibraryFile: (w: string, assetId: string) =>
       send<{ asset: Asset; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(assetId)}/commit`, {}),
     libraryFile: (w: string, assetId: string) =>
       get<{ asset: Asset; extractedText: string; chunks: { ordinal: number; text: string }[] }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
-    libraryFileUrl: (w: string, assetId: string) =>
-      get<{ url: string; mime: string; filename: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/url`),
+    libraryFileUrl: (w: string, assetId: string, download = false) =>
+      get<{ url: string; mime: string; filename: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/url${download ? "?download=1" : ""}`),
     renameLibraryFile: (w: string, assetId: string, title: string) =>
       send<{ asset: Asset }>('PATCH', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`, { title }),
     deleteLibraryFile: (w: string, assetId: string) =>
       send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
+
+    libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number }[] }>(`${ws(w)}/library/collections`),
+    createLibraryCollection: (w: string, name: string) => send('POST', `${ws(w)}/library/collections`, { name }),
+    deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),
+    updateLibraryAsset: (w: string, id: string, body: { title?: string; tags?: string[]; collections?: string[] }) => send('PATCH', `${ws(w)}/library/assets/${encodeURIComponent(id)}`, body),
+    retryLibraryFile: (w: string, id: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/retry`, {}),
+    libraryTranscript: (w: string, id: string, text: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/transcript`, { text }),
+    librarySource: (w: string, id: string, expectedRevision: number) => send<{ sourceId: string; revision?: number; clipped: boolean; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/source`, { expectedRevision }),
 
     /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
     mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),

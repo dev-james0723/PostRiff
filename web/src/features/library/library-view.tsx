@@ -31,13 +31,15 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { CollectionManager, useLibraryCollections } from './library-organizer';
+import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata } from '../agent/attachments/video-file';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetListRow } from './asset-list-row';
 import { AssetDetail } from './asset-detail';
-import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibraryKindFilter, type LibrarySort } from './use-library';
+import { MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibraryKindFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
 
 const infoContent = {
@@ -53,7 +55,7 @@ const infoContent = {
     },
     {
       title: 'Current upload paths',
-      description: 'Add photos here. Photos are decoded, stripped of metadata and stored privately. Videos added from Rafii chat also appear here once the server verifies them.'
+      description: 'Add photos, MP4/MOV videos, audio, PDF, Office documents, text and other files. Documents are indexed in the background. All files remain private to this workspace.'
     },
     {
       title: 'Used',
@@ -78,6 +80,7 @@ const KIND_LABELS: Record<LibraryKindFilter, string> = {
   all: 'All assets',
   image: 'Photos',
   video: 'Videos',
+  audio: 'Audio',
   document: 'Documents',
   file: 'Files'
 };
@@ -91,7 +94,7 @@ const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 tex
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
-  if (code === 'file-too-large') return `${file.name} is over 30 MB`;
+  if (code === 'file-too-large') return `${file.name} is over 50 MB`;
   if (code === 'file-too-small') return `${file.name} is empty`;
   if (code === 'file-invalid-type') return `${file.name} isn’t a photo`;
   return `Couldn’t add ${file.name}`;
@@ -182,10 +185,16 @@ export function LibraryView() {
   const [view, setView] = useState<LibraryViewMode>('gallery');
   const [sort, setSort] = useState<LibrarySort>('newest');
   const [query, setQuery] = useState('');
+  const [tag, setTag] = useState('');
+  const [collection, setCollection] = useState('');
+  const collections = useLibraryCollections();
+  const pendingFile = useRef<{ file: File; assetId: string; put: boolean; video?: { frames: { at: number; data: string }[]; locationCleared: boolean } } | null>(null);
+  const [fileFailure, setFileFailure] = useState<string | null>(null);
+  const [fileProgress, setFileProgress] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
   const filePicker = useRef<HTMLInputElement>(null);
   const auth = useAuth();
-  const library = useLibrary({ filter, kindFilter, sort, query });
+  const library = useLibrary({ filter, kindFilter, sort, query, tag, collection });
   const { snapshot, assets, visible, counts, totals } = library;
 
   const [detail, setDetail] = useState<LibraryAsset | null>(null);
@@ -201,8 +210,7 @@ export function LibraryView() {
   const markPreviewLoaded = useCallback(() => setMediaStorageMissing(false), []);
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, open: openPicker } = useDropzone({
-    accept: ACCEPTED_TYPES,
-    maxSize: MAX_PICK_BYTES,
+    maxSize: 50 * 1024 * 1024,
     minSize: 1,
     multiple: true,
     noClick: true,
@@ -210,7 +218,7 @@ export function LibraryView() {
     disabled: !canEdit || library.revision === null,
     onDrop: (accepted, rejected) => {
       for (const rejection of rejected) toast.error(rejectionMessage(rejection));
-      upload.enqueue(accepted);
+      void uploadFiles(accepted);
     }
   });
 
@@ -224,7 +232,7 @@ export function LibraryView() {
   const defaultSort: LibrarySort = library.hasTimestamps ? 'newest' : 'stored';
   const sortActive = library.sort !== defaultSort ? 1 : 0;
   const kindActive = kindFilter === 'all' ? 0 : 1;
-  const filterCount = sortActive + kindActive;
+  const filterCount = sortActive + kindActive + (tag ? 1 : 0) + (collection ? 1 : 0);
   const sortOptions = [...(library.hasTimestamps ? [{ value: 'newest', label: SORT_LABELS.newest }] : []), { value: 'stored', label: SORT_LABELS.stored }, { value: 'largest', label: SORT_LABELS.largest }];
   const activeFilterSummary = [
     kindActive ? KIND_LABELS[kindFilter] : null,
@@ -242,7 +250,7 @@ export function LibraryView() {
     setDeletingIds((ids) => new Set(ids).add(asset.id));
     try {
       const assetKind = kindOf(asset);
-      if (assetKind === 'document' || assetKind === 'file') {
+      if (assetKind === 'document' || assetKind === 'file' || assetKind === 'audio') {
         await api.deleteLibraryFile(workspaceId, asset.id);
         await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       } else {
@@ -264,15 +272,22 @@ export function LibraryView() {
   }
 
   async function uploadLibraryFile(file: File) {
-    if (!canEdit || uploadingFile) return;
+    if (!canEdit) return;
     if (!file.size || file.size > 50 * 1024 * 1024) {
       toast.error('Choose a file up to 50 MB');
       return;
     }
     setUploadingFile(true);
+    setFileFailure(null);
+    setFileProgress(`Preparing ${file.name}…`);
     try {
       const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (file.type.startsWith('video/') || ['mp4', 'mov'].includes(extension)) {
+        await uploadLibraryVideo(file);
+        return;
+      }
       const fallbackMime: Record<string, string> = {
+        wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', oga: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac', webm: 'audio/webm',
         txt: 'text/plain', md: 'text/markdown', markdown: 'text/markdown', html: 'text/html', htm: 'text/html',
         json: 'application/json', csv: 'text/csv', pdf: 'application/pdf',
         docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -280,16 +295,70 @@ export function LibraryView() {
         pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
       };
       const mime = fallbackMime[extension] ?? 'application/octet-stream';
-      const ticket = await api.beginLibraryFile(workspaceId, { filename: file.name, mime, bytes: file.size });
-      await putSignedUpload(ticket.upload.url, file, { 'Content-Type': ticket.upload.mime });
-      await api.commitLibraryFile(workspaceId, ticket.upload.assetId);
+      let pending = pendingFile.current;
+      if (!pending || pending.file !== file) {
+        const ticket = await api.beginLibraryFile(workspaceId, { filename: file.name, mime, bytes: file.size });
+        pending = { file, assetId: ticket.upload.assetId, put: false };
+        pendingFile.current = pending;
+        await putSignedUpload(ticket.upload.url, file, { 'Content-Type': ticket.upload.mime }, (fraction) => setFileProgress(`${file.name} · ${Math.round(fraction * 100)}%`));
+        pending.put = true;
+      }
+      if (!pending.put) throw new Error('Remove this pending upload and choose the file again.');
+      setFileProgress(`Verifying ${file.name}…`);
+      const result = await api.commitLibraryFile(workspaceId, pending.assetId);
+      pendingFile.current = null;
+      if (result.status === 'failed') throw new Error(result.asset.extractionError || 'The original file was saved, but text extraction failed. Retry from its details.');
       await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
-      toast.success('File added to Library');
+      toast.success('File saved. Complex documents are indexed in the background.');
     } catch (error) {
-      toast.error('Couldn’t add this file', { description: error instanceof Error ? error.message : undefined });
+      const message = error instanceof Error ? error.message : 'Could not add this file';
+      setFileFailure(message);
+      toast.error('Couldn’t add this file', { description: message });
     } finally {
       setUploadingFile(false);
+      setFileProgress('');
+      await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       if (filePicker.current) filePicker.current.value = '';
+    }
+  }
+
+  async function uploadLibraryVideo(file: File) {
+    let pending = pendingFile.current;
+    if (!pending || pending.file !== file) {
+      const policy = { maxBytes: 50_000_000, maxSeconds: 180 };
+      const checked = await checkVideoFile(file, policy);
+      if (!checked.ok || !checked.mime) throw new Error(checked.message || 'Choose an MP4 or MOV video');
+      const metadata = await readVideoMetadata(file);
+      const tooLong = checkDuration(metadata?.duration ?? null, policy);
+      if (tooLong) throw new Error(tooLong);
+      const blanked = await blankLocation(file);
+      const frames = await extractFrames(blanked.blob);
+      const encoded = await Promise.all(frames.map(async (frame) => ({ at: frame.at, data: await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] ?? ''); reader.onerror = () => reject(new Error('Could not prepare preview')); reader.readAsDataURL(frame.blob);
+      }) })));
+      const ticket = await api.beginVideoUpload(workspaceId, { mime: checked.mime, bytes: blanked.blob.size, duration: metadata?.duration ?? null, width: metadata?.width ?? null, height: metadata?.height ?? null });
+      pending = { file, assetId: ticket.upload.assetId, put: false, video: { frames: encoded, locationCleared: blanked.locationCleared } };
+      pendingFile.current = pending;
+      await putSignedUpload(ticket.upload.uploadUrl, blanked.blob, ticket.upload.headers, (fraction) => setFileProgress(`${file.name} · ${Math.round(fraction * 100)}%`));
+      pending.put = true;
+    }
+    if (!pending.put || !pending.video) throw new Error('Remove this pending upload and choose the video again.');
+    setFileProgress(`Verifying ${file.name}…`);
+    await api.commitVideoUpload(workspaceId, pending.assetId, pending.video);
+    await api.updateLibraryAsset(workspaceId, pending.assetId, { title: file.name });
+    pendingFile.current = null;
+    await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+    toast.success('Video added to Library');
+  }
+
+  async function uploadFiles(files: File[]) {
+    if (uploadingFile) return;
+    const photos = files.filter((file) => file.type.startsWith('image/'));
+    for (const file of photos.filter((photo) => photo.size > MAX_PICK_BYTES)) toast.error(`${file.name} is over 30 MB`);
+    upload.enqueue(photos.filter((photo) => photo.size <= MAX_PICK_BYTES));
+    for (const file of files.filter((item) => !item.type.startsWith('image/'))) {
+      await uploadLibraryFile(file);
+      if (pendingFile.current) break;
     }
   }
 
@@ -365,7 +434,7 @@ export function LibraryView() {
         <Workbar
           search={query}
           onSearch={setQuery}
-          searchPlaceholder='Title, filename, hash or 1080x1350'
+          searchPlaceholder='Search titles, tags and extracted text'
           searchLabel='Search Library assets by title, filename, summary, tag, hash or dimensions'
           tabs={
             <div data-tour='library-filter' className='sm:w-fit'>
@@ -402,6 +471,8 @@ export function LibraryView() {
               onClear={() => {
                 setKindFilter('all');
                 setSort(defaultSort);
+                setTag('');
+                setCollection('');
               }}
             >
               <FilterSelect
@@ -413,10 +484,13 @@ export function LibraryView() {
                   { value: 'all', label: `${KIND_LABELS.all} (${library.kindCounts.all})` },
                   { value: 'image', label: `${KIND_LABELS.image} (${library.kindCounts.image})` },
                   { value: 'video', label: `${KIND_LABELS.video} (${library.kindCounts.video})` },
+                  { value: 'audio', label: `${KIND_LABELS.audio} (${library.kindCounts.audio})` },
                   { value: 'document', label: `${KIND_LABELS.document} (${library.kindCounts.document})` },
                   { value: 'file', label: `${KIND_LABELS.file} (${library.kindCounts.file})` }
                 ]}
               />
+              <FilterSelect id='library-tag' label='Tag' value={tag} onChange={setTag} options={[{ value: '', label: 'All tags' }, ...library.tags.map((t) => ({ value: t, label: t }))]} />
+              <FilterSelect id='library-collection' label='Collection' value={collection} onChange={setCollection} options={[{ value: '', label: 'All collections' }, ...(collections.data?.collections ?? []).map((c) => ({ value: c.id, label: c.name }))]} />
               <FilterSelect id='library-sort' label='Sort' value={library.sort} onChange={(value) => setSort(value as LibrarySort)} options={sortOptions} />
             </FilterPanel>
           }
@@ -436,6 +510,8 @@ export function LibraryView() {
               onClear={() => {
                 setKindFilter('all');
                 setSort(defaultSort);
+                setTag('');
+                setCollection('');
               }}
               clearLabel='Clear filters'
             />
@@ -450,7 +526,7 @@ export function LibraryView() {
               normalizedQuery
                 ? `No asset matches “${normalizedQuery}”`
                 : kindFilter !== 'all'
-                  ? `No ${kindFilter === 'image' ? 'photos' : kindFilter === 'video' ? 'videos' : kindFilter === 'document' ? 'documents' : 'files'} match these filters`
+                  ? `No ${kindFilter === 'image' ? 'photos' : kindFilter === 'video' ? 'videos' : kindFilter === 'audio' ? 'audio files' : kindFilter === 'document' ? 'documents' : 'files'} match these filters`
                   : filter === 'unused'
                     ? 'Every asset is used in a post'
                     : 'No asset is used in a post yet'
@@ -524,7 +600,7 @@ export function LibraryView() {
     <div className='flex flex-wrap items-center gap-2'>
       <Button variant='glass' size='control' disabled={uploadingFile} onClick={() => filePicker.current?.click()}>
         {uploadingFile ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.upload aria-hidden />}
-        {uploadingFile ? 'Adding file…' : 'Add file'}
+        {uploadingFile ? 'Adding assets…' : 'Add assets'}
       </Button>
       {uploadButton}
     </div>
@@ -537,18 +613,24 @@ export function LibraryView() {
       pageHeaderAction={headerActions}
     >
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
-        <input {...getInputProps({ 'aria-label': 'Choose JPEG or PNG images to upload' })} />
+        <input {...getInputProps({ 'aria-label': 'Drop assets into Library' })} />
         <input
           ref={filePicker}
           type='file'
           className='sr-only'
-          aria-label='Choose a document or file to add to Library'
+          multiple
+          aria-label='Choose assets to add to Library'
           onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) void uploadLibraryFile(file);
+            const files = [...(event.currentTarget.files ?? [])];
+            if (files.length) void uploadFiles(files);
           }}
         />
 
+        {uploadingFile ? <p role='status' className='text-muted-foreground text-sm'>{fileProgress}</p> : null}
+        {fileFailure ? <StateMessage kind='error' layout='inline' title='Upload needs attention' description={fileFailure} action={pendingFile.current ? <div className='flex gap-2'><Button variant='glass' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>Retry</Button><Button variant='quiet' onClick={() => { const pending = pendingFile.current; if (pending) void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId)).then(() => { pendingFile.current = null; setFileFailure(null); void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }).catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload')); }}>Remove pending upload</Button></div> : undefined} /> : null}
+        <CollectionManager canEdit={canEdit} />
+        {library.storage ? <p className='text-muted-foreground text-xs'>{formatBytes(library.storage.usedBytes)} of {formatBytes(library.storage.limitBytes)} workspace storage used</p> : null}
+        {library.normalized.isError ? <StateMessage kind='error' layout='inline' title='Documents could not be loaded' description='Your media remains available. Retry to load the full Library.' action={<Button variant='glass' onClick={() => void library.normalized.refetch()}>Retry Library</Button>} /> : null}
         {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
         {storageMissing ? (
           <StateMessage kind='unsupported' layout='inline' title='Media uploads aren’t available yet.' />
@@ -589,12 +671,13 @@ export function LibraryView() {
               )}
             >
               <Icons.upload className='size-6' />
-              {isDragReject ? 'Only JPEG or PNG images can be uploaded' : 'Drop JPEG or PNG · up to 8 MB each'}
+              {isDragReject ? 'This file is empty or over the upload limit' : 'Drop photos, videos, audio or documents · files up to 50 MB'}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
+      {library.normalized.hasNextPage ? <Button variant='glass' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>Load more assets</Button> : null}
       <AssetDetail
         asset={current}
         open={detailVisible}

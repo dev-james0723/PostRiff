@@ -377,6 +377,19 @@ def main():
 
     def application(environ, start_response):
         path = environ.get("PATH_INFO", "/")
+        if path == '/dev/library/tick' and environ['REQUEST_METHOD']=='POST':
+            q=parse_qs(environ.get('QUERY_STRING',''))
+            result=service.library.process(service.repository.connection_factory,q['workspace'][0],q['assetId'][0]) if q.get('assetId') and q.get('workspace') else service.library.sweep(service.repository.connection_factory)
+            raw=json.dumps(result).encode()
+            start_response('200 OK',[('Content-Type','application/json'),('Content-Length',str(len(raw)))]);return [raw]
+        if path.startswith('/dev/storage/') and environ['REQUEST_METHOD']=='GET':
+            try:
+                ws,category,name=path[len('/dev/storage/'):].split('/',2)
+                raw=dev_assets.get(ws,category,name)
+                mime=dev_assets.objects.get(('mime',ws,name)) or 'application/octet-stream'
+                start_response('200 OK',[('Content-Type',mime),('Content-Length',str(len(raw))),('Access-Control-Allow-Origin','*')]);return [raw]
+            except AlphaError:
+                start_response('404 Not Found',[('Content-Length','0')]);return [b'']
         if path.startswith("/dev/upload/") and environ["REQUEST_METHOD"] == "PUT":
             # The browser scene forwards the signed-URL PUT here (the real client only PUTs to Supabase URLs).
             length = int(environ.get("CONTENT_LENGTH") or 0)

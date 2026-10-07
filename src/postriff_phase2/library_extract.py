@@ -86,3 +86,55 @@ def extract_text(raw,ext):
   except AlphaError:raise
   except Exception:raise AlphaError("This PDF could not be read safely.") from None
  return "ready",_office(raw,ext)
+
+AUDIO_MIMES = {
+    'wav': {'audio/wav','audio/x-wav'}, 'mp3': {'audio/mpeg','audio/mp3'},
+    'm4a': {'audio/mp4','audio/x-m4a'}, 'ogg': {'audio/ogg'}, 'oga': {'audio/ogg'},
+    'flac': {'audio/flac','audio/x-flac'}, 'aac': {'audio/aac'}, 'webm': {'audio/webm'},
+}
+
+
+def validate_audio(raw, ext):
+    """Container identity only. Playback codec availability remains browser-specific."""
+    valid = {
+        'wav': raw[:4] == b'RIFF' and raw[8:12] == b'WAVE',
+        'mp3': raw[:3] == b'ID3' or (len(raw)>1 and raw[0]==255 and raw[1]&224==224),
+        'm4a': raw[4:8] == b'ftyp', 'ogg': raw[:4] == b'OggS', 'oga': raw[:4] == b'OggS',
+        'flac': raw[:4] == b'fLaC', 'aac': len(raw)>1 and raw[0]==255 and raw[1]&246==240,
+        'webm': raw[:4] == b'\x1aE\xdf\xa3',
+    }
+    if not valid.get(ext):
+        raise AlphaError('This audio file does not match its declared container.',422)
+
+
+def extract_isolated(raw, ext):
+    """Complex formats get a killable process with CPU/address-space/output bounds."""
+    import os
+    import subprocess
+    import sys
+    env = {**os.environ, 'PYTHONPATH': str(__import__('pathlib').Path(__file__).resolve().parents[1]), 'PYTHONDONTWRITEBYTECODE':'1'}
+    try:
+        result = subprocess.run([sys.executable,'-m','postriff_phase2.library_extract',ext],input=raw,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20,env=env,check=False)
+        if result.returncode != 0 or len(result.stdout)>12*MAX_TEXT:
+            raise AlphaError('This document exceeded safe extraction limits or could not be read.',422)
+        data=json.loads(result.stdout)
+        if data.get('error'):
+            raise AlphaError(data['error'],422)
+        return data['status'],data['text'][:MAX_TEXT]
+    except (subprocess.TimeoutExpired,ValueError,KeyError):
+        raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+
+
+if __name__ == '__main__':
+    import sys
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_CPU,(10,10))
+        resource.setrlimit(resource.RLIMIT_AS,(384*1024*1024,384*1024*1024))
+        raw=sys.stdin.buffer.read(MAX_FILE_BYTES+1)
+        status,text=extract_text(raw,sys.argv[1])
+        print(json.dumps({'status':status,'text':text}))
+    except AlphaError as e:
+        print(json.dumps({'error':str(e)[:300]}))
+    except Exception:
+        print(json.dumps({'error':'This document could not be read safely.'}))

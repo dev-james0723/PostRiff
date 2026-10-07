@@ -37,7 +37,7 @@ export interface AssetListRowProps {
 
 export function libraryAssetTitle(asset: LibraryAsset) {
   const kind = kindOf(asset);
-  return asset.displayTitle?.trim() || asset.originalFilename?.trim() || (kind === 'video' ? 'Video' : kind === 'document' ? 'Document' : kind === 'file' ? 'File' : 'Photo');
+  return asset.displayTitle?.trim() || asset.originalFilename?.trim() || (kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : kind === 'document' ? 'Document' : kind === 'file' ? 'File' : 'Photo');
 }
 
 export function AssetListRow({
@@ -97,7 +97,7 @@ export function AssetListRow({
           <button
             type='button'
             onClick={onOpen}
-            aria-label={`${assetKind === 'video' ? 'Video' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${title}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
+            aria-label={`${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${title}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
             className='focus-visible:ring-ring/50 flex min-h-[76px] w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             <span className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
@@ -114,6 +114,7 @@ export function AssetListRow({
             </span>
             <span className='flex min-w-0 flex-1 flex-col gap-1'>
               <span className='truncate text-sm font-medium'>{title}</span>
+              {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
               {asset.aiSummary ? <span className='text-muted-foreground line-clamp-1 text-xs'>{asset.aiSummary}</span> : null}
               <span className='text-muted-foreground truncate text-xs tabular-nums'>{meta || 'Metadata not recorded'}</span>
             </span>

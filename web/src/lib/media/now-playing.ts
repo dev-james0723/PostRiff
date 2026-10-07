@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export interface RafiiTrack {
+  kind?: 'video' | 'audio';
   workspaceId: string;
   conversationId?: string | null;
   assetId: string;

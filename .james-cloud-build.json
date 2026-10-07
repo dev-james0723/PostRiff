@@ -1,0 +1,50 @@
+{
+  "packageRoot": "web",
+  "provider": "depot",
+  "packageManager": "npm",
+  "nodeVersion": "24.15.0",
+  "installCommand": "npm ci",
+  "tasks": {
+    "lint": "lint",
+    "typecheck": "typecheck",
+    "build": "build",
+    "test": "test:library",
+    "ci": "ci:library"
+  },
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
+  },
+  "outputs": [],
+  "envAllowlist": [],
+  "localFallback": false,
+  "environment": {
+    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1",
+    "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
+    "POSTRIFF_DEV_SSR": "1",
+    "LC_ALL": "C"
+  },
+  "taskArgs": {},
+  "inputExcludes": [
+    "docs/**",
+    "desktop/**",
+    "vendor/**",
+    "studio/**",
+    "motion/**",
+    "downloads/**",
+    "artifacts/**",
+    "*.zip"
+  ],
+  "checkoutPersistCredentials": true,
+  "framework": "next",
+  "transportMode": "remote_patch",
+  "cacheScope": "e408bbcd8242",
+  "packageManagerVersion": "11.12.1",
+  "lockfile": "package-lock.json",
+  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7",
+  "orgId": "jf34f85hr0",
+  "baseRef": "refs/remotes/origin/consumer-saas"
+}

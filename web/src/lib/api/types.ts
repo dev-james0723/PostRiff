@@ -48,6 +48,14 @@ export interface Asset {
   uploadedBy?: string;
   /** Universal Library metadata. Older image/video records legitimately omit these fields. */
   originalFilename?: string;
+  tags?: string[];
+  collections?: string[];
+  titleSource?: string;
+  sourceId?: string | null;
+  transcriptionStatus?: string;
+  extractionError?: string | null;
+  processingStatus?: string;
+  duplicateOf?: string | null;
   displayTitle?: string;
   aiSummary?: string;
   aiTags?: string[];
@@ -67,7 +75,7 @@ export interface Asset {
   deleted: boolean;
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
-  kind?: 'image' | 'video' | 'document' | 'file';
+  kind?: 'image' | 'video' | 'audio' | 'document' | 'file';
   category?: 'media' | 'video' | string;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;

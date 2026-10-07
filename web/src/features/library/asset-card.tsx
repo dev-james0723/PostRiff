@@ -147,8 +147,8 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : 'Photo');
-  const label = `${assetKind === 'video' ? 'Video' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo');
+  const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
     <ContextMenu>
@@ -176,7 +176,7 @@ export function AssetCard({
               {!mediaAsset ? (
                 <div className='rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-2 p-4'>
                   <span className='text-foreground text-sm font-medium'>{asset.extension?.toUpperCase() || 'FILE'}</span>
-                  <span className='max-w-full truncate text-xs'>{assetKind === 'document' ? 'Document' : 'File'}</span>
+                  <span className='max-w-full truncate text-xs'>{assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : 'File'}</span>
                 </div>
               ) : image.data ? (
                 <div className='relative'>
@@ -204,6 +204,7 @@ export function AssetCard({
             </TiltCard>
             <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
               <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
+              {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
               <AnimatedBadge
                 size='sm'
                 status={publishing ? 'loading' : 'neutral'}
@@ -242,7 +243,7 @@ export function AssetCard({
           )}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel={`${assetKind === 'video' ? 'Video' : 'Photo'} actions`}>
+      <ContextMenuContent ariaLabel={`${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
