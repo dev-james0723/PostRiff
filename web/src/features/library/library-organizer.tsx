@@ -65,15 +65,18 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
     <form className='space-y-3' onSubmit={(e) => { e.preventDefault(); void change(() => api.updateLibraryAsset(workspaceId, asset.id, { ...(title.trim() ? { title } : {}), tags: tags.split(',').map((t) => t.trim()).filter(Boolean), collections: selected })); }}>
       <label htmlFor={'library-title-'+asset.id} className='block text-xs'>Title<Input id={'library-title-'+asset.id} aria-label='Title' value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} className='mt-1' /></label>
       <label htmlFor={'library-tags-'+asset.id} className='block text-xs'>Tags, separated by commas<Input id={'library-tags-'+asset.id} aria-label='Tags, separated by commas' value={tags} maxLength={1200} onChange={(e) => setTags(e.target.value)} className='mt-1' /></label>
-      {collections.data?.collections.length ? <fieldset><legend className='text-xs'>Collections</legend><div className='mt-1 flex flex-wrap gap-3'>{collections.data.collections.map((c) => <label key={c.id} className='flex min-h-10 items-center gap-2 text-sm'>
-        <input type='checkbox' checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} />{c.name}
-      </label>)}</div></fieldset> : null}
+      {collections.data?.collections.length ? <fieldset><legend className='text-xs'>Collections</legend><div className='mt-1 flex flex-wrap gap-3'>{collections.data.collections.map((c) => {
+        const id = `library-collection-${asset.id}-${c.id}`;
+        return <label key={c.id} htmlFor={id} className='flex min-h-10 items-center gap-2 text-sm'>
+          <input id={id} type='checkbox' aria-label={`Add to collection ${c.name}`} checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} />{c.name}
+        </label>;
+      })}</div></fieldset> : null}
       <Button type='submit' variant='glass' disabled={busy}>Save details</Button>
     </form>
     {normalized && ['failed','queued'].includes(asset.processing ?? '') ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>Retry processing</Button> : null}
     {asset.assetKind === 'audio' && ready ? <details><summary className='rafii-focus cursor-pointer text-sm'>Add or replace transcript</summary>
       <p className='text-muted-foreground my-2 text-xs'>Automatic transcription is unavailable. A supplied transcript becomes searchable and keeps its provenance.</p>
-      <label className='block text-xs'>Transcript<textarea className='rafii-quiet rafii-focus mt-1 min-h-28 w-full rounded-lg p-3 text-sm' maxLength={250000} value={text} onChange={(e) => setText(e.target.value)} /></label>
+      <label htmlFor={'library-transcript-'+asset.id} className='block text-xs'>Transcript<textarea id={'library-transcript-'+asset.id} aria-label='Transcript' className='rafii-quiet rafii-focus mt-1 min-h-28 w-full rounded-lg p-3 text-sm' maxLength={250000} value={text} onChange={(e) => setText(e.target.value)} /></label>
       <Button className='mt-2' variant='glass' disabled={busy || !text.trim()} onClick={() => void change(async () => { await api.libraryTranscript(workspaceId, asset.id, text); setSource(null); await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }); })}>Save transcript</Button>
     </details> : null}
     {normalized && ready && asset.indexingStatus === 'ready' ? <div className='space-y-2'>

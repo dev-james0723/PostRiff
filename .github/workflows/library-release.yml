@@ -66,9 +66,8 @@ jobs:
           node-version-file: .node-version
       - working-directory: web
         run: |
-          npm pkg set 'devDependencies.oxfmt=^0.72.0' 'overrides.sharp=^0.35.5'
+          npm pkg set 'dependencies.sharp=^0.35.5' 'overrides.sharp=^0.35.5' 'overrides.tinypool=2.1.2' 'overrides.source-map-js=1.2.2'
           npm install --package-lock-only --ignore-scripts
-          npm update source-map-js --package-lock-only --ignore-scripts
           npm audit --audit-level=high
           git diff --stat -- package.json package-lock.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
