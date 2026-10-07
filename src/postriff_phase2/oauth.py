@@ -451,6 +451,9 @@ class OAuthService:
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
+            from . import product_events
+            # Product taxonomy (PRD §8.6): one event per completed connect flow (the OAuth transaction is the version).
+            product_events.record(cur, workspace_id, principal, "channel.connected", connection_id, transaction_id, {"provider": provider_id})
         # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
         horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
         channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
@@ -701,6 +704,10 @@ class OAuthService:
                             from .hosted import audit
                             audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
                                   {"provider": "xiaohongshu", "eventId": event_id})
+                            from . import product_events
+                            # Product taxonomy: a disconnection nobody in the workspace chose (no user; the provider event is the version).
+                            product_events.record(cur, workspace_id, None, "channel.disconnected", connection_id,
+                                                  hashlib.sha256(str(event_id).encode()).hexdigest()[:16], {"provider": "xiaohongshu", "cause": "provider"})
                     cur.execute(
                         "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='xiaohongshu' AND event_id=%s",
                         ("revoked" if affected else "acknowledged", event_id),
@@ -718,23 +725,54 @@ class OAuthService:
 
     @staticmethod
     def _capabilities(adapter, requested, granted, missing, now, access_token=None):
+        """Build the whole matrix from the live grant, not only the last requested slice.
+
+        Incremental Meta OAuth can return a token containing permissions granted in earlier
+        rounds. Reconnecting Analytics or Comments must therefore preserve and re-verify the
+        other capabilities instead of resetting them to Unsupported. Provider-wide App Review
+        and an account-scoped Standard Access grant remain distinct: the latter can prove Direct
+        execution only for the exact connected account.
+        """
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
+        granted_set = set(granted or [])
+        account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
+        direct_allowed = bool(adapter.production_reviewed or account_scoped)
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
-        if requested in PUBLISH_CAPABILITIES:
+
+        publish_scopes = set(adapter.capability_scopes("publish"))
+        publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
+        publisher_ready = not (
+            getattr(adapter, "publisher", None) is not None and
+            (not getattr(adapter, "publish_live_tested", False) or
+             not getattr(adapter, "publishing_permission", False) or
+             not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
+        )
+        if publish_granted and direct_allowed and publisher_ready:
+            evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
+            set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
+            schedule_scopes = set(adapter.capability_scopes("schedule"))
+            if schedule_scopes and schedule_scopes <= granted_set:
+                if getattr(adapter, "native_schedule", False):
+                    set_level(matrix, "schedule", "Direct", f"Scheduled on {adapter.platform}.", now, adapter.capability_version)
+                elif getattr(adapter, "server_schedule", False):
+                    set_level(matrix, "schedule", "Direct", "Rafii publishes the approved post at the scheduled time.", now, adapter.capability_version)
+                elif adapter.assisted_fallback:
+                    set_level(matrix, "schedule", "Assisted", "Rafii prepares the scheduled post; you finish the last step.", now, adapter.capability_version)
+        elif requested in PUBLISH_CAPABILITIES:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
-            elif (not adapter.production_reviewed or
-                  (getattr(adapter, "publisher", None) is not None and
-                   (not getattr(adapter, "publish_live_tested", False) or
-                    not getattr(adapter, "publishing_permission", False) or
-                    not getattr(adapter, "write_qualified", lambda _token: True)(access_token)))):
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Direct", "You approve each post; Rafii publishes it.", now, adapter.capability_version)
-                set_level(matrix, "schedule", "Direct" if adapter.native_schedule else "Assisted", f"Scheduled on {adapter.platform}." if adapter.native_schedule else "Rafii publishes at the scheduled time.", now, adapter.capability_version)
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
+
         for name in ("analytics", "comments_read", "reply", "moderate"):
-            if name == requested and not missing:
-                set_level(matrix, name, "Direct" if adapter.production_reviewed else "Unsupported", "Granted." if adapter.production_reviewed else f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
+            required = set(adapter.capability_scopes(name))
+            if not required or not required <= granted_set:
+                continue
+            if direct_allowed:
+                evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "Granted."
+                set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
+            elif name == requested:
+                set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
@@ -1023,6 +1061,13 @@ class OAuthService:
             from .growth.history_import import mark_for_purge
             mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)
             audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote)})
+            from . import product_events
+            # Product taxonomy: the connection generation (when it was verified) is the version, pairing it with its connect.
+            connected = next((item for item in ((state or {}).get("phase2") or {}).get("channels") or [] if isinstance(item, dict) and item.get("id") == connection_id), {})
+            generation = connected.get("verifiedAt")
+            product_events.record(cur, workspace_id, principal, "channel.disconnected", connection_id,
+                                  int(generation) if isinstance(generation, (int, float)) and not isinstance(generation, bool) and generation > 0 else int(self.clock()),
+                                  {"provider": stored[0], "cause": "member"})
         # Outside the transaction that held the workspace row, so it cannot deadlock with the import or metric steps.
         from .growth.history_import import purge_after_disconnect
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)

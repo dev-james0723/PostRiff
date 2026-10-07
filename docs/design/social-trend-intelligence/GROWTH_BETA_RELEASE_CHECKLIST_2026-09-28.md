@@ -22,6 +22,9 @@ Status: **local candidate only**. This checklist does not authorize an activatio
 
 ## Stage 3: views/reach Growth Beta
 
+- [ ] Stage 3A requires an exact `POSTRIFF_METRIC_WORKSPACE_ALLOWLIST`, a reviewed and enabled native adapter,
+  current credential scopes and `analytics=Direct` before `POSTRIFF_METRIC_READS=1`. Follow the updated admission
+  contract in `growth-phase0/CONTRACTS.md`; global mounting alone grants no workspace access.
 - [ ] Verify production `POSTRIFF_METRIC_READS` is enabled only for the approved deployment after its database and account analytics rights are confirmed. The variable name was absent at inspection; this task did not change it.
 - [ ] With an authorized verified test publication, confirm exactly t0, +1h, +24h and +7d durable schedule rows; due claims/retries/lease fencing; disconnect/revocation; append-only native observations; and unavailable distinct from observed zero. No browser polling is needed to create these reads.
 - [ ] Verify the +24h account/provider/language/format/definition cohort, minimum sample, baseline, counter-evidence, `causal=false` wording, owner review and expiry in Performance Learning. Confirm no unqualified follower-conversion option or follower-growth promise.

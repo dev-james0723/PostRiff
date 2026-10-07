@@ -1,0 +1,101 @@
+{
+  "description": "GitHub REST responses (trimmed to the fields ci_evidence reads, plus a few it must ignore) for consumer-saas tip {M}: the merge commit of same-repository PR #90 whose head {H} has the identical tree {T} and already contained the base {B}. All four required workflows ran on the PR head and passed; Vercel's bot reported production success on {M} after a pending status. Keys are request paths with sorted query strings; tests/control/test_ci_evidence.py substitutes the placeholders.",
+  "routes": {
+    "/repos/dev-james0723/PostRiff/git/ref/heads/consumer-saas": {
+      "ref": "refs/heads/consumer-saas",
+      "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/refs/heads/consumer-saas",
+      "object": {"sha": "{M}", "type": "commit", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/commits/{M}"}
+    },
+    "/repos/dev-james0723/PostRiff/git/commits/{M}": {
+      "sha": "{M}",
+      "tree": {"sha": "{T}", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/trees/{T}"},
+      "parents": [
+        {"sha": "{B}", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/commits/{B}"},
+        {"sha": "{H}", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/commits/{H}"}
+      ],
+      "message": "Merge pull request #90 from dev-james0723/claude/founder-activation",
+      "committer": {"name": "GitHub", "date": "2026-10-01T10:00:00Z"}
+    },
+    "/repos/dev-james0723/PostRiff/commits/{M}/pulls?per_page=100": [
+      {
+        "number": 90,
+        "state": "closed",
+        "title": "Founder engineering evidence",
+        "merged_at": "2026-10-01T10:00:00Z",
+        "merge_commit_sha": "{M}",
+        "user": {"login": "dev-james0723"},
+        "head": {"ref": "claude/founder-activation", "sha": "{H}", "repo": {"full_name": "dev-james0723/PostRiff"}},
+        "base": {"ref": "consumer-saas", "sha": "{B}", "repo": {"full_name": "dev-james0723/PostRiff"}}
+      }
+    ],
+    "/repos/dev-james0723/PostRiff/git/commits/{H}": {
+      "sha": "{H}",
+      "tree": {"sha": "{T}", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/trees/{T}"},
+      "parents": [{"sha": "{B}", "url": "https://api.github.com/repos/dev-james0723/PostRiff/git/commits/{B}"}],
+      "message": "feat(founder): exact-SHA CI evidence"
+    },
+    "/repos/dev-james0723/PostRiff/compare/{B}...{H}?per_page=1": {
+      "status": "ahead",
+      "ahead_by": 1,
+      "behind_by": 0,
+      "total_commits": 1,
+      "base_commit": {"sha": "{B}"},
+      "merge_base_commit": {"sha": "{B}"},
+      "commits": [{"sha": "{H}"}],
+      "files": []
+    },
+    "/repos/dev-james0723/PostRiff/actions/runs?head_sha={M}&page=1&per_page=100": {"total_count": 0, "workflow_runs": []},
+    "/repos/dev-james0723/PostRiff/actions/runs?head_sha={H}&page=1&per_page=100": {
+      "total_count": 4,
+      "workflow_runs": [
+        {"id": 1001, "name": "Rafii local release gates", "head_branch": "claude/founder-activation", "head_sha": "{H}", "path": ".github/workflows/consumer-ready.yml",
+         "display_title": "Founder engineering evidence", "run_number": 501, "run_attempt": 1, "event": "pull_request", "status": "completed", "conclusion": "success",
+         "workflow_id": 365845611, "created_at": "2026-10-01T09:20:00Z", "updated_at": "2026-10-01T09:45:00Z", "pull_requests": [],
+         "repository": {"full_name": "dev-james0723/PostRiff"}, "head_repository": {"full_name": "dev-james0723/PostRiff"}},
+        {"id": 1002, "name": "Rafii Control foundation", "head_branch": "claude/founder-activation", "head_sha": "{H}", "path": ".github/workflows/rafii-control.yml",
+         "display_title": "Founder engineering evidence", "run_number": 302, "run_attempt": 1, "event": "pull_request", "status": "completed", "conclusion": "success",
+         "workflow_id": 370650254, "created_at": "2026-10-01T09:20:00Z", "updated_at": "2026-10-01T09:31:00Z", "pull_requests": [],
+         "repository": {"full_name": "dev-james0723/PostRiff"}, "head_repository": {"full_name": "dev-james0723/PostRiff"}},
+        {"id": 1003, "name": "Rafii browser scenes", "head_branch": "claude/founder-activation", "head_sha": "{H}", "path": ".github/workflows/rafii-browser.yml",
+         "display_title": "Founder engineering evidence", "run_number": 203, "run_attempt": 1, "event": "pull_request", "status": "completed", "conclusion": "success",
+         "workflow_id": 371000003, "created_at": "2026-10-01T09:20:00Z", "updated_at": "2026-10-01T09:52:00Z", "pull_requests": [],
+         "repository": {"full_name": "dev-james0723/PostRiff"}, "head_repository": {"full_name": "dev-james0723/PostRiff"}},
+        {"id": 1004, "name": "Founder admin browser", "head_branch": "claude/founder-activation", "head_sha": "{H}", "path": ".github/workflows/founder-browser.yml",
+         "display_title": "Founder engineering evidence", "run_number": 104, "run_attempt": 1, "event": "pull_request", "status": "completed", "conclusion": "success",
+         "workflow_id": 371000004, "created_at": "2026-10-01T09:20:00Z", "updated_at": "2026-10-01T09:49:00Z", "pull_requests": [],
+         "repository": {"full_name": "dev-james0723/PostRiff"}, "head_repository": {"full_name": "dev-james0723/PostRiff"}}
+      ]
+    },
+    "/repos/dev-james0723/PostRiff/actions/runs/1001/jobs?filter=latest&per_page=100": {
+      "total_count": 1,
+      "jobs": [{"id": 2001, "run_id": 1001, "run_attempt": 1, "head_sha": "{H}", "head_branch": "claude/founder-activation", "workflow_name": "Rafii local release gates",
+                "name": "local-gates", "status": "completed", "conclusion": "success", "started_at": "2026-10-01T09:21:00Z", "completed_at": "2026-10-01T09:45:00Z", "steps": []}]
+    },
+    "/repos/dev-james0723/PostRiff/actions/runs/1002/jobs?filter=latest&per_page=100": {
+      "total_count": 1,
+      "jobs": [{"id": 2002, "run_id": 1002, "run_attempt": 1, "head_sha": "{H}", "head_branch": "claude/founder-activation", "workflow_name": "Rafii Control foundation",
+                "name": "local-foundation", "status": "completed", "conclusion": "success", "started_at": "2026-10-01T09:21:00Z", "completed_at": "2026-10-01T09:31:00Z", "steps": []}]
+    },
+    "/repos/dev-james0723/PostRiff/actions/runs/1003/jobs?filter=latest&per_page=100": {
+      "total_count": 1,
+      "jobs": [{"id": 2003, "run_id": 1003, "run_attempt": 1, "head_sha": "{H}", "head_branch": "claude/founder-activation", "workflow_name": "Rafii browser scenes",
+                "name": "scenes", "status": "completed", "conclusion": "success", "started_at": "2026-10-01T09:21:00Z", "completed_at": "2026-10-01T09:52:00Z", "steps": []}]
+    },
+    "/repos/dev-james0723/PostRiff/actions/runs/1004/jobs?filter=latest&per_page=100": {
+      "total_count": 1,
+      "jobs": [{"id": 2004, "run_id": 1004, "run_attempt": 1, "head_sha": "{H}", "head_branch": "claude/founder-activation", "workflow_name": "Founder admin browser",
+                "name": "founder", "status": "completed", "conclusion": "success", "started_at": "2026-10-01T09:21:00Z", "completed_at": "2026-10-01T09:49:00Z", "steps": []}]
+    },
+    "/repos/dev-james0723/PostRiff/pulls/90/files?page=1&per_page=100": [
+      {"filename": "src/rafii_control/ci_evidence.py", "status": "added"},
+      {"filename": "web/src/features/founder/advanced/engineering-model.ts", "status": "modified"},
+      {"filename": "migrations/postriff/071_founder_engineering_evidence.sql", "status": "added"}
+    ],
+    "/repos/dev-james0723/PostRiff/commits/{M}/statuses?per_page=100": [
+      {"id": 3002, "state": "success", "context": "Vercel", "description": "Deployment has completed", "target_url": "https://vercel.example/deployments/production",
+       "created_at": "2026-10-01T10:03:00Z", "updated_at": "2026-10-01T10:03:00Z", "creator": {"login": "vercel[bot]", "type": "Bot"}},
+      {"id": 3001, "state": "pending", "context": "Vercel", "description": "Deployment has started", "target_url": "https://vercel.example/deployments/production",
+       "created_at": "2026-10-01T10:00:30Z", "updated_at": "2026-10-01T10:00:30Z", "creator": {"login": "vercel[bot]", "type": "Bot"}}
+    ]
+  }
+}

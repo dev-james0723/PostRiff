@@ -14,8 +14,9 @@ import tempfile
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-PG = Path("/opt/homebrew/opt/postgresql@17/bin")
+PG = Path(os.environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin"))
 PORT = "56447"
+TEMP_ROOT = Path("/private/tmp" if sys.platform == "darwin" else "/tmp")
 
 
 def hashes():
@@ -30,21 +31,21 @@ def hashes():
 def main():
     if any(k in os.environ for k in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR", "PGOPTIONS")):
         raise ValueError("PG service/options/hostaddr overrides forbidden")
-    if Path("/private/tmp/.s.PGSQL." + PORT).exists():
+    if (TEMP_ROOT / (".s.PGSQL." + PORT)).exists():
         raise RuntimeError("isolated test port already occupied; no existing cluster will be used")
     env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
     env.update(LC_ALL="C", POSTRIFF_RESEARCH="0", PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(ROOT / "src") + ":" + str(ROOT / "tests"))
     before = hashes()
-    with tempfile.TemporaryDirectory(prefix="trend-learning-pg-", dir="/private/tmp") as tmp:
+    with tempfile.TemporaryDirectory(prefix="trend-learning-pg-", dir=TEMP_ROOT) as tmp:
         data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
         subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], env=env, check=True, stdout=subprocess.DEVNULL)
         started = False
         try:
-            subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", "-h '' -k /private/tmp -p " + PORT, "-w", "start"], env=env, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h '' -k {TEMP_ROOT} -p {PORT}", "-w", "start"], env=env, check=True, stdout=subprocess.DEVNULL)
             started = True
             database = "trend_pipeline_service_learning_" + uuid.uuid4().hex[:12]
-            subprocess.run([str(PG / "createdb"), "-h", "/private/tmp", "-p", PORT, database], env=env, check=True)
-            env["TREND_SERVICE_TEST_DSN"] = f"host=/private/tmp port={PORT} dbname={database}"
+            subprocess.run([str(PG / "createdb"), "-h", str(TEMP_ROOT), "-p", PORT, database], env=env, check=True)
+            env["TREND_SERVICE_TEST_DSN"] = f"host={TEMP_ROOT} port={PORT} dbname={database}"
             subprocess.run([str(PG / "psql"), env["TREND_SERVICE_TEST_DSN"], "-v", "ON_ERROR_STOP=1", "-q", "-f",
                             str(ROOT / "tests/phase2/rls.sql")], env=env, check=True, stdout=subprocess.DEVNULL)
             code = """import socket,sys,unittest,json

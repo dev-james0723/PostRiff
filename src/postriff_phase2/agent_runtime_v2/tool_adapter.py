@@ -10,7 +10,9 @@ role check, redaction and release pinning stay exactly as verified.
 2. voice never gains more than text (`spec.voice`);
 3. the member's permission is re-checked against the stored role, not the one the turn started with;
 4. a cancelled turn stops before any non-read effect;
-5. failures become typed results (`ok: false`, `code`) the model must report, never exceptions it can paper over.
+5. failures become typed results (`ok: false`, `code`) the model must report, never exceptions it can paper over;
+6. the tool's tenant must match the turn's: a `tenant='founder'` tool runs only inside a founder turn (`ctx.extra['founder']`,
+   set by rafii_control.founder_agent from a verified control principal), and workspace tools never run in a founder turn.
 
 Tool output reaches models as data (`context.untrusted`), bounded in size; it is never an instruction.
 """
@@ -30,6 +32,7 @@ from . import contracts
 from .context import RafiiRunContext, untrusted
 
 MAX_TOOL_OUTPUT = 14_000
+FOUNDER_TENANT = "founder"
 log = logging.getLogger("postriff.agent_runtime")
 
 
@@ -67,6 +70,29 @@ def _object(properties_or_schema: dict) -> dict:
 
 
 # --- the gate ----------------------------------------------------------------------------------------------------------
+def founder_scope(ctx) -> dict | None:
+    """The founder turn's control scope, or None in a workspace (customer) turn.
+
+    A founder turn carries `ctx.extra['founder']` (the verified control principal, the data mode, the control services
+    and the founder page context), set only by rafii_control.founder_agent after Boundary.authorize. `RafiiRunContext`
+    declares no `extra` field, so a context that was never given one is a workspace turn: nothing a model sends can
+    create the scope, and a view of the context (`for_agent`) keeps it."""
+    extra = getattr(ctx, "extra", None)
+    scope = extra.get(FOUNDER_TENANT) if isinstance(extra, dict) else None
+    return scope if isinstance(scope, dict) and scope else None
+
+
+def tenant_mismatch(ctx, spec: contracts.ToolSpec) -> str | None:
+    """Why this tool may not run in this turn's tenant: a founder tool outside a founder turn, or a workspace tool inside
+    one. None when the tenants match."""
+    founder = founder_scope(ctx) is not None
+    if spec.tenant == FOUNDER_TENANT and not founder:
+        return "That tool belongs to the founder console and can't run in a workspace request."
+    if spec.tenant != FOUNDER_TENANT and founder:
+        return "A founder request can't use workspace tools."
+    return None
+
+
 def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | None = None, agent: str | None = None) -> dict:
     started = time.monotonic()
     spec = tool.spec
@@ -75,6 +101,9 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         return _blocked(ctx, tool, started, "tool_input", "Tool input must be an object.")
     if scope is not None and spec.name not in scope:
         return _blocked(ctx, tool, started, "tool_out_of_scope", "This agent can't use that tool.")
+    mismatch = tenant_mismatch(ctx, spec)
+    if mismatch:
+        return _blocked(ctx, tool, started, "tool_tenant", mismatch)
     if ctx.modality == "voice" and not spec.voice:
         return _blocked(ctx, tool, started, "voice_not_allowed", "That can't be done from a voice request; use the panel.")
     if ctx.membership is not None and not ctx.membership.allows(spec.permission):
@@ -83,6 +112,10 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         if spec.effect != contracts.READ:
             ctx.check_cancelled()
         _check_schema(tool.schema, args)
+        from . import thinking_state
+        op = thinking_state.tool_op(spec.name)
+        if op:
+            ctx.thinking(op, "tool", spec.name)
         result = tool.executor(ctx, args)
     except AlphaError as error:
         code = error.code or ("not_found" if error.status == 404 else "forbidden" if error.status == 403 else "conflict" if error.status == 409 else "failed")

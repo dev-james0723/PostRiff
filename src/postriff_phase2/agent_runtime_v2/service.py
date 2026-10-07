@@ -275,6 +275,12 @@ class AgentRuntimeService:
         item = target["bind"]
         proposal = item.get("proposal") or {}
         try:
+            if wants == "apply" and self.cfg.enabled("RAFII_AGENT_THINKING_STATES_ENABLED"):
+                try:
+                    from . import thinking_state
+                    self._emit_thinking(workspace_id, token, run_id, thinking_state.event("acting", "tool", "approval_apply"))
+                except Exception:  # noqa: BLE001 — semantic telemetry never changes approval authority
+                    pass
             decided = approvals.decide(self.service, workspace_id, token, conversation_id=conversation_id, message_id=item["messageId"], proposal_id=item["proposalId"],
                                        digest=proposal.get("digest") or item.get("digest"), decision=wants, zone=zone)
         except AlphaError as error:
@@ -402,6 +408,13 @@ class AgentRuntimeService:
         row = cur.fetchone()
         return row[0] if row else None
 
+    def _emit_thinking(self, workspace_id, token, run_id, event) -> None:
+        """Store one already-validated semantic progress event while this exact run is still active."""
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            if self._run_status(cur, workspace_id, run_id) != "running":
+                return
+            self.service.ideas._insert_event(cur, workspace_id, run_id, event)
+
     # --- the Manager ------------------------------------------------------------------------------------------------------
     def _manager_turn(self, workspace_id, token, conversation_id, text, modality, run_key, trace_id, page, zone, payload, attachments, now) -> dict:
         _ = now
@@ -460,6 +473,8 @@ class AgentRuntimeService:
                               style=style, command=commands.parse(payload.get("command")))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
+        ctx.thinking("working", "run", "run_open")
         holder["ctx"] = ctx
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
@@ -670,6 +685,9 @@ class AgentRuntimeService:
             # Its own transaction: the chips' spend is booked even if storing the answer fails afterwards.
             with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
                 self.service.ledger.settle(cur, workspace_id, settle["reservation"]["reservationId"], "completed" if settle["cost"] is not None else "unknown", settle["cost"])
+                # The chips call as one pr_ai_call_events row (Founder Admin §8.B), under a savepoint: it never touches the settle.
+                from .manager import record_span
+                record_span(cur, self.cfg, chips.get("span"), workspace_id=workspace_id, user_id=_principal, run_id=run_id, reservation=settle["reservation"], trace_id=trace_id)
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             self._persist(cur, workspace_id, conversation_id, run_id, result, blocks, [], [], trace={"traceId": trace_id, "composedBy": result["composedBy"], **(trace_extra or {}),
                           "followUps": {"skipped": chips.get("skipped"), "count": len(chips.get("followUps") or [])}}, pending=pending,
@@ -818,6 +836,9 @@ class AgentRuntimeService:
             final_status = "cancelled" if status == "cancelled" else "completed"
             if reservation is not None:
                 self.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
+            # This turn's provider attempts as pr_ai_call_events rows (Founder Admin §8.B), under a savepoint: never fails the settle.
+            from .manager import record_calls
+            record_calls(cur, ctx, reservation)
             if ctx.task is not None and ctx.task.changes:
                 task_state.save(cur, self.service.ideas, ctx.workspace_id, ctx.task, trace_id=ctx.trace_id)
             if state_json is not None:
@@ -842,7 +863,7 @@ class AgentRuntimeService:
                  site_extra=None):
         ideas = self.service.ideas
         from ..site_agent import contracts as site_contracts
-        site = {"version": site_contracts.VERSION, "runId": run_id, "status": "completed" if status != "cancelled" else "cancelled", "intent": "agent",
+        site = {"version": site_contracts.VERSION, "runId": run_id, "status": status, "intent": "agent",
                 "language": language, "blocks": blocks, "citations": result.get("citations") or [], "grounding": {"required": False, "sufficient": True, "missing": []},
                 "proposals": proposals, "context": {"route": None, "entity": None, "read": [a["label"] for a in result.get("toolActivity") or [] if a.get("status") == "verified" and a.get("effect") == "READ"][:12],
                                                     "withheld": ["passwords, tokens and keys", "other workspaces"], "stale": False},
@@ -888,8 +909,16 @@ class AgentRuntimeService:
 
     def _spend(self, ledger, default_model) -> int | None:
         """This turn's model spend: each metered call priced at its own model (a specialist on the fast model is not billed at
-        the Manager's price; vision calls count too). None when any call's model has no price."""
+        the Manager's price; vision calls count too). Failed attempts are kept separately from answered spans; any
+        unreconciled attempt or unpriced model leaves total spend unknown, even when no answered span exists."""
         total = 0
+        for call in (ledger.calls if ledger is not None else []):
+            if call.get("feature") == "image":
+                continue  # image generation has its own reservation and settlement, including its own unknown hold
+            actual = call.get("cost_usd_micro")
+            if type(actual) is not int or actual < 0:
+                return None
+            total += actual
         for span in (ledger.spans if ledger is not None else []):
             price = self.cfg.estimate_usd_micro(span.get("model") or default_model or "", span.get("inputTokens") or 0, span.get("outputTokens") or 0)
             if price is None:
@@ -913,10 +942,15 @@ class AgentRuntimeService:
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             if reservation is not None:
                 spent = self._spend(ledger, None)
-                if ledger is None or not ledger.spans:
+                if spent is None:
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "unknown", None)
+                elif ledger is None or (not ledger.spans and not ledger.calls):
                     self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                 else:
-                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed", spent)
+            if ctx is not None:
+                from .manager import record_calls
+                record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             if self._run_status(cur, workspace_id, run_id) == "running":
                 self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "internal_error")], [], [],
                               trace={"traceId": trace_id, "composedBy": "deterministic", "fallback": "internal_error", "errorClass": type(error).__name__},
@@ -925,23 +959,23 @@ class AgentRuntimeService:
 
     def _reap_stale_turns(self, cur, workspace_id):
         """A turn whose function was killed never finalised. The writing-recovery cron leaves the runtime's rows alone, so the
-        runtime closes its own dead turns here: each is failed, the person sees why, and its reservations are booked at the
-        reserved amount (the calls it made are unknown; never free, and never held forever)."""
-        # A turn cancelled after its function died never settled either: its open reservations are booked the same way.
+        runtime closes its own dead turns here: each is failed and the person sees why. Unobserved provider usage remains
+        unknown, with the reservation held until reconciliation; an estimate is never recorded as actual spend."""
+        # Cancellation cannot prove what a killed function spent, so retain the same unknown cost hold.
         cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r JOIN public.pr_agent_runs a ON a.id=r.run_id "
                     "WHERE r.workspace_id=%s AND a.idempotency_key LIKE 'agent:%%' AND a.status='cancelled' AND a.updated_at<now()-make_interval(secs=>%s) AND r.kind='reserve' "
                     "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release')) LIMIT 20",
                     (workspace_id, STALE_TURN_SECONDS))
-        for reservation_id, estimate in cur.fetchall():
-            self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
+        for reservation_id, _estimate in cur.fetchall():
+            self.service.ledger.settle(cur, workspace_id, reservation_id, "unknown", None)
         cur.execute("SELECT id::text,conversation_id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'agent:%%' AND status='running' "
                     "AND updated_at<now()-make_interval(secs=>%s) ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED", (workspace_id, STALE_TURN_SECONDS))
         for run_id, conversation_id in cur.fetchall():
             cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.run_id::text=%s AND r.kind='reserve' "
                         "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release'))",
                         (workspace_id, run_id))
-            for reservation_id, estimate in cur.fetchall():
-                self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
+            for reservation_id, _estimate in cur.fetchall():
+                self.service.ledger.settle(cur, workspace_id, reservation_id, "unknown", None)
             answer = "This request stopped before it finished (the server ran out of time). Anything already finished stays as it is; please ask again."
             result = contracts.empty_result(contracts.new_trace_id(), "text")
             result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic",
@@ -949,7 +983,7 @@ class AgentRuntimeService:
             from ..site_agent import contracts as site_contracts
             self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "turn_stalled")], [], [],
                           trace={"traceId": result["traceId"], "composedBy": "deterministic", "fallback": "turn_stalled"}, status="failed",
-                          usage={"provenance": "deterministic", "billing": "reservation booked: the turn never finished"})
+                          usage={"provenance": "deterministic", "billing": "provider cost unknown: reservation retained until reconciliation"})
 
     # --- SDK human-in-the-loop resume (ADR-H1) ---------------------------------------------------------------------------
     def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None):
@@ -1057,6 +1091,8 @@ class AgentRuntimeService:
                         self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                     else:
                         self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                    from .manager import record_calls
+                    record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             return None
 
 
@@ -1084,6 +1120,41 @@ def _conversation_of(cur, workspace_id, run_id):
     cur.execute("SELECT conversation_id::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
     row = cur.fetchone()
     return row[0] if row else None
+
+
+def active_run(runtime: "AgentRuntimeService", workspace_id, token, conversation_id):
+    """Latest active Agent Runtime turn for one authenticated conversation; safe identifiers only."""
+    ideas = runtime.service.ideas
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        require(ideas._member(row), "read")
+        ideas._conversation(cur, workspace_id, conversation_id)
+        cur.execute(
+            "SELECT id::text,status,extract(epoch from created_at) FROM public.pr_agent_runs "
+            "WHERE workspace_id=%s AND conversation_id::text=%s AND status='running' AND idempotency_key LIKE 'agent:%%' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (workspace_id, conversation_id),
+        )
+        found = cur.fetchone()
+    if not found:
+        return None
+    return {"runId": found[0], "status": found[1], "startedAt": float(found[2])}
+
+
+def run_events(runtime: "AgentRuntimeService", workspace_id, token, run_id, cursor=0) -> dict:
+    """Read the existing safe event stream for an Agent Runtime run with normal workspace read permission."""
+    if type(cursor) is not int or cursor < 0:
+        raise AlphaError("Invalid event cursor.", 400)
+    ideas = runtime.service.ideas
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        require(ideas._member(row), "read")
+        found = ideas._events_for(cur, workspace_id, run_id, cursor)
+    return {
+        "runId": found["runId"],
+        "conversationId": found["conversationId"],
+        "status": found["status"],
+        "events": found["events"],
+        "cursor": found["cursor"],
+    }
 
 
 def task_view(runtime: "AgentRuntimeService", workspace_id, token, task_id, cursor=0) -> dict:

@@ -30,7 +30,7 @@ def spending(phone, cur, workspace_id, *, direction='outbound', principal=None):
             'availableMilliCredits': book.view(cur, workspace_id)['availableMilliCredits'] if active else None}
 
 
-def authorities(phone, cur, workspace_id, principal, revision, *, maximum, conversation_id, number_hash, kind, reason, costs, use_available=False):
+def authorities(phone, cur, workspace_id, principal, revision, *, maximum, conversation_id, number_hash, kind, reason, costs, use_available=False, cap_seconds=None):
     if ai_usage_exempt(principal):
         return None, None
     book = phone.hosted.ledger.credits
@@ -48,7 +48,7 @@ def authorities(phone, cur, workspace_id, principal, revision, *, maximum, conve
             result.append(None)
             continue
         binding = digest({'operation': 'phone', 'conversationId': conversation_id, 'numberHash': number_hash,
-                          'kind': kind, 'reason': reason, 'capSeconds': phone.config.cap_seconds,
+                          'kind': kind, 'reason': reason, 'capSeconds': phone.config.cap_seconds if cap_seconds is None else cap_seconds,
                           'costs': list(costs), 'model': model, 'provider': provider, 'approvedMaximum': maximum, 'useAvailableCredits': use_available})
         quote = book.issue(cur, workspace_id, principal, revision, binding, model, provider, ceiling)
         result.append(book.authorize(cur, workspace_id, principal, revision, binding, quote['quoteId']))
@@ -98,7 +98,7 @@ def lock_workspace(cur, call_id):
                 'WHERE c.id::text=%s FOR UPDATE OF w', (call_id,))
 
 
-def settle(phone, cur, value, component, outcome, actual):
+def settle(phone, cur, value, component, outcome, actual, *, audio_seconds=None):
     """Allocate cumulative usage exactly once over immutable minute holds, including old calls."""
     initial = value['live_reservation_id' if component == 'live' else 'telephony_reservation_id']
     cur.execute("SELECT id::text,estimated_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='reserve' "
@@ -111,6 +111,31 @@ def settle(phone, cur, value, component, outcome, actual):
         phone.hosted.ledger.settle(cur, value['workspace_id'], reservation, outcome, cost)
         if actual is not None:
             remaining -= cost
+    if component == 'live':
+        record_live_audio(phone, cur, value, actual, audio_seconds)
+
+
+def record_live_audio(phone, cur, value, actual, audio_seconds):
+    """The call's GPT-Live audio as one public.pr_ai_call_events row (Founder Admin §8.B), inside the settle's transaction under
+    a savepoint. Cost and seconds exactly as the settle books them (or unknown); a later settle of the same call with its known
+    cost adds a pr_ai_call_settlements row instead of changing the first. No audio (cost 0) is no attempt. Never raises."""
+    try:
+        if actual == 0:
+            return
+        from .. import ai_call_events
+        from ..agent_runtime_v2.config import DEFAULT_LIVE_USD_MICRO_PER_MINUTE
+        cfg = phone.agent().cfg
+        version = ai_call_events.MEDIA_CONSTANTS if cfg.live_usd_micro_per_minute == DEFAULT_LIVE_USD_MICRO_PER_MINUTE else ai_call_events.CONFIGURED
+        cost, source, _ = ai_call_events.table_cost(actual, version)
+        answered = value.get('answered_at')
+        attempt = {'workload': 'voice_front_end', 'provider': 'openai', 'model': cfg.route('voice_front_end', reason='usage record').model,
+                   'status': 'ok' if cost is not None else 'unknown', 'audio_seconds': audio_seconds if cost is not None else None,
+                   'cost_usd_micro': cost, 'cost_source': source, 'started_at': float(answered) if answered else None,
+                   'physical_attempt_id': f"phone-live:{value['id']}"}
+        ai_call_events.write_attempts({'workspace_id': value['workspace_id'], 'user_id': value.get('user_id'), 'feature': 'phone',
+                                       'run_id': value.get('voice_run_id'), 'reservation_id': value.get('live_reservation_id')}, [attempt], cursor=cur)
+    except Exception:  # noqa: BLE001 - recording never fails a phone settle
+        pass
 
 
 def renew(phone, call_id):
@@ -150,8 +175,9 @@ def renew(phone, call_id):
             prefs = store.prefs(cur, value['user_id'], value['workspace_id'])
             cur.execute(f'SELECT coalesce(sum({DAILY_COST_SQL}),0) FROM public.pr_phone_calls '
                         'WHERE user_id=%s AND requested_at>=to_timestamp(%s)',
-                        (value['user_id'], planner.day_start(phone.clock(),prefs['timeZone'])))
-            if int(cur.fetchone()[0])+sum(costs) > phone.config.daily_budget:
+                        (value['user_id'], planner.day_start(phone.clock(),planner.effective_preferences(prefs,phone.config.public())['timeZone'])))
+            reserved = int(cur.fetchone()[0])
+            if phone.config.daily_budget is not None and reserved+sum(costs) > phone.config.daily_budget:
                 raise AlphaError('The phone spending allowance is exhausted.',402,code='phone_budget')
         maximum = voice.get('creditLimitMilliCredits')
         if credit and not voice.get('useAvailableCredits'):
@@ -165,13 +191,13 @@ def renew(phone, call_id):
         revision = cur.fetchone()[0]
         auth = authorities(phone,cur,value['workspace_id'],value['user_id'],revision,maximum=maximum,
                            use_available=bool(voice.get('useAvailableCredits')), conversation_id=value['conversation_id'],
-                           number_hash=value['number_hash'],kind=value['kind'],reason=value['reason_key'],costs=costs)
+                           number_hash=value['number_hash'],kind=value['kind'],reason=value['reason_key'],costs=costs,cap_seconds=value['max_seconds'])
         route=phone.agent().cfg.route('voice_front_end',reason='phone continuation')
         for component,cost,authority,provider,model in zip(('live','telephony'),costs,auth,('openai',value['provider']),(route.model,'pstn')):
             phone.hosted.ledger.reserve(cur,value['workspace_id'],value['user_id'],'tool',cost,
                 f'phone-{component}:{call_id}:{target}',charge_batch=False,provider=provider,model=model,
                 run_id=value['voice_run_id'],credit_authority=authority,
-                meta={'via':'rafii_phone','phoneCallId':call_id,'phoneComponent':component,'throughSeconds':target})
+                meta={'via':'rafii_phone','phoneCallId':call_id,'phoneComponent':component,'throughSeconds':target,'capSeconds':value['max_seconds']})
         cur.execute('UPDATE public.pr_phone_calls SET funded_seconds=%s,reserved_usd_micro=reserved_usd_micro+%s WHERE id=%s',
                     (target,sum(costs),call_id))
         db.commit()

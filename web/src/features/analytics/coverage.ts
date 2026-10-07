@@ -219,7 +219,7 @@ export function capabilitySummary(connection: ConnectionCoverage) {
   }
   if (connection.evidence) return connection.evidence;
   if (connection.direct)
-    return 'Direct: numbers for posts Rafii published. Readings aren’t collected automatically yet.';
+    return 'Direct: available analytics for this account’s own posts. Historical metadata and analytics require a separate confirmed import when available. Collection depends on the enabled services.';
   return 'Analytics not granted for this account.';
 }
 

@@ -154,7 +154,7 @@ class DisabledProvider(unittest.TestCase):
         self.assertEqual(refused.exception.status, 503)
         provider, mailer = billing_from_environment({})
         self.assertEqual((provider.id, type(mailer.transport).__name__), ("disabled", "NullTransport"))
-        provider, mailer = billing_from_environment({"STRIPE_SECRET_KEY": "sk_test_config_example", "STRIPE_WEBHOOK_SECRET": "wh", "RESEND_API_KEY": "re", "EMAIL_FROM": "PostRiff <hello@postriff.test>", "POSTRIFF_PUBLIC_BASE_URL": "https://app.postriff.test/"})
+        provider, mailer = billing_from_environment({"STRIPE_SECRET_KEY": "sk_test_config_example", "STRIPE_WEBHOOK_SECRET": "wh", "RESEND_API_KEY": "re", "EMAIL_FROM": "PostRiff <hello@postriff.test>", "POSTRIFF_PUBLIC_BASE_URL": "https://app.postriff.test/", 'RESEND_WEBHOOK_SECRET': 'whsec_synthetic'})
         self.assertEqual((provider.id, type(mailer.transport).__name__, mailer.public_base_url), ("stripe", "ResendTransport", "https://app.postriff.test"))
         with self.assertRaises(ValueError):
             billing_from_environment({"RESEND_API_KEY": "re"})

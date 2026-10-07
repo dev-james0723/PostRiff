@@ -4,7 +4,39 @@ import copy
 from postriff_alpha.domain import AlphaError
 
 from . import contracts, delivery, inbound, rules, store
+from .config import PhoneConfig
 from .service import PhoneService
+
+
+class FounderPhoneConfig(PhoneConfig):
+    """The flags of one founder-scoped PhoneService also carry the founder scope (Founder Admin, CONTRACTS §5).
+
+    planner.founder_event reads `public()['founder']` in both PhoneService.request and delivery.deliver, so a founder
+    event is admitted only for this request's reason key and only inside the configured ops workspace. The scope is
+    attached by principal_phone alone; it is never read from a customer preference, a browser payload or the database.
+    """
+    def __init__(self, values, workspace_id, reason_key):
+        super().__init__(dict(values))
+        self.founder = {'workspaceId': workspace_id, 'opsWorkspaceId': self.values.get('RAFII_FOUNDER_OPS_WORKSPACE_ID') or None,
+                        'reasonKey': reason_key,
+                        'automaticCallsDaily': int(self.values.get('RAFII_FOUNDER_PHONE_AUTOMATIC_DAILY', 2)),
+                        'concurrentCalls': int(self.values.get('RAFII_FOUNDER_PHONE_CONCURRENT', 1)),
+                        'quietStart': int(self.values.get('RAFII_FOUNDER_PHONE_QUIET_START', 1320)),
+                        'quietEnd': int(self.values.get('RAFII_FOUNDER_PHONE_QUIET_END', 480)),
+                        'timeZone': self.values.get('RAFII_FOUNDER_PHONE_TIME_ZONE', 'America/Indiana/Indianapolis'),
+                        'callingAllowed': self.values.get('RAFII_FOUNDER_PHONE_CONTACT_ALLOWED', True)}
+
+    @property
+    def cap_seconds(self):
+        return min(3600, max(60, int(self.values.get('RAFII_FOUNDER_PHONE_MAX_SECONDS', 600))))
+
+    @property
+    def daily_budget(self):
+        value = self.values.get('RAFII_FOUNDER_PHONE_DAILY_USD_MICRO', 50_000_000)
+        return None if value is None else max(0, int(value))
+
+    def public(self):
+        return {**super().public(), 'founder': dict(self.founder)}
 
 
 def attach(hosted, values):
@@ -46,13 +78,19 @@ def cron(hosted, max_items=10):
     return {'status':'ok','reconciled':len(work),'expired':len(expired),'scheduled':scheduled,'proactive':proactive}
 
 
-def principal_phone(phone, workspace_id, principal):
+def principal_phone(phone, workspace_id, principal, *, founder_reason_key=None):
     from ..automation_runs import principal_repository
     repository, capability = principal_repository(phone.hosted,workspace_id,principal,'edit')
     hosted = copy.copy(phone.hosted)
     hosted.repository = repository
     # request() uses the authenticated transaction principal, never a caller-provided user id.
-    return PhoneService(hosted,phone.config.values,provider=phone.provider,runtime=phone.agent(),clock=phone.clock), capability
+    service = PhoneService(hosted,phone.config.values,provider=phone.provider,runtime=phone.agent(),clock=phone.clock)
+    if founder_reason_key is not None:
+        # Founder Admin passthrough: only rafii_control.founder_contact asks for it, with the reason key it reserved.
+        if not isinstance(founder_reason_key,str) or not founder_reason_key.startswith(contracts.FOUNDER_REASON_PREFIX):
+            raise AlphaError('Invalid founder call reason.', 400)
+        service.config = FounderPhoneConfig(phone.config.values, workspace_id, founder_reason_key)
+    return service, capability
 
 
 def schedule_tick(phone, limit):

@@ -1,0 +1,174 @@
+{
+  "execution": "initial atomic permission refusal retained; owner-approved staging-first migration and exact restoration completed",
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "productionProject": "buoyhkbodnhzngaotoel",
+  "stagingProject": "oxacvkhpfgytkepxcaqh",
+  "correctConnection": "Rafii database",
+  "existingChecksumMatches": {
+    "production": 56,
+    "staging": 56
+  },
+  "candidate088Sha256": "a900d721a735322e680ad448973dce9e1b2b83d13fce5a0962c20b10e71c546c",
+  "stagingApply": {
+    "state": "permission_refused",
+    "sqlState": "42501",
+    "failedOperation": "ALTER VIEW owner to existing rafii_control_business_projection",
+    "rollback": {
+      "current_user": "postgres",
+      "session_user": "postgres",
+      "superuser": false,
+      "projection_membership": true,
+      "migration_count": 56,
+      "migration_088_count": 0,
+      "new_view": null,
+      "support": null,
+      "cutover": null,
+      "new_recorded_column": false
+    }
+  },
+  "stagingMemberships": [
+    {
+      "granted_role": "rafii_control_business_projection",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_business_projection",
+      "member_role": "postgres",
+      "grantor_role": "postgres",
+      "admin_option": false,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_ingest",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_projection",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_projection",
+      "member_role": "postgres",
+      "grantor_role": "postgres",
+      "admin_option": false,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_reader",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_reader_login",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_session",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_session_login",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_test_writer",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_test_writer",
+      "member_role": "postgres",
+      "grantor_role": "postgres",
+      "admin_option": false,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_watchdog",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    },
+    {
+      "granted_role": "rafii_control_watchdog_login",
+      "member_role": "postgres",
+      "grantor_role": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    }
+  ],
+  "stagingSchemaPrivileges": [
+    {
+      "nspname": "public",
+      "owner": "pg_database_owner",
+      "admin_create": true,
+      "projection_create": false
+    },
+    {
+      "nspname": "rafii_control",
+      "owner": "postgres",
+      "admin_create": true,
+      "projection_create": false
+    },
+    {
+      "nspname": "postriff_private",
+      "owner": "postgres",
+      "admin_create": true,
+      "projection_create": false
+    }
+  ],
+  "migrationAdmin": {
+    "rolname": "postgres",
+    "rolsuper": false,
+    "rolbypassrls": true
+  },
+  "productionWrites": "one additive migration 088 transaction; no provider dispatch or customer application mutation",
+  "ownerAuthorizationPending": null,
+  "resolution": {
+    "state": "PASS",
+    "authorization": "Approve both, staging first",
+    "authorizationEvidence": "migration-permission-authorization.json",
+    "staging": "staging-migration-verification.json",
+    "production": "production-migration-verification.json",
+    "restrictedLogins": [
+      "staging-restricted-login-verification.json",
+      "production-restricted-login-verification.json"
+    ],
+    "allTemporaryMembershipAndSchemaAclRestored": true
+  }
+}

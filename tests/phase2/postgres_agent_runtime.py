@@ -36,7 +36,7 @@ from PIL import Image  # noqa: E402
 from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from postriff_phase2.hosted_storage import PrivateAssetService  # noqa: E402
-from postriff_phase2.agent_runtime_v2 import approvals, config, contracts, creative, live, service as runtime_service  # noqa: E402
+from postriff_phase2.agent_runtime_v2 import approvals, config, contracts, creative, live, service as runtime_service, thinking_state  # noqa: E402
 from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService  # noqa: E402
 from consumer_fixtures import approve_budgets  # noqa: E402
 
@@ -147,12 +147,13 @@ class LiveEndpoint:
     def __init__(self):
         self.requests = []
         self.status = 201
+        self.error_code = None
 
     def __call__(self, method, url, headers=None, body=None, timeout=None):
         assert url == live.LIVE_ENDPOINT, url
         self.requests.append({"body": body, "authorization": (headers or {}).get("Authorization", "")})
         if self.status != 201:
-            return {"status": self.status, "body": {"error": {"message": "busy"}}}
+            return {"status": self.status, "body": {"error": {"code": self.error_code, "message": "busy"}}}
         return {"status": 201, "body": {"session": {"id": "live_" + uuid.uuid4().hex[:10]}, "transport": {"type": "webrtc", "sdp": "v=0\r\no=- answer\r\n"}}}
 
 
@@ -198,6 +199,8 @@ def denied(call, status=None):
 
 # --- setup ---------------------------------------------------------------------------------------------------------------------
 with connection() as db:
+    # This runtime fixture predates Founder attempt instrumentation; use its real migration for failure-cost assertions.
+    db.execute((ROOT / "migrations/postriff/058_founder_ai_usage.sql").read_text())
     db.execute("INSERT INTO auth.users VALUES(%s),(%s) ON CONFLICT DO NOTHING", (THREE, TWO))
     wid = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s", (ONE,)).fetchone()[0])
     db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (wid,))
@@ -252,7 +255,7 @@ PROVIDER = ProviderLog()
 LIVE = LiveEndpoint()
 FAKE_PROJECT_KEY = "-".join(["fake", "project", "credential", "for", "tests"])  # never a real key; the Live endpoint here is a stand-in
 ENV = {"OPENAI_API_KEY": FAKE_PROJECT_KEY, "RAFII_AGENT_V2_ENABLED": "1", "RAFII_VOICE_ENABLED": "1", "RAFII_IMAGE_AGENT_ENABLED": "1",
-       "RAFII_SPECIALISTS_ENABLED": "1"}
+       "RAFII_SPECIALISTS_ENABLED": "1", "RAFII_AGENT_THINKING_STATES_ENABLED": "1"}
 CFG = config.RuntimeConfig.from_environment(ENV)
 runtime = AgentRuntimeService(service, CFG, model_factory=SCRIPTS.factory, image_studio=creative.ImageStudio(CFG, transport=PROVIDER),
                               vision=creative.VisionAnalyzer(CFG, transport=PROVIDER), live_transport=LIVE, clock=lambda: clock[0])
@@ -338,6 +341,34 @@ def _():
     return {"actual": body["answerText"], "speakable": body["speakableSummary"], "tools": body["toolActivity"]}
 
 
+@scenario("THINK02", "Real Manager + two specialists emits solving/searching/weaving from application-owned runtime phases",
+          "Compare campaign evidence with Brand Brain", "working at open; specialist retrieval; weaving only when Manager recombines two evidence channels")
+def _():
+    with connection() as db:
+        conversation = str(db.execute(
+            "INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id",
+            (wid, ONE, "ThinkingOps synthesis"),
+        ).fetchone()[0])
+    SCRIPTS.set(
+        rafii_manager=[
+            [function_call("ask_campaign", {"input": "Check campaign coverage."}, call_id="tm1"),
+             function_call("ask_brand_intelligence", {"input": "Check the stored brand summary."}, call_id="tm2")],
+            [reply("I combined the campaign and brand evidence.")],
+        ],
+        campaign=[[function_call("campaign_list", {}, call_id="tc1")], [assistant_message("Campaign evidence checked.")]],
+        brand_intelligence=[[function_call("brand_summary", {}, call_id="tb1")], [assistant_message("Brand evidence checked.")]],
+    )
+    result = turn("Compare campaign evidence with Brand Brain", conversationId=conversation)
+    SCRIPTS.complete()
+    observed = runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)
+    semantic = [e for e in observed["events"] if e.get("thinkingOp")]
+    ops = [e["thinkingOp"] for e in semantic]
+    assert ops[0] == "working" and "solving" in ops and "searching" in ops and "weaving" in ops, semantic
+    assert semantic[-1]["thinkingOp"] == "weaving", semantic
+    assert all(set(e) <= {"id", "seq", "type", "at", "stage", "thinkingOp", "thinkingSource", "reasonCode"} for e in semantic), semantic
+    return {"actual": ops, "events": len(semantic)}
+
+
 @scenario("VS03", "Attach a reference image during voice; the backend vision model reads it (MM01, MM02)", "(uploads image) What do you think of this reference?",
           "image stored privately, recorded on the conversation as image 1; vision runs on the backend; findings returned; GPT-Live never gets pixels")
 def _():
@@ -357,6 +388,8 @@ def _():
     assert image_part["type"] == "input_image" and image_part["image_url"].startswith("data:image/")
     assert not any("live" in c["url"] for c in PROVIDER.calls), "no image goes to the Live front-end"
     assert body["toolActivity"][0]["tool"] == "image_analyze" and body["toolActivity"][0]["status"] == "verified"
+    semantic = [e["thinkingOp"] for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert "shaping" in semantic, semantic
     generations = one("SELECT artifact->'trace'->'generations' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert any(g.get("agent") == "vision" and g.get("model") == "gpt-6-sol" and g.get("inputTokens") == 900 for g in generations), generations
     return {"actual": body["answerText"], "visionModel": vision_calls[-1]["body"]["model"]}
@@ -457,6 +490,9 @@ def _():
     assert ("image_generation", "reserve", "estimated") in [(r[0], r[1], r[2]) for r in ledger] or ledger, ledger
     specialists = {a.get("specialist") for a in body["toolActivity"]}
     assert {"creative", "content", "campaign"} <= specialists, specialists
+    semantic = [e["thinkingOp"] for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert {"working", "solving", "shaping", "composing", "acting", "weaving"} <= set(semantic), semantic
+    assert len(semantic) <= 32, semantic
     STATE["task"] = body["task"]["taskId"]
     return {"actual": body["answerText"], "steps": {k: (v["state"], v.get("reason")) for k, v in steps.items()}, "asset": STATE["asset"], "draft": STATE["draft"]}
 
@@ -489,6 +525,8 @@ def _():
     assert audit
     approval = one("SELECT artifact->'trace'->'approval' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert approval["decision"] == "apply" and approval["verified"] is True and approval["via"] == "voice" and approval["waitSeconds"] >= 0, approval
+    semantic = [e for e in runtime_service.run_events(runtime, wid, OWNER, result["runId"], 0)["events"] if e.get("thinkingOp")]
+    assert any(e["thinkingOp"] == "acting" and e["reasonCode"] == "approval_apply" for e in semantic), semantic
     task = runtime_service.task_view(runtime, wid, OWNER, STATE["task"])
     return {"actual": body["answerText"], "review": reviews[0]["id"], "taskSteps": [(s["label"], s["state"]) for s in task["task"]["steps"]]}
 
@@ -547,6 +585,8 @@ def _():
     before = service.get(wid, OWNER)["revision"]
     result = turn("yes", conversationId=conversation, modality="voice")
     body = result["result"]
+    semantic = rows("SELECT e.body FROM public.pr_agent_events e JOIN public.pr_agent_runs r ON r.id=e.run_id WHERE r.conversation_id::text=%s AND e.body ? 'thinkingOp'", conversation)
+    assert not any(row[0].get("thinkingOp") == "acting" for row in semantic), semantic
     assert "Which one" in body["answerText"] or "several" in body["answerText"], body["answerText"]
     assert service.get(wid, OWNER)["revision"] == before
     STATE["two_conversation"] = conversation
@@ -864,8 +904,10 @@ def _():
     assert "OPENAI_API_KEY" in str(error)
     denied(lambda: voice.start(wid, VIEWER, {"sdp": "v=0\r\n"}), 403)
     LIVE.status = 429
+    LIVE.error_code = "rate_limit_exceeded"
     error = denied(lambda: voice.start(wid, OWNER, {"sdp": "v=0\r\n"}), 502)
     LIVE.status = 201
+    LIVE.error_code = None
     failed = one("SELECT status FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'voice:%%' ORDER BY created_at DESC LIMIT 1", wid)[0]
     assert failed == "failed" and error.code == "live_busy"
     return {"actual": "voice_disabled / 503 no key / viewer 403 / live_busy"}
@@ -1186,6 +1228,24 @@ def running_run(conversation, key_prefix="agent:", actor=ONE, text=None, modalit
     return run
 
 
+@scenario("THINK01", "Semantic ThinkingOps use the existing scoped run-event store", "active-run + events",
+          "latest active run only; fixed enum event; metadata-only response; another workspace cannot read either")
+def _():
+    conversation = fresh_conversation("ThinkingOps isolation")
+    run_id = running_run(conversation)
+    runtime._emit_thinking(wid, OWNER, run_id, thinking_state.event("searching", "tool", "web_research"))
+    active = runtime_service.active_run(runtime, wid, OWNER, conversation)
+    observed = runtime_service.run_events(runtime, wid, OWNER, run_id, 0)
+    semantic = [e for e in observed["events"] if e.get("thinkingOp")]
+    assert active and active["runId"] == run_id and active["status"] == "running", active
+    assert set(observed) == {"runId", "conversationId", "status", "events", "cursor"}, observed.keys()
+    assert semantic and semantic[-1]["thinkingOp"] == "searching" and semantic[-1]["reasonCode"] == "web_research", semantic
+    denied(lambda: runtime_service.active_run(runtime, other, OTHER, conversation), 404)
+    denied(lambda: runtime_service.run_events(runtime, other, OTHER, run_id, 0), 404)
+    runtime.cancel(wid, OWNER, run_id)
+    return {"actual": {"active": active["status"], "op": semantic[-1]["thinkingOp"], "eventCount": len(semantic), "crossWorkspace": "refused"}}
+
+
 @scenario("R08b", "After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)", "yes",
           "the paused answer names the proposal; the yes binds (no endless restating); applied through the site path; the stored run is consumed; the Manager finishes")
 def _():
@@ -1201,6 +1261,8 @@ def _():
     task = one("SELECT artifact FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%' ORDER BY created_at DESC LIMIT 1", conversation)[0]
     assert "pendingRun" not in task, "the paused run was consumed"
     assert result["result"]["composedBy"] == "manager" and "waits for its own approval" in result["result"]["answerText"], (result["result"]["composedBy"], result["result"]["answerText"])
+    acting = rows("SELECT e.body FROM public.pr_agent_events e JOIN public.pr_agent_runs r ON r.id=e.run_id WHERE r.conversation_id::text=%s AND e.body->>'thinkingOp'='acting'", conversation)
+    assert acting and acting[-1][0]["reasonCode"] == "approval_apply", acting
     status = [p["status"] for (b,) in rows("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='assistant'", conversation)
               for p in (b.get("siteAgent") or {}).get("proposals") or [] if p["id"] == pending["proposalId"]]
     assert status == ["applied"], status
@@ -1262,8 +1324,8 @@ def _():
     return {"actual": {"billedSeconds": ended["usageSeconds"], "usdMicro": settled[1]}}
 
 
-@scenario("R17", "The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation",
-          "(cron) recover stalled runs → (next turn) reap", "an old writing run is recovered; task, voice and agent rows are not; the next turn fails the dead agent turn with a message and settles its reservation")
+@scenario("R17", "The runtime closes its dead turn while retaining the unknown provider cost and reserved budget",
+          "(cron) recover stalled runs → (next turn) reap", "an old writing run is recovered; task and voice rows are not; the dead agent fails with a message and an unknown cost hold")
 def _():
     conversation = fresh_conversation("stalled rows")
     writer = running_run(conversation, key_prefix="ideas:", stale=True)
@@ -1278,16 +1340,51 @@ def _():
     statuses = {name: one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", run)[0] for name, run in
                 (("writer", writer), ("task", task), ("agent", dead), ("voice", session["voiceSessionId"]))}
     assert statuses == {"writer": "failed", "task": "running", "agent": "running", "voice": "running"}, statuses
+    budgets_before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
     SCRIPTS.set(rafii_manager=[[reply("Here you go.")]])
     turn("What is on this week?", conversationId=conversation)
     after = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", dead)[0]
     note = one("SELECT body->>'text' FROM public.pr_messages WHERE run_id::text=%s AND role='assistant'", dead)[0]
     settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind='settle'", wid, reservation["reservationId"])
+    budgets_after = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    assert after == "failed" and "stopped before it finished" in note and settled == ("estimated_unknown", None), (after, note, settled)
+    assert budgets_after == budgets_before, "an unobserved cost must not release the hold or become actual spend"
+    with service.repository.transaction(OWNER, wid) as (cur, _row, _principal):
+        runtime._reap_stale_turns(cur, wid)
+    assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind='settle'", wid, reservation["reservationId"])[0] == 1
     voice.end(wid, OWNER, session["voiceSessionId"], {"usageSeconds": 1, "reason": "user_ended"})
     with connection() as db:
         db.execute("UPDATE public.pr_agent_runs SET status='completed' WHERE id=%s", (task,))
-    assert after == "failed" and "stopped before it finished" in note and settled == ("actual", 50_000), (after, note, settled)
     return {"actual": {"cron": statuses, "reaped": after, "settled": settled[0]}}
+
+
+@scenario("R17-cancelled", "Dead cancelled turns retain unknown cost; known settlements and fresh runs stay unchanged",
+          "(cleanup after a cancelled function died)", "unknown hold deduplicated with original attribution; no fabricated actual cost or active-run cancellation")
+def _():
+    conversation = fresh_conversation("cancelled unknown cost")
+    dead = running_run(conversation, stale=True)
+    known = running_run(conversation, stale=True)
+    fresh = running_run(conversation)
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='cancelled',updated_at=to_timestamp(%s) WHERE id=ANY(%s::uuid[])", (clock[0] - 3600, [dead, known]))
+        cur = db.cursor()
+        meta = {"via": "test_cancelled"}
+        hold = service.ledger.reserve(cur, wid, ONE, "text_model", 50_000, "agent:" + dead, charge_batch=False, provider="openai", model="gpt-6-sol", run_id=dead, meta=meta)
+        settled = service.ledger.reserve(cur, wid, ONE, "text_model", 50_000, "agent:" + known, charge_batch=False, provider="openai", model="gpt-6-sol", run_id=known, meta=meta)
+        service.ledger.settle(cur, wid, settled["reservationId"], "completed", 12_345)
+    before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    for _repeat in range(2):
+        with service.repository.transaction(OWNER, wid) as (cur, _row, _principal):
+            runtime._reap_stale_turns(cur, wid)
+    unknown = one("SELECT cost_state,actual_usd_micro,estimated_usd_micro,meta->>'costCenter',meta->>'aiUsageExempt' FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", hold["reservationId"])
+    assert unknown == ("estimated_unknown", None, 50_000, "customer", "false"), unknown
+    assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", hold["reservationId"])[0] == 1
+    assert one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", settled["reservationId"]) == ("actual", 12_345)
+    assert before == rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+    assert one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", fresh)[0] == "running"
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='cancelled' WHERE id=%s", (fresh,))
+    return {"actual": {"unknownHold": unknown[2], "knownCost": 12_345, "duplicateSettlements": 0, "providerCalls": 0}}
 
 
 @scenario("R18", "Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)", "(an internal error while finishing)",
@@ -1303,6 +1400,40 @@ def _():
     status = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert status == "failed" and "went wrong" in result["result"]["answerText"] and result["result"]["errors"][0]["code"] == "internal_error", (status, result["result"])
     return {"actual": result["result"]["answerText"]}
+
+
+@scenario("R18-cost", "Abort retains a timed-out provider's unknown spend, while an explicit refusal can release its hold",
+          "(abort after provider failure)", "failed run/message; unknown cost stays held; observed refusal is actual zero; no duplicate settlement")
+def _():
+    from postriff_phase2.agent_runtime_v2 import manager
+
+    outcomes = []
+    for refused in (False, True):
+        conversation = fresh_conversation("abort provider cost")
+        run = running_run(conversation)
+        with service.repository.transaction(OWNER, wid) as (cur, row, principal):
+            reservation = service.ledger.reserve(cur, wid, principal, "text_model", 50_000, "agent:" + run, charge_batch=False,
+                                                 provider="openai", model="gpt-6-sol", run_id=run)
+            ctx = runtime_service.RafiiRunContext(service=service, workspace_id=wid, token=OWNER, principal=principal, membership=service.ideas._member(row),
+                                                 conversation_id=conversation, trace_id=contracts.new_trace_id(), run_id=run, now=lambda: clock[0], config=runtime.cfg)
+        class RefusedError(Exception):
+            status_code = 429
+        error = RefusedError() if refused else TimeoutError()
+        manager._note_failure(ctx.ledger, error, workload="standard_reasoning", route={"provider": "openai", "model": "gpt-6-sol"},
+                              started=time.monotonic(), wall=clock[0])
+        before = rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope")
+        for _repeat in range(2):
+            out = runtime._abort_run(wid, OWNER, conversation, run, reservation, ctx.trace_id, "text", RuntimeError("synthetic abort"), ctx)
+        settled = one("SELECT cost_state,actual_usd_micro,estimated_usd_micro FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", reservation["reservationId"])
+        assert settled == (("actual", 0, 50_000) if refused else ("estimated_unknown", None, 50_000)), settled
+        assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'", reservation["reservationId"])[0] == 1
+        assert out["status"] == "failed" and message_body(out["messageId"])["siteAgent"]["status"] == "failed"
+        if not refused:
+            assert before == rows("SELECT scope,reserved_usd_micro,spent_usd_micro FROM public.pr_budgets ORDER BY scope"), "unknown spend keeps its original hold"
+        attempt = one("SELECT status,cost_usd_micro FROM public.pr_ai_call_events WHERE run_id::text=%s", run)
+        assert attempt == (("rate_limited", 0) if refused else ("timeout", None)), attempt
+        outcomes.append({"providerStatus": attempt[0], "costState": settled[0], "actualUsdMicro": settled[1]})
+    return {"actual": outcomes}
 
 
 @scenario("MM16", "Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once",

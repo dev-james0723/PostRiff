@@ -1,0 +1,156 @@
+{
+  "version": "2.0.0",
+  "default": "deny",
+  "customer_runtime_forbidden_effects_unchanged": [
+    "EXTERNAL_EFFECT",
+    "DESTRUCTIVE",
+    "SECRET"
+  ],
+  "notes": "effect describes what the LLM can prepare, not what the external executor is allowed to do. Actual writes require Command Gateway checks and immutable receipts.",
+  "actions": [
+    {
+      "operation": "metrics.query",
+      "risk_tier": "R0",
+      "llm_effect": "READ",
+      "external_executor": false,
+      "fresh_step_up": false,
+      "executor": "query_service",
+      "required_proof": "none"
+    },
+    {
+      "operation": "customer.metadata.read",
+      "risk_tier": "R1",
+      "llm_effect": "READ",
+      "external_executor": false,
+      "fresh_step_up": false,
+      "executor": "query_service",
+      "required_proof": "purpose_scope"
+    },
+    {
+      "operation": "customer.private.read",
+      "risk_tier": "R1",
+      "llm_effect": "READ",
+      "external_executor": false,
+      "fresh_step_up": false,
+      "executor": "query_service",
+      "required_proof": "valid_support_grant_or_approved_exception"
+    },
+    {
+      "operation": "chart.save",
+      "risk_tier": "R2",
+      "llm_effect": "CREATE_DRAFT",
+      "external_executor": false,
+      "fresh_step_up": false,
+      "executor": "internal_store",
+      "required_proof": "founder_session"
+    },
+    {
+      "operation": "support.reply",
+      "risk_tier": "R2",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": false,
+      "executor": "support_command_gateway",
+      "required_proof": "explicit_send_confirmation"
+    },
+    {
+      "operation": "credits.grant",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "existing_credit_domain",
+      "required_proof": "step_up_and_exact_preview"
+    },
+    {
+      "operation": "credits.reverse",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "existing_credit_domain",
+      "required_proof": "step_up_and_exact_preview"
+    },
+    {
+      "operation": "billing.refund",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "existing_billing_domain",
+      "required_proof": "step_up_and_exact_preview"
+    },
+    {
+      "operation": "account.security_lock",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "account_command_gateway",
+      "required_proof": "step_up_and_exact_preview"
+    },
+    {
+      "operation": "account.suspend",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "account_command_gateway",
+      "required_proof": "step_up_and_exact_preview"
+    },
+    {
+      "operation": "account.reinstate",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "account_command_gateway",
+      "required_proof": "step_up_and_current_policy"
+    },
+    {
+      "operation": "account.delete",
+      "risk_tier": "R4",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "deletion_orchestrator",
+      "required_proof": "step_up_typed_target_retention_preflight"
+    },
+    {
+      "operation": "engineering.check",
+      "risk_tier": "R2",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": false,
+      "executor": "trusted_runner_broker",
+      "required_proof": "specific_approval_or_approved_standing_template"
+    },
+    {
+      "operation": "engineering.patch",
+      "risk_tier": "R3",
+      "llm_effect": "PREPARE_EXTERNAL",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "isolated_patch_broker",
+      "required_proof": "specific_approval_exact_sha_allowed_paths"
+    },
+    {
+      "operation": "release.prepare",
+      "risk_tier": "R2",
+      "llm_effect": "CREATE_DRAFT",
+      "external_executor": false,
+      "fresh_step_up": false,
+      "executor": "release_evidence_store",
+      "required_proof": "no_deployment"
+    },
+    {
+      "operation": "release.execute",
+      "risk_tier": "R4",
+      "llm_effect": "not_exposed_to_llm",
+      "external_executor": true,
+      "fresh_step_up": true,
+      "executor": "separate_release_operator",
+      "required_proof": "separate_human_release_approval"
+    }
+  ]
+}

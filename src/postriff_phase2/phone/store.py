@@ -51,3 +51,15 @@ def public_call(value):
             'requestedAt': float(value['requested_at']), 'durationSeconds': value['duration_seconds'], 'failure': value['failure_class'],
             'failureMessage': failure_message(value['failure_class']) if value['failure_class'] or value['state'] in ('failed', 'cancelled') else None,
             'maxSeconds': value['max_seconds'], 'execution': 'fake' if value['provider'] == 'fake' else 'provider'}
+def active_founder_contacts(cur, user_id, workspace_id, *, exclude_call_id=None):
+    """Count owner phone calls and browser voice once, under the shared phone lock.
+    Phone-backed agent runs are excluded because their phone row is authoritative.
+    """
+    from .contracts import TERMINAL
+    cur.execute("SELECT (SELECT count(*) FROM public.pr_phone_calls WHERE user_id=%s AND NOT(state=ANY(%s)) "
+                "AND (%s::uuid IS NULL OR id<>%s::uuid)) + (SELECT count(*) FROM public.pr_agent_runs "
+                "WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' "
+                "AND idempotency_key NOT LIKE 'voice:phone:%%' AND status='running' "
+                "AND created_at>now()-make_interval(secs=>coalesce((artifact->'voice'->>'capSeconds')::int,600)+300))",
+                (user_id, list(TERMINAL), exclude_call_id, exclude_call_id, workspace_id, user_id))
+    return int(cur.fetchone()[0])

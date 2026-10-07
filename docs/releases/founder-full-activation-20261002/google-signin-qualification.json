@@ -1,0 +1,31 @@
+{
+  "execution": "local candidate; hosted acceptance pending",
+  "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "branch": "codex/founder-google-acceptance-20261002",
+  "files": {
+    "web/src/lib/founder/sign-in.ts": "f3ad47c1b7dc97bb7a5dc20ee72d66d52f09e612c0ef25870ef01877a1de686f",
+    "web/src/features/founder/shell/sign-in-form.tsx": "34802abc260f90732c0b85d7c6842569b44aa4335aa23f65360609204eefd8f8",
+    "web/tests/founder-sign-in.test.cjs": "26f586440ede08a97ef0672101f262bba56c7cbd7de03f6a7c0173a7ce9afd3c",
+    "web/tests/founder-sign-in-browser.cjs": "b6d3224b4ee11b2296426537533c5e28b23a4c2e2736d8604200807a425777d2"
+  },
+  "unit": {
+    "tests": 18,
+    "pass": 18,
+    "fail": 0,
+    "skip": 0,
+    "evidence": "raw/google-signin-green-final.log"
+  },
+  "typecheck": "PASS before final capability-race refinement; exact-head CI pending",
+  "lint": {
+    "state": "PASS before final capability-race refinement",
+    "errors": 0,
+    "existingWarnings": 2
+  },
+  "productionBuild": "compiled; TypeScript still running in isolated local build",
+  "browserScenes": "pending build completion",
+  "credentialsOrSecurityChanges": 0,
+  "providerModelCalls": 0,
+  "sessionStorage": "PKCE only; no session or token",
+  "freshMFARequired": true,
+  "consumerSessionUntouched": true
+}

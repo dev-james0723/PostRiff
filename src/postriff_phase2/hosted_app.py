@@ -69,12 +69,16 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
         principal = candidate.verify(access_token)
         session_id = verified_session_id(access_token, principal)
         if connection_factory is not None:
+            # A founder account block (operator_actions, migration 062) is folded into this one statement; it is
+            # skipped, never an error, while the block table is not installed.
+            from .operator_actions import blocked_error, session_flags
             with connection_factory() as db:
                 with db.cursor() as cur:
-                    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal))
-                    deleted, revoked, mfa_required = cur.fetchone()
+                    (deleted, revoked, mfa_required), blocked = session_flags(db, cur, "SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal), principal, 3)
             if deleted or revoked:
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
+            if blocked:
+                raise blocked_error()
             # Someone who turned on two-factor authentication must present it on every session:
             # the UI hides nothing the API would not also refuse.
             if enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2":
@@ -166,8 +170,8 @@ def billing_from_environment(values):
     resend_key = values.get("RESEND_API_KEY")
     base_url = values.get("POSTRIFF_PUBLIC_BASE_URL")
     if resend_key:
-        if not values.get("EMAIL_FROM") or not base_url:
-            raise ValueError("EMAIL_FROM and POSTRIFF_PUBLIC_BASE_URL are required when RESEND_API_KEY is set.")
+        if not values.get("EMAIL_FROM") or not base_url or not values.get('RESEND_WEBHOOK_SECRET'):
+            raise ValueError("EMAIL_FROM, POSTRIFF_PUBLIC_BASE_URL and RESEND_WEBHOOK_SECRET are required when RESEND_API_KEY is set.")
         return provider, Mailer(ResendTransport(resend_key), values["EMAIL_FROM"], base_url)
     return provider, Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
 
@@ -202,19 +206,28 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
+    if getattr(mailer.transport, 'requires_cutover', False):
+        from .notifications.legacy_outbox import LegacyMailOutbox
+        service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
+        mailer.enqueue_legacy = service.legacy_mail_outbox.enqueue
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
-    social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
+    social = HostedSocial(service.oauth, providers, storage) if any(
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+    ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
     on_verified = service.audience.on_post_verified
     # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
     from .growth import metric_schedule
+    # Explicit interactive canary shares admission, but does not mount the cron step.
+    service.metric_probe = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
+        workspace_allowlist=metric_schedule.allowed_workspaces(values))
     if metric_schedule.enabled(values):
-        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport)
+        service.metric_reads = service.metric_probe
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
@@ -262,7 +275,7 @@ class HostedApplication:
     @staticmethod
     def _json(start_response, status, body, extra_headers=None):
         raw = json.dumps(body, ensure_ascii=False).encode()
-        labels = {200: "OK", 201: "Created", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
+        labels = {200: "OK", 201: "Created", 202: "Accepted", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
         headers = [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "no-referrer")]
         headers.extend(extra_headers or [])
         start_response(f"{status} {labels.get(status, 'Error')}", headers)
@@ -460,12 +473,28 @@ class HostedApplication:
                 'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
+            # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
+            # written later by a background flusher. Never the raw path; never fails, slows or joins this request.
+            try:
+                from .request_metrics import observe as observe_request
+                observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
+            except Exception:
+                pass
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
         try:
+            if path.startswith("/api/control/v2/"):
+                # Founder Control answers its own prefix through its cookie + CSRF + capability boundary: the consumer
+                # bearer, application guard and runtime never apply to it. Built once, lazily, from the process
+                # environment; rafii_control.hosted.embedded_app never raises (misconfiguration answers 503 there).
+                control = getattr(self, "control_app", None)
+                if control is None:
+                    from rafii_control.hosted import embedded_app
+                    control = self.control_app = embedded_app(os.environ, self._runtime)
+                return control(environ, start_response)
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
@@ -647,6 +676,15 @@ class HostedApplication:
                     result['operations'] = operational_snapshot(service.repository.connection_factory)
                 except Exception:
                     result['operations'] = {'status':'unavailable', 'notificationDelivery':'not_configured'}
+                # The founder cron's operational_snapshot stage persists this minute's counts instead of recomputing them.
+                service.last_operational_snapshot = result['operations']
+                try:
+                    # Founder Control cron (CONTRACTS §1): gated on RAFII_CONTROL_ENABLED inside founder_tick; any failure
+                    # (including an unfinished rafii_control.founder_cron) reports 'unavailable' and never breaks the tick.
+                    from rafii_control.hosted import founder_tick
+                    result['founder'] = founder_tick(service, os.environ)
+                except Exception:
+                    result['founder'] = {'status': 'unavailable'}
                 try:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:
@@ -760,6 +798,11 @@ class HostedApplication:
                     return self._json(start_response, 200, service.billing_portal(parts[2], token, body.get("returnPath")))
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] in ("usage", "subscription") and method == "GET":
                 return self._json(start_response, 200, service.usage(parts[2], token))
+            if len(parts) in (5, 6) and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['support', 'tickets']:
+                from . import support
+                data = support.customer(service, parts[2], token, method, parts[5] if len(parts) == 6 else None,
+                                        self._body(environ) if method != 'GET' else None)
+                return self._json(start_response, 200 if method == 'GET' else 201, data)
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "data-requests":
                 if method == "GET":
                     return self._json(start_response, 200, service.data_requests.list(parts[2], token))
@@ -833,6 +876,11 @@ class HostedApplication:
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
+                if len(parts) == 6 and parts[5] == "insights-canary" and method == "POST":
+                    probe = getattr(service, "metric_probe", None)
+                    if probe is None:
+                        raise AlphaError("Native insights canary is not enabled.", 404, code="feature_disabled")
+                    return self._json(start_response, 200, probe.probe(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 6 and parts[5] == "picture" and method == "GET":
                     # The account's profile picture for previews; the web app asks with ?v=<digest>, so a new picture is a new URL.
                     raw, digest = oauth.picture(parts[2], token, parts[4])
@@ -931,6 +979,15 @@ class HostedApplication:
                     return self._json(start_response, 200, service.delete_account(workspace_id, token, body.get("confirmation")))
             raise AlphaError("This hosted route is unavailable.", 404)
         except AlphaError as error:
+            # Call errors are deliberately handled, but their safe classification must survive in the request log.
+            # Never log the error message or an arbitrary provider-controlled code.
+            parts = path.strip('/').split('/')
+            if len(parts) >= 6 and parts[:2] == ['api', 'workspaces'] and parts[3:6] == ['agent', 'voice', 'sessions']:
+                safe_codes = {'live_auth', 'live_forbidden', 'live_busy', 'live_quota', 'live_rejected', 'live_unreadable', 'live_error',
+                              'live_unreachable', 'voice_busy', 'voice_disabled', 'voice_unavailable', 'sdp_invalid'}
+                suffix = '/' + parts[-1] if len(parts) == 8 and parts[-1] in {'end', 'transcript'} else ''
+                environ['postriff.failure'] = {'errorCode': error.code if error.code in safe_codes else 'other',
+                                              'routePattern': '/api/workspaces/:id/agent/voice/sessions' + ('/:id' + suffix if suffix else '')}
             return self._json(start_response, error.status, {"error": str(error), "code": error.code})
         except Exception as error:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a

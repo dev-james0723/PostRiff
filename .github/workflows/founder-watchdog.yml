@@ -1,0 +1,34 @@
+name: Founder watchdog
+# Independent heartbeat check for the founder cron (CONTRACTS §8.D, PRD §10.3 WP11). Production sits behind Vercel SSO, so
+# this job never calls the app: it reads rafii_control.source_health through a dedicated read-only login (a member of the
+# NOLOGIN role rafii_control_watchdog from migration 066) whose DSN is the repository secret RAFII_WATCHDOG_DSN.
+# - Secret absent: a "not configured" notice, and the job passes.
+# - Secret present: the job fails (GitHub notifies) when the cron heartbeat row is missing, older than 10 minutes or not
+#   measured, when the login is privileged or can write, or when the database cannot be read. Only exception classes are
+#   printed, never the DSN or a server message. The check itself is rafii_control.founder_sources.watchdog_main.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: founder-watchdog
+  cancel-in-progress: false
+jobs:
+  heartbeat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - name: Install the pinned PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]==3.3.5'
+      - name: Check the founder cron heartbeat
+        env:
+          RAFII_WATCHDOG_DSN: ${{ secrets.RAFII_WATCHDOG_DSN }}
+          RAFII_WATCHDOG_ENVIRONMENT: production
+          PYTHONPATH: src
+        run: python -c 'import sys; from rafii_control.founder_sources import watchdog_main; sys.exit(watchdog_main())'

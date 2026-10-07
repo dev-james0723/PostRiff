@@ -1,0 +1,44 @@
+{
+  "execution": "real restricted-login read-only SQL",
+  "environment": "production",
+  "project": "buoyhkbodnhzngaotoel",
+  "at": "2026-10-03T00:00:17.608432+00:00",
+  "mutations": 0,
+  "providerCalls": 0,
+  "roles": [
+    {
+      "kind": "reader",
+      "state": "PASS",
+      "loginVerified": true,
+      "restrictedRoleVerified": true,
+      "verifyFullTls": true,
+      "projectionReads": [
+        "business_product_observations",
+        "business_telemetry_health",
+        "business_support_tickets"
+      ],
+      "rawReadsDenied": [
+        "pr_support_messages",
+        "pr_financial_history",
+        "pr_founder_refund_dispatches"
+      ],
+      "sessionReadDenied": true
+    },
+    {
+      "kind": "session",
+      "state": "PASS",
+      "loginVerified": true,
+      "restrictedRoleVerified": true,
+      "verifyFullTls": true,
+      "rawSupportReadDenied": true
+    },
+    {
+      "kind": "watchdog",
+      "state": "PASS",
+      "loginVerified": true,
+      "restrictedRoleVerified": true,
+      "verifyFullTls": true
+    }
+  ],
+  "state": "PASS"
+}

@@ -59,7 +59,8 @@ class PostgresWorker:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
                 if not cur.fetchone()[0]:
                     return None
-                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' ORDER BY id FOR UPDATE SKIP LOCKED")
+                # A founder account block freezes the workspace like a pending deletion; lifting it resumes the same jobs.
+                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock' ORDER BY id FOR UPDATE SKIP LOCKED")
                 for workspace_id, revision, raw_state in cur.fetchall():
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
                     original = json.dumps(state, sort_keys=True)
@@ -103,6 +104,8 @@ class PostgresWorker:
                                 continue
                         if not reconciliation and not forward and len(job.get("attempts", [])) >= 3:
                             self._event(job, "failed", "Bounded retry limit reached")
+                            from . import product_events
+                            product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
@@ -173,6 +176,10 @@ class PostgresWorker:
                 if result["state"] == "verified":
                     # Learning signal (ids and numbers only); a failure to record never affects the publication.
                     record_published(cur, claimed["workspaceId"], job, self.clock())
+                if result["state"] in ("verified", "failed"):
+                    from . import product_events
+                    # Product taxonomy (PRD §8.6): publish.verified|failed behind its own savepoint; never affects the job.
+                    product_events.publish_outcome(cur, claimed["workspaceId"], job, result["state"])
                 if job.get("attempts") and not claimed["reconciliation"]:
                     job["attempts"][-1]["endedAt"] = self.clock()
                 job["leaseOwner"], job["leaseUntil"] = None, 0

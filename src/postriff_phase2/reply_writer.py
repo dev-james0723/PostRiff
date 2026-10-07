@@ -18,7 +18,7 @@ import uuid
 
 from postriff_alpha.domain import AlphaError
 
-from . import skill_compiler
+from . import ai_call_events, skill_compiler
 from .permissions import require
 
 REPLY_LIMIT = 500
@@ -153,7 +153,10 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         call = GatewayCall(runtime.api_key, model=chosen, endpoint=runtime.endpoint, transport=runtime.transport, allowed_providers=runtime.allowed_for(chosen), drafting=True)
     answer, actual, failure = None, None, None
     try:
-        result = call(system, user, SCHEMA)
+        # The provider attempt becomes one pr_ai_call_events row (Founder Admin §8.B), written when the call returns.
+        with ai_call_events.scope(feature="reply", workspace_id=workspace_id, user_id=principal, reservation_id=reservation["reservationId"],
+                                  connect=getattr(service.repository, "connection_factory", None)):
+            result = call(system, user, SCHEMA)
         actual = getattr(result, "cost_usd_micro", None)
         answer = getattr(result, "value", result)
     except Exception as error:  # noqa: BLE001 - any failure after the reservation is settled 'unknown' (reconcilable), then refused

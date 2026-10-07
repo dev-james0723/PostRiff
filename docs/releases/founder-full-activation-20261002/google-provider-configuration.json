@@ -1,0 +1,12 @@
+{
+  "execution": "real read-only Supabase dashboard",
+  "project": "buoyhkbodnhzngaotoel",
+  "ownerGooglePrimaryConfirmed": true,
+  "siteUrl": "https://postriff-phase2-private.vercel.app",
+  "redirectAllowlist": [
+    "https://postriff-phase2-private.vercel.app/**",
+    "https://postriff-phase2-private-*-jamesau0723-6572s-projects.vercel.app/**"
+  ],
+  "founderCallbackCovered": true,
+  "configurationWrites": 0
+}

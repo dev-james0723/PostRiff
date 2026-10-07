@@ -89,11 +89,19 @@ export interface CalibrationVersion {
   status: string;
   candidates: { metric: string; postCount: number; cohort: string[]; dimensions: { id: string; holdoutSpearman: number; weight: number; trainCount: number; holdoutCount: number }[] }[];
 }
+export interface GrowthReadingWindow {
+  horizon: '1h' | '24h' | '7d';
+  available: boolean;
+  state?: 'measured' | 'pending_horizon' | 'scheduled' | 'pending' | 'disabled' | 'unsupported' | 'disconnected' | 'rights_unavailable' | 'unscheduled' | 'unavailable';
+  dueAt?: number | null;
+  reason?: string | null;
+}
 export interface GrowthOverview {
-  posts: { jobId: string; title: string; platform: string; at: number; hasPrediction: boolean; windows: { horizon: '1h' | '24h' | '7d'; available: boolean }[] }[];
+  posts: { jobId: string; title: string; platform: string; at: number; hasPrediction: boolean; windows: GrowthReadingWindow[] }[];
   reports: Postmortem[];
   calibration: { versions: CalibrationVersion[]; largestCohort: number; minimumPosts: number; available: boolean; notice: string };
   coverage: { maximumPosts: number; loadedPosts: number };
+  measurement?: { enabled: boolean; analyticsConnections: number };
   notice: string;
 }
 export interface AudienceCluster {

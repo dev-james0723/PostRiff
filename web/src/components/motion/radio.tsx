@@ -112,6 +112,8 @@ export function RadioGroup({
 export interface RadioGroupItemProps {
   value: string;
   label?: ReactNode;
+  /** Accessible name for browser automation and assistive technologies. */
+  'aria-label'?: string;
   /** PostRiff: a second line under the label, for card-style options. */
   description?: ReactNode;
   disabled?: boolean;
@@ -122,6 +124,7 @@ export interface RadioGroupItemProps {
 export function RadioGroupItem({
   value,
   label,
+  'aria-label': ariaLabel,
   description,
   disabled,
   className,
@@ -148,6 +151,7 @@ export function RadioGroupItem({
         id={id}
         type='button'
         role='radio'
+        aria-label={ariaLabel ?? (typeof label === 'string' ? label : undefined)}
         aria-checked={selected}
         tabIndex={selected || groupValue === '' ? 0 : -1}
         disabled={disabled}

@@ -1,0 +1,3207 @@
+{
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "sourceState": "merged_deployed_core_release",
+  "sourceTreeHash": null,
+  "generatedAt": "2026-10-03T01:11:36.772268+00:00",
+  "executionState": "production_schema_and_core_deployment_verified_acceptance_pending",
+  "productionVerified": false,
+  "count": 97,
+  "metrics": [
+    {
+      "id": "paid_workspaces",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Distinct workspaces whose subscription has provider<>fixture and status in (active, past_due) at asOf; window grouping reads the daily subscription snapshot.",
+      "unit": "count",
+      "grain": "workspace snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscriptions (business_subscriptions_v2)",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/paid_workspaces/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Same snapshot limits as paid_customers; one-time credit purchasers are not paid workspaces.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "mrr",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "At the interval end (or each local day end with window): for every customer subscription whose latest billing event is active or past_due, the recurring price of its latest priced event times quantity, minus forever discounts and repeating discounts until they end, normalized to one month (annual/12, quarterly/3, weekly x52/12, daily x365/12, rounded half up per subscription), summed by native currency. Trials, free and metered prices contribute nothing; one-time discounts and refunds do not change MRR. delinquent_mrr is the past_due part.",
+      "unit": "currency_minor",
+      "grain": "subscription snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscription_events (057, Stripe webhook) via business_subscription_events + pr_subscriptions for paid subscriptions without any event",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/mrr/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "not_instrumented until the first real billing event. A paid subscription without a priced event (or with a discount, tiered, multi-item or tax-inclusive price that cannot be valued) is coverage.unknown, never its list price. Not collections, not recognized revenue.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "delinquent_mrr",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "The past_due part of mrr at the interval end (or each local day end): normalized monthly recurring value of customer subscriptions whose latest billing event is past_due, by native currency.",
+      "unit": "currency_minor",
+      "grain": "subscription snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscription_events (057) via business_subscription_events",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/delinquent_mrr/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Stripe owns dunning attempts; 'grace' is never produced by Stripe and is not counted. Unpaid or cancelled subscriptions leave MRR.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "mrr_new",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "First paid recurring MRR created in interval from previously nonpaying workspaces.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/mrr_new/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Reactivation is separate, not new acquisition.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": {
+        "canonicalId": "mrr_movements",
+        "dimensions": {
+          "movement": "new"
+        },
+        "runtimeAliasInstalled": false
+      },
+      "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "mrr_expansion",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Positive recurring value change in opening paid cohort, excluding reactivation/new workspaces.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/mrr_expansion/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Normalize currency/discount policy consistently.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": {
+        "canonicalId": "mrr_movements",
+        "dimensions": {
+          "movement": "expansion"
+        },
+        "runtimeAliasInstalled": false
+      },
+      "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "mrr_contraction",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Absolute recurring value decreases in retained members of opening paid cohort.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/mrr_contraction/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Full churn excluded to avoid double count.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": {
+        "canonicalId": "mrr_movements",
+        "dimensions": {
+          "movement": "contraction"
+        },
+        "runtimeAliasInstalled": false
+      },
+      "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "mrr_churn",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Opening recurring value lost when qualifying paid relationship ends under fixed policy.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/mrr_churn/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Cancellation intent is not automatically effective churn.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": {
+        "canonicalId": "mrr_movements",
+        "dimensions": {
+          "movement": "churn"
+        },
+        "runtimeAliasInstalled": false
+      },
+      "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "collections",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Sum captured successful payment amounts by event time and native currency.",
+      "unit": "currency_minor",
+      "grain": "payment event",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "verified payments",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/collections/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Exclude authorizations/unpaid invoices; taxes shown separately for net-revenue analysis.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "cash_collected",
+        "compatibleAlias": false,
+        "differences": {
+          "grain": {
+            "proposed": "payment event",
+            "canonical": "funds movement"
+          },
+          "definition": {
+            "proposed": "Sum captured successful payment amounts by event time and native currency.",
+            "canonical": "Sum of funded live-mode credit orders, live-mode paid invoices of every plan (pr_invoices.amount_paid at the paid event) and live-mode credit-plan invoice grants whose invoice is not in pr_invoices (deduplicated by invoice id), in the half-open interval, by native currency."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": [
+              "synthetic",
+              "test",
+              "internal_founder_activity",
+              "ai_usage_exempt",
+              "fixture_subscriptions"
+            ]
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "refunds",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Sum succeeded refund amounts, deduplicated by refund ID.",
+      "unit": "currency_minor",
+      "grain": "refund event",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "existing reconciler + provider",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/refunds/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Pending/failed refunds are not succeeded refunds.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "refunds_disputes",
+        "compatibleAlias": false,
+        "differences": {
+          "definition": {
+            "proposed": "Sum succeeded refund amounts, deduplicated by refund ID.",
+            "canonical": "Sum of succeeded refunds and non-withdrawn disputes by category, status and native currency, attributed to a workspace through the payment intent when possible."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": [
+              "synthetic",
+              "test",
+              "internal_founder_activity",
+              "ai_usage_exempt",
+              "fixture_subscriptions"
+            ]
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "dispute_net",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Withdrawn dispute funds minus reinstated funds; reconcile overlapping refunds.",
+      "unit": "currency_minor",
+      "grain": "funds movement",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "provider dispute funds events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/dispute_net/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "No double counting when refund and dispute affect the same underlying amount.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "net_collections",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Successful collections minus succeeded refunds minus net dispute withdrawals, with reconciliation of overlaps.",
+      "unit": "currency_minor",
+      "grain": "payment interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "payment projection",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/net_collections/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Payouts and fees separate; cash basis, not recognized revenue.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "recovery_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Recovered eligible failed invoices / eligible failed invoices whose fixed recovery window has matured.",
+      "unit": "ratio",
+      "grain": "invoice cohort",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "invoice state + retry evidence",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/recovery_rate/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Show amount-weighted and count-based separately; spontaneous recovery is not automatically incremental impact.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "nrr",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "(Opening MRR + expansion - contraction - churn) / opening MRR for the same cohort/currency.",
+      "unit": "ratio",
+      "grain": "opening paid cohort",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/nrr/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Exclude new customer MRR; zero denominator unavailable.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "grr",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "(Opening MRR - contraction - churn) / opening MRR.",
+      "unit": "ratio",
+      "grain": "opening paid cohort",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/grr/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "No expansion; consistent status policy required.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "logo_churn",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Customers (workspaces) paying at the interval start (MRR > 0) whose MRR is zero at the end, divided by customers paying at the start. Numerator and denominator are reported.",
+      "unit": "ratio",
+      "grain": "opening paid cohort",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscription_events (057) via business_subscription_events",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/logo_churn/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Billing churn only: inactivity or account deletion is never churn. Same history rule as mrr_movements; no opening paying customers gives not_applicable. Demo reports demo_not_simulated.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "contribution",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Approved period-consistent revenue basis minus attributable operating costs with cost completeness metadata.",
+      "unit": "currency_minor",
+      "grain": "period + currency",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "billing + ops cost ledger",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/contribution/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Label cash contribution when recognition absent; unallocated overhead explicit.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "cost_coverage",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Attempts with verified actual cost / all billable or potentially billable attempts.",
+      "unit": "ratio",
+      "grain": "provider attempt",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "usage receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/cost_coverage/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Missing/unknown attempts in denominator; never silently zero.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "active_users",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Distinct non-test users with a specified meaningful application event in the interval.",
+      "unit": "count",
+      "grain": "user interval",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "authoritative events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/active_users/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Event definition versioned; a pageview-only DAU is a different metric.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "active_workspaces",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Distinct non-excluded workspaces with a completed or applied agent run or a publish event in the interval (definition v1).",
+      "unit": "count",
+      "grain": "workspace interval",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_agent_runs + pr_notification_events",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/active_workspaces/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Product events are not yet instrumented; activity is agent runs and publish events only.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "activation_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Eligible new workspaces with first-value event within 7 days / eligible workspaces whose 7-day window matured.",
+      "unit": "ratio",
+      "grain": "signup cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "signup + first-value events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/activation_rate/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "7-day window proposed; user-confirmed usefulness and proxies must not be mixed.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "time_to_value",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Median seconds from workspace creation to its first value event within 14 days (the first Time Back draft or publish row, or the first verified publication: taxonomy publish.verified, publish notifications or learning post.published), among non-excluded workspaces created in the interval whose 14-day window has matured. measures: n (workspaces with a first value), noFirstValue (censored at 14 days), quartiles, immature and which source supplied each first value; coverage numerator/denominator = n / matured cohort.",
+      "unit": "seconds",
+      "grain": "activated workspace",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_workspaces.created_at + pr_time_savings_ledger (business_time_savings) + pr_product_events publish.verified + pr_notification_events publish.verified + pr_learning_events post.published (with rollup)",
+      "queryAdapter": "rafii_control.founder_metrics_product",
+      "queryTemplate": "metrics/time_to_value/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "The median describes workspaces that reached value within 14 days; the rest are reported as noFirstValue, not folded into the median. No first value in a matured cohort is not_applicable, never zero seconds.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "retention_d7",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Workspaces with meaningful return in [day7,day8) / first-value workspaces observed through day8.",
+      "unit": "ratio",
+      "grain": "mature first-value cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "authoritative events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/retention_d7/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Reporting-day convention fixed; immature workspaces excluded.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "retention_d28",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Workspaces with meaningful return in [day28,day29) / eligible mature first-value workspaces.",
+      "unit": "ratio",
+      "grain": "mature first-value cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "authoritative events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/retention_d28/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "No forecast disguised as observed retention.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "feature_adoption",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Per feature: active non-excluded workspaces that used it in the interval / workspaces active in the interval (activity definition v1: completed or applied agent runs, publish outcomes, person-initiated taxonomy events). Features: voice, brand, write_like_me (draft.created voice=personalized), quick_start, agent_drafting, review (proxy learning draft.approved), scheduling, publishing (proxies: publish notifications, learning post.published), campaigns, automations, suggestions (accepted), research, humanizer, weekly_operator.",
+      "unit": "ratio",
+      "grain": "eligible active workspace",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_product_events (business_product_events) + pr_agent_runs + pr_notification_events + pr_learning_events (with rollup)",
+      "queryAdapter": "rafii_control.founder_metrics_product",
+      "queryTemplate": "metrics/feature_adoption/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Eligibility is activity in the interval; plan entitlements are not modelled in v1. A feature whose taxonomy began collecting after the interval start is partial (collectingSince); one never recorded is not_instrumented. Adoption is not causation.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "task_success",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Successfully completed authoritative tasks / started tasks with terminal observation window elapsed.",
+      "unit": "ratio",
+      "grain": "started task",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "task lifecycle",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/task_success/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Canceled/unknown states shown separately; retries not counted as new user tasks.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "publish_verified",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Verified external publications / eligible approved publications whose observation window elapsed.",
+      "unit": "ratio",
+      "grain": "approved eligible publication",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "publishing receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/publish_verified/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Submitted/approved/confirming is not verified live.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "publish_outcomes",
+        "compatibleAlias": false,
+        "differences": {
+          "unit": {
+            "proposed": "ratio",
+            "canonical": "count"
+          },
+          "grain": {
+            "proposed": "approved eligible publication",
+            "canonical": "occurrence"
+          },
+          "definition": {
+            "proposed": "Verified external publications / eligible approved publications whose observation window elapsed.",
+            "canonical": "Count of publish.verified, publish.failed and publish.uncertain notification events in the interval; coverage numerator is verified, denominator all."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": [
+              "synthetic",
+              "test",
+              "internal_founder_activity",
+              "ai_usage_exempt",
+              "fixture_subscriptions"
+            ]
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "useful_outcomes",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Distinct completed tasks explicitly rated useful; proxy-confirmed outputs reported in separate series.",
+      "unit": "count",
+      "grain": "workspace task",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "task receipts + user feedback",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/useful_outcomes/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Missing feedback is not negative or positive feedback.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "automation_success",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Verified successful occurrences / eligible due occurrences with observation window elapsed.",
+      "unit": "ratio",
+      "grain": "occurrence",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "automation lifecycle",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/automation_success/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Skipped, held and paused distinguished from failures.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "ai_actual_cost",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Sum known actual provider receipt cost, preserving source currency and cost state.",
+      "unit": "currency_minor",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "provider usage receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/ai_actual_cost/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Estimated and unknown costs separate; no client-supplied prices.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "ai_cost_actual",
+        "compatibleAlias": false,
+        "differences": {
+          "unit": {
+            "proposed": "currency_minor",
+            "canonical": "usd_micro"
+          },
+          "grain": {
+            "proposed": "provider attempt",
+            "canonical": "ledger settlement"
+          },
+          "definition": {
+            "proposed": "Sum known actual provider receipt cost, preserving source currency and cost state.",
+            "canonical": "Sum of actual_usd_micro over settle rows with cost_state=actual; coverage reports settle rows still estimated_unknown."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": [
+              "synthetic",
+              "test",
+              "internal_founder_activity",
+              "ai_usage_exempt",
+              "fixture_subscriptions"
+            ]
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "ai_failed_cost",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Known actual provider costs assigned to failed/nonbillable user outcomes.",
+      "unit": "currency_minor",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "usage + task receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/ai_failed_cost/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Shows platform cost, not automatically refundable customer charges.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "cost_per_useful",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Attributed cost in completed useful-task cohort / useful outcomes in the same cohort.",
+      "unit": "currency_minor_per_outcome",
+      "grain": "task cohort",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "usage + outcome linkage",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/cost_per_useful/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Coverage and selection bias must be shown; no zero division.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "cost_per_useful_outcome",
+        "compatibleAlias": false,
+        "differences": {
+          "unit": {
+            "proposed": "currency_minor_per_outcome",
+            "canonical": "usd_micro"
+          },
+          "grain": {
+            "proposed": "task cohort",
+            "canonical": "period outcome proxy"
+          },
+          "definition": {
+            "proposed": "Attributed cost in completed useful-task cohort / useful outcomes in the same cohort.",
+            "canonical": "Canonical AI cost of the period (actual settled ledger cost, failed and cancelled work included) divided by the useful outcomes of the same period and workspaces, from the proxy named in measures.basis: Time Back accepted outcomes (accepted drafts and adaptations, verified publications, activated automations; the default) or learning-event approvals and publishes (outcome_proxy). A period without outcomes is not_applicable, never zero."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": [
+              "synthetic",
+              "test",
+              "internal_founder_activity",
+              "ai_usage_exempt"
+            ]
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "ai_quality",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Cases passing declared quality/correctness rubric / evaluated cases in comparable suite.",
+      "unit": "ratio",
+      "grain": "evaluation case",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "evaluation receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/ai_quality/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Synthetic, human and production feedback separate; no LLM grade as security proof.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "ai_latency",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Per group, the 95th percentile (value) and the median (measures.p50Ms) of request-to-answer latency of provider attempts in [start, end), computed with percentile_cont over the group's attempts. Percentiles are never averaged across groups or periods.",
+      "unit": "milliseconds",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_ai_call_events.latency_ms (058) via business_ai_calls (064)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_latency/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Groups with fewer than 30 attempts carry reason small_sample (sampleCount is n). Total latency only (no first-token latency); voice sessions are excluded.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "task_latency",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Distribution of task accepted to verified terminal result.",
+      "unit": "seconds_distribution",
+      "grain": "user task",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "task lifecycle",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/task_latency/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Do not average provider p95s to infer task p95.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "credit_grants",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of immutable credit grant entries in the usage ledger (meta.credits op grant) in the half-open interval, by grant source (subscription, purchase, goodwill, test, other) and plan.",
+      "unit": "millicredits",
+      "grain": "ledger grant",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_usage_ledger meta.credits via business_credit_entries (063)",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/credit_grants/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "not_instrumented while credits are off (POSTRIFF_CREDITS_ENABLED unset). Credits are a liability, not revenue. Reversals are not netted.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "credit_consumption",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of credits used by settled tasks (meta.credits op settle, used) in the half-open interval, by task type (the ledger feature) and plan.",
+      "unit": "millicredits",
+      "grain": "ledger settlement",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_usage_ledger meta.credits via business_credit_entries (063) and business_usage_v2 feature",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/credit_consumption/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Reservation is not consumption. not_instrumented while credits are off.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "credit_available",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "At the interval end: the existing wallet projection (credit_wallet.project_credit_wallet) per workspace over its credit ledger entries, after holds, expiry, reversals and debt, summed by plan; held and debt credits are reported as measures.",
+      "unit": "millicredits",
+      "grain": "workspace snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_usage_ledger meta.credits via business_credit_entries (063) + credit_wallet.project_credit_wallet",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/credit_available/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Reuses the consumer wallet projection, never a second balance formula. A workspace whose ledger the projection rejects is coverage.unknown. not_instrumented while credits are off; unavailable above 50,000 credit entries.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "credit_held",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Outstanding reservations under current wallet/unknown settlement rules.",
+      "unit": "millicredits",
+      "grain": "workspace snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "credit ledger",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/credit_held/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Unknown outcomes not silently released or charged twice.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "credit_debt",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Current debt from valid reversals after consumption, as projected by existing wallet.",
+      "unit": "millicredits",
+      "grain": "workspace snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "existing credit-domain projection",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/credit_debt/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Debt is not automatically a cash receivable.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "api_errors",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Eligible 5xx/application-failure requests / eligible served requests.",
+      "unit": "ratio",
+      "grain": "request interval",
+      "scope": "global_operations",
+      "sourceContractId": "operations",
+      "requiredSource": "normalized request telemetry",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/api_errors/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Expected client denials separate; sampled numerator and denominator compatible.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": {
+        "candidateId": "api_error_rate",
+        "compatibleAlias": false,
+        "differences": {
+          "definition": {
+            "proposed": "Eligible 5xx/application-failure requests / eligible served requests.",
+            "canonical": "5xx responses / all responses recorded by the consumer request hook, per route pattern (method + path with every identifier masked) and period; coverage numerator = 5xx, denominator = requests; 4xx shown as a measure, not as errors. Half-open intervals; window = local day, hour = local hour in the report time zone."
+          },
+          "default_exclusions": {
+            "proposed": [
+              "synthetic",
+              "test",
+              "internal_founder_activity"
+            ],
+            "canonical": []
+          }
+        }
+      },
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "api_latency",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "p50 and p95 request duration per route pattern and period, read from the summed 20-bucket latency histogram (bounds 10..30000 ms, last bucket open-ended) with linear interpolation inside the bucket that holds the rank; never an average of per-minute percentiles. The 'percentile' dimension (p50, p95) is always present.",
+      "unit": "milliseconds",
+      "grain": "request interval",
+      "scope": "global_operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_request_metrics (060) via rafii_control.business_request_metrics (066)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/api_latency/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Histogram resolution bounds the error to the bucket width; above 30 s only 'at least 30000 ms' is known (openEnded). Fewer than 30 requests in a group is partial (small_sample). Same collection, retention and traffic limits as api_error_rate.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "queue_age",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Now minus eligible enqueue time for pending runnable jobs.",
+      "unit": "seconds_distribution",
+      "grain": "pending job snapshot",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "job projection",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/queue_age/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Paused/scheduled-future jobs excluded or separate.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "slo_burn",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Burn rate = bad-event ratio / (1 - 0.995) over trailing 5m, 30m, 1h and 6h windows ending at min(interval end, now), for API availability (5xx over API requests, cron and founder Control excluded) and publish success (failed + uncertain over all publish outcomes). Multi-window pairs per the SRE workbook: 1h/5m alerts above 14.4x, 6h/30m above 6x, only when both windows hold at least 20 events. Rows carry slo and burn_window.",
+      "unit": "multiple",
+      "grain": "service window",
+      "scope": "global_operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_request_metrics and pr_notification_events via rafii_control projections (066, 054)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/slo_burn/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "The 99.5% target is a proposal nobody has approved: every row says 'proposed SLO, not approved' (measures.basis = proposed_slo) and is not an uptime promise. No synthetic probe fills low-traffic windows: no events is not_applicable, under 20 events is partial (low_traffic). Same request-metric limits as api_error_rate.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "affected_workspaces",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Distinct workspaces with linked verified failing events.",
+      "unit": "count",
+      "grain": "incident",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "incident + task/error links",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/affected_workspaces/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Coverage-limited lower bound unless complete; not guessed customer count.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "source_lag",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Now minus last complete source watermark.",
+      "unit": "seconds",
+      "grain": "source stream",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "ingestion cursors",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/source_lag/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Distinguish event silence from ingestion heartbeat failure.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "open_tickets",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Tickets not in resolved/closed/spam/duplicate, grouped by actual state.",
+      "unit": "count",
+      "grain": "ticket snapshot",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "support records",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/open_tickets/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "Waiting state remains visible; test tickets excluded.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "first_response",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "First public human response minus creation excluding declared nonbusiness intervals.",
+      "unit": "business_seconds_distribution",
+      "grain": "responded ticket",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "support events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/first_response/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "AI acknowledgment not human response; unanswered tickets shown censored/aged.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "resolution_time",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Resolved time minus created time under versioned pause/business-time policy.",
+      "unit": "business_seconds_distribution",
+      "grain": "ticket lifecycle",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "support events",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/resolution_time/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "Unresolved tickets not hidden; reopening policy fixed.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "csat",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Positive qualified responses / valid responses; response rate displayed alongside.",
+      "unit": "ratio",
+      "grain": "survey response",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "support surveys",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/csat/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "No broad satisfaction claim from very low response sample.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it."
+    },
+    {
+      "id": "repeat_tickets",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Resolved cases with same verified issue recurrence within 14 days / cases observed through 14 days.",
+      "unit": "ratio",
+      "grain": "resolved ticket cohort",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "ticket links",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/repeat_tickets/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "Similarity alone does not prove duplicate cause.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "required_checks",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Passed required checks / required checks; failed, skipped, blocked and not-run separately counted.",
+      "unit": "ratio",
+      "grain": "candidate SHA",
+      "scope": "engineering",
+      "sourceContractId": "engineering",
+      "requiredSource": "trusted runner receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/required_checks/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Trusted current required-check manifest and exact deployment SHA required; no arbitrary green snapshots.",
+      "limitations": "Never averaged to override a single mandatory failed security/financial gate.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_engineering.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "check_failures",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Count failures by functional, infrastructure, timeout, canceled or unknown classification.",
+      "unit": "count",
+      "grain": "runner check",
+      "scope": "engineering",
+      "sourceContractId": "engineering",
+      "requiredSource": "trusted runner receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/check_failures/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Trusted current required-check manifest and exact deployment SHA required; no arbitrary green snapshots.",
+      "limitations": "ENOSPC infrastructure failure is not a product bug.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_engineering.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "flake_rate",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Tests with mixed outcomes on unchanged code/environment / tests rerun under the declared policy.",
+      "unit": "ratio",
+      "grain": "repeated comparable test",
+      "scope": "engineering",
+      "sourceContractId": "engineering",
+      "requiredSource": "test receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/flake_rate/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Trusted current required-check manifest and exact deployment SHA required; no arbitrary green snapshots.",
+      "limitations": "Rerun selection bias disclosed; flaky tests not simply ignored.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_engineering.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "security_open",
+      "disposition": "implementation_task",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Distinct current high/critical findings not fixed or validly waived, by scanner/rule/version.",
+      "unit": "count",
+      "grain": "finding snapshot",
+      "scope": "engineering",
+      "sourceContractId": "engineering",
+      "requiredSource": "scanner receipts",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/security_open/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Trusted current required-check manifest and exact deployment SHA required; no arbitrary green snapshots.",
+      "limitations": "Scanner coverage/entitlement explicit; no guarantee all vulnerabilities found.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_engineering.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "gsc_clicks",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Search Console reported clicks for authorized property and chosen dimensions.",
+      "unit": "count",
+      "grain": "site/page/query interval",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "Search Console API",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/gsc_clicks/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Top-row/aggregation limits retained; no per-user attribution.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "gsc_ctr",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Reported clicks / impressions in exactly the same aggregate.",
+      "unit": "ratio",
+      "grain": "site/page/query interval",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "Search Console API",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/gsc_ctr/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Average position is distinct; no averaged CTR across unequal denominators.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "attribution_coverage",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "New workspaces with recorded allowed acquisition source / all new workspaces.",
+      "unit": "ratio",
+      "grain": "signup cohort",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "first-party source capture",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/attribution_coverage/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Unknown attribution is retained, not assigned to direct by default.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "source_paid_conversion",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Attributed workspaces becoming qualifying paid within 30 days / source workspaces observed through day30.",
+      "unit": "ratio",
+      "grain": "source signup cohort",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "signup + billing",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/source_paid_conversion/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Proposed window; immature cohorts excluded.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "cac",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Approved attributable acquisition spend / new qualifying paying workspaces in compatible attribution window.",
+      "unit": "currency_minor_per_workspace",
+      "grain": "paid acquisition cohort",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "campaign spend + billing",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/cac/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Unavailable when spend or attribution incomplete; not blended with LTV projection.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "decision_recovered_cash",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Deduplicated actual recovered payment receipts linked to decisions, labeled associated unless incremental effect measured.",
+      "unit": "currency_minor",
+      "grain": "decision/payment",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "decision outcomes + payments",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/decision_recovered_cash/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Avoid double credit across several recommendations.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "experiment_effect",
+      "disposition": "owner_source_blocker",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Predeclared treatment-control difference with uncertainty under the approved analysis plan.",
+      "unit": "effect_interval",
+      "grain": "experiment unit",
+      "scope": "marketing",
+      "sourceContractId": "marketing",
+      "requiredSource": "exposures + outcome metrics",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/experiment_effect/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Source ownership, attribution denominator, native-currency spend and observation window unavailable.",
+      "limitations": "Only if sample/assignment checks pass; otherwise inconclusive.",
+      "ownerDependencies": [
+        "authorized acquisition/GSC account and OAuth"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": null,
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "source_unavailable"
+      },
+      "nextAction": "Source ownership, attribution denominator, native-currency spend and observation window unavailable."
+    },
+    {
+      "id": "time_back",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of saved_seconds from the Time Back ledger in the interval for non-excluded workspaces, always grouped by confidence (measured, personalized, estimated); never merged into one number.",
+      "unit": "seconds",
+      "grain": "completed task",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_time_savings_ledger (business_time_savings, 054)",
+      "queryAdapter": "rafii_control.founder_metrics_product (live_metrics SPECS)",
+      "queryTemplate": "metrics/time_back/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Estimated and personalized rows are baselines, not measurements; only measured rows include Raffi active time. Ledger rows exist only from the Time Back release.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "mrr_reactivation",
+      "disposition": "explicitly_replaced_definition",
+      "catalogStatus": "proposed_definition_not_activated",
+      "version": 1,
+      "definition": "Recurring value restored for a previously paid, fully churned workspace in the interval; not new MRR or opening-cohort expansion.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "subscription transitions",
+      "queryAdapter": null,
+      "queryTemplate": "metrics/mrr_reactivation/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Report reactivation separately in MRR bridge; opening paid-cohort NRR does not silently acquire returning churned accounts.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": {
+        "canonicalId": "mrr_movements",
+        "dimensions": {
+          "movement": "reactivation"
+        },
+        "runtimeAliasInstalled": false
+      },
+      "aliasComparison": "Same currency_minor/workspace interval; canonical net bridge and fixture exclusions govern. This replaces the proposal, never silently aliases or activates it.",
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "not_activated_disposition_retained",
+        "ciState": "PASS"
+      },
+      "nextAction": "Qualify the stated definition/source; keep proposed until implementation and acceptance pass."
+    },
+    {
+      "id": "paid_customers",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Distinct active owner users (profile not deleted) of workspaces whose subscription has provider<>fixture and status in (active, past_due) at asOf; window grouping reads the daily subscription snapshot.",
+      "unit": "count",
+      "grain": "customer snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscriptions + pr_memberships + pr_profiles (business_subscriptions_v2)",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/paid_customers/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "No subscription history before the first daily snapshot; trial (fixture) subscriptions never count.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "subscriptions_by_plan_status",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of non-fixture subscriptions grouped by plan label and status at asOf.",
+      "unit": "count",
+      "grain": "subscription snapshot",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscriptions + pr_plan_terms",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/subscriptions_by_plan_status/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Status 'grace' is never produced today; a plan may fall back to trial terms when a price is unbound.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "cash_collected",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 2,
+      "definition": "Sum of funded live-mode credit orders, live-mode paid invoices of every plan (pr_invoices.amount_paid at the paid event) and live-mode credit-plan invoice grants whose invoice is not in pr_invoices (deduplicated by invoice id), in the half-open interval, by native currency.",
+      "unit": "currency_minor",
+      "grain": "funds movement",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_credit_orders + pr_invoices + pr_credit_subscription_grants",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/cash_collected/v2",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Partial: invoices issued before the 057 billing-event instrumentation were never stored and provider fees are not recorded; gross of refunds (see refunds_disputes).",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "payment_failures",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "payment_failed billing notices plus failed credit orders in the interval.",
+      "unit": "count",
+      "grain": "payment event",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_notifications + pr_credit_orders",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/payment_failures/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Dunning attempt counts live with the provider and are not stored.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "refunds_disputes",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of succeeded refunds and non-withdrawn disputes by category, status and native currency, attributed to a workspace through the payment intent when possible.",
+      "unit": "currency_minor",
+      "grain": "refund event",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_credit_refunds + pr_credit_disputes",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/refunds_disputes/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Legacy plan refunds have no join path and are reported as unattributed coverage.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_cost_actual",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of actual_usd_micro over settle rows with cost_state=actual; coverage reports settle rows still estimated_unknown.",
+      "unit": "usd_micro",
+      "grain": "ledger settlement",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger (business_usage_v2)",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/ai_cost_actual/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Stale turns may be settled from estimates; provider invoices are not yet imported for reconciliation.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_cost_unknown",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of estimated_usd_micro and count of ledger rows whose cost_state is estimated_unknown in the interval.",
+      "unit": "usd_micro",
+      "grain": "ledger settlement",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger (business_usage_v2)",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/ai_cost_unknown/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Rows leave this metric only through reconciliation; never add it to actual cost.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_cost_by_feature",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "ai_cost_actual grouped by the feature derived from the ledger idempotency_key prefix (feature is always a dimension).",
+      "unit": "usd_micro",
+      "grain": "ledger settlement",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger (business_usage_v2)",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/ai_cost_by_feature/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "The prefix is a convention, not a constraint; unknown prefixes land in other.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "cost_vs_cash",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "ai_cost_actual divided by cash_collected for the same interval and currency; only USD cash is comparable to the USD ledger.",
+      "unit": "ratio",
+      "grain": "period + currency",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_usage_ledger + pr_credit_orders + pr_credit_subscription_grants",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/cost_vs_cash/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "Both sides keep their own coverage; a zero cash denominator is not_applicable.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "founder_ops_cost",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Settled ledger cost for aiUsageExempt rows, costCenter=founder_ops rows and workspaces classified internal; never part of customer metrics.",
+      "unit": "usd_micro",
+      "grain": "ledger settlement",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger + rafii_control.workspace_classifications",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/founder_ops_cost/v1",
+      "exclusions": [],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Includes only excluded activity; estimates stand in where no actual cost exists.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "budget_remaining",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "stop_usd_micro minus (spent + reserved) per pr_budgets scope for the current window.",
+      "unit": "usd_micro",
+      "grain": "budget snapshot",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_budgets",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/budget_remaining/v1",
+      "exclusions": [],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Current window only; no budget history.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "publish_outcomes",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of publish.verified, publish.failed and publish.uncertain notification events in the interval; coverage numerator is verified, denominator all.",
+      "unit": "count",
+      "grain": "occurrence",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_notification_events",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/publish_outcomes/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Only produced while notifications v2 is enabled; otherwise unavailable, never zero.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "cron_heartbeat",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Seconds since the last recorded cron probe in rafii_control.source_health (source_id='cron'); older than 180 seconds is stale.",
+      "unit": "seconds",
+      "grain": "service window",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "rafii_control.source_health",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/cron_heartbeat/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "No heartbeat row means monitoring is unavailable, not that the worker is healthy.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "notification_delivery",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of notification deliveries created in the interval by channel, status and failure class.",
+      "unit": "count",
+      "grain": "occurrence",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_notification_deliveries",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/notification_delivery/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Email delivered states arrive only through provider webhooks.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "phone_calls",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of phone calls requested in the interval by kind, direction, provider, state and failure class, with telephony plus live cost and duration as measures.",
+      "unit": "count",
+      "grain": "occurrence",
+      "scope": "global_operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_phone_calls",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/phone_calls/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Ambiguous calls are reported as unknown coverage.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "source_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Per source: age in seconds since the last good watermark with the recorded state and reason code.",
+      "unit": "seconds",
+      "grain": "source stream",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "rafii_control.source_health",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/source_health/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Sources without a probe row are unavailable.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "data_requests_backlog",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of pr_data_requests with status='requested' by kind and age band at asOf.",
+      "unit": "count",
+      "grain": "pending job snapshot",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_data_requests",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/data_requests_backlog/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Not a ticket system; support conversations are not collected.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "security_events",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of content-free security audit events (session alerts, MFA changes, session revocations, API token changes) in the interval.",
+      "unit": "count",
+      "grain": "occurrence",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_audit_events",
+      "queryAdapter": "rafii_control.live_metrics",
+      "queryTemplate": "metrics/security_events/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Control-plane denied attempts live in admin_audit_log and are read separately.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_calls",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Count of AI provider attempts (one per request sent to a model, image, voice or evaluation provider; not user actions) whose start falls in [start, end), with ok / failed / rate-limited / timeout / cancelled / unknown-outcome counts in measures. Retries and fallbacks are separate attempts. cost_basis says how each attempt's cost is known: reported (provider or gateway), price_table (computed from a versioned price table when recorded) or unknown.",
+      "unit": "count",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_ai_call_events (058) via business_ai_calls (064)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_calls/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Collected from the 058 deployment on (no backfill): not_instrumented before the first attempt, then collectingSince, and an interval that starts earlier is partial. Recording is best-effort (a failed write is skipped, never retried), so counts can fall short of provider bills.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_tokens",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Sum of tokens of text attempts in [start, end) by token_type: input (input tokens not served from cache; all input tokens when the provider did not report cached tokens), cached (cached input tokens), output (output excluding reasoning) and reasoning. Provider input counts include cached tokens and output counts include reasoning (OpenAI semantics, PRD 8.0), so the four types partition an attempt's tokens.",
+      "unit": "tokens",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_ai_call_events (058) via business_ai_calls (064)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_tokens/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "An attempt whose provider did not report a token type counts as coverage unknown for that type (never zero); cached tokens are often unreported on gateway routes. Image and voice attempts are not token attempts.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_fallback_retry_rate",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Attempts in [start, end) that ran on a fallback route or were a retry (attempt number above 1) divided by all attempts; fallback and retry counts and rates separately in measures.",
+      "unit": "ratio",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_ai_call_events.route, attempt_no (058) via business_ai_calls (064)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_fallback_retry_rate/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Retries made inside a provider SDK are invisible; growth retries are numbered per task, workspace and subject.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_cost_per_call",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Mean recorded cost (micro-USD) of attempts in [start, end) whose cost is known: provider-reported, or computed at write time from the versioned price table named on the attempt; refused attempts cost 0. Attempts with unknown cost are coverage unknown and excluded from the mean.",
+      "unit": "usd_micro",
+      "grain": "provider attempt",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_ai_call_events.cost_usd_micro + pr_ai_call_settlements (058) via business_ai_calls (064)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_cost_per_call/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "Attempt costs are never re-priced; the canonical spend remains ai_cost_actual over the ledger. Price tables bill cached input at the input price (no cached rate recorded).",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "cost_per_useful_outcome",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Canonical AI cost of the period (actual settled ledger cost, failed and cancelled work included) divided by the useful outcomes of the same period and workspaces, from the proxy named in measures.basis: Time Back accepted outcomes (accepted drafts and adaptations, verified publications, activated automations; the default) or learning-event approvals and publishes (outcome_proxy). A period without outcomes is not_applicable, never zero.",
+      "unit": "usd_micro",
+      "grain": "period outcome proxy",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger (business_usage_v2), pr_time_savings_ledger (business_time_savings), pr_learning_events (business_learning_events, 065)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/cost_per_useful_outcome/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "A proxy, not a usefulness rating: cost and outcomes are matched by period and workspace, not by task. Learning events expire after 180 days. Unsettled cost rows make the ratio partial.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "ai_cost_forecast",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Scenario, not a measurement: month-end AI cost for the local calendar month containing the interval end = month-to-date actual ledger cost plus an ordinary least-squares line through the 56 complete local days before as-of, extrapolated over the rest of the month (today counts as the larger of its actual so far and the line; negative days floor at zero). With window: the cumulative cost per day of the month (measures.kind actual or projection). measures name the basis ('scenario'), method, slope and the global monthly budget.",
+      "unit": "usd_micro",
+      "grain": "month projection",
+      "scope": "ai",
+      "sourceContractId": "ai",
+      "requiredSource": "pr_usage_ledger (business_usage_v2), pr_budgets scope global-month (business_budgets)",
+      "queryAdapter": "rafii_control.founder_metrics_ai",
+      "queryTemplate": "metrics/ai_cost_forecast/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "ai_usage_exempt"
+      ],
+      "historyGate": "Unknown attempts/reservations remain unknown; price version is fixed at use. Forecasts require real mature history.",
+      "limitations": "insufficient_history until 56 complete days of ledger history exist. A straight line ignores launches, pricing changes and seasonality; the budget line is shown only where a global monthly budget exists.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ai_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "api_error_rate",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "5xx responses / all responses recorded by the consumer request hook, per route pattern (method + path with every identifier masked) and period; coverage numerator = 5xx, denominator = requests; 4xx shown as a measure, not as errors. Half-open intervals; window = local day, hour = local hour in the report time zone.",
+      "unit": "ratio",
+      "grain": "request interval",
+      "scope": "global_operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_request_metrics (060) via rafii_control.business_request_metrics (066)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/api_error_rate/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Collected from the first flush after deploy (collectingSince); 30-day retention, older intervals are partial (retention_limited). Best-effort writer: a crash can lose the last minutes of one instance (gap, never zero). No workspace at the route level, so internal, test and founder traffic cannot be excluded. Stale when no row arrived for 20 minutes although the cron requests every minute.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "queue_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Per operational counter of the per-minute operational_signals snapshot (delayed, uncertain, failed and held publications; stuck model and research runs; unsettled cost; budget stops; billing rejections; notification backlog and dead letters; growth readings; SMS signals) the peak over the group, with the latest reading and its time as measures. 'counter' is always present; 'queue' groups counters.",
+      "unit": "count",
+      "grain": "operational snapshot",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_operational_snapshots (060) via rafii_control.business_operational_snapshots (066)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/queue_health/v1",
+      "exclusions": [],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Counts of overdue or failed work at each minute, not a per-job wait-time distribution (jobs live in workspace state). Snapshot counts span every workspace. Written by the founder cron each tick; stale when no snapshot arrived for 10 minutes; 30-day retention.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "connection_health",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Connections x capability by provider, capability, health state (ok; expiring within 7 days; expired; blocked = revoked, scopes missing or identity unverified) and capability level, as of the last hourly refresh from workspace channel state using the customer Channels card's own connection_state; measure workspaces = distinct workspaces. Customer workspaces only.",
+      "unit": "count",
+      "grain": "connection capability",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_connection_health (060) via rafii_control.business_connection_health (066)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/connection_health/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "A current snapshot, not a history; the interval does not filter it. Short-lived access tokens refreshed on use may show expiring, exactly as the customer sees them. Unavailable until the first refresh finds a connection; stale when the refresh is older than 3 hours.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "publish_by_provider",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Verified / all publish outcomes (publish.verified, publish.failed, publish.uncertain notification events) per provider (payload platform) and period; uncertain outcomes stay in the denominator and are reported as unknown coverage. Measures: verified, failed, uncertain counts.",
+      "unit": "ratio",
+      "grain": "occurrence",
+      "scope": "operations",
+      "sourceContractId": "operations",
+      "requiredSource": "pr_notification_events via rafii_control.business_notification_events (054)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/publish_by_provider/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Per-stage watermarks and retained coverage required. API/call global operations counts include internal traffic by current definition.",
+      "limitations": "Produced only while notifications v2 is enabled; otherwise unavailable, never zero. Platform comes from the event payload; events without one are 'unknown'.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_ops_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "support_aging",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Open data requests (status requested) by age band (under 1 day, 1-3, 3-7, 7-14, 14-30, over 30 days) and kind as of now, with the oldest age in seconds as a measure. Every row carries measures.ticketSource = not_collected: no support-ticket source has been chosen (decision D7). Grouping or filtering by 'source' (data_requests, support_tickets) adds the support-ticket source as its own row, unavailable with reason not_collected, never a zero.",
+      "unit": "count",
+      "grain": "pending job snapshot",
+      "scope": "support",
+      "sourceContractId": "support",
+      "requiredSource": "pr_data_requests via rafii_control.business_data_requests_v2 (054)",
+      "queryAdapter": "rafii_control.founder_metrics_ops",
+      "queryTemplate": "metrics/support_aging/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "Elapsed response/resolution seconds use retained original tickets. Business-time SLA and CSAT have no source; activated support_aging v1 remains privacy-request based until a versioned definition replaces it.",
+      "limitations": "Data requests are not a ticket system; support conversations are not collected (D7). A current snapshot; the interval does not filter it.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_support_refunds.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "activation_funnel",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "M23 definition v1. Cohort: non-excluded workspaces created in the interval whose 14-day window has matured by asOf (immature workspaces are counted in measures.immature, never in a step). Steps, each counted independently within 14 days of creation: workspace_created (cohort anchor), channel_connected, voice_activated, draft_created, draft_approved, post_scheduled, publish_verified. value = workspaces that reached the step; coverage numerator/denominator = reached / matured cohort (or / workspaces the taxonomy observed for steps without a proxy); measures name the source ('taxonomy', 'transition_proxy', 'taxonomy+transition_proxy'), the proxy, rate, dropFromPrevious and stuckFromPrevious (reached the previous step but not this one).",
+      "unit": "count",
+      "grain": "signup cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_workspaces.created_at (business_workspace_starts) + pr_product_events §8.6 taxonomy (business_product_events) + transition proxies: pr_audit_events channel.connected (business_channel_audit), pr_learning_events draft.approved/post.published with their daily rollup (business_learning_events, business_learning_rollups), pr_notification_events publish.verified",
+      "queryAdapter": "rafii_control.founder_metrics_product",
+      "queryTemplate": "metrics/activation_funnel/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Registration is not success. Transition proxies are lower bounds (learning events are not written while a workspace turns learning off), so proxy-based steps are partial. voice_activated, draft_created and post_scheduled have no proxy: until the taxonomy has observed a whole cohort they report only the workspaces created after it began collecting (collectingSince) and the rest as unknown, never as not reached. Steps are counted independently, not in order: a Quick start draft can come before a channel connection.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "retention_weekly",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Cohort = non-excluded workspaces created in a local calendar week (Monday start, report time zone) within the interval. Cell (cohort, week k = 0..12) = workspaces of the cohort active (activity definition v1) during local calendar week cohort+k / cohort size, observed through asOf. Only matured cells (the whole week k has ended) carry a value with numerator/denominator; unmatured cells are returned as not_applicable with reason cell_not_matured.",
+      "unit": "ratio",
+      "grain": "signup cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_workspaces.created_at + pr_agent_runs + pr_notification_events + pr_product_events",
+      "queryAdapter": "rafii_control.founder_metrics_product",
+      "queryTemplate": "metrics/retention_weekly/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "insufficient_history until 56 days (8 matured weeks) separate the earliest workspace from asOf. Week 0 is the partial signup week. Automation-run activity counts as activity (active_workspaces v1). No comparison period.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "retention_correlations",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "P2 hypothesis. Population: non-excluded workspaces created in the interval at least 56 days before asOf (and, for a feature without a transition proxy, after its taxonomy began collecting). Adopter = used the feature within 14 days of creation; retained = active (activity definition v1) in days 28-56 (weeks 4-7). value = retained share among adopters; measures carry basis='hypothesis', adopters, nonAdopters, both retained counts, nonAdopterShare and difference.",
+      "unit": "ratio",
+      "grain": "signup cohort",
+      "scope": "product",
+      "sourceContractId": "product",
+      "requiredSource": "pr_workspaces.created_at + pr_product_events + pr_agent_runs + pr_notification_events + pr_learning_events (with rollup)",
+      "queryAdapter": "rafii_control.founder_metrics_product",
+      "queryTemplate": "metrics/retention_correlations/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity"
+      ],
+      "historyGate": "First-seen taxonomy coverage, mature cohorts and minimum sample required; no invented prior activity.",
+      "limitations": "Correlation, not causation: adopters may differ in intent. Groups under 10 workspaces are suppressed. insufficient_history until 8 matured weeks exist overall, and per feature until its taxonomy has collected for 56 days.",
+      "ownerDependencies": [],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_product_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "mrr_movements",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Over [start, end): per customer (workspace, else subscription) and currency, opening MRR at start versus closing MRR at end. new (no MRR at start, never paid before), reactivation (paid before, none at start), expansion, contraction and churn (MRR at start, none at end) are signed net changes; opening and closing rows cover the same customers, so opening + movements = closing exactly. Without the movement dimension the value is the net movement.",
+      "unit": "currency_minor",
+      "grain": "workspace interval",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscription_events (057) via business_subscription_events; daily pr_subscription_snapshots to flag customers paid before their first event",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/mrr_movements/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "insufficient_history until events cover a full month and reach back to the interval start. Net per customer: changes that offset inside the interval cancel out. Customers with unknown MRR at either end are excluded from every row and counted as coverage.unknown. The Demo dataset has no subscription-change history: Demo reports demo_not_simulated.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    },
+    {
+      "id": "mrr_forecast",
+      "disposition": "canonical_implementation",
+      "catalogStatus": "activated_v1",
+      "version": 1,
+      "definition": "Scenario, not a measurement: an ordinary least-squares line through the most recent (up to 90) daily MRR snapshot totals before the interval end, by native currency, extrapolated to each requested day (or the interval's last day); negative values floor at zero. measures.basis is 'scenario' and measures names the method, fit days and slope.",
+      "unit": "currency_minor",
+      "grain": "daily snapshot scenario",
+      "scope": "revenue",
+      "sourceContractId": "revenue",
+      "requiredSource": "pr_subscription_snapshots.mrr_minor (057, founder_cron daily) via business_subscription_snapshots_v2 (063)",
+      "queryAdapter": "rafii_control.founder_metrics_revenue",
+      "queryTemplate": "metrics/mrr_forecast/v1",
+      "exclusions": [
+        "synthetic",
+        "test",
+        "internal_founder_activity",
+        "fixture_subscriptions"
+      ],
+      "historyGate": "Real signed lifecycle and native currency amounts required; fixtures excluded. Forecasts need the catalog-defined history.",
+      "limitations": "insufficient_history until 56 daily snapshot points exist per currency. A straight line is a scenario for discussion, not a prediction; it ignores seasonality, pricing changes and churn shocks.",
+      "ownerDependencies": [
+        "merchant activation and per-action charge/refund confirmation"
+      ],
+      "replacement": null,
+      "aliasComparison": null,
+      "validation": {
+        "testPath": "tests/control/test_founder_revenue_pg.py",
+        "productionState": "schema_and_restricted_projection_qualified_metric_chain_pending",
+        "ciState": "PASS"
+      },
+      "nextAction": "Verify fresh source→projection→receipt→UI/agent in staging and production."
+    }
+  ],
+  "deploymentSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "reviewedSourceFingerprint": "cb418637e2e8c27b643112b2504be3f2a19c3b522123cb69aeb74ce50ffdaeef",
+  "sourceEvidence": "production-release-verification.json; exact-head CI and identical merged tree",
+  "authCandidate": {
+    "branch": "codex/founder-google-acceptance-20261002",
+    "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "state": "local_qualification_in_progress",
+    "deployed": false
+  },
+  "dispositionCounts": {
+    "canonical_implementation": 48,
+    "explicitly_replaced_definition": 5,
+    "implementation_task": 36,
+    "owner_source_blocker": 8
+  },
+  "runtimeAliasesInstalled": 0,
+  "all97Activated": false
+}

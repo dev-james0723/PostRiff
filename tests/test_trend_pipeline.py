@@ -147,6 +147,45 @@ class DurablePipeline(unittest.TestCase):
             'coverage_epoch':'epoch-v1','completeness':'complete_within_scope',
             'coverage_interval':{'start':cls.observations[0]['event_at'][:13]+':00:00Z','end':cls.cutoff},'markers':[]})
 
+    @classmethod
+    def _completed_hour(cls, value):
+        return contracts.instant(value).replace(minute=0, second=0, microsecond=0)
+
+    @classmethod
+    def _anchor_event_window(cls, cur, scope, sources, cutoff):
+        """Keep copied fixture events in the database's latest completed hour.
+
+        The durable pipeline intentionally selects the latest completed hour.  These
+        tests can run across an hour boundary after ``setUpClass`` seeds the fixture;
+        move provider event times and return their equivalently shifted synthetic
+        coverage interval.  ``available_at`` remains the database-stamped knowledge
+        time and is never rewritten; production completeness checks stay unchanged.
+        """
+        seed_end = contracts.instant(cls.cutoff)
+        target_end = cls._completed_hour(cutoff)
+        delta = target_end - seed_end
+        coverage_interval = deepcopy(cls.event['payload']['coverage_interval'])
+        if not delta:
+            return coverage_interval
+        coverage_interval = {key: contracts.iso(contracts.instant(value) + delta)
+                             for key, value in coverage_interval.items()}
+        seconds = delta.total_seconds()
+        ids = [source['observation_id'] for source in sources]
+        for source in sources:
+            if source.get('event_at') is not None:
+                source['event_at'] = contracts.iso(contracts.instant(source['event_at']) + delta)
+        cur.execute("""UPDATE public.pr_trend_observations
+                      SET event_at=event_at + (%s * interval '1 second')
+                      WHERE scope_key=%s AND observation_id=ANY(%s::uuid[])""",
+                    (seconds, scope, ids))
+        return coverage_interval
+
+    def test_event_window_anchor_handles_hour_rollover(self):
+        seed = contracts.instant(self.cutoff)
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(minutes=59))), seed)
+        self.assertEqual(self._completed_hour(contracts.iso(seed + timedelta(hours=1, minutes=1))),
+                         seed + timedelta(hours=1))
+
     def test_a_atomic_ingest_to_receipt_projection_retry_and_future_cutoff(self):
         with self.store.transaction() as cur:
             claim=self.outbox.claim('pipeline-test','offline-test',lease_seconds=300,cursor=cur)
@@ -243,8 +282,10 @@ class DurablePipeline(unittest.TestCase):
                 source['deletion_key']=source['observation_id']
                 sources.append(source);live.put_observation(source,cursor=cur)
             cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+            coverage_interval=self._anchor_event_window(cur, scope, sources, cutoff)
             event=TrendOutbox(live).enqueue(scope,'bounded-default','trend.ingested',{
-                **self.event['payload'],'decision_cutoff':cutoff,'observation_ids':[o['observation_id'] for o in sources]},cursor=cur)
+                **self.event['payload'],'decision_cutoff':cutoff,'coverage_interval':coverage_interval,
+                'observation_ids':[o['observation_id'] for o in sources]},cursor=cur)
         pipeline=TrendPipeline(live);outbox=TrendOutbox(live)
         seen=[]
         def consume(cur,event):
@@ -297,6 +338,22 @@ class DurablePipeline(unittest.TestCase):
         projected=live.get_projection(self.workspace,self.actor,'trend',saved['payload']['trend_id'])
         self.assertIsNone(projected['payload'])
 
+    def test_d_previous_hour_seed_keeps_complete_coverage_after_continuation(self):
+        # Reproduce an hour rollover without changing the system clock or waiting for one.
+        # Only provider event times and their synthetic coverage declaration move backwards;
+        # live ingestion must still stamp the actual database knowledge timestamps.
+        cls=type(self)
+        previous_cutoff=contracts.iso(contracts.instant(cls.cutoff)-timedelta(hours=1))
+        sources=deepcopy(cls.observations)
+        for source in sources:
+            source['event_at']=contracts.iso(contracts.instant(source['event_at'])-timedelta(hours=1))
+        event=deepcopy(cls.event)
+        event['payload']['decision_cutoff']=previous_cutoff
+        event['payload']['coverage_interval']={key:contracts.iso(contracts.instant(value)-timedelta(hours=1))
+                                               for key,value in event['payload']['coverage_interval'].items()}
+        with patch.object(cls,'cutoff',previous_cutoff),patch.object(cls,'observations',sources),patch.object(cls,'event',event):
+            self.test_d_default_bound_continues_with_database_knowledge_timestamps()
+
     def test_e_original_evidence_corrections_and_separate_platform_associations(self):
         from postriff_phase2.growth.trends.service import TrendService
         from postriff_phase2.growth.trends import revocation
@@ -314,8 +371,10 @@ class DurablePipeline(unittest.TestCase):
             with live.transaction() as cur:
                 for source in sources:live.put_observation(source,cursor=cur)
                 cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+                coverage_interval=self._anchor_event_window(cur, scope, sources, cutoff)
                 event=outbox.enqueue(scope,key,'trend.ingested',{**self.event['payload'],'provider_id':provider,
-                    'observation_ids':[o['observation_id'] for o in sources],'decision_cutoff':cutoff},cursor=cur)
+                    'observation_ids':[o['observation_id'] for o in sources],'decision_cutoff':cutoff,
+                    'coverage_interval':coverage_interval},cursor=cur)
             claim=outbox.claim('pipeline-test','evidence-worker',lease_seconds=300)
             self.assertEqual(claim['event_id'],event['event_id'])
             def effect(cur,event):result.update(pipeline.consume(cur,event))
@@ -492,8 +551,9 @@ class DurablePipeline(unittest.TestCase):
             burst=[source(n) for n in range(700)]
             for o in burst:live.put_observation(o,cursor=cur)
             cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+            coverage_interval=self._anchor_event_window(cur, scope, burst, cutoff)
             event=outbox.enqueue(scope,'root-700','trend.ingested',{**self.event['payload'],'decision_cutoff':cutoff,
-                'observation_ids':[o['observation_id'] for o in burst]},cursor=cur)
+                'coverage_interval':coverage_interval,'observation_ids':[o['observation_id'] for o in burst]},cursor=cur)
         pipeline=TrendPipeline(live,max_observations=700,max_episodes=1)
         outcomes=[];receipts_seen=[]
         for page in range(7):

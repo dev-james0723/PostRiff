@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:chart-spec",
+  "title": "chart-spec",
+  "type": "object",
+  "properties": {
+    "chartId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,79}$"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 300
+    },
+    "metricIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "paid_workspaces",
+          "mrr",
+          "delinquent_mrr",
+          "mrr_new",
+          "mrr_expansion",
+          "mrr_contraction",
+          "mrr_churn",
+          "collections",
+          "refunds",
+          "dispute_net",
+          "net_collections",
+          "recovery_rate",
+          "nrr",
+          "grr",
+          "logo_churn",
+          "contribution",
+          "cost_coverage",
+          "active_users",
+          "active_workspaces",
+          "activation_rate",
+          "time_to_value",
+          "retention_d7",
+          "retention_d28",
+          "feature_adoption",
+          "task_success",
+          "publish_verified",
+          "useful_outcomes",
+          "automation_success",
+          "ai_actual_cost",
+          "ai_failed_cost",
+          "cost_per_useful",
+          "ai_quality",
+          "ai_latency",
+          "task_latency",
+          "credit_grants",
+          "credit_consumption",
+          "credit_available",
+          "credit_held",
+          "credit_debt",
+          "api_errors",
+          "api_latency",
+          "queue_age",
+          "slo_burn",
+          "affected_workspaces",
+          "source_lag",
+          "open_tickets",
+          "first_response",
+          "resolution_time",
+          "csat",
+          "repeat_tickets",
+          "required_checks",
+          "check_failures",
+          "flake_rate",
+          "security_open",
+          "gsc_clicks",
+          "gsc_ctr",
+          "attribution_coverage",
+          "source_paid_conversion",
+          "cac",
+          "decision_recovered_cash",
+          "experiment_effect",
+          "time_back",
+          "mrr_reactivation"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true
+    },
+    "queryReceiptId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "visualType": {
+      "type": "string",
+      "enum": [
+        "aging_histogram",
+        "aging_table",
+        "annotated_line",
+        "annotated_timeline",
+        "distribution",
+        "entity_graph",
+        "evidence_table",
+        "flow",
+        "funnel",
+        "heatmap",
+        "histogram",
+        "interval_bar",
+        "line",
+        "matrix",
+        "metric_strip",
+        "outcome_table",
+        "paired_comparison",
+        "pareto",
+        "priority_scatter",
+        "scatter",
+        "scenario_table",
+        "service_graph",
+        "stacked_area",
+        "stacked_bar",
+        "status_matrix",
+        "survival_curve",
+        "timeline",
+        "trace_waterfall",
+        "waterfall"
+      ]
+    },
+    "definitionVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "dataState": {
+      "type": "string",
+      "enum": [
+        "measured",
+        "partial",
+        "stale",
+        "unavailable",
+        "not_applicable",
+        "suppressed"
+      ]
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "unit": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "grain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "drilldownPolicy": {
+      "type": "string",
+      "enum": [
+        "aggregate_only",
+        "founder_metadata",
+        "valid_support_grant"
+      ]
+    }
+  },
+  "required": [
+    "chartId",
+    "question",
+    "metricIds",
+    "queryReceiptId",
+    "visualType",
+    "definitionVersion",
+    "dataState",
+    "asOf",
+    "unit",
+    "grain",
+    "drilldownPolicy"
+  ],
+  "additionalProperties": false
+}

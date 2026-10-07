@@ -48,3 +48,12 @@ desktop/artifacts/
 
 # Local release-gate evidence (CI uploads it as an artifact)
 docs/consumer-ready/evidence/
+.control-venv/
+.control-browsers/
+control-web/node_modules
+control-web/.next/
+control-web/tsconfig.tsbuildinfo
+control-web/.env*
+!control-web/.env.example
+docs/rafii-control-v2/evidence/raw/
+/.founder-signin-evidence/

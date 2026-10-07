@@ -1237,6 +1237,91 @@ class ProviderClientsTest(unittest.TestCase):
                 raise RuntimeError("already closed")
             self.closed = True
 
+    def test_failure_diagnostics_do_not_guess_quota_or_copy_private_payloads(self):
+        class ProviderError(Exception):
+            status_code = 429
+            body = {"error": {"code": "private-unrecognized-code", "message": "private-customer-text", "param": "secret-api-key"}}
+
+        diagnostic = manager.failure_diagnostic(ProviderError("private-exception-message"))
+        self.assertEqual(diagnostic["httpStatus"], 429)
+        self.assertEqual((diagnostic["errorCode"], diagnostic["errorCategory"], diagnostic["reasonBasis"]), ("other", "other", "unclassified"))
+        self.assertEqual(set(diagnostic), {"errorClass", "errorCode", "errorCategory", "reasonBasis", "httpStatus"})
+        self.assertNotIn("private", json.dumps(diagnostic))
+        self.assertNotIn("secret", json.dumps(diagnostic))
+
+    def test_failed_provider_attempt_keeps_unknown_spend_even_without_answered_spans(self):
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+
+        ctx = make_ctx()
+        runtime = AgentRuntimeService(ctx.service, ctx.config)
+        self.assertEqual(runtime._spend(ctx.ledger, "gpt-6-sol"), 0, "no dispatch can release the hold")
+        ctx.ledger.calls.append({"status": "timeout", "model": "gpt-6-sol"})
+        self.assertIsNone(runtime._spend(ctx.ledger, "gpt-6-sol"), "no span is not proof of zero provider cost")
+        ctx.ledger.spans.append({"model": "gpt-6-sol", "inputTokens": 100, "outputTokens": 100})
+        self.assertIsNone(runtime._spend(ctx.ledger, "gpt-6-sol"), "an answered span does not reconcile another unknown attempt")
+        ctx.ledger.calls[:] = [{"status": "rate_limited", "http_status": 429, "cost_usd_micro": 0, "cost_source": "provider"}]
+        priced = ctx.config.estimate_usd_micro("gpt-6-sol", 100, 100)
+        self.assertEqual(runtime._spend(ctx.ledger, "gpt-6-sol"), priced, "an explicit refusal can be recorded as zero without double-counting answered spans")
+        ctx.ledger.spans.clear()
+        self.assertEqual(runtime._spend(ctx.ledger, "gpt-6-sol"), 0)
+
+    def test_metering_counts_a_failed_dispatch_as_one_request_not_zero(self):
+        from unittest.mock import patch
+
+        ctx = make_ctx()
+        scripted = ScriptedModel([])
+        wrapped = manager.metered(scripted, ctx, agent="rafii_manager", workload="standard_reasoning",
+                                  route={"provider": "openai", "model": "gpt-6-sol"})
+        with patch.object(scripted, "get_response", side_effect=TimeoutError("synthetic timeout")), self.assertRaises(TimeoutError):
+            asyncio.run(wrapped.get_response())
+        self.assertEqual(ctx.ledger.model_requests, 1)
+        self.assertEqual(ctx.ledger.spans, [])
+        self.assertEqual(len(ctx.ledger.calls), 1)
+        self.assertEqual(ctx.ledger.calls[0]["status"], "timeout")
+
+    def test_separately_reserved_images_do_not_double_charge_chat_or_hold_its_budget(self):
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+
+        ctx = make_ctx()
+        runtime = AgentRuntimeService(ctx.service, ctx.config)
+        ctx.ledger.spans.append({"model": "gpt-6-sol", "inputTokens": 100, "outputTokens": 100})
+        text_cost = ctx.config.estimate_usd_micro("gpt-6-sol", 100, 100)
+        for call in ({"feature": "image", "reservation_id": "separate-image-hold", "status": "ok", "cost_usd_micro": 30_000},
+                     {"feature": "image", "reservation_id": "separate-image-hold", "status": "unknown"}):
+            with self.subTest(call=call):
+                ctx.ledger.calls[:] = [call]
+                self.assertEqual(runtime._spend(ctx.ledger, "gpt-6-sol"), text_cost)
+
+    def test_provider_client_dispatches_one_physical_attempt_without_hidden_sdk_retries(self):
+        import httpx
+        from openai import APITimeoutError, AsyncOpenAI, RateLimitError
+        from unittest.mock import patch
+
+        async def exercise(timeout):
+            requests = []
+            def transport(request):
+                requests.append(request)
+                if timeout:
+                    raise httpx.ReadTimeout("synthetic transport timeout", request=request)
+                return httpx.Response(429, json={"error": {"code": "rate_limit_exceeded", "message": "synthetic refusal", "type": "rate_limit_error"}})
+
+            def client(**kwargs):
+                return AsyncOpenAI(**kwargs, http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)))
+
+            cfg = config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "local-only-test-key"})
+            with patch("openai.AsyncOpenAI", side_effect=client):
+                model = manager.provider_model(cfg, "standard_reasoning")
+            try:
+                with self.assertRaises(APITimeoutError if timeout else RateLimitError):
+                    await model._client.responses.create(model="gpt-6-sol", input="synthetic no-network input")
+                self.assertEqual(len(requests), 1, "one metered call must not hide a second provider dispatch")
+            finally:
+                await model.close()
+
+        for timeout in (False, True):
+            with self.subTest(timeout=timeout):
+                asyncio.run(exercise(timeout))
+
     def test_drive_closes_clients_after_success_failure_and_timeout(self):
         async def ok():
             return "done"

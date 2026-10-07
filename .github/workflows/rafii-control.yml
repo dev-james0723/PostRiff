@@ -1,0 +1,70 @@
+name: Rafii Control foundation
+on:
+  pull_request:
+    paths: ['src/rafii_control/**', 'control-web/**', 'api/control.py', 'migrations/postriff/049_*', 'migrations/postriff/051_*', 'migrations/postriff/052_*', 'migrations/postriff/053_*', 'migrations/postriff/05[4-9]_*', 'migrations/postriff/06[0-9]_*', 'migrations/postriff/07[0-9]_*', 'scripts/rafii_control_*', 'tests/control/**', 'tests/phase2/rls.sql', 'docs/superpowers/tech-packs/2026-09-29-rafii-control-v2/**', 'docs/releases/founder-admin-2026-10-01/**', '.github/workflows/rafii-control.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rafii-control-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      RAFII_CONTROL_ENABLED: '1'
+      RAFII_CONTROL_ORIGIN: http://localhost:4549
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.control-browsers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: control-web/package-lock.json
+      - name: Install pinned dependencies and disposable PostgreSQL
+        run: |
+          python -m pip install -r requirements-control.txt
+          # Embedded-mount tests also import the consumer notification service, whose web push signing needs cryptography
+          # (same pin as requirements.txt). Control itself still installs no model or payment SDK.
+          python -m pip install 'cryptography==50.0.1'
+          npm install -g npm@11.12.1
+          npm --prefix control-web ci
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Boundary, golden definitions, isolated tools, package and PostgreSQL roles
+        run: python scripts/rafii_control_pg.py
+      - name: Frontend contracts, types, lint and production build
+        run: |
+          npm --prefix control-web test
+          npm --prefix control-web run typecheck
+          npm --prefix control-web run lint
+          npm --prefix control-web run build
+      # The separate control-web browser gate is retired with the separate dashboard it tested: PRD v2.0 §4 (option B)
+      # moved the founder surface into the Rafii app (web/src/app/founder, Control embedded in the consumer API), and
+      # /control/* now redirects there. That surface's end-to-end browser gate is .github/workflows/founder-browser.yml
+      # (real Next production build, embedded Control, disposable restricted PostgreSQL, synthetic founder identity).
+      # control-web keeps its contract, type, lint and build checks above until it is deleted.
+      - name: Exact-content separate Control function archive
+        run: |
+          python -m pip install uv==0.11.16
+          npm install --prefix .codex/consumer-ready/vercel --no-save vercel@59.23.2 ignore@7.0.5
+          CONTROL_BUILD_PYTHON=python CONTROL_ARTIFACT_RECORD=docs/rafii-control-v2/evidence/business-workspace/control-artifact.json node scripts/rafii_control_artifact.cjs
+      - name: Retain source-specific synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rafii-control-${{ github.sha }}
+          path: docs/rafii-control-v2/evidence/
+          retention-days: 14

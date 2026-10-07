@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime
 
 from postriff_alpha.domain import AlphaError
 
@@ -66,6 +67,8 @@ def ingest(cur, msg_id, event, raw_body, now=None):
     kind = str(event.get("type") or "")[:60]
     data = event.get("data") if isinstance(event.get("data"), dict) else {}
     digest = hashlib.sha256(raw_body).hexdigest()
+    # Serialize duplicate callbacks before any preference/audit side effect.
+    cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('resend_event:' + msg_id,))
     cur.execute("SELECT outcome FROM public.pr_notification_provider_events WHERE provider='resend' AND event_id=%s", (msg_id,))
     if cur.fetchone():
         return {"outcome": "duplicate"}
@@ -91,13 +94,13 @@ def ingest(cur, msg_id, event, raw_body, now=None):
     outcome = "unmatched" if row is None else "ignored"
     if row is not None:
         delivery, user_id, status = row
-        if mapped == "delivered" and status in ("sent", "claimed"):
-            cur.execute("UPDATE public.pr_notification_deliveries SET status='delivered', delivered_at=now(), updated_at=now() WHERE id::text = ANY(%s) AND status IN ('sent','claimed')",
-                        (targets,))
+        if mapped == "delivered" and status in ("sent", "claimed", "uncertain", "pending"):
+            cur.execute("UPDATE public.pr_notification_deliveries SET status='delivered', delivered_at=now(), provider='resend',provider_ref=coalesce(provider_ref,%s), updated_at=now() WHERE id::text = ANY(%s) AND status IN ('sent','claimed','uncertain','pending')",
+                        (str(provider_ref)[:200] if provider_ref else None, targets))
             outcome = "applied"
         elif mapped in ("bounced", "failed"):
-            cur.execute("UPDATE public.pr_notification_deliveries SET status='failed', failure_class='permanent', failure_detail=%s, failed_at=now(), updated_at=now() WHERE id::text = ANY(%s)",
-                        (f"provider reported {mapped}", targets))
+            cur.execute("UPDATE public.pr_notification_deliveries SET status='failed', failure_class='permanent', failure_detail=%s, failed_at=now(), updated_at=now() WHERE id::text = ANY(%s) AND (%s='bounced' OR status NOT IN ('delivered','read','acted','dismissed'))",
+                        (f"provider reported {mapped}", targets, mapped))
             if mapped == "bounced":
                 _suppress_email(cur, user_id, "bounced")
             outcome = "applied"
@@ -110,9 +113,20 @@ def ingest(cur, msg_id, event, raw_body, now=None):
             if mapped == "clicked":
                 cur.execute("UPDATE public.pr_notification_deliveries SET read_at=coalesce(read_at, now()), updated_at=now() WHERE id::text=%s", (delivery,))
             outcome = "applied"
+    if row is None and tags.get('legacy_delivery_id'):
+        from .legacy_outbox import ingest as ingest_legacy
+        # A legacy source has its own original-tenant row, never a fabricated
+        # notification delivery. The shared signed event journal still dedupes.
+        outcome = ingest_legacy(cur, tags['legacy_delivery_id'], str(provider_ref)[:200] if provider_ref else None, mapped) or 'unmatched'
+    try:
+        provider_time = datetime.fromisoformat(str(event.get('created_at')).replace('Z', '+00:00'))
+        event_time = provider_time.timestamp() if provider_time.tzinfo else None
+    except (TypeError, ValueError, OverflowError):
+        event_time = None
+    # Unknown provider time stays NULL; received_at is the database observation.
     cur.execute("""INSERT INTO public.pr_notification_provider_events(provider,event_id,delivery_id,kind,event_at,payload_digest,outcome)
                    VALUES('resend',%s,%s,%s,to_timestamp(%s),%s,%s) ON CONFLICT (provider,event_id) DO NOTHING""",
-                (msg_id, row[0] if row else None, kind or "unknown", now or time.time(), digest, outcome))
+                (msg_id, row[0] if row else None, kind or "unknown", event_time, digest, outcome))
     return {"outcome": outcome, "kind": kind}
 
 

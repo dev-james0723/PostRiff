@@ -53,6 +53,7 @@ import { PasskeysCard } from './passkeys-card';
 import { PreferencesCard } from './preferences-card';
 import { SecurityCard } from './security-card';
 import { SettingsSection } from './settings-section';
+import { SupportCard } from './support-card';
 
 const infoContent = {
   title: 'What lives here',
@@ -677,6 +678,7 @@ export function ProfileView() {
           <AccountActions />
         </div>
       </div>
+      <SupportCard />
     </PageContainer>
   );
 }

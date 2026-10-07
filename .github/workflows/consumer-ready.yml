@@ -10,7 +10,8 @@ concurrency:
 jobs:
   local-gates:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # About 21 minutes of work on a typical runner; 25 left no room for runner variance and cancelled a passing run.
+    timeout-minutes: 40
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'
@@ -79,6 +80,7 @@ jobs:
           python scripts/consumer_ready_check.py ci-session-cache node web/tests/session-cache-browser.cjs
           python scripts/consumer_ready_check.py ci-browser python scripts/consumer_ready_browser.py
           python scripts/consumer_ready_check.py ci-performance python scripts/consumer_ready_browser.py --performance
+          python scripts/consumer_ready_check.py ci-history-import python scripts/consumer_ready_browser.py --history-import
       - name: Retain evidence tied to this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

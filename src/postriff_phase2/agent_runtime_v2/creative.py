@@ -394,12 +394,14 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
             raise AlphaError("That image was already requested in this turn, so I didn't make it twice.", 409, code="duplicate_image")
     parent_hash = parent.get("hash") if parent else None
     inputs = ([parent] if parent else []) + sources
-    staged, result = None, None
+    staged, result, dispatched, began = None, None, None, None
     try:
         ctx.check_cancelled()
         source_bytes = [_bytes(ctx, asset) for asset in inputs]
+        dispatched, began = time.time(), time.monotonic()
         result = studio.run(prompt=prompt, quality=quality, size=size, sources=source_bytes, operation=operation, timeout=ctx.provider_timeout(TIMEOUT_SECONDS))
         ctx.ledger.model_requests += 1
+        _note_image_call(ctx, studio, quality, reservation, started=dispatched, began=began, result=result)
         staged = ctx.service.assets.stage_upload(ctx.workspace_id, {"data": base64.b64encode(result["bytes"]).decode()})
         # The provider's reported cost when it gives one (the gateway); otherwise the configured per-image price — the same
         # rule as model tokens, which are priced from config — so a saved image is never left "unknown" with no reconciler.
@@ -435,6 +437,8 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
                 ctx.service.assets.remove(ctx.workspace_id, staged)
             except Exception:  # noqa: BLE001 — cleanup must not hide the original failure
                 pass
+        if result is None and dispatched is not None:
+            _note_image_call(ctx, studio, quality, reservation, started=dispatched, began=began, error=error)
         with ctx.workspace() as (cur, _row, _principal, _member, _state):
             if result is not None:
                 # The provider made (and billed) the image even though it wasn't saved: book that cost, don't hold it unknown.
@@ -462,6 +466,40 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
         ctx.ledger.changed.append({"type": "asset", "id": asset_id, "change": lineage["operation"], "expected": "saved image", "actual": "saved image", "verified": True})
     return {"ok": verified, "verified": verified, "asset": view, "revisedPrompt": result.get("revisedPrompt"), "digest": digest({"asset": asset_id, "hash": record["hash"]}),
             **({} if verified else {"error": "The image could not be confirmed in the workspace after saving."})}
+
+
+def _note_image_call(ctx: RafiiRunContext, studio, quality, reservation, *, started, began, result=None, error=None) -> None:
+    """One image provider attempt for public.pr_ai_call_events (Founder Admin §8.B), kept on the turn's ledger and written when
+    the turn settles (manager.record_calls). Cost as the settle books it: the provider's report, else the configured per-image
+    price (labelled with its table). A refusal costs nothing; a timeout or server error leaves it unknown. Never raises."""
+    try:
+        from .. import ai_call_events
+        workload = "image_quality" if quality == "quality" else "image_fast"
+        route = studio.route(quality, reason="usage record")
+        call = {"feature": "image", "workload": workload, "reservation_id": (reservation or {}).get("reservationId"), "started_at": started,
+                "provider": route.provider, "model": route.model}
+        if result is not None:
+            reported, usage = (result.get("usage") or {}).get("costUsd"), result.get("usage") or {}
+            if type(reported) in (int, float) and reported >= 0:
+                cost, source = int(round(reported * 1_000_000)), "gateway" if result.get("provider") == "gateway" else "provider"
+            else:
+                estimate = studio.estimate(quality)
+                default = runtime_config.DEFAULT_IMAGE_ESTIMATE_USD_MICRO.get(workload)
+                cost, source, _ = ai_call_events.table_cost(estimate, ai_call_events.MEDIA_CONSTANTS if estimate == default else ai_call_events.CONFIGURED)
+            call.update(status="ok", images=1, model=result.get("model") or route.model, provider=result.get("provider") or route.provider, latency_ms=result.get("latencyMs"),
+                        provider_request_id=(result.get("providerRef") or {}).get("responseId"), input_tokens=usage.get("inputTokens"), output_tokens=usage.get("outputTokens"),
+                        cost_usd_micro=cost, cost_source=source)
+        else:
+            code, uncertain = getattr(error, "code", None), bool(getattr(error, "uncertain", False))
+            if code == "route_unavailable":
+                return   # refused before any request: not a provider attempt
+            status = "unknown" if uncertain or not isinstance(error, CreativeError) else "rate_limited" if code == "provider_busy" else "failed"
+            refused = status == "rate_limited" or (status == "failed" and code != "no_image")
+            call.update(status=status, latency_ms=round((time.monotonic() - began) * 1000) if began is not None else None,
+                        **({"images": 0, "cost_usd_micro": 0, "cost_source": "provider"} if refused else {}))
+        ctx.ledger.calls.append(call)
+    except Exception:  # noqa: BLE001 - recording never changes an image request
+        pass
 
 
 def _step(ctx, args, fn):

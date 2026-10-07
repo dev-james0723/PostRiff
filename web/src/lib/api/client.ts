@@ -1,5 +1,6 @@
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
+import type { HistoryImportStatus } from '@/lib/channels/history-import';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -257,6 +258,10 @@ export function createApi(getToken: TokenSource) {
       send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),
     ownedPosts: (w: string, id: string, cursor?: string) =>
       send<import('./types').OwnedPostPage>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts`, { confirmed: true, cursor: cursor ?? null, limit: 25 }),
+    historyImportStatus: (w: string, id: string) =>
+      get<HistoryImportStatus>(`${ws(w)}/channels/${encodeURIComponent(id)}/history-import`),
+    requestHistoryImport: (w: string, id: string, body: { confirmed: boolean }) =>
+      send<HistoryImportStatus>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/history-import`, body),
     importOwnedPosts: (w: string, id: string, receipt: string, postIds: string[], expectedRevision: number) =>
       send<Snapshot>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts/import`, { receipt, postIds, expectedRevision, confirmedAuthorship: true }),
     importOwnedPostSelection: (w: string, id: string, selections: { receipt: string; postIds: string[] }[], labels: Record<string, string>, expectedRevision: number) =>
@@ -265,6 +270,12 @@ export function createApi(getToken: TokenSource) {
       send<{ connectionId: string; state: string; identityVerified: boolean; detail?: string }>(
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
+      ),
+    insightsCanary: (w: string, id: string) =>
+      send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(
+        'POST',
+        `${ws(w)}/channels/${encodeURIComponent(id)}/insights-canary`,
+        { confirmed: true }
       ),
     disconnectChannel: (w: string, id: string) =>
       send<{ disconnected: boolean; remoteRevoked: boolean; revision: number }>(
@@ -461,10 +472,13 @@ export function createApi(getToken: TokenSource) {
     phoneVerify: (w: string, number: string) => send<{ sent: boolean }>('POST', `${ws(w)}/phone/verification`, { number }),
     phoneConfirm: (w: string, code: string) => send<{ verified: boolean }>('POST', `${ws(w)}/phone/verification/confirm`, { code }),
     phoneDelete: (w: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/number`),
-    phoneCall: (w: string, body: { idempotencyKey: string; conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean }) => send<PhoneCall>('POST', `${ws(w)}/phone/calls`, body),
+    phoneCall: (w: string, body: { idempotencyKey: string; conversationId?: string | null; maxMilliCredits?: number; useAvailableCredits?: boolean; callDurationLimitSeconds?: number }) => send<PhoneCall>('POST', `${ws(w)}/phone/calls`, body),
     phoneEnd: (w: string, id: string) => send<{ ended: boolean; state?: string }>('POST', `${ws(w)}/phone/calls/${encodeURIComponent(id)}/end`),
     phoneSchedule: (w: string, schedule: { weekdays: string[]; localTime: string; timeZone: string }) => send<{ id: string }>('POST', `${ws(w)}/phone/schedules`, { schedule }),
     phoneDeleteSchedule: (w: string, id: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/schedules/${encodeURIComponent(id)}`),
+    supportTickets: (w: string) => get<{ tickets: { id: string; category: string; status: string; revision: number }[] }>(`${ws(w)}/support/tickets`),
+    supportTicket: (w: string, id: string) => get<{ messages: { role: string; body: string; createdAt: string }[] }>(`${ws(w)}/support/tickets/${encodeURIComponent(id)}`),
+    supportMessage: (w: string, body: { requestId: string; message: string; category?: string }, id?: string) => send('POST', `${ws(w)}/support/tickets${id ? '/' + encodeURIComponent(id) : ''}`, body),
     dataRequests: (w: string) => get<{ requests: DataRequest[] }>(`${ws(w)}/data-requests`),
     dataRequest: (w: string, body: Record<string, unknown>) =>
       send<Record<string, unknown> & { kind: string; status: string }>('POST', `${ws(w)}/data-requests`, body)

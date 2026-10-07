@@ -1,0 +1,446 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rafii-control:v2:recommendation",
+  "title": "recommendation",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "recommendationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "investigationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "production",
+        "staging",
+        "local"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stored",
+              "deterministic_derived"
+            ]
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "statement",
+          "kind",
+          "evidenceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 30,
+      "uniqueItems": true
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "supportingEvidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfirmed",
+              "supported_not_causal",
+              "reproduced"
+            ]
+          }
+        },
+        "required": [
+          "statement",
+          "supportingEvidenceRefs",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10
+    },
+    "proposedAction": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "support.reply",
+            "credits.grant",
+            "credits.reverse",
+            "billing.refund",
+            "account.security_lock",
+            "account.suspend",
+            "account.reinstate",
+            "account.delete",
+            "engineering.check",
+            "engineering.patch",
+            "release.prepare",
+            "chart.save"
+          ]
+        },
+        "targetRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "riskTier": {
+          "type": "string",
+          "enum": [
+            "R0",
+            "R1",
+            "R2",
+            "R3",
+            "R4"
+          ]
+        },
+        "parametersDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "requiresHumanApproval": {
+          "const": true
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "production",
+            "staging",
+            "local"
+          ]
+        }
+      },
+      "required": [
+        "operation",
+        "targetRefs",
+        "riskTier",
+        "parametersDigest",
+        "requiresHumanApproval",
+        "environment"
+      ],
+      "additionalProperties": false
+    },
+    "impact": {
+      "type": "object",
+      "properties": {
+        "basis": {
+          "type": "string",
+          "enum": [
+            "scenario",
+            "observed_association",
+            "experiment_estimate",
+            "unknown"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{3}$"
+        },
+        "lowMinor": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "baseMinor": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "highMinor": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "basis",
+        "currency",
+        "lowMinor",
+        "baseMinor",
+        "highMinor",
+        "assumptions"
+      ],
+      "additionalProperties": false
+    },
+    "measurementPlan": {
+      "type": "object",
+      "properties": {
+        "primaryMetric": {
+          "type": "string",
+          "enum": [
+            "paid_workspaces",
+            "mrr",
+            "delinquent_mrr",
+            "mrr_new",
+            "mrr_expansion",
+            "mrr_contraction",
+            "mrr_churn",
+            "collections",
+            "refunds",
+            "dispute_net",
+            "net_collections",
+            "recovery_rate",
+            "nrr",
+            "grr",
+            "logo_churn",
+            "contribution",
+            "cost_coverage",
+            "active_users",
+            "active_workspaces",
+            "activation_rate",
+            "time_to_value",
+            "retention_d7",
+            "retention_d28",
+            "feature_adoption",
+            "task_success",
+            "publish_verified",
+            "useful_outcomes",
+            "automation_success",
+            "ai_actual_cost",
+            "ai_failed_cost",
+            "cost_per_useful",
+            "ai_quality",
+            "ai_latency",
+            "task_latency",
+            "credit_grants",
+            "credit_consumption",
+            "credit_available",
+            "credit_held",
+            "credit_debt",
+            "api_errors",
+            "api_latency",
+            "queue_age",
+            "slo_burn",
+            "affected_workspaces",
+            "source_lag",
+            "open_tickets",
+            "first_response",
+            "resolution_time",
+            "csat",
+            "repeat_tickets",
+            "required_checks",
+            "check_failures",
+            "flake_rate",
+            "security_open",
+            "gsc_clicks",
+            "gsc_ctr",
+            "attribution_coverage",
+            "source_paid_conversion",
+            "cac",
+            "decision_recovered_cash",
+            "experiment_effect",
+            "time_back",
+            "mrr_reactivation"
+          ]
+        },
+        "guardrailMetrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "paid_workspaces",
+              "mrr",
+              "delinquent_mrr",
+              "mrr_new",
+              "mrr_expansion",
+              "mrr_contraction",
+              "mrr_churn",
+              "collections",
+              "refunds",
+              "dispute_net",
+              "net_collections",
+              "recovery_rate",
+              "nrr",
+              "grr",
+              "logo_churn",
+              "contribution",
+              "cost_coverage",
+              "active_users",
+              "active_workspaces",
+              "activation_rate",
+              "time_to_value",
+              "retention_d7",
+              "retention_d28",
+              "feature_adoption",
+              "task_success",
+              "publish_verified",
+              "useful_outcomes",
+              "automation_success",
+              "ai_actual_cost",
+              "ai_failed_cost",
+              "cost_per_useful",
+              "ai_quality",
+              "ai_latency",
+              "task_latency",
+              "credit_grants",
+              "credit_consumption",
+              "credit_available",
+              "credit_held",
+              "credit_debt",
+              "api_errors",
+              "api_latency",
+              "queue_age",
+              "slo_burn",
+              "affected_workspaces",
+              "source_lag",
+              "open_tickets",
+              "first_response",
+              "resolution_time",
+              "csat",
+              "repeat_tickets",
+              "required_checks",
+              "check_failures",
+              "flake_rate",
+              "security_open",
+              "gsc_clicks",
+              "gsc_ctr",
+              "attribution_coverage",
+              "source_paid_conversion",
+              "cac",
+              "decision_recovered_cash",
+              "experiment_effect",
+              "time_back",
+              "mrr_reactivation"
+            ]
+          },
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "windowDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 366
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "deterministic_reconciliation",
+            "functional_verification",
+            "randomized_experiment",
+            "observational_review"
+          ]
+        },
+        "successCriterion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "primaryMetric",
+        "guardrailMetrics",
+        "windowDays",
+        "method",
+        "successCriterion"
+      ],
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "approved",
+        "rejected",
+        "snoozed",
+        "executing",
+        "verification_pending",
+        "measuring",
+        "validated",
+        "inconclusive",
+        "invalidated",
+        "closed"
+      ]
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fixture": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "recommendationId",
+    "investigationId",
+    "environment",
+    "title",
+    "facts",
+    "hypotheses",
+    "proposedAction",
+    "impact",
+    "measurementPlan",
+    "state",
+    "expiresAt",
+    "fixture"
+  ],
+  "additionalProperties": false,
+  "description": "A recommendation is not an execution capability. Server validates evidence ownership, freshness, operation policy and digest. Impact ranges are not guaranteed revenue."
+}

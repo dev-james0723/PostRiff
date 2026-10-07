@@ -112,11 +112,12 @@ class CoworkerService:
     def status(self, workspace_id, token):
         from .. import skill_registry
         from ..growth.trends import beta
+        from ..growth.metric_schedule import workspace_enabled
         state = self._state(workspace_id, token)
         weekly = weekly_operator.view(state)
         notifications = getattr(self.hosted, "notifications", None)
         return {**flags.public(), "registryRelease": skill_registry.default_registry().release(),
-                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=getattr(self.hosted, "metric_reads", None) is not None),
+                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=workspace_enabled(getattr(self.hosted, "metric_reads", None), workspace_id)),
                 "notifications": notifications.status() if notifications else {"enabled": False},
                 "research": research_broker.ResearchBroker(state=state).diagnostics() if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
                 "weekly": {"recipes": len([r for r in weekly["recipes"] if r.get("status") != "deleted"]), "weeks": len(weekly["weeks"])}}
@@ -398,6 +399,9 @@ class CoworkerService:
 
         def emit(cur, state_, principal):
             target_week = self._find_week(state_, week_id)
+            from .. import product_events
+            # Product taxonomy (PRD §8.6): humanizer.applied per checked draft, ids/enums only, behind its own savepoint.
+            product_events.humanizer_applied(cur, workspace_id, principal, state_, [(check.get("variantId"), check.get("status")) for check in checks.values()], "weekly")
             notifications = getattr(self.hosted, "notifications", None)
             if notifications is None:
                 return
@@ -535,6 +539,11 @@ class CoworkerService:
             require(self.hosted.ideas._member(row), "edit")
             evidence_ids = [self._store_evidence(cur, workspace_id, key, item["provenance"], item["snippet"]) for item in outcome["items"]]
             _event(cur, workspace_id, principal, "research.search", {"status": outcome["status"], "results": len(outcome["items"])})
+            if outcome["status"] == "ok":
+                from .. import product_events
+                # Product taxonomy (PRD §8.6): an opaque request id (never the query) and the UTC day as the version.
+                product_events.record(cur, workspace_id, principal, "research.completed", product_events.request_entity(workspace_id, key),
+                                      time.strftime("%Y%m%d", time.gmtime(self.clock())), {"source": "broker", "outcome": "found" if outcome["items"] else "empty"})
         return {"status": outcome["status"], "provider": outcome["provider"], "errors": outcome["errors"],
                 "items": [{**i, "evidenceId": e, "usableForDraft": False, "note": "A search result is a lead, not a verified fact."} for i, e in zip(outcome["items"], evidence_ids)]}
 
@@ -687,6 +696,9 @@ class CoworkerService:
                 notifications.emit(cur, workspace_id=workspace_id, event_type="campaign.drafts_ready", dedupe_key=f"source_campaign:{record_id}", entity_type="source_campaign",
                                    entity_id=record_id, payload={"count": len(drafts), "recipeName": artifact["title"][:80], "href": "/app/queue?view=drafts"}, actor=principal)
             _event(cur, workspace_id, principal, "research.campaign_created", {"sourceCampaignId": record_id, "drafts": len(drafts)}, f"source_campaign:{record_id}")
+            from .. import product_events
+            # Product taxonomy (PRD §8.6): humanizer.applied per checked draft, ids/enums only, behind its own savepoint.
+            product_events.humanizer_applied(cur, workspace_id, principal, state_, [(d.get("variantId"), d.get("status")) for d in drafts if d.get("quality")], "source_campaign")
 
         self._command(workspace_id, token, finish, "edit", "source_campaign.drafted", record_id, {"drafts": len(drafts)}, after=emit)
         stored = next(x for x in (self._state(workspace_id, token).get("coworker") or {}).get("sourceCampaigns") or [] if x["id"] == record_id)
@@ -849,8 +861,9 @@ class CoworkerService:
             trend_report = self._trend_learning_report(cur, workspace_id, _p)
             result = performance.view(cur, workspace_id, state, self.clock(), trend_report=trend_report)
             from ..growth.trends import beta
+            from ..growth.metric_schedule import workspace_enabled
             result['post_tracking'] = beta.tracking(cur, workspace_id, state, self.clock(),
-                enabled=getattr(self.hosted, 'metric_reads', None) is not None)
+                enabled=workspace_enabled(getattr(self.hosted, 'metric_reads', None), workspace_id))
             if trend_report is not None:
                 from ..growth.trends import learning_options
                 from ..growth.trends.store import TrendStore

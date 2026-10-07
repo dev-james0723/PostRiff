@@ -124,6 +124,10 @@ class PostgresWorkspaceRepository:
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
                     raise AlphaError('Account deletion is pending. Only deletion can continue.', 409, code='account_deletion_pending')
+                if state.get('accountBlock'):
+                    # A founder account block froze this workspace (operator_actions): every request and background run stops here.
+                    from .operator_actions import blocked_error
+                    raise blocked_error()
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
                 yield cur, row, principal
@@ -354,7 +358,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -399,7 +403,7 @@ class HostedWorkspaceService:
         self.mailer = mailer or Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
         self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
-        self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
+        self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
@@ -411,6 +415,10 @@ class HostedWorkspaceService:
         # Time Back: a draft accepted for use or an automation activated is recorded in the command that completed it.
         self.time_savings = TimeSavingsService(self.repository, clock)
         self.repository.effects.append(self.time_savings.capture)
+        from . import product_events
+        # Product taxonomy (PRD §8.6): the journey and adoption events a command implies, ids/enums only, each batch behind
+        # its own savepoint; it never fails the command.
+        self.repository.effects.append(product_events.capture)
         self.ideas.learning = self.learning
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
@@ -471,7 +479,7 @@ class HostedWorkspaceService:
     def usage(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, actor):
             view = self.ledger.usage_view(cur, workspace_id, actor)
-            view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
+            view["lifecycle"] = {"status": "internal", "canPublish": True, "exportAvailable": True, "draftsRetained": True} if view["entitlement"].get("unlimited") else self.billing.lifecycle(cur, workspace_id, self.clock())
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
             if not _membership(row).allows("owner"):
@@ -736,6 +744,9 @@ class HostedWorkspaceService:
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
                     audit(cur, workspace_id, principal, "workspace.created", "", {"plan": saved_plan})
+                    from . import product_events
+                    # Product taxonomy (PRD §8.6): the signup milestone, ids/enums only, behind its own savepoint.
+                    product_events.record(cur, workspace_id, principal, "workspace.created", workspace_id, 1, {"plan": saved_plan})
                     created = True
                 self._touch_session(cur, principal, self._session_id(token, principal), client_label)
         if created and self.public_base_url:

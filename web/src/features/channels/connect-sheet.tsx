@@ -17,6 +17,8 @@ import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
 import type { OAuthStart, ProviderView } from '@/lib/api/types';
 import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
+import { historyImportCopy } from '@/lib/channels/history-import-copy';
+import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
@@ -100,6 +102,8 @@ export function ConnectSheet({
   request: ConnectRequest | null;
 }) {
   const { api, workspaceId } = useWorkspaceApi();
+  const { locale } = usePreferences();
+  const { copy: importCopy, lang: importLang } = historyImportCopy(locale);
   const isMobile = useIsMobile();
   const [providerId, setProviderId] = useState<string>('');
   const [capability, setCapability] = useState<ConnectCapability>('publish');
@@ -116,18 +120,30 @@ export function ConnectSheet({
   const offered = offeredCapabilities(provider);
   const reconnect = request?.reconnect ?? null;
 
-  // Each opening starts from what opened it: the tile's provider, the card's capability, or the first provider.
+  // Each opening starts from what opened it: the tile's provider, the card's capability,
+  // or the URL deep link. The URL is the final authority for direct-entry flows such as
+  // Analytics → Enable analytics; this avoids losing the intended provider/capability
+  // during hydration or parent state races. Equivalent React Query provider-array refreshes
+  // must not reset an in-progress choice, so depend on the stable provider id signature.
+  const providerSignature = providers.map((provider) => provider.id).join('|');
   useEffect(() => {
     if (!open) return;
-    const initial = providers.find((p) => p.id === request?.providerId) ?? providers[0];
+    const search = new URLSearchParams(window.location.search);
+    const urlProviderId = search.get('connect') ?? undefined;
+    const urlCapabilityValue = search.get('capability');
+    const urlCapability = CONNECT_CAPABILITIES.find((value) => value === urlCapabilityValue);
+    const requestedProviderId = urlProviderId ?? request?.providerId;
+    const requestedCapability = urlCapability ?? request?.capability;
+    const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
+
     setProviderId(initial?.id ?? '');
-    setCapability(defaultCapability(initial, request?.capability));
+    setCapability(defaultCapability(initial, requestedCapability));
     setPending(null);
     setError(null);
     setBusy(false);
     setInputValue('');
     setNotSeenYet(false);
-  }, [open, providers, request]);
+  }, [open, providerSignature, request?.providerId, request?.capability]);
 
   function choosePlatform(id: string) {
     const next = providers.find((p) => p.id === id);
@@ -205,7 +221,11 @@ export function ConnectSheet({
                 <ChannelIcon platform={pending.platform} name={pending.platform} />
                 {pending.platform} · {CONNECT_CAPABILITY_OPTIONS.find((c) => c.key === pending.capability)?.label ?? pending.capability}
               </div>
-              <p className='text-sm leading-relaxed'>{pending.permissionExplanation}</p>
+              {pending.capability === 'analytics' && ['threads', 'instagram'].includes(pending.provider) ? (
+                <div className='flex flex-col gap-2 text-sm leading-relaxed' lang={importLang}>
+                  <p>{importCopy.analyticsAccess}</p><p>{importCopy.metadata}</p><p>{importCopy.purge}</p>
+                </div>
+              ) : <p className='text-sm leading-relaxed'>{pending.permissionExplanation}</p>}
               {/* Permissions stay explicit: they are what the person is about to grant. */}
               <div className='flex flex-col gap-1.5'>
                 <span className='text-muted-foreground text-xs'>Permissions requested</span>
@@ -341,8 +361,9 @@ export function ConnectSheet({
                       <RadioGroupItem
                         key={option.key}
                         value={option.key}
+                        aria-label={option.label}
                         label={option.label}
-                        description={option.description}
+                        description={option.key === 'analytics' && provider && ['threads', 'instagram'].includes(provider.id) ? importCopy.analyticsAccess : option.description}
                         className='rafii-quiet rounded-[var(--rafii-radius-control)] p-3 transition-colors data-[state=checked]:rafii-glass-selected'
                       />
                     ))}

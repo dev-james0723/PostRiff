@@ -1,0 +1,67 @@
+{
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "sourceState": "merged_deployed_core_release",
+  "sourceTreeHash": null,
+  "generatedAt": "2026-10-03T01:11:36.772268+00:00",
+  "executionState": "production_schema_and_core_deployment_verified_acceptance_pending",
+  "productionVerified": false,
+  "real": {
+    "state": "not_run",
+    "providerCalls": 0,
+    "providerCostUsd": null,
+    "reason": "Core deployment and migration passed. Existing Google primary needs the qualified fix and fresh owner MFA; saved Ops/policy, verified sender and physical-device acceptance remain pending."
+  },
+  "synthetic": {
+    "state": "PASS_core_release",
+    "evidence": [
+      {
+        "run": 37066291791,
+        "head": "4c2bfb88050efab92eec988f727513c68ce358af",
+        "name": "local release gates",
+        "pythonTests": 3698,
+        "conditionalPythonSkips": 367,
+        "webTests": 636,
+        "state": "PASS"
+      },
+      {
+        "run": 37066291818,
+        "name": "restricted-role PostgreSQL",
+        "tests": 547,
+        "skipped": 3,
+        "state": "PASS"
+      },
+      {
+        "run": 37066291871,
+        "name": "Founder browser",
+        "checks": 1062,
+        "failures": 0,
+        "widths": [
+          390,
+          768,
+          1440
+        ],
+        "state": "PASS"
+      },
+      {
+        "run": 37066291864,
+        "attempt": 2,
+        "name": "Rafii browser scenes Chromium/WebKit",
+        "state": "PASS",
+        "earlierAttempt": "WebKit process crash retained in raw/ci-4c-scenes-failed.log"
+      }
+    ]
+  },
+  "observation24Hours": {
+    "state": "not_started",
+    "reason": "No authenticated real owner canary has completed."
+  },
+  "deploymentSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+  "reviewedSourceFingerprint": "cb418637e2e8c27b643112b2504be3f2a19c3b522123cb69aeb74ce50ffdaeef",
+  "sourceEvidence": "production-release-verification.json; exact-head CI and identical merged tree",
+  "authCandidate": {
+    "branch": "codex/founder-google-acceptance-20261002",
+    "baseSha": "00245f46b4c6c3ee5325c1484da56f5a556a117b",
+    "state": "local_qualification_in_progress",
+    "deployed": false
+  }
+}

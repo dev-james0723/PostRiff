@@ -753,6 +753,9 @@ export interface SafeEvent {
   sourceId?: string;
   policy?: string;
   stage?: string;
+  thinkingOp?: 'working' | 'searching' | 'solving' | 'listening' | 'connecting' | 'weaving' | 'composing' | 'breathing' | 'shaping' | 'acting';
+  thinkingSource?: 'run' | 'model' | 'specialist' | 'tool' | 'voice' | 'client';
+  reasonCode?: string;
   percent?: number;
   variants?: number;
   images?: number;

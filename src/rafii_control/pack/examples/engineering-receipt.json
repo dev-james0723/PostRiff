@@ -1,0 +1,27 @@
+{
+  "jobId": "10000000-0000-4000-8000-000000000001",
+  "requestId": "10000000-0000-4000-8000-000000000002",
+  "checkedSha": "0000000000000000000000000000000000000000",
+  "workflowDefinitionSha": "2222222222222222222222222222222222222222",
+  "state": "partial",
+  "startedAt": "2026-09-29T10:00:00Z",
+  "finishedAt": "2026-09-29T10:01:00Z",
+  "checks": [
+    {
+      "name": "synthetic-types",
+      "required": true,
+      "status": "pass",
+      "exitCode": 0,
+      "evidenceDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "synthetic-security",
+      "required": true,
+      "status": "not_run",
+      "exitCode": null,
+      "evidenceDigest": null
+    }
+  ],
+  "attestationRef": "synthetic-untrusted-fixture-not-a-real-run",
+  "fixture": true
+}

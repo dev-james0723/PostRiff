@@ -22,6 +22,17 @@ def observations(n=60):
 
 
 class ClosedLoopTests(unittest.TestCase):
+    def test_reading_status_requires_a_mounted_worker_and_its_workspace_admission(self):
+        from types import SimpleNamespace
+        from postriff_phase2.growth.closed_loop import collection_enabled
+        growth=SimpleNamespace(hosted=SimpleNamespace(),env={'POSTRIFF_METRIC_READS':'1'})
+        self.assertFalse(collection_enabled(growth,'owned'))
+        growth.hosted.metric_reads=SimpleNamespace(workspace_allowed=lambda wid:wid=='owned')
+        self.assertTrue(collection_enabled(growth,'owned'))
+        self.assertFalse(collection_enabled(growth,'foreign'))
+        growth.env={}
+        self.assertFalse(collection_enabled(growth,'owned'))
+
     def test_same_account_cohort_and_version(self):
         posts,predictions=observations()
         result=cal.propose(posts,predictions)

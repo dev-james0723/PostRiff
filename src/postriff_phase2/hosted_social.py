@@ -77,7 +77,12 @@ class HostedSocial:
 
     def _provider(self, manifest):
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
-        if provider is None or not provider.production_reviewed or not getattr(provider, "execution_enabled", True):
+        if provider is None or not getattr(provider, "execution_enabled", True):
+            return None
+        # Provider-wide review unlocks public accounts. Instagram Standard Access can also
+        # issue a real grant to an app-role owned/managed account before Advanced Access;
+        # that grant is checked again below against the exact required scopes.
+        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False):
             return None
         if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):

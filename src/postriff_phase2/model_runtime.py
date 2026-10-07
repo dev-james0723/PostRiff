@@ -20,7 +20,7 @@ from .agent_runtime import AgentRuntime, DEFAULT_REQUEST_DESTINATIONS, PLATFORMS
 from .contracts import LIMITS, digest
 from .source_policy import exclusion_message
 from .fencing import writer_fields
-from . import locale_lint, locales
+from . import ai_call_events, locale_lint, locales
 from .text_measure import over_by
 from .voice_sources import bounded_style_directives
 
@@ -308,6 +308,51 @@ def gateway_routing(data):
     return provider, cost if cost is not None and 0 <= cost < float("inf") else None
 
 
+def gateway_generation(data):
+    """The gateway's id for one generation (providerMetadata.gateway.generationId, else the response id): the provider request
+    id an AI call event records so a provider bill can be matched later. An opaque id, never content."""
+    meta = (data.get("providerMetadata") or data.get("provider_metadata") or {}) if isinstance(data, dict) else {}
+    gateway = meta.get("gateway") if isinstance(meta, dict) and isinstance(meta.get("gateway"), dict) else {}
+    for value in (gateway.get("generationId"), data.get("id") if isinstance(data, dict) else None):
+        if isinstance(value, str) and value:
+            return value[:200]
+    return None
+
+
+def meter_attempt(runtime, model, attempt, started, began, status, *, http_status=None, usage=None, request_id=None):
+    """Note one drafting-route provider attempt for public.pr_ai_call_events (Founder Admin §8.B) in the active
+    ai_call_events scope; outside a scope (growth, which its usage sink records, or voice analysis) nothing is noted here.
+    `attempt` is (workload, attempt number). Cost: the gateway's report, else tokens at this runtime's price table (labelled
+    with its version), else unknown; a 429 or 4xx was refused before any work and costs nothing (the run's own rule).
+    Prompt tokens include cached ones and completion tokens include reasoning (PRD §8.0). Never raises."""
+    if not ai_call_events.active():
+        return
+    try:
+        workload, number = attempt if isinstance(attempt, tuple) and len(attempt) == 2 else (None, 1)
+        usage = usage if isinstance(usage, dict) else {}
+        cost, source, version, tokens = None, "unknown", None, {}
+        if status == "rate_limited" or (status == "failed" and isinstance(http_status, int) and 400 <= http_status < 500):
+            cost, source, tokens = 0, "provider", dict(input_tokens=0, output_tokens=0, cached_input_tokens=0, reasoning_tokens=0)
+        elif status == "ok":
+            prompt, completion = usage.get("prompt_tokens"), usage.get("completion_tokens")
+            cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens") if isinstance(usage.get("prompt_tokens_details"), dict) else None
+            reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") if isinstance(usage.get("completion_tokens_details"), dict) else None
+            tokens = dict(input_tokens=prompt, output_tokens=completion, cached_input_tokens=cached, reasoning_tokens=reasoning)
+            reported = ai_call_events.usd_micro(usage["gatewayCost"] if type(usage.get("gatewayCost")) is float else usage.get("cost"))
+            if reported is not None:
+                cost, source = reported, "gateway"
+            elif all(type(v) is int and v >= 0 for v in (prompt, completion)):
+                try:
+                    cost, source, version = ai_call_events.table_cost(round(runtime._cost(model, prompt, completion) * 1_000_000), runtime.price_basis(model)["version"])
+                except (AlphaError, KeyError, TypeError):
+                    cost, source, version = None, "unknown", None
+        ai_call_events.attempt(provider=runtime.provider, model=model, workload=workload, attempt_no=number, route="primary", status=status,
+                               http_status=http_status, latency_ms=round((time.monotonic() - began) * 1000), started_at=started,
+                               provider_request_id=request_id, cost_usd_micro=cost, cost_source=source, price_version=version, **tokens)
+    except Exception:  # noqa: BLE001 - recording never changes a drafting call
+        pass
+
+
 class ServerModelRuntime(AgentRuntime):
     """Paid, synchronous, cloud-egress route. One HTTPS call per turn (retried at most once)."""
     provider = "vercel-ai-gateway"
@@ -534,10 +579,11 @@ class ServerModelRuntime(AgentRuntime):
         """AI Gateway provider slugs this model may execute on; the model maker when not configured."""
         return list(self.allowed_providers.get(model) or ([model.split("/", 1)[0]] if "/" in model else []))
 
-    def _call(self, messages, model, progress=None, max_tokens=None, effort=AUTO, timeout=None):
+    def _call(self, messages, model, progress=None, max_tokens=None, effort=AUTO, timeout=None, attempt=None):
         """One drafting call. `effort` AUTO sends the catalogue's drafting baseline (voice analysis and every caller but
         _start_turn keep it); an explicit level ("none"…"high") is sent as it is, only when the model lists it, and a
-        level it does not list is refused before anything is sent. `timeout` (seconds) overrides the level's own."""
+        level it does not list is refused before anything is sent. `timeout` (seconds) overrides the level's own.
+        Every request sent is noted as one provider attempt (`meter_attempt`; `attempt` = (workload, number))."""
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
         from . import gateway_catalog
@@ -560,24 +606,30 @@ class ServerModelRuntime(AgentRuntime):
             timeout = LEVELS[effort]["timeout"] if explicit else THINKING_TIMEOUT_SECONDS if thinking(model) else TIMEOUT_SECONDS
         if progress is not None:
             progress["dispatched"] = True
+        started, began = time.time(), time.monotonic()
         try:
             # A thinking model may take longer than the default 45 s; a transport without a timeout parameter keeps its own.
             extra = {"timeout": timeout} if timeout != TIMEOUT_SECONDS and _takes_timeout(self.transport) else {}
             response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body, **extra)
         except AlphaError as error:
+            meter_attempt(self, model, attempt, started, began, "unknown")
             raise _Unknown(str(error), error.status) from error
         status, data = response.get("status"), response.get("body") or {}
         if status == 429:
+            meter_attempt(self, model, attempt, started, began, "rate_limited", http_status=429)
             raise _RateLimited("The model provider is rate limiting; retrying once.")
         if status is None or status >= 500:
+            meter_attempt(self, model, attempt, started, began, "unknown", http_status=status)
             raise _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
         if status != 200 or not isinstance(data, dict):
+            meter_attempt(self, model, attempt, started, began, "failed", http_status=status)
             rejected = _Rejected("The AI writer couldn't take this request. Try again.", 502)
             rejected.http_status = status   # kept for callers that must tell auth/budget from a bad request (growth router)
             raise rejected
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
+            meter_attempt(self, model, attempt, started, began, "failed", http_status=status, request_id=gateway_generation(data))
             raise _Retry("The model provider returned an unexpected shape.") from error
         usage = dict(data.get("usage")) if isinstance(data.get("usage"), dict) else {}
         final_provider, gateway_cost = gateway_routing(data)
@@ -588,21 +640,24 @@ class ServerModelRuntime(AgentRuntime):
         finish = data["choices"][0].get("finish_reason") if isinstance(data["choices"][0], dict) else None
         if isinstance(finish, str):
             usage["finishReason"] = finish
+        meter_attempt(self, model, attempt, started, began, "ok", http_status=status, usage=usage, request_id=gateway_generation(data))
         return content, usage
 
     # --- run -----------------------------------------------------------------------------
     def start_turn(self, request, emit):
         progress = {"dispatched": False}
-        try:
-            return self._start_turn(request, emit, progress)
-        except ProviderFailure:
-            raise
-        except AlphaError as error:
-            # Free only when no provider request had been sent; otherwise the outcome is unknown.
-            usage = progress["usage"]() if callable(progress.get("usage")) else None
-            if progress["dispatched"]:
-                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None, code=error.code, usage=usage) from error
-            raise ProviderFailure(str(error), error.status, dispatched=False, cost_usd=0.0, code=error.code, usage=usage) from error
+        # This run's provider attempts become pr_ai_call_events rows, written once when it ends (also when it fails).
+        with ai_call_events.sink_scope(emit, feature="writer"):
+            try:
+                return self._start_turn(request, emit, progress)
+            except ProviderFailure:
+                raise
+            except AlphaError as error:
+                # Free only when no provider request had been sent; otherwise the outcome is unknown.
+                usage = progress["usage"]() if callable(progress.get("usage")) else None
+                if progress["dispatched"]:
+                    raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None, code=error.code, usage=usage) from error
+                raise ProviderFailure(str(error), error.status, dispatched=False, cost_usd=0.0, code=error.code, usage=usage) from error
 
     def _start_turn(self, request, emit, progress):
         from . import gateway_catalog
@@ -717,7 +772,8 @@ class ServerModelRuntime(AgentRuntime):
                 raise failure(TIME_LEFT_MESSAGE, 503, dispatched=sent, cost_usd=known_cost() if sent else 0.0, code="reasoning_time_exhausted")
             timeout, call_cap = allowance
             try:
-                content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
+                content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout,
+                                            attempt=("draft", attempt + 1))
             except _RateLimited as error:
                 requests_made += 1  # refused before any work: known to cost nothing
                 last_error = str(error)
@@ -765,7 +821,8 @@ class ServerModelRuntime(AgentRuntime):
                 timeout, call_cap = allowance
                 revised_content = revised_usage = None
                 try:
-                    revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
+                    revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout,
+                                                                attempt=("revise", 1))
                 except (_RateLimited, _Rejected):
                     pass   # refused before any work: nothing was billed
                 except _Retry:

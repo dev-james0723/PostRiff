@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "eventId": "10000000-0000-4000-8000-000000000001",
+  "eventType": "control.source.stale",
+  "source": "synthetic-health-adapter",
+  "sourceEventId": "fixture-health-001",
+  "environment": "staging",
+  "eventTime": "2026-09-29T10:00:00Z",
+  "receivedAt": "2026-09-29T10:00:01Z",
+  "subject": {
+    "type": "source",
+    "id": "synthetic-source"
+  },
+  "classification": "internal_metadata",
+  "dedupeKey": "fixture:source:stale:001",
+  "payload": {
+    "stream": "synthetic",
+    "lagSeconds": 600
+  },
+  "fixture": true
+}

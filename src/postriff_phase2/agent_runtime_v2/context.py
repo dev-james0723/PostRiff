@@ -36,6 +36,9 @@ class EffectLedger:
     voice_commands: list[dict] = field(default_factory=list)   # voice_command blocks from ui.voice (Contract 2)
     known_ids: set = field(default_factory=set)
     spans: list[dict] = field(default_factory=list)
+    # Provider attempts that are not priced token spans (failed generations, images), kept only for pr_ai_call_events
+    # (manager.record_calls); the turn's spend never reads them.
+    calls: list[dict] = field(default_factory=list)
     specialists: list[str] = field(default_factory=list)
     model_requests: int = 0
     guardrail_trips: list[dict] = field(default_factory=list)
@@ -108,6 +111,10 @@ class RafiiRunContext:
     image_studio: Any = None
     vision: Any = None
     specialist: str | None = None             # set while a specialist agent's tools run
+    thinking_emit: Callable[[dict], None] | None = None  # safe semantic progress event sink; telemetry only
+    # A mutable tracker is intentionally shared by shallow `for_agent` copies, so specialists and Manager
+    # dedupe/count one run-wide semantic stream instead of each getting their own scalar counter.
+    thinking_tracker: dict[str, Any] = field(default_factory=lambda: {"last": None, "count": 0})
     request_text: str = ""                    # the person's request this turn (guardrails read it)
     page_raw: dict | None = None             # the page context as sent (re-validated by the site agent's contract)
     deadline: float | None = None             # time.monotonic() by which the turn must be done (tools and providers fit inside it)
@@ -158,6 +165,22 @@ class RafiiRunContext:
         view = copy.copy(self)
         view.specialist = agent
         return view
+
+    def thinking(self, op: str, source: str, reason_code: str) -> None:
+        """Emit bounded app-authored semantic telemetry. Failure never changes the user's task."""
+        try:
+            if self.thinking_emit is None or self.config is None or not self.config.enabled("RAFII_AGENT_THINKING_STATES_ENABLED"):
+                return
+            tracker = self.thinking_tracker
+            if op == tracker.get("last") or int(tracker.get("count") or 0) >= 32:
+                return
+            from . import thinking_state
+            item = thinking_state.event(op, source, reason_code)
+            self.thinking_emit(item)
+            tracker["last"] = op
+            tracker["count"] = int(tracker.get("count") or 0) + 1
+        except Exception:  # noqa: BLE001 — status telemetry is never task authority
+            return
 
     def activity(self, tool: str, label: str, effect: str, status: str, started: float, **extra) -> dict:
         record = {"tool": tool, "label": label, "effect": effect, "status": status, "latencyMs": round((time.monotonic() - started) * 1000, 1),

@@ -1,0 +1,66 @@
+{
+  "execution": "read-only production Vercel project configuration",
+  "flags": [
+    {
+      "key": "RAFII_AGENT_V2_ENABLED",
+      "configured": true,
+      "value": true,
+      "state": "PASS",
+      "reference": "TK71GHcUmbCLONBx"
+    },
+    {
+      "key": "NEXT_PUBLIC_PASSKEY_SIGN_IN",
+      "configured": true,
+      "value": true,
+      "state": "PASS",
+      "reference": "ezJ45pmLie1gPvOA"
+    },
+    {
+      "key": "RAFII_CONTROL_ENABLED",
+      "configured": true,
+      "value": true,
+      "state": "PASS",
+      "reference": "c3BntqVf8m8VVtHo"
+    },
+    {
+      "key": "RAFII_CONTROL_MOUNT",
+      "configured": true,
+      "value": "embedded",
+      "state": "PASS",
+      "reference": "H4u0vX4d1s9hCcd6"
+    },
+    {
+      "key": "RAFII_CONTROL_ENVIRONMENT",
+      "configured": true,
+      "value": "production",
+      "state": "PASS",
+      "reference": "ESdqQlibGKd0r1nn"
+    },
+    {
+      "key": "RAFII_FOUNDER_CALLS_ENABLED",
+      "configured": false,
+      "value": false,
+      "state": "ABSENT"
+    },
+    {
+      "key": "RAFII_FOUNDER_EMAIL_ENABLED",
+      "configured": false,
+      "value": false,
+      "state": "ABSENT"
+    },
+    {
+      "key": "RAFII_FOUNDER_PUSH_ENABLED",
+      "configured": false,
+      "value": false,
+      "state": "ABSENT"
+    },
+    {
+      "key": "RAFII_FOUNDER_VOICE_ENABLED",
+      "configured": false,
+      "value": false,
+      "state": "ABSENT"
+    }
+  ],
+  "secretsPrinted": false,
+  "configurationMutations": 0
+}

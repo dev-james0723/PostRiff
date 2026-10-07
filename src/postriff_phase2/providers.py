@@ -210,7 +210,7 @@ class ThreadsProvider(OAuthProvider):
     account_requirement = "Threads profile."
     publish_required = frozenset({"threads_basic", "threads_content_publish"})
     SCOPES = {"identity": ["threads_basic"], "publish": ["threads_basic", "threads_content_publish"], "schedule": ["threads_basic", "threads_content_publish"], "analytics": ["threads_basic", "threads_manage_insights"], "comments_read": ["threads_basic", "threads_read_replies"], "reply": ["threads_basic", "threads_manage_replies"]}
-    EXPLAIN = {"publish": "Rafii will create Threads posts on this profile only when you approve each exact post.", "analytics": "Allows Rafii to read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "Rafii will read replies to your posts.", "reply": "Rafii will post replies only after you approve the exact text."}
+    EXPLAIN = {"publish": "Rafii will create Threads posts on this profile only when you approve each exact post.", "analytics": "Allows Rafii to read available views, likes, replies, reposts and quotes for this account's own posts. When History Import is available, you can separately confirm reading up to 90 days, 300 posts and 12 pages of historical metadata and analytics. Rafii retains post IDs, dates, media types, links and caption length, never caption text or caption hashes. Disconnecting removes imported metadata and its analytics; delayed purges retry and block further imports. Analytics permission alone does not start an import.", "comments_read": "Rafii will read replies to your posts.", "reply": "Rafii will post replies only after you approve the exact text."}
     SCOPES = {**SCOPES, "posts_read": ["threads_basic"],
               "reply": ["threads_basic", "threads_content_publish"],
               "moderate": ["threads_basic", "threads_manage_replies"],
@@ -257,8 +257,16 @@ class InstagramProvider(OAuthProvider):
     account_requirement = "Instagram Creator or Business account. No Facebook Page required."
     read_scope, publish_scope = "instagram_business_basic", "instagram_business_content_publish"
     publish_required = frozenset({"instagram_business_basic", "instagram_business_content_publish"})
+    # Meta Standard Access can legitimately grant these permissions to professional accounts
+    # owned/managed by app-role users before Advanced Access is approved for the public. A
+    # live grant is therefore account-scoped execution evidence; it must never be promoted
+    # into provider-wide "productionReviewed" status.
+    account_scoped_direct = True
+    # Instagram has no native "publish later" endpoint; Rafii's own queue can hold an
+    # approved manifest and call the normal Content Publishing API at the scheduled time.
+    server_schedule = True
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
-    EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows Rafii to read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
+    EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows Rafii to read available reach, views, likes, comments, saves and shares for this account's own posts. When History Import is available, you can separately confirm reading up to 90 days, 300 posts and 12 pages of historical metadata and analytics. Rafii retains post IDs, dates, media types, links and caption length, never caption text or caption hashes. Disconnecting removes imported metadata and its analytics; delayed purges retry and block further imports. Analytics permission alone does not start an import.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
     SCOPES = {**SCOPES, "moderate": ["instagram_business_basic", "instagram_business_manage_comments"],
               "messaging": ["instagram_business_basic", "instagram_business_manage_messages"]}
 

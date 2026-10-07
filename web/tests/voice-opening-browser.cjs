@@ -20,13 +20,15 @@ for (const name of ['voice-session', 'voice-opening', 'voice-transcript']) {
     await page.evaluate(({modules, order}) => {
       const cache = {}; const wires = []; window.wires = wires;
       function createTransport() {
-        const listeners = new Set(); let open = true;
+        const listeners = new Set(); const states = new Set(); let open = true;
         const wire = {kind:'fake', sent:[], emit(event) { for (const h of listeners) h(event); },
-          onEvent(h) {listeners.add(h); return () => listeners.delete(h);}, onState() {return () => {};},
+          emitState(state) {open = state === 'connected'; for (const h of states) h(state);},
+          onEvent(h) {listeners.add(h); return () => listeners.delete(h);}, onState(h) {states.add(h); return () => states.delete(h);},
           async connect(offer) {
             if (order !== 'api-first') wire.emit({type:'session.started'});
             if (order === 'caller-first') wire.emit({type:'session.input_transcript.delta', delta:'Hello'});
             await offer('v=0 fake-offer');
+            wire.emitState('connected');
             wire.emit({type:'session.started'}); wire.emit({type:'session.started'});
           },
           send(event) {wire.sent.push(event); if(event.type === 'session.close') setTimeout(() => wire.emit({type:'session.closed', reason:'close_requested', usage:{seconds:1}}), 0);},
@@ -57,6 +59,7 @@ for (const name of ['voice-session', 'voice-opening', 'voice-transcript']) {
     let sent = await page.evaluate(() => wires[0].sent.filter(e => e.type === 'session.instructions.append'));
     assert.equal(sent.length, order === 'caller-first' ? 0 : 1, `${name}/${order}`);
     if(sent.length) assert.match(sent[0].content, /Hi James/);
+    await page.evaluate(() => wires[0].emitState('disconnected'));
     await page.locator('#reconnect').click();
     await page.waitForFunction(() => wires.length === 2 && voiceSession.get().state === 'live');
     assert.equal(await page.evaluate(() => wires[1].sent.filter(e => e.type === 'session.instructions.append').length), 0);

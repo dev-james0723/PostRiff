@@ -1,0 +1,739 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:4: NOTICE:  schema "rafii_control" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:24: NOTICE:  relation "platform_operators" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:33: NOTICE:  relation "founder_sessions" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:34: NOTICE:  relation "rc_session_actor" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:40: NOTICE:  relation "admin_audit_log" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:41: NOTICE:  relation "rc_audit_environment_time" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:48: NOTICE:  relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:53: NOTICE:  relation "source_health" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:64: NOTICE:  relation "engineering_evidence" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:70: NOTICE:  relation "founder_runs" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:76: NOTICE:  relation "recommendations" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:80: NOTICE:  relation "request_budgets" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:89: NOTICE:  relation "normalized_events" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:93: NOTICE:  relation "ingestion_cursors" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/049_rafii_control_foundation.sql:104: NOTICE:  relation "metric_rollups" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/051_rafii_control_read_workflow.sql:5: NOTICE:  column "error_code" of relation "admin_audit_log" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/051_rafii_control_read_workflow.sql:6: NOTICE:  column "result_rows" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/051_rafii_control_read_workflow.sql:8: NOTICE:  column "execution_state" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/051_rafii_control_read_workflow.sql:21: NOTICE:  relation "rc_synthetic_check_receipt" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:3: NOTICE:  column "normalized_query" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:4: NOTICE:  column "calculated_at" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:5: NOTICE:  column "source_versions" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:6: NOTICE:  column "coverage" of relation "query_receipts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:31: NOTICE:  relation "github_check_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/052_rafii_control_investigations.sql:32: NOTICE:  relation "rc_github_snapshots_latest" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/053_rafii_control_business_workspace.sql:59: NOTICE:  relation "demo_workspaces" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/053_rafii_control_business_workspace.sql:77: NOTICE:  relation "workspace_actions" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/053_rafii_control_business_workspace.sql:82: NOTICE:  relation "test_workspace_grants" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/054_rafii_control_founder_views.sql:28: NOTICE:  relation "pr_usage_ledger_reservation_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/054_rafii_control_founder_views.sql:81: NOTICE:  relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/054_rafii_control_founder_views.sql:140: NOTICE:  relation "workspace_classifications" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/054_rafii_control_founder_views.sql:149: NOTICE:  relation "founder_follow_ups" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:24: NOTICE:  relation "founder_contact_policy" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:36: NOTICE:  relation "founder_briefing_schedules" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:37: NOTICE:  relation "rc_founder_schedules_due" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:48: NOTICE:  relation "founder_reports" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:59: NOTICE:  relation "founder_briefing_occurrences" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:71: NOTICE:  relation "founder_incidents" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:72: NOTICE:  relation "rc_founder_incidents_open" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:79: NOTICE:  relation "founder_incident_events" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:80: NOTICE:  relation "rc_founder_incident_events_incident" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:87: NOTICE:  relation "founder_incident_acks" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:100: NOTICE:  relation "founder_contact_attempts" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:101: NOTICE:  relation "rc_founder_attempts_open" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/055_rafii_control_founder_contact.sql:102: NOTICE:  relation "rc_founder_attempts_source" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:43: NOTICE:  relation "pr_subscription_events" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:44: NOTICE:  relation "pr_subscription_events_subscription_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:45: NOTICE:  relation "pr_subscription_events_workspace_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:46: NOTICE:  relation "pr_subscription_events_event_at_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:69: NOTICE:  relation "pr_invoices" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:70: NOTICE:  relation "pr_invoices_workspace_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:71: NOTICE:  relation "pr_invoices_status_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:72: NOTICE:  relation "pr_invoices_payment_intent_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:88: NOTICE:  relation "pr_usage_ledger_credits_at_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:93: NOTICE:  column "mrr_minor" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:94: NOTICE:  column "currency" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:95: NOTICE:  column "interval" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/057_founder_billing_events.sql:96: NOTICE:  column "interval_count" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:50: NOTICE:  relation "pr_ai_call_events" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:51: NOTICE:  relation "pr_ai_call_events_started" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:52: NOTICE:  relation "pr_ai_call_events_workspace" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:53: NOTICE:  relation "pr_ai_call_events_reservation" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:64: NOTICE:  relation "pr_ai_call_settlements" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:75: NOTICE:  relation "pr_price_versions" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:119: NOTICE:  relation "pr_usage_rollups" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:121: NOTICE:  relation "pr_usage_rollups_key" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/058_founder_ai_usage.sql:122: NOTICE:  relation "pr_usage_rollups_workspace" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/059_founder_product.sql:8: NOTICE:  relation "pr_product_events_workspace_event" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/059_founder_product.sql:9: NOTICE:  relation "pr_learning_events_kind_created" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/059_founder_product.sql:25: NOTICE:  relation "pr_learning_daily_rollups" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/059_founder_product.sql:26: NOTICE:  relation "pr_learning_daily_rollups_kind_first" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/059_founder_product.sql:27: NOTICE:  relation "pr_learning_daily_rollups_expires" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:30: NOTICE:  relation "pr_request_metrics" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:43: NOTICE:  relation "pr_operational_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:62: NOTICE:  relation "pr_connection_health" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:63: NOTICE:  relation "pr_connection_health_refreshed_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:67: NOTICE:  relation "pr_usage_ledger_settled_at_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:68: NOTICE:  relation "pr_billing_events_recency_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/060_founder_reliability.sql:73: NOTICE:  relation "pr_notification_provider_events_recency_idx" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/062_founder_admin_actions.sql:36: NOTICE:  relation "pr_account_blocks" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/062_founder_admin_actions.sql:38: NOTICE:  relation "pr_account_blocks_active_user" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/062_founder_admin_actions.sql:39: NOTICE:  relation "pr_account_blocks_active_workspace" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/062_founder_admin_actions.sql:40: NOTICE:  relation "pr_account_blocks_retention" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:8: NOTICE:  column "mrr_minor" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:9: NOTICE:  column "currency" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:10: NOTICE:  column "interval" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:11: NOTICE:  column "interval_count" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:8: NOTICE:  column "mrr_minor" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:9: NOTICE:  column "currency" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:10: NOTICE:  column "interval" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/063_founder_revenue_views.sql:11: NOTICE:  column "interval_count" of relation "pr_subscription_snapshots" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/067_founder_comms_views.sql:24: NOTICE:  relation "founder_notification_preferences" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/067_founder_comms_views.sql:47: NOTICE:  relation "founder_notices" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/067_founder_comms_views.sql:48: NOTICE:  relation "rc_founder_notices_recent" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/067_founder_comms_views.sql:49: NOTICE:  relation "rc_founder_notices_digest" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/067_founder_comms_views.sql:50: NOTICE:  relation "rc_founder_notices_retention" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/068_founder_actions_views.sql:46: NOTICE:  relation "founder_action_requests" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/068_founder_actions_views.sql:47: NOTICE:  relation "rc_founder_actions_recent" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/068_founder_actions_views.sql:48: NOTICE:  relation "rc_founder_actions_open" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/070_founder_ops_settings.sql:11: NOTICE:  relation "founder_settings" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/071_founder_engineering_evidence.sql:35: NOTICE:  constraint "rc_github_environment" of relation "github_check_snapshots" does not exist, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/071_founder_engineering_evidence.sql:38: NOTICE:  constraint "rc_github_provenance" of relation "github_check_snapshots" does not exist, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/071_founder_engineering_evidence.sql:41: NOTICE:  constraint "rc_github_ci_attested" of relation "github_check_snapshots" does not exist, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/071_founder_engineering_evidence.sql:67: NOTICE:  constraint "rc_evidence_check_green" of relation "engineering_evidence" does not exist, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/088_founder_activation_integrity.sql:6: NOTICE:  column "recorded_at" of relation "pr_product_events" already exists, skipping
+psql:/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/migrations/postriff/088_founder_activation_integrity.sql:43: NOTICE:  relation "pr_delivery_cutovers" already exists, skipping
+test_all_migration_bytes_match_the_reviewed_pins (test_activation_runner.ActivationSourceTests.test_all_migration_bytes_match_the_reviewed_pins) ... ok
+test_hosted_target_rejects_the_other_project_before_connecting (test_activation_runner.ActivationSourceTests.test_hosted_target_rejects_the_other_project_before_connecting) ... ok
+test_a_recent_refusal_is_not_itself_founder_authorization (test_activation_runner.FounderEnrollmentPostgresTests.test_a_recent_refusal_is_not_itself_founder_authorization) ... ok
+test_ambiguous_refusals_never_pick_the_first_identity (test_activation_runner.FounderEnrollmentPostgresTests.test_ambiguous_refusals_never_pick_the_first_identity) ... ok
+test_existing_other_founder_is_never_replaced (test_activation_runner.FounderEnrollmentPostgresTests.test_existing_other_founder_is_never_replaced) ... ok
+test_malformed_explicit_identity_cannot_enroll_anyone (test_activation_runner.FounderEnrollmentPostgresTests.test_malformed_explicit_identity_cannot_enroll_anyone) ... ok
+test_matching_identity_is_idempotent_and_does_not_create_a_session (test_activation_runner.FounderEnrollmentPostgresTests.test_matching_identity_is_idempotent_and_does_not_create_a_session) ... ok
+test_refused_identity_must_equal_the_separately_verified_founder (test_activation_runner.FounderEnrollmentPostgresTests.test_refused_identity_must_equal_the_separately_verified_founder) ... ok
+test_revoked_founder_is_not_silently_reactivated (test_activation_runner.FounderEnrollmentPostgresTests.test_revoked_founder_is_not_silently_reactivated) ... ok
+test_aal1_and_old_mfa_refreshed_jwt_fail (test_boundary.BoundaryTests.test_aal1_and_old_mfa_refreshed_jwt_fail) ... ok
+test_cross_origin_csrf_and_unknown_capability_fail_closed (test_boundary.BoundaryTests.test_cross_origin_csrf_and_unknown_capability_fail_closed) ... ok
+test_customer_or_editable_metadata_cannot_become_operator (test_boundary.BoundaryTests.test_customer_or_editable_metadata_cannot_become_operator) ... ok
+test_denials_and_metadata_reads_have_content_free_audit (test_boundary.BoundaryTests.test_denials_and_metadata_reads_have_content_free_audit) ... ok
+test_disabled_flag_and_preview_production_fail_closed (test_boundary.BoundaryTests.test_disabled_flag_and_preview_production_fail_closed) ... ok
+test_idle_and_absolute_expiry_are_independent (test_boundary.BoundaryTests.test_idle_and_absolute_expiry_are_independent) ... ok
+test_opaque_session_never_stores_raw_credential (test_boundary.BoundaryTests.test_opaque_session_never_stores_raw_credential) ... ok
+test_preview_database_identity_and_distinct_logins_are_bound_to_staging (test_boundary.BoundaryTests.test_preview_database_identity_and_distinct_logins_are_bound_to_staging) ... ok
+test_primary_passkey_is_never_a_fresh_second_factor (test_boundary.BoundaryTests.test_primary_passkey_is_never_a_fresh_second_factor) ... ok
+test_revocation_and_epoch_change_take_effect_next_request (test_boundary.BoundaryTests.test_revocation_and_epoch_change_take_effect_next_request) ... ok
+test_verified_webauthn_mfa_still_needs_aal2_and_the_operator_row (test_boundary.BoundaryTests.test_verified_webauthn_mfa_still_needs_aal2_and_the_operator_row) ... ok
+test_aal1_and_old_mfa_refreshed_jwt_fail (test_boundary.HttpTests.test_aal1_and_old_mfa_refreshed_jwt_fail) ... ok
+test_attempted_prohibited_route_is_audited_without_raw_path (test_boundary.HttpTests.test_attempted_prohibited_route_is_audited_without_raw_path) ... ok
+test_bearer_alone_never_authorizes_founder_api (test_boundary.HttpTests.test_bearer_alone_never_authorizes_founder_api) ... ok
+test_cross_origin_csrf_and_unknown_capability_fail_closed (test_boundary.HttpTests.test_cross_origin_csrf_and_unknown_capability_fail_closed) ... ok
+test_customer_or_editable_metadata_cannot_become_operator (test_boundary.HttpTests.test_customer_or_editable_metadata_cannot_become_operator) ... ok
+test_denials_and_metadata_reads_have_content_free_audit (test_boundary.HttpTests.test_denials_and_metadata_reads_have_content_free_audit) ... ok
+test_disabled_flag_and_preview_production_fail_closed (test_boundary.HttpTests.test_disabled_flag_and_preview_production_fail_closed) ... ok
+test_error_contract_and_denied_dispatch_audit (test_boundary.HttpTests.test_error_contract_and_denied_dispatch_audit) ... ok
+test_exchange_cookie_flags_and_logout_csrf (test_boundary.HttpTests.test_exchange_cookie_flags_and_logout_csrf) ... ok
+test_http_request_id_binds_content_free_audit (test_boundary.HttpTests.test_http_request_id_binds_content_free_audit) ... ok
+test_idle_and_absolute_expiry_are_independent (test_boundary.HttpTests.test_idle_and_absolute_expiry_are_independent) ... ok
+test_logout_budget_cannot_be_used_for_other_capabilities_or_reads (test_boundary.HttpTests.test_logout_budget_cannot_be_used_for_other_capabilities_or_reads) ... ok
+test_opaque_session_never_stores_raw_credential (test_boundary.HttpTests.test_opaque_session_never_stores_raw_credential) ... ok
+test_preview_database_identity_and_distinct_logins_are_bound_to_staging (test_boundary.HttpTests.test_preview_database_identity_and_distinct_logins_are_bound_to_staging) ... ok
+test_primary_passkey_is_never_a_fresh_second_factor (test_boundary.HttpTests.test_primary_passkey_is_never_a_fresh_second_factor) ... ok
+test_revocation_and_epoch_change_take_effect_next_request (test_boundary.HttpTests.test_revocation_and_epoch_change_take_effect_next_request) ... ok
+test_run_reads_have_read_budget_and_keep_copilot_permission (test_boundary.HttpTests.test_run_reads_have_read_budget_and_keep_copilot_permission) ... ok
+test_verified_webauthn_mfa_still_needs_aal2_and_the_operator_row (test_boundary.HttpTests.test_verified_webauthn_mfa_still_needs_aal2_and_the_operator_row) ... ok
+test_wrong_host_and_effect_routes_never_execute (test_boundary.HttpTests.test_wrong_host_and_effect_routes_never_execute) ... ok
+test_approved_rename_persists_back_to_rafii_and_restores_with_one_retry_record (test_business_workspace.BusinessWorkspaceTests.test_approved_rename_persists_back_to_rafii_and_restores_with_one_retry_record) ... ok
+test_canonical_rafii_creation_appears_and_reader_hides_private_content (test_business_workspace.BusinessWorkspaceTests.test_canonical_rafii_creation_appears_and_reader_hides_private_content) ... ok
+test_database_failure_is_an_explicit_error_not_an_empty_dataset (test_business_workspace.BusinessWorkspaceTests.test_database_failure_is_an_explicit_error_not_an_empty_dataset) ... ok
+test_demo_linked_workflows_retry_reset_and_live_isolation (test_business_workspace.BusinessWorkspaceTests.test_demo_linked_workflows_retry_reset_and_live_isolation) ... ok
+test_demo_rejects_free_text_audit_targets_and_unused_action_payloads (test_business_workspace.BusinessWorkspaceTests.test_demo_rejects_free_text_audit_targets_and_unused_action_payloads) ... ok
+test_demo_stop_remains_authorized_after_read_throttling (test_business_workspace.BusinessWorkspaceTests.test_demo_stop_remains_authorized_after_read_throttling) ... ok
+test_founder_action_replay_requires_current_capabilities (test_business_workspace.BusinessWorkspaceTests.test_founder_action_replay_requires_current_capabilities) ... ok
+test_global_search_pagination_literal_inputs_and_linked_record_lookup (test_business_workspace.BusinessWorkspaceTests.test_global_search_pagination_literal_inputs_and_linked_record_lookup) ... ok
+test_logout_remains_authorized_when_read_budget_is_exhausted (test_business_workspace.BusinessWorkspaceTests.test_logout_remains_authorized_when_read_budget_is_exhausted) ... ok
+test_pending_account_deletion_and_direct_reader_mutation_are_rejected (test_business_workspace.BusinessWorkspaceTests.test_pending_account_deletion_and_direct_reader_mutation_are_rejected) ... ok
+test_unapproved_workspace_stale_mfa_revoked_operator_and_unauthorized_http_fail_closed (test_business_workspace.BusinessWorkspaceTests.test_unapproved_workspace_stale_mfa_revoked_operator_and_unauthorized_http_fail_closed) ... ok
+test_a_direct_push_without_its_merged_pull_request_stays_suspected (test_ci_evidence.CollectorTests.test_a_direct_push_without_its_merged_pull_request_stays_suspected) ... ok
+test_a_path_filtered_check_is_exempt_only_with_positive_proof (test_ci_evidence.CollectorTests.test_a_path_filtered_check_is_exempt_only_with_positive_proof) ... ok
+test_an_exact_sha_push_run_on_consumer_saas_outranks_the_pull_request_head (test_ci_evidence.CollectorTests.test_an_exact_sha_push_run_on_consumer_saas_outranks_the_pull_request_head) ... ok
+test_an_unreadable_branch_or_commit_fails_closed (test_ci_evidence.CollectorTests.test_an_unreadable_branch_or_commit_fails_closed) ... ok
+test_every_conclusion_but_an_attested_success_is_suspected (test_ci_evidence.CollectorTests.test_every_conclusion_but_an_attested_success_is_suspected) ... ok
+test_fork_pull_requests_and_foreign_or_renamed_workflows_never_count (test_ci_evidence.CollectorTests.test_fork_pull_requests_and_foreign_or_renamed_workflows_never_count) ... ok
+test_merged_pr_head_with_identical_tree_attests_every_required_check_for_the_exact_tip (test_ci_evidence.CollectorTests.test_merged_pr_head_with_identical_tree_attests_every_required_check_for_the_exact_tip) ... ok
+test_path_globs_follow_the_github_filter_syntax (test_ci_evidence.CollectorTests.test_path_globs_follow_the_github_filter_syntax) ... ok
+test_pr_results_that_did_not_test_the_exact_tree_are_recorded_but_never_attested (test_ci_evidence.CollectorTests.test_pr_results_that_did_not_test_the_exact_tree_are_recorded_but_never_attested) ... ok
+test_the_newest_run_of_the_pinned_workflow_decides (test_ci_evidence.CollectorTests.test_the_newest_run_of_the_pinned_workflow_decides) ... ok
+test_vercel_counts_only_its_own_bot_status_on_the_exact_sha (test_ci_evidence.CollectorTests.test_vercel_counts_only_its_own_bot_status_on_the_exact_sha) ... ok
+test_migration_071_is_additive_scoped_and_reapplicable_by_construction (test_ci_evidence.DriftTests.test_migration_071_is_additive_scoped_and_reapplicable_by_construction) ... ok
+test_the_manifest_is_the_required_workflow_files (test_ci_evidence.DriftTests.test_the_manifest_is_the_required_workflow_files) ... ok
+test_the_workflow_is_read_only_and_never_hands_the_secret_to_untrusted_code (test_ci_evidence.DriftTests.test_the_workflow_is_read_only_and_never_hands_the_secret_to_untrusted_code) ... ok
+test_a_qualified_ci_sha_reads_checks_passed (test_ci_evidence.EngineeringReadTests.test_a_qualified_ci_sha_reads_checks_passed) ... ok
+test_anything_short_of_a_qualified_manifest_reads_suspected (test_ci_evidence.EngineeringReadTests.test_anything_short_of_a_qualified_manifest_reads_suspected) ... ok
+test_ci_manifests_feed_neither_the_check_failures_metric_nor_github_source_health (test_ci_evidence.EngineeringReadTests.test_ci_manifests_feed_neither_the_check_failures_metric_nor_github_source_health) ... ok
+test_the_newest_sha_is_judged_and_an_older_qualified_sha_keeps_its_rows (test_ci_evidence.EngineeringReadTests.test_the_newest_sha_is_judged_and_an_older_qualified_sha_keeps_its_rows) ... ok
+test_summarize_rederives_every_count_and_rejects_tampering (test_ci_evidence.SummaryTests.test_summarize_rederives_every_count_and_rejects_tampering) ... ok
+test_configured_runs_record_and_print_codes_and_classes_only (test_ci_evidence.WriteAndEntryPointTests.test_configured_runs_record_and_print_codes_and_classes_only) ... ok
+test_it_refuses_to_write_from_pull_requests_forks_or_other_branches (test_ci_evidence.WriteAndEntryPointTests.test_it_refuses_to_write_from_pull_requests_forks_or_other_branches) ... ok
+test_the_github_client_sends_the_token_only_as_a_header_and_maps_errors_to_codes (test_ci_evidence.WriteAndEntryPointTests.test_the_github_client_sends_the_token_only_as_a_header_and_maps_errors_to_codes) ... ok
+test_without_the_secret_it_prints_not_configured_dry_runs_and_passes (test_ci_evidence.WriteAndEntryPointTests.test_without_the_secret_it_prints_not_configured_dry_runs_and_passes) ... ok
+test_write_assumes_the_ingest_role_upserts_rows_and_inserts_only_a_changed_manifest (test_ci_evidence.WriteAndEntryPointTests.test_write_assumes_the_ingest_role_upserts_rows_and_inserts_only_a_changed_manifest) ... ok
+test_071_relaxes_only_the_local_manifest_rule_and_keeps_the_role_split (test_ci_evidence_pg.CiEvidencePostgresTests.test_071_relaxes_only_the_local_manifest_rule_and_keeps_the_role_split) ... ok
+test_a_collector_write_reads_checks_passed_in_production_only_and_survives_reapplication (test_ci_evidence_pg.CiEvidencePostgresTests.test_a_collector_write_reads_checks_passed_in_production_only_and_survives_reapplication) ... ok
+test_ingest_writes_only_ci_evidence_in_its_session_environment (test_ci_evidence_pg.CiEvidencePostgresTests.test_ingest_writes_only_ci_evidence_in_its_session_environment) ... ok
+test_atomic_rate_budget_and_unsafe_factory_fail_closed (test_database.DatabaseTests.test_atomic_rate_budget_and_unsafe_factory_fail_closed) ... ok
+test_control_tables_force_rls_and_never_grant_browser_access (test_database.DatabaseTests.test_control_tables_force_rls_and_never_grant_browser_access) ... ok
+test_function_acl_and_search_path_are_fixed (test_database.DatabaseTests.test_function_acl_and_search_path_are_fixed) ... ok
+test_ingestion_dedupe_cursor_and_fixture_environment_isolation (test_database.DatabaseTests.test_ingestion_dedupe_cursor_and_fixture_environment_isolation) ... ok
+test_reader_cannot_read_customer_content_or_mutate_any_source (test_database.DatabaseTests.test_reader_cannot_read_customer_content_or_mutate_any_source) ... ok
+test_real_store_boundary_safe_projection_receipts_and_idempotency (test_database.DatabaseTests.test_real_store_boundary_safe_projection_receipts_and_idempotency) ... ok
+test_session_role_cannot_change_operator_or_audit_history (test_database.DatabaseTests.test_session_role_cannot_change_operator_or_audit_history) ... ok
+test_all_customer_subscription_invoice_payment_usage_links_are_consistent (test_demo_dataset.DemoDatasetTests.test_all_customer_subscription_invoice_payment_usage_links_are_consistent) ... ok
+test_cached_reads_follow_the_row_version (test_demo_dataset.DemoDatasetTests.test_cached_reads_follow_the_row_version) ... ok
+test_customer_and_invoice_drilldowns_only_contain_related_records (test_demo_dataset.DemoDatasetTests.test_customer_and_invoice_drilldowns_only_contain_related_records) ... ok
+test_exact_paid_distribution_ids_provenance_and_fictional_addresses (test_demo_dataset.DemoDatasetTests.test_exact_paid_distribution_ids_provenance_and_fictional_addresses) ... ok
+test_first_open_and_actions_store_and_move_kilobytes (test_demo_dataset.DemoDatasetTests.test_first_open_and_actions_store_and_move_kilobytes) ... ok
+test_global_email_name_id_search_plan_cycle_status_sort_and_pagination (test_demo_dataset.DemoDatasetTests.test_global_email_name_id_search_plan_cycle_status_sort_and_pagination) ... ok
+test_legacy_full_dataset_row_becomes_an_overlay_keeping_founder_changes (test_demo_dataset.DemoDatasetTests.test_legacy_full_dataset_row_becomes_an_overlay_keeping_founder_changes) ... ok
+test_overlay_round_trips_every_collection_shape (test_demo_dataset.DemoDatasetTests.test_overlay_round_trips_every_collection_shape) ... ok
+test_public_snapshot_is_bounded_without_reseeding_existing_state (test_demo_dataset.DemoDatasetTests.test_public_snapshot_is_bounded_without_reseeding_existing_state) ... ok
+test_query_rejects_unsafe_options_and_live_authority_expansion (test_demo_dataset.DemoDatasetTests.test_query_rejects_unsafe_options_and_live_authority_expansion) ... ok
+test_reads_after_every_action_equal_the_dataset_the_action_produced (test_demo_dataset.DemoDatasetTests.test_reads_after_every_action_equal_the_dataset_the_action_produced) ... ok
+test_reads_take_no_row_lock_and_actions_do (test_demo_dataset.DemoDatasetTests.test_reads_take_no_row_lock_and_actions_do) ... ok
+test_replays_store_compact_pages_and_return_the_original_response (test_demo_dataset.DemoDatasetTests.test_replays_store_compact_pages_and_return_the_original_response) ... ok
+test_seed_and_totals_are_deterministic_and_derived (test_demo_dataset.DemoDatasetTests.test_seed_and_totals_are_deterministic_and_derived) ... ok
+test_seed_namespace_reset_revision_idempotency_and_bounded_replay (test_demo_dataset.DemoDatasetTests.test_seed_namespace_reset_revision_idempotency_and_bounded_replay) ... ok
+test_shared_base_is_read_only_and_never_changed_by_any_founder (test_demo_dataset.DemoDatasetTests.test_shared_base_is_read_only_and_never_changed_by_any_founder) ... ok
+test_stale_scenario_preserves_last_good_provenance_at_new_revision (test_demo_dataset.DemoDatasetTests.test_stale_scenario_preserves_last_good_provenance_at_new_revision) ... ok
+test_ai_cost_uses_the_snapshot_bound_and_cost_vs_cash_divides_usd_micro (test_demo_metrics.DemoMetricTests.test_ai_cost_uses_the_snapshot_bound_and_cost_vs_cash_divides_usd_micro) ... ok
+test_backlog_activity_sources_and_heartbeat (test_demo_metrics.DemoMetricTests.test_backlog_activity_sources_and_heartbeat) ... ok
+test_cash_collected_by_day_matches_the_revenue_trend_and_half_open_intervals (test_demo_metrics.DemoMetricTests.test_cash_collected_by_day_matches_the_revenue_trend_and_half_open_intervals) ... ok
+test_comparison_and_rejections (test_demo_metrics.DemoMetricTests.test_comparison_and_rejections) ... ok
+test_cost_anomaly_scenario_raises_cost_for_three_days_and_opens_an_incident (test_demo_metrics.DemoMetricTests.test_cost_anomaly_scenario_raises_cost_for_three_days_and_opens_an_incident) ... ok
+test_demo_metric_query_receipt_and_overview (test_demo_metrics.DemoMetricTests.test_demo_metric_query_receipt_and_overview) ... ok
+test_every_activated_id_returns_contract_rows_marked_fixture (test_demo_metrics.DemoMetricTests.test_every_activated_id_returns_contract_rows_marked_fixture) ... ok
+test_paid_counts_and_plan_distribution_match_the_dataset (test_demo_metrics.DemoMetricTests.test_paid_counts_and_plan_distribution_match_the_dataset) ... ok
+test_scenarios_flow_through_the_same_definitions (test_demo_metrics.DemoMetricTests.test_scenarios_flow_through_the_same_definitions) ... ok
+test_consumer_credentials_do_not_abort_the_embedded_build_and_are_never_read (test_embedded_mount.EmbeddedBuildTests.test_consumer_credentials_do_not_abort_the_embedded_build_and_are_never_read) ... ok
+test_unmounted_or_misconfigured_control_fails_closed_without_raising (test_embedded_mount.EmbeddedBuildTests.test_unmounted_or_misconfigured_control_fails_closed_without_raising) ... ok
+test_local_production_harness_and_wrong_identity_cannot_run_on_a_preview (test_embedded_mount.EmbeddedConfigTests.test_local_production_harness_and_wrong_identity_cannot_run_on_a_preview) ... ok
+test_preview_accepts_its_vercel_urls_and_listed_origins_as_staging (test_embedded_mount.EmbeddedConfigTests.test_preview_accepts_its_vercel_urls_and_listed_origins_as_staging) ... ok
+test_production_requires_explicit_https_origins_and_never_infers_vercel_url (test_embedded_mount.EmbeddedConfigTests.test_production_requires_explicit_https_origins_and_never_infers_vercel_url) ... ok
+test_separate_mount_is_unchanged_when_mount_is_unset (test_embedded_mount.EmbeddedConfigTests.test_separate_mount_is_unchanged_when_mount_is_unset) ... ok
+test_legacy_overview_mode_validation_step_up_and_idempotency (test_embedded_mount.FounderRouteTests.test_legacy_overview_mode_validation_step_up_and_idempotency) ... ok
+test_missing_slice_module_fails_only_its_route (test_embedded_mount.FounderRouteTests.test_missing_slice_module_fails_only_its_route) ... ok
+test_routes_reach_their_slice_with_real_signatures_and_the_envelope (test_embedded_mount.FounderRouteTests.test_routes_reach_their_slice_with_real_signatures_and_the_envelope) ... {"event": "founder_ops.source_unavailable", "exceptionType": "AttributeError"}
+ok
+test_disabled_missing_failing_or_unserialisable_founder_cron_never_breaks_the_tick (test_embedded_mount.FounderTickTests.test_disabled_missing_failing_or_unserialisable_founder_cron_never_breaks_the_tick) ... ok
+test_consumer_bearer_cannot_call_control_and_the_application_guard_is_not_applied (test_embedded_mount.HostedDelegationTests.test_consumer_bearer_cannot_call_control_and_the_application_guard_is_not_applied) ... ok
+test_forwarded_host_must_match_an_allowed_origin (test_embedded_mount.HostedDelegationTests.test_forwarded_host_must_match_an_allowed_origin) ... ok
+test_every_allowed_origin_may_exchange_and_mutate_but_no_other (test_embedded_mount.MultiOriginBoundaryTests.test_every_allowed_origin_may_exchange_and_mutate_but_no_other) ... ok
+test_founder_purposes_select_budgets_while_audit_keeps_the_capability (test_embedded_mount.MultiOriginBoundaryTests.test_founder_purposes_select_budgets_while_audit_keeps_the_capability) ... ok
+test_block_needs_typed_confirmation_takes_effect_and_unblock_lifts_it (test_founder_actions.ActionRouteTests.test_block_needs_typed_confirmation_takes_effect_and_unblock_lifts_it) ... ok
+test_block_refuses_the_operator_the_ops_workspace_and_an_uninstalled_table (test_founder_actions.ActionRouteTests.test_block_refuses_the_operator_the_ops_workspace_and_an_uninstalled_table) ... ok
+test_capabilities_are_required_and_the_action_budget_is_used (test_founder_actions.ActionRouteTests.test_capabilities_are_required_and_the_action_budget_is_used) ... ok
+test_credits_are_refused_while_off_and_adjust_through_the_book_when_on (test_founder_actions.ActionRouteTests.test_credits_are_refused_while_off_and_adjust_through_the_book_when_on) ... ok
+test_demo_mode_refuses_every_write_and_lists_nothing (test_founder_actions.ActionRouteTests.test_demo_mode_refuses_every_write_and_lists_nothing) ... ok
+test_get_actions_lists_recent_requests_and_active_blocks (test_founder_actions.ActionRouteTests.test_get_actions_lists_recent_requests_and_active_blocks) ... ok
+test_interrupted_confirm_resumes_with_the_same_request_id_and_executes_once (test_founder_actions.ActionRouteTests.test_interrupted_confirm_resumes_with_the_same_request_id_and_executes_once) ... ok
+test_missing_step_up_and_expired_previews_are_refused (test_founder_actions.ActionRouteTests.test_missing_step_up_and_expired_previews_are_refused) ... ok
+test_preview_request_ids_are_idempotent (test_founder_actions.ActionRouteTests.test_preview_request_ids_are_idempotent) ... ok
+test_reconcile_preview_then_confirm_executes_once_with_both_audits (test_founder_actions.ActionRouteTests.test_reconcile_preview_then_confirm_executes_once_with_both_audits) ... ok
+test_refund_preview_records_an_intent_that_cannot_execute (test_founder_actions.ActionRouteTests.test_refund_preview_records_an_intent_that_cannot_execute) ... ok
+test_refused_confirms_have_no_side_effects (test_founder_actions.ActionRouteTests.test_refused_confirms_have_no_side_effects) ... ok
+test_routes_carry_capability_step_up_and_the_action_budget (test_founder_actions.ActionRouteTests.test_routes_carry_capability_step_up_and_the_action_budget) ... ok
+test_the_founder_agent_has_no_path_to_any_action (test_founder_actions.ActionRouteTests.test_the_founder_agent_has_no_path_to_any_action) ... ok
+test_expired_previews_and_foreign_operators_are_refused (test_founder_actions_pg.FounderActionsPostgresTests.test_expired_previews_and_foreign_operators_are_refused) ... ok
+test_migrations_keep_the_public_fence_apart_from_control_and_lock_down_grants (test_founder_actions_pg.FounderActionsPostgresTests.test_migrations_keep_the_public_fence_apart_from_control_and_lock_down_grants) ... ok
+test_reconcile_executes_once_with_both_audits_and_refusals_change_nothing (test_founder_actions_pg.FounderActionsPostgresTests.test_reconcile_executes_once_with_both_audits_and_refusals_change_nothing) ... ok
+test_user_block_takes_effect_everywhere_and_unblock_lifts_it_without_touching_others (test_founder_actions_pg.FounderActionsPostgresTests.test_user_block_takes_effect_everywhere_and_unblock_lifts_it_without_touching_others) ... ok
+test_workspace_block_freezes_only_that_workspace (test_founder_actions_pg.FounderActionsPostgresTests.test_workspace_block_freezes_only_that_workspace) ... ok
+test_cutover_blocks_absence_old_events_other_recipient_and_customer_scope (test_founder_activation_integrity.IntegrityPostgresTests.test_cutover_blocks_absence_old_events_other_recipient_and_customer_scope) ... ok
+test_dispatch_marker_survives_crash_and_quota_race_never_exceeds_cap (test_founder_activation_integrity.IntegrityPostgresTests.test_dispatch_marker_survives_crash_and_quota_race_never_exceeds_cap) ... ok
+test_gap_survives_failed_writer_suspension_and_recovery_preserves_times (test_founder_activation_integrity.IntegrityPostgresTests.test_gap_survives_failed_writer_suspension_and_recovery_preserves_times) ... {"event": "product_events.not_installed", "exceptionType": "UndefinedTable", "retryAfterSeconds": 600}
+ok
+test_readiness_cannot_hide_database_failure_as_no_ops (test_founder_activation_integrity.IntegrityPostgresTests.test_readiness_cannot_hide_database_failure_as_no_ops) ... ok
+test_recovery_does_not_restore_revoked_actor_and_reader_never_reads_journal_rows (test_founder_activation_integrity.IntegrityPostgresTests.test_recovery_does_not_restore_revoked_actor_and_reader_never_reads_journal_rows) ... ok
+test_flags_alone_never_mean_activation_and_all_24_are_present (test_founder_activation_integrity.ReadinessTests.test_flags_alone_never_mean_activation_and_all_24_are_present) ... ok
+test_an_attention_item_carries_no_entity_and_bad_values_are_still_refused (test_founder_agent.FounderPanelContextTests.test_an_attention_item_carries_no_entity_and_bad_values_are_still_refused) ... ok
+test_the_panels_context_shape_is_accepted_and_normalised (test_founder_agent.FounderPanelContextTests.test_the_panels_context_shape_is_accepted_and_normalised) ... ok
+test_attention_list_ranks_the_incident_first_and_honours_limit (test_founder_agent.FounderToolTests.test_attention_list_ranks_the_incident_first_and_honours_limit) ... ok
+test_chart_explain_states_missing_denominator_instead_of_inventing_one (test_founder_agent.FounderToolTests.test_chart_explain_states_missing_denominator_instead_of_inventing_one) ... ok
+test_demo_reads_through_the_real_query_service_and_overview (test_founder_agent.FounderToolTests.test_demo_reads_through_the_real_query_service_and_overview)
+The landed adapters' call shapes: QueryService.metric_query(mode='demo', demo_data=...) and live_metrics.overview(..., queries). ... ok
+test_demo_tools_answer_from_the_dataset_with_its_receipt (test_founder_agent.FounderToolTests.test_demo_tools_answer_from_the_dataset_with_its_receipt) ... ok
+test_draft_message_is_text_only_for_a_named_recipient_class (test_founder_agent.FounderToolTests.test_draft_message_is_text_only_for_a_named_recipient_class) ... ok
+test_entity_links_use_the_parameters_each_page_reads (test_founder_agent.FounderToolTests.test_entity_links_use_the_parameters_each_page_reads) ... ok
+test_live_reads_go_through_query_service_receipts_and_never_fall_back_to_demo (test_founder_agent.FounderToolTests.test_live_reads_go_through_query_service_receipts_and_never_fall_back_to_demo) ... ok
+test_navigate_links_only_console_sections (test_founder_agent.FounderToolTests.test_navigate_links_only_console_sections) ... ok
+test_reminder_and_report_stop_at_a_draft_that_needs_confirmation (test_founder_agent.FounderToolTests.test_reminder_and_report_stop_at_a_draft_that_needs_confirmation) ... ok
+test_facts_without_a_receipt_from_this_turn_are_dropped (test_founder_agent.HarnessManagerTests.test_facts_without_a_receipt_from_this_turn_are_dropped) ... ok
+test_founder_manager_refuses_workspace_tools_and_forbidden_requests (test_founder_agent.HarnessManagerTests.test_founder_manager_refuses_workspace_tools_and_forbidden_requests) ... ok
+test_publish_failures_link_the_affected_workspaces (test_founder_agent.HarnessManagerTests.test_publish_failures_link_the_affected_workspaces) ... ok
+test_seven_example_questions_call_the_expected_tools_and_cite_receipts (test_founder_agent.HarnessManagerTests.test_seven_example_questions_call_the_expected_tools_and_cite_receipts) ... ok
+test_thirteen_founder_tools_with_the_contract_effects (test_founder_agent.ToolRegistryTests.test_thirteen_founder_tools_with_the_contract_effects) ... ok
+test_demo_and_live_conversations_never_mix (test_founder_agent.TurnTests.test_demo_and_live_conversations_never_mix) ... ok
+test_demo_turn_runs_on_the_ops_workspace_with_namespaced_key_conversation_and_founder_section (test_founder_agent.TurnTests.test_demo_turn_runs_on_the_ops_workspace_with_namespaced_key_conversation_and_founder_section) ... ok
+test_forbidden_request_is_refused_deterministically_without_tools (test_founder_agent.TurnTests.test_forbidden_request_is_refused_deterministically_without_tools) ... ok
+test_only_an_aal2_founder_with_copilot_use_reaches_a_turn (test_founder_agent.TurnTests.test_only_an_aal2_founder_with_copilot_use_reaches_a_turn) ... ok
+test_stored_and_cancel_see_only_this_founders_founder_runs (test_founder_agent.TurnTests.test_stored_and_cancel_see_only_this_founders_founder_runs) ... ok
+test_turn_body_is_strict (test_founder_agent.TurnTests.test_turn_body_is_strict) ... ok
+test_unconfigured_ops_workspace_is_a_policy_blocker_before_any_read (test_founder_agent.TurnTests.test_unconfigured_ops_workspace_is_a_policy_blocker_before_any_read) ... ok
+test_comparison_uses_the_previous_interval (test_founder_ai.AttemptMetrics.test_comparison_uses_the_previous_interval) ... ok
+test_latency_percentiles_and_small_samples (test_founder_ai.AttemptMetrics.test_latency_percentiles_and_small_samples) ... ok
+test_not_instrumented_until_the_first_row_then_collecting_since (test_founder_ai.AttemptMetrics.test_not_instrumented_until_the_first_row_then_collecting_since) ... ok
+test_ratios_and_cost_per_call (test_founder_ai.AttemptMetrics.test_ratios_and_cost_per_call) ... ok
+test_source_not_configured_is_never_zero (test_founder_ai.AttemptMetrics.test_source_not_configured_is_never_zero) ... ok
+test_tokens_unknown_types_are_coverage_never_zero (test_founder_ai.AttemptMetrics.test_tokens_unknown_types_are_coverage_never_zero) ... ok
+test_window_rows_are_partial_only_where_collection_started (test_founder_ai.AttemptMetrics.test_window_rows_are_partial_only_where_collection_started) ... ok
+test_cost_divided_by_the_named_outcome_proxy (test_founder_ai.CostPerOutcome.test_cost_divided_by_the_named_outcome_proxy) ... ok
+test_missing_learning_projection_marks_only_that_proxy (test_founder_ai.CostPerOutcome.test_missing_learning_projection_marks_only_that_proxy) ... ok
+test_demo_parity (test_founder_ai.Demo.test_demo_parity) ... ok
+test_insufficient_history_names_what_it_has (test_founder_ai.Forecast.test_insufficient_history_names_what_it_has) ... ok
+test_live_forecast_rows_carry_scenario_budget_and_history (test_founder_ai.Forecast.test_live_forecast_rows_carry_scenario_budget_and_history) ... ok
+test_ols_line_projects_the_rest_of_the_month (test_founder_ai.Forecast.test_ols_line_projects_the_rest_of_the_month) ... ok
+test_catalog_rows_are_activated_and_served_live_and_demo (test_founder_ai.Registration.test_catalog_rows_are_activated_and_served_live_and_demo) ... ok
+test_ledger_feature_mapping_equals_the_054_projection (test_founder_ai.Registration.test_ledger_feature_mapping_equals_the_054_projection) ... ok
+test_views_migration_only_touches_control_objects_and_grants_no_membership (test_founder_ai.Registration.test_views_migration_only_touches_control_objects_and_grants_no_membership) ... ok
+test_purge_keeps_400_days (test_founder_ai.Stages.test_purge_keeps_400_days) ... ok
+test_rollups_recompute_three_local_days_idempotently (test_founder_ai.Stages.test_rollups_recompute_three_local_days_idempotently) ... ok
+test_rollups_skip_when_fresh_locked_or_missing_and_never_raise (test_founder_ai.Stages.test_rollups_skip_when_fresh_locked_or_missing_and_never_raise) ... ok
+test_every_statement_is_fixed_parameterised_half_open_and_excluding (test_founder_ai.Statements.test_every_statement_is_fixed_parameterised_half_open_and_excluding) ... ok
+test_cost_per_useful_outcome_and_forecast_read_the_canonical_ledger (test_founder_ai_pg.FounderAiMigrationTests.test_cost_per_useful_outcome_and_forecast_read_the_canonical_ledger) ... ok
+test_live_attempt_metrics_exclude_exempt_and_internal_and_never_average_percentiles (test_founder_ai_pg.FounderAiMigrationTests.test_live_attempt_metrics_exclude_exempt_and_internal_and_never_average_percentiles) ... ok
+test_missing_table_rolls_back_only_the_savepoint_and_backs_off (test_founder_ai_pg.FounderAiMigrationTests.test_missing_table_rolls_back_only_the_savepoint_and_backs_off) ... {"event": "telemetry.journal_unavailable", "writer": "ai_call_events", "errorClass": "InsufficientPrivilege"}
+ok
+test_recording_twice_is_one_row_and_a_late_cost_settles_in_the_sidecar (test_founder_ai_pg.FounderAiMigrationTests.test_recording_twice_is_one_row_and_a_late_cost_settles_in_the_sidecar) ... ok
+test_rollups_are_idempotent_and_purge_keeps_400_days (test_founder_ai_pg.FounderAiMigrationTests.test_rollups_are_idempotent_and_purge_keeps_400_days) ... ok
+test_tables_are_service_only_with_forced_rls_and_the_seed_is_present (test_founder_ai_pg.FounderAiMigrationTests.test_tables_are_service_only_with_forced_rls_and_the_seed_is_present) ... ok
+test_views_are_projection_owned_column_bounded_and_reader_only (test_founder_ai_pg.FounderAiMigrationTests.test_views_are_projection_owned_column_bounded_and_reader_only) ... ok
+test_principal_is_the_stored_founder_row_and_grants_nothing (test_founder_briefings.CronPrincipalTests.test_principal_is_the_stored_founder_row_and_grants_nothing) ... {"event": "founder_briefing.operator_unavailable", "error": "OperationalError"}
+ok
+test_cost_is_the_activated_metric_over_the_reader_projection (test_founder_briefings.ReaderProjectionCostTests.test_cost_is_the_activated_metric_over_the_reader_projection) ... ok
+test_missing_projection_is_unobserved_not_zero (test_founder_briefings.ReaderProjectionCostTests.test_missing_projection_is_unobserved_not_zero) ... ok
+test_capability_check_stays_intact_and_falls_back_honestly (test_founder_briefings.ReceiptedFactsTests.test_capability_check_stays_intact_and_falls_back_honestly) ... {"event": "founder_briefing.metric_unavailable", "metricId": "ai_cost_actual", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "ai_cost_actual", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "cash_collected", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "payment_failures", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "publish_outcomes", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "active_workspaces", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "paid_customers", "error": "RuntimeError"}
+{"event": "founder_briefing.metric_unavailable", "metricId": "source_health", "error": "RuntimeError"}
+ok
+test_every_line_comes_from_a_receipted_query_run_as_the_founder (test_founder_briefings.ReceiptedFactsTests.test_every_line_comes_from_a_receipted_query_run_as_the_founder) ... ok
+test_one_failing_metric_stays_one_unavailable_line (test_founder_briefings.ReceiptedFactsTests.test_one_failing_metric_stays_one_unavailable_line) ... {"event": "founder_briefing.metric_unavailable", "metricId": "payment_failures", "error": "RuntimeError"}
+ok
+test_values_render_in_their_units (test_founder_briefings.ReceiptedFactsTests.test_values_render_in_their_units) ... ok
+test_windows_are_report_days_across_dst_and_month_starts (test_founder_briefings.ReceiptedFactsTests.test_windows_are_report_days_across_dst_and_month_starts) ... ok
+test_cron_briefing_keeps_its_receipt_ids (test_founder_briefings.ScheduledBriefingTests.test_cron_briefing_keeps_its_receipt_ids) ... {"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "operational_snapshot"}
+{"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "connection_health"}
+ok
+test_store_without_a_receipt_path_keeps_the_p0_briefing (test_founder_briefings.ScheduledBriefingTests.test_store_without_a_receipt_path_keeps_the_p0_briefing) ... ok
+test_briefing_values_are_founder_owned_receipts (test_founder_briefings_pg.FounderBriefingsDatabaseTests.test_briefing_values_are_founder_owned_receipts) ... ok
+test_cron_principal_keeps_the_capability_check (test_founder_briefings_pg.FounderBriefingsDatabaseTests.test_cron_principal_keeps_the_capability_check) ... ok
+test_observe_live_cost_comes_from_the_reader_projection (test_founder_briefings_pg.FounderBriefingsDatabaseTests.test_observe_live_cost_comes_from_the_reader_projection) ... ok
+test_scheduled_briefing_stores_its_receipt_ids (test_founder_briefings_pg.FounderBriefingsDatabaseTests.test_scheduled_briefing_stores_its_receipt_ids) ... ok
+test_the_settings_page_body_saves_and_a_stale_revision_conflicts (test_founder_contact.ContactPolicyPanelBodyTests.test_the_settings_page_body_saves_and_a_stale_revision_conflicts) ... ok
+test_get_and_put_policy_round_trip (test_founder_contact.ContactPolicyTests.test_get_and_put_policy_round_trip) ... ok
+test_policy_validation_and_defaults (test_founder_contact.ContactPolicyTests.test_policy_validation_and_defaults) ... ok
+test_reason_codes_in_gate_order (test_founder_contact.ContactPolicyTests.test_reason_codes_in_gate_order) ... ok
+test_customer_preferences_cannot_allowlist_founder_events (test_founder_contact.FounderCallEventsTests.test_customer_preferences_cannot_allowlist_founder_events) ... ok
+test_planner_accepts_founder_events_only_with_scope_in_ops_workspace (test_founder_contact.FounderCallEventsTests.test_planner_accepts_founder_events_only_with_scope_in_ops_workspace) ... ok
+test_principal_phone_passthrough_attaches_scope_only_on_request (test_founder_contact.FounderCallEventsTests.test_principal_phone_passthrough_attaches_scope_only_on_request) ... ok
+test_inbound_requires_dial_provider_rates_and_flags (test_founder_contact.InboundAndPlaybackTests.test_inbound_requires_dial_provider_rates_and_flags) ... ok
+test_playback_reads_report_or_incident_through_reader_scope_only (test_founder_contact.InboundAndPlaybackTests.test_playback_reads_report_or_incident_through_reader_scope_only) ... ok
+test_session_prompt_is_guarded_and_scoped_to_the_prepared_text (test_founder_contact.InboundAndPlaybackTests.test_session_prompt_is_guarded_and_scoped_to_the_prepared_text) ... ok
+test_crash_windows_reconcile_without_a_second_dial (test_founder_contact.IncidentCallAckTests.test_crash_windows_reconcile_without_a_second_dial) ... ok
+test_disabled_policy_suppresses_with_reason_and_never_dials (test_founder_contact.IncidentCallAckTests.test_disabled_policy_suppresses_with_reason_and_never_dials) ... ok
+test_incident_call_answered_then_ack_cancels_pending_escalation (test_founder_contact.IncidentCallAckTests.test_incident_call_answered_then_ack_cancels_pending_escalation) ... ok
+test_phone_product_refusal_is_a_suppression_with_its_code (test_founder_contact.IncidentCallAckTests.test_phone_product_refusal_is_a_suppression_with_its_code) ... ok
+test_test_call_is_policy_disabled_until_everything_is_on (test_founder_contact.IncidentCallAckTests.test_test_call_is_policy_disabled_until_everything_is_on) ... ok
+test_memory_store_covers_the_postgres_store_surface (test_founder_contact.StoreSurfaceTests.test_memory_store_covers_the_postgres_store_surface) ... ok
+test_insert_is_idempotent_on_the_source_key_and_update_is_a_compare_and_set (test_founder_follow_ups.FollowUpSQLTests.test_insert_is_idempotent_on_the_source_key_and_update_is_a_compare_and_set) ... ok
+test_read_statements_bind_operator_and_environment (test_founder_follow_ups.FollowUpSQLTests.test_read_statements_bind_operator_and_environment) ... ok
+test_concurrent_writer_is_reported_as_stale (test_founder_follow_ups.FollowUpWriteTests.test_concurrent_writer_is_reported_as_stale) ... ok
+test_create_replays_on_the_same_source_and_caps_open_rows (test_founder_follow_ups.FollowUpWriteTests.test_create_replays_on_the_same_source_and_caps_open_rows) ... ok
+test_create_validates_and_stamps_iso_times (test_founder_follow_ups.FollowUpWriteTests.test_create_validates_and_stamps_iso_times) ... ok
+test_list_orders_open_first_and_derives_due_without_persisting (test_founder_follow_ups.FollowUpWriteTests.test_list_orders_open_first_and_derives_due_without_persisting) ... ok
+test_update_is_revision_checked_and_follows_the_transition_table (test_founder_follow_ups.FollowUpWriteTests.test_update_is_revision_checked_and_follows_the_transition_table) ... ok
+test_cost_anomaly_uses_seven_day_median_floor_and_budget_stop (test_founder_incidents.DetectorTests.test_cost_anomaly_uses_seven_day_median_floor_and_budget_stop) ... ok
+test_detect_is_deterministic_and_ordered (test_founder_incidents.DetectorTests.test_detect_is_deterministic_and_ordered) ... ok
+test_payment_failure_spike_counts (test_founder_incidents.DetectorTests.test_payment_failure_spike_counts) ... ok
+test_publish_failure_rate_thresholds_and_sample_floor (test_founder_incidents.DetectorTests.test_publish_failure_rate_thresholds_and_sample_floor) ... ok
+test_source_silence_per_source_with_critical_after_long_silence (test_founder_incidents.DetectorTests.test_source_silence_per_source_with_critical_after_long_silence) ... ok
+test_acknowledge_requires_exact_version_and_stops_escalation (test_founder_incidents.EpisodeTests.test_acknowledge_requires_exact_version_and_stops_escalation) ... ok
+test_evidence_drift_keeps_the_version_and_the_timeline_quiet (test_founder_incidents.EpisodeTests.test_evidence_drift_keeps_the_version_and_the_timeline_quiet)
+The version an acknowledgement binds to moves only on a severity/state transition; drifting evidence between ... ok
+test_notifier_failures_never_break_evaluation (test_founder_incidents.EpisodeTests.test_notifier_failures_never_break_evaluation) ... ok
+test_same_episode_updates_escalates_and_resolves_once (test_founder_incidents.EpisodeTests.test_same_episode_updates_escalates_and_resolves_once) ... ok
+test_unobserved_detectors_are_not_recovery (test_founder_incidents.EpisodeTests.test_unobserved_detectors_are_not_recovery)
+A tick whose inputs were unavailable (consumer DB outage, notifications off) leaves open episodes open and never ... ok
+test_cron_notifier_emits_person_level_events_per_operator (test_founder_incidents.NotificationTests.test_cron_notifier_emits_person_level_events_per_operator) ... ok
+test_email_and_push_follow_the_founder_contact_policy (test_founder_incidents.NotificationTests.test_email_and_push_follow_the_founder_contact_policy)
+CONTRACTS §0: real email/push stay OFF. The default policy (live_delivery_enabled=false) plans in-app rows only; ... ok
+test_register_adds_founder_events_without_overriding_existing_entries (test_founder_incidents.NotificationTests.test_register_adds_founder_events_without_overriding_existing_entries) ... ok
+test_open_incidents_hook_lists_unresolved_episodes_as_content_free_attention_rows (test_founder_incidents.OverviewAttentionHookTests.test_open_incidents_hook_lists_unresolved_episodes_as_content_free_attention_rows) ... ok
+test_cantonese_and_unknown_question_are_truthfully_labeled (test_founder_intelligence.FounderIntelligenceTests.test_cantonese_and_unknown_question_are_truthfully_labeled) ... ok
+test_connected_report_call_follow_up_and_durable_summary (test_founder_intelligence.FounderIntelligenceTests.test_connected_report_call_follow_up_and_durable_summary) ... ok
+test_context_receipt_environment_and_unknown_fields_cannot_override_evidence (test_founder_intelligence.FounderIntelligenceTests.test_context_receipt_environment_and_unknown_fields_cannot_override_evidence) ... ok
+test_exact_chart_receipt_and_10000_population_survive_persisted_conversation (test_founder_intelligence.FounderIntelligenceTests.test_exact_chart_receipt_and_10000_population_survive_persisted_conversation) ... ok
+test_founder_aal2_capability_and_actor_environment_isolation (test_founder_intelligence.FounderIntelligenceTests.test_founder_aal2_capability_and_actor_environment_isolation) ... ok
+test_local_dst_fold_gap_and_no_unspecified_report_time (test_founder_intelligence.FounderIntelligenceTests.test_local_dst_fold_gap_and_no_unspecified_report_time) ... ok
+test_malformed_payloads_are_safe_validation_failures_without_partial_writes (test_founder_intelligence.FounderIntelligenceTests.test_malformed_payloads_are_safe_validation_failures_without_partial_writes) ... ok
+test_old_scenario_report_cannot_be_spoken_as_current_evidence (test_founder_intelligence.FounderIntelligenceTests.test_old_scenario_report_cannot_be_spoken_as_current_evidence) ... ok
+test_public_history_is_bounded_while_durable_history_is_preserved (test_founder_intelligence.FounderIntelligenceTests.test_public_history_is_bounded_while_durable_history_is_preserved) ... ok
+test_read_snapshot_denies_intelligence_without_breaking_workspace_read (test_founder_intelligence.FounderIntelligenceTests.test_read_snapshot_denies_intelligence_without_breaking_workspace_read) ... ok
+test_reminder_draft_exact_confirmation_persistence_and_duplicate_identity (test_founder_intelligence.FounderIntelligenceTests.test_reminder_draft_exact_confirmation_persistence_and_duplicate_identity) ... ok
+test_replay_authorization_rechecks_current_grants_before_cached_output (test_founder_intelligence.FounderIntelligenceTests.test_replay_authorization_rechecks_current_grants_before_cached_output) ... ok
+test_sandbox_actions_have_no_real_egress_and_no_customer_debit (test_founder_intelligence.FounderIntelligenceTests.test_sandbox_actions_have_no_real_egress_and_no_customer_debit) ... ok
+test_saved_entity_report_remains_historical_when_same_scenario_changes (test_founder_intelligence.FounderIntelligenceTests.test_saved_entity_report_remains_historical_when_same_scenario_changes) ... ok
+test_scenario_outbox_preview_retry_recovery_share_one_incident (test_founder_intelligence.FounderIntelligenceTests.test_scenario_outbox_preview_retry_recovery_share_one_incident) ... ok
+test_selected_customer_is_server_resolved_and_grant_rechecked_on_retrieval (test_founder_intelligence.FounderIntelligenceTests.test_selected_customer_is_server_resolved_and_grant_rechecked_on_retrieval) ... ok
+test_selected_entity_never_overwrites_stale_source_warning (test_founder_intelligence.FounderIntelligenceTests.test_selected_entity_never_overwrites_stale_source_warning) ... ok
+test_stale_scenario_never_becomes_business_decline (test_founder_intelligence.FounderIntelligenceTests.test_stale_scenario_never_becomes_business_decline) ... ok
+test_workspace_extension_returns_false_only_for_an_unowned_action (test_founder_intelligence.FounderIntelligenceTests.test_workspace_extension_returns_false_only_for_an_unowned_action) ... ok
+test_notice_centre_test_notice_and_read (test_founder_notifications.ControlRouteTests.test_notice_centre_test_notice_and_read) ... ok
+test_preferences_get_and_put_with_step_up (test_founder_notifications.ControlRouteTests.test_preferences_get_and_put_with_step_up) ... {"error": "UndefinedTable", "event": "founder_notice.preferences_unavailable"}
+ok
+test_report_routes_list_versions_and_carry_receipts (test_founder_notifications.ControlRouteTests.test_report_routes_list_versions_and_carry_receipts) ... ok
+test_digest_email_only_through_policy_flags_and_preference (test_founder_notifications.DigestTests.test_digest_email_only_through_policy_flags_and_preference) ... ok
+test_digest_is_a_registered_cron_stage (test_founder_notifications.DigestTests.test_digest_is_a_registered_cron_stage) ... ok
+test_digest_waits_for_its_hour_and_quiet_hours_then_runs_once_a_day (test_founder_notifications.DigestTests.test_digest_waits_for_its_hour_and_quiet_hours_then_runs_once_a_day) ... ok
+test_stage_never_raises_and_purges_past_retention (test_founder_notifications.DigestTests.test_stage_never_raises_and_purges_past_retention) ... {"error": "UndefinedTable", "event": "founder_notice.preferences_unavailable"}
+{"error": "UndefinedTable", "event": "founder_notice.centre_unavailable"}
+{"error": "RuntimeError", "event": "founder_notice.digest_failed"}
+ok
+test_critical_notice_leaves_by_email_and_push_only_through_every_gate (test_founder_notifications.NotifierTests.test_critical_notice_leaves_by_email_and_push_only_through_every_gate) ... ok
+test_cron_tick_records_founder_notices_for_incidents_and_recovery (test_founder_notifications.NotifierTests.test_cron_tick_records_founder_notices_for_incidents_and_recovery) ... ok
+test_in_app_always_even_when_the_consumer_outbox_is_off (test_founder_notifications.NotifierTests.test_in_app_always_even_when_the_consumer_outbox_is_off) ... ok
+test_missing_centre_table_keeps_the_outbox_and_never_raises (test_founder_notifications.NotifierTests.test_missing_centre_table_keeps_the_outbox_and_never_raises) ... {"error": "OperationalError", "event": "founder_notice.outbox_unavailable"}
+ok
+test_missing_outbox_tables_are_not_installed_yet_and_logged_once (test_founder_notifications.NotifierTests.test_missing_outbox_tables_are_not_installed_yet_and_logged_once) ... ok
+test_replays_are_one_notice_and_text_is_fixed_vocabulary (test_founder_notifications.NotifierTests.test_replays_are_one_notice_and_text_is_fixed_vocabulary) ... ok
+test_readiness_names_every_failing_gate (test_founder_notifications.PreferenceTests.test_readiness_names_every_failing_gate) ... ok
+test_validation_is_strict_and_never_widens_a_channel (test_founder_notifications.PreferenceTests.test_validation_is_strict_and_never_widens_a_channel) ... ok
+test_customer_catalogue_stays_byte_identical (test_founder_notifications.RegistrationTests.test_customer_catalogue_stays_byte_identical) ... ok
+test_memory_centre_covers_the_sql_surface (test_founder_notifications.RegistrationTests.test_memory_centre_covers_the_sql_surface) ... ok
+test_routes_capabilities_and_the_stage_are_registered_once (test_founder_notifications.RegistrationTests.test_routes_capabilities_and_the_stage_are_registered_once) ... ok
+test_email_and_push_need_the_policy_the_flag_and_the_preference (test_founder_notifications.RoutingTests.test_email_and_push_need_the_policy_the_flag_and_the_preference) ... ok
+test_quiet_hours_hold_everything_below_critical_and_security (test_founder_notifications.RoutingTests.test_quiet_hours_hold_everything_below_critical_and_security) ... ok
+test_route_table_follows_prd_6_7 (test_founder_notifications.RoutingTests.test_route_table_follows_prd_6_7) ... ok
+test_warnings_join_the_daily_digest (test_founder_notifications.RoutingTests.test_warnings_join_the_daily_digest) ... ok
+test_founder_notice_through_the_real_outbox_plans_nothing_sendable (test_founder_notifications_pg.FounderNoticesMigrationTests.test_founder_notice_through_the_real_outbox_plans_nothing_sendable) ... ok
+test_notice_sql_round_trip_as_the_restricted_session_role (test_founder_notifications_pg.FounderNoticesMigrationTests.test_notice_sql_round_trip_as_the_restricted_session_role) ... ok
+test_tables_force_rls_with_the_environment_policy_and_session_only_grants (test_founder_notifications_pg.FounderNoticesMigrationTests.test_tables_force_rls_with_the_environment_policy_and_session_only_grants) ... ok
+test_demo_reads_the_demo_dataset_and_live_reads_the_session_store (test_founder_ops.IncidentRouteTests.test_demo_reads_the_demo_dataset_and_live_reads_the_session_store) ... ok
+test_route_is_registered_read_only_beside_the_ack (test_founder_ops.IncidentRouteTests.test_route_is_registered_read_only_beside_the_ack) ... ok
+test_connection_health_is_a_customer_snapshot_with_refresh_lag (test_founder_ops.OperationsMetricTests.test_connection_health_is_a_customer_snapshot_with_refresh_lag) ... ok
+test_demo_parity_support_aging_from_the_demo_inbox_and_never_a_zero_elsewhere (test_founder_ops.OperationsMetricTests.test_demo_parity_support_aging_from_the_demo_inbox_and_never_a_zero_elsewhere) ... ok
+test_publish_by_provider_is_a_registry_statement_with_customer_exclusions (test_founder_ops.OperationsMetricTests.test_publish_by_provider_is_a_registry_statement_with_customer_exclusions) ... ok
+test_queue_health_peaks_per_counter_with_the_latest_reading (test_founder_ops.OperationsMetricTests.test_queue_health_peaks_per_counter_with_the_latest_reading) ... ok
+test_slo_burn_is_labelled_proposed_and_alerts_only_when_both_windows_burn (test_founder_ops.OperationsMetricTests.test_slo_burn_is_labelled_proposed_and_alerts_only_when_both_windows_burn) ... ok
+test_support_aging_bands_kinds_and_the_ticket_source_not_collected (test_founder_ops.OperationsMetricTests.test_support_aging_bands_kinds_and_the_ticket_source_not_collected) ... ok
+test_configured_reads_mounted_objects_never_credentials (test_founder_ops.ProbeTests.test_configured_reads_mounted_objects_never_credentials) ... ok
+test_probe_writes_every_source_with_event_recency_watermarks (test_founder_ops.ProbeTests.test_probe_writes_every_source_with_event_recency_watermarks) ... ok
+test_unmounted_missing_and_failing_event_sources (test_founder_ops.ProbeTests.test_unmounted_missing_and_failing_event_sources) ... ok
+test_catalog_rows_are_complete_activated_extensions (test_founder_ops.RegistrationTests.test_catalog_rows_are_complete_activated_extensions) ... ok
+test_live_demo_sources_and_stages_are_registered (test_founder_ops.RegistrationTests.test_live_demo_sources_and_stages_are_registered) ... ok
+test_source_vocabulary (test_founder_ops.RegistrationTests.test_source_vocabulary) ... ok
+test_error_rate_ratio_coverage_and_collecting_since (test_founder_ops.RequestMetricTests.test_error_rate_ratio_coverage_and_collecting_since) ... ok
+test_lagging_writer_and_stale_database_source (test_founder_ops.RequestMetricTests.test_lagging_writer_and_stale_database_source) ... ok
+test_latency_rows_carry_both_percentiles_and_flag_small_samples (test_founder_ops.RequestMetricTests.test_latency_rows_carry_both_percentiles_and_flag_small_samples) ... ok
+test_percentile_interpolates_inside_the_rank_bucket_and_is_never_an_average (test_founder_ops.RequestMetricTests.test_percentile_interpolates_inside_the_rank_bucket_and_is_never_an_average) ... ok
+test_statements_are_fixed_parameterised_half_open_and_bounded (test_founder_ops.RequestMetricTests.test_statements_are_fixed_parameterised_half_open_and_bounded) ... ok
+test_unavailable_until_installed_and_collected (test_founder_ops.RequestMetricTests.test_unavailable_until_installed_and_collected) ... ok
+test_zero_requests_is_not_applicable_never_zero_percent (test_founder_ops.RequestMetricTests.test_zero_requests_is_not_applicable_never_zero_percent) ... ok
+test_connection_health_refreshes_hourly_and_removes_vanished_connections (test_founder_ops.StageTests.test_connection_health_refreshes_hourly_and_removes_vanished_connections) ... ok
+test_operational_snapshot_persists_the_cron_snapshot_counters_only (test_founder_ops.StageTests.test_operational_snapshot_persists_the_cron_snapshot_counters_only) ... ok
+test_projection_classifies_with_the_customer_connection_state (test_founder_ops.StageTests.test_projection_classifies_with_the_customer_connection_state) ... ok
+test_purge_runs_daily_at_three_with_retention_cutoffs (test_founder_ops.StageTests.test_purge_runs_daily_at_three_with_retention_cutoffs) ... ok
+test_registered_stages_run_inside_the_founder_tick_without_breaking_it (test_founder_ops.StageTests.test_registered_stages_run_inside_the_founder_tick_without_breaking_it) ... {"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "operational_snapshot"}
+{"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "connection_health"}
+ok
+test_stages_pause_when_not_installed_log_once_and_never_raise (test_founder_ops.StageTests.test_stages_pause_when_not_installed_log_once_and_never_raise) ... ok
+test_current_heartbeat_passes_through_the_read_only_watchdog_role (test_founder_ops.WatchdogTests.test_current_heartbeat_passes_through_the_read_only_watchdog_role) ... ok
+test_default_connector_uses_bundled_supabase_root_for_verify_full (test_founder_ops.WatchdogTests.test_default_connector_uses_bundled_supabase_root_for_verify_full) ... ok
+test_not_configured_passes_with_a_notice (test_founder_ops.WatchdogTests.test_not_configured_passes_with_a_notice) ... ok
+test_stale_unmeasured_missing_privileged_or_unreadable_fails_loudly (test_founder_ops.WatchdogTests.test_stale_unmeasured_missing_privileged_or_unreadable_fails_loudly) ... ok
+test_verdict_and_step_summary (test_founder_ops.WatchdogTests.test_verdict_and_step_summary) ... ok
+test_workflow_runs_every_ten_minutes_with_the_secret_only (test_founder_ops.WatchdogTests.test_workflow_runs_every_ten_minutes_with_the_secret_only) ... ok
+test_checks_reject_raw_paths_payloads_and_unknown_states (test_founder_ops_pg.FounderOpsPostgresTests.test_checks_reject_raw_paths_payloads_and_unknown_states) ... ok
+test_every_ops_metric_round_trips_through_the_reader_role (test_founder_ops_pg.FounderOpsPostgresTests.test_every_ops_metric_round_trips_through_the_reader_role) ... ok
+test_probe_writes_every_source_through_the_restricted_stores (test_founder_ops_pg.FounderOpsPostgresTests.test_probe_writes_every_source_through_the_restricted_stores) ... ok
+test_projections_are_projection_owned_reader_readable_and_column_bounded (test_founder_ops_pg.FounderOpsPostgresTests.test_projections_are_projection_owned_reader_readable_and_column_bounded) ... ok
+test_public_tables_force_rls_service_only_and_request_metrics_are_unlogged (test_founder_ops_pg.FounderOpsPostgresTests.test_public_tables_force_rls_service_only_and_request_metrics_are_unlogged) ... ok
+test_stages_snapshot_project_and_purge (test_founder_ops_pg.FounderOpsPostgresTests.test_stages_snapshot_project_and_purge) ... /Users/ouxianxing/.codex/worktrees/rafii-founder-control-v2/James-Au-Studio/.control-venv/lib/python3.12/site-packages/psycopg/_connection_base.py:153: ResourceWarning: <psycopg.Connection object at 0x30ba982c0> was deleted while still open. Please use 'with' or '.close()' to close the connection properly
+  __warn(
+ok
+test_watchdog_main_through_a_member_login (test_founder_ops_pg.FounderOpsPostgresTests.test_watchdog_main_through_a_member_login) ... /Users/ouxianxing/.codex/worktrees/rafii-founder-control-v2/James-Au-Studio/.control-venv/lib/python3.12/site-packages/psycopg/_connection_base.py:153: ResourceWarning: <psycopg.Connection object at 0x30ba9a9f0> was deleted while still open. Please use 'with' or '.close()' to close the connection properly
+  __warn(
+ok
+test_watchdog_role_is_nologin_and_sees_only_its_environments_source_health (test_founder_ops_pg.FounderOpsPostgresTests.test_watchdog_role_is_nologin_and_sees_only_its_environments_source_health) ... ok
+test_writer_flushes_merge_across_instances_and_never_store_identifiers (test_founder_ops_pg.FounderOpsPostgresTests.test_writer_flushes_merge_across_instances_and_never_store_identifiers) ... ok
+test_writer_treats_a_missing_privilege_as_not_installed (test_founder_ops_pg.FounderOpsPostgresTests.test_writer_treats_a_missing_privilege_as_not_installed) ... ok
+test_a_second_call_returns_the_existing_workspace_and_demo_or_no_runtime_is_refused (test_founder_ops_workspace.CreateTests.test_a_second_call_returns_the_existing_workspace_and_demo_or_no_runtime_is_refused) ... ok
+test_creates_one_internal_workspace_with_no_publishing_rights_and_remembers_it (test_founder_ops_workspace.CreateTests.test_creates_one_internal_workspace_with_no_publishing_rights_and_remembers_it) ... ok
+test_get_reports_the_source_and_whether_it_can_be_created (test_founder_ops_workspace.CreateTests.test_get_reports_the_source_and_whether_it_can_be_created) ... ok
+test_concurrent_requests_converge_without_customer_kpi_or_trial_growth (test_founder_ops_workspace.OpsWorkspacePostgresTests.test_concurrent_requests_converge_without_customer_kpi_or_trial_growth) ... ok
+test_crash_before_consumer_write_keeps_an_internal_identity_and_resume_reuses_it (test_founder_ops_workspace.OpsWorkspacePostgresTests.test_crash_before_consumer_write_keeps_an_internal_identity_and_resume_reuses_it) ... {"event": "founder_ops.source_unavailable", "exceptionType": "RuntimeError"}
+ok
+test_create_commits_a_classified_internal_workspace_and_bootstrap_keeps_the_trial_workspace (test_founder_ops_workspace.OpsWorkspacePostgresTests.test_create_commits_a_classified_internal_workspace_and_bootstrap_keeps_the_trial_workspace) ... ok
+test_customer_or_foreign_environment_override_is_refused (test_founder_ops_workspace.OpsWorkspacePostgresTests.test_customer_or_foreign_environment_override_is_refused) ... ok
+test_internal_ai_has_no_subscription_and_requires_numeric_budget_even_for_exempt_owner (test_founder_ops_workspace.OpsWorkspacePostgresTests.test_internal_ai_has_no_subscription_and_requires_numeric_budget_even_for_exempt_owner) ... ok
+test_the_deployment_variable_wins_then_the_stored_setting (test_founder_ops_workspace.ResolveTests.test_the_deployment_variable_wins_then_the_stored_setting) ... ok
+test_unavailable_settings_never_look_unconfigured (test_founder_ops_workspace.ResolveTests.test_unavailable_settings_never_look_unconfigured) ... {"event": "founder_ops.source_unavailable", "exceptionType": "RuntimeError"}
+ok
+test_bad_impact_inputs_fail_closed (test_founder_preview_delivery.FounderEmailPreviewTests.test_bad_impact_inputs_fail_closed) ... ok
+test_contact_like_title_values_cannot_become_a_destination (test_founder_preview_delivery.FounderEmailPreviewTests.test_contact_like_title_values_cannot_become_a_destination) ... ok
+test_original_payment_evidence_preserves_minor_units_without_private_fields (test_founder_preview_delivery.FounderEmailPreviewTests.test_original_payment_evidence_preserves_minor_units_without_private_fields) ... ok
+test_payment_evidence_is_bounded_and_invalid_references_fail_closed (test_founder_preview_delivery.FounderEmailPreviewTests.test_payment_evidence_is_bounded_and_invalid_references_fail_closed) ... ok
+test_private_fields_are_dropped_and_impact_text_is_escaped (test_founder_preview_delivery.FounderEmailPreviewTests.test_private_fields_are_dropped_and_impact_text_is_escaped) ... ok
+test_recovery_preview_subject_is_explicitly_recovered_and_unsent (test_founder_preview_delivery.FounderEmailPreviewTests.test_recovery_preview_subject_is_explicitly_recovered_and_unsent) ... ok
+test_adapter_and_preview_make_no_socket_calls (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_adapter_and_preview_make_no_socket_calls) ... ok
+test_ambiguity_holds_active_slot_until_definitive_reconciliation (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_ambiguity_holds_active_slot_until_definitive_reconciliation) ... ok
+test_call_progress_reuses_receipt_and_never_acknowledges_completion (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_call_progress_reuses_receipt_and_never_acknowledges_completion) ... ok
+test_corrupt_attempt_state_cannot_release_active_call_guard (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_corrupt_attempt_state_cannot_release_active_call_guard) ... ok
+test_daily_cap_uses_founder_local_day_not_utc_day (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_daily_cap_uses_founder_local_day_not_utc_day) ... ok
+test_duplicate_request_cannot_repeat_or_change_effect (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_duplicate_request_cannot_repeat_or_change_effect) ... ok
+test_duplicate_start_cannot_bypass_explicit_retry (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_duplicate_start_cannot_bypass_explicit_retry) ... ok
+test_email_acceptance_delivery_and_acknowledgement_are_separate (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_email_acceptance_delivery_and_acknowledgement_are_separate) ... ok
+test_email_failure_retry_and_suppression_never_dispatch (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_email_failure_retry_and_suppression_never_dispatch) ... ok
+test_email_uncertainty_requires_definitive_reconcile (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_email_uncertainty_requires_definitive_reconcile) ... ok
+test_one_active_call_and_daily_cap_span_all_sources (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_one_active_call_and_daily_cap_span_all_sources) ... ok
+test_only_failed_or_no_answer_calls_are_retryable (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_only_failed_or_no_answer_calls_are_retryable) ... ok
+test_out_of_order_and_terminal_callbacks_never_regress (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_out_of_order_and_terminal_callbacks_never_regress) ... ok
+test_payload_rejects_egress_fields_untrusted_ids_and_live_mode (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_payload_rejects_egress_fields_untrusted_ids_and_live_mode) ... ok
+test_quiet_hours_gate_scheduled_calls_and_automatic_retry (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_quiet_hours_gate_scheduled_calls_and_automatic_retry) ... ok
+test_replay_capacity_cannot_prevent_terminal_call_cleanup (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_replay_capacity_cannot_prevent_terminal_call_cleanup) ... ok
+test_retry_cooldown_starts_at_failure_and_total_attempts_are_two (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_retry_cooldown_starts_at_failure_and_total_attempts_are_two) ... ok
+test_source_and_channel_bind_every_attempt_operation (test_founder_preview_delivery.FounderPreviewDeliveryTests.test_source_and_channel_bind_every_attempt_operation) ... ok
+test_demo_isolation_full_source_and_atomic_invalid_input (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_demo_isolation_full_source_and_atomic_invalid_input) ... ok
+test_exact_canonical_10000_baseline_not_second_seed (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_exact_canonical_10000_baseline_not_second_seed) ... ok
+test_failure_recovery_same_episode_append_only_no_duplicate_notices (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_failure_recovery_same_episode_append_only_no_duplicate_notices) ... ok
+test_later_independent_edit_of_owned_status_wins_restoration (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_later_independent_edit_of_owned_status_wins_restoration) ... ok
+test_new_outage_after_recovery_gets_new_episode_without_rewriting_history (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_new_outage_after_recovery_gets_new_episode_without_rewriting_history) ... ok
+test_no_provider_transport_model_or_ledger_dependency (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_no_provider_transport_model_or_ledger_dependency) ... ok
+test_outage_has_linked_named_fictional_impact_unknown_cause_and_no_financial_fault (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_outage_has_linked_named_fictional_impact_unknown_cause_and_no_financial_fault) ... ok
+test_payment_and_outage_have_distinct_detector_episodes_preserving_history (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_payment_and_outage_have_distinct_detector_episodes_preserving_history) ... ok
+test_payment_exception_persists_same_linked_account_evidence_and_safe_notice (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_payment_exception_persists_same_linked_account_evidence_and_safe_notice) ... ok
+test_payment_failure_links_named_source_and_derives_money_from_records (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_payment_failure_links_named_source_and_derives_money_from_records) ... ok
+test_payment_normal_restores_original_fields_and_preserves_unrelated_work (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_payment_normal_restores_original_fields_and_preserves_unrelated_work) ... ok
+test_payment_notification_failure_and_recovery_keep_episode_and_derive_restoration (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_payment_notification_failure_and_recovery_keep_episode_and_derive_restoration) ... ok
+test_stale_keeps_last_good_actual_asof_values_and_normal_restores_source_state (test_founder_preview_scenarios.FounderPreviewScenarioTests.test_stale_keeps_last_good_actual_asof_values_and_normal_restores_source_state) ... ok
+test_a_missing_learning_rollup_falls_back_to_live_learning_events (test_founder_product.ProductMetricTests.test_a_missing_learning_rollup_falls_back_to_live_learning_events) ... ok
+test_adoption_uses_the_eligible_denominator_and_says_when_collection_began (test_founder_product.ProductMetricTests.test_adoption_uses_the_eligible_denominator_and_says_when_collection_began) ... ok
+test_catalog_entries_are_activated_and_registered_live_and_demo (test_founder_product.ProductMetricTests.test_catalog_entries_are_activated_and_registered_live_and_demo) ... ok
+test_correlations_are_hypotheses_with_n_and_suppress_small_groups (test_founder_product.ProductMetricTests.test_correlations_are_hypotheses_with_n_and_suppress_small_groups) ... ok
+test_demo_computes_the_anchor_and_says_the_rest_is_not_simulated (test_founder_product.ProductMetricTests.test_demo_computes_the_anchor_and_says_the_rest_is_not_simulated) ... ok
+test_every_statement_is_fixed_parameterised_half_open_and_excluding (test_founder_product.ProductMetricTests.test_every_statement_is_fixed_parameterised_half_open_and_excluding) ... ok
+test_funnel_cohort_grouping_filters_empty_and_missing_sources (test_founder_product.ProductMetricTests.test_funnel_cohort_grouping_filters_empty_and_missing_sources) ... ok
+test_funnel_steps_name_their_source_and_never_turn_unknown_into_not_reached (test_founder_product.ProductMetricTests.test_funnel_steps_name_their_source_and_never_turn_unknown_into_not_reached) ... ok
+test_retention_returns_matured_cells_with_n_and_d_and_grey_cells_without_a_value (test_founder_product.ProductMetricTests.test_retention_returns_matured_cells_with_n_and_d_and_grey_cells_without_a_value) ... ok
+test_time_back_keeps_confidence_apart (test_founder_product.ProductMetricTests.test_time_back_keeps_confidence_apart) ... ok
+test_time_to_value_is_a_median_with_n_quartiles_and_censored_count (test_founder_product.ProductMetricTests.test_time_to_value_is_a_median_with_n_quartiles_and_censored_count) ... ok
+test_backfills_then_recomputes_recent_days_idempotently_and_purges (test_founder_product.RollupStageTests.test_backfills_then_recomputes_recent_days_idempotently_and_purges) ... ok
+test_lists_workspaces_stuck_before_a_step_with_names_and_bounds (test_founder_product.StuckRouteTests.test_lists_workspaces_stuck_before_a_step_with_names_and_bounds) ... ok
+test_validation_capabilities_demo_and_missing_sources (test_founder_product.StuckRouteTests.test_validation_capabilities_demo_and_missing_sources) ... ok
+test_a_failing_event_write_never_rolls_back_the_customer_transaction (test_founder_product_pg.FounderProductPostgresTests.test_a_failing_event_write_never_rolls_back_the_customer_transaction) ... {"event": "product_events.not_installed", "exceptionType": "InsufficientPrivilege", "retryAfterSeconds": 600}
+{"event": "telemetry.journal_unavailable", "writer": "product_events", "errorClass": "InsufficientPrivilege"}
+ok
+test_live_round_trips_over_the_projections (test_founder_product_pg.FounderProductPostgresTests.test_live_round_trips_over_the_projections) ... ok
+test_projections_are_owned_barriered_reader_readable_and_allowlisted (test_founder_product_pg.FounderProductPostgresTests.test_projections_are_owned_barriered_reader_readable_and_allowlisted) ... ok
+test_the_rollup_stage_keeps_learning_history_idempotently (test_founder_product_pg.FounderProductPostgresTests.test_the_rollup_stage_keeps_learning_history_idempotently) ... ok
+test_bridge_rows_reconcile_exactly_and_zero_fill_segments (test_founder_revenue.Bridge.test_bridge_rows_reconcile_exactly_and_zero_fill_segments) ... ok
+test_insufficient_history_names_what_is_missing (test_founder_revenue.Bridge.test_insufficient_history_names_what_is_missing) ... ok
+test_logo_churn_ratio_and_zero_denominator (test_founder_revenue.Bridge.test_logo_churn_ratio_and_zero_denominator) ... ok
+test_v2_serves_only_when_the_governing_catalog_row_is_version_two (test_founder_revenue.CashCollectedV2.test_v2_serves_only_when_the_governing_catalog_row_is_version_two) ... ok
+test_monthly_normalization_is_exact_and_rounds_half_up (test_founder_revenue.CatalogAndRegistration.test_monthly_normalization_is_exact_and_rounds_half_up) ... ok
+test_revenue_rows_are_activated_registered_and_sourced (test_founder_revenue.CatalogAndRegistration.test_revenue_rows_are_activated_registered_and_sourced) ... ok
+test_available_credits_use_the_wallet_projection (test_founder_revenue.Credits.test_available_credits_use_the_wallet_projection) ... ok
+test_credit_metrics_say_not_instrumented_while_credits_are_off (test_founder_revenue.Credits.test_credit_metrics_say_not_instrumented_while_credits_are_off) ... ok
+test_grants_and_consumption_sum_ledger_entries (test_founder_revenue.Credits.test_grants_and_consumption_sum_ledger_entries) ... ok
+test_demo_credits_bridge_and_forecast (test_founder_revenue.Demo.test_demo_credits_bridge_and_forecast) ... ok
+test_demo_mrr_is_the_candidate_catalog_labelled_not_active (test_founder_revenue.Demo.test_demo_mrr_is_the_candidate_catalog_labelled_not_active) ... ok
+test_demo_overview_mrr_tile (test_founder_revenue.Demo.test_demo_overview_mrr_tile) ... ok
+test_demo_payment_failure_moves_one_subscription_into_delinquent_mrr (test_founder_revenue.Demo.test_demo_payment_failure_moves_one_subscription_into_delinquent_mrr) ... ok
+test_least_squares_scenario_and_history_rule (test_founder_revenue.Forecast.test_least_squares_scenario_and_history_rule) ... ok
+test_live_overview_mrr_tile_reads_the_slice (test_founder_revenue.LiveMrr.test_live_overview_mrr_tile_reads_the_slice) ... ok
+test_missing_projection_and_no_events_are_unavailable_never_zero (test_founder_revenue.LiveMrr.test_missing_projection_and_no_events_are_unavailable_never_zero) ... ok
+test_mrr_rows_carry_unknown_coverage_and_collecting_since (test_founder_revenue.LiveMrr.test_mrr_rows_carry_unknown_coverage_and_collecting_since) ... ok
+test_demo_routes (test_founder_revenue.Routes.test_demo_routes) ... ok
+test_live_invoice_route (test_founder_revenue.Routes.test_live_invoice_route) ... ok
+test_movement_route_states_and_rows (test_founder_revenue.Routes.test_movement_route_states_and_rows) ... ok
+test_snapshot_falls_back_to_plan_and_status (test_founder_revenue.Snapshot.test_snapshot_falls_back_to_plan_and_status) ... ok
+test_snapshot_records_mrr_once_057_is_applied (test_founder_revenue.Snapshot.test_snapshot_records_mrr_once_057_is_applied) ... ok
+test_statements_are_fixed_parameterised_and_exclude_fixture_and_internal_workspaces (test_founder_revenue.StatementShapes.test_statements_are_fixed_parameterised_and_exclude_fixture_and_internal_workspaces) ... ok
+test_057_before_054_still_gets_the_snapshot_columns_from_063 (test_founder_revenue_pg.FounderRevenueMigrationTests.test_057_before_054_still_gets_the_snapshot_columns_from_063)
+Production applies 057 (public) before the owner-approved 054 creates pr_subscription_snapshots, so 057's column ... ok
+test_cash_collected_v2_dedupes_grants_against_paid_invoices (test_founder_revenue_pg.FounderRevenueMigrationTests.test_cash_collected_v2_dedupes_grants_against_paid_invoices) ... ok
+test_credit_metrics_read_the_ledger_through_the_wallet_projection (test_founder_revenue_pg.FounderRevenueMigrationTests.test_credit_metrics_read_the_ledger_through_the_wallet_projection) ... ok
+test_daily_snapshot_records_mrr_and_the_forecast_reads_it (test_founder_revenue_pg.FounderRevenueMigrationTests.test_daily_snapshot_records_mrr_and_the_forecast_reads_it) ... ok
+test_mrr_delinquent_bridge_and_churn_through_the_reader (test_founder_revenue_pg.FounderRevenueMigrationTests.test_mrr_delinquent_bridge_and_churn_through_the_reader) ... ok
+test_stripe_webhooks_record_events_and_invoices (test_founder_revenue_pg.FounderRevenueMigrationTests.test_stripe_webhooks_record_events_and_invoices) ... ok
+test_tables_views_grants_and_rls (test_founder_revenue_pg.FounderRevenueMigrationTests.test_tables_views_grants_and_rls) ... ok
+test_webhook_succeeds_when_the_billing_event_table_is_missing (test_founder_revenue_pg.FounderRevenueMigrationTests.test_webhook_succeeds_when_the_billing_event_table_is_missing) ... {"event": "founder_billing_record_skipped", "table": "pr_subscription_events", "reason": "not_installed", "error": "UndefinedTable"}
+ok
+test_a_view_whose_only_source_is_missing_is_unavailable_never_empty_and_measured (test_founder_risk.RiskTests.test_a_view_whose_only_source_is_missing_is_unavailable_never_empty_and_measured) ... ok
+test_at_risk_is_a_named_hypothesis_and_every_row_carries_all_its_chips (test_founder_risk.RiskTests.test_at_risk_is_a_named_hypothesis_and_every_row_carries_all_its_chips) ... ok
+test_demo_saved_views_flag_exactly_the_matching_workspaces_with_evidence_and_since (test_founder_risk.RiskTests.test_demo_saved_views_flag_exactly_the_matching_workspaces_with_evidence_and_since) ... ok
+test_live_at_risk_checks_inactivity_for_payment_and_connection_candidates_and_falls_back_to_reconnect_events (test_founder_risk.RiskTests.test_live_at_risk_checks_inactivity_for_payment_and_connection_candidates_and_falls_back_to_reconnect_events) ... ok
+test_live_runs_fixed_statements_phase_two_restricted_and_missing_sources_say_so (test_founder_risk.RiskTests.test_live_runs_fixed_statements_phase_two_restricted_and_missing_sources_say_so) ... ok
+test_rules_are_versioned_explainable_and_the_route_is_registered (test_founder_risk.RiskTests.test_rules_are_versioned_explainable_and_the_route_is_registered) ... ok
+test_validation_and_capabilities (test_founder_risk.RiskTests.test_validation_and_capabilities) ... ok
+test_views_are_bounded_to_two_hundred_rows (test_founder_risk.RiskTests.test_views_are_bounded_to_two_hundred_rows) ... ok
+test_live_rules_flag_the_seeded_workspaces_and_exclude_classified_ones (test_founder_risk_pg.FounderRiskPostgresTests.test_live_rules_flag_the_seeded_workspaces_and_exclude_classified_ones) ... ok
+test_compose_is_deterministic_and_quotes_values_only (test_founder_schedules.BriefingTests.test_compose_is_deterministic_and_quotes_values_only) ... ok
+test_reports_are_immutable_versions (test_founder_schedules.BriefingTests.test_reports_are_immutable_versions) ... ok
+test_briefing_is_composed_and_delivered_even_when_calls_are_off (test_founder_schedules.CronBriefingPathTests.test_briefing_is_composed_and_delivered_even_when_calls_are_off) ... {"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "operational_snapshot"}
+{"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "connection_health"}
+ok
+test_crash_after_the_claim_is_reconciled_never_redialed (test_founder_schedules.CronBriefingPathTests.test_crash_after_the_claim_is_reconciled_never_redialed) ... ok
+test_critical_incident_from_observations_plans_a_contact_once (test_founder_schedules.CronBriefingPathTests.test_critical_incident_from_observations_plans_a_contact_once) ... {"cause": "table_missing", "event": "founder_ops.not_installed", "pauseSeconds": 600, "stage": "reliability_purge"}
+ok
+test_disabled_control_or_missing_store_is_a_no_op (test_founder_schedules.CronBriefingPathTests.test_disabled_control_or_missing_store_is_a_no_op) ... ok
+test_missed_slot_reaches_the_inbox_without_a_catch_up_call (test_founder_schedules.CronBriefingPathTests.test_missed_slot_reaches_the_inbox_without_a_catch_up_call) ... ok
+test_schedule_to_call_to_summary_with_duplicate_ticks (test_founder_schedules.CronBriefingPathTests.test_schedule_to_call_to_summary_with_duplicate_ticks) ... ok
+test_stage_failures_are_reported_not_raised (test_founder_schedules.CronBriefingPathTests.test_stage_failures_are_reported_not_raised) ... ok
+test_claim_commits_next_slot_first_and_duplicate_invocations_create_one_occurrence (test_founder_schedules.ScheduleRulesTests.test_claim_commits_next_slot_first_and_duplicate_invocations_create_one_occurrence) ... ok
+test_dst_gap_moves_to_next_valid_minute_and_fold_uses_first_instance (test_founder_schedules.ScheduleRulesTests.test_dst_gap_moves_to_next_valid_minute_and_fold_uses_first_instance) ... ok
+test_late_slot_is_missed_not_caught_up (test_founder_schedules.ScheduleRulesTests.test_late_slot_is_missed_not_caught_up) ... ok
+test_validation (test_founder_schedules.ScheduleRulesTests.test_validation) ... ok
+test_weekly_replaces_daily_on_the_same_day (test_founder_schedules.ScheduleRulesTests.test_weekly_replaces_daily_on_the_same_day) ... ok
+test_catalog_extensions_are_activated_rows_with_live_and_demo_adapters (test_founder_slices.SliceRegistryTests.test_catalog_extensions_are_activated_rows_with_live_and_demo_adapters) ... ok
+test_cron_stage_registry_and_failure_isolation (test_founder_slices.SliceRegistryTests.test_cron_stage_registry_and_failure_isolation) ... ok
+test_demo_register_and_not_simulated (test_founder_slices.SliceRegistryTests.test_demo_register_and_not_simulated) ... ok
+test_every_installed_slice_imports_cleanly (test_founder_slices.SliceRegistryTests.test_every_installed_slice_imports_cleanly) ... ok
+test_failed_slice_is_recorded_by_class_only (test_founder_slices.SliceRegistryTests.test_failed_slice_is_recorded_by_class_only) ... {"event": "founder_slice_unavailable", "reason": "RuntimeError", "slice": "founder_metrics_ops"}
+ok
+test_live_register_refuses_duplicates_and_unknown_sources (test_founder_slices.SliceRegistryTests.test_live_register_refuses_duplicates_and_unknown_sources) ... ok
+test_new_capabilities_are_declared_and_budgeted (test_founder_slices.SliceRegistryTests.test_new_capabilities_are_declared_and_budgeted) ... ok
+test_route_registry_validates_capability_and_resolves_full_matches (test_founder_slices.SliceRegistryTests.test_route_registry_validates_capability_and_resolves_full_matches) ... ok
+test_unknown_activated_metric_reports_adapter_unavailable_not_a_failure (test_founder_slices.SliceRegistryTests.test_unknown_activated_metric_reports_adapter_unavailable_not_a_failure) ... ok
+test_flag_and_ops_workspace_are_required_before_anything_is_read (test_founder_voice.VoiceGateTests.test_flag_and_ops_workspace_are_required_before_anything_is_read) ... ok
+test_only_an_aal2_founder_with_copilot_use_reaches_voice (test_founder_voice.VoiceGateTests.test_only_an_aal2_founder_with_copilot_use_reaches_voice) ... ok
+test_runtime_and_route_blockers_are_policy_answers (test_founder_voice.VoiceGateTests.test_runtime_and_route_blockers_are_policy_answers) ... ok
+test_start_body_is_strict (test_founder_voice.VoiceGateTests.test_start_body_is_strict) ... ok
+test_status_names_every_blocker_without_creating_anything (test_founder_voice.VoiceGateTests.test_status_names_every_blocker_without_creating_anything) ... ok
+test_policy_refusals_come_first_with_their_blocker (test_founder_voice.VoiceRouteTests.test_policy_refusals_come_first_with_their_blocker) ... ok
+test_routes_are_registered_with_copilot_use_and_their_budgets (test_founder_voice.VoiceRouteTests.test_routes_are_registered_with_copilot_use_and_their_budgets) ... ok
+test_start_delegate_and_end_through_the_boundary (test_founder_voice.VoiceRouteTests.test_start_delegate_and_end_through_the_boundary) ... ok
+test_another_member_cannot_touch_the_founders_session (test_founder_voice.VoiceSessionTests.test_another_member_cannot_touch_the_founders_session) ... ok
+test_conversation_must_belong_to_the_session_namespace (test_founder_voice.VoiceSessionTests.test_conversation_must_belong_to_the_session_namespace) ... ok
+test_delegation_runs_the_founder_turn_with_voice_modality (test_founder_voice.VoiceSessionTests.test_delegation_runs_the_founder_turn_with_voice_modality) ... ok
+test_delegations_are_confined_to_their_session (test_founder_voice.VoiceSessionTests.test_delegations_are_confined_to_their_session) ... ok
+test_provider_refusal_releases_the_reservation_and_names_a_blocker (test_founder_voice.VoiceSessionTests.test_provider_refusal_releases_the_reservation_and_names_a_blocker) ... rafii.voice.start.failed {"errorCode": "invalid_api_key", "phase": "live_create", "reason": "live_auth", "upstreamStatus": 401}
+ok
+test_start_creates_a_founder_live_session_with_client_delegation_and_no_tools (test_founder_voice.VoiceSessionTests.test_start_creates_a_founder_live_session_with_client_delegation_and_no_tools) ... ok
+test_the_founder_workspace_from_settings_serves_voice_when_the_variable_is_unset (test_founder_voice.VoiceSessionTests.test_the_founder_workspace_from_settings_serves_voice_when_the_variable_is_unset) ... ok
+test_transcript_and_end_settle_on_the_ops_ledger (test_founder_voice.VoiceSessionTests.test_transcript_and_end_settle_on_the_ops_ledger) ... ok
+test_editable_admin_metadata_never_enrolls_an_operator (test_hosted.HostedErrors.test_editable_admin_metadata_never_enrolls_an_operator) ... ok
+test_invalid_authentication_remains_unauthorized (test_hosted.HostedErrors.test_invalid_authentication_remains_unauthorized) ... ok
+test_malformed_and_oversized_success_responses_are_unavailable (test_hosted.HostedErrors.test_malformed_and_oversized_success_responses_are_unavailable) ... ok
+test_redirect_and_unexpected_status_fail_closed (test_hosted.HostedErrors.test_redirect_and_unexpected_status_fail_closed) ... ok
+test_timeout_and_transport_failure_are_unavailable (test_hosted.HostedErrors.test_timeout_and_transport_failure_are_unavailable) ... ok
+test_upstream_rate_limit_is_retryable_not_invalid_auth (test_hosted.HostedErrors.test_upstream_rate_limit_is_retryable_not_invalid_auth) ... ok
+test_upstream_server_errors_are_unavailable (test_hosted.HostedErrors.test_upstream_server_errors_are_unavailable) ... ok
+test_valid_verified_identity_still_requires_founder_and_mfa (test_hosted.HostedErrors.test_valid_verified_identity_still_requires_founder_and_mfa) ... ok
+test_an_explicit_root_or_another_sslmode_is_left_alone (test_hosted_tls.HostedTlsTests.test_an_explicit_root_or_another_sslmode_is_left_alone) ... ok
+test_bundled_root_is_the_published_supabase_root_2021 (test_hosted_tls.HostedTlsTests.test_bundled_root_is_the_published_supabase_root_2021) ... ok
+test_verify_full_without_root_uses_the_bundled_one (test_hosted_tls.HostedTlsTests.test_verify_full_without_root_uses_the_bundled_one) ... ok
+test_all_read_projections_capability_check_and_uuid_rejects_injection (test_intelligence.IntelligenceTests.test_all_read_projections_capability_check_and_uuid_rejects_injection) ... ok
+test_copilot_validates_permissions_and_evidence_before_reserving (test_intelligence.IntelligenceTests.test_copilot_validates_permissions_and_evidence_before_reserving) ... ok
+test_engineering_states_require_attestation_exact_sha_and_all_required_checks (test_intelligence.IntelligenceTests.test_engineering_states_require_attestation_exact_sha_and_all_required_checks) ... ok
+test_exact_catalog_versions_and_no_missing_value_becomes_zero (test_intelligence.IntelligenceTests.test_exact_catalog_versions_and_no_missing_value_becomes_zero) ... ok
+test_founder_tools_have_no_customer_context_or_effect_executor (test_intelligence.IntelligenceTests.test_founder_tools_have_no_customer_context_or_effect_executor) ... ok
+test_native_money_requires_currency_and_incompatible_grains_fail (test_intelligence.IntelligenceTests.test_native_money_requires_currency_and_incompatible_grains_fail) ... ok
+test_read_model_never_promotes_a_single_provider_green_without_trusted_manifest (test_intelligence.IntelligenceTests.test_read_model_never_promotes_a_single_provider_green_without_trusted_manifest) ... ok
+test_reserved_read_failure_has_content_free_terminal_record (test_intelligence.IntelligenceTests.test_reserved_read_failure_has_content_free_terminal_record) ... ok
+test_sql_unknown_fields_excess_limits_timezone_and_dimension_fail (test_intelligence.IntelligenceTests.test_sql_unknown_fields_excess_limits_timezone_and_dimension_fail) ... ok
+test_actual_metadata_admission_replay_exact_sha_receipt_and_explanation (test_investigations.InvestigationDatabaseTests.test_actual_metadata_admission_replay_exact_sha_receipt_and_explanation) ... ok
+test_filters_windows_and_unsupported_comparison_do_not_become_zero (test_investigations.InvestigationDatabaseTests.test_filters_windows_and_unsupported_comparison_do_not_become_zero) ... ok
+test_immutable_snapshot_rls_no_browser_writes_and_no_fixture_admission (test_investigations.InvestigationDatabaseTests.test_immutable_snapshot_rls_no_browser_writes_and_no_fixture_admission) ... ok
+test_keyboard_interrupt_persists_safe_terminal_run (test_investigations.InvestigationDatabaseTests.test_keyboard_interrupt_persists_safe_terminal_run) ... ok
+test_pg_read_failure_returns_safe_503_and_persists_terminal_audit (test_investigations.InvestigationDatabaseTests.test_pg_read_failure_returns_safe_503_and_persists_terminal_audit) ... ok
+test_real_database_cancellation_rolls_back_and_remains_readable (test_investigations.InvestigationDatabaseTests.test_real_database_cancellation_rolls_back_and_remains_readable) ... ok
+test_real_statement_deadline_cancels_pg_sleep (test_investigations.InvestigationDatabaseTests.test_real_statement_deadline_cancels_pg_sleep) ... ok
+test_revoked_engineering_denies_receipt_cached_run_and_new_query (test_investigations.InvestigationDatabaseTests.test_revoked_engineering_denies_receipt_cached_run_and_new_query) ... ok
+test_terminated_worker_running_record_recovers_and_late_completion_cannot_overwrite (test_investigations.InvestigationDatabaseTests.test_terminated_worker_running_record_recovers_and_late_completion_cannot_overwrite) ... ok
+test_unadmitted_capture_never_becomes_numeric_with_age (test_investigations.InvestigationDatabaseTests.test_unadmitted_capture_never_becomes_numeric_with_age) ... ok
+test_upstream_revocation_projection_denies_existing_local_founder_cookie (test_investigations.InvestigationDatabaseTests.test_upstream_revocation_projection_denies_existing_local_founder_cookie) ... ok
+test_adapter_rejects_late_client_and_no_implicit_fetch_exists (test_investigations.ProviderBoundaryTests.test_adapter_rejects_late_client_and_no_implicit_fetch_exists) ... ok
+test_capture_size_total_coverage_duplicate_timestamps_and_digest (test_investigations.ProviderBoundaryTests.test_capture_size_total_coverage_duplicate_timestamps_and_digest) ... ok
+test_manual_adapter_bounds_429_5xx_timeouts_without_exposing_body (test_investigations.ProviderBoundaryTests.test_manual_adapter_bounds_429_5xx_timeouts_without_exposing_body) ... ok
+test_comparison_rows_match_dimensions_and_snapshot_history (test_live_metrics.LiveMetricTests.test_comparison_rows_match_dimensions_and_snapshot_history) ... ok
+test_cost_vs_cash_ratio_uses_usd_only_and_zero_denominator_is_not_applicable (test_live_metrics.LiveMetricTests.test_cost_vs_cash_ratio_uses_usd_only_and_zero_denominator_is_not_applicable) ... ok
+test_dispatch_carries_mode_beside_the_query (test_live_metrics.LiveMetricTests.test_dispatch_carries_mode_beside_the_query) ... ok
+test_every_registry_statement_is_fixed_parameterised_half_open_and_excluding (test_live_metrics.LiveMetricTests.test_every_registry_statement_is_fixed_parameterised_half_open_and_excluding) ... ok
+test_overview_live_contract (test_live_metrics.LiveMetricTests.test_overview_live_contract) ... ok
+test_pack_lives_in_package_and_catalog_activates_without_editing_proposed_entries (test_live_metrics.LiveMetricTests.test_pack_lives_in_package_and_catalog_activates_without_editing_proposed_entries) ... ok
+test_previous_intervals_align_to_calendar_month_only_for_previous_complete (test_live_metrics.LiveMetricTests.test_previous_intervals_align_to_calendar_month_only_for_previous_complete) ... ok
+test_receipt_path_rejects_mixed_definitions_and_keeps_proposed_behaviour (test_live_metrics.LiveMetricTests.test_receipt_path_rejects_mixed_definitions_and_keeps_proposed_behaviour) ... ok
+test_rows_follow_contract_and_missing_data_is_never_zero (test_live_metrics.LiveMetricTests.test_rows_follow_contract_and_missing_data_is_never_zero) ... ok
+test_stale_sources_and_heartbeat_and_source_health_rows (test_live_metrics.LiveMetricTests.test_stale_sources_and_heartbeat_and_source_health_rows) ... ok
+test_unknown_reservations_is_a_fixed_reader_statement (test_live_metrics.LiveMetricTests.test_unknown_reservations_is_a_fixed_reader_statement) ... ok
+test_window_series_for_snapshot_metrics_reads_daily_snapshots (test_live_metrics.LiveMetricTests.test_window_series_for_snapshot_metrics_reads_daily_snapshots) ... ok
+test_live_metric_round_trip_excludes_classified_and_exempt_rows (test_live_metrics_pg.FounderViewsMigrationTests.test_live_metric_round_trip_excludes_classified_and_exempt_rows) ... FAIL
+test_new_tables_force_rls_with_environment_policies_and_session_writes (test_live_metrics_pg.FounderViewsMigrationTests.test_new_tables_force_rls_with_environment_policies_and_session_writes) ... ok
+test_reconciled_unknown_reservations_are_counted_once (test_live_metrics_pg.FounderViewsMigrationTests.test_reconciled_unknown_reservations_are_counted_once)
+billing.Ledger keeps the estimated_unknown settle row when reconcile_unknown later writes the actual/released row for ... ok
+test_views_are_projection_owned_reader_readable_and_column_bounded (test_live_metrics_pg.FounderViewsMigrationTests.test_views_are_projection_owned_reader_readable_and_column_bounded) ... FAIL
+test_event_contract_needs_payload_allowlist_and_private_content_is_denied (test_metrics.MetricGoldenTests.test_event_contract_needs_payload_allowlist_and_private_content_is_denied) ... ok
+test_monthly_annual_native_currencies_and_topups_are_distinct (test_metrics.MetricGoldenTests.test_monthly_annual_native_currencies_and_topups_are_distinct) ... ok
+test_retention_excludes_unmatured_cohort_and_empty_denominator (test_metrics.MetricGoldenTests.test_retention_excludes_unmatured_cohort_and_empty_denominator) ... ok
+test_verified_cash_movements_replay_and_refund_dispute_overlap (test_metrics.MetricGoldenTests.test_verified_cash_movements_replay_and_refund_dispute_overlap) ... ok
+test_separate_artifact_has_only_allowlisted_source_and_no_harness_or_credentials (test_package.PackageTests.test_separate_artifact_has_only_allowlisted_source_and_no_harness_or_credentials) ... ok
+test_automatic_next_environment_files_are_refused (test_preview_launcher.PreviewLauncherTests.test_automatic_next_environment_files_are_refused) ... ok
+test_cleanup_targets_only_owned_children (test_preview_launcher.PreviewLauncherTests.test_cleanup_targets_only_owned_children) ... ok
+test_demo_access_gate_denies_remote_host_missing_flag_and_deployment (test_preview_launcher.PreviewLauncherTests.test_demo_access_gate_denies_remote_host_missing_flag_and_deployment) ... ok
+test_deployment_environment_is_rejected_before_sanitizing (test_preview_launcher.PreviewLauncherTests.test_deployment_environment_is_rejected_before_sanitizing) ... ok
+test_occupied_or_excluded_port_is_not_reused (test_preview_launcher.PreviewLauncherTests.test_occupied_or_excluded_port_is_not_reused) ... ok
+test_provider_database_and_identity_environment_is_removed (test_preview_launcher.PreviewLauncherTests.test_provider_database_and_identity_environment_is_removed) ... ok
+test_runtime_uses_distinct_loopback_services_and_server_only_identity (test_preview_launcher.PreviewLauncherTests.test_runtime_uses_distinct_loopback_services_and_server_only_identity) ... ok
+test_synthetic_identity_is_not_literal_in_browser_or_server_page (test_preview_launcher.PreviewLauncherTests.test_synthetic_identity_is_not_literal_in_browser_or_server_page) ... ok
+test_age_never_admits_unqualified_or_conflicting_evidence (test_read_trust.TrustRegressionTests.test_age_never_admits_unqualified_or_conflicting_evidence) ... ok
+test_aged_source_cannot_remain_current_measured (test_read_trust.TrustRegressionTests.test_aged_source_cannot_remain_current_measured) ... ok
+test_connection_initialization_rechecks_remaining_budget (test_read_trust.TrustRegressionTests.test_connection_initialization_rechecks_remaining_budget) ... ok
+test_exact_manifest_and_sha_distinguish_all_check_states (test_read_trust.TrustRegressionTests.test_exact_manifest_and_sha_distinguish_all_check_states) ... ok
+test_generic_read_failure_has_terminal_outcome (test_read_trust.TrustRegressionTests.test_generic_read_failure_has_terminal_outcome) ... ok
+test_legacy_receipts_recheck_capability_from_definition_lineage (test_read_trust.TrustRegressionTests.test_legacy_receipts_recheck_capability_from_definition_lineage) ... ok
+test_quality_rejects_future_missing_malformed_conflicts_and_unqualified (test_read_trust.TrustRegressionTests.test_quality_rejects_future_missing_malformed_conflicts_and_unqualified) ... ok
+test_receipt_get_and_explanation_recheck_engineering_capability (test_read_trust.TrustRegressionTests.test_receipt_get_and_explanation_recheck_engineering_capability) ... ok
+test_receipt_retains_reproducible_query_and_calculation (test_read_trust.TrustRegressionTests.test_receipt_retains_reproducible_query_and_calculation) ... ok
+test_source_health_dispatch_is_available_for_founder_workbench (test_read_trust.TrustRegressionTests.test_source_health_dispatch_is_available_for_founder_workbench) ... ok
+test_supported_intent_preserves_window_and_declines_unqualified_comparison (test_read_trust.TrustRegressionTests.test_supported_intent_preserves_window_and_declines_unqualified_comparison) ... ok
+test_terminal_audit_outage_fails_closed_with_safe_correlation_log (test_read_trust.TrustRegressionTests.test_terminal_audit_outage_fails_closed_with_safe_correlation_log) ... ok
+test_unknown_question_does_not_select_activation (test_read_trust.TrustRegressionTests.test_unknown_question_does_not_select_activation) ... ok
+test_upstream_revocation_and_identity_outage_fail_closed_locally (test_read_trust.TrustRegressionTests.test_upstream_revocation_and_identity_outage_fail_closed_locally) ... ok
+test_concurrent_replay_commits_one_event_and_projection (test_workflow.WorkflowTests.test_concurrent_replay_commits_one_event_and_projection) ... ok
+test_denial_codes_are_persisted_in_restricted_audit (test_workflow.WorkflowTests.test_denial_codes_are_persisted_in_restricted_audit) ... ok
+test_duplicate_and_conflicting_events_never_change_materialized_count (test_workflow.WorkflowTests.test_duplicate_and_conflicting_events_never_change_materialized_count) ... ok
+test_input_budget_stops_before_returning_or_receipting_truncated_values (test_workflow.WorkflowTests.test_input_budget_stops_before_returning_or_receipting_truncated_values) ... ok
+test_policy_currency_environment_and_query_boundaries (test_workflow.WorkflowTests.test_policy_currency_environment_and_query_boundaries) ... ok
+test_receipt_expiry_and_hosted_synthetic_context_fail_closed (test_workflow.WorkflowTests.test_receipt_expiry_and_hosted_synthetic_context_fail_closed) ... ok
+test_source_to_projection_query_receipt_and_grounded_copilot (test_workflow.WorkflowTests.test_source_to_projection_query_receipt_and_grounded_copilot) ... ok
+
+======================================================================
+FAIL: test_live_metric_round_trip_excludes_classified_and_exempt_rows (test_live_metrics_pg.FounderViewsMigrationTests.test_live_metric_round_trip_excludes_classified_and_exempt_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/tests/control/test_live_metrics_pg.py", line 147, in test_live_metric_round_trip_excludes_classified_and_exempt_rows
+    self.assertEqual({row['dimensions']['feature']: row['value'] for row in ops['rows']}, {'agent': 100, 'voice': 900})
+AssertionError: {'agent': 100, 'other': 70, 'voice': 900} != {'agent': 100, 'voice': 900}
+- {'agent': 100, 'other': 70, 'voice': 900}
+?               -------------
+
++ {'agent': 100, 'voice': 900}
+
+======================================================================
+FAIL: test_views_are_projection_owned_reader_readable_and_column_bounded (test_live_metrics_pg.FounderViewsMigrationTests.test_views_are_projection_owned_reader_readable_and_column_bounded)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio-founder-admin/tests/control/test_live_metrics_pg.py", line 73, in test_views_are_projection_owned_reader_readable_and_column_bounded
+    self.assertEqual(set(features.values()) <= {'writer', 'image', 'agent', 'voice'}, True)
+AssertionError: False != True
+
+----------------------------------------------------------------------
+Ran 565 tests in 90.871s
+
+FAILED (failures=2)

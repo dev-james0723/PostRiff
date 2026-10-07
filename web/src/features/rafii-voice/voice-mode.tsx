@@ -14,6 +14,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { usePathname } from 'next/navigation';
 import { IconKeyboard, IconMicrophone, IconMicrophoneOff, IconPhoneOff, IconPlayerStop, IconRefresh, IconVolume } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
+import { RafiiThinkingOrb } from '@/components/agents/thinking/rafii-thinking-orb';
+import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { matchRoute, type RouteManifest } from '@/lib/site-agent/routes';
@@ -22,6 +24,7 @@ import { registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import { LANGUAGE_LABELS, LANGUAGES, type Language } from '@/lib/agent-runtime/style';
 import type { AgentTurnResponse } from '@/lib/agent-runtime/types';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useAgentStyle } from '@/lib/agent-runtime/use-agent-style';
 import { useVoice, voiceSession, type VoiceSnapshot } from '@/lib/agent-runtime/voice-session';
 import { cn } from '@/lib/utils';
@@ -126,6 +129,11 @@ export function VoiceMode({
 
   const line = statusLine(snapshot);
   const running = snapshot.delegations.filter((d) => d.status === 'running' || d.status === 'collecting');
+  const activeDelegation = running.at(-1);
+  const voiceThinkingOp: ThinkingOp =
+    snapshot.state === 'connecting' || snapshot.state === 'reconnecting'
+      ? 'connecting'
+      : activeDelegation?.thinkingOp ?? (running.length > 0 ? 'solving' : snapshot.state === 'live' && snapshot.speaker === 'user' && !snapshot.micMuted ? 'listening' : snapshot.state === 'live' ? 'breathing' : 'working');
   const transcript = snapshot.transcript.slice(-6);
   const avatarMode = resolveRafiiAvatarMode({
     state: snapshot.state,
@@ -155,8 +163,13 @@ export function VoiceMode({
       <section className='rafii-live flex min-h-0 flex-1 flex-col px-5 pb-[calc(1rem+env(safe-area-inset-bottom))]' aria-label='Rafii Live' data-rafii-voice={snapshot.state} data-rafii-live-state={snapshot.state}>
         <p className='text-muted-foreground mt-2 text-center text-xs'>Current context: {contextLabel ?? 'this workspace'}</p>
         <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 py-5'>
-          <div className='rafii-live-stage w-full max-w-[18rem]' data-rafii-avatar-slot>
+          <div className='rafii-live-stage relative w-full max-w-[18rem]' data-rafii-avatar-slot>
             <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+            {thinkingOrbsEnabled() && (
+              <div className='rafii-glass pointer-events-none absolute right-2 bottom-2 flex size-[76px] items-center justify-center rounded-full' data-rafii-thinking-op={voiceThinkingOp}>
+                <RafiiThinkingOrb op={voiceThinkingOp} size={64} />
+              </div>
+            )}
           </div>
           <p role='status' aria-live='polite' className='text-center text-2xl font-medium' data-rafii-voice-status>{stateLabel}</p>
           {active && <p className='text-muted-foreground text-center text-sm'>{snapshot.state === 'live' ? 'Speak naturally. Rafii keeps your place in this conversation.' : line}</p>}
@@ -168,7 +181,7 @@ export function VoiceMode({
         {running.length > 0 && <p className='text-muted-foreground mt-2 text-center text-xs'>{running.length} request{running.length === 1 ? '' : 's'} in progress</p>}
         <div className='mt-4 flex shrink-0 items-center justify-around gap-3' role='group' aria-label='Live controls'>
           <Button type='button' variant='glass' size='icon-control' className='size-12 rounded-full' aria-label='Stop Rafii speaking' disabled={snapshot.state !== 'live'} onClick={() => voiceSession.stopSpeaking()}><IconVolume className='size-5' /></Button>
-          <Button type='button' variant='destructive' size='icon-control' className='size-14 rounded-full' aria-label='End live conversation' disabled={!active} onClick={() => void voiceSession.end()}><IconPhoneOff className='size-6' /></Button>
+          <Button type='button' variant='destructive' size='icon-control' className='size-14 rounded-full' aria-label='End live conversation' disabled={!active || snapshot.state === 'ending'} onClick={() => void voiceSession.end()}><IconPhoneOff className='size-6' /></Button>
           <Button type='button' variant='glass' size='icon-control' className='size-12 rounded-full' aria-label='Return to keyboard' onClick={onKeyboard}><IconKeyboard className='size-5' /></Button>
         </div>
         <details className='text-muted-foreground mt-3 text-center text-xs'><summary className='rafii-focus inline-flex min-h-11 cursor-pointer items-center rounded-lg px-3'>Live options</summary><div className='flex flex-wrap items-center justify-center gap-2 py-2'><Button type='button' variant={snapshot.micMuted ? 'destructive' : 'quiet'} className='min-h-11' aria-pressed={snapshot.micMuted} data-rafii-voice-mute={snapshot.micMuted ? 'on' : 'off'} disabled={snapshot.state !== 'live'} onClick={() => voiceSession.setMicMuted(!snapshot.micMuted)}>{snapshot.micMuted ? <IconMicrophoneOff className='size-4' /> : <IconMicrophone className='size-4' />}{snapshot.micMuted ? 'Unmute' : 'Mute'}</Button><StyleButton /></div></details>
@@ -210,7 +223,14 @@ export function VoiceMode({
   return (
     <section className='mx-4 mb-2 flex min-w-0 flex-col gap-2 overflow-hidden rounded-[var(--rafii-radius-control)] border border-[color-mix(in_oklch,var(--foreground)_10%,transparent)] p-2.5' aria-label='Voice Mode' data-rafii-voice={state}>
       {active && (
-        <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+        <div className='relative'>
+          <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+          {thinkingOrbsEnabled() && (
+            <div className='rafii-glass pointer-events-none absolute right-2 bottom-2 flex size-[76px] items-center justify-center rounded-full' data-rafii-thinking-op={voiceThinkingOp}>
+              <RafiiThinkingOrb op={voiceThinkingOp} size={64} />
+            </div>
+          )}
+        </div>
       )}
       <div className='flex min-w-0 items-center gap-2'>
         <span aria-hidden className={cn('inline-block size-2.5 shrink-0 rounded-full', dotColor(snapshot))} data-rafii-voice-dot={muted ? 'muted' : state} />

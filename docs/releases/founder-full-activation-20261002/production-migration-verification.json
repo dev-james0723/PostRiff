@@ -1,0 +1,339 @@
+{
+  "sourceSha": "4c2bfb88050efab92eec988f727513c68ce358af",
+  "state": "PASS",
+  "execution": "real hosted migration and read-only verification",
+  "before": {
+    "at": "2026-10-02T23:55:40.557435+00:00",
+    "objects": {
+      "support": null,
+      "cutovers": null,
+      "productObservation": null
+    },
+    "membership": [
+      {
+        "set": false,
+        "role": "rafii_control_business_projection",
+        "admin": false,
+        "member": "postgres",
+        "grantor": "postgres",
+        "inherit": false
+      },
+      {
+        "set": false,
+        "role": "rafii_control_business_projection",
+        "admin": true,
+        "member": "postgres",
+        "grantor": "supabase_admin",
+        "inherit": false
+      }
+    ],
+    "currentUser": "postgres",
+    "sessionUser": "postgres",
+    "projectLedger": {
+      "001_phase2.sql": "48250315280c51fb2d4c40de57eb332c80029ae5514da1b62482cbec367d9bcc",
+      "016_api_tokens.sql": "2cfd4e6cd3170594aff082cda128e33988c02852a599824a2a1171995cd6e4d0",
+      "031_chat_media.sql": "4403a1686045fe5a7ca2081ef57ebf136b7fd4cdd2a1f0768548dea240ab2a6c",
+      "033_phone_mode.sql": "1c05526ab7c83660b4890bb978006697cd248fd7f997fdf90966828468662352",
+      "013_locale_tags.sql": "fb1f45de7313f33f7b6f8803bb2d6c97ff168cdd9ff5e171cefb4c52f14e541f",
+      "030_agent_style.sql": "4a4e43810abafe0e0331f263c348623e0bc6c3f7eaedea010ece1404b4097e6a",
+      "023_time_savings.sql": "7a105a1a1d6d61fca317d767f67c9e672bc8e76b5e6c09a588ba4d189e2bf0a1",
+      "017_cli_reasoning.sql": "530769e7e970feb523f33604ad6ba30b7d441e21cfedb6959a8f8323dee27f55",
+      "020_credit_quotes.sql": "d23a0f3bf458c52dc34fd80653bdd8fcc79219d5c80f0195d8d737ff78a5af92",
+      "042_phone_inbound.sql": "78a23c99f1b876426fa4aa5193da67f2e9941901baee89502004ae84f9131554",
+      "018_raffi_planning.sql": "e9ccc13a444f6eec9f1f03860be967d22cc137ba3f5533e1d67ddf0acc31b9bb",
+      "043_phone_duration.sql": "a798b67d66a3664cb9010c7ae15d38707d537fd494591b336805058e326a9a7a",
+      "059_founder_product.sql": "d3b733d493f946fd3b92643180209ae138bab7b93a8d8f6c801a4864fe3f1f77",
+      "009_account_security.sql": "e3fdcadc6f60802c6ebc5f296189d8b75c863da7406d7b6b3c99b2fded8f19dd",
+      "012_channel_pictures.sql": "bfc4a8c7126ca438a4496594b74aa9ab813c75b20686f4cc9b493188e29d37e3",
+      "015_audit_visibility.sql": "35eea103e9e4d18eba28e093af6923f9228a01b06ddce240a3020faa0922dc44",
+      "021_credit_purchases.sql": "d354474f5cbdb75c948a7ce12a4e13ad7ae419ebfb57544a09ef22a99add5895",
+      "058_founder_ai_usage.sql": "117d83f3c0a2e5ff9bc8223dd97e6be023cd89ee695ffad296aeb0419e4dd53e",
+      "064_founder_ai_views.sql": "856508ca28d016190ed7fcccb76d8a72bfb63abd4ecfaa8b6aeda94f7623b14d",
+      "019_research_requests.sql": "74ab96d77f01ca5f91c439d99d86740a47084b6ea46d6a846748e97c1a7f0446",
+      "024_notification_core.sql": "f39a37ec099fc7928edccafca189c07ed39717585deac81312cefb09a15f46cc",
+      "066_founder_ops_views.sql": "98b48430f52d008672cc7b4e409b3305249364a33142df2d437f22fa223c41b7",
+      "005_consumer_web_ideas.sql": "baae632e07c0e30e1299838b8f32448771cb41eb5bc59e1b16211b049a93b78e",
+      "010_preference_learning.sql": "5193407e018f3249cdc99f937f7917d49aead56ad8d6f1a61ae38035c96fce4f",
+      "011_account_preferences.sql": "7b98bf8305813223a7bcf7235b57a089936291055aa4050f20138ac2883a12be",
+      "035_growth_metric_reads.sql": "e742c119c496d4e9ed9863bb8e176b103467315b4f1504e454319694f5a620b1",
+      "036_dial_phone_provider.sql": "d0c9ccd280c96e33b2ff75d52a3746fdb523b364547f4b51c377b5a5d2b7f554",
+      "060_founder_reliability.sql": "9be2086bfc10433025f62663911580a6bc67b3c46c9ac385226657b28e3d6532",
+      "067_founder_comms_views.sql": "5fdb3ee0b46054567d57e64dd0e3577c51d1eb5a70f30420f624d774ee912514",
+      "004_consumer_web_tenancy.sql": "9b9f44b41b9660bf82b47beafbc280803a68678079d0b7c9e28a5be2aaf948fa",
+      "007_consumer_web_billing.sql": "adff5e5d36ec6f8e3c253898d0843df972a151079f511a32457488b6ae9179de",
+      "070_founder_ops_settings.sql": "b874c083f6a906b4332a84bb723f1371ffc5f04f7a9a3337b935e7c83f9c4a2c",
+      "006_consumer_web_channels.sql": "43626c283cb3b16106411bb247b17b2a73a67c294a2bb1e82a537f99547650b3",
+      "034_unified_notifications.sql": "df29f5f056955d74098b6de470250cc8013e8b9e683be0ae75ad5d3e7412f717",
+      "045_phone_caller_identity.sql": "1d672f5df62ae9209671d1b8505fe3729a6e6713e22a840b8db8edb0f76e1014",
+      "062_founder_admin_actions.sql": "0826d0d1c5e6a90e64731e183f980e17babcd1c0bff3c22ec82e492b7d6ab7f7",
+      "063_founder_revenue_views.sql": "89008cf43248e3947f43b567870d77845e7493916121c5bf6c495c38a5f99541",
+      "065_founder_product_views.sql": "6a5a58e3af954e0f986660e595995cbdbea08be15f3539ca6cd026ec8f6d2c7a",
+      "068_founder_actions_views.sql": "456f712ddf568d0c059d15b4701294a425794aaa065e4f785a245fa1a64163dc",
+      "069_founder_ops_bootstrap.sql": "0e6cf0780bed232cee33871985897b8252714cc5821b1a8d8be7772e3120dfc3",
+      "057_founder_billing_events.sql": "92b2c3f1ebb860ce769a6f76d0a059a120cabdfc04a9723a1748d68ef63cdcd3",
+      "014_billing_cost_visibility.sql": "b8bea33b74c29854e3cbaf9aff7d3e9bf67db45fd75bf90e2b08cb4a0bef8665",
+      "032_productivity_connectors.sql": "c125a2d8354ab62a5df92b8dea425392c449d85540ba5c52ce5a21a9de799ea1",
+      "002_hosted_account_lifecycle.sql": "beb393985c4e58ec8255c9e9b27487d12bc96c29fa1560a243b247dc16be23a0",
+      "022_credit_payment_lifecycle.sql": "0f34bc6ee71ed1b5fc9773ba4898591faca99b4b201ea4649b5051f864e3a069",
+      "025_coworker_evidence_growth.sql": "fc5f3e01ef93825e97bba21621ea834c4aba2622b9ac7504e2c872bd6b77f08e",
+      "049_rafii_control_foundation.sql": "b4cdabf7cc9b8f63d83fd7897a5214f147c3a08d0bdd6e235507f82b12a7f322",
+      "040_social_trend_intelligence.sql": "fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0",
+      "051_rafii_control_read_workflow.sql": "67731fae74a5c0d4fcb1750318467ec8e2678efd5b7498aff3cb744340fea3e2",
+      "054_rafii_control_founder_views.sql": "d848748bf0f1c8f198979ac367522e3d9665be503d5d6a22279f1a5f5c1033d3",
+      "052_rafii_control_investigations.sql": "27736fa262bcd341161b7dcdd7b41860d27fa73682f8d140d8da9543232544d5",
+      "071_founder_engineering_evidence.sql": "05b5acdf89f167d702fd44caa7ed5c4c6f755c278766a4055ea4e2d30a068720",
+      "055_rafii_control_founder_contact.sql": "80155f9b67b774bc4a2ed7b9ef867c1d5fb1e2a64208ccfcc0e405d1c98983c1",
+      "008_billing_provider_notifications.sql": "20d3bb334a9a177f3428f063720ddafb556a91ec66f097f6ac1315a09fbabca1",
+      "053_rafii_control_business_workspace.sql": "a1c475adeadecaabb6c4a69ce5ae84ba5beec525d2458de11975ae6011e8d60e",
+      "056_rafii_control_founder_capabilities.sql": "e3410d4c920ec4c02da8e609bdec7a1fdfdbaeb89ceca489d7bb5a2a22646714"
+    },
+    "schemaPrivileges": {
+      "acl": [
+        [
+          "16388",
+          "16388",
+          "CREATE",
+          false
+        ],
+        [
+          "16388",
+          "16388",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21765",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21768",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21771",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21775",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21777",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21779",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "22769",
+          "USAGE",
+          false
+        ]
+      ],
+      "owner": "postgres",
+      "projectionCreate": false
+    }
+  },
+  "after": {
+    "at": "2026-10-03T00:00:00.266544+00:00",
+    "rls": [
+      {
+        "table": "pr_delivery_cutovers",
+        "forced": true,
+        "enabled": true
+      },
+      {
+        "table": "pr_financial_history",
+        "forced": true,
+        "enabled": true
+      },
+      {
+        "table": "pr_founder_refund_dispatches",
+        "forced": true,
+        "enabled": true
+      },
+      {
+        "table": "pr_support_messages",
+        "forced": true,
+        "enabled": true
+      },
+      {
+        "table": "pr_support_tickets",
+        "forced": true,
+        "enabled": true
+      }
+    ],
+    "roles": [
+      {
+        "role": "rafii_control_session",
+        "login": false,
+        "bypassRls": false,
+        "superuser": false
+      },
+      {
+        "role": "rafii_control_reader",
+        "login": false,
+        "bypassRls": false,
+        "superuser": false
+      },
+      {
+        "role": "rafii_control_watchdog",
+        "login": false,
+        "bypassRls": false,
+        "superuser": false
+      }
+    ],
+    "counts": {
+      "support": 0,
+      "cutovers": 0,
+      "opsSettings": 0,
+      "financialHistory": 486
+    },
+    "entry088": {
+      "name": "088_founder_activation_integrity.sql",
+      "sha256": "a900d721a735322e680ad448973dce9e1b2b83d13fce5a0962c20b10e71c546c",
+      "appliedAt": "2026-10-02T23:57:40.706133+00:00"
+    },
+    "rawDenial": [
+      {
+        "table": "pr_financial_history",
+        "readerInsert": false,
+        "readerSelect": false,
+        "sessionSelect": false
+      },
+      {
+        "table": "pr_founder_refund_dispatches",
+        "readerInsert": false,
+        "readerSelect": false,
+        "sessionSelect": false
+      },
+      {
+        "table": "pr_support_messages",
+        "readerInsert": false,
+        "readerSelect": false,
+        "sessionSelect": false
+      }
+    ],
+    "membership": [
+      {
+        "set": false,
+        "role": "rafii_control_business_projection",
+        "admin": false,
+        "member": "postgres",
+        "grantor": "postgres",
+        "inherit": false
+      },
+      {
+        "set": false,
+        "role": "rafii_control_business_projection",
+        "admin": true,
+        "member": "postgres",
+        "grantor": "supabase_admin",
+        "inherit": false
+      }
+    ],
+    "migrationCount": 57,
+    "projectionAccess": [
+      {
+        "view": "business_product_observations",
+        "owner": "rafii_control_business_projection",
+        "options": [
+          "security_barrier=true"
+        ],
+        "readerSelect": true
+      },
+      {
+        "view": "business_support_tickets",
+        "owner": "rafii_control_business_projection",
+        "options": [
+          "security_barrier=true"
+        ],
+        "readerSelect": true
+      },
+      {
+        "view": "business_telemetry_health",
+        "owner": "rafii_control_business_projection",
+        "options": [
+          "security_barrier=true"
+        ],
+        "readerSelect": true
+      }
+    ],
+    "schemaPrivileges": {
+      "acl": [
+        [
+          "16388",
+          "16388",
+          "CREATE",
+          false
+        ],
+        [
+          "16388",
+          "16388",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21765",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21768",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21771",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21775",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21777",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "21779",
+          "USAGE",
+          false
+        ],
+        [
+          "16388",
+          "22769",
+          "USAGE",
+          false
+        ]
+      ],
+      "owner": "postgres",
+      "projectionCreate": false
+    }
+  },
+  "membershipRestored": true,
+  "schemaAclRestored": true
+}

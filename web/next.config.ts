@@ -10,6 +10,23 @@ import { withSentryConfig } from '@sentry/nextjs/config';
 const apiOrigin = process.env.POSTRIFF_API_ORIGIN;
 const shouldProxyApi = Boolean(apiOrigin) || process.env.NODE_ENV === 'development';
 
+/**
+ * Founder admin redirects (CONTRACTS §6, PRD §5.1): the retired `/control/*` preview and the two merged sections.
+ * Mirrors `FOUNDER_REDIRECTS` in `src/config/founder-nav.ts` verbatim (this file cannot import TypeScript);
+ * `tests/founder-nav.test.cjs` fails when the two drift. Query strings are preserved by Next.
+ */
+const founderRedirects = [
+  { source: '/control/command', destination: '/founder', permanent: false },
+  { source: '/control/billing', destination: '/founder/revenue', permanent: false },
+  { source: '/control/connections', destination: '/founder/operations?tab=connections', permanent: false },
+  { source: '/control/workspaces', destination: '/founder/customers?tab=workspaces', permanent: false },
+  { source: '/control/:tab(evidence|engineering|founder|audit|infrastructure)', destination: '/founder/advanced?tab=:tab', permanent: false },
+  { source: '/control', destination: '/founder', permanent: false },
+  { source: '/control/:section', destination: '/founder/:section', permanent: false },
+  { source: '/founder/connections', destination: '/founder/operations?tab=connections', permanent: false },
+  { source: '/founder/workspaces', destination: '/founder/customers?tab=workspaces', permanent: false }
+];
+
 const baseConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
@@ -27,6 +44,9 @@ const baseConfig: NextConfig = {
   transpilePackages: ['geist'],
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
+  },
+  async redirects() {
+    return founderRedirects;
   },
   async rewrites() {
     if (!shouldProxyApi) return [];

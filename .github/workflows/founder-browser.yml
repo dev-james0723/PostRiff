@@ -1,0 +1,99 @@
+name: Founder admin browser
+# The end-to-end browser gate for the founder surface (PRD v2.0 §10.1 P0-1/P0-8, §10.5; CONTRACTS §8.G): a production
+# build of the Rafii web app, the real Python API with Founder Control embedded on /api/control/v2, and a disposable
+# PostgreSQL with the founder migrations and restricted roles. Identity is synthetic and local (the harness's
+# --founder-fixture); the founder agent uses the agent runtime's QA harness model. Nothing reaches Supabase, a model
+# provider, a phone provider or a mail service.
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'src/rafii_control/**'
+      - 'src/postriff_phase2/**'
+      - 'migrations/postriff/**'
+      - 'scripts/postriff_dev_hosted.py'
+      - 'scripts/founder_signin_web.py'
+      - 'tests/founder_browser_fixture.py'
+      - 'tests/phase2/rls.sql'
+      - '.github/workflows/founder-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: founder-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  founder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      # The browser uses localhost (the founder cookie is __Host-, Secure); the API stays on loopback.
+      RAFII_WEB_URL: http://localhost:4439
+      RAFII_API_URL: http://127.0.0.1:4438
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and test tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+      - name: Install PostgreSQL 17 using its signed official repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Build the web app for the local harness
+        run: |
+          python scripts/consumer_ready_web.py --prepare npm ci
+          python scripts/consumer_ready_web.py npm run build
+      - name: Start the harness with embedded founder Control, and the web app
+        run: |
+          RAFII_AGENT_HARNESS=1 RAFII_FOUNDER_WEB_ORIGINS=http://localhost:4439,http://127.0.0.1:4439 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4439 \
+            nohup python scripts/postriff_dev_hosted.py --port 4438 --pg-port 55479 --founder-fixture > harness.log 2>&1 &
+          nohup python scripts/consumer_ready_web.py npm run start -- -p 4439 > web.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -sf http://127.0.0.1:4438/api/health > /dev/null && curl -sf -o /dev/null http://localhost:4439/; then echo ready; exit 0; fi
+            sleep 2
+          done
+          echo "harness or web app did not start"; tail -n 80 harness.log web.log; exit 1
+      - name: Install Chromium for Playwright
+        run: npx --prefix web playwright install --with-deps chromium
+      - name: Founder passkey sign-in (real UI and SDK, local Auth fixtures, Chromium virtual authenticator)
+        run: |
+          python scripts/founder_signin_web.py --prepare npm ci
+          python scripts/founder_signin_web.py npm run build
+          python scripts/founder_signin_web.py --test
+      - name: Founder scenes (sections in Live and Demo at 1440/768/390, axe, deep links, evidence, Ask Rafii, settings, follow-ups, sign-out)
+        run: FOUNDER_EVIDENCE_DIR=founder-evidence node web/tests/founder-browser.cjs
+      - name: Harness and web logs
+        if: always()
+        run: tail -n 200 harness.log web.log || true
+      - name: Retain founder evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: founder-browser-${{ github.sha }}
+          # Only the explicitly listed synthetic screenshots/results/logs are uploaded.
+          include-hidden-files: true
+          path: |
+            founder-evidence/
+            .founder-signin-evidence/
+            harness.log
+            web.log
+          retention-days: 14

@@ -1,0 +1,9 @@
+{
+  "execution": "local synthetic identity; real Next/API/restricted PostgreSQL",
+  "status": "passed",
+  "checks": [
+    "unauthenticated route/API denied",
+    "width 390: navigation/User360/canary/receipts/copilot/CSRF/axe/logout passed",
+    "width 1440: navigation/User360/canary/receipts/copilot/CSRF/axe/logout passed"
+  ]
+}

@@ -1,0 +1,2290 @@
+[
+  {
+    "id": "paid_workspaces",
+    "version": 1,
+    "title": "Paying workspaces",
+    "grain": "workspace snapshot",
+    "unit": "count",
+    "definition": "Distinct non-test workspaces with positive recurring value in the normalized healthy_paid subscription state at asOf; delinquent, trial and one-time-purchase-only workspaces are separate cohorts.",
+    "source_contract": "billing projection",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/paid_workspaces/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "healthy_paid requires provider/entitlement reconciliation under a versioned status policy. Do not silently include one-time credit purchasers.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr",
+    "version": 1,
+    "title": "Healthy recurring MRR",
+    "grain": "subscription snapshot",
+    "unit": "currency_minor",
+    "definition": "Sum approved recurring net subscription amounts normalized to one month, excluding tax, trials and top-ups; healthy status policy fixed.",
+    "source_contract": "subscription terms + Stripe state",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/mrr/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Annual/12; multi-currency separate; do not equate to collections or recognized revenue.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "delinquent_mrr",
+    "version": 1,
+    "title": "Delinquent contracted MRR",
+    "grain": "subscription snapshot",
+    "unit": "currency_minor",
+    "definition": "Recurring contracted value for delinquent subscriptions under the chosen policy, separate from healthy MRR.",
+    "source_contract": "subscription projection",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/delinquent_mrr/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Grace and canceled states are versioned, never silently blended.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr_new",
+    "version": 1,
+    "title": "New MRR",
+    "grain": "workspace interval",
+    "unit": "currency_minor",
+    "definition": "First paid recurring MRR created in interval from previously nonpaying workspaces.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "plan",
+      "currency",
+      "source"
+    ],
+    "query_template_ref": "metrics/mrr_new/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Reactivation is separate, not new acquisition.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr_expansion",
+    "version": 1,
+    "title": "Expansion MRR",
+    "grain": "workspace interval",
+    "unit": "currency_minor",
+    "definition": "Positive recurring value change in opening paid cohort, excluding reactivation/new workspaces.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/mrr_expansion/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Normalize currency/discount policy consistently.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr_contraction",
+    "version": 1,
+    "title": "Contraction MRR",
+    "grain": "workspace interval",
+    "unit": "currency_minor",
+    "definition": "Absolute recurring value decreases in retained members of opening paid cohort.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/mrr_contraction/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Full churn excluded to avoid double count.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr_churn",
+    "version": 1,
+    "title": "Churned MRR",
+    "grain": "workspace interval",
+    "unit": "currency_minor",
+    "definition": "Opening recurring value lost when qualifying paid relationship ends under fixed policy.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/mrr_churn/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Cancellation intent is not automatically effective churn.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "collections",
+    "version": 1,
+    "title": "Successful collections",
+    "grain": "payment event",
+    "unit": "currency_minor",
+    "definition": "Sum captured successful payment amounts by event time and native currency.",
+    "source_contract": "verified payments",
+    "allowed_dimensions": [
+      "currency",
+      "payment_type"
+    ],
+    "query_template_ref": "metrics/collections/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Exclude authorizations/unpaid invoices; taxes shown separately for net-revenue analysis.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "refunds",
+    "version": 1,
+    "title": "Succeeded refunds",
+    "grain": "refund event",
+    "unit": "currency_minor",
+    "definition": "Sum succeeded refund amounts, deduplicated by refund ID.",
+    "source_contract": "existing reconciler + provider",
+    "allowed_dimensions": [
+      "currency",
+      "reason"
+    ],
+    "query_template_ref": "metrics/refunds/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Pending/failed refunds are not succeeded refunds.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "dispute_net",
+    "version": 1,
+    "title": "Net dispute withdrawals",
+    "grain": "funds movement",
+    "unit": "currency_minor",
+    "definition": "Withdrawn dispute funds minus reinstated funds; reconcile overlapping refunds.",
+    "source_contract": "provider dispute funds events",
+    "allowed_dimensions": [
+      "currency",
+      "status"
+    ],
+    "query_template_ref": "metrics/dispute_net/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "No double counting when refund and dispute affect the same underlying amount.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "net_collections",
+    "version": 1,
+    "title": "Net collections",
+    "grain": "payment interval",
+    "unit": "currency_minor",
+    "definition": "Successful collections minus succeeded refunds minus net dispute withdrawals, with reconciliation of overlaps.",
+    "source_contract": "payment projection",
+    "allowed_dimensions": [
+      "currency",
+      "payment_type"
+    ],
+    "query_template_ref": "metrics/net_collections/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Payouts and fees separate; cash basis, not recognized revenue.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "recovery_rate",
+    "version": 1,
+    "title": "Eligible invoice recovery rate",
+    "grain": "invoice cohort",
+    "unit": "ratio",
+    "definition": "Recovered eligible failed invoices / eligible failed invoices whose fixed recovery window has matured.",
+    "source_contract": "invoice state + retry evidence",
+    "allowed_dimensions": [
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/recovery_rate/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Show amount-weighted and count-based separately; spontaneous recovery is not automatically incremental impact.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "nrr",
+    "version": 1,
+    "title": "Net revenue retention",
+    "grain": "opening paid cohort",
+    "unit": "ratio",
+    "definition": "(Opening MRR + expansion - contraction - churn) / opening MRR for the same cohort/currency.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "cohort",
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/nrr/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Exclude new customer MRR; zero denominator unavailable.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "grr",
+    "version": 1,
+    "title": "Gross revenue retention",
+    "grain": "opening paid cohort",
+    "unit": "ratio",
+    "definition": "(Opening MRR - contraction - churn) / opening MRR.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "cohort",
+      "plan",
+      "currency"
+    ],
+    "query_template_ref": "metrics/grr/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "No expansion; consistent status policy required.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "logo_churn",
+    "version": 1,
+    "title": "Paid workspace churn",
+    "grain": "opening paid cohort",
+    "unit": "ratio",
+    "definition": "Opening paid workspaces that end paid service / opening paid workspaces.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "cohort",
+      "plan"
+    ],
+    "query_template_ref": "metrics/logo_churn/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Do not substitute user inactivity or account deletion for billing churn.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "contribution",
+    "version": 1,
+    "title": "Estimated contribution",
+    "grain": "period + currency",
+    "unit": "currency_minor",
+    "definition": "Approved period-consistent revenue basis minus attributable operating costs with cost completeness metadata.",
+    "source_contract": "billing + ops cost ledger",
+    "allowed_dimensions": [
+      "plan",
+      "currency",
+      "cost_center"
+    ],
+    "query_template_ref": "metrics/contribution/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Label cash contribution when recognition absent; unallocated overhead explicit.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "cost_coverage",
+    "version": 1,
+    "title": "Provider cost coverage",
+    "grain": "provider attempt",
+    "unit": "ratio",
+    "definition": "Attempts with verified actual cost / all billable or potentially billable attempts.",
+    "source_contract": "usage receipts",
+    "allowed_dimensions": [
+      "provider",
+      "model",
+      "task_type"
+    ],
+    "query_template_ref": "metrics/cost_coverage/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Missing/unknown attempts in denominator; never silently zero.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "active_users",
+    "version": 1,
+    "title": "Active users",
+    "grain": "user interval",
+    "unit": "count",
+    "definition": "Distinct non-test users with a specified meaningful application event in the interval.",
+    "source_contract": "authoritative events",
+    "allowed_dimensions": [
+      "cohort",
+      "plan",
+      "locale"
+    ],
+    "query_template_ref": "metrics/active_users/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Event definition versioned; a pageview-only DAU is a different metric.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "active_workspaces",
+    "version": 1,
+    "title": "Active workspaces",
+    "grain": "workspace interval",
+    "unit": "count",
+    "definition": "Distinct non-test workspaces with a meaningful completed outcome in interval.",
+    "source_contract": "authoritative events",
+    "allowed_dimensions": [
+      "plan",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/active_workspaces/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "A user belonging to several workspaces must not collapse workspace grain.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "activation_rate",
+    "version": 1,
+    "title": "Activation rate",
+    "grain": "signup cohort",
+    "unit": "ratio",
+    "definition": "Eligible new workspaces with first-value event within 7 days / eligible workspaces whose 7-day window matured.",
+    "source_contract": "signup + first-value events",
+    "allowed_dimensions": [
+      "source",
+      "locale",
+      "device",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/activation_rate/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "7-day window proposed; user-confirmed usefulness and proxies must not be mixed.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "time_to_value",
+    "version": 1,
+    "title": "Time to first value",
+    "grain": "activated workspace",
+    "unit": "seconds_distribution",
+    "definition": "Distribution of first-value event time minus verified signup time.",
+    "source_contract": "signup + first-value events",
+    "allowed_dimensions": [
+      "source",
+      "locale",
+      "device"
+    ],
+    "query_template_ref": "metrics/time_to_value/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Report censored/nonactivated separately; median among completers is not all-user experience.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "retention_d7",
+    "version": 1,
+    "title": "D7 first-value return",
+    "grain": "mature first-value cohort",
+    "unit": "ratio",
+    "definition": "Workspaces with meaningful return in [day7,day8) / first-value workspaces observed through day8.",
+    "source_contract": "authoritative events",
+    "allowed_dimensions": [
+      "cohort",
+      "plan",
+      "source"
+    ],
+    "query_template_ref": "metrics/retention_d7/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Reporting-day convention fixed; immature workspaces excluded.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "retention_d28",
+    "version": 1,
+    "title": "D28 first-value return",
+    "grain": "mature first-value cohort",
+    "unit": "ratio",
+    "definition": "Workspaces with meaningful return in [day28,day29) / eligible mature first-value workspaces.",
+    "source_contract": "authoritative events",
+    "allowed_dimensions": [
+      "cohort",
+      "plan",
+      "source"
+    ],
+    "query_template_ref": "metrics/retention_d28/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "No forecast disguised as observed retention.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "feature_adoption",
+    "version": 1,
+    "title": "Feature adoption",
+    "grain": "eligible active workspace",
+    "unit": "ratio",
+    "definition": "Active eligible workspaces completing the feature event / active workspaces eligible to use that feature.",
+    "source_contract": "events + entitlements",
+    "allowed_dimensions": [
+      "feature",
+      "plan",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/feature_adoption/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Eligibility matters; correlations with retention are not causal effects.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "task_success",
+    "version": 1,
+    "title": "Task completion rate",
+    "grain": "started task",
+    "unit": "ratio",
+    "definition": "Successfully completed authoritative tasks / started tasks with terminal observation window elapsed.",
+    "source_contract": "task lifecycle",
+    "allowed_dimensions": [
+      "task_type",
+      "model",
+      "provider",
+      "release"
+    ],
+    "query_template_ref": "metrics/task_success/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Canceled/unknown states shown separately; retries not counted as new user tasks.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "publish_verified",
+    "version": 1,
+    "title": "Verified publication rate",
+    "grain": "approved eligible publication",
+    "unit": "ratio",
+    "definition": "Verified external publications / eligible approved publications whose observation window elapsed.",
+    "source_contract": "publishing receipts",
+    "allowed_dimensions": [
+      "platform",
+      "release"
+    ],
+    "query_template_ref": "metrics/publish_verified/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Submitted/approved/confirming is not verified live.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "useful_outcomes",
+    "version": 1,
+    "title": "Useful completed outcomes",
+    "grain": "workspace task",
+    "unit": "count",
+    "definition": "Distinct completed tasks explicitly rated useful; proxy-confirmed outputs reported in separate series.",
+    "source_contract": "task receipts + user feedback",
+    "allowed_dimensions": [
+      "task_type",
+      "plan",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/useful_outcomes/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Missing feedback is not negative or positive feedback.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "automation_success",
+    "version": 1,
+    "title": "Automation occurrence success",
+    "grain": "occurrence",
+    "unit": "ratio",
+    "definition": "Verified successful occurrences / eligible due occurrences with observation window elapsed.",
+    "source_contract": "automation lifecycle",
+    "allowed_dimensions": [
+      "workflow_type",
+      "provider"
+    ],
+    "query_template_ref": "metrics/automation_success/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Skipped, held and paused distinguished from failures.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "ai_actual_cost",
+    "version": 1,
+    "title": "Observed AI provider cost",
+    "grain": "provider attempt",
+    "unit": "currency_minor",
+    "definition": "Sum known actual provider receipt cost, preserving source currency and cost state.",
+    "source_contract": "provider usage receipts",
+    "allowed_dimensions": [
+      "model",
+      "provider",
+      "task_type"
+    ],
+    "query_template_ref": "metrics/ai_actual_cost/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Estimated and unknown costs separate; no client-supplied prices.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "ai_failed_cost",
+    "version": 1,
+    "title": "Absorbed failed-task cost",
+    "grain": "provider attempt",
+    "unit": "currency_minor",
+    "definition": "Known actual provider costs assigned to failed/nonbillable user outcomes.",
+    "source_contract": "usage + task receipts",
+    "allowed_dimensions": [
+      "model",
+      "provider",
+      "task_type"
+    ],
+    "query_template_ref": "metrics/ai_failed_cost/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Shows platform cost, not automatically refundable customer charges.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "cost_per_useful",
+    "version": 1,
+    "title": "Cost per useful task",
+    "grain": "task cohort",
+    "unit": "currency_minor_per_outcome",
+    "definition": "Attributed cost in completed useful-task cohort / useful outcomes in the same cohort.",
+    "source_contract": "usage + outcome linkage",
+    "allowed_dimensions": [
+      "task_type",
+      "model",
+      "provider"
+    ],
+    "query_template_ref": "metrics/cost_per_useful/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Coverage and selection bias must be shown; no zero division.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "ai_quality",
+    "version": 1,
+    "title": "Evaluation pass rate",
+    "grain": "evaluation case",
+    "unit": "ratio",
+    "definition": "Cases passing declared quality/correctness rubric / evaluated cases in comparable suite.",
+    "source_contract": "evaluation receipts",
+    "allowed_dimensions": [
+      "model",
+      "task_type",
+      "rubric_version"
+    ],
+    "query_template_ref": "metrics/ai_quality/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Synthetic, human and production feedback separate; no LLM grade as security proof.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "ai_latency",
+    "version": 1,
+    "title": "AI attempt latency",
+    "grain": "provider attempt",
+    "unit": "seconds_distribution",
+    "definition": "Distribution of request dispatch to completion/failure under a fixed timeout/cancel policy.",
+    "source_contract": "trace metadata",
+    "allowed_dimensions": [
+      "model",
+      "provider",
+      "task_type"
+    ],
+    "query_template_ref": "metrics/ai_latency/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Streaming first-token and total latency are distinct.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "task_latency",
+    "version": 1,
+    "title": "End-to-end task latency",
+    "grain": "user task",
+    "unit": "seconds_distribution",
+    "definition": "Distribution of task accepted to verified terminal result.",
+    "source_contract": "task lifecycle",
+    "allowed_dimensions": [
+      "task_type",
+      "device",
+      "release"
+    ],
+    "query_template_ref": "metrics/task_latency/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Do not average provider p95s to infer task p95.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "credit_grants",
+    "version": 1,
+    "title": "Credits granted",
+    "grain": "ledger grant",
+    "unit": "millicredits",
+    "definition": "Sum immutable grant events by approved source and period.",
+    "source_contract": "credit ledger",
+    "allowed_dimensions": [
+      "grant_source",
+      "plan"
+    ],
+    "query_template_ref": "metrics/credit_grants/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Goodwill, subscription and purchased credits shown separately; not revenue.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "credit_consumption",
+    "version": 1,
+    "title": "Credits consumed",
+    "grain": "ledger settlement",
+    "unit": "millicredits",
+    "definition": "Sum settled consumed credits by terminal task outcome.",
+    "source_contract": "credit ledger",
+    "allowed_dimensions": [
+      "task_type",
+      "plan"
+    ],
+    "query_template_ref": "metrics/credit_consumption/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Reservation is not consumption.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "credit_available",
+    "version": 1,
+    "title": "Available credits",
+    "grain": "workspace snapshot",
+    "unit": "millicredits",
+    "definition": "Existing wallet projection after holds, expiry, reversals and debt.",
+    "source_contract": "existing credit-domain projection",
+    "allowed_dimensions": [
+      "plan"
+    ],
+    "query_template_ref": "metrics/credit_available/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Do not independently reimplement mutable balance logic.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "credit_held",
+    "version": 1,
+    "title": "Held credits",
+    "grain": "workspace snapshot",
+    "unit": "millicredits",
+    "definition": "Outstanding reservations under current wallet/unknown settlement rules.",
+    "source_contract": "credit ledger",
+    "allowed_dimensions": [
+      "task_type",
+      "age_band"
+    ],
+    "query_template_ref": "metrics/credit_held/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Unknown outcomes not silently released or charged twice.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "credit_debt",
+    "version": 1,
+    "title": "Credit debt",
+    "grain": "workspace snapshot",
+    "unit": "millicredits",
+    "definition": "Current debt from valid reversals after consumption, as projected by existing wallet.",
+    "source_contract": "existing credit-domain projection",
+    "allowed_dimensions": [
+      "plan",
+      "reason"
+    ],
+    "query_template_ref": "metrics/credit_debt/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Debt is not automatically a cash receivable.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "api_errors",
+    "version": 1,
+    "title": "API server error rate",
+    "grain": "request interval",
+    "unit": "ratio",
+    "definition": "Eligible 5xx/application-failure requests / eligible served requests.",
+    "source_contract": "normalized request telemetry",
+    "allowed_dimensions": [
+      "route",
+      "release",
+      "service"
+    ],
+    "query_template_ref": "metrics/api_errors/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Expected client denials separate; sampled numerator and denominator compatible.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "api_latency",
+    "version": 1,
+    "title": "API latency",
+    "grain": "request",
+    "unit": "seconds_distribution",
+    "definition": "Observed eligible request duration distribution.",
+    "source_contract": "OTel/runtime metrics",
+    "allowed_dimensions": [
+      "route",
+      "service",
+      "release"
+    ],
+    "query_template_ref": "metrics/api_latency/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Sample/region/cache status included.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "queue_age",
+    "version": 1,
+    "title": "Queue age",
+    "grain": "pending job snapshot",
+    "unit": "seconds_distribution",
+    "definition": "Now minus eligible enqueue time for pending runnable jobs.",
+    "source_contract": "job projection",
+    "allowed_dimensions": [
+      "job_type",
+      "provider"
+    ],
+    "query_template_ref": "metrics/queue_age/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Paused/scheduled-future jobs excluded or separate.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "slo_burn",
+    "version": 1,
+    "title": "Error budget burn rate",
+    "grain": "service window",
+    "unit": "ratio",
+    "definition": "Observed bad-event fraction / allowed bad-event fraction for approved SLO.",
+    "source_contract": "SLO registry + telemetry",
+    "allowed_dimensions": [
+      "service",
+      "window"
+    ],
+    "query_template_ref": "metrics/slo_burn/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Undefined until SLO and denominator approved; not measured uptime promise.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "affected_workspaces",
+    "version": 1,
+    "title": "Incident affected workspaces",
+    "grain": "incident",
+    "unit": "count",
+    "definition": "Distinct workspaces with linked verified failing events.",
+    "source_contract": "incident + task/error links",
+    "allowed_dimensions": [
+      "incident",
+      "severity"
+    ],
+    "query_template_ref": "metrics/affected_workspaces/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Coverage-limited lower bound unless complete; not guessed customer count.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "source_lag",
+    "version": 1,
+    "title": "Source data lag",
+    "grain": "source stream",
+    "unit": "seconds",
+    "definition": "Now minus last complete source watermark.",
+    "source_contract": "ingestion cursors",
+    "allowed_dimensions": [
+      "source",
+      "stream"
+    ],
+    "query_template_ref": "metrics/source_lag/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Distinguish event silence from ingestion heartbeat failure.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "open_tickets",
+    "version": 1,
+    "title": "Open support tickets",
+    "grain": "ticket snapshot",
+    "unit": "count",
+    "definition": "Tickets not in resolved/closed/spam/duplicate, grouped by actual state.",
+    "source_contract": "support records",
+    "allowed_dimensions": [
+      "priority",
+      "category",
+      "state"
+    ],
+    "query_template_ref": "metrics/open_tickets/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Waiting state remains visible; test tickets excluded.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "first_response",
+    "version": 1,
+    "title": "First human response time",
+    "grain": "responded ticket",
+    "unit": "business_seconds_distribution",
+    "definition": "First public human response minus creation excluding declared nonbusiness intervals.",
+    "source_contract": "support events",
+    "allowed_dimensions": [
+      "priority",
+      "category"
+    ],
+    "query_template_ref": "metrics/first_response/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "AI acknowledgment not human response; unanswered tickets shown censored/aged.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "resolution_time",
+    "version": 1,
+    "title": "Support resolution time",
+    "grain": "ticket lifecycle",
+    "unit": "business_seconds_distribution",
+    "definition": "Resolved time minus created time under versioned pause/business-time policy.",
+    "source_contract": "support events",
+    "allowed_dimensions": [
+      "priority",
+      "category"
+    ],
+    "query_template_ref": "metrics/resolution_time/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Unresolved tickets not hidden; reopening policy fixed.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "csat",
+    "version": 1,
+    "title": "Positive CSAT",
+    "grain": "survey response",
+    "unit": "ratio",
+    "definition": "Positive qualified responses / valid responses; response rate displayed alongside.",
+    "source_contract": "support surveys",
+    "allowed_dimensions": [
+      "category",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/csat/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "No broad satisfaction claim from very low response sample.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "repeat_tickets",
+    "version": 1,
+    "title": "Repeat issue rate",
+    "grain": "resolved ticket cohort",
+    "unit": "ratio",
+    "definition": "Resolved cases with same verified issue recurrence within 14 days / cases observed through 14 days.",
+    "source_contract": "ticket links",
+    "allowed_dimensions": [
+      "category",
+      "release"
+    ],
+    "query_template_ref": "metrics/repeat_tickets/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Similarity alone does not prove duplicate cause.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "required_checks",
+    "version": 1,
+    "title": "Required check coverage",
+    "grain": "candidate SHA",
+    "unit": "ratio",
+    "definition": "Passed required checks / required checks; failed, skipped, blocked and not-run separately counted.",
+    "source_contract": "trusted runner receipts",
+    "allowed_dimensions": [
+      "suite",
+      "repository"
+    ],
+    "query_template_ref": "metrics/required_checks/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Never averaged to override a single mandatory failed security/financial gate.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "check_failures",
+    "version": 1,
+    "title": "Check failures",
+    "grain": "runner check",
+    "unit": "count",
+    "definition": "Count failures by functional, infrastructure, timeout, canceled or unknown classification.",
+    "source_contract": "trusted runner receipts",
+    "allowed_dimensions": [
+      "suite",
+      "failure_class"
+    ],
+    "query_template_ref": "metrics/check_failures/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "ENOSPC infrastructure failure is not a product bug.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "flake_rate",
+    "version": 1,
+    "title": "Test instability",
+    "grain": "repeated comparable test",
+    "unit": "ratio",
+    "definition": "Tests with mixed outcomes on unchanged code/environment / tests rerun under the declared policy.",
+    "source_contract": "test receipts",
+    "allowed_dimensions": [
+      "suite",
+      "test_id"
+    ],
+    "query_template_ref": "metrics/flake_rate/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Rerun selection bias disclosed; flaky tests not simply ignored.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "security_open",
+    "version": 1,
+    "title": "Unresolved high-severity findings",
+    "grain": "finding snapshot",
+    "unit": "count",
+    "definition": "Distinct current high/critical findings not fixed or validly waived, by scanner/rule/version.",
+    "source_contract": "scanner receipts",
+    "allowed_dimensions": [
+      "scanner",
+      "severity",
+      "age_band"
+    ],
+    "query_template_ref": "metrics/security_open/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Scanner coverage/entitlement explicit; no guarantee all vulnerabilities found.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "gsc_clicks",
+    "version": 1,
+    "title": "Organic search clicks",
+    "grain": "site/page/query interval",
+    "unit": "count",
+    "definition": "Search Console reported clicks for authorized property and chosen dimensions.",
+    "source_contract": "Search Console API",
+    "allowed_dimensions": [
+      "page",
+      "query",
+      "country",
+      "device"
+    ],
+    "query_template_ref": "metrics/gsc_clicks/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Top-row/aggregation limits retained; no per-user attribution.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "gsc_ctr",
+    "version": 1,
+    "title": "Organic search CTR",
+    "grain": "site/page/query interval",
+    "unit": "ratio",
+    "definition": "Reported clicks / impressions in exactly the same aggregate.",
+    "source_contract": "Search Console API",
+    "allowed_dimensions": [
+      "page",
+      "query",
+      "country",
+      "device"
+    ],
+    "query_template_ref": "metrics/gsc_ctr/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Average position is distinct; no averaged CTR across unequal denominators.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "attribution_coverage",
+    "version": 1,
+    "title": "Known acquisition source coverage",
+    "grain": "signup cohort",
+    "unit": "ratio",
+    "definition": "New workspaces with recorded allowed acquisition source / all new workspaces.",
+    "source_contract": "first-party source capture",
+    "allowed_dimensions": [
+      "cohort"
+    ],
+    "query_template_ref": "metrics/attribution_coverage/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Unknown attribution is retained, not assigned to direct by default.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "source_paid_conversion",
+    "version": 1,
+    "title": "Source-to-paid conversion",
+    "grain": "source signup cohort",
+    "unit": "ratio",
+    "definition": "Attributed workspaces becoming qualifying paid within 30 days / source workspaces observed through day30.",
+    "source_contract": "signup + billing",
+    "allowed_dimensions": [
+      "source",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/source_paid_conversion/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "unavailable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Proposed window; immature cohorts excluded.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "cac",
+    "version": 1,
+    "title": "Attributed acquisition cost",
+    "grain": "paid acquisition cohort",
+    "unit": "currency_minor_per_workspace",
+    "definition": "Approved attributable acquisition spend / new qualifying paying workspaces in compatible attribution window.",
+    "source_contract": "campaign spend + billing",
+    "allowed_dimensions": [
+      "source",
+      "currency"
+    ],
+    "query_template_ref": "metrics/cac/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "unavailable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Unavailable when spend or attribution incomplete; not blended with LTV projection.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "decision_recovered_cash",
+    "version": 1,
+    "title": "Observed recovery associated with decisions",
+    "grain": "decision/payment",
+    "unit": "currency_minor",
+    "definition": "Deduplicated actual recovered payment receipts linked to decisions, labeled associated unless incremental effect measured.",
+    "source_contract": "decision outcomes + payments",
+    "allowed_dimensions": [
+      "playbook",
+      "currency"
+    ],
+    "query_template_ref": "metrics/decision_recovered_cash/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Avoid double credit across several recommendations.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "experiment_effect",
+    "version": 1,
+    "title": "Estimated experiment effect",
+    "grain": "experiment unit",
+    "unit": "effect_interval",
+    "definition": "Predeclared treatment-control difference with uncertainty under the approved analysis plan.",
+    "source_contract": "exposures + outcome metrics",
+    "allowed_dimensions": [
+      "experiment",
+      "variant"
+    ],
+    "query_template_ref": "metrics/experiment_effect/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Only if sample/assignment checks pass; otherwise inconclusive.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "time_back",
+    "version": 1,
+    "title": "Estimated time back",
+    "grain": "completed task",
+    "unit": "seconds_estimate",
+    "definition": "Reuse approved baseline-minus-measured-effort methodology and version, if available and verified.",
+    "source_contract": "existing time-saving receipts",
+    "allowed_dimensions": [
+      "task_type",
+      "baseline_version"
+    ],
+    "query_template_ref": "metrics/time_back/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "hourly_or_source_cadence",
+    "limitations": "Not invented hours saved; unavailable until current source/definition verified.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "mrr_reactivation",
+    "version": 1,
+    "title": "Reactivated MRR",
+    "grain": "workspace interval",
+    "unit": "currency_minor",
+    "definition": "Recurring value restored for a previously paid, fully churned workspace in the interval; not new MRR or opening-cohort expansion.",
+    "source_contract": "subscription transitions",
+    "allowed_dimensions": [
+      "plan",
+      "currency",
+      "cohort"
+    ],
+    "query_template_ref": "metrics/mrr_reactivation/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Report reactivation separately in MRR bridge; opening paid-cohort NRR does not silently acquire returning churned accounts.",
+    "status": "proposed_definition_not_activated"
+  },
+  {
+    "id": "paid_customers",
+    "version": 1,
+    "title": "Paid customers",
+    "grain": "customer snapshot",
+    "unit": "count",
+    "definition": "Distinct active owner users (profile not deleted) of workspaces whose subscription has provider<>fixture and status in (active, past_due) at asOf; window grouping reads the daily subscription snapshot.",
+    "source_contract": "pr_subscriptions + pr_memberships + pr_profiles (business_subscriptions_v2)",
+    "allowed_dimensions": [
+      "plan",
+      "status",
+      "window"
+    ],
+    "query_template_ref": "metrics/paid_customers/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "No subscription history before the first daily snapshot; trial (fixture) subscriptions never count.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "paid_workspaces",
+    "version": 1,
+    "title": "Paid workspaces",
+    "grain": "workspace snapshot",
+    "unit": "count",
+    "definition": "Distinct workspaces whose subscription has provider<>fixture and status in (active, past_due) at asOf; window grouping reads the daily subscription snapshot.",
+    "source_contract": "pr_subscriptions (business_subscriptions_v2)",
+    "allowed_dimensions": [
+      "plan",
+      "status",
+      "window"
+    ],
+    "query_template_ref": "metrics/paid_workspaces/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Same snapshot limits as paid_customers; one-time credit purchasers are not paid workspaces.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "subscriptions_by_plan_status",
+    "version": 1,
+    "title": "Subscriptions by plan and status",
+    "grain": "subscription snapshot",
+    "unit": "count",
+    "definition": "Count of non-fixture subscriptions grouped by plan label and status at asOf.",
+    "source_contract": "pr_subscriptions + pr_plan_terms",
+    "allowed_dimensions": [
+      "plan",
+      "status",
+      "window"
+    ],
+    "query_template_ref": "metrics/subscriptions_by_plan_status/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Status 'grace' is never produced today; a plan may fall back to trial terms when a price is unbound.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "cash_collected",
+    "version": 1,
+    "title": "Cash collected",
+    "grain": "funds movement",
+    "unit": "currency_minor",
+    "definition": "Sum of funded live-mode credit orders plus live-mode credit-plan invoice grants in the half-open interval, by native currency.",
+    "source_contract": "pr_credit_orders + pr_credit_subscription_grants",
+    "allowed_dimensions": [
+      "currency",
+      "payment_type",
+      "window"
+    ],
+    "query_template_ref": "metrics/cash_collected/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Partial by construction: legacy plan invoices and provider fees are not recorded; reconcile against the provider balance.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "payment_failures",
+    "version": 1,
+    "title": "Payment failures",
+    "grain": "payment event",
+    "unit": "count",
+    "definition": "payment_failed billing notices plus failed credit orders in the interval.",
+    "source_contract": "pr_notifications + pr_credit_orders",
+    "allowed_dimensions": [
+      "payment_type",
+      "window"
+    ],
+    "query_template_ref": "metrics/payment_failures/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Dunning attempt counts live with the provider and are not stored.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "refunds_disputes",
+    "version": 1,
+    "title": "Refunds and disputes",
+    "grain": "refund event",
+    "unit": "currency_minor",
+    "definition": "Sum of succeeded refunds and non-withdrawn disputes by category, status and native currency, attributed to a workspace through the payment intent when possible.",
+    "source_contract": "pr_credit_refunds + pr_credit_disputes",
+    "allowed_dimensions": [
+      "currency",
+      "category",
+      "status",
+      "window"
+    ],
+    "query_template_ref": "metrics/refunds_disputes/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Legacy plan refunds have no join path and are reported as unattributed coverage.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "ai_cost_actual",
+    "version": 1,
+    "title": "AI cost (actual)",
+    "grain": "ledger settlement",
+    "unit": "usd_micro",
+    "definition": "Sum of actual_usd_micro over settle rows with cost_state=actual; coverage reports settle rows still estimated_unknown.",
+    "source_contract": "pr_usage_ledger (business_usage_v2)",
+    "allowed_dimensions": [
+      "feature",
+      "provider",
+      "model",
+      "plan",
+      "window"
+    ],
+    "query_template_ref": "metrics/ai_cost_actual/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Stale turns may be settled from estimates; provider invoices are not yet imported for reconciliation.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "ai_cost_unknown",
+    "version": 1,
+    "title": "AI cost (unknown)",
+    "grain": "ledger settlement",
+    "unit": "usd_micro",
+    "definition": "Sum of estimated_usd_micro and count of ledger rows whose cost_state is estimated_unknown in the interval.",
+    "source_contract": "pr_usage_ledger (business_usage_v2)",
+    "allowed_dimensions": [
+      "feature",
+      "provider",
+      "model",
+      "plan",
+      "window"
+    ],
+    "query_template_ref": "metrics/ai_cost_unknown/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Rows leave this metric only through reconciliation; never add it to actual cost.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "ai_cost_by_feature",
+    "version": 1,
+    "title": "AI cost by feature",
+    "grain": "ledger settlement",
+    "unit": "usd_micro",
+    "definition": "ai_cost_actual grouped by the feature derived from the ledger idempotency_key prefix (feature is always a dimension).",
+    "source_contract": "pr_usage_ledger (business_usage_v2)",
+    "allowed_dimensions": [
+      "feature",
+      "provider",
+      "model",
+      "plan",
+      "window"
+    ],
+    "query_template_ref": "metrics/ai_cost_by_feature/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "The prefix is a convention, not a constraint; unknown prefixes land in other.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "cost_vs_cash",
+    "version": 1,
+    "title": "AI cost versus cash collected",
+    "grain": "period + currency",
+    "unit": "ratio",
+    "definition": "ai_cost_actual divided by cash_collected for the same interval and currency; only USD cash is comparable to the USD ledger.",
+    "source_contract": "pr_usage_ledger + pr_credit_orders + pr_credit_subscription_grants",
+    "allowed_dimensions": [
+      "currency",
+      "window"
+    ],
+    "query_template_ref": "metrics/cost_vs_cash/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "native_currency_separate",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Both sides keep their own coverage; a zero cash denominator is not_applicable.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "founder_ops_cost",
+    "version": 1,
+    "title": "Founder operations cost",
+    "grain": "ledger settlement",
+    "unit": "usd_micro",
+    "definition": "Settled ledger cost for aiUsageExempt rows, costCenter=founder_ops rows and workspaces classified internal; never part of customer metrics.",
+    "source_contract": "pr_usage_ledger + rafii_control.workspace_classifications",
+    "allowed_dimensions": [
+      "feature",
+      "provider",
+      "window"
+    ],
+    "query_template_ref": "metrics/founder_ops_cost/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Includes only excluded activity; estimates stand in where no actual cost exists.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "budget_remaining",
+    "version": 1,
+    "title": "Budget remaining",
+    "grain": "budget snapshot",
+    "unit": "usd_micro",
+    "definition": "stop_usd_micro minus (spent + reserved) per pr_budgets scope for the current window.",
+    "source_contract": "pr_budgets",
+    "allowed_dimensions": [
+      "scope",
+      "status"
+    ],
+    "query_template_ref": "metrics/budget_remaining/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Current window only; no budget history.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "active_workspaces",
+    "version": 1,
+    "title": "Active workspaces",
+    "grain": "workspace interval",
+    "unit": "count",
+    "definition": "Distinct non-excluded workspaces with a completed or applied agent run or a publish event in the interval (definition v1).",
+    "source_contract": "pr_agent_runs + pr_notification_events",
+    "allowed_dimensions": [
+      "plan",
+      "window"
+    ],
+    "query_template_ref": "metrics/active_workspaces/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Product events are not yet instrumented; activity is agent runs and publish events only.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "publish_outcomes",
+    "version": 1,
+    "title": "Publish outcomes",
+    "grain": "occurrence",
+    "unit": "count",
+    "definition": "Count of publish.verified, publish.failed and publish.uncertain notification events in the interval; coverage numerator is verified, denominator all.",
+    "source_contract": "pr_notification_events",
+    "allowed_dimensions": [
+      "status",
+      "platform",
+      "window"
+    ],
+    "query_template_ref": "metrics/publish_outcomes/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Only produced while notifications v2 is enabled; otherwise unavailable, never zero.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "cron_heartbeat",
+    "version": 1,
+    "title": "Cron heartbeat age",
+    "grain": "service window",
+    "unit": "seconds",
+    "definition": "Seconds since the last recorded cron probe in rafii_control.source_health (source_id='cron'); older than 180 seconds is stale.",
+    "source_contract": "rafii_control.source_health",
+    "allowed_dimensions": [],
+    "query_template_ref": "metrics/cron_heartbeat/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "minute",
+    "limitations": "No heartbeat row means monitoring is unavailable, not that the worker is healthy.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "notification_delivery",
+    "version": 1,
+    "title": "Notification deliveries",
+    "grain": "occurrence",
+    "unit": "count",
+    "definition": "Count of notification deliveries created in the interval by channel, status and failure class.",
+    "source_contract": "pr_notification_deliveries",
+    "allowed_dimensions": [
+      "channel",
+      "status",
+      "failure_class",
+      "window"
+    ],
+    "query_template_ref": "metrics/notification_delivery/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Email delivered states arrive only through provider webhooks.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "phone_calls",
+    "version": 1,
+    "title": "Phone calls",
+    "grain": "occurrence",
+    "unit": "count",
+    "definition": "Count of phone calls requested in the interval by kind, direction, provider, state and failure class, with telephony plus live cost and duration as measures.",
+    "source_contract": "pr_phone_calls",
+    "allowed_dimensions": [
+      "kind",
+      "direction",
+      "provider",
+      "state",
+      "failure_class",
+      "window"
+    ],
+    "query_template_ref": "metrics/phone_calls/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Ambiguous calls are reported as unknown coverage.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "source_health",
+    "version": 1,
+    "title": "Source health",
+    "grain": "source stream",
+    "unit": "seconds",
+    "definition": "Per source: age in seconds since the last good watermark with the recorded state and reason code.",
+    "source_contract": "rafii_control.source_health",
+    "allowed_dimensions": [
+      "source",
+      "state",
+      "reason"
+    ],
+    "query_template_ref": "metrics/source_health/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "minute",
+    "limitations": "Sources without a probe row are unavailable.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "data_requests_backlog",
+    "version": 1,
+    "title": "Data request backlog",
+    "grain": "pending job snapshot",
+    "unit": "count",
+    "definition": "Count of pr_data_requests with status='requested' by kind and age band at asOf.",
+    "source_contract": "pr_data_requests",
+    "allowed_dimensions": [
+      "kind",
+      "age_band"
+    ],
+    "query_template_ref": "metrics/data_requests_backlog/v1",
+    "default_exclusions": [
+      "synthetic",
+      "test",
+      "internal_founder_activity",
+      "ai_usage_exempt",
+      "fixture_subscriptions"
+    ],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Not a ticket system; support conversations are not collected.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": true,
+      "prd": "7.1"
+    }
+  },
+  {
+    "id": "security_events",
+    "version": 1,
+    "title": "Security events",
+    "grain": "occurrence",
+    "unit": "count",
+    "definition": "Count of content-free security audit events (session alerts, MFA changes, session revocations, API token changes) in the interval.",
+    "source_contract": "pr_audit_events",
+    "allowed_dimensions": [
+      "kind",
+      "window"
+    ],
+    "query_template_ref": "metrics/security_events/v1",
+    "default_exclusions": [],
+    "data_state_required": true,
+    "currency_policy": "not_applicable",
+    "zero_denominator": "not_applicable",
+    "refresh_target": "event_driven_or_15m",
+    "limitations": "Control-plane denied attempts live in admin_audit_log and are read separately.",
+    "status": "activated_v1",
+    "activation": {
+      "definitionVersion": "v1",
+      "liveAdapter": "rafii_control.live_metrics",
+      "demoAdapter": "rafii_control.demo_metrics",
+      "migration": "054_rafii_control_founder_views",
+      "snapshot": false,
+      "prd": "7.1"
+    }
+  }
+]
