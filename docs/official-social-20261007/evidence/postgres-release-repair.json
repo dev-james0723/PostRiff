@@ -1,0 +1,56 @@
+{
+  "state": "NARROW_REMOTE_PASS_REQUIRED_GITHUB_GATE_PENDING",
+  "candidateBeforeRepair": "db92bafdcbaa0be16168ecb801b26f1f16d2e8fc",
+  "failedGitHub": {
+    "runId": 37575130542,
+    "jobId": 112642204537,
+    "mergeSha": "692b1e88fe9417b1a3e79924cecd2805b2e23070",
+    "headSha": "db92bafdcbaa0be16168ecb801b26f1f16d2e8fc",
+    "artifactId": 11462672476,
+    "artifactDigest": "sha256:c85aa2359b056fbd6343f1afde252e3bd5b5a33a9dab8aa1831dbe143692d137",
+    "programCount": 93,
+    "passedPrograms": 91,
+    "firstFailure": "tests/phase2/postgres_channels.py:275 expected scope_missing for None introspection",
+    "secondFailure": "tests/phase2/postgres_reverify.py:272 expected scope_missing for None introspection",
+    "migrationRestore": "PASS",
+    "officialSocialPersistence": "PASS"
+  },
+  "cause": "Stale permission-introspection assertions and narrower Depot coverage; no migration, restore or PostgreSQL version failure. None is unavailable evidence, while [] proves empty scopes.",
+  "repair": "Assert unavailable reads preserve credential scopes, workspace revision/state, capability levels and trust window while worker readiness remains false; explicit empty scopes still downgrade. Add both legacy suites to scoped cloud validation in separate disposable clusters.",
+  "narrowRemote": {
+    "runId": "n7zhfcvhhf",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/n7zhfcvhhf",
+    "runner": "depot-ubuntu-24.04-8",
+    "orgId": "jf34f85hr0",
+    "exitCode": 0,
+    "remoteExitCode": 0,
+    "elapsedSeconds": 84.301,
+    "startedAt": "2026-10-07T05:47:12.839421+00:00"
+  },
+  "snapshot": {
+    "sourceHead": "db92bafdcbaa0be16168ecb801b26f1f16d2e8fc",
+    "sourceFingerprint": "e0bf0fdb59a9d8923f698dd500f05dd6e6b04a26b9cb4c20d47d83afe7a32926",
+    "patchSha256": "7797e1416ec8464c479ed759624a4cb1870aab28b8aa9edd694599719293140c",
+    "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e"
+  },
+  "temporaryExecutionMapping": "test:jcb -- --connection-regression; restored normal --backend-only config after run",
+  "sourceFileSha256": {
+    "scripts/social-validation-cloud.sh": "19a331cfc6b183124922238da8bf6aa7586c14d9d78ffd93f7332dccc8c480c2",
+    "tests/phase2/postgres_channels.py": "595ccc90892eae51e226b5e7a27b26b02e9f1cdb173608a99ec26e780ef88946",
+    "tests/phase2/postgres_reverify.py": "34a9c9aa9e4a373b931a736eb5d63ec2f26dec1c75e0150275036ede2a2c049c"
+  },
+  "priorNarrowFailure": {
+    "runId": "185rk3jrvw",
+    "cause": "New assertion incorrectly required credential scope ordering to be sorted; corrected to exact preservation and scope-set equality.",
+    "exitCode": 1
+  },
+  "localChecks": [
+    "Python AST parse",
+    "bash -n scripts/social-validation-cloud.sh",
+    "git diff --check"
+  ],
+  "ordinaryExternalProviderPasses": 0,
+  "liveProviderCalls": 0,
+  "productionChanged": false,
+  "migration100AppliedToProduction": false
+}
