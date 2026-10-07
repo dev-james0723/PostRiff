@@ -1,6 +1,6 @@
 # Rafii Universal Library production release
 
-Execution state: candidate; not yet production released.
+Execution state: candidate; production migrations, merge, deployment and authenticated acceptance remain gated on the current release checks.
 
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-universal-library-production-20261007`
 
@@ -12,8 +12,8 @@ Baseline deployment: `dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en`, `https://postriff-phase
 
 Rollback: promote the baseline deployment using the existing Vercel project, retain all Library tables/private files. Do not drop schema, erase objects, or downgrade unrelated production work. Pause Library ingestion via code rollback if required. A newer production deployment requires a refreshed rollback baseline before release.
 
-Migrations: apply only verified 093 and 094; do not automatically apply unrelated ledger gaps. Each is additive and keeps legacy media/state paths; 094 widens lifecycle checks and reconciles the staging candidate filename check. Production has no Library tables or bucket at baseline. Staging has an earlier manually provisioned 093 candidate. Preserve historical applied bytes and record exact new checksums.
+Migrations: production preflight found no Library tables, policies or bucket. Staging has 093 and the lifecycle migration applied, with zero Library assets. A staging audit found the private 50 MiB bucket lacked accepted audio MIME types; additive 095 now preserves the existing 12 MIME types and adds the 11 audio/generic types accepted by the server. Staging verification reports private bucket, 50 MiB, 23 MIME types and all required audio/generic entries. Applied staging history: `universal_library_storage_mime_types` at `20261007234839`. Source SHA-256: 093 `9d35962f93afbe56d4ad6dc6f7a9fed1c25f422334747118d1242e8e29e5b5d8`; 094 `313ab91df771656b7d77d8532c901ec744f3ca371e6a5d942452b0c5055308df`; 095 `5e6f2067ad0afbc71ada20146de962791f4469e9c8a87f4bea69f31c598d3f1b`. All three are additive; rollback retains private rows and objects.
 
-Remote validation: JCB `6jcw5k5078` passed 36 unit tests and existing disposable PostgreSQL Library checks. JCB `4ssm6cjmrt` passed extended real parser/DB lifecycle and typecheck, then failed four frontend accessibility lint errors, repaired in the next candidate. Identity/storage in this harness are synthetic; it is not production acceptance.
+Remote validation: JCB `4ssm6cjmrt` passed real parser/disposable-PostgreSQL lifecycle checks and typecheck; its frontend lint failures were repaired. JCB `n9wzg809vd` passed cloud lint after explicit control labels were added. Local single-test check `PYTHONPATH=src:tests python3 -m unittest test_site_agent.ToolTest.test_catalogue_pin` passes after the two Library read tools were added to the pinned catalogue. Dependency-lock preparation run `37703884929` reports zero vulnerabilities and changes only patched versions of Sharp, tinypool and source-map-js; no package entries were added or removed. The PR’s earlier full run exposed the stale tool-count assertion and a transient unrelated Growth Studio browser server reset; both will be checked on the current head. Synthetic identity/storage checks are not production acceptance.
 
-Remaining gates: cloud build/lint/browser/security and full CI, exact production schema/bucket configuration, merge/deploy, authenticated production file and regression acceptance. No paid transcription/model calls are enabled by this release.
+Remaining gates: current-head cloud build/lint/browser/security and full CI, production migrations, merge/deploy, authenticated production file/permission/search/source/deletion acceptance, runtime errors and regression checks. Automatic audio transcription is unavailable; uploaded audio supports playback and user-supplied, searchable transcripts. No new paid service or paid model call is enabled by this release.
