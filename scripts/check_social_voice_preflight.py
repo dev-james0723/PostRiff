@@ -28,7 +28,8 @@ def inspect_environment(values):
         issues.append('NEXT_PUBLIC_APP_URL and POSTRIFF_PUBLIC_BASE_URL must match the fixed HTTPS app origin.')
     service = OAuthService(None, None, vault, registry_from_environment(values), base)
     providers = [item for item in service.provider_catalog() if item['id'] in ('instagram', 'linkedin')]
-    return {'configured': not issues and all(item['connectReady'] for item in providers), 'issues': issues, 'providers': providers,
+    return {'configured': not issues and bool(vault.fernet) and all(item['configured'] and item.get('callbackUri') for item in providers),
+            'publicConnectionReady': not issues and all(item.get('publicConnectionReady', False) for item in providers), 'issues': issues, 'providers': providers,
             'liveOAuthVerified': False, 'liveHistoryVerified': False,
             'note': 'Static configuration only. Provider app roles/approval, granted permissions, real callbacks, token refresh and AI budgets still need verification.'}
 

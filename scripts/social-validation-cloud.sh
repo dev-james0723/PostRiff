@@ -13,7 +13,7 @@ case "${1:-}" in
 esac
 cd -- "$jcb_social_root"
 export PYTHONPATH="$jcb_social_root/src:$jcb_social_root/tests"
-python -m unittest test_postriff_phase2 test_postriff_audience_contract test_official_social test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video
+python -m unittest test_postriff_phase2 test_postriff_audience_contract test_official_social test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video test_asset_consumers test_asset_kinds test_instagram_full_capabilities test_social_voice_preflight test_postriff_hosted_deployment
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
   sudo -n apt-get -y -qq install postgresql
