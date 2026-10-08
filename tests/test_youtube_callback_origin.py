@@ -28,6 +28,30 @@ def invoke_callback(app, provider='youtube'):
 
 
 class YouTubeCallbackOriginTests(unittest.TestCase):
+    def test_legacy_provider_pin_preserves_registered_callback_and_canonical_landing(self):
+        provider = SimpleNamespace(callback_origin=LEGACY)
+        service = OAuthService(None, None, None, {'youtube': provider}, DEDICATED)
+        self.assertEqual(service.callback_uri('youtube'), LEGACY + '/api/oauth/youtube/callback')
+        self.assertEqual(service.callback_base_url('youtube'), DEDICATED)
+        app = HostedApplication(SimpleNamespace(oauth=service))
+        result, _ = invoke_callback(app)
+        self.assertTrue(result['headers']['Location'].startswith(DEDICATED + '/channels/connect?'))
+
+    def test_dedicated_youtube_origin_supersedes_legacy_pin_without_changing_other_pins(self):
+        provider = SimpleNamespace(callback_origin='https://registered-legacy.example')
+        service = OAuthService(None, None, None, {'youtube': provider, 'linkedin': provider}, LEGACY,
+                               youtube_public_base_url=DEDICATED)
+        self.assertEqual(service.callback_uri('youtube'), DEDICATED + '/api/oauth/youtube/callback')
+        self.assertEqual(service.callback_uri('linkedin'), 'https://registered-legacy.example/api/oauth/linkedin/callback')
+        self.assertEqual(service.callback_base_url('linkedin'), LEGACY)
+
+    def test_legacy_pin_cannot_bypass_strict_dedicated_youtube_origin_validation(self):
+        provider = SimpleNamespace(callback_origin=LEGACY)
+        service = OAuthService(None, None, None, {'youtube': provider}, LEGACY,
+                               youtube_public_base_url='https://rafii.example/path')
+        with self.assertRaises(AlphaError):
+            service.callback_uri('youtube')
+
     def test_unset_or_empty_override_preserves_legacy_origin_and_other_provider_callbacks(self):
         for override in (None, ''):
             with self.subTest(override=override):

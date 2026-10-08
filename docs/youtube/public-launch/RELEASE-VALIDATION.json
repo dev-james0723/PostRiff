@@ -240,5 +240,21 @@
         "workspace quota UI displays reservations and explicitly unknown Google remaining allocation"
       ]
     }
-  ]
+  ],
+  "originReconciliation": {
+    "productionBase": "65b1ea83283b34c99779e7d311828662debf4b23",
+    "productionPR": 135,
+    "previousCandidate": "b0ca13a4ebc46fa53573bc6f6b6516032a6130e1",
+    "previousMainCI": 37850230732,
+    "previousMainCIStatus": "SUCCESS99/99PG modules plus remaining gates",
+    "status": "COMBINED SOURCE CLOUD VALIDATION PENDING",
+    "conflictResolution": "Preserve canonical callback_base_url; callback_uri honors registered provider pin except explicit dedicated YouTube override for both lanes. Existing exact in-flight redirect and custody retained.",
+    "regressions": [
+      "test_rafii_origin_migration",
+      "test_youtube_callback_origin",
+      "test_youtube_oauth_binding",
+      "legacy-host and all existing web contracts"
+    ],
+    "actualGoogleAcceptance": false
+  }
 }
