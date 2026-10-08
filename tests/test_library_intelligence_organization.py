@@ -63,6 +63,7 @@ class OrgDB:
         self.relations, self.annotations, self.usage, self.suggestions, self.audits = [], [], [], [], []
         self.languages, self.caps, self.text, self.chunks, self.segments, self.packs = {}, {}, {}, {}, {}, {}
         self.neighbors, self.receipts, self.grants = {}, {}, []
+        self.workspace_members, self.prefs = [ACTOR, OTHER_ACTOR], {}
         self.vector = False
         self.policy = {"grant": 0, "index": 1, "org": 0}
         self.state = {"sources": [], "variants": [], "phase2": {"assets": [], "jobs": [], "reviews": []}}
@@ -444,17 +445,38 @@ class OrgDB:
         p.update(evidence_refs=json.loads(evidence), style_refs=json.loads(style), rights_warnings=json.loads(warnings), revision=p["revision"] + 1)
         return [(p["revision"],)]
 
-    def _sugg_exists(self, args):
-        return [(True,)]
+    # --- suggestions (the statements the version-link warning path uses; the suggestions suite adds the rest) -------------
+    def _sugg_lock(self, args):
+        return []
+
+    def _sugg_members(self, args):
+        return [(m,) for m in self.workspace_members[:args[1]]]
+
+    def _sugg_is_member(self, args):
+        return [(u,) for u in args[1] if u in self.workspace_members]
+
+    def _sugg_prefs(self, args):
+        wanted = set(args[1])
+        return [(r, cat, p["disabled"], p["snooze_days"], p["external_opt_in"]) for (r, cat), p in self.prefs.items() if r in wanted]
+
+    def _sugg_today(self, args):
+        counts = {}
+        for s in self.suggestions:
+            if s["recipient"] in args[1] and not s["critical"] and s["created"] > self.now - args[2]:
+                counts[s["recipient"]] = counts.get(s["recipient"], 0) + 1
+        return list(counts.items())
 
     def _sugg_put(self, args):
-        row = dict(zip(("id", "ws", "recipient", "dedup", "trigger", "candidates", "affected", "reason", "consent"), args))
+        row = dict(zip(("id", "ws", "recipient", "dedup", "category", "critical", "trigger", "candidates", "affected", "reason", "consent", "expires_days"),
+                       args))
         if any((s["recipient"], s["dedup"]) == (row["recipient"], row["dedup"]) for s in self.suggestions):
             return []
         for name in ("trigger", "candidates", "affected"):
             row[name] = json.loads(row[name])
+        row.update(id=row["id"].hex, state="new", snooze=None, created=self.now,
+                   expires=None if row["expires_days"] is None else self.now + row["expires_days"] * 86400)
         self.suggestions.append(row)
-        return [(str(row["id"]),)]
+        return [(str(uuid.UUID(hex=row["id"])), row["created"])]
 
     def _vec_column(self, args):
         return [(1,)] if self.vector else []
@@ -980,14 +1002,16 @@ class Lineage(unittest.TestCase):
         stale = {(r["to_kind"], r["to_key"]) for r in db.relations if r["relation"] == "used_in" and r["status"] == "stale" and r["from_version"] == O}
         self.assertEqual(stale, {("source_pack", PACK), ("idea", "src-old"), ("draft", "variant-1"), ("post", "post-9")})
         self.assertEqual(linked["flagged"]["count"], 4)
-        self.assertEqual({s["affected"][0]["kind"] for s in db.suggestions}, {"source_pack", "idea", "draft", "post"})
-        self.assertTrue(all(s["recipient"] in (ACTOR, OTHER_ACTOR) for s in db.suggestions))
-        self.assertEqual(next(s for s in db.suggestions if s["affected"][0]["kind"] == "source_pack")["recipient"], OTHER_ACTOR)
+        self.assertEqual(linked["flagged"]["suggestions"], 2, "one outdated-source warning per recipient for the whole link")
+        self.assertEqual({a["kind"] for s in db.suggestions for a in s["affected"]}, {"source_pack", "idea", "draft", "post"})
+        self.assertEqual({s["category"] for s in db.suggestions}, {"outdated_source"})
+        self.assertEqual(next(s for s in db.suggestions if any(a["kind"] == "source_pack" for a in s["affected"]))["recipient"], OTHER_ACTOR)
+        self.assertEqual(len(next(s for s in db.suggestions if s["recipient"] == ACTOR)["affected"]), 3)
         self.assertEqual(db.packs[PACK]["evidence_refs"], pack_before, "the old citation is never rewritten")
         self.assertEqual(db.state, state_before, "Ideas sources and drafts are not mutated")
         # Linking again is idempotent: no duplicate flags or suggestions.
         flagged_again = relations.flag_dependents(self.ctx, [versions.get(self.ctx, O)], versions.get(self.ctx, N))
-        self.assertEqual(len(db.suggestions), 4)
+        self.assertEqual(len(db.suggestions), 2)
         self.assertEqual(flagged_again["count"], 4)
 
         listing = comparison.versions_http(self.ctx, {"params": {"key": O}, "query": {}, "body": {}})

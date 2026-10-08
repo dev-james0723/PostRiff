@@ -76,10 +76,6 @@ PACK_LOCK = ("/*lio:pack.lock*/ SELECT id::text,revision,status,evidence_refs,st
              "WHERE workspace_id=%s AND id=%s FOR UPDATE")
 PACK_REPLACE = ("/*lio:pack.replace*/ UPDATE public.pr_library_source_packs SET evidence_refs=%s::jsonb,style_refs=%s::jsonb,rights_warnings=%s::jsonb,"
                 "revision=revision+1,updated_at=now() WHERE workspace_id=%s AND id=%s AND revision=%s RETURNING revision")
-SUGG_EXISTS = "/*lio:sugg.exists*/ SELECT to_regclass('public.pr_library_suggestions') IS NOT NULL"
-SUGG_PUT = ("/*lio:sugg.put*/ INSERT INTO public.pr_library_suggestions(id,workspace_id,recipient,dedup_key,category,critical,trigger,candidate_refs,"
-            "affected,reason,consent_revision) VALUES(%s,%s,%s,%s,'outdated_source',false,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s) "
-            "ON CONFLICT(workspace_id,recipient,dedup_key) DO NOTHING RETURNING id::text")
 VEC_COLUMN = ("/*lio:vec.column*/ SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='pr_library_embeddings' "
               "AND column_name='embedding'")
 VEC_NEAR = ("/*lio:vec.near*/ SELECT e.asset_key,e.version_key,(e.embedding::vector(256) <=> q.v) AS distance FROM public.pr_library_embeddings e,"
@@ -269,17 +265,9 @@ def _cites(value, version_key: str, depth: int = 0) -> bool:
     return False
 
 
-def _suggestions_available(ctx) -> bool:
-    if "suggestionsTable" not in ctx.caches:
-        ctx.cur.execute(SUGG_EXISTS)
-        row = ctx.cur.fetchone()
-        ctx.caches["suggestionsTable"] = bool(row and row[0])
-    return ctx.caches["suggestionsTable"]
-
-
 def flag_dependents(ctx, olds: list, new: dict) -> dict:
-    """Mark everything that cites an older version stale and record one 'outdated_source' suggestion per dependent.
-    Never rewrites a citation; idempotent for the same (old, new) pair."""
+    """Mark everything that cites an older version stale and raise one 'outdated_source' warning per recipient and link
+    through suggestions.evaluate_suggestions. Never rewrites a citation; idempotent for the same (old, new) pair."""
     new_ref = versions.ref(new)
     affected: dict = {}
 
@@ -315,19 +303,16 @@ def flag_dependents(ctx, olds: list, new: dict) -> dict:
                     _upsert(ctx, old, "draft", variant_id, None, "used_in", "stale", "system", evidence)
                     add(old, "draft", variant_id)
     created = 0
-    if affected and _suggestions_available(ctx):
-        revision = policy.revisions(ctx)["grantRevision"]
+    if affected:
+        from . import suggestions
+        by_old: dict = {}
         for entry in list(affected.values())[:MAX_DEPENDENTS]:
-            old, kind, key = entry["old"], entry["kind"], entry["key"]
-            title = str(old.get("title") or "this item")[:80]
-            reason = (f"A newer version of “{title}” was added. This {DEPENDENT_LABELS[kind]} still cites version {old['versionNo']}; "
-                      "review the change before replacing it.")[:400]
-            dedup = f"outdated:{old['versionId']}:{new['versionId']}:{kind}:{key}"[:300]
-            ctx.cur.execute(SUGG_PUT, (uuid.uuid4(), ctx.workspace_id, entry["recipient"] or ctx.actor, dedup,
-                                       json.dumps({"event": "version_linked", "old": versions.ref(old), "new": new_ref}, sort_keys=True),
-                                       json.dumps([new_ref]), json.dumps([{"kind": kind, "key": key, "citesVersion": versions.ref(old)}]), reason, revision))
-            if ctx.cur.fetchone():
-                created += 1
+            item = {"kind": entry["kind"], "key": entry["key"]}
+            if entry["recipient"]:
+                item["recipient"] = entry["recipient"]
+            by_old.setdefault(entry["old"]["versionId"], (entry["old"], []))[1].append(item)
+        for old, items in by_old.values():
+            created += len(suggestions.evaluate_suggestions(ctx, {"type": "version_linked", "old": versions.ref(old), "new": new_ref, "affected": items}))
     return {"count": len(affected), "suggestions": created,
             "affected": [{"kind": e["kind"], "key": e["key"], "citesVersion": versions.ref(e["old"])} for e in list(affected.values())[:50]]}
 
