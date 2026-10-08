@@ -196,7 +196,10 @@ class OAuthService:
         origin = urlparse(self.public_base_url)
         if origin.scheme != 'https' or not origin.hostname or origin.username or origin.password or origin.path or origin.query or origin.fragment:
             raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
-        return f"{self.public_base_url}/api/oauth/{provider_id}/callback"
+        # A provider whose console still lists only an earlier origin keeps that registered callback; the public
+        # callback route forwards to POSTRIFF_PUBLIC_BASE_URL, so the user still finishes on the canonical origin.
+        pinned = getattr(self.providers.get(provider_id), 'callback_origin', None) if hasattr(self.providers, 'get') else None
+        return f"{pinned or self.public_base_url}/api/oauth/{provider_id}/callback"
 
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
