@@ -141,6 +141,14 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 
 \ir ../../migrations/postriff/094_universal_library_lifecycle.sql
 \ir ../../migrations/postriff/095_universal_library_storage.sql
+\ir ../../migrations/postriff/096_universal_library_duplicate_index.sql
+do $$ begin
+ if not exists (
+  select 1 from pg_indexes
+  where schemaname='public' and tablename='pr_library_assets'
+    and indexname='pr_library_assets_duplicate_of'
+ ) then raise exception 'Library duplicate references are not indexed'; end if;
+end $$;
 do $$ begin
  if not exists (
   select 1 from storage.buckets
