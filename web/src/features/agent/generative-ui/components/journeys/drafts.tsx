@@ -112,9 +112,12 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
   );
 }
 
-export function DraftCompare({ props }: JourneyRendererProps) {
+export function DraftCompare({ props, statementId }: JourneyRendererProps) {
   const { copy } = useJourneyEnvironment();
   const literal = titleProps.safeParse(props);
+  // Only drafts the person picked, in the order picked: an empty pick never falls back to "all drafts".
+  const selection = useBound<string[]>(`${statementId ?? 'draftCompare'}Selected`, props.selected);
+  const picked = strings(selection.value);
   return (
     <QueryFrame
       value={props.data}
@@ -124,7 +127,8 @@ export function DraftCompare({ props }: JourneyRendererProps) {
       empty={() => <p className='text-muted-foreground text-sm'>{copy.drafts.compareNeedTwo}</p>}
     >
       {(data) => {
-        const drafts = data.drafts.slice(0, 4);
+        const byId = new Map(data.drafts.map((d) => [d.draftId, d]));
+        const drafts = picked.map((id) => byId.get(id)).filter((d): d is DraftRow => Boolean(d)).slice(0, 4);
         if (drafts.length < 2) return <p className='text-muted-foreground text-sm'>{copy.drafts.compareNeedTwo}</p>;
         return (
           <div className='@container'>

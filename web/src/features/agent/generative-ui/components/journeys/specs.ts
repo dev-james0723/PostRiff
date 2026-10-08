@@ -43,8 +43,8 @@ const DraftList: RafiiComponentSpec = {
 const DraftCompare: RafiiComponentSpec = {
   name: 'DraftCompare',
   description:
-    'Two to four drafts side by side from a drafts_list Query whose ids argument is the selection $variable, in the order picked.',
-  props: z.object({ data: queryRef, title: title() }),
+    'Two to four picked drafts side by side, in the order picked: data is a drafts_list Query whose ids argument is the selection $variable, and selected is that same $variable.',
+  props: z.object({ data: queryRef, selected: selectionList(), title: title() }),
   rules: query,
 };
 const DraftDetail: RafiiComponentSpec = {

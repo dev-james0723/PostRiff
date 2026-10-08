@@ -1,13 +1,4 @@
-/**
- * Rafii journey catalog (lane E): the per-journey component groups, read bindings, action ids, examples, edit cases and
- * truth rules for J01-J09. This file is an exact mirror of
- * `src/postriff_phase2/agent_runtime_v2/generated/journey-examples/journeys.json` (the copy Python, the prompt assembly
- * and the capability manifest read); `web/tests/agent-ui-journeys/catalog.test.cjs` fails CI when the two drift.
- *
- * Data only: no imports, no React, erasable TypeScript, so the asset generator can load it under Node type stripping.
- * Nothing here grants authority. The server manifest decides which of these bindings and actions a turn may use.
- */
-export const JOURNEY_CATALOG = {
+{
   "catalogVersion": "journeys/1",
   "contractVersion": "rafii-genui/1",
   "selection": {
@@ -1124,8 +1115,4 @@ export const JOURNEY_CATALOG = {
     "note": "Periods are resolved by the server in the given IANA zone; the presenter never computes dates."
   },
   "examplesNote": "Refs inside examples (for example draft:7f3c2a91) are placeholders: the presenter uses only refs present in the turn's allowed context."
-} as const;
-
-export type JourneyCatalog = typeof JOURNEY_CATALOG;
-export type CatalogJourneyId = keyof JourneyCatalog['journeys'];
-export type CatalogGroupId = keyof JourneyCatalog['groups'];
+}

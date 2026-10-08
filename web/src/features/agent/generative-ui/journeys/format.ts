@@ -7,43 +7,48 @@
  *     always printed next to the time, so a calendar entry never silently shifts into the browser's zone.
  *   - Formatting never throws: an invalid zone or date falls back to the server's own local string.
  */
-import { INTL_TAG, type JourneyLocale } from './copy';
+import { INTL_TAG } from './copy';
+
+/** A BCP 47 tag (the person's locale) or a journey language. */
+function tag(locale: string): string {
+  return (INTL_TAG as Record<string, string>)[locale] ?? locale;
+}
 
 export function isKnownNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-export function formatCount(value: unknown, locale: JourneyLocale): string | null {
+export function formatCount(value: unknown, locale: string): string | null {
   if (!isKnownNumber(value)) return null;
-  return new Intl.NumberFormat(INTL_TAG[locale], { maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat(tag(locale), { maximumFractionDigits: 0 }).format(value);
 }
 
-export function formatNumber(value: unknown, locale: JourneyLocale, digits = 2): string | null {
+export function formatNumber(value: unknown, locale: string, digits = 2): string | null {
   if (!isKnownNumber(value)) return null;
-  return new Intl.NumberFormat(INTL_TAG[locale], { maximumFractionDigits: digits }).format(value);
+  return new Intl.NumberFormat(tag(locale), { maximumFractionDigits: digits }).format(value);
 }
 
-export function formatPercent(value: unknown, locale: JourneyLocale): string | null {
+export function formatPercent(value: unknown, locale: string): string | null {
   if (!isKnownNumber(value)) return null;
-  return new Intl.NumberFormat(INTL_TAG[locale], { style: 'percent', maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat(tag(locale), { style: 'percent', maximumFractionDigits: 1 }).format(value);
 }
 
 /** Money stored in micro units (1/1,000,000) of `currency`. */
-export function formatMicroMoney(micro: unknown, currency: string | null | undefined, locale: JourneyLocale): string | null {
+export function formatMicroMoney(micro: unknown, currency: string | null | undefined, locale: string): string | null {
   if (!isKnownNumber(micro)) return null;
   const amount = micro / 1_000_000;
   if (currency && /^[A-Z]{3}$/.test(currency)) {
     try {
-      return new Intl.NumberFormat(INTL_TAG[locale], { style: 'currency', currency, maximumFractionDigits: amount < 1 ? 4 : 2 }).format(amount);
+      return new Intl.NumberFormat(tag(locale), { style: 'currency', currency, maximumFractionDigits: amount < 1 ? 4 : 2 }).format(amount);
     } catch {
       // fall through to a plain number with the code
     }
   }
-  const plain = new Intl.NumberFormat(INTL_TAG[locale], { maximumFractionDigits: amount < 1 ? 4 : 2 }).format(amount);
+  const plain = new Intl.NumberFormat(tag(locale), { maximumFractionDigits: amount < 1 ? 4 : 2 }).format(amount);
   return currency ? `${plain} ${currency}` : plain;
 }
 
-export function formatBytes(bytes: unknown, locale: JourneyLocale): string | null {
+export function formatBytes(bytes: unknown, locale: string): string | null {
   if (!isKnownNumber(bytes) || bytes < 0) return null;
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
@@ -52,7 +57,7 @@ export function formatBytes(bytes: unknown, locale: JourneyLocale): string | nul
     value /= 1024;
     unit += 1;
   }
-  return `${new Intl.NumberFormat(INTL_TAG[locale], { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(value)} ${units[unit]}`;
+  return `${new Intl.NumberFormat(tag(locale), { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(value)} ${units[unit]}`;
 }
 
 function validZone(zone: string | null | undefined): string | undefined {
@@ -78,7 +83,7 @@ function instant(value: string | null | undefined): Date | null {
 export function formatInstant(
   atUtc: string | null | undefined,
   zone: string | null | undefined,
-  locale: JourneyLocale,
+  locale: string,
   local?: string | null,
   options: { withZone?: boolean; dateOnly?: boolean } = {},
 ): string | null {
@@ -90,7 +95,7 @@ export function formatInstant(
     const format: Intl.DateTimeFormatOptions = options.dateOnly
       ? { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz ?? 'UTC' }
       : { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz ?? 'UTC' };
-    text = new Intl.DateTimeFormat(INTL_TAG[locale], format).format(date);
+    text = new Intl.DateTimeFormat(tag(locale), format).format(date);
     if (withZone) text = `${text} · ${tz ?? 'UTC'}`;
     return text;
   }
@@ -103,15 +108,15 @@ export function formatInstant(
 }
 
 /** A calendar date (YYYY-MM-DD) shown as a locale date without shifting it through any zone. */
-export function formatCalendarDate(day: string | null | undefined, locale: JourneyLocale): string | null {
+export function formatCalendarDate(day: string | null | undefined, locale: string): string | null {
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
   const [y, m, d] = day.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d, 12));
-  return new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
+  return new Intl.DateTimeFormat(tag(locale), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
 }
 
 /** Server ISO time (as-of, fetched-at) in the person's own zone, with the zone named. */
-export function formatAsOf(value: string | null | undefined, zone: string | null | undefined, locale: JourneyLocale): string | null {
+export function formatAsOf(value: string | null | undefined, zone: string | null | undefined, locale: string): string | null {
   return formatInstant(value, zone ?? 'UTC', locale, null, { withZone: true });
 }
 

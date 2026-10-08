@@ -7,9 +7,9 @@
 import { CalendarAgenda, ProposalList, QueueStatus, RescheduleForm, SlotCheck } from './calendar';
 import { Commentary } from './commentary';
 import { DraftCompare, DraftDetail, DraftEditor, DraftEvidence, DraftList } from './drafts';
-import type { JourneyRenderer } from './types';
+import type { JourneyRenderers } from './types';
 
-export const JOURNEY_RENDERERS: Readonly<Record<string, JourneyRenderer>> = {
+export const JOURNEY_RENDERERS: JourneyRenderers = {
   Commentary,
   DraftList,
   DraftCompare,

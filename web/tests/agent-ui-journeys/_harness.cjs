@@ -53,6 +53,8 @@ function makeEnvironment({ streaming = false, store = {}, manifestActions = [], 
   const context = {
     useRafiiActionBridge: () => env.actionBridge,
     useRafiiQueryBridge: () => env.queryBridge,
+    useRafiiActionState: () => env.actionState,
+    useBindingStatus: (name) => env.statuses[name],
     useUiBridges: () => ({ query: env.queryBridge, action: env.actionBridge, onContinue: () => undefined }),
     UiBridgesProvider: ({ children }) => children,
   };
@@ -79,13 +81,14 @@ function makeEnvironment({ streaming = false, store = {}, manifestActions = [], 
 /** `$var` passed to a reactive prop, as OpenUI evaluates it. */
 const bound = (target) => ({ __reactive: 'assign', target, expr: { k: 'Ref', n: '$value' } });
 
+/** Render one journey component inside lane C's real locale context (locale: 'en' | 'zh-Hant-HK' | 'zh-Hans-CN' | …). */
 function render(env, Component, props, { locale = 'en', timeZone = 'Asia/Hong_Kong', statementId = 's1' } = {}) {
   const React = pkg('react');
   const { renderToStaticMarkup } = pkg('react-dom/server');
-  const runtime = env.load('journeys/runtime');
+  const { GenUiLocaleProvider, createGenUiLocale } = env.load('core/locale');
   const element = React.createElement(
-    runtime.JourneyEnvironmentProvider,
-    { value: { locale, timeZone } },
+    GenUiLocaleProvider,
+    { value: createGenUiLocale({ locale, timeZone }) },
     React.createElement(Component, { props, renderNode: () => null, statementId }),
   );
   return renderToStaticMarkup(element);

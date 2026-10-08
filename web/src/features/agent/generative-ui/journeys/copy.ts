@@ -1,29 +1,20 @@
 /**
  * Journey chrome copy (lane E) in English, Traditional Chinese (Hong Kong wording) and Simplified Chinese.
  *
- * The app has no UI translation framework (evidence/r0/web-surfaces.md §12): generated views follow the language of the
- * conversation, which reaches the renderer as the answer language ('en' | 'yue' | 'cmn' or a BCP 47 tag). Record text
- * (titles, drafts, page facts) is shown as stored; only the labels around it come from here. Data only, no React.
+ * The app has no UI translation framework (evidence/r0/web-surfaces.md §12). Lane C's locale context
+ * (`core/locale.tsx`, `useGenUiLocale().language`) decides the language for the whole view; these are the journey labels
+ * in that language. Record text (titles, drafts, page facts) is shown as stored. Data only, no React.
  *
  * Words with a fixed meaning keep it in every language: "saved", "scheduled", "published" and "trained" are never used
  * for anything a service result did not report, and "prepared" never reads as "applied".
  */
 
 export const JOURNEY_LOCALES = ['en', 'zh-Hant', 'zh-Hans'] as const;
+/** Same values as lane C's `GenUiLanguage` (core/locale.tsx), which decides the language for the whole view. */
 export type JourneyLocale = (typeof JOURNEY_LOCALES)[number];
 
 /** BCP 47 tag used for Intl number/date formatting in each journey locale. */
 export const INTL_TAG: Readonly<Record<JourneyLocale, string>> = { en: 'en', 'zh-Hant': 'zh-Hant-HK', 'zh-Hans': 'zh-Hans-CN' };
-
-/** Map the conversation's answer language to a journey locale. Unknown values fall back to English. */
-export function journeyLocale(language: unknown): JourneyLocale {
-  if (typeof language !== 'string') return 'en';
-  const tag = language.trim().toLowerCase();
-  if (!tag) return 'en';
-  if (tag === 'yue' || tag.startsWith('yue-') || tag.startsWith('zh-hant') || tag === 'zh-hk' || tag === 'zh-tw' || tag === 'zh-mo') return 'zh-Hant';
-  if (tag === 'cmn' || tag.startsWith('cmn-') || tag.startsWith('zh-hans') || tag === 'zh' || tag === 'zh-cn' || tag === 'zh-sg') return 'zh-Hans';
-  return 'en';
-}
 
 type Count = (n: number) => string;
 

@@ -10,29 +10,31 @@
  * request is ignored unless it comes from a trusted user event, the view's revision is accepted (not streaming) and the
  * manifest holds the action. Nothing here runs on render, mount, replay or refresh.
  */
-import { createContext, createElement, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback } from 'react';
 import type { JsonValue, UiPublicManifestV1 } from '@/lib/agent-runtime/ui-contracts';
 import { useIsStreaming, useStateField } from '../core/openui';
-import { useRafiiActionBridge, useRafiiQueryBridge } from '../bridges/context';
+import { useGenUiLocale, type GenUiLocale } from '../core/locale';
+import { useBindingStatus as useBridgeBindingStatus, useRafiiActionBridge, useRafiiActionState } from '../bridges/context';
 import type { ActionState, BindingStatus } from '../bridges/types';
 import { journeyCopy, type JourneyCopy, type JourneyLocale } from './copy';
 
 // --- locale and zone ---------------------------------------------------------------------------------------------------
 export interface JourneyEnvironment {
-  locale: JourneyLocale;
+  /** Language of Rafii's own labels (lane C's GenUiLocale.language). */
+  language: JourneyLocale;
+  /** BCP 47 tag numbers and dates are formatted with (the person's preference). */
+  locale: string;
   /** The person's IANA zone; record times keep their own zone and are labelled with it. */
   timeZone: string;
+  copy: JourneyCopy;
+  /** Lane C's formatter for the person's locale (numbers, dates; unknown → "Not available", never 0). */
+  l: GenUiLocale;
 }
 
-const JourneyEnvironmentContext = createContext<JourneyEnvironment>({ locale: 'en', timeZone: 'UTC' });
-
-export function JourneyEnvironmentProvider({ value, children }: { value: JourneyEnvironment; children: ReactNode }) {
-  return createElement(JourneyEnvironmentContext.Provider, { value }, children);
-}
-
-export function useJourneyEnvironment(): JourneyEnvironment & { copy: JourneyCopy } {
-  const env = useContext(JourneyEnvironmentContext);
-  return { ...env, copy: journeyCopy(env.locale) };
+/** Journey copy and formatting from lane C's single locale context (no second locale context). */
+export function useJourneyEnvironment(): JourneyEnvironment {
+  const l = useGenUiLocale();
+  return { language: l.language, locale: l.locale, timeZone: l.timeZone, copy: journeyCopy(l.language), l };
 }
 
 // --- reactive bindings -------------------------------------------------------------------------------------------------
@@ -51,15 +53,9 @@ export function useStreaming(): boolean {
 }
 
 // --- query status ------------------------------------------------------------------------------------------------------
-const noStatus = () => undefined;
-const noSubscribe = () => () => undefined;
-
 /** Per-binding status from the query bridge (OpenUI 0.3.2 has no per-query loading hook). */
 export function useBindingStatus(binding: string): BindingStatus | undefined {
-  const bridge = useRafiiQueryBridge();
-  const subscribe = useMemo(() => (bridge ? (listener: () => void) => bridge.subscribe(listener) : noSubscribe), [bridge]);
-  const read = useCallback(() => (bridge ? bridge.status(binding) : undefined), [bridge, binding]);
-  return useSyncExternalStore(subscribe, read, noStatus);
+  return useBridgeBindingStatus(binding);
 }
 
 // --- guarded actions ---------------------------------------------------------------------------------------------------
@@ -74,15 +70,10 @@ export interface JourneyAction {
   request(inputs: Record<string, JsonValue>, event: { isTrusted?: boolean } | null | undefined): void;
 }
 
-const idleState: ActionState = { phase: 'idle', request: null, activation: null, result: null, error: null };
-
 export function useJourneyAction(actionId: string | undefined, controlId: string | undefined): JourneyAction {
   const bridge = useRafiiActionBridge();
   const streaming = useIsStreaming();
-  const subscribe = useMemo(() => (bridge ? (listener: () => void) => bridge.subscribe(listener) : noSubscribe), [bridge]);
-  // The bridge returns the same ActionState object until it changes (useSyncExternalStore needs a stable snapshot).
-  const read = useCallback(() => (bridge ? bridge.state() : idleState), [bridge]);
-  const state = useSyncExternalStore(subscribe, read, () => idleState);
+  const state: ActionState = useRafiiActionState();
   const binding = actionId && bridge ? bridge.binding(actionId) : undefined;
   const enabled = Boolean(actionId && bridge && binding && !streaming && bridge.writesEnabled(actionId));
   const request = useCallback(
