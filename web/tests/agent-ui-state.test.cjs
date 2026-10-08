@@ -186,3 +186,14 @@ test('locale: unknown is never zero; dates keep calendar days; three label langu
   assert.equal(locale.createGenUiLocale({ locale: 'ar-EG' }).dir, 'rtl');
   assert.equal(locale.createGenUiLocale({ locale: 'not a locale!!' }).locale, 'en');
 });
+
+test('receipts never upgrade an outcome: prepared is not applied; applied reads as done only when verified', () => {
+  const confirmation = loader.load('src/features/agent/generative-ui/core/action-confirmation.tsx');
+  assert.equal(confirmation.outcomeKey({ outcome: 'prepared', verified: false }), 'outcomePrepared');
+  assert.equal(confirmation.outcomeKey({ outcome: 'prepared', verified: true }), 'outcomePrepared');
+  assert.equal(confirmation.outcomeKey({ outcome: 'applied', verified: false }), 'outcomeAppliedUnverified');
+  assert.equal(confirmation.outcomeKey({ outcome: 'applied', verified: true }), 'outcomeApplied');
+  assert.equal(confirmation.outcomeKey({ outcome: 'conflict', verified: false }), 'outcomeConflict');
+  assert.equal(confirmation.outcomeKey({ outcome: 'published', verified: true }), 'outcomeFailed');
+  assert.equal(confirmation.CONFIRMATION_ATTRIBUTE, 'data-rafii-genui-confirmation');
+});
