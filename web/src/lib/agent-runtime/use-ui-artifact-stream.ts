@@ -143,8 +143,8 @@ export class UiArtifactStream {
   private attempts = 0;
   private active = true;
   private terminalSeen = new Set<string>();
-  private gapAt: number | null = null;
-  private replayAfterGap = false;
+  /** A replay connection reads the durable log in seq order: what it returns is complete (gaps are compacted or rolled-back seqs). */
+  private replaying = false;
   status: UiStreamStatus = 'idle';
   lastSeq: number;
   artifactId: string;
@@ -179,6 +179,7 @@ export class UiArtifactStream {
     this.abortCurrent();
     const controller = new AbortController();
     this.controller = controller;
+    this.replaying = true;
     this.set(this.attempts > 0 ? 'reconnecting' : 'connecting');
     const path = `${this.opts.transport.base}/presentations/${encodeURIComponent(this.artifactId)}/events?after=${this.lastSeq}`;
     void this.opts.transport
@@ -193,6 +194,7 @@ export class UiArtifactStream {
     this.abortCurrent();
     const controller = new AbortController();
     this.controller = controller;
+    this.replaying = false;
     this.set('connecting');
     void this.read(response, controller).catch((error: unknown) => this.onDisconnect(controller, error, false));
   }
@@ -309,16 +311,10 @@ export class UiArtifactStream {
       }
       return 'ignored';
     }
-    if (this.lastSeq > 0 && event.seq > this.lastSeq + 1) {
-      if (!(this.replayAfterGap && this.gapAt === this.lastSeq)) {
-        this.gapAt = this.lastSeq;
-        this.replayAfterGap = true;
-        return 'gap';
-      }
-      // The replay confirmed the gap (compacted deltas of a finished attempt): the server is authoritative.
+    if (!this.replaying && this.lastSeq > 0 && event.seq > this.lastSeq + 1) {
+      // A producer stream skipped seqs (another tab's state change, a repair's bookkeeping): replay the durable log from here.
+      return 'gap';
     }
-    this.replayAfterGap = false;
-    this.gapAt = null;
     this.lastSeq = event.seq;
     if (terminalKey) this.terminalSeen.add(terminalKey);
     this.opts.onEvent(event);

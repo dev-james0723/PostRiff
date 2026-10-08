@@ -78,7 +78,7 @@ export class ArtifactSession {
   };
 
   private notify() {
-    for (const listener of [...this.listeners]) listener();
+    for (const listener of Array.from(this.listeners)) listener();
   }
 
   dispatch(action: ArtifactAction) {
@@ -119,14 +119,19 @@ export class ArtifactSession {
       return;
     }
     if (view.artifact.revision !== this.controllerRevision || view.artifact.stateRevision > this.controller.current().stateRevision) {
-      this.lostFields = this.controller.rebase(stored, declared).lostFields;
+      const rebased = this.controller.rebase(stored, declared);
+      if (rebased.lostFields.length) {
+        this.lostFields = [...new Set([...this.lostFields, ...rebased.lostFields])];
+        this.lostValues = { ...this.lostValues, ...rebased.lostValues };
+      }
       this.controllerRevision = view.artifact.revision;
     }
     this.controller.setAllowed(Boolean(view.access?.canPersistState));
   }
 
-  /** Dirty fields a new revision no longer declares (a native warning offers to restore them). */
+  /** Dirty fields a new revision no longer declares, and their values (a native warning keeps them readable). */
   lostFields: string[] = [];
+  lostValues: Record<string, JsonValue> = {};
 
   stateController(): UiStateController | null {
     return this.controller;
@@ -340,13 +345,13 @@ function disposeSession(session: ArtifactSession) {
 
 /** Dispose every session (and forget every start in flight) that is not in the `keep` scope. */
 export function disposeOutOfScope(keep: string) {
-  for (const [key, session] of [...sessions.entries()]) {
+  for (const [key, session] of sessions.entries()) {
     if (!key.startsWith(`${keep}|`)) {
       sessions.delete(key);
       session.dispose();
     }
   }
-  for (const key of [...starting.keys()]) if (!key.startsWith(`${keep}|`)) starting.delete(key);
+  for (const key of starting.keys()) if (!key.startsWith(`${keep}|`)) starting.delete(key);
 }
 
 let activeScope: string | null = null;

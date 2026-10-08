@@ -16,14 +16,17 @@ export interface GeneratedFrameProps {
   controls?: ReactNode;
   notices?: ReactNode;
   artifactId?: string | null;
+  /** The artifact's generation state (queued|streaming|validating|ready|failed|canceled|interrupted), for tests and styling. */
+  generationState?: string | null;
 }
 
-export function GeneratedFrame({ surface, busy, status, label = 'Interactive view', children, controls, notices, artifactId }: GeneratedFrameProps) {
+export function GeneratedFrame({ surface, busy, status, label = 'Interactive view', children, controls, notices, artifactId, generationState }: GeneratedFrameProps) {
   return (
     <section
       {...{ [GENERATED_ATTR]: '' }}
       data-surface={surface}
       data-artifact-id={artifactId ?? undefined}
+      data-generation-state={generationState ?? undefined}
       aria-label={label}
       aria-busy={busy || undefined}
       className='rafii-generated flex min-w-0 flex-col gap-2'
