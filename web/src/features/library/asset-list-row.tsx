@@ -20,6 +20,7 @@ import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { badgeClass, copyHash, dimensionsOf, formatDuration, useAssetImage, usageLabel } from './asset-card';
+import { AssetFileThumbnail } from './asset-thumbnail';
 
 export interface AssetListRowProps {
   asset: LibraryAsset;
@@ -59,11 +60,13 @@ export function AssetListRow({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
   const preview = useAssetImage(asset.id, nearView && mediaAsset);
   const video = assetKind === 'video';
   const title = libraryAssetTitle(asset);
   const dims = dimensionsOf(asset);
   const count = uses.length;
+  const kindLabel = assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo';
 
   useEffect(() => {
     if (preview.storageNotConfigured) onStorageMissing?.();
@@ -92,17 +95,17 @@ export function AssetListRow({
           animate={{ opacity: deleting ? 0.55 : 1, y: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, transition: { duration: 0.15, ease: EASE_OUT } }}
           transition={{ layout: SPRING_LAYOUT }}
-          className='bg-card text-card-foreground overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
+          className='bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
         >
           <button
             type='button'
             onClick={onOpen}
-            aria-label={`${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${title}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
+            aria-label={`${kindLabel} ${title}${video ? ', video thumbnail' : pdfAsset ? ', first-page preview' : assetKind === 'document' ? `, ${asset.extension?.toUpperCase() || 'document'} preview` : ''}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
             className='focus-visible:ring-ring/50 flex min-h-[76px] w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
-            <span className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
+            <span data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined} data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined} className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
               {!mediaAsset ? (
-                <span className='text-muted-foreground text-[10px] font-semibold'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+                <AssetFileThumbnail asset={asset} size='row' loadPreview={false} />
               ) : preview.data ? (
                 <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-cover' />
               ) : preview.isError ? (
@@ -128,9 +131,14 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
+          {pdfAsset && nearView ? (
+            <div className='pointer-events-none absolute top-2.5 left-3 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]'>
+              <AssetFileThumbnail asset={asset} size='row' loadPreview />
+            </div>
+          ) : null}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel={`${video ? 'Video' : 'Photo'} actions`}>
+      <ContextMenuContent ariaLabel={`${kindLabel} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
