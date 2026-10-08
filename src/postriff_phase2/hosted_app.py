@@ -633,6 +633,13 @@ class HostedApplication:
                     if site_agent is not None:
                         result['siteAgentRecovery'] = site_agent.recover_stalled()
                     result['writingRecovery'] = ideas.recover_stalled()
+                    if repository is not None:
+                        # Generative UI attempts whose producer died: interrupted, reservation kept as unknown, zero provider requests.
+                        try:
+                            from .agent_runtime_v2 import ui_store
+                            result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
+                        except Exception:
+                            result['uiRecovery'] = {'status': 'unavailable'}
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
@@ -924,6 +931,12 @@ class HostedApplication:
                     if verb == "commit" and method == "POST":
                         self._body(environ)
                         return self._json(start_response, 200, library.commit(workspace_id, token, asset_id))
+                    if verb == "viewer" and method == "GET":
+                        from urllib.parse import parse_qs
+                        try: page = int(parse_qs(environ.get("QUERY_STRING", "")).get("page", ["1"])[0])
+                        except ValueError: raise AlphaError("Choose a valid document page.",422) from None
+                        return self._json(start_response, 200, library.viewer_page(workspace_id, token, asset_id, page))
+                    if verb == "preview" and method == "GET": return self._json(start_response, 200, library.preview(workspace_id, token, asset_id))
                     if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id, "download=1" in environ.get("QUERY_STRING", "")))
                 raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":

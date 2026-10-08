@@ -10,7 +10,7 @@
  * it off here.
  */
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { IconMicrophone } from '@tabler/icons-react';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 import { Icons } from '@/components/icons';
@@ -50,7 +50,9 @@ function merge(initial: FounderAgentTurnResponse, run: FounderAgentRun): Founder
 }
 
 export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean }) {
-  const { api, mode, environment } = useFounderSession();
+  const { api, mode, environment, sessionStatus, sessionError, retrySession } = useFounderSession();
+  const sessionReady = sessionStatus === 'ready' && Boolean(environment);
+  const sessionStatusId = useId();
   const pathname = usePathname() ?? '/founder';
   const { reduced } = useMotionPreference();
   const key = conversationKey(mode, environment);
@@ -129,7 +131,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
     async (raw: string, retryKey?: string) => {
       const message = raw.trim();
       const k = keyRef.current;
-      if (!message || founderPanelStore.get().busy[k]) return;
+      if (!sessionReady || !message || founderPanelStore.get().busy[k]) return;
       const idempotencyKey = retryKey ?? randomKey();
       const assistantId = `a-${idempotencyKey}`;
       if (!retryKey) {
@@ -166,7 +168,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         founderPanelStore.setBusy(k, false);
       }
     },
-    [api, environment, mode, pathname, waitForRun]
+    [api, environment, mode, pathname, sessionReady, waitForRun]
   );
 
   const stop = useCallback(async () => {
@@ -255,7 +257,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             </div>
             <div className='flex flex-col items-stretch gap-2 self-stretch' role='group' aria-label='Suggested questions'>
               {suggestions.map((item) => (
-                <Button key={item} type='button' variant='glass' className='h-auto min-h-14 justify-between rounded-2xl px-4 py-3 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={busy}>
+                <Button key={item} type='button' variant='glass' className='h-auto min-h-14 justify-between rounded-2xl px-4 py-3 text-left text-sm whitespace-normal' onClick={() => void send(item)} disabled={!sessionReady || busy}>
                   <span>{item}</span>
                   <Icons.arrowRight aria-hidden className='size-4 shrink-0' />
                 </Button>
@@ -265,13 +267,17 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         ) : (
           <ol className='flex flex-col gap-4 pt-2'>
             {thread.map((item) => (
-              <ThreadItem key={item.id} item={item} latest={item.id === lastAssistant} busy={busy} onAsk={(value) => void send(value)} onRetry={(value, retryKey) => void send(value, retryKey)} onNavigate={onNavigate} onStop={() => void stop()} />
+              <ThreadItem key={item.id} item={item} latest={item.id === lastAssistant} busy={!sessionReady || busy} onAsk={(value) => void send(value)} onRetry={(value, retryKey) => void send(value, retryKey)} onNavigate={onNavigate} onStop={() => void stop()} />
             ))}
           </ol>
         )}
         <div ref={end} />
       </div>
       <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        {!sessionReady && <div id={sessionStatusId} role={sessionStatus === 'loading' ? 'status' : 'alert'} className='text-muted-foreground mb-2 px-2 text-xs'>
+          <p>{sessionStatus === 'loading' ? 'Connecting to Founder Rafii…' : sessionError ? describeFounderError(sessionError) : 'The Founder session environment is unavailable.'}</p>
+          {sessionStatus !== 'loading' && <Button type='button' variant='quiet' size='sm' onClick={retrySession}>Retry connection</Button>}
+        </div>}
         <div className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <textarea
             ref={input}
@@ -283,10 +289,11 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
             rows={2}
             maxLength={4000}
             aria-label='Ask Rafii'
+            aria-describedby={!sessionReady ? sessionStatusId : undefined}
             placeholder={`Ask about ${sectionTitle.toLowerCase()}, or anything in the business…`}
             className='placeholder:text-muted-foreground max-h-40 min-h-14 flex-1 resize-none bg-transparent px-2 py-3 text-base leading-snug outline-none field-sizing-content'
           />
-          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!text.trim() || busy}>
+          <Button type='submit' variant='action' size='icon-control' aria-label='Send' disabled={!sessionReady || !text.trim() || busy}>
             <Icons.send className='size-4' />
           </Button>
         </div>

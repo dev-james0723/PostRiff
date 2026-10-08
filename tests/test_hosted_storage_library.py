@@ -13,6 +13,15 @@ class FakeHTTPS(BaseHandler):
 class LibraryStorageTests(unittest.TestCase):
  def make(self,script):
   h=FakeHTTPS(script);return SupabaseStorage(PROJECT,KEY,file_bucket="postriff-library",opener=build_opener(_NoRedirect(),h)),h
+ def test_every_viewer_page_uses_real_private_storage_object_grammar(self):
+  from postriff_phase2.library_assets import UniversalLibrary
+  asset={'id':OBJ.split('.')[0],'sha256':'a'*64}
+  storage,handler=self.make([])
+  names=[UniversalLibrary._preview_object(asset,n) for n in (1,2,12345)]
+  self.assertEqual(len(set(names)),3)
+  for name in names:
+   self.assertEqual(storage._path(WS,'media',name),f'{WS}/media/{name}')
+  self.assertFalse(handler.requests)
  def test_file_path_uses_separate_private_bucket(self):
   s,h=self.make([(200,{"Content-Length":"3","Content-Type":"application/pdf","ETag":"e"},b"")]);self.assertEqual(s.object_info(WS,"file",OBJ)["bytes"],3);self.assertIn("/postriff-library/",h.requests[0][1]);self.assertIn(f"/{WS}/file/{OBJ}",h.requests[0][1])
  def test_html_safe_download_mime_keeps_declared_identity(self):
