@@ -270,7 +270,25 @@ def start_postgres(port=PORT_PG):
     tmp = tempfile.mkdtemp(prefix="postriff-dev-pg-")
     data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
     subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # This database contains only disposable fixtures. Preserve the actual
+        # startup failure before the CI runner removes its temporary directory.
+        print(f"Disposable PostgreSQL startup failed on port {port}:", file=sys.stderr)
+        try:
+            with log.open("rb") as stream:
+                stream.seek(max(0, log.stat().st_size - 16384))
+                print(stream.read(16384).decode("utf-8", errors="replace"), file=sys.stderr)
+        except OSError as error:
+            print(f"PostgreSQL startup log unavailable: {type(error).__name__}", file=sys.stderr)
+        try:
+            sockets = subprocess.run(["ss", "-tanp", f"sport = :{port}"], capture_output=True, text=True, timeout=5)
+            print("TCP sockets using the PostgreSQL port:", file=sys.stderr)
+            print((sockets.stdout + sockets.stderr)[-8192:], file=sys.stderr)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"Socket diagnostics unavailable: {type(error).__name__}", file=sys.stderr)
+        raise
     dsn = f"host=127.0.0.1 port={port} dbname=postgres"
     subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
     return dsn, data

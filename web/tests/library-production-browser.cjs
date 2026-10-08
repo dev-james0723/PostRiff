@@ -17,6 +17,22 @@ const checks=[];
    const headers={Authorization:'Bearer dev:'+principal,'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Origin:base};
    await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base}]);
    await context.addInitScript(id=>localStorage.setItem('postriff-dev-principal',id),principal);
+   await context.addInitScript(()=>{
+    const nativeInterval=window.setInterval.bind(window),nativeClear=window.clearInterval.bind(window),refreshIntervals=new Map();
+    window.setInterval=(callback,delay,...args)=>{
+     const id=nativeInterval(callback,delay,...args);
+     if(delay===240000&&typeof callback==='function')refreshIntervals.set(id,()=>callback(...args));
+     return id;
+    };
+    window.clearInterval=id=>{refreshIntervals.delete(id);nativeClear(id)};
+    // Invoke only the application's existing four-minute callbacks, once per
+    // acceptance step. Native clock/polling schedules remain unchanged.
+    window.__rafiiRefreshAcceptanceEnabled=false;
+    window.__rafiiRefreshAcceptance=()=>{
+     if(!window.__rafiiRefreshAcceptanceEnabled||!refreshIntervals.size)throw new Error('No enabled source refresh interval');
+     [...refreshIntervals.values()].forEach(callback=>callback());
+    };
+   });
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
    const ws=(await boot.json()).workspaceId,path=base+'/api/workspaces/'+ws+'/library';
    const storageTrace=[],thumbnailFormats=new Set(['md']),markdownBytes=Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.');
@@ -328,12 +344,28 @@ const checks=[];
    assert.equal((await context.request.put(base+'/dev/upload/'+new URL(audioTicket.url).searchParams.get('token'),{data:audioBytes,headers:{'Content-Type':'audio/wav'}})).status(),200);
    assert.ok((await context.request.post(path+'/files/'+audioTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+audioTicket.assetId);
+   let audioUrlRevision=0;
+   await context.route(path+'/files/'+audioTicket.assetId+'/url',async route=>{
+    const response=await route.fetch();assert.ok(response.ok(),await response.text());
+    const payload=await response.json(),url=new URL(payload.url);
+    // The same original private bytes/Range route receive a distinct source URL.
+    url.searchParams.set('acceptance-refresh',String(++audioUrlRevision));
+    await route.fulfill({response,json:{...payload,url:url.href}});
+   });
    await settleBeforeNavigation('show uploaded waveform WAV');await page.reload();await search.fill('inline-preview.wav');
    await view.getByRole('radio',{name:'Gallery'}).click();
    const inlineAudio=page.locator('[data-library-media-player="audio"]').first();
    await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
    const audioWave=inlineAudio.locator('[data-waveform-source="original-audio"]');await audioWave.waitFor({state:'visible',timeout:20000});
    assert.ok(await audioWave.locator('rect').evaluateAll(rects=>new Set(rects.map(rect=>rect.getAttribute('height'))).size>3),'waveform must reflect changing amplitude in the original audio');
+   // WebAudio decoding and the native playback clock complete independently.
+   // Observe actual playback; do not play or seek on behalf of the controls.
+   const playingAudio=inlineAudio.locator('audio');
+   try{await page.waitForFunction(audio=>audio.currentTime>0&&!audio.error,await playingAudio.elementHandle(),{timeout:10000});}
+   catch(error){
+    const diagnostic=await playingAudio.evaluate(audio=>({paused:audio.paused,ended:audio.ended,time:audio.currentTime,duration:Number.isFinite(audio.duration)?audio.duration:null,readyState:audio.readyState,networkState:audio.networkState,error:audio.error?{code:audio.error.code,message:audio.error.message}:null,hasSource:Boolean(audio.currentSrc),visibility:document.visibilityState,playerText:audio.closest('[data-library-media-player]')?.textContent}));
+    throw new Error(`${error.message}\nActual WAV diagnostics (${engine} ${width}): ${JSON.stringify(diagnostic)}`);
+   }
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.currentTime>0),'actual WAV playback advances');
    const inlineAudioPause=inlineAudio.getByRole('button',{name:'Pause audio preview',exact:true});if(await inlineAudioPause.isVisible())await inlineAudioPause.click();
    await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('2');
@@ -348,13 +380,33 @@ const checks=[];
    await audioTimeline.press('ArrowRight');
    await page.waitForFunction(audio=>audio.dataset.acceptanceSeeked==='yes'&&!audio.seeking,seekAudioHandle,{timeout:5000});
    assert.ok(await seekAudio.evaluate(audio=>audio.currentTime>0&&audio.currentTime<0.25),'audio timeline keyboard seeks actual source after the native seeked event');
+   // Exercise actual signed-source rotation through the query's existing timer.
+   await audioTimeline.press('Home');
+   for(let step=0;step<20;step++)await audioTimeline.press('ArrowRight');
+   await page.waitForFunction(audio=>!audio.seeking&&Math.abs(audio.currentTime-1)<0.025,seekAudioHandle,{timeout:5000});
+   const pausedRefresh=await seekAudio.evaluate(audio=>({url:audio.currentSrc,time:audio.currentTime,rate:audio.playbackRate,volume:audio.volume}));
+   await page.evaluate(()=>{window.__rafiiRefreshAcceptanceEnabled=true;window.__rafiiRefreshAcceptance()});
+   try{
+    await page.waitForFunction(({audio,before})=>audio.currentSrc!==before.url&&audio.readyState>=1&&!audio.seeking&&Math.abs(audio.currentTime-before.time)<0.025,{audio:seekAudioHandle,before:pausedRefresh},{timeout:10000});
+    assert.deepEqual(await seekAudio.evaluate(audio=>({paused:audio.paused,rate:audio.playbackRate,volume:audio.volume,error:audio.error?.code||null})),{paused:true,rate:pausedRefresh.rate,volume:pausedRefresh.volume,error:null},'paused refresh preserves offset, rate and volume');
+    await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('0.5');
+    await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
+    await page.waitForFunction(audio=>!audio.paused&&audio.currentTime>1.05,seekAudioHandle,{timeout:10000});
+    const playingRefresh=await seekAudio.evaluate(audio=>({url:audio.currentSrc,time:audio.currentTime,volume:audio.volume}));
+    await page.evaluate(()=>window.__rafiiRefreshAcceptance());
+    await page.waitForFunction(({audio,before})=>audio.currentSrc!==before.url&&!audio.paused&&!audio.seeking&&!audio.error&&audio.currentTime>before.time+0.05,{audio:seekAudioHandle,before:playingRefresh},{timeout:10000});
+    assert.deepEqual(await seekAudio.evaluate(audio=>({rate:audio.playbackRate,volume:audio.volume})),{rate:0.5,volume:playingRefresh.volume},'playing refresh retains preferences and advances from the saved offset');
+    assert.ok(audioUrlRevision>=3,'both refreshes must fetch fresh source URLs from the real API');
+    await inlineAudio.getByRole('button',{name:'Pause audio preview',exact:true}).click();
+   }finally{await page.evaluate(()=>{window.__rafiiRefreshAcceptanceEnabled=false})}
+
    assert.equal(await inlineAudio.locator('button button').count(),0,'media controls cannot be nested inside details buttons');
    assert.ok(await inlineAudio.evaluate(element=>element.getBoundingClientRect().right<=innerWidth+1),'inline audio controls fit viewport');
    await page.addScriptTag({path:require.resolve('axe-core')});
    const mediaAccessibility=await page.evaluate(async()=>{const result=await axe.run(document.querySelector('[data-library-media-player="audio"]'));return result.violations.filter(item=>['critical','serious'].includes(item.impact)).map(item=>({id:item.id,impact:item.impact,nodes:item.nodes.map(node=>node.target)}));});
    assert.deepEqual(mediaAccessibility,[],'inline audio serious/critical accessibility violations');
    await page.screenshot({path:resolve(out,`inline-audio-${engine}-${width}.png`),fullPage:true});
-   checks.push({engine,width,format:'wav',inline:'actual varying-amplitude waveform; play/pause; keyboard seek; speed; volume; responsive',execution:'real original WAV/UI/decode; synthetic identity/storage'});
+   checks.push({engine,width,format:'wav',inline:'actual varying-amplitude waveform; play/pause; keyboard seek; speed; volume; paused/playing signed-source refresh; responsive',execution:'real original WAV/UI/decode; synthetic identity/storage'});
    if(engine==='chromium'){
     for(const [ext,codecMime] of Object.entries({mp3:'audio/mpeg',m4a:'audio/mp4; codecs="mp4a.40.2"',ogg:'audio/ogg; codecs="vorbis"',oga:'audio/ogg; codecs="vorbis"',flac:'audio/flac',aac:'audio/aac',webm:'audio/webm; codecs="opus"'})){
      await search.fill('sample.'+ext);

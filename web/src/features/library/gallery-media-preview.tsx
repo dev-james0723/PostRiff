@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { useInView } from 'motion/react';
@@ -74,6 +74,9 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   const [userPaused, setUserPaused] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
+  const savedPosition = useRef(0);
+  const loadedSource = useRef<string | undefined>(undefined);
+  const restorePosition = useRef<{ value: number; applied: boolean } | null>(null);
   const [duration, setDuration] = useState(asset.duration || 0);
   const [metadataReady, setMetadataReady] = useState(false);
   const [rate, setRate] = useState(1);
@@ -94,6 +97,17 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     refetchInterval: active ? 4 * 60_000 : false,
     retry: 1
   });
+  const playbackUrl = video && !active ? undefined : source.data?.url;
+  useLayoutEffect(() => {
+    if (loadedSource.current === playbackUrl) return;
+    // Changing src resets native time before metadata arrives. Preserve the last
+    // settled position before the reset's queued timeupdate can overwrite it.
+    if (loadedSource.current || restorePosition.current) {
+      restorePosition.current = { value: savedPosition.current, applied: false };
+    }
+    loadedSource.current = playbackUrl;
+    setMetadataReady(false);
+  }, [playbackUrl]);
   const waveformAllowed = !video && activated && metadataReady && duration > 0 && duration <= WAVEFORM_DURATION_LIMIT && (!asset.bytes || asset.bytes <= WAVEFORM_BYTE_LIMIT);
   const waveform = useQuery({
     queryKey: ['library-audio-waveform', workspaceId, asset.id, asset.hash],
@@ -169,14 +183,23 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   };
   const seek = (value: number) => {
     if (!media.current || !Number.isFinite(duration) || duration <= 0) return;
+    restorePosition.current = null; savedPosition.current = value;
     media.current.currentTime = value; setPosition(value);
   };
   const onMetadata = () => {
     const element = media.current;
     if (!element) return;
     setDuration(Number.isFinite(element.duration) ? element.duration : 0); setMetadataReady(true);
-    // Refreshing an expiring private URL keeps the user's place and controls.
-    if (position > 0 && position < element.duration) element.currentTime = position;
+    const pending = restorePosition.current;
+    if (pending && Number.isFinite(element.duration)) {
+      const target = Math.max(0, Math.min(pending.value, element.duration));
+      if (Math.abs(element.currentTime - target) > 0.001) {
+        pending.applied = true; element.currentTime = target;
+        savedPosition.current = target; setPosition(target);
+      } else {
+        restorePosition.current = null; savedPosition.current = target; setPosition(target);
+      }
+    }
     element.volume = volume; element.muted = volume === 0; element.playbackRate = rate;
   };
   const onError = () => {
@@ -187,7 +210,17 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   const mediaEvents = {
     onLoadedMetadata: onMetadata,
     onDurationChange: () => { if (media.current && Number.isFinite(media.current.duration)) setDuration(media.current.duration); },
-    onTimeUpdate: () => setPosition(media.current?.currentTime || 0),
+    onTimeUpdate: () => {
+      const element = media.current;
+      if (!element || element.readyState === 0 || element.seeking || restorePosition.current) return;
+      savedPosition.current = element.currentTime; setPosition(element.currentTime);
+    },
+    onSeeked: () => {
+      const element = media.current;
+      if (!element || element.readyState === 0 || (restorePosition.current && !restorePosition.current.applied)) return;
+      restorePosition.current = null;
+      savedPosition.current = element.currentTime; setPosition(element.currentTime);
+    },
     onPlay: () => { setPlaying(true); setFailure(''); announcePlay(); },
     onPause: () => setPlaying(false),
     onEnded: () => { setPlaying(false); setUserPaused(true); },
@@ -202,13 +235,13 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
           {/* Uploaded originals do not provide a timed caption track. Never fabricate one;
               audio transcripts can be imported/read through the asset details. */}
           {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-          <video ref={node => { media.current = node; }} src={active ? source.data?.url : undefined} poster={posterUrl} muted={volume === 0} playsInline loop preload='metadata' aria-label={`Video preview of ${title}`} {...mediaEvents} className='absolute inset-0 h-full w-full object-contain' />
+          <video ref={node => { media.current = node; }} src={playbackUrl} poster={posterUrl} muted={volume === 0} playsInline loop preload='metadata' aria-label={`Video preview of ${title}`} {...mediaEvents} className='absolute inset-0 h-full w-full object-contain' />
           <span className='rafii-glass pointer-events-none absolute top-2 left-2 rounded-full px-2 py-1 text-[10px] font-medium'>{volume === 0 ? 'Silent preview' : 'Video preview'}</span>
         </> : <>
           {/* An audio-only upload has no timed captions; its optional imported transcript
               remains available in details, rather than inventing synchronization. */}
           {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-          <audio ref={node => { media.current = node; }} src={source.data?.url} preload={activated ? 'metadata' : 'none'} {...mediaEvents} />
+          <audio ref={node => { media.current = node; }} src={playbackUrl} preload={activated ? 'metadata' : 'none'} {...mediaEvents} />
           {waveform.data ? <svg viewBox='0 0 384 64' preserveAspectRatio='none' aria-label='Waveform decoded from the original audio' role='img' data-waveform-source='original-audio' className='mx-4 h-16 w-[calc(100%-2rem)]'>
             {waveform.data.map((peak, index) => <rect key={index} x={index * 4} y={32 - Math.max(1, peak * 56) / 2} width={2} height={Math.max(1, peak * 56)} rx={1} fill='currentColor' className={index / 96 <= progress ? 'text-foreground' : 'text-muted-foreground/50'} />)}
           </svg> : <div className='text-muted-foreground flex flex-col items-center gap-2 p-3 text-center'>
