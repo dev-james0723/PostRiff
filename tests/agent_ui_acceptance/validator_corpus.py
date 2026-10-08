@@ -18,16 +18,13 @@ from pathlib import Path
 
 from .client import Api
 from .evidence import Recorder
+from .world import Blocked, recorded
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATED = ROOT / "src/postriff_phase2/agent_runtime_v2/generated"
-FIXTURE = Path(__file__).resolve().parent / "fixtures/validator-cases.json"
 WRITE_NAMES = ("schedule_apply", "draft_edit", "approvals_decide", "proposal_apply", "p2_approve", "raffi_recurrence_activate", "delete_account")
 RECORD = Recorder("validator-corpus")
-
-
-class Blocked(AssertionError):
-    pass
+vcheck = recorded(RECORD, "validator_corpus")
 
 
 def _assets():
@@ -135,8 +132,8 @@ class Validator(unittest.TestCase):
 
     def setUp(self):
         if self.blocked:
-            RECORD.add(self.id(), "blocked", self.blocked)
-            self.fail(self.blocked)
+            RECORD.add(f"validator_corpus.{type(self).__name__}.{self._testMethodName}", "blocked", self.blocked)
+            raise Blocked(self.blocked)
 
     def rejected(self, candidate, *families, mode="generate", base=None, policy=None):
         result = self.validate(candidate, mode=mode, base=base, policy=policy)
@@ -150,14 +147,16 @@ class Validator(unittest.TestCase):
     def with_root_child(self, extra):
         return self.valid + "\n" + extra
 
+    @vcheck
     def test_positive_control(self):
         result = self.validate(self.valid)
         self.assertTrue(result["accepted"], result.get("errors"))
         self.assertEqual(result["sourceHash"], hashlib.sha256(result["canonicalSource"].encode("utf-8")).hexdigest())
         self.assertTrue(set(result["componentNames"]) <= set(self.meta["policy"]["allowedComponents"]))
         self.assertGreaterEqual(result["statementCount"], 1)
-        RECORD.add(self.id(), "pass", "minimal RafiiRoot accepted; sourceHash = sha256(canonicalSource)", sourceHash=result["sourceHash"])
+        return f"minimal RafiiRoot accepted; sourceHash={result['sourceHash'][:12]}… = sha256(canonicalSource)"
 
+    @vcheck
     def test_query_write_name_rejected(self):
         """NC07: a generated Query naming a write (or a non-literal/unknown tool) never validates."""
         for name in WRITE_NAMES:
@@ -165,15 +164,17 @@ class Validator(unittest.TestCase):
                 self.rejected(self.with_root_child(f'w = Query("{name}", {{}}, null)'), "query_binding_denied", "binding")
         self.rejected(self.with_root_child('w = Query("schedule" + "_apply", {}, null)'), "query_binding_denied", "binding")
         self.rejected(self.with_root_child('$tool = "schedule_apply"\nw = Query($tool, {}, null)'), "query_binding_denied", "binding")
-        RECORD.add(self.id(), "pass", "write names, concatenated and $var tool names rejected")
+        return "write names, concatenated and $var tool names rejected"
 
+    @vcheck
     def test_mutation_and_top_level_run_rejected(self):
         """NC08: native Mutation and @Run of it are forbidden in 0.3.2 (writes go through ActionButton only)."""
         self.rejected(self.with_root_child('m = Mutation("schedule_apply", {})'), "mutation_forbidden", "mutation")
         self.rejected(self.with_root_child('m = Mutation("schedule_apply", {})\nx = @Run(m)\ny = @Run(m)'), "mutation_forbidden", "mutation")
         self.rejected(self.with_root_child('m = Mutation("drafts_list", {})'), "mutation_forbidden", "mutation")
-        RECORD.add(self.id(), "pass", "Mutation statements and @Run(mutation) rejected")
+        return "Mutation statements and @Run(mutation) rejected"
 
+    @vcheck
     def test_unknown_component_and_root(self):
         """NC13: unknown components, a non-RafiiRoot root, a missing root and builtin-named components are rejected."""
         self.rejected("root = NotAComponent()", "component", "unknown", "root")
@@ -184,8 +185,9 @@ class Validator(unittest.TestCase):
             self.rejected(f"root = {other}()\n{children}".strip(), "root")
         self.rejected(self.valid.replace("root = ", "main = ", 1), "root")
         self.rejected(self.with_root_child('h = Html("<b>x</b>")'), "component", "unknown")
-        RECORD.add(self.id(), "pass", "unknown component, wrong/missing root and builtin-named components rejected")
+        return "unknown component, wrong/missing root and builtin-named components rejected"
 
+    @vcheck
     def test_bounds(self):
         """NC14: source/patch size, statement count, depth and nesting are refused (the client refuses size before any network)."""
         big = self.valid + "\n" + "\n".join(f'pad{i} = "{"x" * 200}"' for i in range(700))
@@ -206,8 +208,9 @@ class Validator(unittest.TestCase):
         self.assertGreater(len(oversized.encode()), 128 * 1024)
         answer = self.raw(body)
         self.assertFalse((answer.json() or {}).get("accepted"), "the seam itself refuses an oversized source")
-        RECORD.add(self.id(), "pass", "size/statements/depth/nesting/body caps enforced")
+        return "size/statements/depth/nesting/body caps enforced"
 
+    @vcheck
     def test_refresh_and_defaults_rejected(self):
         """NC17: no sub-30 s or computed refresh, no model-supplied defaults shown as data, no query→query arguments."""
         self.rejected(self.with_root_child('q = Query("drafts_list", {}, null, 0.01)'), "refresh")
@@ -216,8 +219,9 @@ class Validator(unittest.TestCase):
         self.rejected(self.with_root_child('a = Query("drafts_list", {}, null)\nb = Query("library_search", {q: a.rows}, null)'), "args", "query_args")
         accepted = self.validate(self.with_root_child('q = Query("drafts_list", {}, null, 30)'))
         self.assertNotIn("refresh_invalid", " ".join(accepted.get("errors") or []), "a literal 30 s refresh is allowed")
-        RECORD.add(self.id(), "pass", "refresh <30 s / computed, defaults and query→query args rejected")
+        return "refresh <30 s / computed, defaults and query→query args rejected"
 
+    @vcheck
     def test_markup_and_script_urls_never_accepted_as_executable(self):
         """NC11 (parser side): markup and script URLs are only ever string literals; no raw-HTML component can validate.
         Rendering them as inert text / refusing the link is asserted in the browser (e2e:xss)."""
@@ -227,19 +231,21 @@ class Validator(unittest.TestCase):
                 self.assertTrue(set(result["componentNames"]) <= set(self.meta["policy"]["allowedComponents"]))
         for component in ("Html", "RawHtml", "Script", "Iframe", "DangerouslySetInnerHTML"):
             self.rejected(self.with_root_child(f'x = {component}("<b>x</b>")'), "component", "unknown")
-        RECORD.add(self.id(), "pass", "markup strings stay literals; raw-HTML-like components are unknown")
+        return "markup strings stay literals; raw-HTML-like components are unknown"
 
+    @vcheck
     def test_unexplained_deletion_in_patch_rejected(self):
         """`x = )` parses to Null and would silently delete `x` in mergeStatements; the seam must flag it."""
         child = next((line.split(" = ", 1)[0] for line in self.valid.split("\n")[1:] if " = " in line), None)
         base = self.valid if child else self.valid + "\n$g = 1"
         self.rejected(f"{child or '$g'} = )", "delet", "patch", "unexplained", mode="patch", base=base)
-        RECORD.add(self.id(), "pass", "malformed RHS deletion flagged in patch mode")
+        return "malformed RHS deletion flagged in patch mode"
 
+    @vcheck
     def test_library_skew_rejected(self):
         result = self.validate(self.valid, library_hash="0" * 64)
         self.assertFalse(result.get("accepted"), "a candidate validated for another library build must not be accepted")
-        RECORD.add(self.id(), "pass", "library hash mismatch rejected")
+        return "library hash mismatch rejected"
 
     def raw(self, body: bytes, *, key="v1", stamp=None, signature=None, content_type="application/json"):
         from postriff_phase2.agent_runtime_v2 import ui_validator
@@ -248,6 +254,7 @@ class Validator(unittest.TestCase):
                    "X-Rafii-Validator-Signature": signature or ui_validator.sign(self.secret, stamp, body)}
         return self.api.request("POST", "/internal/agent-ui/validate", body=body, headers=headers)
 
+    @vcheck
     def test_signed_route_refuses_unsigned_skewed_or_foreign_requests(self):
         body = json.dumps({"v": "v1", "contractVersion": "rafii-genui/1", "mode": "generate", "baseSource": None, "candidateSource": self.valid,
                            "libraryHash": self.meta["libraryHash"], "policy": self.meta["policy"], "scope": {"workspaceId": "a", "artifactId": "b", "attemptId": "c"}}).encode()
@@ -262,7 +269,7 @@ class Validator(unittest.TestCase):
         self.assertEqual(self.raw(json.dumps(foreign).encode()).status, 400)
         unsigned = self.api.request("POST", "/internal/agent-ui/validate", body=body, headers={"Content-Type": "application/json"})
         self.assertEqual(unsigned.status, 401)
-        RECORD.add(self.id(), "pass", "unsigned, bad signature, stale timestamp, tampered body, wrong type and contract refused")
+        return "unsigned, bad signature, stale timestamp, tampered body, wrong type and contract refused"
 
     def raw_signature(self, body):
         from postriff_phase2.agent_runtime_v2 import ui_validator

@@ -69,9 +69,11 @@ class Requests(unittest.TestCase):
         raises(self, lambda: c.validate_presentation_request({"parentRunId": UUID, "idempotencyKey": KEY, "surface": "founder"}), 400, "ui_surface")
 
     def test_ids_are_opaque_server_identifiers(self):
-        for bad in ("../" + UUID, UUID + "' or 1=1", "", None, 7, UUID.upper() + "x", "00000000-0000-0000-0000-00000000000g"):
+        for bad in ("../" + UUID, UUID + "' or 1=1", "", 7, UUID.upper() + "x", "00000000-0000-0000-0000-00000000000g"):
             with self.subTest(bad=bad):
                 raises(self, lambda: c.validate_query({"artifactId": bad, "bindingId": "drafts_list"}), 404)
+        # Absent (null) is a missing field, refused before any shape check — still never a lookup.
+        raises(self, lambda: c.validate_query({"artifactId": None, "bindingId": "drafts_list"}), 400, "ui_missing_field")
         for bad in ("Query", "drafts list", "x", "a" * 70, "__proto__", "constructor()", "schedule.apply", "DROP TABLE"):
             with self.subTest(binding=bad):
                 raises(self, lambda: c.validate_query({"artifactId": UUID, "bindingId": bad}), 404, "ui_binding")

@@ -23,10 +23,15 @@ class SseReader:
         self.events: list[dict] = []        # {"id", "event", "data" (parsed JSON or raw), "at", "raw"}
         self.comments = 0
         self.decode_errors = 0
+        self.raw_tail = b""                 # last bytes of the previous chunk (split-character detection)
+        self.splits_inside_character = 0
 
     def feed(self, chunk: bytes) -> list[dict]:
         at = self.clock()
         self.chunks.append({"at": at, "bytes": len(chunk)})
+        if chunk and self.raw_tail and (chunk[0] & 0xC0) == 0x80:
+            self.splits_inside_character += 1   # this read began inside a multi-byte character
+        self.raw_tail = chunk[-4:] if chunk else self.raw_tail
         try:
             text = self._decoder.decode(chunk, final=False)
         except UnicodeDecodeError:
@@ -43,6 +48,10 @@ class SseReader:
             if event is not None:
                 out.append(event)
         return out
+
+    def split_inside_character(self) -> bool:
+        """True when at least one network read started in the middle of a UTF-8 character (the G04 split was observed)."""
+        return self.splits_inside_character > 0
 
     def close(self) -> list[dict]:
         tail = self._decoder.decode(b"", final=True)

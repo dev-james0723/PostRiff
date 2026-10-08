@@ -132,5 +132,34 @@ VIEWPORTS = ({"id": "desktop-1440", "width": 1440, "height": 900, "surface": "ch
              {"id": "mobile-390-landscape", "width": 844, "height": 390, "surface": "mobile"})
 
 
+# Gate → the harness checks whose results make its ci-harness / ci-browser-emulation evidence (summarize.py). Gates absent
+# here (G01, G03, G20, G22-G25, J01-J09) have no lane-G harness record; their evidence comes from A, the live runner or a device.
+GATE_CHECKS = {
+    "G02": ("api_corpus.Faults.test_at_most_one_repair", "api_corpus.Faults.test_provider_failure_and_truncation_keep_native_answer", "e2e:native-fallback"),
+    "G04": ("api_corpus.Streaming.test_probe_frames_and_utf8_split", "api_corpus.Streaming.test_presentation_is_progressive", "e2e:progressive-render"),
+    "G05": ("api_corpus.Queries.test_filter_change_is_bounded_and_model_free", "api_corpus.Bounds.test_query_admission_rate_limit"),
+    "G11": ("api_corpus.Durability.test_duplicate_create_reuses_attempt", "api_corpus.Durability.test_old_library_version_falls_back_without_model",
+            "api_corpus.NoAutomaticWrites.test_mount_replay_and_snapshot_never_write", "e2e:history-reload-zero-attempts"),
+    "G12": ("api_corpus.Faults.test_at_most_one_repair", "api_corpus.Faults.test_provider_failure_and_truncation_keep_native_answer",
+            "validator_corpus.Validator.test_unknown_component_and_root", "e2e:native-fallback"),
+    "G13": ("api_corpus.Accounting.test_ready_only_after_settlement", "api_corpus.Accounting.test_client_gone_settles_once",
+            "api_corpus.Accounting.test_unknown_cost_keeps_hold", "api_corpus.Faults.test_at_most_one_repair"),
+    "G14": ("api_corpus.Privacy.test_untrusted_source_text_is_data", "e2e:xss", "e2e:devtools-not-shipped"),
+    "G15": ("e2e:viewports",),
+    "G16": ("e2e:axe", "e2e:keyboard-only", "e2e:locales", "e2e:reduced-motion"),
+    "G17": ("e2e:local-interaction-p95", "e2e:progressive-render"),
+    "G18": ("api_corpus.Bounds.test_query_page_cap", "e2e:hidden-no-polling", "e2e:scope-switch-aborts"),
+    "G19": ("api_corpus.Voice.test_ui_context_turn_keeps_selection_and_speakable_has_no_dsl",),
+    "G21": ("api_corpus.Truthful.test_unknown_metrics_are_not_zero", "api_corpus.Approvals.test_prepared_is_not_applied"),
+}
+
+
+def gate_checks(gate: str) -> tuple:
+    """Every harness check that bears on a gate: its negative-corpus items plus GATE_CHECKS, in a stable order."""
+    found = [c for item in NEGATIVE_CORPUS if gate in item["gates"] for c in item["checks"]] + list(GATE_CHECKS.get(gate, ()))
+    return tuple(dict.fromkeys(found))
+
+
 def corpus_checks() -> set[str]:
-    return {check for item in NEGATIVE_CORPUS for check in item["checks"]} | {check for item in REVIEW_FOCUS for check in item["checks"]}
+    return ({check for item in NEGATIVE_CORPUS for check in item["checks"]} | {check for item in REVIEW_FOCUS for check in item["checks"]}
+            | {check for checks in GATE_CHECKS.values() for check in checks})
