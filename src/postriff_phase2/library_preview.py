@@ -78,8 +78,8 @@ def _run_office(arguments, *, env, cwd):
             return result
     return result
 
-def render(raw, extension, page_number=1, metadata=False):
-    import pypdfium2 as pdfium
+def _source_pdf(raw, extension):
+    """Convert once; both real page rendering and full-document text reuse it."""
     if extension not in SUPPORTED or not raw or len(raw) > 50 * 1024 * 1024:
         raise ValueError('No first-page renderer for this file')
     if extension == 'pdf':
@@ -118,6 +118,38 @@ def render(raw, extension, page_number=1, metadata=False):
                 logging.warning('Office renderer failed: exit=%s pdf_present=%s missing_libraries=%s', result.returncode, output.exists(), [name.decode('ascii') for name in missing])
                 raise ValueError('Document could not be rendered')
             pdf = output.read_bytes()
+    return pdf
+
+def document_text(raw, extension):
+    """Bounded text from one conversion; never rasterize each document page."""
+    import pypdfium2 as pdfium
+    from .library_extract import MAX_TEXT
+    with pdfium.PdfDocument(_source_pdf(raw, extension)) as doc:
+        if not 0 < len(doc) <= 300:
+            raise ValueError('Document must have at most 300 pages')
+        parts = []
+        size = 0
+        for index in range(len(doc)):
+            remaining = MAX_TEXT - size
+            if remaining <= 0:
+                break
+            page = doc[index]
+            try:
+                text_page = page.get_textpage()
+                try:
+                    count = min(text_page.count_chars(), remaining)
+                    text = text_page.get_text_range(count=count)[:remaining] if count else ''
+                finally:
+                    text_page.close()
+            finally:
+                page.close()
+            parts.append(text)
+            size += len(text) + 2
+        return '\n\n'.join(parts)[:MAX_TEXT]
+
+def render(raw, extension, page_number=1, metadata=False):
+    import pypdfium2 as pdfium
+    pdf = _source_pdf(raw, extension)
     with pdfium.PdfDocument(pdf) as doc:
         if not len(doc):
             raise ValueError('Document has no pages')
@@ -146,27 +178,20 @@ def render(raw, extension, page_number=1, metadata=False):
         finally:
             page.close()
 
-def render_isolated(raw, extension, page_number=None):
+def _isolated_output(raw, extension, argument=None, maximum=3*1024*1024):
     env = {'PATH':os.environ.get('PATH','/usr/bin:/bin'), 'PYTHONPATH':os.pathsep.join(dict.fromkeys([str(Path(__file__).resolve().parents[1]),*sys.path])), 'PYTHONDONTWRITEBYTECODE':'1'}
     command = [sys.executable, '-m', 'postriff_phase2.library_preview', extension]
-    if page_number is not None: command.append(str(page_number))
+    if argument is not None: command.append(str(argument))
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, start_new_session=True)
     try:
         result, error_output = process.communicate(raw, timeout=60)
-        if process.returncode or len(result)>3*1024*1024 or (page_number is None and not result.startswith(b'\xff\xd8')):
+        if process.returncode or len(result)>maximum:
             # Report only controlled process diagnostics, never document text or paths.
             exceptions = re.findall(rb'^([A-Za-z]+(?:Error|Exception)):', error_output, re.MULTILINE)
             codes = re.findall(rb'\[Errno ([0-9]+)\]', error_output)
             office = re.findall(rb'Office renderer failed: exit=(-?[0-9]+) pdf_present=(True|False) missing_libraries=(\[[A-Za-z0-9_.+, \'-]*\])', error_output)
             logging.warning('Library renderer failed: exit=%s exceptions=%s errno=%s office=%s', process.returncode, [v.decode('ascii') for v in exceptions], [v.decode('ascii') for v in codes], [[v.decode('ascii') for v in row] for row in office])
             raise ValueError('First-page preview unavailable (renderer exit '+str(process.returncode)+')')
-        if page_number is not None:
-            import json, base64
-            data = json.loads(result)
-            data['image'] = base64.b64decode(data['image'], validate=True)
-            if not data['image'].startswith(b'\xff\xd8') or len(data['image'])>2*1024*1024:
-                raise ValueError('Invalid page raster')
-            return data
         return result
     except BaseException:
         import signal
@@ -174,6 +199,27 @@ def render_isolated(raw, extension, page_number=None):
         except ProcessLookupError: pass
         process.wait()
         raise
+
+def render_isolated(raw, extension, page_number=None):
+    result = _isolated_output(raw, extension, page_number)
+    if page_number is not None:
+        import base64
+        data = json.loads(result)
+        data['image'] = base64.b64decode(data['image'], validate=True)
+        if not data['image'].startswith(b'\xff\xd8') or len(data['image'])>2*1024*1024:
+            raise ValueError('Invalid page raster')
+        return data
+    if not result.startswith(b'\xff\xd8'):
+        raise ValueError('Invalid page raster')
+    return result
+
+def extract_text_isolated(raw, extension):
+    from .library_extract import MAX_TEXT
+    result = _isolated_output(raw, extension, '--text', maximum=12*MAX_TEXT)
+    data = json.loads(result)
+    if not isinstance(data.get('text'), str) or len(data['text']) > MAX_TEXT:
+        raise ValueError('Invalid document text')
+    return data['text']
 
 if __name__ == '__main__':
     import resource
@@ -183,7 +229,9 @@ if __name__ == '__main__':
     resource.setrlimit(resource.RLIMIT_NOFILE, (512,512))
     _deny_internet()
     raw = sys.stdin.buffer.read(50*1024*1024+1)
-    if len(sys.argv)>2:
+    if len(sys.argv)>2 and sys.argv[2]=='--text':
+        sys.stdout.write(json.dumps({'text':document_text(raw,sys.argv[1])},ensure_ascii=False))
+    elif len(sys.argv)>2:
         import json
         sys.stdout.write(json.dumps(render(raw,sys.argv[1],int(sys.argv[2]),True)))
     else:

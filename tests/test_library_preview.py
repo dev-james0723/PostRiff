@@ -31,6 +31,26 @@ class FirstPageRendering(unittest.TestCase):
         self.assertNotEqual(first['image'],second['image'])
         with self.assertRaises(ValueError):render_isolated(viewer_pdf(),'pdf',3)
 
+    def test_full_document_text_reads_both_pages_without_rasterization(self):
+        from postriff_phase2.library_preview import extract_text_isolated
+        text = extract_text_isolated(viewer_pdf(),'pdf')
+        self.assertIn('Viewer first page Brahms',text)
+        self.assertIn('Viewer second page Mozart',text)
+
+    def test_full_document_text_rejects_over_300_pages(self):
+        import re
+        from postriff_phase2.library_preview import extract_text_isolated
+        # A valid PDF page tree with 301 references to the same source page.
+        objects = re.findall(rb'[0-9]+ 0 obj\n(.*?)\nendobj',pdf(),re.DOTALL)
+        objects[1] = b'<< /Type /Pages /Kids ['+b'3 0 R '*301+b'] /Count 301 >>'
+        raw = b'%PDF-1.4\n'; offsets = []
+        for number, obj in enumerate(objects,1):
+            offsets.append(len(raw)); raw += str(number).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
+        xref = len(raw); raw += b'xref\n0 6\n0000000000 65535 f \n'
+        for offset in offsets: raw += f'{offset:010} 00000 n \n'.encode()
+        raw += f'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+        with self.assertRaises(ValueError):extract_text_isolated(raw,'pdf')
+
     def test_actual_supported_source_bytes(self):
         for ext,raw in samples().items():
             if ext not in {'pdf','docx','xlsx','pptx','txt','md','markdown','csv','json','html','htm'}: continue
@@ -89,6 +109,14 @@ class FirstPageRendering(unittest.TestCase):
                     converted=work/('fixture.'+target)
                     self.assertTrue(converted.exists(),result.stdout.decode()+result.stderr.decode())
                     self.image(converted.read_bytes(),target)
+                    from postriff_phase2.library_extract import extract_isolated, MIMES, LEGACY
+                    self.assertIn(target, LEGACY)
+                    self.assertIn(target, MIMES)
+                    status, text = extract_isolated(converted.read_bytes(),target)
+                    self.assertEqual(status,'ready')
+                    searchable = ' '.join(text.split())
+                    self.assertIn('Brahms rehearsal on Wednesday',searchable)
+                    self.assertIn('Private practice notes',searchable)
 
     def test_network_is_denied_in_render_child(self):
         import subprocess,sys,os

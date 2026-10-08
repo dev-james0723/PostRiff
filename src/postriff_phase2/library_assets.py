@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 
 from postriff_alpha.domain import AlphaError
 from .permissions import require
-from .library_extract import MIMES, MAX_FILE_BYTES, MAX_TEXT, chunks, extract_text, extract_isolated, normalize, AUDIO_MIMES
+from .library_extract import MIMES, MAX_FILE_BYTES, MAX_TEXT, chunks, extract_text, extract_isolated, normalize, AUDIO_MIMES, LEGACY
 
 TOKEN_SECONDS = 7200
 SWEEP_MARGIN = 86400
@@ -66,6 +66,7 @@ def _asset(a):
         'analysisStatus': a['analysis_status'], 'indexingStatus': a['indexing_status'],
         'createdAt': float(a['epoch']), 'provenance': provenance, 'deleted': False,
         'extractionError': a['extraction_error'], 'attempts': a.get('attempts', 0),
+        'canRetryProcessing': a['processing_status'] in ('failed','queued') or (a['processing_status']=='unsupported' and a['extension'] in LEGACY),
         'transcriptionStatus': a.get('transcription_status', 'not_applicable'), 'sourceId': a.get('source_id'),
         'duplicateOf': str(a['duplicate_of']).replace('-', '') if a.get('duplicate_of') else None,
     }
@@ -169,7 +170,7 @@ class UniversalLibrary:
                 cur.execute("UPDATE public.pr_library_assets SET etag=%s,processing_status='queued',next_attempt_at=now(),updated_at=now() WHERE workspace_id=%s AND id=%s", (info['etag'],w,i))
             a = self._row(cur, w, i)
         # Bounded small plain text/generic files can finish immediately. Complex parsers run on the cron worker.
-        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or a['kind'] == 'file'):
+        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
             self.process(self.service.repository.connection_factory, w, i)
             with self.service.repository.transaction(t, w) as (cur, row, p):
                 a = self._row(cur, w, i)
@@ -199,7 +200,7 @@ class UniversalLibrary:
                 validate_audio(raw, a['extension'])
                 status, text = 'unsupported', ''
             else:
-                status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or a['kind'] == 'file' else extract_isolated(raw,a['extension']))
+                status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES) else extract_isolated(raw,a['extension']))
             parts = chunks(text)
             with connect() as db, db.cursor() as cur:
                 # Serializes digest admission with other files in this workspace, without a network call under lock.
@@ -231,7 +232,7 @@ class UniversalLibrary:
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             a = self._row(cur,w,i,True)
-            if a['processing_status'] not in ('failed','queued'):
+            if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY):
                 raise AlphaError('This file is not waiting for a retry.',409)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
         # An explicit retry can complete a bounded small file without waiting

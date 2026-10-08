@@ -54,6 +54,7 @@ export interface Asset {
   sourceId?: string | null;
   transcriptionStatus?: string;
   extractionError?: string | null;
+  canRetryProcessing?: boolean;
   processingStatus?: string;
   duplicateOf?: string | null;
   displayTitle?: string;

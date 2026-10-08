@@ -73,7 +73,7 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
       })}</div></fieldset> : null}
       <Button type='submit' variant='glass' disabled={busy}>Save details</Button>
     </form>
-    {normalized && ['failed','queued'].includes(asset.processing ?? '') ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>Retry processing</Button> : null}
+    {normalized && (asset.canRetryProcessing || ['failed','queued'].includes(asset.processing ?? '')) ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>{asset.processing === 'unsupported' ? 'Index document' : 'Retry processing'}</Button> : null}
     {asset.assetKind === 'audio' && ready ? <details><summary className='rafii-focus cursor-pointer text-sm'>Add or replace transcript</summary>
       <p className='text-muted-foreground my-2 text-xs'>Automatic transcription is unavailable. A supplied transcript becomes searchable and keeps its provenance.</p>
       <label htmlFor={'library-transcript-'+asset.id} className='block text-xs'>Transcript<textarea id={'library-transcript-'+asset.id} aria-label='Transcript' className='rafii-quiet rafii-focus mt-1 min-h-28 w-full rounded-lg p-3 text-sm' maxLength={250000} value={text} onChange={(e) => setText(e.target.value)} /></label>

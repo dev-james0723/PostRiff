@@ -124,8 +124,14 @@ const checks=[];
     await waitForSilentVideo();
     await inlineVideo.getByRole('button',{name:'Pause video preview',exact:true}).click();
     const videoTimeline=inlineVideo.getByRole('slider',{name:'Video preview timeline',exact:true});
-    await videoTimeline.focus();await videoTimeline.press('Home');await videoTimeline.press('ArrowRight');
-    assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4');
+    const seekVideoHandle=await previewVideo.elementHandle();
+    await page.waitForFunction(video=>video.paused,seekVideoHandle,{timeout:5000});
+    await videoTimeline.focus();await videoTimeline.press('Home');
+    await page.waitForFunction(video=>!video.seeking&&video.currentTime<0.075,seekVideoHandle,{timeout:5000});
+    await previewVideo.evaluate(video=>{delete video.dataset.acceptanceSeeked;video.addEventListener('seeked',()=>{video.dataset.acceptanceSeeked='yes';},{once:true});});
+    await videoTimeline.press('ArrowRight');
+    await page.waitForFunction(video=>video.dataset.acceptanceSeeked==='yes'&&!video.seeking,seekVideoHandle,{timeout:5000});
+    assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4 after the native seeked event: '+JSON.stringify(await previewVideo.evaluate(video=>({time:video.currentTime,seeking:video.seeking,paused:video.paused,range:video.closest('[data-library-media-player]')?.querySelector('input[type="range"]')?.value}))));
     await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
     assert.equal(await previewVideo.evaluate(video=>video.playbackRate),1.5);
     await page.emulateMedia({reducedMotion:'reduce'});
@@ -268,8 +274,14 @@ const checks=[];
    assert.equal(await inlineAudio.locator('audio').evaluate(audio=>audio.playbackRate),2);
    const audioVolume=inlineAudio.getByRole('slider',{name:'Audio preview volume',exact:true});await audioVolume.focus();await audioVolume.press('Home');await audioVolume.press('ArrowRight');
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.volume>0&&audio.volume<=0.1),'audio volume control updates the actual media element');
-   const audioTimeline=inlineAudio.getByRole('slider',{name:'Audio preview timeline',exact:true});await audioTimeline.focus();await audioTimeline.press('Home');await audioTimeline.press('ArrowRight');
-   assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.currentTime>0&&audio.currentTime<0.25),'audio timeline keyboard seeks actual source');
+   const audioTimeline=inlineAudio.getByRole('slider',{name:'Audio preview timeline',exact:true}),seekAudio=inlineAudio.locator('audio'),seekAudioHandle=await seekAudio.elementHandle();
+   await page.waitForFunction(audio=>audio.paused,seekAudioHandle,{timeout:5000});
+   await audioTimeline.focus();await audioTimeline.press('Home');
+   await page.waitForFunction(audio=>!audio.seeking&&audio.currentTime<0.075,seekAudioHandle,{timeout:5000});
+   await seekAudio.evaluate(audio=>{delete audio.dataset.acceptanceSeeked;audio.addEventListener('seeked',()=>{audio.dataset.acceptanceSeeked='yes';},{once:true});});
+   await audioTimeline.press('ArrowRight');
+   await page.waitForFunction(audio=>audio.dataset.acceptanceSeeked==='yes'&&!audio.seeking,seekAudioHandle,{timeout:5000});
+   assert.ok(await seekAudio.evaluate(audio=>audio.currentTime>0&&audio.currentTime<0.25),'audio timeline keyboard seeks actual source after the native seeked event');
    assert.equal(await inlineAudio.locator('button button').count(),0,'media controls cannot be nested inside details buttons');
    assert.ok(await inlineAudio.evaluate(element=>element.getBoundingClientRect().right<=innerWidth+1),'inline audio controls fit viewport');
    await page.addScriptTag({path:require.resolve('axe-core')});
@@ -277,9 +289,50 @@ const checks=[];
    assert.deepEqual(mediaAccessibility,[],'inline audio serious/critical accessibility violations');
    await page.screenshot({path:resolve(out,`inline-audio-${engine}-${width}.png`),fullPage:true});
    checks.push({engine,width,format:'wav',inline:'actual varying-amplitude waveform; play/pause; keyboard seek; speed; volume; responsive',execution:'real original WAV/UI/decode; synthetic identity/storage'});
+   if(engine==='chromium'){
+    for(const [ext,codecMime] of Object.entries({mp3:'audio/mpeg',m4a:'audio/mp4; codecs="mp4a.40.2"',ogg:'audio/ogg; codecs="vorbis"',oga:'audio/ogg; codecs="vorbis"',flac:'audio/flac',aac:'audio/aac',webm:'audio/webm; codecs="opus"'})){
+     await search.fill('sample.'+ext);
+     const formatPlayer=page.locator(`[data-library-media-player="audio"][data-library-thumbnail="${ext}"]`).first();await formatPlayer.waitFor({state:'visible',timeout:15000});
+     const formatAudio=formatPlayer.locator('audio'),nativeHint=await formatAudio.evaluate((audio,mime)=>audio.canPlayType(mime),codecMime);
+     await formatPlayer.getByRole('button',{name:'Play audio preview',exact:true}).click();
+     const handle=await formatAudio.elementHandle();
+     await page.waitForFunction(audio=>audio.currentTime>0||Boolean(audio.error),handle,{timeout:15000});
+     const actual=await formatAudio.evaluate(audio=>({time:audio.currentTime,readyState:audio.readyState,error:audio.error?{code:audio.error.code,message:audio.error.message}:null}));
+     if(actual.time>0&&!actual.error){
+      const pause=formatPlayer.getByRole('button',{name:'Pause audio preview',exact:true});if(await pause.isVisible())await pause.click();
+      checks.push({engine,width,format:ext,nativeHint,playback:'actual original encoded audio decoded and played',execution:'real ffmpeg-generated and independently decoded source/UI; synthetic identity/storage'});
+     }else{
+      assert.ok(actual.error&&[3,4].includes(actual.error.code),ext+' must either decode/play or report a codec error; network/source failures are not accepted: '+JSON.stringify(actual));
+      await formatPlayer.getByRole('status').filter({hasText:'Playback unavailable in this browser. Open the original to use another player.'}).waitFor({timeout:15000});
+      checks.push({engine,width,format:ext,nativeHint,playback:'unsupported browser decoder; explicit original-file fallback verified',mediaError:actual.error.code,execution:'real source bytes/UI; synthetic identity/storage; no playback claim'});
+     }
+    }
+    await search.fill('');
+    const movName=`rafii-release-${engine}-${width}.mov`,movBytes=readFileSync(resolve(__dirname,'../../.codex/library-samples/archive-acceptance.mov'));
+    await picker.setInputFiles({name:movName,mimeType:'video/quicktime',buffer:movBytes});
+    const movButton=page.getByRole('button',{name:new RegExp('Video '+movName)}).first();await movButton.waitFor({timeout:30000});
+    const movCard=page.getByRole('listitem').filter({has:movButton}),movPlayer=movCard.locator('[data-library-media-player="video"]');
+    await movPlayer.scrollIntoViewIfNeeded();
+    const movPoster=movPlayer.locator('img');await movPoster.waitFor({state:'visible',timeout:15000});await movPoster.evaluate(image=>image.decode());
+    assert.ok(await movPoster.evaluate(image=>image.naturalWidth>0),'MOV must have a captured actual source frame');
+    const movVideo=movPlayer.locator('video'),movHint=await movVideo.evaluate(video=>video.canPlayType('video/quicktime'));
+    await movPlayer.getByRole('button',{name:'Play video preview',exact:true}).click();
+    await page.waitForFunction(video=>video.currentTime>0||Boolean(video.error),await movVideo.elementHandle(),{timeout:15000});
+    const movActual=await movVideo.evaluate(video=>({time:video.currentTime,muted:video.muted,error:video.error?{code:video.error.code,message:video.error.message}:null}));
+    if(movActual.time>0&&!movActual.error){
+     assert.equal(movActual.muted,true,'MOV explicit preview remains silent by default');
+     await movPlayer.getByRole('button',{name:'Pause video preview',exact:true}).click();
+     checks.push({engine,width,format:'mov',nativeHint:movHint,playback:'actual QuickTime/H264 upload, captured frame and silent playback',execution:'real remuxed source/UI/API; synthetic identity/storage'});
+    }else{
+     assert.ok(movActual.error&&[3,4].includes(movActual.error.code),'MOV failure must be an explicit unsupported decoder, not a storage/network error');
+     await movPlayer.getByRole('status').filter({hasText:'Playback unavailable in this browser. Open the original to use another player.'}).waitFor({timeout:15000});
+     checks.push({engine,width,format:'mov',nativeHint:movHint,playback:'unsupported browser decoder; actual captured frame and explicit fallback verified',mediaError:movActual.error.code,execution:'real source bytes/UI; synthetic identity/storage; no MOV playback claim'});
+    }
+    await page.screenshot({path:resolve(out,`inline-formats-${engine}-${width}.png`),fullPage:true});
+   }
    await view.getByRole('radio',{name:'List'}).click();
-   await page.locator('[data-library-media-player="audio"]').first().waitFor({state:'visible'});
    await search.fill('sample.wav');
+   await page.locator('[data-library-media-player="audio"]').first().waitFor({state:'visible'});
    await page.getByRole('button',{name:/Audio sample/}).first().click();
    await page.getByRole('button',{name:'Play audio in Now Playing'}).click();
    await page.getByLabel('Now Playing',{exact:true}).waitFor();

@@ -23,6 +23,23 @@ for ext,raw in samples().items():
         check(ext+': extracted acceptance text','Brahms' in detail['extractedText'],detail)
     check(ext+': signed private original',library.url(wid,'one',i,True)['url'].startswith('https://') if detail['asset']['processing']!='duplicate' else True)
 
+# Previously stored legacy documents retain their exact storage identity and gain
+# an explicit indexing action after the renderer upgrade; no bulk data migration.
+legacy=b'{\\rtf1\\ansi Legacy archive Brahms upgrade marker.}'
+legacy_upload=library.begin(wid,'one',{'filename':'historical.rtf','mime':'application/rtf','bytes':len(legacy)})['upload'];legacy_id=legacy_upload['assetId']
+storage.put(wid,legacy_id+'.rtf',legacy,'application/octet-stream')
+with connection() as db:
+    db.execute("UPDATE public.pr_library_assets SET kind='file',mime='application/octet-stream',processing_status='unsupported',indexing_status='not_applicable',etag=%s WHERE id=%s",(storage.object_info(wid,'file',legacy_id+'.rtf')['etag'],legacy_id))
+check('historical legacy offers scoped indexing',library.detail(wid,'one',legacy_id)['asset']['canRetryProcessing'])
+check('historical legacy indexing completes',library.retry(wid,'one',legacy_id)['status']=='ready')
+legacy_detail=library.detail(wid,'one',legacy_id)
+check('historical storage identity preserved',legacy_detail['asset']['assetKind']=='file' and legacy_detail['asset']['mime']=='application/octet-stream')
+check('historical legacy source content searchable',any(x['id']==legacy_id for x in library.list(wid,'one','upgrade marker')['assets']))
+for unchanged in (ids['bin'],ids['wav']):
+    check('unsupported generic/audio cannot reindex automatically',not library.detail(wid,'one',unchanged)['asset']['canRetryProcessing'])
+    try:library.retry(wid,'one',unchanged);raise AssertionError('Unsupported content retry escaped')
+    except AlphaError as e:check('unsupported retry denied',e.status==409)
+
 # Explicit retry processes only this bounded source, even without a cron scheduler.
 reader=viewer_pdf()
 reader_upload=library.begin(wid,'one',{'filename':'reader.pdf','mime':'application/pdf','bytes':len(reader)})['upload'];reader_id=reader_upload['assetId']

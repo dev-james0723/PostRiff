@@ -57,6 +57,7 @@ jobs:
           path: |
             docs/consumer-ready/evidence/library/
             .codex/library-samples/
+          include-hidden-files: true
           retention-days: 14
   document-runtime:
     if: ${{ inputs.prepare_dependency_lock != true }}
