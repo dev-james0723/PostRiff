@@ -631,7 +631,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                         ) : (
                           <SiteAgentAnswer body={siteAnswer} actions={{ messageId: message.messageId, conversationId, latest: message.messageId === lastSiteAnswer, onAsk: (value) => void askAgent(value) }}
                             generated={(body as { agent?: unknown }).agent ? <GeneratedAnswerSlot message={message} conversationId={conversationId} surface='chat' latest={message.messageId === lastSiteAnswer}
-                              onContinue={continueFromView} /> : undefined} />
+                              onContinue={continueFromView} onNavigate={(path) => router.push(path)} /> : undefined} />
                         )}
                         <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
                       </MessageContent>

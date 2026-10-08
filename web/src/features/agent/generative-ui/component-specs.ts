@@ -201,7 +201,7 @@ const ErrorState = spec({
 const ToolBoundTable = spec({
   name: 'ToolBoundTable',
   description:
-    'A table of rows from a Query. columns pick fields of each row. Sorting is local. Bind cursor to the $variable used as the query cursor argument to page through results. Unknown values show as "Not available", never as zero.'+
+    'A table of rows from a Query. columns pick fields of each row. Sorting is local. To page, pass the same $variable as the Query\'s cursor argument and as cursor here, e.g. Query("name", {cursor: $page}, null). Unknown values show as "Not available", never as zero.' +
     ROWS_FIELD_NOTE,
   props: z.object({
     source: queryRef,

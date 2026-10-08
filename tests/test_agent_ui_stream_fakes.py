@@ -532,6 +532,8 @@ class FakeValidator:
         verdict = self.verdicts.pop(0) if self.verdicts else None
         if verdict == "unavailable":
             return {"accepted": False, "errors": ["validation_unavailable"]}
+        if isinstance(verdict, str) and verdict.startswith("errors:"):
+            return {"accepted": False, "errors": verdict[len("errors:"):].split(",")}
         merged = (base_source + "\n" + candidate_source) if mode == "patch" else candidate_source
         ok = verdict == "accept" or (verdict is None and merged.lstrip().startswith("root = RafiiRoot(") and "BAD" not in candidate_source)
         if not ok:

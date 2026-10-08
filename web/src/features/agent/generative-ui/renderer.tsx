@@ -182,21 +182,28 @@ function useVisible(ref: { current: Element | null }): boolean {
   return inView && tabVisible;
 }
 
-class GeneratedBoundary extends Component<{ resetKey: string; fallback: ReactNode; onError(): void; children: ReactNode }, { failedKey: string | null }> {
-  state = { failedKey: null as string | null };
-  static getDerivedStateFromError(): Partial<{ failedKey: string | null }> {
-    return { failedKey: '__pending__' };
+interface BoundaryProps {
+  resetKey: string;
+  fallback: ReactNode;
+  onError(): void;
+  children: ReactNode;
+}
+
+/** Keeps a render error inside the generated subtree; a new source (resetKey) gets a fresh try. */
+class GeneratedBoundary extends Component<BoundaryProps, { failed: boolean; key: string }> {
+  state = { failed: false, key: this.props.resetKey };
+  static getDerivedStateFromProps(props: BoundaryProps, state: { failed: boolean; key: string }) {
+    return props.resetKey !== state.key ? { failed: false, key: props.resetKey } : null;
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
   }
   componentDidCatch(_error: Error, _info: ErrorInfo): void {
     // No source text or stack in logs: the native answer stays complete and the failure is a presentation one.
-    this.setState({ failedKey: this.props.resetKey });
     this.props.onError();
   }
-  componentDidUpdate(prev: { resetKey: string }): void {
-    if (prev.resetKey !== this.props.resetKey && this.state.failedKey !== null) this.setState({ failedKey: null });
-  }
   render(): ReactNode {
-    return this.state.failedKey !== null ? this.props.fallback : this.props.children;
+    return this.state.failed ? this.props.fallback : this.props.children;
   }
 }
 
@@ -310,7 +317,11 @@ function GenerativeMessage(props: RafiiGenerativeMessageProps): JSX.Element {
       onContinue: (request) => onContinueRef.current(request),
     });
     setBridges(created);
-    return () => created.dispose();
+    return () => {
+      // D-A45: UiBridges.dispose() aborts reads/actions in flight and clears caches (query.dispose also stops both sides).
+      if (typeof created.dispose === 'function') created.dispose();
+      else created.query.dispose();
+    };
     // The manifest identity is its id + binding version; a new object with the same identity keeps the bridges.
   }, [transport.scopeKey, artifactId, revision, accepted, historical, manifest?.manifestId, manifest?.bindingVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -558,6 +569,7 @@ function inertBridges(): UiBridges {
       dispose: () => undefined,
     },
     onContinue: () => undefined,
+    dispose: () => undefined,
   };
 }
 
