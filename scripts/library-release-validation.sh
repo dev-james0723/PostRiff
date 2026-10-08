@@ -12,6 +12,8 @@ for name,v in x.get('vulnerabilities',{}).items():
  print('SECURITY',name,v['severity'],v.get('range'),v.get('fixAvailable'),json.dumps(v.get('via')))
 PY
 bash scripts/library-cloud-validation.sh
+export POSTRIFF_PG_BIN="$(pg_config --bindir)"
+test -x "$POSTRIFF_PG_BIN/initdb"
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
