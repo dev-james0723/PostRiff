@@ -92,7 +92,7 @@ export function FounderCostBreakdown({ props }: JourneyRendererProps) {
   return (
     <QueryFrame value={props.data} binding='founder_costs' label={copy.founder.costsTitle} title={copy.founder.costsTitle}>
       {(data) => {
-        const rows = data.rows ?? data.current?.rows ?? [];
+        const rows = data.rows ?? [];
         return (
           <div className='flex flex-col gap-1.5'>
             {data.dimension ? <p className='text-muted-foreground text-xs'>{data.dimension}</p> : null}
@@ -134,7 +134,7 @@ export function FounderCostBreakdown({ props }: JourneyRendererProps) {
                 {data.previous.reason ? ` · ${data.previous.reason.replaceAll('_', ' ')}` : ''}
               </p>
             ) : null}
-            <Receipt id={data.receiptId ?? data.current?.receiptId} mode={data.mode} />
+            <Receipt id={data.receiptId} mode={data.mode} />
           </div>
         );
       }}

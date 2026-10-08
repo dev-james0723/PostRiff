@@ -741,7 +741,7 @@ const founderCosts = z.object({
   receiptId: opt(text(120)),
   dataState: opt(text(40)),
   rows: z.array(founderCostRow).max(200).optional(),
-  current: opt(founderCostPart),
+  // Lane D unwraps the founder tool's current period into these top-level keys (closed shape); only `previous` stays nested.
   previous: opt(founderCostPart),
   note: opt(text(400)),
 });

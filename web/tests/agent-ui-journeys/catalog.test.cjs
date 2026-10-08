@@ -74,7 +74,9 @@ test('every bound data prop is a direct Query reference and every action prop na
     if ('data' in shape) assert.equal(spec.rules?.data, 'query', `${spec.name}.data`);
     if ('actionId' in shape) {
       assert.equal(spec.rules?.actionId, 'action-id', `${spec.name}.actionId`);
-      const ids = shape.actionId.options ?? [];
+      let schema = shape.actionId;
+      while (schema && !schema.options && typeof schema.unwrap === 'function') schema = schema.unwrap(); // optional/nullable controls
+      const ids = schema?.options ?? [];
       assert.ok(ids.length >= 1, `${spec.name}.actionId is an enum of server ids`);
       const offered = Object.values(catalog.journeys).filter((j) => j.components.includes(spec.name)).flatMap((j) => j.actions);
       for (const id of ids) assert.ok(offered.includes(id), `${spec.name} names ${id}, which no journey using it offers`);
