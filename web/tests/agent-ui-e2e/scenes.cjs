@@ -263,20 +263,34 @@ scene('history-reload-zero-attempts', async (t) => {
 });
 
 scene('scope-switch-aborts', async (t) => {
+  // A real in-app switch: this principal also belongs to a second workspace (real invitation), the generation of the first
+  // is slowed, and the sidebar's workspace menu (components/layout/workspace-switcher.tsx) switches mid-stream.
+  let second;
+  try {
+    second = await t.joinSecondWorkspace('editor');
+  } catch (error) {
+    blocked(`harness: could not give the principal a second workspace through invitations (${String(error.message).slice(0, 120)})`);
+  }
   const page = await t.page({ surface: 'panel' });
   const log = track(page);
   await arm(t, 'slow', 1);
   await generated(t, page, { wait: 'none' });
-  const switcher = page.getByRole('button', { name: /workspace|switch/i }).first();
-  if (!(await switcher.count())) blocked('app: no workspace switcher reachable from this page in the harness (single-workspace principal)');
+  const first = t.workspaceId;
+  const trigger = page.locator('[data-sidebar="menu-button"]').filter({ hasText: /owner/i }).first();
+  if (!(await trigger.count())) blocked('app: the sidebar workspace menu is not reachable on this page/viewport');
+  await trigger.click();
+  const target = page.getByRole('menuitem').filter({ hasText: /editor/i }).first();
+  if (!(await target.count())) blocked('app: the second workspace is not listed in the workspace menu');
   const since = Date.now();
-  await page.evaluate(() => localStorage.setItem('postriff-workspace', '00000000-0000-4000-8000-000000000000'));
-  await page.goto(`${t.base}/app/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
-  const stale = uiRequests(log, since + 500);
-  const aborted = log.filter((e) => e.kind === 'failed' && UI_PATH.test(new URL(e.url).pathname));
-  t.assert(stale.length === 0, 'no request to the previous scope after the switch', stale.map((e) => e.url));
-  return `aborted in-flight UI requests: ${aborted.length}`;
+  await target.click();
+  await page.waitForTimeout(4000);
+  const previous = (e) => new URL(e.url).pathname.includes(`/api/workspaces/${first}/agent/ui/`);
+  const stale = log.filter((e) => e.kind === 'request' && e.at >= since + 300 && previous(e));
+  const aborted = log.filter((e) => e.kind === 'failed' && e.at >= since - 100 && previous(e));
+  const shown = await page.locator(`[data-rafii-generated][data-artifact-id]`).count();
+  t.assert(stale.length === 0, 'no request to the previous workspace after the switch', stale.map((e) => new URL(e.url).pathname));
+  t.metric('abortedPreviousScopeRequests', aborted.length);
+  return `switched to ${second.workspaceId.slice(0, 8)}; ${aborted.length} in-flight UI request(s) aborted; 0 later requests to the old scope; views shown after switch: ${shown}`;
 });
 
 scene('hidden-no-polling', async (t) => {
