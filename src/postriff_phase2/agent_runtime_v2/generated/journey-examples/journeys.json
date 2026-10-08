@@ -1,0 +1,139 @@
+{
+ "catalogVersion": "journeys/2",
+ "contractVersion": "rafii-genui/1",
+ "note": "Lane E's journey index: which components, bindings and actions each journey uses, its examples (inputs to prompt generation), its explicit edit case and the truth rules its tests enforce. Binding names, argument names and action ids are lane D's ui_domain registry; tests fail on drift. Example ids such as v_7f3c2a91 are placeholders: the presenter uses only ids from the turn's allowed context.",
+ "selection": {
+  "rule": "A selection $variable holds the record ids the binding's own arguments take (draft ids, job ids, asset ids, …), in the order the person picked them. Selecting never approves, schedules or publishes.",
+  "max": {
+   "drafts": 10,
+   "default": 20
+  }
+ },
+ "journeys": {
+  "J01": {
+   "title": "Draft and platform studio",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "drafts"
+   ],
+   "components": [
+    "Commentary",
+    "DraftList",
+    "DraftCompare",
+    "DraftDetail",
+    "DraftEvidence",
+    "DraftEditor"
+   ],
+   "bindings": [
+    "drafts_list",
+    "draft_read",
+    "draft_evidence"
+   ],
+   "actions": [
+    "draft_edit"
+   ],
+   "examples": [
+    {
+     "file": "J01-drafts-studio.openui",
+     "request": "Show my unscheduled drafts so I can pick two to compare"
+    },
+    {
+     "file": "J01-draft-edit.openui",
+     "request": "Open my latest LinkedIn draft, show where it came from and let me fix the wording"
+    }
+   ],
+   "editCase": {
+    "id": "J01-compare-selected",
+    "instruction": "Compare the two I picked",
+    "base": "J01-drafts-studio.openui",
+    "patch": "edits/J01-compare-selected.patch.openui",
+    "preserves": [
+     "$selectedDrafts",
+     "drafts",
+     "picks",
+     "list"
+    ],
+    "removes": [
+     "note"
+    ],
+    "addsBindings": [],
+    "changes": [
+     "root",
+     "compare"
+    ]
+   },
+   "truth": [
+    "Selecting a draft is not approval or publication.",
+    "A draft in the publishing queue is read-only here.",
+    "Rewrites and adaptations are follow-up turns, never a direct write.",
+    "An edit saves only after the person confirms, and the draft needs review again."
+   ]
+  },
+  "J02": {
+   "title": "Calendar and publishing operations",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "calendar"
+   ],
+   "components": [
+    "Commentary",
+    "CalendarAgenda",
+    "QueueStatus",
+    "SlotCheck",
+    "RescheduleForm",
+    "ProposalList"
+   ],
+   "bindings": [
+    "calendar_agenda",
+    "queue_status",
+    "slot_check",
+    "open_proposals"
+   ],
+   "actions": [
+    "schedule_prepare"
+   ],
+   "examples": [
+    {
+     "file": "J02-calendar-week.openui",
+     "request": "What's on my calendar this week and is anything stuck in the queue?"
+    },
+    {
+     "file": "J02-reschedule.openui",
+     "request": "Move my Thursday LinkedIn post to Friday morning"
+    }
+   ],
+   "editCase": {
+    "id": "J02-change-period",
+    "instruction": "Change the period to next week",
+    "base": "J02-calendar-week.openui",
+    "patch": "edits/J02-change-period.patch.openui",
+    "preserves": [
+     "$selectedJob",
+     "queueNow",
+     "agenda",
+     "queue"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "cal",
+     "root"
+    ]
+   },
+   "truth": [
+    "Every time is shown with its time zone.",
+    "Unknown states stay unknown; they are never counted as scheduled.",
+    "Preparing a time only prepares a proposal; it is applied on its own card.",
+    "Published is shown only for posts the queue reports as published."
+   ]
+  }
+ },
+ "composite": {
+  "id": "library-draft-campaign",
+  "title": "Library selection to voice-aware draft to campaign and calendar proposal",
+  "steps": [],
+  "retains": "every follow-up turn sends uiContext {artifactId, artifactRevision, stateRevision}; the server resolves the stored selection in its displayed order"
+ }
+}
