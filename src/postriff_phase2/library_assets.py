@@ -216,6 +216,11 @@ class UniversalLibrary:
                 for n, part in enumerate(parts):
                     cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
                 cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
+            try:  # Library intelligence, after commit: flag-gated local capabilities; never blocks this file.
+                from .library_intelligence import jobs as intelligence_jobs
+                intelligence_jobs.on_asset_processed(connect, w, i)
+            except Exception:
+                pass
             return status
         except Exception as e:
             transient = not isinstance(e,AlphaError) or e.status >= 500
