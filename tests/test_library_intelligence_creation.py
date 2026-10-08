@@ -95,7 +95,7 @@ ART_FIELDS = ("id", "run_id", "output_id", "idempotency_key", "content_sha256", 
 class CreationCursor(VoiceCursor):
     def execute(self, sql, args=()):
         db = self.db
-        tag = re.search(r"/\*(lis|lia|lio|lij):([a-z_.]+)\*/", sql)
+        tag = re.search(r"/\*(lis|lia|lio|lij|lil):([a-z_.]+)\*/", sql)
         handler = getattr(self, "_" + tag.group(2).replace(".", "_"), None) if tag else None
         if handler is not None:
             db.executed.append((sql, args))
@@ -118,15 +118,6 @@ class CreationCursor(VoiceCursor):
         if sql.startswith("SELECT replace(id::text,'-',''),processing_status FROM public.pr_library_assets"):
             db.executed.append((sql, args))
             return self._set([(k, a["status"]) for k, a in db.assets.items() if a["status"] not in ("deleting", "duplicate")])
-        if sql.startswith("UPDATE public.pr_library_source_packs SET status='revoked'"):
-            # lifecycle.propagate_revocation: packs citing a withdrawn item stop
-            db.executed.append((sql, args))
-            keys = args[1] if len(args) > 1 else None
-            for row in db.packs.values():
-                cited = json.dumps([row["evidence_refs"], row["style_refs"]])
-                if row["status"] in ("draft", "attached") and (keys is None or any(k in cited for k in keys)):
-                    row["status"] = "revoked"
-            return self._set([])
         return super().execute(sql, args)
 
     # --- source packs -------------------------------------------------------------------------------------------------
@@ -162,6 +153,22 @@ class CreationCursor(VoiceCursor):
         _, version, sid = args
         self._set([(s["id"], s["kind"], s["text"], json.dumps(s["locator"]), s["language"], s["speaker"], s["origin"], s["superseded"])
                    for s in self.db.segments if s["version"] == version and s["id"] == sid])
+
+    # --- A's lifecycle: packs citing withdrawn items stop ------------------------------------------------------------
+    def _revoke_packs(self, keys):
+        changed = 0
+        for row in self.db.packs.values():
+            cited = json.dumps([row["evidence_refs"], row["style_refs"]])
+            if row["status"] in ("draft", "attached") and (keys is None or any(k in cited for k in keys)):
+                row["status"] = "revoked"
+                changed += 1
+        self.rowcount = changed
+
+    def _rev_packs(self, args):
+        self._revoke_packs(list(args[1]) if len(args) > 1 else None)
+
+    def _packs_revoke(self, args):
+        self._revoke_packs([args[2]])
 
     # --- D's relations and usage --------------------------------------------------------------------------------------
     def _rel_find(self, args):
@@ -506,10 +513,11 @@ class AttachTests(Base):
         self.assertIn("changed", str(stale))
         voice_grant = next(g for g in db.grants if g["purpose"] == "voice")
         policy.revoke(make_ctx(db), voice_grant["id"].hex)
+        self.assertEqual(db.packs[uuid.UUID(hex=pack["packId"])]["status"], "revoked", "lifecycle stops packs citing the withdrawn item")
         db.state["sources"][0]["egressConsent"] = ["local"]  # the reviewed facts source is no longer shared with cloud writers
         state_before = copy.deepcopy(db.state)
         result = source_packs.attach_pack_to_draft(make_ctx(db), pack["packId"], "f" * 32, 1)
-        self.assertEqual(result["status"], "conflict")
+        self.assertEqual((result["status"], result["packStatus"]), ("conflict", "revoked"))
         changes = {(ch["purpose"], ch["assetRef"]["versionId"], ch["change"]) for ch in result["changes"]}
         self.assertIn(("style", NOTE, "permission_narrowed"), changes)
         self.assertIn(("evidence", DOC, "permission_narrowed"), changes)
