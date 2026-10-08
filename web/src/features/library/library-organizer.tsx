@@ -83,8 +83,8 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
       <Button variant='glass' disabled={busy || !snapshot.data || Boolean(source)} onClick={() => void change(async () => {
         const result = await api.librarySource(workspaceId, asset.id, snapshot.data!.revision); setSource(result.sourceId); await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       })}>{source ? 'Source added for review' : 'Use as a source'}</Button>
-      <p className='text-muted-foreground text-xs'>Review the extracted facts and sharing permission in Memory before Rafii uses them. Long documents use a labelled excerpt of up to 19,000 characters.</p>
-      {source ? <a className='rafii-focus text-sm underline underline-offset-4' href={`/app/memory?source=${encodeURIComponent(source)}`}>Review source in Memory</a> : null}
+      <p className='text-muted-foreground text-xs'>Review the extracted facts and sharing permission in Ideas before Rafii uses them. Long documents use a labelled excerpt of up to 19,000 characters.</p>
+      {source ? <a className='rafii-focus text-sm underline underline-offset-4' href={`/app/ideas?source=${encodeURIComponent(source)}`}>Review source in Ideas</a> : null}
     </div> : null}
   </section>;
 }
