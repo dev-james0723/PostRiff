@@ -25,9 +25,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 import wave
 from array import array
+from contextlib import closing
 
 from postriff_alpha.domain import AlphaError
 
@@ -46,7 +48,9 @@ TRANSCRIBE_VERSION = "asr-1"
 TRANSCRIPT_EXTRACTOR = "asr"
 FFMPEG_TIMEOUT = 60
 FFMPEG_MEMORY = 1024 * 1024 * 1024
-MAX_PCM_BYTES = 400 * 1024 * 1024
+MAX_PCM_BYTES = 400 * 1024 * 1024  # mono 8 kHz s16le is 16 KB/s: about 7 hours, streamed, never held
+STREAM_CHUNK = 1 << 16  # largest decoder buffer ever held at once
+MAX_PROBE_BYTES, MAX_FRAME_BYTES = 64 * 1024, 8 * 1024 * 1024
 MEDIA_KEYS = ("durationMs", "durationSource", "width", "height", "orientation", "pages", "slides", "sheets", "sheetNames", "textLength",
               "ocrNeededPages", "ocrReasons", "peaks", "peaksSource", "peaksDurationMs")
 CARD_MEDIA = ("durationMs", "width", "height", "pages", "slides", "peaks", "peaksSource")
@@ -76,25 +80,39 @@ def build_waveform(samples, buckets: int = DEFAULT_BUCKETS, *, full_scale: float
 
 
 class PeakAccumulator:
-    """Streaming peaks with bounded memory: per-window maxima that coarsen (pairwise max) when they exceed `cap`.
-    The final reduction is exact over windows because the max of maxima is the max."""
+    """Streaming peaks with bounded memory: per-window maxima that coarsen (pairwise max) when they exceed `cap`, and
+    the open window kept as a running maximum, so no input buffer is ever concatenated or retained. The final reduction
+    is exact over windows because the max of maxima is the max."""
 
     def __init__(self, full_scale: float, window: int = 1, cap: int = 65536):
         self.full_scale, self.window, self.cap = full_scale, window, cap
         self.values: list = []
-        self.pending = None
         self.samples = 0
+        self._open, self._open_peak = 0, 0
 
     def add(self, samples):
-        if not len(samples):
+        n = len(samples)
+        if not n:
             return
-        self.samples += len(samples)
-        buf = samples if self.pending is None or not len(self.pending) else self.pending + samples
-        full = len(buf) // self.window * self.window
-        for start in range(0, full, self.window):
-            chunk = buf[start:start + self.window]
+        self.samples += n
+        start = 0
+        if self._open:
+            take = min(self.window - self._open, n)
+            part = samples[:take]
+            self._open_peak = max(self._open_peak, abs(max(part)), abs(min(part)))
+            self._open += take
+            start = take
+            if self._open >= self.window:
+                self.values.append(self._open_peak)
+                self._open, self._open_peak = 0, 0
+        window = self.window
+        end = start + (n - start) // window * window
+        for offset in range(start, end, window):
+            chunk = samples[offset:offset + window]
             self.values.append(max(abs(max(chunk)), abs(min(chunk))))
-        self.pending = buf[full:]
+        if end < n:
+            part = samples[end:]
+            self._open, self._open_peak = n - end, max(abs(max(part)), abs(min(part)))
         while len(self.values) > self.cap:
             pairs = [max(a, b) for a, b in zip(self.values[0::2], self.values[1::2])]
             if len(self.values) % 2:
@@ -102,9 +120,7 @@ class PeakAccumulator:
             self.values, self.window = pairs, self.window * 2
 
     def finish(self, buckets: int) -> list[float]:
-        values = list(self.values)
-        if self.pending is not None and len(self.pending):
-            values.append(max(abs(max(self.pending)), abs(min(self.pending))))
+        values = self.values + ([self._open_peak] if self._open else [])
         return build_waveform(values, buckets, full_scale=self.full_scale)
 
 
@@ -268,8 +284,12 @@ def _limit_child():
         pass
 
 
-def _run_tool(argv, path, timeout):
-    """Stream a tool's stdout in chunks with a wall-clock kill switch and an output cap."""
+class OutputTooLarge(ValueError):
+    """A decoder produced more output than the caller's cap allows."""
+
+
+def _run_tool(argv, path, timeout, max_bytes=MAX_PCM_BYTES):
+    """Stream a tool's stdout in chunks of at most STREAM_CHUNK bytes with a wall-clock kill switch and an output cap."""
     process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=_tool_env(),
                                cwd=os.path.dirname(path), preexec_fn=_limit_child if os.name == "posix" else None)
     timer = threading.Timer(timeout, process.kill)
@@ -277,12 +297,12 @@ def _run_tool(argv, path, timeout):
     total = 0
     try:
         while True:
-            chunk = process.stdout.read(1 << 16)
+            chunk = process.stdout.read(STREAM_CHUNK)
             if not chunk:
                 break
             total += len(chunk)
-            if total > MAX_PCM_BYTES:
-                raise ValueError("decoder output over the safe limit")
+            if total > max_bytes:
+                raise OutputTooLarge("decoder output over the safe limit")
             yield chunk
         if process.wait(timeout=5) != 0:
             raise ValueError("decoder failed")
@@ -293,18 +313,46 @@ def _run_tool(argv, path, timeout):
         process.stdout.close()
 
 
-def _with_temp(raw: bytes, build, runner, timeout):
+def _stream_tool(raw: bytes, build, runner, timeout, max_bytes):
+    """Run a tool on a private temporary copy of `raw` and yield its output in pieces of at most STREAM_CHUNK bytes.
+    The byte cap and the wall-clock deadline are enforced here too, so an injected runner gets the same bounds; closing
+    the generator closes the runner (the real one kills its process). Nothing accumulates the whole output."""
     with tempfile.TemporaryDirectory(prefix="library-media-") as directory:
         path = os.path.join(directory, "input")
         with open(path, "wb") as handle:
             handle.write(raw)
+        deadline, total = time.monotonic() + timeout, 0
         result = runner(build(path), path, timeout)
-        chunks = [result] if isinstance(result, (bytes, bytearray)) else list(result or [])
-    return b"".join(chunks)
+        source = [result] if isinstance(result, (bytes, bytearray)) else (result or [])
+        try:
+            for chunk in source:
+                view = memoryview(chunk)
+                for start in range(0, len(view), STREAM_CHUNK):
+                    piece = view[start:start + STREAM_CHUNK]
+                    total += len(piece)
+                    if total > max_bytes:
+                        raise OutputTooLarge("decoder output over the safe limit")
+                    if time.monotonic() > deadline:
+                        raise TimeoutError("decoder exceeded its time limit")
+                    yield piece
+        finally:
+            close = getattr(source, "close", None)
+            if callable(close):
+                close()
+
+
+def _collect(raw: bytes, build, runner, timeout, max_bytes) -> bytes:
+    """Small, capped outputs only (probe JSON, one JPEG frame, FLAC up to the provider limit)."""
+    out = bytearray()
+    with closing(_stream_tool(raw, build, runner, timeout, max_bytes)) as stream:
+        for piece in stream:
+            out += piece
+    return bytes(out)
 
 
 def ffmpeg_peaks(raw: bytes, ext: str, buckets: int = DEFAULT_BUCKETS, *, runner=None, binary=None) -> list[float] | None:
-    """Decode the first audio stream to mono 16-bit PCM with ffmpeg and return real peaks, or None."""
+    """Decode the first audio stream to mono 8 kHz 16-bit PCM with ffmpeg and return real peaks, or None. The PCM is
+    streamed into a PeakAccumulator piece by piece; memory stays bounded however long the recording is."""
     demuxer = DEMUXERS.get(str(ext or "").lower())
     binary = binary or ffmpeg_path()
     if not demuxer or not binary:
@@ -312,20 +360,26 @@ def ffmpeg_peaks(raw: bytes, ext: str, buckets: int = DEFAULT_BUCKETS, *, runner
 
     def build(path):
         return [binary, "-nostdin", "-hide_banner", "-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-i", path, "-vn", "-sn", "-dn",
-                "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1"]
+                "-map", "0:a:0", "-ac", "1", "-ar", "8000", "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1"]
 
+    accumulator, carry = PeakAccumulator(32768), b""
     try:
-        pcm = _with_temp(raw, build, runner or _run_tool, FFMPEG_TIMEOUT)
+        with closing(_stream_tool(raw, build, runner or _run_tool, FFMPEG_TIMEOUT, MAX_PCM_BYTES)) as stream:
+            for piece in stream:
+                if carry:
+                    piece = memoryview(carry + piece)
+                even = len(piece) - (len(piece) & 1)
+                carry = bytes(piece[even:])
+                if not even:
+                    continue
+                samples = array("h")
+                samples.frombytes(piece[:even])
+                if sys.byteorder == "big":
+                    samples.byteswap()
+                accumulator.add(samples)
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
-    if len(pcm) < 2:
-        return None
-    samples = array("h", pcm[:len(pcm) // 2 * 2])
-    if sys.byteorder == "big":
-        samples.byteswap()
-    accumulator = PeakAccumulator(32768)
-    accumulator.add(samples)
-    return accumulator.finish(buckets)
+    return accumulator.finish(buckets) if accumulator.samples else None
 
 
 def ffprobe_duration(raw: bytes, ext: str, *, runner=None):
@@ -337,7 +391,7 @@ def ffprobe_duration(raw: bytes, ext: str, *, runner=None):
         return [binary, "-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration", "-of", "json", path]
 
     try:
-        data = json.loads(_with_temp(raw, build, runner or _run_tool, 20) or b"{}")
+        data = json.loads(_collect(raw, build, runner or _run_tool, 20, MAX_PROBE_BYTES) or b"{}")
         seconds = float((data.get("format") or {}).get("duration"))
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
         return None
@@ -345,7 +399,8 @@ def ffprobe_duration(raw: bytes, ext: str, *, runner=None):
 
 
 def ffmpeg_audio_flac(raw: bytes, ext: str, *, runner=None) -> bytes | None:
-    """Extract a container's first audio stream as 16 kHz mono FLAC for transcription, when ffmpeg exists."""
+    """Extract a container's first audio stream as 16 kHz mono FLAC for transcription, when ffmpeg exists. Output is
+    capped at the provider's upload limit; a longer recording raises OutputTooLarge instead of being buffered."""
     demuxer, binary = DEMUXERS.get(str(ext or "").lower()), ffmpeg_path()
     if not demuxer or not binary:
         return None
@@ -355,7 +410,9 @@ def ffmpeg_audio_flac(raw: bytes, ext: str, *, runner=None) -> bytes | None:
                 "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-c:a", "flac", "-f", "flac", "pipe:1"]
 
     try:
-        out = _with_temp(raw, build, runner or _run_tool, FFMPEG_TIMEOUT)
+        out = _collect(raw, build, runner or _run_tool, FFMPEG_TIMEOUT, MAX_AUDIO_BYTES)
+    except OutputTooLarge:
+        raise
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
     return out if out.startswith(b"fLaC") else None
@@ -375,7 +432,7 @@ def video_frames(raw: bytes, ext: str, duration_ms: int | None, count: int = 4, 
                     "-i", path, "-frames:v", "1", "-vf", "scale='min(1280,iw)':-2", "-f", "image2", "-c:v", "mjpeg", "pipe:1"]
 
         try:
-            jpeg = _with_temp(raw, build, runner or _run_tool, 20)
+            jpeg = _collect(raw, build, runner or _run_tool, 20, MAX_FRAME_BYTES)
         except (OSError, ValueError, subprocess.SubprocessError):
             continue
         if jpeg.startswith(b"\xff\xd8"):
@@ -616,7 +673,11 @@ def transcribe_processor_run(job) -> dict:
     ext = str(version.get("extension") or "").lower()
     raw, filename, mime = job_raw(job), version.get("filename") or f"audio.{ext}", version.get("mime") or "application/octet-stream"
     if ext not in ASR_EXTENSIONS:
-        converted = ffmpeg_audio_flac(raw, ext)
+        try:
+            converted = ffmpeg_audio_flac(raw, ext)
+        except OutputTooLarge:
+            return outcome("unsupported", error="media_too_large", detail="The extracted audio is larger than the transcription provider accepts.",
+                           **common)
         if converted is None:
             return outcome("unsupported", error="format_unsupported", detail="This recording's format needs audio extraction, which isn't available here.",
                            **common)
