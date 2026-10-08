@@ -1,0 +1,36 @@
+--- a/src/postriff_phase2/agent_runtime_v2/context.py	2026-10-08 14:31:40
++++ b/src/postriff_phase2/agent_runtime_v2/context.py	2026-10-08 14:31:40
+@@ -44,6 +44,7 @@
+     guardrail_trips: list[dict] = field(default_factory=list)
+     interruptions: list[dict] = field(default_factory=list)
+     site_results: dict = field(default_factory=dict)            # raw site-tool results, for the site agent's evidence blocks
++    research: list = field(default_factory=list)                # web_research outputs this turn (pages, never page bodies beyond facts)
+ 
+     def reference(self, kind: str, ident: str | None, title: str | None = None) -> None:
+         if not ident or not isinstance(ident, str):
+--- a/src/postriff_phase2/agent_runtime_v2/specialists.py	2026-10-08 14:31:40
++++ b/src/postriff_phase2/agent_runtime_v2/specialists.py	2026-10-08 14:31:40
+@@ -124,6 +124,9 @@
+               "facts": [str(f)[:400] for f in p.get("facts") or []][:6]} for p in found.get("pages") or []]
+     for page in pages:
+         ctx.ledger.facts.append({"text": f"Web source: {page['title']} ({page['url']}, fetched {page['fetchedAt']})", "kind": "external", "rule": "web research"})
++    # The structured record a generated view reads back (rafii-genui/1 J07): titles, addresses, source dates ("" stays no
++    # date), fetch times and the bounded facts, persisted on the turn's result as result.research. Never re-fetched.
++    ctx.ledger.research.append({"query": found.get("query"), "pages": pages[:6], "warnings": [str(w)[:240] for w in found.get("warnings") or []][:5]})
+     return {"ok": True, "verified": bool(pages), "data": {"query": found.get("query"), "pages": pages, "warnings": found.get("warnings") or []}}
+ 
+ 
+--- a/src/postriff_phase2/agent_runtime_v2/service.py	2026-10-08 14:31:40
++++ b/src/postriff_phase2/agent_runtime_v2/service.py	2026-10-08 14:31:40
+@@ -840,6 +840,11 @@
+                 extra = {"traceHookError": getattr(hook, "__name__", "hook")}
+             if isinstance(extra, dict):
+                 trace.update({k: v for k, v in extra.items() if k not in trace})
++        if ledger.research:
++            # rafii-genui/1 J07: the pages this turn's research returned, for a generated view's research_results binding.
++            pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
++            result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
++                                  "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
+         result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
+         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
+             status = self._run_status(cur, ctx.workspace_id, run_id)

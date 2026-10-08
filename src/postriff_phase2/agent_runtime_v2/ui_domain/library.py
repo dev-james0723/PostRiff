@@ -115,13 +115,13 @@ def library_item(dctx, inputs, _cursor):
     legacy = _legacy(dctx.state, asset_id)
     consent = {"modelMayView": bool(media_consent.decision(dctx.state).get("cloud")) if hasattr(media_consent, "decision") else None}
     if legacy is not None:
-        data = {**_row(dctx, {**legacy, "assetKind": "video" if str(legacy.get("mime") or "").startswith("video/") else "image"}), "excerpt": None, "chunkCount": 0,
-                "lineage": legacy.get("lineage") or None, "mediaConsent": consent}
+        data = {**_row(dctx, {**legacy, "assetKind": "video" if str(legacy.get("mime") or "").startswith("video/") else "image"}), "excerpt": None, "excerptTruncated": False,
+                "chunkCount": 0, "summary": None, "lineage": legacy.get("lineage") or None, "mediaConsent": consent}
         return ui_contracts.query_result("available", data, as_of=common.iso(dctx.now), source_refs=[common.ref("media", asset_id)], known=1, total=1)
     detail = _library(dctx).detail(dctx.workspace_id, None, asset_id)
     text = detail.get("extractedText") or ""
     data = {**_row(dctx, detail["asset"]), "excerpt": text[:2000] or None, "excerptTruncated": len(text) > 2000, "chunkCount": len(detail.get("chunks") or []),
-            "summary": str(detail["asset"].get("summary") or "")[:400] or None, "mediaConsent": consent}
+            "summary": str(detail["asset"].get("summary") or "")[:400] or None, "lineage": None, "mediaConsent": consent}
     return ui_contracts.query_result("available", data, as_of=common.iso(dctx.now), source_refs=[common.ref("library_file", asset_id)], known=1, total=1,
                                      note=None if text else "No extracted text: add a transcript (audio) or use a text document.")
 

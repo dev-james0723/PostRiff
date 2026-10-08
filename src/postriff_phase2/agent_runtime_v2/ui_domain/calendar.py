@@ -171,6 +171,12 @@ def _slot(dctx, inputs):
 
 
 def slot_check(dctx, inputs, _cursor):
+    if not inputs.get("local") or not (inputs.get("draftId") or inputs.get("jobId")):
+        # A view whose time (or draft) is still unset must not error on mount.
+        return ui_contracts.query_result("empty", {"draftId": inputs.get("draftId"), "jobId": inputs.get("jobId"), "platform": None, "account": None, "channelId": None,
+                                                   "local": None, "timeZone": inputs.get("zone") or dctx.zone, "atUtc": None, "valid": False, "problems": [], "collisions": [],
+                                                   "rule": "posts on the same account less than 2 hours apart (Rafii's calendar rule); an observation, not a block"},
+                                         as_of=common.iso(dctx.now), known=0, total=0, note="Pick a time" if not inputs.get("local") else "Pick a draft")
     variant, job, channel, zone, timing, problems, collisions = _slot(dctx, inputs)
     if channel is None:
         problems.append({"code": "needs_account", "message": f"This {variant.get('platform')} draft has no account, and Rafii won't pick one for you."})
@@ -295,7 +301,7 @@ query("job_detail", "J02", "One publishing job or review: state in plain words, 
       refresh=60, tool="job.get")
 query("slot_check", "J02", "Check a proposed local time for a draft or waiting post before preparing it: valid in that zone (DST), the account it would use and posts on "
       "the same account less than 2 hours away. Read only.", {"draftId": ID, "jobId": ID, "local": LOCAL, "zone": ZONE, "channelId": ID},
-      slot_check, required=("local",), refresh=None)
+      slot_check, refresh=None)
 query("open_proposals", "J02", "Proposals in this conversation still waiting for the person (open, not expired), with digest and expiry. Applied only on their native card.",
       {}, open_proposals, refresh=30, tool="pending_approvals", also=("J05", "J08"))
 action("schedule_prepare", "J02", "Prepare schedule", "Prepares a proposal to schedule this draft (or move this waiting post) at the chosen local time. Nothing changes "

@@ -93,7 +93,8 @@ def research_results(dctx, _inputs, _cursor):
                      "published": page.get("published") or None, "publishedLabel": page.get("published") or "no date", "fetchedAt": page.get("fetchedAt"),
                      "facts": page.get("facts") or [], "untrusted": True})
     if not activity and not rows:
-        return ui_contracts.query_result("empty", {"pages": [], "recorded": recorded}, as_of=common.iso(dctx.now), known=0, total=0, note="This answer used no web research.")
+        return ui_contracts.query_result("empty", {"pages": [], "recorded": recorded, "searches": 0, "note": "This answer used no web research."},
+                                         as_of=common.iso(dctx.now), known=0, total=0, note="This answer used no web research.")
     off = any(a.get("code") == "research_off" for a in activity)
     if off and not rows:
         return ui_contracts.query_result("unavailable", {"pages": [], "reason": "research_off"}, as_of=common.iso(dctx.now), note="Web research is off for this workspace.",

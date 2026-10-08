@@ -41,7 +41,7 @@ SHAPES: dict[str, dict] = {
     "open_proposals": _s("proposals conversationId applyWith", proposals="proposalId messageId type summary digest expiresAt requiredPermission status view"),
     # J03
     "library_search": _s("items offset storage capabilities legacyMedia", items=_LIB_ROW),
-    "library_item": _s(_LIB_ROW + " excerpt chunkCount mediaConsent"),
+    "library_item": _s(_LIB_ROW + " excerpt excerptTruncated chunkCount summary lineage mediaConsent"),
     "library_lineage": _s("assetId store edges"),
     "library_collections": _s("collections", collections="collectionId name count"),
     "library_selection": _s("attachments references refused note", attachments="assetId role", references="kind id", refused="assetId reason"),
@@ -80,14 +80,14 @@ SHAPES: dict[str, dict] = {
     "recovery_guides": _s("guides pages", guides="guideId title summary href page canOpen reason"),
     # J09 (founder scope): the founder tools' own result keys
     "founder_metrics": _s("mode receiptId dataState rows coverage executionState warnings interval note"),
-    "founder_costs": _s("mode receiptId dataState rows coverage"),
+    "founder_costs": _s("mode dimension receiptId dataState rows coverage interval reason previous warnings note"),
     "founder_attention": _s("mode items"),
     "founder_sources": _s("mode sources"),
-    "founder_incident": _s("incident"),
+    "founder_incident": _s("mode incident"),
     "founder_search": _s("mode collection rows"),
-    "founder_entity": _s("collection record links"),
+    "founder_entity": _s("mode collection record"),
 }
 
 # Bindings whose `data` is the existing tool's own record (site-agent `job.get`, founder tools): only the keys listed are
 # guaranteed; others may appear.
-OPEN_SHAPES = {"job_detail", "founder_metrics", "founder_costs", "founder_attention", "founder_sources", "founder_incident", "founder_search", "founder_entity"}
+OPEN_SHAPES = {"job_detail", "founder_metrics", "founder_attention", "founder_sources", "founder_incident", "founder_search", "founder_entity"}

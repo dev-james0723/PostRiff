@@ -73,8 +73,16 @@ def founder_metrics(dctx, inputs, _cursor):
 
 
 def founder_costs(dctx, inputs, _cursor):
+    """founder_cost_breakdown answers {dimension, current: {receiptId, dataState, rows, coverage, …}, previous}: the state, rows and
+    coverage of THIS period come from `current` (an unavailable breakdown is never reported available)."""
     out = _run(dctx, "founder_cost_breakdown", {"dimension": inputs["dimension"], "period": inputs["period"], **({"compare": True} if inputs.get("compare") else {})})
-    return _result(dctx, out, note="AI cost by the chosen dimension; an uninstrumented dimension says so instead of estimating.")
+    if not out.get("ok"):
+        return _result(dctx, out)
+    current = out.get("current") if isinstance(out.get("current"), dict) else {}
+    flat = {"ok": True, "mode": out.get("mode"), "dimension": out.get("dimension"), "receiptId": current.get("receiptId"), "dataState": current.get("dataState") or "unavailable",
+            "rows": current.get("rows") if isinstance(current.get("rows"), list) else [], "coverage": current.get("coverage"), "interval": current.get("interval"),
+            "reason": current.get("reason"), "previous": out.get("previous"), "warnings": current.get("warnings") or [], "note": out.get("note")}
+    return _result(dctx, flat, note="AI cost by the chosen dimension; an uninstrumented dimension says so instead of estimating.")
 
 
 def founder_attention(dctx, inputs, _cursor):
