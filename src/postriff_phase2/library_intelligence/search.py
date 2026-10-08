@@ -95,12 +95,14 @@ KNN_TEXT_SQL = (
     "/* lib:knn */ SELECT e.version_key,replace(e.segment_id::text,'-',''),(e.embedding::vector(1024)) <=> %(vec)s::vector(1024) AS d "
     "FROM public.pr_library_embeddings e WHERE e.workspace_id=%(w)s AND e.status='active' AND e.modality='text' AND e.dims=1024 "
     "AND e.modality=%(modality)s AND e.dims=%(dims)s AND e.model_id=%(model)s AND e.index_generation=%(gen)s AND e.created_at<=to_timestamp(%(t)s) "
-    "AND e.version_key=ANY(%(keys)s::text[]) ORDER BY {open}(e.embedding::vector(1024)) <=> %(vec)s::vector(1024){close} LIMIT %(k)s")
+    "AND e.version_key=ANY(%(keys)s::text[]) AND (e.segment_id IS NULL OR EXISTS (SELECT 1 FROM public.pr_library_segments s WHERE s.id=e.segment_id "
+    "AND s.workspace_id=e.workspace_id AND s.superseded_at IS NULL)) ORDER BY {open}(e.embedding::vector(1024)) <=> %(vec)s::vector(1024){close} LIMIT %(k)s")
 KNN_VISUAL_SQL = (
     "/* lib:knn */ SELECT e.version_key,replace(e.segment_id::text,'-',''),(e.embedding::vector(256)) <=> %(vec)s::vector(256) AS d "
     "FROM public.pr_library_embeddings e WHERE e.workspace_id=%(w)s AND e.status='active' AND e.modality='visual' AND e.dims=256 "
     "AND e.modality=%(modality)s AND e.dims=%(dims)s AND e.model_id=%(model)s AND e.index_generation=%(gen)s AND e.created_at<=to_timestamp(%(t)s) "
-    "AND e.version_key=ANY(%(keys)s::text[]) ORDER BY {open}(e.embedding::vector(256)) <=> %(vec)s::vector(256){close} LIMIT %(k)s")
+    "AND e.version_key=ANY(%(keys)s::text[]) AND (e.segment_id IS NULL OR EXISTS (SELECT 1 FROM public.pr_library_segments s WHERE s.id=e.segment_id "
+    "AND s.workspace_id=e.workspace_id AND s.superseded_at IS NULL)) ORDER BY {open}(e.embedding::vector(256)) <=> %(vec)s::vector(256){close} LIMIT %(k)s")
 VISUAL_REFERENCE_SQL = ("/* lib:visual-reference */ SELECT e.embedding::text FROM public.pr_library_embeddings e WHERE e.workspace_id=%(w)s "
                         "AND e.version_key=%(key)s AND e.status='active' AND e.modality='visual' AND e.model_id=%(model)s AND e.dims=%(dims)s "
                         "AND e.index_generation=%(gen)s ORDER BY e.created_at DESC LIMIT 1")
@@ -111,7 +113,7 @@ PASSAGES_SQL = (
     "WHERE s.workspace_id=%(w)s AND s.version_key=ANY(%(keys)s::text[]) AND s.superseded_at IS NULL AND s.normalizer_version=%(nv)s "
     "AND s.created_at<=to_timestamp(%(t)s) AND s.search_vector@@q.q) ranked WHERE n<=%(per)s ORDER BY version_key,r DESC,ordinal")
 SEGMENTS_BY_ID_SQL = ("/* lib:segments-by-id */ SELECT version_key,replace(id::text,'-',''),text,locator,kind,language,ordinal "
-                      "FROM public.pr_library_segments WHERE workspace_id=%(w)s AND id=ANY(%(ids)s::uuid[])")
+                      "FROM public.pr_library_segments WHERE workspace_id=%(w)s AND id=ANY(%(ids)s::uuid[]) AND superseded_at IS NULL")
 CHUNK_PASSAGES_SQL = ("/* lib:chunk-passages */ SELECT replace(asset_id::text,'-',''),ordinal,text FROM public.pr_library_chunks "
                       "WHERE workspace_id=%(w)s AND asset_id=ANY(%(ids)s::uuid[])")
 HIT_CAPABILITIES_SQL = ("/* lib:hit-capabilities */ SELECT asset_key,capability,state,error_code,detail,retryable,progress,processor_version,"
@@ -225,30 +227,37 @@ def _scope(ctx, scope: dict, current: dict) -> tuple[dict, str]:
 
 # --- purpose (before ranking) -------------------------------------------------------------------------------------
 def _cover(grants) -> tuple[bool, set]:
+    """The version keys a set of grants covers, exactly as policy._covers: workspace grants cover everything; asset grants
+    cover the versions snapshotted in member_keys when granted (or, with no snapshot, the one version named by
+    scope_key); collection grants cover their captured members. There is no lineage fallback, so linking an item into
+    a granted lineage never widens a grant."""
     everything, keys = False, set()
     for g in grants:
         if g["scopeKind"] == "workspace":
             everything = True
         elif g["scopeKind"] == "asset":
-            keys.add(g["scopeKey"])
+            keys.update(g["memberKeys"] or [g["scopeKey"]])
         else:
             keys.update(g["memberKeys"])
     return everything, keys
 
 
 def _covered(cover, item) -> bool:
-    return cover[0] or item["versionId"] in cover[1] or item["assetId"] in cover[1]
+    return cover[0] or item["versionId"] in cover[1]
 
 
 def eligible_items(ctx, purpose: str, items: dict, processing: dict | None = None) -> dict:
     """Items policy.authorize_source(ctx, item, purpose, processing) allows, computed efficiently for whole libraries:
-    grant key sets for plain items, the full policy call for source-linked ones (bounded by imported sources)."""
+    grant key sets for plain items, the full policy call for source-linked ones (bounded by imported sources, and the
+    only items cloud source denials can apply to). Browse with cloud processing is not browsing: it needs the answer
+    purpose and the processing grant, as in policy."""
     if not ctx.allows("read"):
         return {}
-    if purpose == "browse":
+    if purpose == "browse" and (processing is None or processing["location"] == "local"):
         return dict(items)
+    effective = "answer" if purpose == "browse" else purpose
     grants = policy.active_grants(ctx)
-    purpose_cover = _cover([g for g in grants if g["grantType"] == "purpose" and g["purpose"] == purpose])
+    purpose_cover = _cover([g for g in grants if g["grantType"] == "purpose" and g["purpose"] == effective])
     processing_cover = None
     if processing is not None and (processing["location"], processing["category"]) not in policy.LOCAL_DEFAULTS:
         processing_cover = _cover([g for g in grants if g["grantType"] == "processing" and g["location"] == processing["location"]
@@ -925,7 +934,7 @@ def search_library(ctx, request, *, processing: dict | None = None, passage_char
     page_keys = ordered[offset:offset + request["limit"]]
     page_items = [items[k] for k in page_keys]
     decisions = None
-    if purpose != "browse":
+    if purpose != "browse" or (processing is not None and processing["location"] != "local"):  # grant-bound: decide and re-check
         decisions = [policy.authorize_source(ctx, item, purpose, processing) for item in page_items]
         decisions = policy.recheck(ctx, decisions)
         kept = [(item, d) for item, d in zip(page_items, decisions) if d.allowed]

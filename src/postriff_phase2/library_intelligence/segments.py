@@ -303,6 +303,8 @@ def write_segments(cur, workspace_id, version: dict, items: list[dict], *, extra
     if shadowed:
         cur.execute("UPDATE public.pr_library_segments SET superseded_at=now() WHERE workspace_id=%s AND id=ANY(%s::uuid[]) AND superseded_at IS NULL",
                     (workspace_id, shadowed))
+    from . import index  # superseded passages must not resurface through meaning search (retrieval review #7)
+    index.tombstone_inactive_segments(cur, workspace_id, version["versionId"])
     return len(rows) - len(shadowed)
 
 
@@ -410,6 +412,8 @@ def correct(ctx, segment_id, text, speaker_label=KEEP, *, version_key: str | Non
                     (ctx.workspace_id, [str(_uuid(sid))]))
     if not ctx.cur.rowcount:
         raise AlphaError("This passage changed since you opened it. Refresh and edit the current text.", 409, code="library_segment_changed")
+    from . import index  # the old wording's embeddings are superseded now; embed_text re-embeds the correction later
+    index.tombstone_inactive_segments(ctx.cur, ctx.workspace_id, row_version)
     new_id = uuid.uuid4()
     _insert(ctx.cur, [_row(ctx.workspace_id, version, item, extractor=USER_EXTRACTOR, extractor_version="1", created_by=ctx.actor,
                            correction_of=_uuid(sid), row_id=new_id)])

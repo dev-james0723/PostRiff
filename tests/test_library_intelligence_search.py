@@ -8,6 +8,7 @@ here are fixtures, never evidence of semantic quality.
 """
 import hashlib
 import io
+import json
 import math
 import os
 import re
@@ -188,6 +189,9 @@ class FakeLibraryDB:
     def q_vector_column(self, a):
         return [(1,)] if self.vector else []
 
+    def _active_segment(self, sid):
+        return any(s["id"] == sid and s["superseded"] is None for s in self.segments)
+
     def q_knn(self, a):
         if "knn" in self.fail:
             raise RuntimeError("synthetic vector failure")
@@ -195,7 +199,7 @@ class FakeLibraryDB:
         rows = []
         for e in self.embeddings:
             if (e["ws"] == a["w"] and e["status"] == "active" and e["modality"] == a["modality"] and e["model"] == a["model"] and e["dims"] == a["dims"]
-                    and e["gen"] == a["gen"] and e["created"] <= a["t"] and e["vk"] in a["keys"]):
+                    and e["gen"] == a["gen"] and e["created"] <= a["t"] and e["vk"] in a["keys"] and (e["sid"] is None or self._active_segment(e["sid"]))):
                 rows.append((e["vk"], e["sid"], 1 - sum(x * y for x, y in zip(q, e["vector"]))))
         rows.sort(key=lambda r: (r[2], r[0]))
         return rows[: a["k"]]
@@ -217,7 +221,8 @@ class FakeLibraryDB:
 
     def q_segments_by_id(self, a):
         ids = {str(i).replace("-", "") for i in a["ids"]}
-        return [(s["vk"], s["id"], s["text"], s["locator"], s["kind"], s["language"], s["ordinal"]) for s in self.segments if s["ws"] == a["w"] and s["id"] in ids]
+        return [(s["vk"], s["id"], s["text"], s["locator"], s["kind"], s["language"], s["ordinal"]) for s in self.segments
+                if s["ws"] == a["w"] and s["id"] in ids and s["superseded"] is None]
 
     def q_segments_for_read(self, a):
         rows = [s for s in self.segments if s["ws"] == a["w"] and s["vk"] == a["key"] and s["superseded"] is None]
@@ -243,6 +248,14 @@ class FakeLibraryDB:
         self.embeddings.append({"ws": a["w"], "ak": a["ak"], "vk": a["vk"], "sid": a["sid"], "modality": a["modality"], "model": a["model"], "dims": a["dims"],
                                 "gen": a["gen"], "status": "active", "consent": a["consent"], "created": self.now, "vector": parse_vec(a["vec"])})
         return 1
+
+    def q_embeddings_inactive_segments(self, a):
+        n = 0
+        for e in self.embeddings:
+            if e["ws"] == a["w"] and e["vk"] == a["vk"] and e["status"] == "active" and e["sid"] and not self._active_segment(e["sid"]):
+                e["status"] = "superseded"
+                n += 1
+        return n
 
     def q_embeddings_tombstone(self, a):
         n = 0
@@ -493,13 +506,29 @@ class Permissions(unittest.TestCase):
         self.assertEqual(len(browse["hits"]), 5, "browse sees every stored item, including ones still processing")
 
     def test_fast_eligibility_matches_policy(self):
-        state = dict(self.state, memoryEgress={"cloud": False})
-        grants = self.grants + [grant(location="cloud", category="llm", scope="asset", key=self.granted["key"], gid="5" * 32),
-                                grant("memory", gid="6" * 32), grant("voice", scope="asset", key=self.ungranted["key"], gid="7" * 32)]
+        linked = self.db.add_asset(6, lineage=self.granted["key"], version_no=2)  # linked into a granted lineage after the grant
+        unreviewed = self.db.add_asset(7, source_id="src-unreviewed")
+        local_only = self.db.add_asset(8, source_id="src-local")
+        for a in (linked, unreviewed, local_only):
+            self.db.add_segment(a, "Victoria harbour sunset rehearsal")
+        sources = self.state["sources"] + [
+            {"id": "src-unreviewed", "active": True, "sourcePolicy": None, "egressConsent": ["local", "cloud"], "facts": [], "origin": {"kind": "library"}},
+            {"id": "src-local", "active": True, "sourcePolicy": "rewrite_approval", "egressConsent": ["local"], "facts": [{"id": "f", "text": "x", "approved": True}],
+             "origin": {"kind": "library", "sha256": local_only["sha"]}}]
+        state = dict(self.state, sources=sources, memoryEgress={"cloud": False})
+        grants = [grant("answer", scope="asset", key=self.granted["key"], members=[self.granted["key"]], gid="1" * 32)] + self.grants[1:] + [
+            grant("answer", scope="asset", key=key(6), gid="8" * 32),  # no snapshot: covers exactly the named version
+            grant("answer", scope="asset", key=key(7), members=[key(7)], gid="9" * 32), grant("answer", scope="asset", key=key(8), members=[key(8)], gid="d" * 32),
+            grant(location="cloud", category="llm", scope="asset", key=self.granted["key"], members=[self.granted["key"]], gid="5" * 32),
+            grant(location="cloud", category="llm", scope="workspace", gid="e" * 32), grant(location="cloud", category="embedding", scope="asset",
+                                                                                     key=key(2), members=[key(2)], gid="f" * 32),
+            grant("memory", gid="6" * 32), grant("voice", scope="asset", key=self.ungranted["key"], members=[self.ungranted["key"]], gid="7" * 32)]
         ctx = make_ctx(self.db, state=state, grants=grants)
         items = {v["versionId"]: v for v in self.db_versions(ctx)}
+        items.update(search.versions.load(ctx, [self.granted["key"]]))  # the superseded first version (selection scopes reach it)
         for purpose in c.PURPOSES:
-            for processing in (None, {"location": "cloud", "category": "llm"}, {"location": "local", "category": "extract"}):
+            for processing in (None, {"location": "cloud", "category": "llm"}, {"location": "local", "category": "extract"},
+                               {"location": "cloud", "category": "embedding"}):
                 fast = set(search.eligible_items(ctx, purpose, items, processing))
                 slow = {k for k, v in items.items() if policy.authorize_source(ctx, v, purpose, processing).allowed}
                 self.assertEqual(fast, slow, (purpose, processing))
@@ -508,6 +537,153 @@ class Permissions(unittest.TestCase):
         with mock.patch.dict(os.environ, ENV):
             current, _ = search.universe(ctx)
         return list(current.values())
+
+
+class ReviewedPolicy(unittest.TestCase):
+    """Shared security review (d06cc4b7): search eligibility mirrors policy exactly."""
+
+    def test_asset_grant_covers_only_snapshotted_versions(self):
+        db = FakeLibraryDB()
+        v1 = db.add_asset(1)
+        db.add_segment(v1, "Harbour concert notes")
+        v2 = db.add_asset(2, lineage=v1["key"], version_no=2)  # a later version linked into the granted lineage
+        db.add_segment(v2, "Harbour concert notes, revised")
+        pinned = [grant("answer", scope="asset", key=v1["key"], members=[v1["key"]])]
+        whole = run(make_ctx(db, grants=pinned), query="harbour", purpose="answer")
+        self.assertEqual(whole["hits"], [], "linking a new version into a granted lineage does not widen the grant")
+        old = run(make_ctx(db, grants=pinned), query="harbour", purpose="answer",
+                  scope={"kind": "selection", "assetRefs": [{"assetId": v1["key"], "versionId": v1["key"], "sha256": v1["sha"]}]})
+        self.assertEqual([h["assetRef"]["versionId"] for h in old["hits"]], [v1["key"]])
+        named = run(make_ctx(db, grants=[grant("answer", scope="asset", key=v2["key"])]), query="harbour", purpose="answer")
+        self.assertEqual([h["assetRef"]["versionId"] for h in named["hits"]], [v2["key"]], "without a snapshot an asset grant covers the named version")
+        lineage_only = run(make_ctx(db, grants=[grant("answer", scope="asset", key=v1["key"])]), query="harbour", purpose="answer")
+        self.assertEqual(lineage_only["hits"], [], "no lineage fallback: the lineage key never covers its later versions")
+
+    def test_cloud_processing_honours_source_review_and_egress(self):
+        db = FakeLibraryDB()
+        reviewed = db.add_asset(1, source_id="src-ok")
+        unreviewed = db.add_asset(2, source_id="src-unreviewed")
+        local_only = db.add_asset(3, source_id="src-local")
+        for a in (reviewed, unreviewed, local_only):
+            db.add_segment(a, "Harbour concert notes")
+        source = lambda sid, policy_name, egress, a: {"id": sid, "active": True, "sourcePolicy": policy_name, "egressConsent": egress, "facts": [],
+                                                     "origin": {"kind": "library", "sha256": a["sha"]}}
+        state = {"sources": [source("src-ok", "rewrite_approval", ["local", "cloud"], reviewed), source("src-unreviewed", None, ["local", "cloud"], unreviewed),
+                             source("src-local", "rewrite_approval", ["local"], local_only)], "phase2": {"assets": [], "jobs": [], "reviews": []}}
+        grants = [grant("answer", gid="1" * 32), grant(location="cloud", category="llm", gid="2" * 32)]
+        with mock.patch.dict(os.environ, ENV):
+            cloud = search.search_library(make_ctx(db, state=state, grants=grants), {"query": "harbour", "purpose": "answer"}, processing={"location": "cloud", "category": "llm"})
+            local = search.search_library(make_ctx(db, state=state, grants=grants), {"query": "harbour", "purpose": "answer"})
+        self.assertEqual({h["assetRef"]["versionId"] for h in cloud["hits"]}, {reviewed["key"]},
+                         "an unreviewed source or one without cloud sharing never goes to a cloud model")
+        self.assertEqual({h["assetRef"]["versionId"] for h in local["hits"]}, {reviewed["key"], unreviewed["key"], local_only["key"]})
+        ctx = make_ctx(db, state=state, grants=grants)
+        current, _ = search.universe(ctx)
+        reasons = {k: policy.authorize_source(ctx, v, "answer", {"location": "cloud", "category": "llm"}).reason for k, v in current.items()}
+        self.assertEqual((reasons[unreviewed["key"]], reasons[local_only["key"]]), ("policy_review_required", "egress_consent_required"))
+
+    def test_browse_with_cloud_processing_is_not_a_bypass(self):
+        db = FakeLibraryDB()
+        allowed = db.add_asset(1)
+        stored_only = db.add_asset(2)
+        for a in (allowed, stored_only):
+            db.add_segment(a, "Harbour concert notes")
+        grants = [grant("answer", scope="asset", key=allowed["key"], members=[allowed["key"]], gid="1" * 32), grant(location="cloud", category="llm", gid="2" * 32)]
+        with mock.patch.dict(os.environ, ENV):
+            cloud = search.search_library(make_ctx(db, grants=grants), {"query": "harbour"}, processing={"location": "cloud", "category": "llm"})
+            local = search.search_library(make_ctx(db, grants=grants), {"query": "harbour"}, processing={"location": "local", "category": "extract"})
+            plain = search.search_library(make_ctx(db, grants=grants), {"query": "harbour"})
+        self.assertEqual([h["assetRef"]["versionId"] for h in cloud["hits"]], [allowed["key"]], "browse + cloud processing is answer + processing")
+        self.assertTrue(cloud["hits"][0]["sourceStatus"]["attributionOnly"])
+        self.assertEqual(len(local["hits"]), 2)
+        self.assertEqual(len(plain["hits"]), 2)
+
+    def test_superseded_passages_never_resurface(self):
+        db = FakeLibraryDB()
+        a = db.add_asset(1)
+        old = db.add_segment(a, "Original transcript wording")
+        db.add_embedding(a, unit(1024, {4: 1.0}), segment=old)
+        db.segments[-1]["superseded"] = NOW - 10  # a person corrected it
+        fresh = db.add_segment(a, "Corrected transcript wording", created=NOW - 9)
+        other = db.add_asset(2)
+        other_sid = db.add_segment(other, "Unrelated words")
+        db.add_embedding(other, unit(1024, {5: 1.0}), segment=other_sid)
+        index._QUERY_CACHE.clear()
+        with free_budget():
+            result = run(make_ctx(db, embedder=FakeEmbedder(unit(1024, {4: 1.0}))), query="zzz-no-lexical-match", modes=["semantic"])
+        self.assertNotIn(a["key"], {h["assetRef"]["versionId"] for h in result["hits"]}, "the superseded passage's vector is never a match")
+        cur = db.cursor()
+        cur.execute(search.SEGMENTS_BY_ID_SQL, {"w": WS, "ids": [str(uuid.UUID(hex=old)), str(uuid.UUID(hex=fresh))]})
+        self.assertEqual([r[1] for r in cur.fetchall()], [fresh], "hydration never returns superseded text")
+        self.assertEqual(index.tombstone_inactive_segments(db.cursor(), WS, a["key"]), 1)
+        self.assertEqual(db.embeddings[0]["status"], "superseded")
+        self.assertEqual(db.embeddings[1]["status"], "active")
+
+    def test_corrections_and_reextraction_supersede_embeddings(self):
+        from library_intelligence_fakes import FakeCursor, ctx as fake_ctx
+        from postriff_phase2.library_intelligence import segments
+        vk = "a" * 32
+        row = (uuid.UUID(hex=vk), None, 1, WS, "talk.mp3", "Talk", "filename", None, [], "audio", "audio/mpeg", "mp3", 10, "b" * 64, "ready",
+               "not_applicable", "ready", "ready", None, "upload", {}, None, {}, 1.0)
+        cur = FakeCursor()
+        cur.on(r"FROM public.pr_library_segments WHERE workspace_id=%s AND id=%s FOR UPDATE",
+               [(uuid.UUID(int=5), vk, vk, 0, "transcript", "old words", "en", None, "asr", "1", None, None, "transcript", False)])
+        cur.on(r"FROM public.pr_library_assets WHERE workspace_id=%s AND id=ANY", [row])
+        cur.on(r"SELECT media FROM public.pr_library_assets", [({},)])
+        cur.on(r"UPDATE public.pr_library_segments SET superseded_at=now\(\) WHERE workspace_id=%s AND id=ANY", [(1,)])
+        segments.correct(fake_ctx(cur), uuid.UUID(int=5).hex, "new words")
+        tombstones = [args for sql, args in cur.executed if "lib:embeddings-inactive-segments" in sql]
+        self.assertEqual(tombstones, [{"w": WS, "vk": vk}], "a correction supersedes the old wording's embeddings")
+        cur2 = FakeCursor().on(r"SELECT media FROM public.pr_library_assets", [({},)])
+        version = {"assetId": vk, "versionId": vk, "sha256": "b" * 64, "legacy": False, "media": {}}
+        segments.write_segments(cur2, WS, version, [{"kind": "transcript", "text": "re-extracted", "origin": "transcript"}], extractor="asr", extractor_version="2")
+        self.assertTrue(cur2.sql(r"lib:embeddings-inactive-segments"), "re-extraction supersedes embeddings of replaced passages")
+        broken = FakeCursor()
+        original = broken.execute
+
+        def failing(sql, args=()):
+            if "lib:embeddings-inactive-segments" in sql:
+                raise RuntimeError("synthetic failure")
+            return original(sql, args)
+        broken.execute = failing
+        self.assertEqual(index.tombstone_inactive_segments(broken, WS, vk), 0, "cleanup failure never aborts the caller")
+        self.assertTrue(broken.sql(r"ROLLBACK TO SAVEPOINT lib_tombstone"))
+
+
+class ModelBound(unittest.TestCase):
+    def seeded(self):
+        db = FakeLibraryDB()
+        self.allowed = db.add_asset(1)
+        self.storage_only = db.add_asset(2)
+        for a in (self.allowed, self.storage_only):
+            db.add_segment(a, "Harbour concert notes")
+        self.grants = [grant("answer", scope="asset", key=key(1), members=[key(1)], gid="1" * 32), grant(location="cloud", category="llm", gid="2" * 32)]
+        return db
+
+    def test_for_model_search_and_read(self):
+        from postriff_phase2.library_intelligence import api, understanding
+        db = self.seeded()
+        ctx_for = lambda: make_ctx(db, grants=self.grants)
+        with mock.patch.dict(os.environ, ENV), mock.patch.object(api, "context", lambda *a, **k: ctx_for()):
+            model = api.search(None, ACTOR, WS, {"query": "harbour", "purpose": "browse"}, for_model=True)
+            people = api.search(None, ACTOR, WS, {"query": "harbour"})
+            card = {"assetRef": {}, "displayTitle": "Notes", "summary": {"text": "private summary"}, "topics": [{"value": "x"}], "suggestedUses": [],
+                    "annotations": [{"value": "y"}], "usefulSegments": [{"id": "s", "text": "Harbour concert notes", "locator": None}]}
+            with mock.patch.object(understanding, "card", lambda ctx, ref: dict(card)):
+                denied = api.read(None, ACTOR, WS, {"assetRef": {"assetId": key(2), "versionId": key(2), "sha256": ""}}, for_model=True)
+                allowed = api.read(None, ACTOR, WS, {"assetRef": {"assetId": key(1), "versionId": key(1), "sha256": ""}}, for_model=True)
+                plain = api.read(None, ACTOR, WS, {"assetRef": {"assetId": key(2), "versionId": key(2), "sha256": ""}})
+        self.assertEqual([h["assetRef"]["versionId"] for h in model["hits"]], [key(1)], "storage-only items never reach a model")
+        self.assertEqual(len(people["hits"]), 2, "people still browse everything")
+        self.assertEqual(model["hits"][0]["sourceStatus"]["purpose"], "answer")
+        self.assertFalse(denied["modelAccess"]["allowed"])
+        self.assertEqual(denied["modelAccess"]["reason"], "grant_required")
+        self.assertNotIn("Harbour", json.dumps(denied))
+        self.assertNotIn("private summary", json.dumps(denied))
+        self.assertEqual(denied["usefulSegments"], [{"id": "s", "locator": None}])
+        self.assertTrue(allowed["modelAccess"]["allowed"])
+        self.assertEqual(allowed["usefulSegments"][0]["text"], "Harbour concert notes")
+        self.assertNotIn("modelAccess", plain)
 
 
 class Multilingual(unittest.TestCase):
@@ -1027,6 +1203,19 @@ class Surface(unittest.TestCase):
         self.assertEqual({(e["modality"], e["dims"], e["modelId"]) for e in done["embeddings"]}, {("text", 1024, TEXT_MODEL)})
         empty = SimpleNamespace(version=version, providers=FakeEmbedder(unit(1024, {3: 1.0})), segments=lambda: [])
         self.assertEqual(index.EMBED_TEXT["run"](empty)["state"], "unsupported")
+        revoked_embedder = FakeEmbedder(unit(1024, {3: 1.0}))
+        revoked = SimpleNamespace(version=version, providers=revoked_embedder, segments=lambda: segments, recheck=lambda: False, heartbeat=lambda: True)
+        stopped = index.EMBED_TEXT["run"](revoked)
+        self.assertEqual((stopped["state"], stopped["embeddings"], revoked_embedder.calls), ("blocked_permission", [], 0))
+        many = [{"id": format(n, "032x"), "text": f"Passage {n}"} for n in range(index.EMBED_BATCH + 1)]
+        answers = iter([True, False])
+        midway_embedder = FakeEmbedder(unit(1024, {3: 1.0}))
+        midway = index.EMBED_TEXT["run"](SimpleNamespace(version=version, providers=midway_embedder, segments=lambda: many, recheck=lambda: next(answers)))
+        self.assertEqual((midway["state"], midway["embeddings"], midway_embedder.calls), ("blocked_permission", [], 1),
+                         "a revoke between batches stops further calls and keeps nothing")
+        lease_lost = index.EMBED_TEXT["run"](SimpleNamespace(version=version, providers=FakeEmbedder(unit(1024, {3: 1.0})), segments=lambda: segments,
+                                                             heartbeat=lambda: False))
+        self.assertEqual(lease_lost["state"], "blocked_permission", "without recheck, a lost heartbeat also stops the job")
 
     def test_cloud_scripts_compile(self):
         for path in ("tests/phase2/postgres_library_intelligence_search.py", "scripts/library-intelligence-bench.py"):

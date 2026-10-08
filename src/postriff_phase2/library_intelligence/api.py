@@ -2,6 +2,12 @@
 
 Each runs inside the caller's authenticated cursor: membership and state are re-read for (principal, workspace) here,
 grants are re-checked, and nothing commits or opens another transaction. The HTTP routes call the same functions.
+
+MODEL-BOUND RESULTS: any caller that puts search results or an item card in front of a model (the Agent, OpenUI task
+surfaces, source packs, background generation) MUST pass `for_model=True` to `search` and `read`. That forces the
+`answer` purpose plus a ('cloud', 'llm') processing grant, so storage-only items and items without both grants never
+reach a model, and `read` withholds passage text and content-derived fields unless that decision allows them. Browsing
+permission alone never authorizes showing content to a model.
 """
 from __future__ import annotations
 
@@ -12,6 +18,8 @@ from .http import load_member
 
 
 _MOUNTED = {"service": None}
+MODEL_PROCESSING = {"location": "cloud", "category": "llm"}
+WITHHELD_FIELDS = ("summary", "topics", "suggestedUses", "annotations")
 
 
 def mount(service):
@@ -26,15 +34,33 @@ def context(cur, principal, workspace_id, *, service=None, now=None) -> c.Librar
                             now=now if now is not None else time.time(), service=service if service is not None else _MOUNTED["service"])
 
 
-def search(cur, principal, workspace_id, params, **kw) -> dict:
+def search(cur, principal, workspace_id, params, *, for_model: bool = False, **kw) -> dict:
+    """search_library for in-process callers. for_model=True (required whenever results reach a model) forces the
+    answer purpose and a cloud/llm processing grant, applied before ranking."""
     from . import search as search_module
-    return search_module.search_library(context(cur, principal, workspace_id, **kw), c.search_request(params))
-
-
-def read(cur, principal, workspace_id, params, **kw) -> dict:
-    from . import understanding
     ctx = context(cur, principal, workspace_id, **kw)
-    return understanding.card(ctx, c.asset_ref(params.get("assetRef") if isinstance(params, dict) else None))
+    if for_model:
+        request = c.search_request({**params, "purpose": "answer"} if isinstance(params, dict) else params)
+        return search_module.search_library(ctx, request, processing=MODEL_PROCESSING)
+    return search_module.search_library(ctx, c.search_request(params))
+
+
+def read(cur, principal, workspace_id, params, *, for_model: bool = False, **kw) -> dict:
+    """The item's understanding card. for_model=True (required whenever the card reaches a model) keeps passage text and
+    content-derived fields only when answer + cloud/llm processing is allowed for this exact version, re-checked now."""
+    from . import policy, understanding, versions
+    ctx = context(cur, principal, workspace_id, **kw)
+    ref = c.asset_ref(params.get("assetRef") if isinstance(params, dict) else None)
+    card = understanding.card(ctx, ref)
+    if not for_model:
+        return card
+    decision = policy.recheck(ctx, policy.authorize_source(ctx, versions.resolve(ctx, ref), "answer", MODEL_PROCESSING))
+    if decision.allowed:
+        return {**card, "modelAccess": {"allowed": True, "attributionOnly": decision.attribution_only}}
+    safe = {k: v for k, v in card.items() if k not in WITHHELD_FIELDS}
+    safe["usefulSegments"] = [{k: v for k, v in s.items() if k != "text"} for s in card.get("usefulSegments") or []]
+    safe["modelAccess"] = {"allowed": False, "reason": decision.reason, "message": policy.message(decision.reason)}
+    return safe
 
 
 def answer(cur, principal, workspace_id, params, **kw) -> dict:
