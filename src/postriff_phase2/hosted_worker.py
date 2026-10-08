@@ -83,7 +83,7 @@ class PostgresWorker:
         data = state['phase2']
         view = {**state, 'phase2': {**data,
                 'jobs': [job for job in data['jobs'] if self._binding_matches(job)],
-                'reviews': [review for review in data['reviews'] if self._binding_matches({'manifest': review['manifest']})]}}
+                'reviews': [review for review in data.get('reviews', []) if self._binding_matches({'manifest': review['manifest']})]}}
         self.commands.engine.invalidate(view)
 
     def _approved(self, cur, workspace_id, state, job):
