@@ -51,6 +51,8 @@ MAX_QUOTE_CHARS = 400
 EXTRACT_CHARS = 300
 RELEVANCE = 0.5
 LLM_MAX_TOKENS = 1200
+MIN_QUOTE_WEIGHT = 12  # Latin characters count 1, CJK characters 3 (one CJK character carries roughly a short word)
+COVERAGE = 0.6  # share of a claim's content words its quotations must contain before its paraphrase is shown
 CLOUD_LLM = {"location": "cloud", "category": "llm"}
 
 # Test seams for budget admission; production uses the coordinator's providers.reserve/settle.
@@ -75,6 +77,13 @@ SYSTEM = (
     "{\"abstain\": boolean, \"claims\": [{\"text\": string, \"support\": \"supported\" | \"conflicting\", \"quotes\": [{\"passage\": \"P1\", "
     "\"text\": string}]}]}")
 NUMBER = re.compile(r"\d+(?:[.,:]\d+)*")
+ATTRIBUTION = set("""says said say saying states stated state according mentions mentioned mention notes noted writes wrote reports reported shows
+shown source sources document documents passage passages item items file""".split())
+NEGATIONS = {"not", "no", "never", "none", "nothing", "nobody", "neither", "nor", "cannot", "without"}
+CJK_NEGATORS = set("不沒没無无唔冇未非別别勿莫否")
+NON_NEGATING = ("不過", "不过", "不錯", "不错", "不同", "不但", "不僅", "不仅", "不斷", "不断", "不久", "不少", "不管", "無論", "无论", "未來", "未来",
+                "非常", "別人", "别人", "別的", "别的", "否則", "否则", "唔該", "唔该", "唔使", "冇問題", "冇问题")
+CLAUSE = re.compile(r"[.!?;:,。！？；：，、\n]+")
 LINK = re.compile(r"https?://[^\s\"'<>]+|www\.[^\s\"'<>]+|[\w.+-]+@[\w-]+\.[\w.-]+", re.I)
 SENTENCE = re.compile(r"(?<=[.!?;])\s+|(?<=[。！？；])")
 
@@ -271,8 +280,64 @@ def build_prompt(question: str, passages: list[dict]) -> tuple[str, str]:
     return SYSTEM, json.dumps(data, ensure_ascii=False)
 
 
+def _weight(text: str) -> int:
+    return sum(3 if textnorm.CJK.match(ch) else 1 for ch in text if not ch.isspace())
+
+
+def quote_ok(excerpt: str, passage_text: str) -> bool:
+    """A quotation counts only if it is found in the passage and is either long enough to carry meaning (weight 12) or a
+    whole clause of it; single letters or fragments like "e" never support a claim."""
+    if not _contains(passage_text, excerpt):
+        return False
+    if _weight(excerpt) >= MIN_QUOTE_WEIGHT:
+        return True
+    clauses = {_norm(part).casefold() for part in CLAUSE.split(passage_text) if part.strip()}
+    return _norm(CLAUSE.sub(" ", excerpt)).casefold() in clauses
+
+
+def negated(text: str) -> bool:
+    """Whether a statement carries a negation (not/never/no/n't, or 不/沒/無/唔/冇/未/非/別…, ignoring compounds such as 不過)."""
+    folded = textnorm.fold(text)
+    for compound in NON_NEGATING:
+        folded = folded.replace(textnorm.fold(compound), " ")
+    if any(textnorm.fold(ch) in folded for ch in CJK_NEGATORS):
+        return True
+    return any(w in NEGATIONS or w.endswith("n't") for w in textnorm.tokens(text))
+
+
+def _content_terms(text: str, ignore: set) -> list[str]:
+    out = []
+    for term in textnorm.query_terms(text):
+        if textnorm.CJK.match(term):
+            out.append(term)
+        elif len(term) > 1 and not term.isdigit() and term not in STOPWORDS and term not in ATTRIBUTION and term not in ignore and term not in NEGATIONS:
+            out.append(term)
+    return out
+
+
+def coverage_of(text: str, quotes: list[str], titles: list[str]) -> float:
+    """Share of the claim's content words (folded; stopwords, attribution words and source titles ignored) found in its
+    quotations."""
+    ignore = {t for title in titles for t in textnorm.query_terms(title)}
+    terms = _content_terms(text, ignore)
+    if not terms:
+        return 1.0
+    joined = " ".join(quotes)
+    folded, words = textnorm.fold(joined), set(textnorm.tokens(joined))
+    return sum(1 for t in terms if (t in folded if textnorm.CJK.match(t) else t in words)) / len(terms)
+
+
+def _quotation_text(refs: list[dict], *, conflict: bool) -> str:
+    if conflict:
+        return "The sources disagree: " + " / ".join(f"“{r['excerpt']}” ({r['displayTitle']})" for r in refs)
+    return " … ".join(f"“{r['excerpt']}”" for r in refs)
+
+
 def verify_claims(value, passages: list[dict]) -> tuple[list[dict], int]:
-    """Keep only claims that cite given passages with verbatim quotations and introduce no unsupported figure or link."""
+    """Keep only claims that cite given passages with real quotations (quote_ok), keep the claim's polarity (a dropped or
+    added negation drops the claim) and introduce no figure or link absent from the cited passages. A claim whose words
+    its quotations do not substantially cover is downgraded to a quotation-only claim: the quotes are shown, the model's
+    paraphrase is not. Conflicts are always shown as the conflicting quotations side by side."""
     by_handle = {p["handle"]: p for p in passages}
     raw = value.get("claims") if isinstance(value, dict) and isinstance(value.get("claims"), list) else []
     claims, dropped = [], 0
@@ -287,16 +352,28 @@ def verify_claims(value, passages: list[dict]) -> tuple[list[dict], int]:
                 continue
             p = by_handle.get(quote.get("passage"))
             excerpt = search.plain_text(quote.get("text") or "")
-            if p is None or not excerpt or len(excerpt) > MAX_QUOTE_CHARS or not _contains(p["text"], excerpt):
+            if p is None or not excerpt or len(excerpt) > MAX_QUOTE_CHARS or not quote_ok(excerpt, p["text"]):
                 continue
             if all(r["segmentId"] != p["segmentId"] or r["excerpt"] != excerpt for r in refs):
                 refs.append(_ref(p, excerpt))
                 cited.append(p)
-        distinct = {r["assetRef"]["assetId"] for r in refs}
-        if not text or not refs or (item["support"] == "conflicting" and len(distinct) < 2) or not _grounded_text(text, cited):
+        conflict = item["support"] == "conflicting"
+        if not text or not refs or (conflict and len({r["assetRef"]["assetId"] for r in refs}) < 2):
             dropped += 1
             continue
-        claims.append({"text": text, "support": item["support"], "kind": "conflict" if item["support"] == "conflicting" else "statement", "sourceRefs": refs})
+        if conflict:
+            claims.append({"text": _quotation_text(refs, conflict=True), "support": "conflicting", "kind": "conflict", "sourceRefs": refs,
+                           "paraphraseWithheld": True})
+            continue
+        quotes = [r["excerpt"] for r in refs]
+        if negated(text) != negated(" ".join(quotes)) or not _grounded_text(text, cited):
+            dropped += 1
+            continue
+        if coverage_of(text, quotes, [p["displayTitle"] or "" for p in cited]) < COVERAGE:
+            claims.append({"text": _quotation_text(refs, conflict=False), "support": "supported", "kind": "quotation", "sourceRefs": refs,
+                           "paraphraseWithheld": True})
+            continue
+        claims.append({"text": text, "support": "supported", "kind": "statement", "sourceRefs": refs})
     return claims[:MAX_CLAIMS], dropped + max(0, len(claims) - MAX_CLAIMS)
 
 
@@ -353,6 +430,27 @@ def _best_sentence(text: str, question_units: list[str]) -> str:
     return best[start:start + EXTRACT_CHARS].strip()
 
 
+FIGURE_WORDS = set(MONTHS) | {"hkd", "usd", "percent", "pm", "am"}
+
+
+def subject_terms(sentence: str) -> set:
+    """What a sentence is about, without its figures: content words and CJK bigrams minus numbers, months and units."""
+    out = set()
+    for term in textnorm.query_terms(sentence):
+        if textnorm.CJK.match(term):
+            if not any(ch in "月日號号年元" or ch in CN_VALUES or ch in CN_UNITS for ch in term):
+                out.add(term)
+        elif len(term) > 1 and not any(ch.isdigit() for ch in term) and term not in STOPWORDS and term not in FIGURE_WORDS:
+            out.add(term)
+    return out
+
+
+def same_subject(a: str, b: str, question_units: list[str]) -> bool:
+    """Two sentences are about the same thing when they share a question word, or at least two content words."""
+    shared = subject_terms(a) & subject_terms(b)
+    return bool(shared & set(question_units)) or len(shared) >= 2
+
+
 def extractive_claims(question_units: list[str], passages: list[dict]) -> list[dict]:
     chosen, assets = [], set()
     for p in passages:
@@ -366,7 +464,7 @@ def extractive_claims(question_units: list[str], passages: list[dict]) -> list[d
         for j in range(i + 1, len(chosen)):
             (pa, qa), (pb, qb) = chosen[i], chosen[j]
             fa, fb = figures(qa), figures(qb)
-            if any(fa[k].isdisjoint(fb[k]) for k in set(fa) & set(fb)):
+            if any(fa[k].isdisjoint(fb[k]) for k in set(fa) & set(fb)) and same_subject(qa, qb, question_units):
                 conflict = {"text": f"The sources disagree: “{qa}” ({pa['displayTitle']}) / “{qb}” ({pb['displayTitle']})", "support": "conflicting",
                             "kind": "conflict", "sourceRefs": [_ref(pa, qa), _ref(pb, qb)]}
                 rest = [cl for k, cl in enumerate(claims) if k not in (i, j)]
@@ -376,28 +474,19 @@ def extractive_claims(question_units: list[str], passages: list[dict]) -> list[d
 
 # --- the LLM call ---------------------------------------------------------------------------------------------------------
 def _call_llm(ctx, prov, system: str, user: str):
-    cur = ctx.cur
+    """Budget reserved and settled in short transactions of their own (index.paid_call): no budget row lock is held while
+    the model works, and a failed or unreadable call is settled outside any request rollback."""
     model = prov.model("llm")
     estimate = prov.estimate("llm", units=math.ceil((len(system) + len(user)) / 3) + LLM_MAX_TOKENS)
-    savepoint = index._savepoint(cur, "lib_answer")
     try:
-        reservation = _reserve(cur, ctx.workspace_id, ctx.actor, capability="llm", estimate_usd_micro=estimate, key="answer:" + uuid.uuid4().hex, model=model)
-        if (reservation or {}).get("status") != "reserved":
-            raise _Blocked("AI answers are paused by the workspace budget, so this answer quotes the sources instead.")
-        try:
-            result = prov.complete_json(system, user, max_tokens=LLM_MAX_TOKENS)
-        except Exception:
-            _settle(cur, ctx.workspace_id, reservation, None, failed=True)
-            raise
-        _settle(cur, ctx.workspace_id, reservation, result)
-    except _Blocked:
-        index._rollback(cur, savepoint)
-        raise
+        return index.paid_call(ctx, capability="llm", model=model, estimate_usd_micro=estimate, key="answer:" + uuid.uuid4().hex,
+                               call=lambda: prov.complete_json(system, user, max_tokens=LLM_MAX_TOKENS), reserve=_reserve, settle=_settle)
+    except providers.ProviderUnavailable as error:
+        if error.reason == "blocked_budget":
+            raise _Blocked("AI answers are paused by the workspace budget, so this answer quotes the sources instead.") from error
+        raise _Blocked("The AI answer isn't available right now, so this answer quotes the sources instead.") from error
     except Exception as error:  # provider refusal, timeout or an unreadable reply: quote instead, never guess
-        index._rollback(cur, savepoint)
         raise _Blocked("The AI answer failed for this request, so this answer quotes the sources instead.") from error
-    index._release(cur, savepoint)
-    return result
 
 
 # --- composition --------------------------------------------------------------------------------------------------------
@@ -423,16 +512,17 @@ def _compose(mode: str, claims: list[dict]) -> str:
                 lines.append(f"• “{ref['excerpt']}” — {ref['displayTitle']}{where} {marks(claim)}")
         return "\n".join(lines)
     lines = []
-    for claim in claims:
-        titles = "; ".join(dict.fromkeys(r["displayTitle"] for r in claim["sourceRefs"]))
-        prefix = "Sources disagree: " if claim["support"] == "conflicting" else ""
-        lines.append(f"{prefix}{claim['text']} ({titles}) {marks(claim)}")
+    for claim in claims:  # conflicts and quotation-only claims already carry their quotations and sources in their text
+        titles = "" if claim["kind"] == "conflict" else " (" + "; ".join(dict.fromkeys(r["displayTitle"] for r in claim["sourceRefs"])) + ")"
+        lines.append(f"{claim['text']}{titles} {marks(claim)}")
     lines.append("These statements report what the cited sources say; they are not approved facts.")
     return "\n".join(lines)
 
 
-def _abstain_text(coverage: dict, scope_coverage: dict) -> str:
-    lines = ["The selected sources don't contain enough to answer this.",
+def _abstain_text(coverage: dict, scope_coverage: dict, *, had_material: bool = False, not_sent: int = 0) -> str:
+    first = ("The answer could not be verified against the selected sources." if had_material
+             else "The selected sources don't contain enough to answer this.")
+    lines = [first,
              f"Searched: {coverage['scopeDescription']} ({coverage['accessibleAssetCount']:,} item{'s' if coverage['accessibleAssetCount'] != 1 else ''} "
              "available for answers)."]
     pending = max(coverage["pendingAssetCount"], scope_coverage["pendingAssetCount"])
@@ -445,7 +535,13 @@ def _abstain_text(coverage: dict, scope_coverage: dict) -> str:
     if withheld:
         lines.append(f"{withheld:,} more item{'s' if withheld != 1 else ''} in this scope {'are' if withheld != 1 else 'is'} stored but not available "
                      "for answers (not processed yet or not allowed).")
+    if not_sent:
+        lines.append(_not_sent_text(not_sent))
     return "\n".join(lines)
+
+
+def _not_sent_text(count: int) -> str:
+    return f"{count:,} relevant item{'s' if count != 1 else ''} {'weren' if count != 1 else 'wasn'}'t sent to the AI because cloud processing isn't allowed for them."
 
 
 # --- time-of-use verification --------------------------------------------------------------------------------------------
@@ -495,7 +591,7 @@ def answer_library(ctx, question, search_request) -> dict:
     scope_coverage = _scope_coverage(ctx, base)
     warnings = list(local["warnings"])
     relevant = [p for p in local["passages"] if p["relevance"] >= RELEVANCE or p["semantic"]]
-    mode, claims, dropped, receipt, processing = "none", [], 0, None, None
+    mode, claims, dropped, receipt, processing, not_sent, llm_attempted = "none", [], 0, None, None, 0, False
     prov = index.providers_for(ctx)
     try:
         prov.require("llm")
@@ -505,6 +601,9 @@ def answer_library(ctx, question, search_request) -> dict:
     if relevant and llm_available:
         cloud = _retrieve(ctx, base, queries, CLOUD_LLM, question_units)
         candidates = [p for p in cloud["passages"] if p["relevance"] >= RELEVANCE or p["semantic"]][:MAX_LLM_PASSAGES]
+        not_sent = len({p["assetRef"]["versionId"] for p in relevant} - {p["assetRef"]["versionId"] for p in cloud["passages"]})
+        if not_sent and candidates:
+            warnings.append(_not_sent_text(not_sent))
         if candidates:
             for n, p in enumerate(candidates, 1):
                 p["handle"] = f"P{n}"
@@ -514,25 +613,31 @@ def answer_library(ctx, question, search_request) -> dict:
             except _Blocked as blocked:
                 warnings.append(str(blocked))
             else:
-                mode, processing, receipt = "llm", CLOUD_LLM, result.receipt()
+                llm_attempted, receipt = True, result.receipt()
                 claims, dropped = verify_claims(result.value, candidates)
                 if dropped:
                     verb = "were" if dropped != 1 else "was"
                     warnings.append(f"{dropped} statement{'s' if dropped != 1 else ''} from the AI could not be verified against the cited passages "
                                     f"and {verb} left out.")
+                if claims:
+                    mode, processing = "llm", CLOUD_LLM
+                else:
+                    warnings.append("The AI's answer could not be verified, so this shows quotations from the sources instead.")
         else:
             warnings.append("The matching items aren't allowed for cloud processing, so this answer quotes them instead of summarising.")
     if mode == "none" and relevant:
         mode, claims = "extractive", extractive_claims(question_units, local["passages"])
+    had_material = bool(claims) or bool(relevant)
     claims, final_warnings = _finalize(ctx, claims, processing)
     warnings += final_warnings
     abstained = not claims
-    answer = _abstain_text(coverage, scope_coverage) if abstained else _compose(mode, claims)
+    answer = _abstain_text(coverage, scope_coverage, had_material=had_material, not_sent=not_sent) if abstained else _compose(mode, claims)
     if coverage["pendingAssetCount"] or coverage["failedAssetCount"]:
         warnings.append("Some items in this scope are still being processed or could not be read; the answer may change.")
     result = c.answer_result(answer, claims, coverage, list(dict.fromkeys(w for w in warnings if w)))
     result.update(abstained=abstained, mode=mode, scope=coverage["scopeDescription"], scopeCoverage=scope_coverage, attributionOnly=True,
-                  approvedFacts=False, provider=receipt, droppedClaims=dropped, promptVersion=PROMPT_VERSION if mode == "llm" else None)
+                  approvedFacts=False, provider=receipt, droppedClaims=dropped, llmAttempted=llm_attempted,
+                  promptVersion=PROMPT_VERSION if llm_attempted else None)
     return result
 
 

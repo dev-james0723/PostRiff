@@ -147,7 +147,10 @@ class Abstention(unittest.TestCase):
             {"text": "The recital is on 30 February.", "support": "supported", "quotes": [{"passage": "P1", "text": "on 30 February"}]}]})
         with_llm = ask(make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=relevant_but_unverifiable), "When is the recital?")
         self.assertEqual(relevant_but_unverifiable.calls, 1)
-        self.assertTrue(with_llm["abstained"], "a claim whose quote is not in its passage is dropped, never shown")
+        self.assertNotIn("30 February", json.dumps(with_llm), "a claim whose quote is not in its passage is dropped, never shown")
+        self.assertEqual((with_llm["mode"], with_llm["abstained"], with_llm["llmAttempted"]), ("extractive", False, True),
+                         "relevant material is quoted instead of a false 'not enough'")
+        self.assertEqual({cl["kind"] for cl in with_llm["claims"]}, {"quotation"})
         self.assertTrue(any("could not be verified" in w for w in with_llm["warnings"]))
 
     def test_abstention_reports_pending_and_failed_extraction(self):
@@ -228,22 +231,209 @@ class Conflicts(unittest.TestCase):
 
         def model(system, payload):
             return {"abstain": False, "claims": [{"text": "The venue contract says 12 October; the newsletter says 19 October.", "support": "conflicting",
-                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "October")},
-                                                             {"passage": "P2", "text": quote_from(payload, "P2", "October")}]}]}
+                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "the recital")},
+                                                             {"passage": "P2", "text": quote_from(payload, "P2", "the recital")}]}]}
+
+        def with_dates(system, payload):
+            p1 = next(p["text"] for p in payload["passages"] if p["id"] == "P1")
+            p2 = next(p["text"] for p in payload["passages"] if p["id"] == "P2")
+            return {"abstain": False, "claims": [{"text": "The two sources give different dates.", "support": "conflicting",
+                                                  "quotes": [{"passage": "P1", "text": p1[p1.index("recital"):p1.index("October") + 7]},
+                                                             {"passage": "P2", "text": p2[p2.index("recital"):p2.index("October") + 7]}]}]}
+        model = with_dates
         prov = FakeProviders(model)
         llm = ask(make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=prov), "When is the recital?")
         self.assertEqual(llm["mode"], "llm")
         self.assertEqual([cl["support"] for cl in llm["claims"]], ["conflicting"])
         self.assertEqual({r["assetRef"]["assetId"] for r in llm["claims"][0]["sourceRefs"]}, {a["key"], b["key"]})
+        self.assertTrue(llm["claims"][0]["paraphraseWithheld"], "a conflict is shown as the conflicting quotations, not the model's summary")
+        self.assertIn("12 October", llm["answer"])
+        self.assertIn("19 October", llm["answer"])
 
     def test_one_sided_conflict_is_dropped(self):
         db, *_ = self.seeded()
 
         def model(system, payload):
             return {"abstain": False, "claims": [{"text": "Sources disagree.", "support": "conflicting",
-                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "October")}, {"passage": "P2", "text": "invented words"}]}]}
+                                                  "quotes": [{"passage": "P1", "text": payload["passages"][0]["text"][:20]}, {"passage": "P2", "text": "invented words"}]}]}
         result = ask(make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=FakeProviders(model)), "When is the recital?")
-        self.assertTrue(result["abstained"])
+        self.assertEqual((result["droppedClaims"], result["mode"]), (1, "extractive"), "the one-sided model conflict is dropped; quotations replace it")
+        self.assertNotIn("invented words", json.dumps(result))
+
+    def test_different_figures_without_a_shared_subject_are_not_a_conflict(self):
+        db = AnswerDB()
+        doc(db, 1, "Practice scales and arpeggios on 3 March.", title="Practice plan")
+        doc(db, 2, "Piano lesson with Mei on 15 March.", title="Lesson diary")
+        result = ask(make_ctx(db, grants=[ANSWER_GRANT]), "What happens in March?")
+        self.assertEqual([cl["kind"] for cl in result["claims"]], ["quotation", "quotation"])
+        self.assertNotIn("disagree", result["answer"])
+
+
+def passage(text, handle="P1", n=1, title="Contract"):
+    return {"handle": handle, "segmentId": format(n, "032x"), "assetRef": {"assetId": key(n), "versionId": key(n), "sha256": ""}, "displayTitle": title,
+            "locator": None, "text": text, "window": text, "quoteHash": c.quote_hash(text), "relevance": 1.0, "semantic": False}
+
+
+def claim(text, quote, handle="P1", support="supported"):
+    return {"claims": [{"text": text, "support": support, "quotes": [{"passage": handle, "text": quote}]}]}
+
+
+class ReviewProbes(unittest.TestCase):
+    """Independent review round 2 (#3): quotations must carry the claim, not merely occur in the passage."""
+
+    def test_renewal_probe(self):
+        p = [passage("The contract will not be renewed automatically; either side must confirm in writing.")]
+        self.assertEqual(answers.verify_claims(claim("The contract will be renewed automatically.", "e"), p), ([], 1), "a 1-character quote supports nothing")
+        flipped = claim("The contract will be renewed automatically.", "The contract will not be renewed automatically")
+        self.assertEqual(answers.verify_claims(flipped, p), ([], 1), "dropping the source's 'not' drops the claim")
+        kept, dropped = answers.verify_claims(claim("The contract will not be renewed automatically.", "The contract will not be renewed automatically"), p)
+        self.assertEqual((dropped, kept[0]["kind"]), (0, "statement"))
+
+    def test_chinese_negation_probe(self):
+        negative = [passage("合約唔會自動續期，雙方要書面確認。")]
+        self.assertEqual(answers.verify_claims(claim("合約會自動續期。", "合約唔會自動續期"), negative), ([], 1))
+        self.assertEqual(len(answers.verify_claims(claim("合約唔會自動續期。", "合約唔會自動續期"), negative)[0]), 1)
+        positive = [passage("合約會自動續期，每年一月生效。")]
+        self.assertEqual(answers.verify_claims(claim("合約唔會自動續期。", "合約會自動續期"), positive), ([], 1), "adding a negation drops the claim too")
+        self.assertFalse(answers.negated("不過合約會自動續期，不同條款另議。"), "compounds such as 不過 and 不同 are not negations")
+        self.assertTrue(answers.negated("没有自动续期"))
+        self.assertTrue(answers.negated("It won't renew."))
+
+    def test_short_quotes_and_paraphrase_coverage(self):
+        self.assertFalse(answers.quote_ok("Doors open", "Doors open forty-five minutes before."))
+        self.assertTrue(answers.quote_ok("Doors open", "Doors open. Bring your ticket."), "a whole clause may be short")
+        self.assertTrue(answers.quote_ok("一百八十", "學生票港幣一百八十元"), "four CJK characters carry enough meaning")
+        self.assertFalse(answers.quote_ok("票", "學生票港幣一百八十元"))
+        p = [passage("Tickets cost HKD 380 for adults.", title="Ticket notes")]
+        padded = claim("Adult tickets cost HKD 380 and include a free drink and backstage tour.", "Tickets cost HKD 380 for adults")
+        kept, dropped = answers.verify_claims(padded, p)
+        self.assertEqual((dropped, kept[0]["kind"], kept[0]["paraphraseWithheld"]), (0, "quotation", True))
+        self.assertEqual(kept[0]["text"], "“Tickets cost HKD 380 for adults”", "the quotation is shown, the unsupported paraphrase is not")
+        attributed = claim("Ticket notes says tickets cost HKD 380 for adults.", "Tickets cost HKD 380 for adults")
+        self.assertEqual(answers.verify_claims(attributed, p)[0][0]["kind"], "statement", "attribution words and source titles are not content")
+
+
+class LedgerConnection:
+    """A fake connection factory: tracks whether a ledger transaction is open and whether it committed."""
+
+    def __init__(self):
+        from library_intelligence_fakes import FakeCursor
+        self.open, self.commits, self.rollbacks, self.cursors, self._cursor_type = 0, 0, 0, [], FakeCursor
+
+    def __call__(self):
+        return self
+
+    def __enter__(self):
+        self.open += 1
+        return self
+
+    def __exit__(self, kind, value, tb):
+        self.open -= 1
+        if kind is None:
+            self.commits += 1
+        else:
+            self.rollbacks += 1
+        return False
+
+    def cursor(self):
+        cur = self._cursor_type()
+        self.cursors.append(cur)
+        return _Plain(cur)
+
+
+class _Plain:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def __enter__(self):
+        return self.cur
+
+    def __exit__(self, *exc):
+        return False
+
+
+class Ledger(unittest.TestCase):
+    """Review #1/#4: budget rows are never locked across a provider call, and settlements survive request rollbacks."""
+
+    def harness(self, *, reserve_status="reserved"):
+        conn = LedgerConnection()
+        events = []
+
+        def reserve(cur, ws, actor, **kw):
+            events.append(("reserve", conn.open, cur))
+            return {"status": reserve_status, "reservationId": "r1"}
+
+        def settle(cur, ws, reservation, result, failed=False):
+            events.append(("settle", conn.open, cur, failed, result is not None))
+        return conn, events, reserve, settle
+
+    def test_answer_llm_call_holds_no_budget_lock(self):
+        db = AnswerDB()
+        doc(db, 1, "Doors open forty-five minutes before the recital.")
+        conn, events, reserve, settle = self.harness()
+
+        def model(system, payload):
+            events.append(("provider", conn.open))
+            return {"abstain": False, "claims": [{"text": "Doors open forty-five minutes before the recital.", "support": "supported",
+                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "Doors open forty-five minutes")}]}]}
+        ctx = make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=FakeProviders(model))
+        ctx.service.repository = SimpleNamespace(connection_factory=conn)
+        with mock.patch.dict(os.environ, ENV), mock.patch.multiple(answers, _reserve=reserve, _settle=settle):
+            result = answers.answer_library(ctx, "When do doors open for the recital?", {"scope": {"kind": "workspace"}})
+        self.assertEqual(result["mode"], "llm")
+        self.assertEqual([e[:2] for e in events], [("reserve", 1), ("provider", 0), ("settle", 1)], "reserve and settle in their own short transactions")
+        self.assertTrue(all(e[2] is not ctx.cur for e in events if e[0] != "provider"))
+        self.assertEqual((conn.commits, conn.rollbacks), (2, 0))
+        self.assertFalse(any("lib_ledger" in sql for sql, _ in ctx.cur.executed), "the request transaction never touches the ledger")
+
+    def test_failed_and_unreadable_calls_are_settled_outside_the_request(self):
+        db = AnswerDB()
+        doc(db, 1, "Doors open forty-five minutes before the recital.")
+        cases = (("The provider returned an unreadable answer.", 502, False), ("The provider refused the request.", 422, True),
+                 ("The provider could not be reached.", 503, True))
+        for message, status, settled_as_failed in cases:
+            conn, events, reserve, settle = self.harness()
+            code = "library_provider_timeout" if status == 503 else "library_provider_failed"
+
+            def broken(system, payload, message=message, status=status, code=code):
+                raise AlphaError(message, status, code=code)
+            ctx = make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=FakeProviders(broken))
+            ctx.service.repository = SimpleNamespace(connection_factory=conn)
+            with mock.patch.dict(os.environ, ENV), mock.patch.multiple(answers, _reserve=reserve, _settle=settle):
+                result = answers.answer_library(ctx, "When do doors open for the recital?", {"scope": {"kind": "workspace"}})
+            settles = [e for e in events if e[0] == "settle"]
+            self.assertEqual(len(settles), 1, message)
+            self.assertEqual(settles[0][3], settled_as_failed, f"{message}: a billed unreadable reply settles as unknown, a refusal as failed")
+            self.assertEqual(conn.commits, 2, "the settlement is committed on its own, so no request rollback can erase it")
+            self.assertEqual(result["mode"], "extractive")
+        conn, events, reserve, settle = self.harness(reserve_status="blocked_budget")
+        ctx = make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=FakeProviders(lambda *a: self.fail("no call without a reservation")))
+        ctx.service.repository = SimpleNamespace(connection_factory=conn)
+        with mock.patch.dict(os.environ, ENV), mock.patch.multiple(answers, _reserve=reserve, _settle=settle):
+            blocked = answers.answer_library(ctx, "When do doors open for the recital?", {"scope": {"kind": "workspace"}})
+        self.assertEqual([e[0] for e in events], ["reserve"], "a refused reservation leaves no settlement")
+        self.assertTrue(any("budget" in w for w in blocked["warnings"]))
+
+    def test_query_embedding_holds_no_budget_lock(self):
+        from postriff_phase2.library_intelligence import index
+        from test_library_intelligence_search import FakeEmbedder, unit
+        db = AnswerDB()
+        conn, events, reserve, settle = self.harness()
+        embedder = FakeEmbedder(unit(1024, {1: 1.0}))
+        original = embedder.embed
+
+        def watched(texts, dims=1024):
+            events.append(("provider", conn.open))
+            return original(texts, dims=dims)
+        embedder.embed = watched
+        ctx = make_ctx(db, prov=embedder)
+        ctx.service.repository = SimpleNamespace(connection_factory=conn)
+        index._QUERY_CACHE.clear()
+        with mock.patch.multiple(index, _reserve=reserve, _settle=settle):
+            index.embed_query(ctx, "a query that needs a vector")
+        self.assertEqual([e[:2] for e in events], [("reserve", 1), ("provider", 0), ("settle", 1)])
+        self.assertEqual(conn.commits, 2)
+        index._QUERY_CACHE.clear()
 
 
 class Versions(unittest.TestCase):
@@ -347,7 +537,7 @@ class Permissions(unittest.TestCase):
             db.revision[WS] = 7  # a revoke lands while the model is answering
             db.grants = []
             return {"abstain": False, "claims": [{"text": "Doors open forty-five minutes early.", "support": "supported",
-                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "Doors open")}]}]}
+                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "Doors open forty-five minutes")}]}]}
         result = ask(make_ctx(db, grants=grants, prov=FakeProviders(revoking)), "When do doors open for the recital?")
         self.assertTrue(result["abstained"])
         self.assertEqual(result["claims"], [])
@@ -378,7 +568,7 @@ class Permissions(unittest.TestCase):
             asset["status"] = "deleting"
             db.segments[0]["superseded"] = NOW
             return {"abstain": False, "claims": [{"text": "Doors open early.", "support": "supported",
-                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "Doors open")}]}]}
+                                                  "quotes": [{"passage": "P1", "text": quote_from(payload, "P1", "Doors open forty-five minutes")}]}]}
         result = ask(make_ctx(db, grants=[ANSWER_GRANT, CLOUD_LLM_GRANT], prov=FakeProviders(deleting)), "When do doors open for the recital?")
         self.assertTrue(result["abstained"], "a source deleted while answering is never cited")
 
