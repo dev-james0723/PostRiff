@@ -122,6 +122,14 @@ def _mutate_state(ctx, apply) -> dict:
 mutate_state = _mutate_state
 
 
+def hold_workspace(ctx) -> None:
+    """Take the workspace row lock before the final permission recheck of a short write path (nothing here waits on a
+    provider). policy.recheck reads the committed revision without a lock; every grant revoke over HTTP holds this row
+    lock for its whole transaction, so after this the recheck either sees a committed revoke or the revoke waits and its
+    propagation then sees this write. An HTTP write context already holds it (a no-op re-lock)."""
+    ctx.cur.execute("/*voice.workspace_hold*/ SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (ctx.workspace_id,))
+
+
 def _canonical(state: dict, source_id: str | None) -> dict | None:
     if not source_id:
         return None
@@ -351,8 +359,9 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
                        select: bool = False, expected_revision: int | None = None) -> dict:
     """approve_voice_span(ctx, ref, locator, persona_id, author_attestation) -> VoiceSample (implementation plan T07).
 
-    Owner only. Every refusal happens before any write; the purpose grant is rechecked (TOCTOU) right before the
-    canonical import, which holds the policy row so a concurrent revoke waits and then withdraws this span."""
+    Owner only. Every refusal happens before any write. Right before the canonical import the workspace row is locked
+    (hold_workspace) and the purpose grant rechecked (TOCTOU), so a revoke that committed first wins, and one that comes
+    later waits for this write and then withdraws the span."""
     ctx.require("owner")
     seg.writable(ctx)
     if not policy.enabled("voice"):
@@ -406,6 +415,7 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
     if existing:
         out = sample_contract(existing[0], ctx.state)
         return {**out, "alreadyApproved": True, "warnings": ["This passage was already approved."]}
+    hold_workspace(ctx)
     decision = policy.recheck(ctx, decision)
     policy.require(decision)
     if retired:

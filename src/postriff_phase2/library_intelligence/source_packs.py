@@ -543,7 +543,7 @@ def _narrowed(purpose, ref, decision) -> dict:
 
 def _revalidate(ctx, row: dict, *, lock: bool) -> dict:
     """Re-resolve and re-authorize every ref against the pack's snapshot (policy.authorize_source, and with `lock` also
-    policy.recheck, which holds the policy row until commit). Only narrowing is a change; a newly granted use is not."""
+    policy.recheck after the caller took the workspace row lock). Only narrowing is a change; a newly granted use is not."""
     changes, evidence, style, checked = [], [], [], []
     for raw in row["evidence_refs"] or []:
         entry = raw if isinstance(raw, dict) else {}
@@ -744,6 +744,7 @@ def attach_pack_to_draft(ctx, pack_id, draft_id, expected_revision) -> dict:
         _fail("This source pack is already attached to another draft. Make a new pack for this one.", 409, "library_pack_attached")
     if not any(v.get("id") == draft_id for v in ctx.state.get("variants", [])):
         _fail("This draft is unavailable.", 404, "library_draft_unavailable")
+    voice.hold_workspace(ctx)  # serialize with grant revokes before the final recheck (policy.recheck itself takes no lock)
     check = _revalidate(ctx, row, lock=True)
     if check["changes"] or pack["status"] == "revoked":
         changes = check["changes"] or [_change("pack", {}, "pack_revoked", message="A permission this pack relied on was withdrawn.")]

@@ -528,8 +528,10 @@ class AttachTests(Base):
         pack = self._pack()
         envelope = {"actionId": "attach2", "uiInstanceId": "ui", "actionType": "source_pack.attach", "targetRefs": [], "expectedRevision": 1,
                     "idempotencyKey": "attach-key-000000002", "payload": {"packId": pack["packId"], "draftId": "f" * 32}}
+        held = getattr(db, "held", 0)
         first = actions.apply(make_ctx(db), envelope)
         self.assertEqual((first["status"], first["revision"]), ("applied", 2), first)
+        self.assertGreater(getattr(db, "held", 0), held, "attach locks the workspace row before its final recheck")
         replay = actions.apply(make_ctx(db), envelope)
         self.assertTrue(replay.get("replayed"))
         self.assertEqual(db.packs[uuid.UUID(hex=pack["packId"])]["revision"], 2)
