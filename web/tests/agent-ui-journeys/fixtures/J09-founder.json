@@ -1,0 +1,194 @@
+{
+ "founder_metrics": {
+  "partial": {
+   "state": "partial",
+   "data": {
+    "mode": "live",
+    "receiptId": "rcpt_1",
+    "dataState": "partial",
+    "rows": [
+     {
+      "metricId": "mrr",
+      "definitionVersion": "1",
+      "dimensions": {
+       "currency": "USD"
+      },
+      "value": 1250000000,
+      "unit": "usd_micro",
+      "currency": "USD",
+      "dataState": "measured"
+     },
+     {
+      "metricId": "logo_churn",
+      "definitionVersion": null,
+      "dimensions": {},
+      "value": null,
+      "unit": null,
+      "dataState": "unavailable",
+      "reason": "definition_not_activated"
+     }
+    ],
+    "coverage": {
+     "complete": false,
+     "returnedRows": 2
+    },
+    "executionState": "done",
+    "warnings": [],
+    "interval": {},
+    "note": "a null value is unavailable, not zero."
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "founder_costs": {
+  "unavailable_dimension": {
+   "state": "unavailable",
+   "data": {
+    "mode": "demo",
+    "dimension": "model",
+    "receiptId": "rcpt_2",
+    "dataState": "unavailable",
+    "rows": [],
+    "coverage": null,
+    "interval": {},
+    "reason": "demo_usage_has_no_model",
+    "previous": null,
+    "warnings": [],
+    "note": null
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": "AI cost by the chosen dimension; an uninstrumented dimension says so instead of estimating."
+   },
+   "warnings": []
+  },
+  "normal": {
+   "state": "available",
+   "data": {
+    "mode": "demo",
+    "dimension": "feature",
+    "receiptId": "rcpt_3",
+    "dataState": "measured",
+    "rows": [
+     {
+      "dimensions": {
+       "feature": "agent_turn"
+      },
+      "estimatedUsdMicro": 4200000,
+      "creditsUsed": 120,
+      "rows": 4,
+      "actualUsdMicro": null,
+      "unit": "usd_micro",
+      "currency": "USD",
+      "costState": "simulated",
+      "dataState": "measured"
+     }
+    ],
+    "coverage": {
+     "complete": true
+    },
+    "interval": {},
+    "reason": null,
+    "previous": null,
+    "warnings": [
+     "Demo usage carries estimated cost only (actual cost is unavailable)."
+    ],
+    "note": null
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "founder_attention": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "mode": "demo",
+    "items": [
+     {
+      "id": "inc_1",
+      "severity": "critical",
+      "title": "Publishing errors on Threads",
+      "scope": "operations",
+      "count": 3,
+      "since": "2026-10-08T01:00:00Z",
+      "href": "/control/operations?incident=inc_1"
+     },
+     {
+      "id": "demo-openRequests",
+      "severity": "info",
+      "title": "Open customer requests",
+      "scope": "support",
+      "count": 2,
+      "since": null,
+      "href": "/control/support"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "founder_sources": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "mode": "live",
+    "sources": [
+     {
+      "sourceId": "stripe",
+      "state": "measured",
+      "lastGoodAt": "2026-10-08T13:00:00Z",
+      "reasonCode": null
+     },
+     {
+      "sourceId": "provider_usage",
+      "state": "stale",
+      "lastGoodAt": "2026-10-06T00:00:00Z",
+      "reasonCode": "late_export"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  }
+ }
+}

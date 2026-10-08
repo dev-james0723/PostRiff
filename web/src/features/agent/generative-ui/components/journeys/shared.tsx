@@ -172,6 +172,8 @@ export function GuardedAction({
   inputs,
   ready,
   notReadyHint,
+  label,
+  quiet,
 }: {
   actionId: string | undefined;
   controlId: string | undefined;
@@ -179,6 +181,10 @@ export function GuardedAction({
   /** The component's own inputs are complete and valid. */
   ready: boolean;
   notReadyHint?: string;
+  /** Rafii's own native copy for this button (e.g. "Remember" / "Dismiss" for one decide action); never model text. */
+  label?: string;
+  /** Compact row control: no summary line. */
+  quiet?: boolean;
 }) {
   const { copy } = useJourneyEnvironment();
   const streaming = useStreaming();
@@ -203,7 +209,7 @@ export function GuardedAction({
             if (inputs) action.request(inputs, event);
           }}
         >
-          {busy ? copy.common.working : action.binding.label}
+          {busy ? copy.common.working : label ?? action.binding.label}
         </Button>
         {result ? <ActionOutcomeLine outcome={result.outcome} verified={result.verified} /> : null}
       </div>
@@ -213,9 +219,9 @@ export function GuardedAction({
           {action.state.error}
         </p>
       ) : null}
-      {streaming ? <p className='text-muted-foreground text-xs'>{copy.common.waitForView}</p> : null}
+      {streaming && !quiet ? <p className='text-muted-foreground text-xs'>{copy.common.waitForView}</p> : null}
       {!ready && notReadyHint ? <p className='text-muted-foreground text-xs'>{notReadyHint}</p> : null}
-      {action.binding.summary ? <p className='text-muted-foreground text-xs'>{action.binding.summary}</p> : null}
+      {action.binding.summary && !quiet ? <p className='text-muted-foreground text-xs'>{action.binding.summary}</p> : null}
     </div>
   );
 }

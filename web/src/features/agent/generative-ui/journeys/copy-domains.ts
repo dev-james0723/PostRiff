@@ -161,6 +161,7 @@ export interface DomainCopy {
     matrixTitle: string;
     pickToCompare: string;
     facts: string;
+    host: string;
   };
   automations: {
     listTitle: string;
@@ -375,6 +376,7 @@ const EN: DomainCopy = {
     matrixTitle: 'Sources side by side',
     pickToCompare: 'Pick two or more pages to compare them.',
     facts: 'Facts',
+    host: 'Site',
   },
   automations: {
     listTitle: 'Automations',
@@ -584,6 +586,7 @@ const ZH_HANT: DomainCopy = {
     matrixTitle: '來源並排比較',
     pickToCompare: '揀選兩個或以上網頁作比較。',
     facts: '事實',
+    host: '網站',
   },
   automations: {
     listTitle: '自動化',
@@ -793,6 +796,7 @@ const ZH_HANS: DomainCopy = {
     matrixTitle: '来源并排比较',
     pickToCompare: '选择两个或以上网页进行比较。',
     facts: '事实',
+    host: '网站',
   },
   automations: {
     listTitle: '自动化',

@@ -1,0 +1,2 @@
+root = RafiiRoot([status, brief, matrix])
+matrix = ComparisonMatrix(results, $selectedPages)
