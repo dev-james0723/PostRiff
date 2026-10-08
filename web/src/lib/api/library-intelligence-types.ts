@@ -80,6 +80,10 @@ export interface SearchHit {
   capabilities: CapabilityState[];
   sourceStatus: { purpose: LibraryPurpose; allowed: boolean; reason?: string | null; attributionOnly?: boolean; candidateOnly?: boolean };
   createdAt: number;
+  /** The Ideas source this asset was imported as, if any. */
+  sourceId?: string | null;
+  /** Every matching passage or moment in this version (the best one is also on segmentId/locator). */
+  passages?: { segmentId?: string; locator?: Locator; locatorLabel?: string; kind?: string; language?: string | null; mode?: SearchMode }[];
 }
 
 export interface SearchCoverage {
@@ -100,6 +104,14 @@ export interface SearchResponse {
   nextCursor: string | null;
   coverage: SearchCoverage;
   facets?: { kinds: Record<string, number>; tags: Record<string, number> };
+  /** Server-side hit count; relation 'gte' when a bounded ranking stage reached its limit. */
+  totalHits?: { value: number; relation: 'eq' | 'gte' };
+  /** Ranking configuration (order only, never a confidence score). */
+  ranking?: {
+    version: string; k: number; weights: Record<string, number>; exactFirst: boolean; orderOnly: boolean;
+    candidateLimits: Record<string, number>; boundsReached: string[] | Record<string, boolean>;
+    semanticModel: string | null; visualModel: string | null; normalizerVersion: number;
+  };
   warnings: string[];
 }
 

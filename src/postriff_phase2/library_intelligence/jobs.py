@@ -133,6 +133,7 @@ class JobContext:
     _progress: Callable[[int, int, str], bool] | None = None
     _segments: Callable[[], list] | None = None
     _frames: Callable[[], list] | None = None
+    _poster: Callable[[], bytes | None] | None = None
     _raw: bytes | None = field(default=None, repr=False)
 
     def raw(self) -> bytes:
@@ -150,6 +151,10 @@ class JobContext:
     def segments(self) -> list:
         """This version's active segments (contract shape), read in a fresh short transaction; [] when none."""
         return list(self._segments()) if self._segments else []
+
+    def poster(self) -> bytes | None:
+        """A legacy video's stored poster image (bounded private read, hash-checked when the record carries one)."""
+        return self._poster() if self._poster else None
 
     def frames(self) -> list:
         """Stored poster/frame images (raw JPEG bytes) for a legacy video; [] when none were kept."""
@@ -655,10 +660,22 @@ def _prepare(intel, connect, prepared):
                 return []
             frames = [f for f in legacy.get("frames") or [] if isinstance(f, dict) and f.get("objectName")][:4]
             return [storage.get(job["workspaceId"], "media", f["objectName"]) for f in frames]
+
+        def poster_of():
+            poster = (legacy or {}).get("poster") if version["kind"] == "video" else None
+            if storage is None or not isinstance(poster, dict) or not poster.get("objectName"):
+                return None
+            if int(poster.get("bytes") or 0) > 8 * 1024 * 1024:
+                return None
+            raw = storage.get(job["workspaceId"], "media", poster["objectName"])
+            expected = str(poster.get("hash") or "")
+            if len(expected) == 64 and hashlib.sha256(raw).hexdigest() != expected:
+                raise AlphaError("The poster image changed; processing stopped.", 409, code="library_source_changed")
+            return raw
         jobctx = JobContext(job_id=jid, workspace_id=job["workspaceId"], actor=ctx.actor, version=version, providers=getattr(intel, "providers", None),
                             now=time.time(), processor=proc, consent_revision=decision.grant_revision, attempt=job["attempts"],
                             _reader=_reader(storage, job["workspaceId"], version, obj, legacy), _heartbeat=heartbeat, _progress=progress,
-                            _segments=segments_of, _frames=frames_of)
+                            _segments=segments_of, _frames=frames_of, _poster=poster_of)
         prepared["context"] = jobctx
         if not capabilities.is_local(proc):
             estimate = proc["estimate"](jobctx) if proc.get("estimate") else None
@@ -789,8 +806,13 @@ def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_t
     if state in ("ready", "partial"):
         cur.execute("SAVEPOINT library_finalize")
         try:
-            _write(ctx, version, proc, outcome)
+            written = _write(ctx, version, proc, outcome)
             cur.execute("RELEASE SAVEPOINT library_finalize")
+            embedded = written.get("embeddings")
+            if isinstance(embedded, dict) and embedded.get("vector") is False:
+                # No pgvector here: nothing was indexed, so the capability is honestly unsupported, not "ready".
+                outcome.update(state="unsupported", errorCode="vector_unavailable", errorCategory="unsupported",
+                               detail="This database has no vector index; lexical search still covers this item.")
         except _WriterUnavailable:
             cur.execute("ROLLBACK TO SAVEPOINT library_finalize")
             outcome.update(state="failed", errorCode="library_capability_unavailable", detail="This build cannot store these results yet.",

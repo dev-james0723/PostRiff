@@ -127,6 +127,7 @@ create table if not exists public.pr_library_segments (
 create index if not exists pr_library_segments_asset on public.pr_library_segments(workspace_id, asset_key, version_key, ordinal) where superseded_at is null;
 create index if not exists pr_library_segments_search on public.pr_library_segments using gin(search_vector) where superseded_at is null;
 create index if not exists pr_library_segments_workspace on public.pr_library_segments(workspace_id) where superseded_at is null;
+create index if not exists pr_library_segments_version on public.pr_library_segments(workspace_id, version_key) where superseded_at is null;
 
 -- Understanding annotations. Human confirmations are separate rows that reprocessing never overwrites.
 create table if not exists public.pr_library_annotations (
@@ -167,6 +168,8 @@ create table if not exists public.pr_library_embeddings (
   created_at timestamptz not null default now()
 );
 create index if not exists pr_library_embeddings_asset on public.pr_library_embeddings(workspace_id, asset_key, modality) where status = 'active';
+create index if not exists pr_library_embeddings_version on public.pr_library_embeddings(workspace_id, version_key, modality) where status = 'active';
+alter table public.pr_library_embeddings add column if not exists superseded_at timestamptz;
 do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'vector') then
