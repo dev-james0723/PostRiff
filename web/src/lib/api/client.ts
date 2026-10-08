@@ -1,8 +1,8 @@
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type {
   ActionEnvelope, ActionResult, AnswerResult, AssetRef, CapabilityState, CollectionDetail, CollectionPreview, ComparisonResult, ContentSegment,
-  LibraryCapability, LibraryGrant, LibraryIntelligenceStatus, LibraryScope, LibrarySearchRequest, LibrarySuggestion, RelatedResult, SearchResponse,
-  SmartRule, SourcePack, SourceRef, TaskContext, UnderstandingCard, UsageEntry, VersionStack, ViewerResult
+  AssetUsage, AssetVoice, LibraryCapability, LibraryGrant, LibraryIntelligenceStatus, LibraryScope, LibrarySearchRequest, RelatedResult, SearchResponse,
+  SmartRule, SourcePack, SourceRef, SuggestionInbox, TaskContext, UnderstandingCard, VersionStack, ViewerResult
 } from './library-intelligence-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
@@ -386,8 +386,8 @@ export function createApi(getToken: TokenSource) {
       intelligence<{ status: string }>(w, 'POST', `assets/${encodeURIComponent(key)}/waveform`, body),
     libraryRelated: (w: string, key: string) => intelligence<RelatedResult>(w, 'GET', `assets/${encodeURIComponent(key)}/related`),
     libraryVersions: (w: string, key: string) => intelligence<VersionStack>(w, 'GET', `assets/${encodeURIComponent(key)}/versions`),
-    libraryUsage: (w: string, key: string) => intelligence<{ usage: UsageEntry[]; note: string }>(w, 'GET', `assets/${encodeURIComponent(key)}/usage`),
-    libraryAssetVoice: (w: string, key: string) => intelligence<{ samples: unknown[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/voice`),
+    libraryUsage: (w: string, key: string) => intelligence<AssetUsage>(w, 'GET', `assets/${encodeURIComponent(key)}/usage`),
+    libraryAssetVoice: (w: string, key: string) => intelligence<AssetVoice>(w, 'GET', `assets/${encodeURIComponent(key)}/voice`),
     libraryCompare: (w: string, refs: AssetRef[]) => intelligence<ComparisonResult>(w, 'POST', 'compare', { refs }),
     libraryAction: <T = unknown>(w: string, envelope: ActionEnvelope) => intelligence<ActionResult<T>>(w, 'POST', 'actions', envelope),
     libraryGrants: (w: string) => intelligence<{ grants: LibraryGrant[]; revisions: LibraryIntelligenceStatus['revisions']; flags: Record<string, boolean> }>(w, 'GET', 'grants'),
@@ -401,7 +401,7 @@ export function createApi(getToken: TokenSource) {
     libraryCollection: (w: string, id: string) => intelligence<CollectionDetail>(w, 'GET', `collections/${encodeURIComponent(id)}`),
     librarySourcePack: (w: string, id: string) => intelligence<SourcePack>(w, 'GET', `source-packs/${encodeURIComponent(id)}`),
     libraryRecommendSources: (w: string, task: TaskContext) => intelligence<SourcePack>(w, 'POST', 'source-packs', task),
-    librarySuggestions: (w: string) => intelligence<{ suggestions: LibrarySuggestion[]; cap: { noncriticalPerDay: number; shownToday: number } }>(w, 'GET', 'suggestions'),
+    librarySuggestions: (w: string) => intelligence<SuggestionInbox>(w, 'GET', 'suggestions'),
     libraryVoiceSummary: (w: string) => intelligence<Record<string, unknown>>(w, 'GET', 'voice'),
     libraryIntelligenceStatus: (w: string) => intelligence<LibraryIntelligenceStatus>(w, 'GET', 'status'),
 

@@ -364,11 +364,12 @@ test('detail: sections, provenance in words, no voice scores, and a separate dan
   assert.match(detail, /<DangerArea /);
   assert.match(detail, /DocumentText/);
   const sections = feature('intelligence', 'detail-sections.tsx');
-  assert.match(sections, /attestation: \{ authoredByMe: true \}/, 'My voice needs the owner’s authorship statement');
-  assert.match(sections, /I wrote or said this myself/);
-  assert.doesNotMatch(sections, /confidence|%\s*match|matchPercent|similarity/i, 'no match percentages anywhere');
-  assert.match(sections, /Metrics: unknown/);
-  assert.match(sections, /'unknown'/);
+  const voicePanel = feature('intelligence', 'voice-panel.tsx');
+  assert.match(voicePanel, /I wrote or said this myself/, 'My voice needs the owner’s authorship statement');
+  assert.doesNotMatch(sections + voicePanel, /confidence|%\s*match|matchPercent|similarity/i, 'no match percentages anywhere');
+  assert.match(feature('intelligence', 'usage-panel.tsx'), /Metrics: unknown/);
+  assert.match(detail, /<VoicePanel /);
+  assert.match(detail, /<UsagePanel usage=\{usage\} \/>/);
   assert.equal(W.originLabel('ai_suggested'), 'AI suggestion');
   assert.equal(W.originLabel('user_confirmed'), 'Confirmed by you');
   assert.equal(W.originLabel('extracted'), 'Extracted');
@@ -548,5 +549,93 @@ test('ask library: explicit scope, explicit permission, honest abstention, fresh
   const client = read('lib', 'api', 'client.ts');
   assert.match(client, /search: LibrarySearchRequest & \{ scope: LibraryScope \}/, 'the client type requires a scope');
   assert.match(client, /intelligence<ViewerResult>\(w, 'POST', 'viewer', \{\s*sourceRef:/);
+});
+
+const P2 = load(path.join(LIB, 'proactive.ts'));
+
+test('suggestions: honest cap, in-app only, set_state payloads, critical warnings cannot be switched off', () => {
+  const inbox = { cap: { noncriticalPerDay: 3, shownToday: 1 }, delivery: { channels: ['in_app'], external: false, note: 'Suggestions stay inside Rafii.' } };
+  assert.equal(P2.capLine(inbox), 'At most 3 new suggestions a day (1 today); permission and source warnings always show. Shown only here in Rafii.');
+  assert.ok(!P2.capLine({ ...inbox, delivery: { channels: ['in_app', 'other'], external: true } }).includes('only here'), 'never claims in-app only when the server says otherwise');
+  const item = { id: HEX('s'), category: 'unused_relevant', critical: false, actions: ['open', 'dismiss', 'snooze', 'disable_category'] };
+  assert.deepEqual(P2.suggestionEnvelope(item, 'dismiss', { actionId: 'a' }).payload, { suggestionId: HEX('s'), action: 'dismiss' });
+  assert.deepEqual(P2.suggestionEnvelope(item, 'snooze', { actionId: 'a' }).payload, { suggestionId: HEX('s'), action: 'snooze', snoozeDays: 7 }, 'snooze defaults to 7 days');
+  assert.equal(P2.suggestionEnvelope(item, 'snooze', { snoozeDays: 400, actionId: 'a' }).payload.snoozeDays, 90);
+  assert.equal(P2.suggestionEnvelope(item, 'snooze', { snoozeDays: 0, actionId: 'a' }).payload.snoozeDays, 1);
+  assert.deepEqual(P2.suggestionEnvelope(item, 'disable_category', { actionId: 'a' }).payload, { suggestionId: HEX('s'), action: 'disable_category' });
+  assert.equal(P2.suggestionEnvelope(item, 'apply', { actionId: 'a' }), null, 'apply only on organization proposals');
+  const critical = { id: HEX('c'), category: 'permission', critical: true, actions: ['open', 'dismiss', 'snooze', 'disable_category'] };
+  assert.equal(P2.suggestionEnvelope(critical, 'disable_category', { actionId: 'a' }), null, 'a critical warning can never be switched off');
+  assert.equal(P2.suggestionEnvelope(critical, 'dismiss', { actionId: 'a' }).actionType, 'suggestion.set_state');
+  assert.equal(P2.affectedLabel({ kind: 'proposal', name: 'Recital', itemCount: 4 }), 'Proposed collection “Recital” · 4 items');
+  const panel = feature('intelligence', 'suggestions-panel.tsx');
+  assert.match(panel, /\{data\.delivery\.note\}/, 'the server’s in-app note is shown');
+  assert.match(panel, /\{capLine\(data\)\}/);
+  assert.match(panel, /item\.actions\.includes\('disable_category'\) && canDisable && !item\.critical/);
+  assert.doesNotMatch(panel, /toast|email|push|notif|unread|badge|text-destructive|bg-red|animate-pulse/i, 'no toast storm, other channels or urgency styling');
+  assert.match(feature('library-view.tsx'), /<SuggestionsPanel/);
+});
+
+test('voice: one passage at a time, explicit attestation, AI text approved separately, no scores anywhere', () => {
+  const passages = P2.voicePassages([
+    { id: 'a', kind: 'text', text: 'My own opening line.', locator: { kind: 'text', start: 0, end: 20 } },
+    { id: 'b', kind: 'sheet', text: 'A1', locator: { kind: 'sheet', sheetName: 'S', cellRange: 'A1' } },
+    { id: 'c', kind: 'transcript', text: 'Spoken.', locator: { kind: 'time', startMs: 0, endMs: 900 } },
+    { id: 'd', kind: 'text', text: '   ', locator: { kind: 'text', start: 20, end: 23 } }
+  ]);
+  assert.deepEqual(passages.map((passage) => passage.id), ['a', 'c'], 'cells, image regions and empty text are never voice examples');
+  const draft = { passage: passages[0], polarity: 'positive', personaId: 'default', language: 'en', attested: false, method: 'written_by_me', localAnalysis: true, writer: false, grantVoice: false, approveGeneratedText: false };
+  assert.equal(P2.voiceApproval(draft, 2).ok, false, 'attestation is required');
+  assert.match(P2.voiceApproval(draft, 2).reason, /wrote or said this yourself/);
+  assert.equal(P2.voiceApproval({ ...draft, attested: true, passage: null }, 2).ok, false, 'a passage, never the whole file');
+  assert.equal(P2.voiceApproval({ ...draft, attested: true, language: '' }, 2).ok, false, 'language is explicit');
+  assert.equal(P2.voiceApproval({ ...draft, attested: true, personaId: 'bad persona!' }, 2).ok, false, 'persona is explicit');
+  assert.equal(P2.voiceApproval({ ...draft, attested: true, localAnalysis: false }, 2).ok, false, 'a voice example says what it is for');
+  const ok = P2.voiceApproval({ ...draft, attested: true, grantVoice: true }, 2);
+  assert.deepEqual(ok.payload, {
+    locator: { kind: 'text', start: 0, end: 20 },
+    personaId: 'default',
+    language: 'en',
+    polarity: 'positive',
+    attestation: { authoredByMe: true, method: 'written_by_me' },
+    confirmed: true,
+    uses: [{ purpose: 'analysis', route: 'local-rules' }],
+    grantVoice: true
+  });
+  const negative = P2.voiceApproval({ ...draft, attested: true, polarity: 'negative', localAnalysis: false }, 2);
+  assert.equal(negative.ok, true);
+  assert.equal('uses' in negative.payload, false, 'a don’t-write-like-this example has no uses');
+  assert.equal(P2.voiceApproval({ ...draft, attested: true, approveGeneratedText: true }, 2).payload.approveGeneratedText, true);
+  assert.deepEqual(P2.voiceRevocation({ sampleId: HEX('v'), revision: 2, assetRef: REF('a') }, 'r').payload, { sampleId: HEX('v'), confirmed: true });
+  assert.equal(P2.voiceCoverage([{ status: 'approved' }, { status: 'revoked' }], [{ status: 'approved' }]), '1 voice example · 1 “don’t write like this” example from this item');
+
+  const panel = feature('intelligence', 'voice-panel.tsx');
+  assert.match(panel, /result\.status === 'requires_confirmation'/, 'AI-written text answers requires_confirmation');
+  assert.match(panel, /void approve\(true\)/, 'and is approved by a separate press');
+  assert.match(panel, /actionType: 'voice\.approve_span'/);
+  assert.match(panel, /<fieldset disabled=\{!canApprove \|\| reference \|\| busy\}/, 'owner-only controls are disabled for others');
+  assert.match(panel, /Only the workspace owner can choose voice examples\./);
+  for (const { file, text } of sources()) {
+    assert.doesNotMatch(text, /\b(voice|match|similarity)[- ](score|percentage|percent|rate)\b|\d+\s*%\s*(match|similar|voice)|percent(age)?\s+(match|similar)/i, `${file}: no voice or match percentages`);
+  }
+  for (const file of ['voice-panel.tsx', 'suggestions-panel.tsx', 'usage-panel.tsx']) assert.doesNotMatch(feature('intelligence', file), /percent|%/i, `${file}: no percentages at all`);
+});
+
+test('usage: unknown is never 0, readings carry their time, and nothing claims a cause', () => {
+  assert.equal(P2.metricValue(null), 'unknown');
+  assert.equal(P2.metricValue({ value: null, display: 'unknown', observedAt: null }), 'unknown');
+  assert.equal(P2.metricValue({ value: Number.NaN, observedAt: null }), 'unknown');
+  assert.equal(P2.metricValue({ value: 0, display: '0', observedAt: 1 }), '0', 'a real zero stays zero');
+  assert.equal(P2.metricValue({ value: 1250, display: '1250', observedAt: 1 }), '1,250');
+  assert.equal(P2.metricName('link_clicks'), 'Link clicks');
+  assert.equal(P2.usageLabel({ source: 'citation', type: 'used_in', kind: 'source_pack', status: 'stale' }), 'Cited by a source pack (an older version)');
+  assert.equal(P2.usageLabel({ source: 'post_job', type: 'post_job' }), 'Prepared in a post');
+  const panel = feature('intelligence', 'usage-panel.tsx');
+  assert.match(panel, /\{metricValue\(reading\)\}/);
+  assert.match(panel, /as of \$\{formatDateTime\(reading\.observedAt\)\}/, 'each reading shows its source time');
+  assert.match(panel, /\{usage\.note\}/, 'the server’s correlation-not-causation note is shown');
+  assert.doesNotMatch(panel, /\?\? 0|\|\| 0/, 'no missing value becomes 0');
+  for (const file of ['usage-panel.tsx', 'suggestions-panel.tsx']) assert.doesNotMatch(feature('intelligence', file), P2.CAUSAL_WORDING, `${file}: no causal or ranking claims`);
+  assert.doesNotMatch(fs.readFileSync(path.join(LIB, 'proactive.ts'), 'utf8').replace(/export const CAUSAL_WORDING[^\n]*\n/, ''), P2.CAUSAL_WORDING);
 });
 

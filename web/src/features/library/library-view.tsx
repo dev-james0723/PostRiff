@@ -52,6 +52,7 @@ import { CollectionRail } from './intelligence/collection-rail';
 import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewControls } from './intelligence/library-toolbar';
 import { AskLibraryPanel } from './intelligence/ask-library';
 import { SmartCollectionPanel } from './intelligence/smart-collections';
+import { SuggestionsPanel } from './intelligence/suggestions-panel';
 import { HitDetails, resolveHitAsset } from './intelligence/search-results';
 import { useBatchActions } from './intelligence/use-batch-actions';
 import { groupHits, useLibraryIntelligence, useLibrarySearch } from './intelligence/use-library-search';
@@ -1006,6 +1007,18 @@ function LibraryPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {!asking ? (
+              <SuggestionsPanel
+                enabled={intel.reachable}
+                canEdit={canEdit}
+                onOpen={(assetId) => {
+                  setFocusLocator(null);
+                  update({ asset: assetId });
+                }}
+                onAnnounce={announce}
+              />
+            ) : null}
 
             {activeSmart ? <SmartCollectionPanel collectionId={url.collection} canEdit={canEdit} enabled={intel.reachable} onAnnounce={announce} /> : null}
 
