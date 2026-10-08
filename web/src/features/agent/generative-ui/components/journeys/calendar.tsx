@@ -257,7 +257,7 @@ export function SlotCheck({ props }: JourneyRendererProps) {
 const rescheduleProps = z.object({ actionId: z.literal('schedule_prepare'), target: z.enum(['job', 'draft']) });
 
 function validZone(zone: string): boolean {
-  if (!/^[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+){0,2}$/.test(zone)) return false;
+  if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/.test(zone)) return false;
   try {
     new Intl.DateTimeFormat('en', { timeZone: zone });
     return true;

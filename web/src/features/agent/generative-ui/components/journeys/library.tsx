@@ -9,11 +9,11 @@
  * own consent checks apply. "Use as source" imports a document as a source that still needs review.
  */
 import { z } from 'zod';
-import { Icons } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { formatBytes, formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { LibraryRow } from '../../journeys/views';
+import { AssetPreviewView } from '../primitives/asset-preview';
 import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
 import type { JourneyRendererProps } from './types';
 
@@ -25,20 +25,9 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v)) : [];
 }
 
-const KIND_ICON: Record<string, keyof typeof Icons> = { image: 'media', video: 'video', audio: 'music', document: 'page', file: 'page' };
-
-/** A type cover: no network, no private bytes. */
-export function AssetCover({ row, className }: { row: LibraryRow; className?: string }) {
-  const { copy } = useJourneyEnvironment();
-  const Icon = Icons[KIND_ICON[row.kind ?? 'file'] ?? 'page'] ?? Icons.page;
-  return (
-    <div aria-hidden className={cn('rafii-quiet flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-md', className)}>
-      <Icon className='text-muted-foreground size-6' />
-      <span className='text-muted-foreground text-[10px] font-semibold tracking-wide uppercase'>
-        {(row.extension ?? copy.library.kind[row.kind ?? 'file'] ?? '').slice(0, 10)}
-      </span>
-    </div>
-  );
+/** Preview through lane C's AssetPreviewView: only this workspace's own preview routes, never a signed URL. */
+export function AssetCover({ row, size = 'card' }: { row: LibraryRow; size?: 'row' | 'card' | 'detail' }) {
+  return <AssetPreviewView item={row} size={size} />;
 }
 
 function RowFlags({ row }: { row: LibraryRow }) {
@@ -136,7 +125,7 @@ export function LibraryAssetCard({ props, statementId }: JourneyRendererProps) {
       {(item) => (
         <article className='flex flex-col gap-2 rounded-[var(--rafii-radius-card)] border p-3'>
           <div className='grid gap-3 @[28rem]:grid-cols-[10rem_1fr]'>
-            <AssetCover row={item} />
+            <AssetCover row={item} size='detail' />
             <div className='flex min-w-0 flex-col gap-1'>
               <h4 className='text-sm font-semibold break-words' dir='auto'>
                 {item.title ?? <Missing />}

@@ -803,7 +803,8 @@ export type ViewData<B extends BindingName> = z.infer<(typeof VIEWS)[B]>;
 /** What a journey component can show for one query reference. */
 export type QueryRead<T> =
   | { kind: 'loading' }
-  | { kind: 'denied' | 'unavailable'; result: UiQueryResultV1 }
+  | { kind: 'denied'; result: UiQueryResultV1 }
+  | { kind: 'unavailable'; result: UiQueryResultV1 }
   | { kind: 'empty'; result: UiQueryResultV1; data: T | null }
   | { kind: 'invalid' }
   | { kind: 'data'; state: Extract<DataState, 'available' | 'partial' | 'stale'>; result: UiQueryResultV1; data: T };
@@ -819,7 +820,8 @@ export function readQuery<B extends BindingName>(value: unknown, binding: B): Qu
   if (!envelope.success) return { kind: 'invalid' };
   const result = envelope.data;
   if (result.state === 'loading') return { kind: 'loading' };
-  if (result.state === 'denied' || result.state === 'unavailable') return { kind: result.state, result };
+  if (result.state === 'denied') return { kind: 'denied', result };
+  if (result.state === 'unavailable') return { kind: 'unavailable', result };
   const schema: z.ZodType = VIEWS[binding];
   const parsed = schema.safeParse(result.data);
   if (result.state === 'empty') return { kind: 'empty', result, data: parsed.success ? (parsed.data as ViewData<B>) : null };

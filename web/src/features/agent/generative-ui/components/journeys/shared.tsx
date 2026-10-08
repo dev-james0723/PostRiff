@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import { StateMessage } from '@/components/rafii/state-message';
+import { LoadingRows } from '../primitives/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { JsonValue, UiQueryResultV1 } from '@/lib/agent-runtime/ui-contracts';
@@ -103,9 +104,10 @@ export function QueryFrame<B extends BindingName>({ value, binding, label, title
   const read = readQuery(value, binding);
   let body: ReactNode;
   if (read.kind === 'loading') {
+    // Loading rows are announced once by the message-level status (lane C), not by every component.
     if (status === 'denied') body = <StateMessage kind='permission' title={copy.states.denied} description={copy.states.deniedHint} layout='inline' />;
     else if (status === 'unavailable') body = <StateMessage kind='unsupported' title={copy.states.unavailable} layout='inline' />;
-    else body = <StateMessage kind='loading' title={copy.states.loading} />;
+    else body = <LoadingRows label={copy.states.loading} />;
   } else if (read.kind === 'invalid') {
     body = <StateMessage kind='error' title={copy.states.invalid} description={copy.states.invalidHint} layout='inline' />;
   } else if (read.kind === 'denied') {
