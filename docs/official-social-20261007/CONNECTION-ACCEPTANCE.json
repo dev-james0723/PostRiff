@@ -4,17 +4,17 @@
   "productionSource": {
     "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
     "project": "postriff-phase2-private",
-    "deploymentId": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
-    "sourceSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "deploymentId": "dpl_6XUpCXLgiFHp8vkV9kZv1VPUxdzs",
+    "sourceSha": "8377ebbb037633d7a360207872f37c51ae088fba",
     "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
     "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
-    "health": "200 configured=true phase0=incomplete customerValidated=false"
+    "health": "NOT_RECHECKED after independent Library release; no connection-first production acceptance claimed."
   },
   "providers": [
     {
       "provider": "linkedin",
       "name": "LinkedIn",
-      "environment": "Protected branch preview source dd199b02737d77d5e2eb5bd9ef112af62f204eba, deployment dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k READY; production unchanged",
+      "environment": "READY preview 18798a19; B saved connection survives reload. Resolved merge with current Library 8377ebbb passed Depot CI/browser; new candidate push/preview checks pending.",
       "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
       "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
       "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
@@ -27,7 +27,7 @@
         "profile"
       ],
       "accountRequirements": "Member; no organization required",
-      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary B minimum connection demonstrated on current dd199b02 preview. Full tenant-negative/iPhone/time-dependent and production acceptance remain pending.",
+      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary B minimum connection demonstrated on dd199b02, persistence on 18798a19. Full live tenancy/iPhone/time-dependent and production acceptance pending.",
       "customerConnection": "CONNECTED_IDENTITY_ONLY",
       "featurePermission": "Tester B actual identity-only grant verified; publishing not enabled. No publishing/organization/read/analytics capability promoted.",
       "tokenExchange": "REAL_EXCHANGED: Tester B Account only transaction consumed; Tester A identity/extension history retained separately.",
@@ -35,7 +35,7 @@
       "persistence": "PASS: encrypted durable connection, reload and genuinely new Rafii session retained the original Tester B credential and workspace binding. A survives deployment/reload separately.",
       "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
       "disconnectReconnect": "PASS: approved remote revocation/local removal, then real same-account/workspace reconnect on dd199b02 with openid/profile only; A unchanged. Two expired callbacks were safely rejected before successful third attempt.",
-      "failureStep": "No current LinkedIn identity connection failure. Full live tenant-negative, real iPhone and genuine expiry acceptance remain pending; required database CI test under repair.",
+      "failureStep": "No current identity failure. Frontier CI regression repaired; resolved merge CI/browser pass. Required new-head checks/preview, live tenant-negative, real iPhone and genuine expiry remain pending.",
       "blockerClass": "UNVERIFIED",
       "owner": "Agent: remaining CI/security validation; account owner: supported real iPhone consent/session test when device available.",
       "nextAction": "Preserve both grants; complete remaining acceptance and exact production release review. No repeat basic consent or disconnect approval needed.",
@@ -118,7 +118,9 @@
         "evidence/linkedin-tester-b-fresh-session-20261008.json",
         "evidence/linkedin-tester-b-lifecycle-20261008.json",
         "evidence/preview-status-dd199b02.json",
-        "evidence/linkedin-tester-b-reconnect-dd199b02.json"
+        "evidence/linkedin-tester-b-reconnect-dd199b02.json",
+        "evidence/preview-status-18798a19.json",
+        "evidence/library-merge-validation-20261008.json"
       ],
       "freshSessionEvidence": "evidence/linkedin-tester-b-fresh-session-20261008.json",
       "historicalObservationBeforeAuthorizedDisconnect": {
@@ -136,7 +138,7 @@
       "provider": "threads",
       "name": "Threads",
       "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
-      "appIdentityAndOwnership": "James Au Studio — Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
+      "appIdentityAndOwnership": "James Au Studio \u2014 Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
       "credentials": "Missing client ID and secret",
       "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/threads/callback",
       "generatedCallback": "UNVERIFIED on deployment",
@@ -457,7 +459,7 @@
   "evidenceClasses": {
     "synthetic": "cloud regression, disposable PostgreSQL and browser fixtures only",
     "appRoleIntegration": "Tester A live preview identity observed; provider-app role unverified, so not counted as ordinary-external proof",
-    "ordinaryExternalLive": "Historical LinkedIn minimum ordinary-user connection/reload/fresh session observed. B deliberately disconnected; two expired callbacks rejected, fresh reconnect remains pending. Full acceptance zero; other seven NOT_RUN.",
+    "ordinaryExternalLive": "LinkedIn B real minimum consent/exchange/identity, reload and prior genuinely fresh session observed. Approved disconnect/revocation and same-account/workspace reconnect passed; two expired callbacks rejected safely. Full acceptance zero; other seven NOT_RUN.",
     "productionVerification": "source/UI/config inspected; no live acceptance"
   },
   "requiredLiveAcceptance": [
@@ -471,12 +473,22 @@
     "desktop and real iPhone Safari"
   ],
   "latestConsoleObservationAt": "2026-10-07T07:26:52.475Z",
-  "latestEvidenceRef": "evidence/preview-status-dd199b02.json",
+  "latestEvidenceRef": "evidence/preview-status-18798a19.json",
   "latestLiveObservationAt": "2026-10-08T03:11:35.515828+00:00",
   "ordinaryExternalConnectionObservedProviders": 1,
   "countDefinitions": {
     "ordinaryExternalConnectionObservedProviders": "At least one non-Founder user with attested no provider-app role completed real minimum consent/exchange/identity and reload on this preview.",
     "verifiedOrdinaryExternalProviders": "Full required lifecycle, tenancy, desktop/iPhone and release acceptance; this count remains zero."
   },
-  "latestPreviewObservationAtUtc": "2026-10-08 02:51:34 UTC"
+  "latestPreviewObservationAtUtc": "2026-10-08 02:51:34 UTC",
+  "historicalProductionSourceBeforeConcurrentLibrary": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
+    "sourceSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "200 configured=true phase0=incomplete customerValidated=false"
+  },
+  "candidateMergeEvidence": "evidence/library-merge-validation-20261008.json"
 }

@@ -47,12 +47,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-lint"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-lint"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -117,12 +117,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-typecheck"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-typecheck"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -190,12 +190,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-build"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-build"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -260,12 +260,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-test"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-test"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -330,12 +330,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-ci"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-ci"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -404,12 +404,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-next-e2e"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-next-e2e"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -423,7 +423,7 @@ jobs:
       - name: Mount durable Playwright browser cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-960b2161-playwright"
+          name: "jcb-e408bbcd8242-3f8771e7-9460a6ea-playwright"
           path: "/mnt/jcb-playwright-cache"
       - name: Observe cache before
         run: "printf 'JCB cache before: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"', '\"'\"'/mnt/jcb-playwright-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"

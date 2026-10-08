@@ -220,7 +220,9 @@ export function allPickerItems(
     const like = asset as AssetLike;
     if (!id || !isLibraryAsset(like) || !isReady(like)) return;
     const kind = kindOf(like);
-    if (!kind || kind === 'document') return;
+    // The chat attachment protocol currently accepts only post/reference media.
+    // Documents/files stay first-class Library assets but are not misrepresented as media chips.
+    if (kind !== 'image' && kind !== 'video') return;
     items.push({
       kind,
       id,

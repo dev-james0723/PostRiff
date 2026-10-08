@@ -87,6 +87,10 @@ def _delete(service, workspace_id, principal):
         cur.execute("SELECT 1 FROM public.pr_media_uploads WHERE workspace_id=%s LIMIT 1", (workspace_id,))
         if cur.fetchone() and (uploads is None or uploads.storage is None):
             raise AlphaError('Private storage deletion is unavailable. No data was deleted.', 503)
+        library = getattr(service, 'library', None)
+        cur.execute("SELECT 1 FROM public.pr_library_assets WHERE workspace_id=%s LIMIT 1", (workspace_id,))
+        if cur.fetchone() and (library is None or library.storage is None):
+            raise AlphaError('Private file storage deletion is unavailable. No data was deleted.', 503)
         pending = state.get('accountDeletion')
         if not pending:
             receipt_id = service.data_requests.record(cur, workspace_id, principal, 'deletion', 'requested', {'stage':'storage_pending'})
@@ -118,6 +122,12 @@ def _delete(service, workspace_id, principal):
                 uploads.purge_workspace(cur, workspace_id)
         except Exception as error:
             raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
+    if library is not None and library.storage is not None:
+        try:
+            with service.connection_factory() as db, db.cursor() as cur:
+                library.purge_workspace(cur, workspace_id)
+        except Exception as error:
+            raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private file cleanup.', 503, code='account_deletion_pending') from error
     # Disconnect grants where supported. Never retain plaintext tokens in receipts or logs.
     revocation_pending = revoke_remote_grants(service, workspace_id)
     connector_service = getattr(service, 'productivity_connectors', None)

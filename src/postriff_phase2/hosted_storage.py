@@ -22,7 +22,9 @@ from .media import decode_upload
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.(jpg|pdf|gif)")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
+FILE_OBJECT = re.compile(r"[0-9a-f]{32}\.[a-z0-9]{1,12}")
 MAX_BODY = 8 * 1024 * 1024
+MAX_FILE_BODY = 50 * 1024 * 1024
 MAX_VIDEO_BODY = 100_000_000
 LIST_PAGE = 100
 LIST_PAGES = 200
@@ -39,19 +41,20 @@ def storage_opener(context=None):
 
 
 class SupabaseStorage:
-    def __init__(self, project_url, secret_key, *, bucket="postriff-private", video_bucket="postriff-video", send=None, opener=None):
+    def __init__(self, project_url, secret_key, *, bucket="postriff-private", video_bucket="postriff-video", file_bucket="postriff-library", send=None, opener=None):
         parsed = urlparse(project_url)
         if parsed.scheme != "https" or not parsed.hostname or not parsed.hostname.endswith(".supabase.co") or parsed.path not in ("", "/"):
             raise ValueError("An exact Supabase project URL is required.")
         if not isinstance(secret_key, str) or len(secret_key) < 20:
             raise ValueError("A server-only Supabase secret key is required.")
-        if not re.fullmatch(r"[a-z0-9-]{3,63}", bucket) or not re.fullmatch(r"[a-z0-9-]{3,63}", video_bucket):
+        if not re.fullmatch(r"[a-z0-9-]{3,63}", bucket) or not re.fullmatch(r"[a-z0-9-]{3,63}", video_bucket) or not re.fullmatch(r"[a-z0-9-]{3,63}", file_bucket):
             raise ValueError("Use a valid private bucket name.")
         self.project_url = project_url.rstrip("/")
         self.host = parsed.hostname
         self.secret_key = secret_key
         self.bucket = bucket
         self.video_bucket = video_bucket
+        self.file_bucket = file_bucket
         self.opener = opener or storage_opener()
         self.send = send or self._send
 
@@ -76,10 +79,12 @@ class SupabaseStorage:
             raise AlphaError("Private storage is temporarily unavailable.", 503) from error
 
     def _bucket(self, category):
-        return self.video_bucket if category == "video" else self.bucket
+        if category == "video": return self.video_bucket
+        if category == "file": return self.file_bucket
+        return self.bucket
 
     def _path(self, workspace_id, category, object_name):
-        pattern = VIDEO_OBJECT if category == "video" else OBJECT if category in ("media", "artwork") else None
+        pattern = VIDEO_OBJECT if category == "video" else FILE_OBJECT if category == "file" else OBJECT if category in ("media", "artwork") else None
         if not UUID.fullmatch(str(workspace_id)) or pattern is None or not isinstance(object_name, str) or not pattern.fullmatch(object_name):
             raise AlphaError("Invalid private object location.")
         return f"{workspace_id}/{category}/{object_name}"
@@ -298,6 +303,26 @@ class SupabaseStorage:
         finally:
             response.close()
 
+    def get_bounded(self, workspace_id, category, object_name, max_bytes=MAX_FILE_BODY):
+        if type(max_bytes) is not int or not 1 <= max_bytes <= MAX_FILE_BODY:
+            raise AlphaError("Invalid private object read limit.")
+        path = self._path(workspace_id, category, object_name)
+        try:
+            response = self._open("GET", self._object_url(category, path), self._headers(), None, timeout=120)
+        except HTTPError as error:
+            error.close()
+            if error.code in (400, 404): raise AlphaError("This private file object is unavailable.", 404) from None
+            raise AlphaError("Private storage could not read this file.", 502) from None
+        except (URLError, TimeoutError, OSError) as error:
+            raise AlphaError("Private storage is temporarily unavailable.", 503) from error
+        try:
+            if response.status != 200: raise AlphaError("Private storage could not read this file.", 502)
+            data = response.read(max_bytes + 1)
+            if len(data) > max_bytes: raise AlphaError("Private file exceeded the safe size limit.", 413)
+            return data
+        finally:
+            response.close()
+
     def bucket_info(self, bucket=None):
         name = bucket or self.video_bucket
         status, _, body = self.send("GET", f"{self.project_url}/storage/v1/bucket/{quote(name)}", self._headers(), None)
@@ -317,10 +342,10 @@ class SupabaseStorage:
     def list_prefix(self, prefix, bucket=None):
         """Every object name under `{workspace}/{category}/` (paginated, bounded)."""
         parts = str(prefix).strip("/").split("/")
-        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video")):
+        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video", "file")):
             raise AlphaError("Invalid private object location.")
         folder = "/".join(parts)
-        name = bucket or (self.video_bucket if parts[-1] == "video" else self.bucket)
+        name = bucket or (self.video_bucket if parts[-1] == "video" else self.file_bucket if parts[-1] == "file" else self.bucket)
         found = []
         for page in range(LIST_PAGES):
             body = json.dumps({"prefix": folder, "limit": LIST_PAGE, "offset": page * LIST_PAGE, "sortBy": {"column": "name", "order": "asc"}}).encode()

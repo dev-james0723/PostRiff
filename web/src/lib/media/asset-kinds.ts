@@ -3,10 +3,11 @@
  * `kind` from `mime` (never a stored or client kind), `category` defaulting to `media`, readiness per kind.
  */
 
-export type AssetKind = 'image' | 'video' | 'document';
+export type AssetKind = 'image' | 'video' | 'audio' | 'document' | 'file';
 
 export interface AssetLike {
   mime?: string | null;
+  assetKind?: string | null;
   category?: string | null;
   processing?: string | null;
   duration?: number | null;
@@ -17,13 +18,16 @@ export interface AssetLike {
   deletionPending?: boolean | null;
 }
 
-const READY: Record<AssetKind, string> = { image: 'decoded', video: 'ready', document: 'validated' };
+const READY: Record<'image' | 'video', string> = { image: 'decoded', video: 'ready' };
 
 export function kindOf(asset: AssetLike | null | undefined): AssetKind | null {
   if (!asset) return null;
+  const declared = String(asset.assetKind ?? '').toLowerCase();
+  if (declared === 'document' || declared === 'file' || declared === 'audio') return declared;
   const mime = String(asset.mime ?? '').toLowerCase();
   // Records from before video existed carry no mime; every one of them is an image.
   if (!mime) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
   if (mime.startsWith('video/')) return 'video';
   if (mime.startsWith('image/')) return 'image';
   if (mime === 'application/pdf') return 'document';
@@ -40,7 +44,10 @@ function live(asset: AssetLike | null | undefined): asset is AssetLike {
 
 export function isReady(asset: AssetLike | null | undefined): boolean {
   const kind = kindOf(asset);
-  return live(asset) && kind !== null && asset.processing === READY[kind];
+  if (!live(asset) || kind === null) return false;
+  if (kind === 'document' && asset.mime === 'application/pdf' && asset.processing === 'validated') return true;
+  if (kind === 'document' || kind === 'file' || kind === 'audio') return asset.processing === 'ready' || asset.processing === 'unsupported';
+  return asset.processing === READY[kind];
 }
 
 /** Images a post can be scheduled with. */

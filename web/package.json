@@ -16,7 +16,9 @@
     "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/social-validation-cloud.sh",
     "test:connections": "node --test src/lib/channels/connection-status.test.cjs src/lib/channels/onboarding.test.cjs",
     "ci:jcb": "npm audit --audit-level=high && npm run lint && npm run typecheck && npm run test:connections && npm run test:jcb && npm run build",
-    "e2e:social": "bash ../scripts/social-browser-cloud.sh"
+    "e2e:social": "bash ../scripts/social-browser-cloud.sh",
+    "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-cloud-validation.sh",
+    "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -63,7 +65,7 @@
     "react-resizable-panels": "^4.12.2",
     "react-responsive": "^10.0.1",
     "recharts": "3.8.0",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "simple-icons": "^16.31.0",
     "sonner": "^1.7.4",
     "tailwind-merge": "^3.5.0",
@@ -92,7 +94,9 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "postcss": "8.5.25",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.5",
+    "tinypool": "2.1.2",
+    "source-map-js": "1.2.2"
   },
   "engines": {
     "node": "24.x"

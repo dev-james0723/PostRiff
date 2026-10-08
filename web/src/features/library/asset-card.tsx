@@ -134,9 +134,10 @@ export function AssetCard({
   const ref = useRef<HTMLDivElement>(null);
   // Thumbnails are the stored renditions (up to 4096 px), so a card fetches only once it is near the viewport.
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
-  const document = asset.mime === 'application/pdf';
-  const image = useAssetImage(asset.id, nearView && !document);
-  const storageMissing = image.storageNotConfigured;
+  const assetKind = kindOf(asset);
+  const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const image = useAssetImage(asset.id, nearView && mediaAsset);
+  const storageMissing = mediaAsset && image.storageNotConfigured;
   const loaded = Boolean(image.data);
   useEffect(() => {
     if (storageMissing) onStorageMissing?.();
@@ -146,7 +147,8 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const label = `${document ? 'PDF document' : 'Image'}${dims ? ` ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo');
+  const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
     <ContextMenu>
@@ -171,7 +173,12 @@ export function AssetCard({
           >
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
-              {document ? <div className='rafii-quiet flex aspect-square w-full flex-col items-center justify-center gap-2 text-sm'><span className='font-medium'>PDF document</span><span className='text-muted-foreground'>{asset.pages ?? 'Verified'} pages · LinkedIn</span></div> : image.data ? (
+              {!mediaAsset ? (
+                <div className='rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-2 p-4'>
+                  <span className='text-foreground text-sm font-medium'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+                  <span className='max-w-full truncate text-xs'>{assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : 'File'}</span>
+                </div>
+              ) : image.data ? (
                 <div className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (
@@ -196,13 +203,15 @@ export function AssetCard({
               )}
             </TiltCard>
             <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
+              <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
+              {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
               <AnimatedBadge
                 size='sm'
                 status={publishing ? 'loading' : 'neutral'}
                 showIcon={count > 0}
                 icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
                 className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground')}
-                title={publishing ? 'A post using this image is publishing now' : undefined}
+                title={publishing ? 'A post using this asset is publishing now' : undefined}
               >
                 {usageLabel(count)}
               </AnimatedBadge>
@@ -234,12 +243,12 @@ export function AssetCard({
           )}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel='Image actions'>
+      <ContextMenuContent ariaLabel={`${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
         </ContextMenuItem>
-        {canApprove ? (
+        {canApprove && mediaAsset ? (
           <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />
             Use in a post

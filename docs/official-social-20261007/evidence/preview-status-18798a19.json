@@ -1,0 +1,49 @@
+{
+  "observedAtUtc": "2026-10-08T03:26:13.478835+00:00",
+  "execution": "REAL READY preview/source and saved B connection after reload",
+  "deployment": {
+    "id": "dpl_BqLE38xoaM18CWGxM91FrKbvzDYD",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "state": "READY",
+    "sha": "18798a19fc5ad11262f0350b216bebcb83ec6248",
+    "branch": "codex/social-connection-recovery-20261007",
+    "url": "postriff-phase2-private-9vakiz7w4-jamesau0723-6572s-projects.vercel.app",
+    "target": null
+  },
+  "previewAlias": "postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "production": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_6XUpCXLgiFHp8vkV9kZv1VPUxdzs",
+    "sourceSha": "8377ebbb037633d7a360207872f37c51ae088fba",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "NOT_RECHECKED after independent Library release; no connection-first production acceptance claimed."
+  },
+  "productionBoundary": "Library advanced production independently; this recovery task did not release production.",
+  "connection": {
+    "tester": "B",
+    "provider": "linkedin",
+    "state": "CONNECTED_IDENTITY_ONLY",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "sameOriginalAccountWorkspaceConnection": true,
+    "currentSourceReload": "PASS",
+    "screenshotLocal": "/private/tmp/rafii-linkedin-b-persisted-18798a19.jpg",
+    "screenshotSha256": "0331a7b7c85df50b777543108cf2c8d39ca887ffe98d952dc9946c963f629a8e",
+    "limits": "Persistence only on this revision; real token exchange/identity read happened on dd199b02. No post-reconnect fresh sign-in claimed."
+  },
+  "qualification": {
+    "capabilities": 205,
+    "liveCases": 196,
+    "livePartial": 2,
+    "liveNotRun": 194,
+    "livePassed": 0,
+    "ordinaryExternalBasicProvidersObserved": 1,
+    "fullAcceptanceProviders": 0
+  },
+  "mergeEvidence": "library-merge-validation-20261008.json",
+  "secretSafety": "No credential, state/code/verifier, cookie, email or raw customer ID."
+}

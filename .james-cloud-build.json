@@ -40,7 +40,9 @@
     ".preview/**",
     "audio-reactive-fix/**",
     "PostRiff_Research_2026-09-18/**",
-    "*.zip"
+    "*.zip",
+    "desktop/**",
+    "studio/**"
   ],
   "installCommand": "npm ci",
   "taskArgs": {
@@ -55,6 +57,6 @@
   "framework": "next",
   "cacheScope": "e408bbcd8242",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "960b21616c6467f1e54fce9238ccb6684c959b168ac46734b3668d25b5507d72",
+  "lockfileSha256": "9460a6ea4d9a6bb7dd1d9a15dbef03028ce10fed3bee61f75d362e0f609c15f4",
   "transportMode": "remote_patch"
 }
