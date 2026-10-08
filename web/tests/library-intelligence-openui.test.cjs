@@ -91,7 +91,13 @@ function issuedFrom(nodes) {
   return { tree, refs: P.collectServerRefs(tree.nodes), issued: P.collectIssuedActions(tree.nodes) };
 }
 
-const live = { userActivation: true, phase: 'live' };
+/** A press as the gate sees it: trusted or not, on the control naming `actionId`, inside the node at `owner`. */
+function press(actionId, { owner = '0', trusted = true, control = actionId } = {}) {
+  const node = { getAttribute: (name) => (name === 'data-task-node' ? owner : null), closest: () => null };
+  const target = { getAttribute: (name) => (name === 'data-library-action' ? control : null), closest: (selector) => (selector === '[data-task-node]' ? node : null) };
+  return { isTrusted: trusted, currentTarget: target };
+}
+const live = { event: press('save-1'), actionId: 'save-1', owner: '0', phase: 'live' };
 
 test('test_unknown_component_rejected: only the nine allowlisted components with strict, plain-text props render', () => {
   assert.deepEqual(S.LIBRARY_OPENUI_NAMES, ['AssetCandidateCard', 'SourceCitation', 'SourceScope', 'VersionComparison', 'CollectionProposal', 'SourcePackReview', 'DraftWorkspace', 'ProcessingStatus', 'SuggestionReview']);
@@ -160,10 +166,11 @@ test('test_hydration_no_mutation: no write without a fresh press on a finished, 
   const { refs, issued } = issuedFrom([{ component: 'CollectionProposal', props: proposal() }]);
   const save = issued.get('save-1');
   const { dispatcher, sent } = recorder();
-  assert.deepEqual(dispatcher.activate({ userActivation: true, phase: 'hydrating' }), { ok: false, reason: 'hydration' });
-  assert.deepEqual(dispatcher.activate({ userActivation: true, phase: 'replaying' }), { ok: false, reason: 'replay' });
-  assert.deepEqual(dispatcher.activate({ userActivation: true, phase: 'streaming' }), { ok: false, reason: 'streaming' });
-  assert.deepEqual(dispatcher.activate({ userActivation: false, phase: 'live' }), { ok: false, reason: 'no-user-activation' });
+  assert.deepEqual(dispatcher.activate({ ...live, phase: 'hydrating' }), { ok: false, reason: 'hydration' });
+  assert.deepEqual(dispatcher.activate({ ...live, phase: 'replaying' }), { ok: false, reason: 'replay' });
+  assert.deepEqual(dispatcher.activate({ ...live, phase: 'streaming' }), { ok: false, reason: 'streaming' });
+  assert.deepEqual(dispatcher.activate({ ...live, event: press('save-1', { trusted: false }) }), { ok: false, reason: 'no-user-activation' });
+  assert.deepEqual(dispatcher.activate({ ...live, event: null }), { ok: false, reason: 'no-user-activation' });
   assert.equal((await dispatcher.dispatch(save, { token: null, serverRefs: refs })).status, 'refused');
   assert.equal(sent.length, 0);
 
@@ -181,8 +188,8 @@ test('test_hydration_no_mutation: no write without a fresh press on a finished, 
   // Components only call onAction from presses: no effects in the task components at all.
   assert.doesNotMatch(read('components.tsx'), /useEffect|useLayoutEffect/);
   const surface = read('error-boundary.tsx');
-  for (const line of surface.split('\n').filter((entry) => entry.includes('onAction('))) assert.match(line, /onClick=\{\(\) => onAction\(/, 'the surface raises an action only from a press');
-  assert.match(read('action-adapter.ts'), /if \(event\.isTrusted\) lastTrustedPress\.current = Date\.now\(\)/, 'synthetic events do not count as a press');
+  for (const line of surface.split('\n').filter((entry) => entry.includes('onAction('))) assert.match(line, /onClick=\{\(event\) => onAction\(/, 'the surface raises an action only from a press, and passes it');
+  assert.doesNotMatch(read('action-adapter.ts'), /navigator\.userActivation|lastTrustedPress|addEventListener/, 'no page-wide "recent press" counts as activation');
 });
 
 test('test_stale_revision_conflict: stale or conflicting writes are surfaced, never retried automatically', async () => {
@@ -320,7 +327,7 @@ test('test_fallback_browsing_works: the same validated data renders without Open
   assert.match(surface, /static getDerivedStateFromError\(\)/);
   assert.match(surface, /fallback=\{deterministic\}/, 'a renderer failure shows the deterministic view');
   assert.match(surface, /fallback=\{<PlainItems nodes=\{\[node\]\} onAction=\{onAction\} \/>\}/, 'one failing part falls back on its own');
-  assert.match(surface, /Renderer && !rendererFailed \?/);
+  assert.match(surface, /Renderer && generated && !rendererFailed \?/);
   assert.match(surface, /\) : \(\s*deterministic\s*\)/, 'no renderer mounted → deterministic view');
   const view = fs.readFileSync(path.join(SRC, 'features', 'library', 'library-view.tsx'), 'utf8');
   assert.doesNotMatch(view, /openui|LibraryTaskSurface/i, 'the deterministic Library shell never depends on generated UI');
@@ -347,6 +354,10 @@ test('test_missing_on_action_renders_unavailable: without an injected handler, c
   assert.equal(some.available, true);
   some.call('library.select', { a: 1 });
   assert.deepEqual(calls, [['library.select', { a: 1 }]]);
+  const withEvent = [];
+  const event = press('x');
+  P.resolveActionHandler((id, inputs, pressed) => withEvent.push(pressed)).call('library.open', {}, event);
+  assert.equal(withEvent[0], event, 'the press travels with the call');
 
   const components = read('components.tsx');
   assert.match(components, /onAction\?: LibraryOnAction \| null;/, 'the handler is optional for the runtime bridge');
@@ -355,9 +366,97 @@ test('test_missing_on_action_renders_unavailable: without an injected handler, c
   assert.equal(resolved, declared, 'every component with controls resolves its handler');
   assert.equal(declared, 8, 'all components but SourceScope have controls');
   assert.doesNotMatch(components, /\bonAction\(/, 'no component calls the raw handler');
-  assert.match(components, /disabled=\{!act\.available \|\| !host\.writesEnabled \|\| host\.busyActionId !== null\}/);
-  assert.match(components, /disabled=\{!act\.available\} onClick=\{\(\) => act\.call\('library\.open'/);
+  assert.match(components, /disabled=\{!act\.available \|\| !host\.writesEnabled \|\| host\.busyActionId !== null \|\| control\.disabled/);
+  assert.match(components, /disabled=\{!act\.available\} onClick=\{\(event\) => act\.call\('library\.open'/);
   assert.match(components, /Actions aren’t available in this view\./);
   assert.doesNotMatch(components, /useLibraryActionAdapter/, 'inside generated UI only the injected onAction is used');
 });
 
+
+test('activation is tied to the control: a trusted press on that action’s own button, inside the component that owns it', async () => {
+  const proposalNode = { component: 'CollectionProposal', props: proposal() };
+  const { tree, refs, issued } = issuedFrom([candidate(KEY), proposalNode]);
+  const owners = P.collectIssuedOwners(tree.nodes);
+  assert.equal(owners.get('save-1'), '1', 'the action belongs to the node that offered it');
+  const save = issued.get('save-1');
+
+  assert.deepEqual(P.checkActivation(press('save-1', { owner: '1' }), 'save-1', '1'), { ok: true });
+  assert.deepEqual(P.checkActivation(press('save-1', { owner: '1', trusted: false }), 'save-1', '1'), { ok: false, reason: 'no-user-activation' }, 'synthetic events never count');
+  assert.deepEqual(P.checkActivation(undefined, 'save-1', '1'), { ok: false, reason: 'no-user-activation' }, 'a call without its press is refused');
+  assert.deepEqual(P.checkActivation(press('save-1', { owner: '0' }), 'save-1', '1'), { ok: false, reason: 'not-owner' }, 'a press inside another component does not count');
+  assert.deepEqual(P.checkActivation(press('open-1', { owner: '1', control: 'open-1' }), 'save-1', '1'), { ok: false, reason: 'not-owner' }, 'a press on another control does not count');
+  assert.deepEqual(P.checkActivation({ isTrusted: true, currentTarget: {} }, 'save-1', '1'), { ok: false, reason: 'not-owner' });
+
+  const { dispatcher, sent } = recorder();
+  const elsewhere = dispatcher.activate({ event: press('save-1', { owner: '0' }), actionId: 'save-1', owner: owners.get('save-1'), phase: 'live' });
+  assert.deepEqual(elsewhere, { ok: false, reason: 'not-owner' });
+  const ok = dispatcher.activate({ event: press('save-1', { owner: '1' }), actionId: 'save-1', owner: owners.get('save-1'), phase: 'live' });
+  assert.equal(ok.ok, true);
+  assert.equal((await dispatcher.dispatch(save, { token: ok.token, serverRefs: refs })).status, 'applied');
+  assert.equal(sent.length, 1);
+
+  const adapter = read('action-adapter.ts');
+  assert.match(adapter, /dispatcher\.activate\(\{ event, actionId: envelope\.actionId, owner: owners\.get\(envelope\.actionId\), phase \}\)/);
+  assert.match(adapter, /if \(!checkActivation\(event, actionId, owners\.get\(actionId\)\)\.ok\)/, 'Retry needs the same kind of press');
+  const surface = read('error-boundary.tsx');
+  assert.match(surface, /data-task-node=\{node\.path\}/, 'each rendered node names its path');
+  const components = read('components.tsx');
+  assert.match(components, /data-library-action=\{actionId\}/, 'each write control names its action');
+  assert.match(components, /act\.call\(actionType, \{ actionId \}, event\)/, 'the press is passed with the call');
+  assert.equal(P.ACTION_ATTRIBUTE, 'data-library-action');
+  assert.equal(P.NODE_ATTRIBUTE, 'data-task-node');
+});
+
+test('labels come from the action type: generated text can only describe, never front a write', () => {
+  const sneaky = proposal();
+  sneaky.actions[0].label = 'Preview';
+  assert.equal(parse('CollectionProposal', sneaky).ok, true, 'a generated label is allowed as text…');
+  assert.equal(P.actionLabel(sneaky.actions[0].envelope.actionType, sneaky.actions[0].envelope.payload), 'Save collection', '…but the button says what the action does');
+  assert.equal(P.actionLabel('collection.override', { mode: 'include' }), 'Include');
+  assert.equal(P.actionLabel('collection.override', { mode: 'exclude' }), 'Exclude');
+  assert.equal(P.actionLabel('collection.override', {}), 'Include/Exclude');
+  assert.equal(P.actionLabel('suggestion.set_state', { state: 'dismissed' }), 'Dismiss');
+  assert.equal(P.actionLabel('suggestion.set_state', { state: 'Delete everything' }), 'Update suggestion', 'only known payload values refine a label');
+  assert.equal(P.actionLabel('voice.revoke'), 'Remove voice example');
+  assert.equal(P.actionLabel('nope.unknown'), 'Unavailable action');
+  for (const type of S.LIBRARY_ACTION_TYPES) assert.ok(P.ACTION_LABELS[type], `${type} has a fixed label`);
+  const components = read('components.tsx');
+  assert.match(components, /const label = actionLabel\(actionType, payload\);/);
+  assert.match(components, /\{control\.mode === 'retry' \? 'Retry' : label\}/, 'the visible label is the fixed one');
+  assert.match(components, /\{action\.label !== label \? `\$\{action\.label\} · ` : ''\}/, 'a differing generated label is only part of the description');
+  assert.doesNotMatch(components, /\n\s*\{action\.label\}\n/, 'never the generated label as button text');
+});
+
+test('a failed write becomes Retry with the same press and key; an applied one is done', async () => {
+  assert.deepEqual(P.actionControl(undefined), { mode: 'act', disabled: false });
+  assert.deepEqual(P.actionControl({ status: 'failed', retryable: true }), { mode: 'retry', disabled: false });
+  assert.deepEqual(P.actionControl({ status: 'failed', retryable: false }), { mode: 'blocked', disabled: true });
+  assert.deepEqual(P.actionControl({ status: 'applied' }), { mode: 'done', disabled: true });
+  for (const status of ['conflict', 'denied', 'requires_confirmation']) assert.deepEqual(P.actionControl({ status }), { mode: 'blocked', disabled: true }, status);
+  assert.deepEqual(P.actionControl({ status: 'refused' }), { mode: 'act', disabled: false }, 'nothing was sent: the press can be made again');
+
+  // A save that committed while its answer was lost: Retry re-sends the same activation, so the server replays it.
+  const { refs, issued } = issuedFrom([{ component: 'CollectionProposal', props: proposal() }]);
+  const save = issued.get('save-1');
+  const committed = new Map();
+  const lossy = recorder((envelope, call) => {
+    if (!committed.has(envelope.idempotencyKey)) committed.set(envelope.idempotencyKey, true);
+    else return { status: 'applied', replayed: true, warnings: [] };
+    if (call === 1) throw new Error('The connection dropped.');
+    return { status: 'applied', warnings: [] };
+  });
+  const token = lossy.dispatcher.activate(live).token;
+  const lost = await lossy.dispatcher.dispatch(save, { token, serverRefs: refs });
+  assert.deepEqual([lost.status, lost.retryable], ['failed', true]);
+  assert.equal(P.actionControl(lost).mode, 'retry');
+  const again = await lossy.dispatcher.dispatch(save, { token, serverRefs: refs, retry: true });
+  assert.deepEqual([again.status, again.replayed], ['applied', true], 'answered from the receipt, not applied twice');
+  assert.equal(committed.size, 1, 'one key, one write');
+  assert.equal(P.actionControl(again).mode, 'done');
+  assert.equal((await lossy.dispatcher.dispatch(save, { token, serverRefs: refs })).status, 'refused', 'a used press cannot write again');
+
+  const components = read('components.tsx');
+  assert.match(components, /control\.mode === 'retry' \? host\.retry\?\.\(actionId, event\)/, 'the control turns into Retry');
+  assert.match(read('error-boundary.tsx'), /retry: adapter\.retry,/, 'the surface wires Retry to the same activation');
+  assert.match(read('action-adapter.ts'), /void dispatchLibraryAction\(envelope, token, true\);/);
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState, type CSSProperties } from 'react';
+import { useId, useState, type CSSProperties } from 'react';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader } from '@/components/rafii';
 import {
@@ -18,9 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ApiError } from '@/lib/api/client';
-import type { AssetRef, ComparisonResult, SourcePack } from '@/lib/api/library-intelligence-types';
-import { OUTCOME_TEXT, newIdempotencyKey, outcomeFromActionResult, outcomeFromError, reduceBatchOutcomes, type BatchOutcome } from '@/lib/library/batch';
-import { normalizeKey } from '@/lib/library/url-state';
+import type { AssetRef, ComparisonResult } from '@/lib/api/library-intelligence-types';
+import { OUTCOME_TEXT } from '@/lib/library/batch';
 import { countLabel } from '@/lib/library/wording';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -33,10 +32,6 @@ import { ComparisonView } from './versions-panel';
 /** Glass with an opaque fill where transparency is reduced or unsupported (the global material covers the rest). */
 export const OPAQUE_GLASS_FALLBACK = '[@media(prefers-reduced-transparency:reduce)]:bg-popover [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none';
 
-function randomKey() {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 export interface SelectedItem {
   id: string;
   asset: LibraryAsset | null;
@@ -46,7 +41,9 @@ export interface SelectedItem {
 
 /**
  * Batch actions appear only once something is selected (UI spec §5): collections, tags, a source pack, comparing two
- * versions and deleting, which has its own confirmation. Results are reported per item, never as "all done".
+ * versions and deleting, which has its own confirmation. Results are reported per item, never as "all done". While
+ * the last run has items that didn't finish, its Retry (same keys) is the way forward: the other write controls wait
+ * until it is retried or dismissed, so a lost answer is never re-sent as a new request.
  */
 export function BatchBar({
   selected,
@@ -63,9 +60,9 @@ export function BatchBar({
   canSelectMore,
   searchWithin,
   onSearchWithin,
-  sourcePacks,
-  stickyBottom,
-  onAnnounce
+  onBuildPack,
+  packNote,
+  stickyBottom
 }: {
   selected: SelectedItem[];
   collections: { id: string; name: string; kind?: 'manual' | 'smart' }[];
@@ -83,19 +80,22 @@ export function BatchBar({
   /** Search only the selected items ("Selected N items" scope). */
   searchWithin: boolean;
   onSearchWithin: (on: boolean) => void;
-  /** Source packs are offered only when the Library intelligence service answers in this build (T08 lands them). */
-  sourcePacks: boolean;
+  /** Source packs, when the Library intelligence service answers here (absent: the entry point is hidden). */
+  onBuildPack?: (() => void) | null;
+  /** Why source packs are off or limited here, in plain words. */
+  packNote?: string | null;
   stickyBottom: string;
-  onAnnounce: (message: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [dialog, setDialog] = useState<'pack' | 'compare' | null>(null);
+  const [dialog, setDialog] = useState<'compare' | null>(null);
   const [tag, setTag] = useState('');
   const [tagOpen, setTagOpen] = useState(false);
   const tagId = useId();
   const ids = selected.map((item) => item.id);
   const count = selected.length;
-  const busy = Boolean(run?.running);
+  // A run with items that didn't finish waits for its own Retry (or Dismiss) before another write starts.
+  const unresolved = Boolean(run && !run.running && run.summary.retryIds.length > 0);
+  const busy = Boolean(run?.running) || unresolved;
   if (count === 0 && !run) return null;
 
   return (
@@ -190,14 +190,14 @@ export function BatchBar({
                 </PopoverContent>
               </Popover>
             ) : null}
-            {canEdit && sourcePacks ? (
-              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy} onClick={() => setDialog('pack')}>
+            {canEdit && onBuildPack ? (
+              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={Boolean(run?.running)} title={packNote ?? undefined} onClick={onBuildPack}>
                 <Icons.sparkles aria-hidden />
                 Build source pack
               </Button>
             ) : null}
             {count === 2 ? (
-              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy} onClick={() => setDialog('compare')}>
+              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={Boolean(run?.running)} onClick={() => setDialog('compare')}>
                 Compare
               </Button>
             ) : null}
@@ -208,6 +208,7 @@ export function BatchBar({
               </Button>
             ) : null}
           </div>
+          {unresolved ? <p className='text-muted-foreground basis-full px-2 text-xs'>Retry or dismiss the last change before starting another.</p> : null}
         </div>
       ) : null}
 
@@ -239,7 +240,6 @@ export function BatchBar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {sourcePacks ? <SourcePackDialog open={dialog === 'pack'} onOpenChange={(open) => setDialog(open ? 'pack' : null)} items={selected} onAnnounce={onAnnounce} /> : null}
       {count === 2 ? <CompareDialog open={dialog === 'compare'} onOpenChange={(open) => setDialog(open ? 'compare' : null)} items={selected} /> : null}
     </div>
   );
@@ -280,157 +280,6 @@ function RunReport({ run, items, onRetry, onDismiss }: { run: BatchRun; items: S
           ))}
         </ul>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * A source pack from the selection: evidence and style samples apart, with rationale, gaps and rights warnings. Each
- * selected item says whether it went in and why not. Saving is one explicit action with its own idempotency key.
- */
-function SourcePackDialog({ open, onOpenChange, items, onAnnounce }: { open: boolean; onOpenChange: (open: boolean) => void; items: SelectedItem[]; onAnnounce: (message: string) => void }) {
-  const { api, workspaceId } = useWorkspaceApi();
-  const id = useId();
-  const [goal, setGoal] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [pack, setPack] = useState<SourcePack | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const saveKey = useRef<{ pack: string; key: string } | null>(null);
-
-  const included = new Map<string, string>();
-  for (const ref of pack?.evidenceRefs ?? []) included.set(normalizeKey(ref.assetRef.assetId), 'Evidence');
-  for (const ref of pack?.styleRefs ?? []) if (!included.has(normalizeKey(ref.assetRef.assetId))) included.set(normalizeKey(ref.assetRef.assetId), 'Style sample');
-  const warnings = new Map((pack?.rightsWarnings ?? []).map((warning) => [normalizeKey(warning.assetId), warning.message]));
-  const outcomes: BatchOutcome[] = pack
-    ? items.map((item): BatchOutcome => {
-        const role = included.get(normalizeKey(item.id));
-        return role ? { id: item.id, status: 'applied', message: role } : { id: item.id, status: 'skipped', message: warnings.get(normalizeKey(item.id)) ?? 'Not used for this goal', retryable: false };
-      })
-    : [];
-  const summary = reduceBatchOutcomes(outcomes, 'included');
-
-  async function build() {
-    if (!goal.trim()) {
-      setError('Say what you’re making first.');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setSaved(false);
-    try {
-      const refs = items.map((item) => item.ref);
-      const result = await api.libraryRecommendSources(workspaceId, {
-        userGoal: goal.trim(),
-        selectedSourceRefs: refs.map((assetRef) => ({ assetRef })),
-        scope: { kind: 'selection', assetRefs: refs },
-        purpose: 'draft_evidence'
-      });
-      setPack(result);
-    } catch (failure) {
-      setError(failure instanceof ApiError && failure.status === 503 ? 'Source packs aren’t available in this version yet.' : failure instanceof Error ? failure.message : 'The source pack couldn’t be built.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save() {
-    if (!pack) return;
-    const digest = `${pack.packId}:${pack.revision}`;
-    if (!saveKey.current || saveKey.current.pack !== digest) saveKey.current = { pack: digest, key: newIdempotencyKey('lib-pack', randomKey) };
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.libraryAction(workspaceId, {
-        actionId: `pack-${Date.now()}`,
-        uiInstanceId: 'library-batch',
-        actionType: 'source_pack.create',
-        targetRefs: items.map((item) => item.ref),
-        expectedRevision: pack.revision,
-        idempotencyKey: saveKey.current.key,
-        payload: { packId: pack.packId, userGoal: goal.trim() }
-      });
-      const outcome = outcomeFromActionResult('pack', result);
-      if (outcome.status === 'applied') {
-        setSaved(true);
-        onAnnounce(`Source pack saved. ${summary.label}.`);
-      } else setError(outcome.message ?? 'The source pack wasn’t saved.');
-    } catch (failure) {
-      setError(outcomeFromError('pack', failure instanceof ApiError ? failure : null).message ?? 'The source pack wasn’t saved.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <RafiiDialog open={open} onOpenChange={onOpenChange}>
-      <RafiiDialogContent size='md'>
-        <RafiiDialogHeader title='Build source pack' intro={`From ${countLabel(items.length, 'selected item')}. Evidence and style samples are kept apart; nothing here approves a fact or its rights.`} />
-        <RafiiDialogBody className='flex flex-col gap-4'>
-          <label htmlFor={`${id}-goal`} className='flex flex-col gap-1.5 text-sm font-medium'>
-            What are you making?
-            <Input id={`${id}-goal`} value={goal} maxLength={300} onChange={(event) => setGoal(event.target.value)} placeholder='A post about the spring recital' className='h-11 font-normal' />
-          </label>
-          {error ? (
-            <p role='alert' className='text-destructive text-sm'>
-              {error}
-            </p>
-          ) : null}
-          {pack ? (
-            <div className='flex flex-col gap-4'>
-              <p className='text-sm font-medium'>{summary.label}</p>
-              <PackList title='Evidence' entries={pack.evidenceRefs.map((ref) => ({ key: `${ref.assetRef.assetId}-${ref.segmentId ?? ''}`, title: ref.displayTitle, detail: [ref.rationale, ref.rights].filter(Boolean).join(' · ') }))} />
-              <PackList title='Style samples' entries={pack.styleRefs.map((ref) => ({ key: `${ref.assetRef.assetId}-${ref.sampleId}`, title: ref.displayTitle, detail: ref.rationale }))} />
-              {pack.gaps.length ? <PackList title='Missing' entries={pack.gaps.map((gap, index) => ({ key: `gap-${index}`, title: gap.message, detail: '' }))} /> : null}
-              {pack.rightsWarnings.length ? <PackList title='Rights to check' entries={pack.rightsWarnings.map((warning, index) => ({ key: `rights-${index}`, title: warning.message, detail: '' }))} /> : null}
-              <ul className='flex flex-col gap-1 text-sm'>
-                {outcomes.map((outcome) => (
-                  <li key={outcome.id} className='flex flex-wrap items-baseline justify-between gap-x-3'>
-                    <span className='min-w-0 truncate'>{items.find((item) => item.id === outcome.id)?.title ?? 'An item'}</span>
-                    <span className='text-muted-foreground text-xs'>{outcome.message}</span>
-                  </li>
-                ))}
-              </ul>
-              {saved ? <p className='text-sm'>Saved. Attach it to a draft from Ideas when you write.</p> : null}
-            </div>
-          ) : null}
-        </RafiiDialogBody>
-        <RafiiDialogFooter className='flex-row justify-end'>
-          <Button variant='glass' size='control' onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          {pack && !saved ? (
-            <Button variant='action' size='control' disabled={busy} onClick={() => void save()}>
-              Save source pack
-            </Button>
-          ) : (
-            <Button variant='action' size='control' disabled={busy || !goal.trim() || saved} onClick={() => void build()}>
-              {busy ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
-              Build
-            </Button>
-          )}
-        </RafiiDialogFooter>
-      </RafiiDialogContent>
-    </RafiiDialog>
-  );
-}
-
-function PackList({ title, entries }: { title: string; entries: { key: string; title: string; detail: string }[] }) {
-  return (
-    <div className='flex flex-col gap-1'>
-      <p className='rafii-eyebrow'>{title}</p>
-      {entries.length ? (
-        <ul className='flex flex-col gap-1.5'>
-          {entries.map((entry) => (
-            <li key={entry.key} className='flex flex-col text-sm'>
-              <span>{entry.title}</span>
-              {entry.detail ? <span className='text-muted-foreground text-xs'>{entry.detail}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className='text-muted-foreground text-sm'>None</p>
-      )}
     </div>
   );
 }

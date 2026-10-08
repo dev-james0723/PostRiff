@@ -435,21 +435,124 @@ export interface TaskContext {
   locale?: string;
   personaId?: string;
   selectedSourceRefs: SourceRef[];
+  /** Required by source packs: a pack never defaults to the whole Library. */
   scope?: LibraryScope;
   purpose?: LibraryPurpose;
 }
 
+/** Library state carried to a draft and back (`source_packs.return_to`): bounded, link-free, never identity. */
+export interface LibraryReturnTo {
+  query?: string;
+  scope?: LibraryScope;
+  filters?: LibraryFilters;
+  sort?: string;
+  density?: string;
+  /** 32-hex asset keys. */
+  selection?: string[];
+  anchor?: string;
+  view?: string;
+}
+
+/** approved_public | needs_review | internal | unknown: a constraint to check, never "cleared". */
+export type PackRights = 'approved_public' | 'needs_review' | 'internal' | 'unknown';
+
+export interface PackEvidenceRef {
+  purpose: 'evidence';
+  selection: 'user' | 'recommended';
+  assetRef: AssetRef;
+  title: string;
+  kind: string;
+  locatorLabel: string;
+  review: 'approved' | 'needs_review';
+  reviewReason: string | null;
+  rights: PackRights | string;
+  current: boolean;
+  why: string[];
+  segmentId?: string;
+  locator?: Locator;
+}
+
+export interface PackStyleRef {
+  purpose: 'style';
+  polarity: 'positive' | 'negative';
+  sampleId: string;
+  voiceSourceId: string | null;
+  assetRef: AssetRef;
+  locator?: Locator | null;
+  locatorLabel?: string | null;
+  language?: string | null;
+}
+
+/** A gap, a rights/currency note or a rationale line. `assetRef` names the ref it is about, when it is about one. */
+export interface PackNote {
+  code: string;
+  message: string;
+  assetRef?: AssetRef;
+}
+
+/** What narrowed since the pack's snapshot (`source_packs._revalidate`). */
+export interface PackChange {
+  purpose: 'evidence' | 'style' | 'pack';
+  assetRef: Partial<AssetRef>;
+  change: string;
+  before?: { allowed?: boolean };
+  after?: { allowed?: boolean; reason?: string | null; message?: string | null };
+  message?: string;
+}
+
+/** The fields the existing writer takes (`ideas.turn`): Ideas source ids, voice mode and voice samples. */
+export interface PackComposer {
+  draftId: string;
+  sourcePackId: string;
+  sourceIds: string[];
+  voiceMode: 'personalized' | 'neutral';
+  voiceSourceIds: string[];
+}
+
 export interface SourcePack {
+  contractVersion?: string;
   packId: string;
   revision: number;
-  taskContext: TaskContext;
-  evidenceRefs: (SourceRef & { displayTitle: string; rationale: string; rights: string })[];
-  styleRefs: (SourceRef & { displayTitle: string; rationale: string; sampleId: string })[];
-  rationale: string[];
-  gaps: { kind: string; message: string }[];
-  rightsWarnings: { assetId: string; message: string }[];
   status: 'draft' | 'attached' | 'superseded' | 'revoked';
+  taskContext: TaskContext;
+  returnTo: LibraryReturnTo | null;
+  evidenceRefs: PackEvidenceRef[];
+  styleRefs: PackStyleRef[];
+  rationale: PackNote[];
+  gaps: PackNote[];
+  rightsWarnings: PackNote[];
+  grantRevision: number;
+  draftId: string | null;
+  style: { personaId: string; language: string | null } | null;
+  limits: { maxEvidence: number; maxRecommended: number };
+  warnings?: string[];
+  /** GET only: selected items that became inaccessible were dropped from returnTo (counted, never named). */
+  returnToRemoved?: number;
+  validity?: { attachable: boolean; changes: PackChange[] };
 }
+
+export type PackAttachResult =
+  | {
+      status: 'applied';
+      alreadyAttached: boolean;
+      packId: string;
+      revision: number;
+      draftId: string;
+      composer: PackComposer | null;
+      returnTo: LibraryReturnTo | null;
+      gaps: PackNote[];
+      rightsWarnings: PackNote[];
+      warnings: string[];
+    }
+  | {
+      status: 'conflict';
+      packId: string;
+      revision: number;
+      packStatus: SourcePack['status'];
+      draftId: string;
+      changes: PackChange[];
+      grantRevision: { snapshot: number; current: number };
+    };
 
 export type LibraryActionType =
   | 'collection.save' | 'collection.override' | 'collection.undo' | 'collection.preview' | 'sources.select' | 'source_pack.create'

@@ -14,11 +14,11 @@ import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { Locator } from '@/lib/api/library-intelligence-types';
+import type { AssetRef, Locator } from '@/lib/api/library-intelligence-types';
 import { formatBytes, formatDateTime, relativeTime } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
-import { openerSelector } from '@/lib/library/url-state';
+import { assetRefFor, openerSelector } from '@/lib/library/url-state';
 import { formatClock } from '@/lib/library/wording';
 import { AssetOrganizer } from './library-organizer';
 import { assetTitle, badgeClass, copyHash, dimensionsOf, kindLabel, useAssetImage } from './asset-card';
@@ -69,6 +69,11 @@ interface AssetDetailProps {
   onAnnounce?: (message: string) => void;
   /** Open another item (a related version or a suggestion) in this panel. */
   onOpenAsset?: (assetId: string) => void;
+  /** "Use in draft": build a source pack starting from this item (absent where source packs are off). */
+  onUseInDraft?: (asset: LibraryAsset, ref: AssetRef) => void;
+  /** Voice examples are switched on here; otherwise `voiceNote` says why the voice panel is missing. */
+  voiceEnabled?: boolean;
+  voiceNote?: string | null;
 }
 
 /**
@@ -291,8 +296,10 @@ function DetailBody({
   focusLocator,
   onAnnounce,
   intelligence,
-  onOpenAsset
-}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit' | 'deleting' | 'onDelete' | 'focusLocator' | 'onAnnounce' | 'intelligence' | 'onOpenAsset'> & {
+  onOpenAsset,
+  voiceEnabled = true,
+  voiceNote
+}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit' | 'deleting' | 'onDelete' | 'focusLocator' | 'onAnnounce' | 'intelligence' | 'onOpenAsset' | 'voiceEnabled' | 'voiceNote'> & {
   asset: LibraryAsset;
   isOwner: boolean;
   intel: AssetIntelligence;
@@ -322,7 +329,7 @@ function DetailBody({
         {textual && intelligence ? (
           <div className='flex flex-col gap-1.5'>
             <p className='rafii-eyebrow'>My voice</p>
-            <VoicePanel assetKey={intel.key} segments={segments} enabled />
+            {voiceEnabled ? <VoicePanel assetKey={intel.key} segments={segments} enabled /> : <p className='text-muted-foreground text-sm'>{voiceNote ?? 'Voice examples aren’t available here.'}</p>}
           </div>
         ) : null}
         <SuggestedUses card={card} />
@@ -400,13 +407,19 @@ function DetailBody({
 }
 
 /** One context-specific commitment, quiet glass for the rest (DNA §10.1). Delete lives in its own danger area. */
-function DetailActions({ asset, canEdit, canApprove }: Pick<AssetDetailProps, 'canEdit' | 'canApprove'> & { asset: LibraryAsset }) {
+function DetailActions({ asset, assetRef, canEdit, canApprove, onUseInDraft }: Pick<AssetDetailProps, 'canEdit' | 'canApprove' | 'onUseInDraft'> & { asset: LibraryAsset; assetRef: AssetRef }) {
   const { api, workspaceId } = useWorkspaceApi();
   const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
   return (
     <>
       {mediaAsset && !canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use media in posts.</p>}
       <div className='flex flex-wrap gap-2'>
+        {canEdit && onUseInDraft ? (
+          <Button variant={mediaAsset && canApprove ? 'glass' : 'action'} size='control' className='flex-1 sm:flex-none' onClick={() => onUseInDraft(asset, assetRef)}>
+            <Icons.sparkles aria-hidden />
+            Use in draft
+          </Button>
+        ) : null}
         {canApprove && mediaAsset ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
@@ -495,6 +508,8 @@ export function AssetDetail(props: AssetDetailProps) {
       onAnnounce={props.onAnnounce}
       intelligence={props.intelligence}
       onOpenAsset={props.onOpenAsset}
+      voiceEnabled={props.voiceEnabled ?? true}
+      voiceNote={props.voiceNote}
     />
   ) : null;
 
@@ -515,7 +530,7 @@ export function AssetDetail(props: AssetDetailProps) {
               </DrawerHeader>
               <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4'>{body}</div>
               <DrawerFooter className='pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]'>
-                <DetailActions asset={asset} canEdit={props.canEdit} canApprove={props.canApprove} />
+                <DetailActions asset={asset} assetRef={intel.card.data?.assetRef ?? assetRefFor(asset.id)} canEdit={props.canEdit} canApprove={props.canApprove} onUseInDraft={props.onUseInDraft} />
               </DrawerFooter>
             </>
           )}
@@ -538,7 +553,7 @@ export function AssetDetail(props: AssetDetailProps) {
             </SheetHeader>
             <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4'>{body}</div>
             <SheetFooter className='pt-3'>
-              <DetailActions asset={asset} canEdit={props.canEdit} canApprove={props.canApprove} />
+              <DetailActions asset={asset} assetRef={intel.card.data?.assetRef ?? assetRefFor(asset.id)} canEdit={props.canEdit} canApprove={props.canApprove} onUseInDraft={props.onUseInDraft} />
             </SheetFooter>
           </>
         )}
