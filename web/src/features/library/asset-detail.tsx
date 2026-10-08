@@ -45,6 +45,7 @@ import {
   useAssetIntelligence,
   type AssetIntelligence
 } from './intelligence/detail-sections';
+import { DocumentViewerLauncher } from './document-viewer';
 
 interface AssetDetailProps {
   asset: LibraryAsset | null;
@@ -135,7 +136,7 @@ function LargeImage({ asset, peaks }: { asset: LibraryAsset; peaks?: number[] | 
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = assetKind === 'video';
   if (!mediaAsset) {
-    return <AssetFileThumbnail asset={asset} size='detail' peaks={peaks} />;
+    return <div className='flex flex-col gap-3'><AssetFileThumbnail asset={asset} size='detail' peaks={peaks} /><DocumentViewerLauncher key={asset.id} asset={asset} /></div>;
   }
   if (isVideo) {
     return (

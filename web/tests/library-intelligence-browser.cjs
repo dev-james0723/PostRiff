@@ -146,13 +146,19 @@ async function openLibrary(page, query = '') {
         check(`${label}: scope visible beside search`, (await scope.isVisible()) && /Entire permitted Library/.test(await scope.innerText()));
         check(`${label}: no horizontal overflow`, await noOverflow(page));
 
-        // A016: text covers say what they are; no faux sheet/slide labels.
-        const covers = await page.evaluate(() => ({
-          extracted: [...document.querySelectorAll('[data-thumbnail-preview="extracted-text"]')].map((node) => node.textContent || ''),
-          faux: /SHEET PREVIEW|SLIDE PREVIEW/.test(document.body.textContent || '')
-        }));
-        check(`${label}: extracted-text covers labelled`, covers.extracted.length > 0 && covers.extracted.every((text) => text.includes('Extracted text preview')), covers.extracted.length);
-        check(`${label}: no faux sheet or slide labels`, !covers.faux);
+        // A016: a document cover is the real rendered page or says it is preparing/unavailable; only a raster says "PAGE 1".
+        const covers = await page.evaluate(() => {
+          const nodes = [...document.querySelectorAll('[data-library-item] [data-thumbnail-preview]')];
+          return {
+            kinds: nodes.map((node) => node.getAttribute('data-thumbnail-preview')),
+            pageLabels: nodes.filter((node) => (node.textContent || '').includes('· PAGE 1')).map((node) => node.getAttribute('data-thumbnail-preview')),
+            faux: /SHEET PREVIEW|SLIDE PREVIEW|Extracted text preview/.test(document.body.textContent || '')
+          };
+        });
+        const honest = ['first-page-raster', 'preparing', 'unavailable', 'audio-waveform', 'audio-file', 'image', 'video-poster'];
+        check(`${label}: every cover is a real rendition or says it is not`, covers.kinds.length > 0 && covers.kinds.every((kind) => honest.includes(kind)), covers.kinds);
+        check(`${label}: only a real page raster carries a page label`, covers.pageLabels.every((kind) => kind === 'first-page-raster'), covers.pageLabels);
+        check(`${label}: no faux sheet, slide or text-cover labels`, !covers.faux);
 
         // A065: animated digits never add a second accessible name.
         const digitsHidden = await page.evaluate(() => [...document.querySelectorAll('[data-slot="digit-swap"]')].every((node) => node.closest('[aria-hidden="true"]')));
@@ -203,7 +209,12 @@ async function openLibrary(page, query = '') {
           await audioCard.click();
           await page.getByRole('button', { name: 'Close asset details' }).waitFor({ timeout: 10000 });
           await page.waitForTimeout(1500);
-          check(`${label}: no autoplay on detail open`, await page.evaluate(() => document.querySelector('[aria-label="Now Playing"]')?.classList.contains('hidden') !== false));
+          // Non-vacuous: the bar is always mounted (hidden without a track), and nothing on the page is audibly playing.
+          check(`${label}: no autoplay on detail open`, await page.evaluate(() => {
+            const bar = document.querySelector('[aria-label="Now Playing"]');
+            const audible = [...document.querySelectorAll('audio,video')].filter((media) => !media.paused && !media.muted && media.volume > 0);
+            return Boolean(bar) && bar.classList.contains('hidden') && audible.length === 0;
+          }));
           await page.getByRole('button', { name: 'Play audio in Now Playing' }).click();
           await page.waitForFunction(() => document.querySelector('[aria-label="Now Playing"]')?.classList.contains('hidden') === false, null, { timeout: 10000 });
           await page.getByRole('button', { name: 'Close asset details' }).click();

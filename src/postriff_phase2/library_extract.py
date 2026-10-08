@@ -8,6 +8,19 @@ MAX_FILE_BYTES=50*1024*1024
 MAX_TEXT=2_000_000
 CHUNK=6000
 MIMES={"txt":{"text/plain"},"md":{"text/markdown","text/plain"},"markdown":{"text/markdown","text/plain"},"html":{"text/html"},"htm":{"text/html"},"json":{"application/json","text/json"},"csv":{"text/csv","application/csv","text/plain"},"pdf":{"application/pdf"},"docx":{"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},"xlsx":{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pptx":{"application/vnd.openxmlformats-officedocument.presentationml.presentation"}}
+LEGACY = {'doc','xls','ppt','odt','ods','odp','rtf'}
+MIMES.update({
+ 'doc': {'application/msword','application/vnd.ms-word'},
+ 'xls': {'application/vnd.ms-excel'},
+ 'ppt': {'application/vnd.ms-powerpoint'},
+ 'odt': {'application/vnd.oasis.opendocument.text'},
+ 'ods': {'application/vnd.oasis.opendocument.spreadsheet'},
+ 'odp': {'application/vnd.oasis.opendocument.presentation'},
+ 'rtf': {'application/rtf','text/rtf'},
+})
+# OS MIME registries often omit these legacy types. The isolated converter still
+# validates actual source content; preserve the original stored MIME identity.
+for extension in LEGACY:MIMES[extension].add('application/octet-stream')
 def normalize(x):
  x=html.unescape(str(x or "")).replace("\x00","");x=re.sub(r"\r\n?","\n",x);x=re.sub(r"[ \t\f\v]+"," ",x);return re.sub(r"\n{3,}","\n\n",x).strip()[:MAX_TEXT]
 def chunks(x):
@@ -52,6 +65,7 @@ def extract_text(raw,ext):
  if not isinstance(raw,bytes) or not raw or len(raw)>MAX_FILE_BYTES:raise AlphaError("The file is empty or too large.")
  ext=str(ext or "").lower()
  if ext not in MIMES:return "unsupported",""
+ if ext in LEGACY:return extract_isolated(raw,ext)
  if ext in ("txt","md","markdown"):
   try:return "ready",normalize(raw.decode())
   except UnicodeDecodeError:raise AlphaError("This text file must be UTF-8.") from None
@@ -112,7 +126,20 @@ def extract_isolated(raw, ext):
     import os
     import subprocess
     import sys
-    env = {**os.environ, 'PYTHONPATH': str(__import__('pathlib').Path(__file__).resolve().parents[1]), 'PYTHONDONTWRITEBYTECODE':'1'}
+    if ext in LEGACY:
+        # The existing Office boundary has a credential-free environment,
+        # denied network sockets, a process-group deadline, and enough bounded
+        # memory/CPU for one conversion. Do not nest it in the smaller XML parser.
+        from .library_preview import extract_text_isolated
+        try:
+            return 'ready', normalize(extract_text_isolated(raw, ext))
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+    # Vercel installs vendored dependencies through site.addsitedir; these are
+    # present in sys.path but absent from a fresh subprocess's default path.
+    paths = [str(__import__('pathlib').Path(__file__).resolve().parents[1]), *sys.path]
+    env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
+           'PYTHONPATH': os.pathsep.join(dict.fromkeys(paths)), 'PYTHONDONTWRITEBYTECODE': '1'}
     try:
         result = subprocess.run([sys.executable,'-m','postriff_phase2.library_extract',ext],input=raw,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20,env=env,check=False)
         if result.returncode != 0 or len(result.stdout)>12*MAX_TEXT:
@@ -129,9 +156,10 @@ if __name__ == '__main__':
     import sys
     try:
         import resource
-        resource.setrlimit(resource.RLIMIT_CPU,(10,10))
+        budget = (40,1536) if sys.argv[1] in LEGACY else (10,384)
+        resource.setrlimit(resource.RLIMIT_CPU,(budget[0],budget[0]))
         try:
-            resource.setrlimit(resource.RLIMIT_AS,(384*1024*1024,384*1024*1024))
+            resource.setrlimit(resource.RLIMIT_AS,(budget[1]*1024*1024,budget[1]*1024*1024))
         except (ValueError,OSError):
             pass  # macOS rejects RLIMIT_AS; Linux (production, CI) enforces it. CPU and output bounds still apply.
         raw=sys.stdin.buffer.read(MAX_FILE_BYTES+1)

@@ -132,17 +132,19 @@ test('test_honest_document_preview: text covers say extracted text; only a real 
   assert.equal(W.documentCoverLabel({ extension: 'xlsx', hasExtractedText: false, hasSummary: false, genuineRendition: false }), 'XLSX file');
   assert.equal(W.documentPreviewPhrase({ extension: 'pptx', ...base }), 'extracted text preview');
 
+  // Documents show a server-rendered source page (PR #134); before it exists they say "Preparing preview" or
+  // "Preview unavailable", never a stand-in that looks like the page.
   const thumbnail = feature('asset-thumbnail.tsx');
-  for (const banned of ['SHEET PREVIEW', 'SLIDE PREVIEW', 'WORD · FIRST PAGE', 'DOCUMENT · FIRST PAGE', 'TEXT PREVIEW', 'charCodeAt']) assert.ok(!thumbnail.includes(banned), banned);
-  const firstPageLines = thumbnail.split('\n').filter((line) => line.includes('FIRST PAGE'));
-  assert.equal(firstPageLines.length, 1, 'one first-page label');
-  const label = thumbnail.indexOf('PDF · FIRST PAGE');
-  assert.ok(label > thumbnail.indexOf('function PdfFirstPage') && label < thumbnail.indexOf('function AudioCover'), 'the label sits on the real PDF iframe rendition');
-  assert.match(thumbnail, /documentCoverLabel\(\{[^}]*genuineRendition: false/, 'text covers never claim a rendition');
-  assert.match(thumbnail, /data-thumbnail-preview=\{preview\.source === 'extracted' \? 'extracted-text'/);
-  assert.ok(thumbnail.includes("title='First page PDF thumbnail'") && thumbnail.includes('page=1&view=Fit'), 'the real PDF iframe path stays');
-  // Card and row names say what the cover is.
-  assert.match(thumbnail, /', extracted text preview'/);
+  for (const banned of ['SHEET PREVIEW', 'SLIDE PREVIEW', 'WORD · FIRST PAGE', 'DOCUMENT · FIRST PAGE', 'TEXT PREVIEW', 'charCodeAt', 'asset.aiSummary', '<iframe']) assert.ok(!thumbnail.includes(banned), banned);
+  const pageLabelLines = thumbnail.split('\n').filter((line) => line.includes('· PAGE 1'));
+  assert.equal(pageLabelLines.length, 1, 'one page label');
+  const label = thumbnail.indexOf('· PAGE 1');
+  assert.ok(label > thumbnail.indexOf("data-thumbnail-preview='first-page-raster'") && label < thumbnail.indexOf('function AudioCover'), 'the page label sits on the real raster');
+  assert.match(thumbnail, /api\.libraryPreviewUrl\(workspaceId, asset\.id\)/);
+  assert.match(thumbnail, /'Preparing preview' : 'Preview unavailable'/);
+  // Card and row names say what the cover is: a first page only once a raster can exist.
+  assert.match(thumbnail, /if \(PREVIEW_READY\.includes\(asset\.processing \|\| ''\)\) return ', first-page preview';/);
+  assert.match(thumbnail, /preview being prepared/);
   for (const file of ['asset-card.tsx', 'asset-list-row.tsx']) {
     const text = feature(file);
     assert.match(text, /documentPreviewSuffix\(asset\)/, file);
@@ -161,15 +163,22 @@ test('test_audio_no_autoplay: real peaks or a neutral symbol, and playback only 
   assert.deepEqual(W.peaksToBars([0.2, 0.4], 4), [0.5, 0.5, 1, 1]);
 
   const thumbnail = feature('asset-thumbnail.tsx');
-  const audioCover = thumbnail.slice(thumbnail.indexOf('function AudioCover'), thumbnail.indexOf('function GenericFileCover'));
+  const audioCover = thumbnail.slice(thumbnail.indexOf('function AudioCover'), thumbnail.indexOf('export function AssetFileThumbnail'));
   assert.match(audioCover, /peaksToBars\(peaks,/);
-  assert.match(audioCover, /'audio-symbol'/);
+  assert.match(audioCover, /bars \? 'audio-waveform' : 'audio-file'/);
   assert.doesNotMatch(audioCover, /hash|seed|asset\.id/, 'no bars derived from the file identity');
   assert.match(feature('asset-detail.tsx'), /peaks=\{card\?\.media\?\.peaks \?\? null\}/, 'the detail uses the understanding card peaks');
 
+  // The gallery's inline preview (PR #134) is the one other media element: video starts muted and loops only while in
+  // view (a press under reduced motion), audio waits for a press, and either pauses when Now Playing or another preview plays.
+  const inline = feature('gallery-media-preview.tsx');
+  assert.match(inline, /useState\(video \? 0 : 0\.8\)/, 'video previews start muted');
+  assert.match(inline, /video \? visible && \(!reduce \|\| activated\) : activated/, 'audio plays only after a press');
+  assert.match(inline, /useNowPlaying\.subscribe\(/, 'Now Playing pauses an inline preview');
+  assert.match(inline, /window\.dispatchEvent\(new CustomEvent\(PLAY_EVENT/, 'one audible preview at a time');
   for (const { file, text } of sources()) {
     assert.doesNotMatch(text, /autoPlay|autoplay/, `${file}: no autoplay`);
-    assert.doesNotMatch(text, /<audio[\s>]|<video[\s>]/, `${file}: the Now Playing bar owns the only media element`);
+    if (file !== 'gallery-media-preview.tsx') assert.doesNotMatch(text, /<audio[\s>]|<video[\s>]/, `${file}: the Now Playing bar owns playback outside the inline preview`);
     for (const body of effectBodies(text)) {
       assert.ok(!body.includes('getState().open(') && !body.includes('startPlayback(') && !body.includes('playFrom('), `${file}: an effect must not start playback`);
     }

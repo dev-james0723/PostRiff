@@ -1092,7 +1092,7 @@ class Rollback(Base):
         cur.on(r"to_jsonb\(a\)", lambda sql, args: [({**row, "lease_token": live["token"], "processing_status": live["status"]},)])
         cur.on(r"AND sha256=%s AND id<>%s", [])
         cur.on(r"SELECT count\(\*\) FROM public.pr_library_assets a", [(1,)])
-        cur.on(r"coalesce\(sum\(bytes\),0\)", [(len(raw),)])
+        cur.on(r"coalesce\(sum\(bytes( \+ coalesce\(\(provenance->'thumbnail'->>'bytes'\)::bigint,0\))?\),0\)", [(len(raw),)])  # thumbnails count since #134
 
         @contextlib.contextmanager
         def connect():

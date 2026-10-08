@@ -445,11 +445,11 @@ function LibraryPage() {
       const assetKind = kindOf(asset);
       if (assetKind === 'document' || assetKind === 'file' || assetKind === 'audio') {
         await api.deleteLibraryFile(workspaceId, asset.id);
-        await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       } else {
         await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
       }
       if (url.asset && normalizeKey(url.asset) === normalizeKey(asset.id)) update({ asset: '' });
+      await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       // The card leaves the grid; the announcement says so once.
       announce(`${assetTitle(asset)} deleted.`);
     } catch (error) {
@@ -790,7 +790,15 @@ function LibraryPage() {
             </span>
           }
           title='No assets yet'
-          description={canEdit ? 'Upload a photo here. Videos added from Rafii chat also appear in this Library. Use Add to upload files, paste a link or write a quick note, or drop files anywhere on this page.' : 'Only editors can add media.'}
+          description={canEdit ? 'Add photos, videos, audio, documents or files to your Library.' : 'Only editors can add assets.'}
+          action={
+            canEdit ? (
+              <Button variant='action' size='control' onClick={() => filePicker.current?.click()} disabled={library.revision === null || uploadingFile}>
+                <Icons.upload aria-hidden />
+                Choose assets
+              </Button>
+            ) : undefined
+          }
         />
       </motion.div>
     );
@@ -849,7 +857,7 @@ function LibraryPage() {
                   ? 'Every asset is used in a post'
                   : url.use === 'used'
                     ? 'No asset is used in a post yet'
-                    : 'Nothing matches these filters'
+                    : 'No assets match these filters'
         }
         action={
           <Button

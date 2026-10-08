@@ -20,7 +20,8 @@ import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { assetTitle, badgeClass, cardStatus, copyHash, dimensionsOf, formatDuration, kindLabel, useAssetImage, usageLabel, type LibraryDensity } from './asset-card';
-import { AssetFileThumbnail, documentPreviewSuffix, isPdfAsset } from './asset-thumbnail';
+import { AssetFileThumbnail, documentPreviewSuffix } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 import { SelectToggle } from './intelligence/select-toggle';
 
 export interface AssetListRowProps {
@@ -72,7 +73,6 @@ export function AssetListRow({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
-  const pdfAsset = isPdfAsset(asset);
   const preview = useAssetImage(asset.id, nearView && mediaAsset);
   const video = assetKind === 'video';
   const title = assetTitle(asset);
@@ -132,7 +132,7 @@ export function AssetListRow({
               className={cn('rafii-quiet relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]', compact ? 'size-10' : 'size-14')}
             >
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='row' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='row' loadPreview={nearView} />
               ) : preview.data ? (
                 <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-contain' />
               ) : preview.isError ? (
@@ -158,12 +158,8 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
+          {assetKind === 'audio' || video ? <div className={cn('pr-3 pb-3', onSelect ? 'pl-14' : 'pl-3')}><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
           {footer ? <div className={cn('flex min-w-0 flex-col gap-1.5 pr-3 pb-2.5', onSelect ? 'pl-14' : 'pl-3')}>{footer}</div> : null}
-          {pdfAsset && nearView && !compact ? (
-            <div className={cn('pointer-events-none absolute top-2.5 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]', onSelect ? 'left-14' : 'left-3')}>
-              <AssetFileThumbnail asset={asset} size='row' loadPreview />
-            </div>
-          ) : null}
           {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-1.5', compact ? 'top-1.5' : 'top-4')} /> : null}
         </motion.div>
       </ContextMenuTrigger>

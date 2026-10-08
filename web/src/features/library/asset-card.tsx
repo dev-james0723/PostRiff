@@ -25,7 +25,8 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { kindOf } from '@/lib/media/asset-kinds';
-import { AssetFileThumbnail, documentPreviewSuffix, isPdfAsset } from './asset-thumbnail';
+import { AssetFileThumbnail, documentPreviewSuffix } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 import { SelectToggle } from './intelligence/select-toggle';
 
 /**
@@ -176,7 +177,7 @@ export function AssetCard({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
-  const pdfAsset = isPdfAsset(asset);
+  const inlineMedia = assetKind === 'audio' || assetKind === 'video';
   const image = useAssetImage(asset.id, nearView && mediaAsset);
   const storageMissing = mediaAsset && image.storageNotConfigured;
   const loaded = Boolean(image.data);
@@ -214,6 +215,7 @@ export function AssetCard({
             selected && 'ring-foreground ring-offset-background ring-2 ring-offset-2'
           )}
         >
+          {inlineMedia ? <GalleryMediaPreview key={asset.id} asset={asset} video={assetKind === 'video'} posterUrl={image.data} enabled={nearView} /> : null}
           <button
             type='button'
             onClick={onOpen}
@@ -222,9 +224,9 @@ export function AssetCard({
             className='focus-visible:ring-ring/50 flex min-w-0 flex-col rounded-[var(--rafii-radius-card)] text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             {/* Only the preview tilts; the caption stays still. The card clips the corners. */}
-            <TiltCard max={6} className='rounded-none'>
+            {!inlineMedia ? <TiltCard max={6} className='rounded-none'>
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
                 <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='rafii-quiet relative'>
                   {/* Letterboxed, not cropped: the whole picture in its own proportions. */}
@@ -244,7 +246,7 @@ export function AssetCard({
               ) : (
                 <Skeleton className='aspect-square w-full rounded-none' />
               )}
-            </TiltCard>
+            </TiltCard> : null}
             <span className={cn('flex min-w-0 flex-col items-start gap-1.5 p-2.5', compact && 'gap-1 p-2')}>
               <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
               {status ? (
@@ -269,13 +271,8 @@ export function AssetCard({
             </span>
           </button>
           {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-2.5 pb-2.5'>{footer}</div> : null}
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute inset-x-0 top-0 z-10 aspect-square overflow-hidden rounded-t-[var(--rafii-radius-card)]'>
-              <AssetFileThumbnail asset={asset} size='gallery' loadPreview />
-            </div>
-          ) : null}
           {onSelect ? <SelectToggle title={itemTitle} checked={selected} visible={selecting} onChange={onSelect} className='top-1.5 left-1.5' /> : null}
-          {image.canRetry && (
+          {image.canRetry && !inlineMedia && (
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
               <Button size='lg' variant='glass' className='pointer-events-auto' aria-label='Retry loading this preview' disabled={image.isFetching} onClick={() => void image.refetch()}>
