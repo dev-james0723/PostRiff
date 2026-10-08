@@ -50,7 +50,7 @@ run_unit() {
   log="$EVIDENCE/unit-web.log"; status=0
   node --test "${files[@]}" >"$log" 2>&1 || status=$?
   tail -n 40 "$log"
-  count="$(grep -Eo '^# pass [0-9]+' "$log" | grep -Eo '[0-9]+' | tail -n1 || echo 0)"
+  count="$(grep -Eo '^(# |ℹ )pass [0-9]+' "$log" | grep -Eo '[0-9]+' | tail -n1 || echo 0)"
   record unit-web "$status" "${count:-0}"
   [ "$status" -eq 0 ] && [ "${count:-0}" -gt 0 ]
 }
@@ -79,7 +79,7 @@ run_regression() {
   log="$EVIDENCE/regression-web.log"; status=0
   node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs >"$log" 2>&1 || status=$?
   tail -n 30 "$log"
-  count="$(grep -Eo '^# pass [0-9]+' "$log" | grep -Eo '[0-9]+' | tail -n1 || echo 0)"
+  count="$(grep -Eo '^(# |ℹ )pass [0-9]+' "$log" | grep -Eo '[0-9]+' | tail -n1 || echo 0)"
   record regression-web "$status" "${count:-0}"
   [ "$status" -eq 0 ]
 }
