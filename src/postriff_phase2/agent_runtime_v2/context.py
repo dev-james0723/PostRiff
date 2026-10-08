@@ -44,6 +44,7 @@ class EffectLedger:
     guardrail_trips: list[dict] = field(default_factory=list)
     interruptions: list[dict] = field(default_factory=list)
     site_results: dict = field(default_factory=dict)            # raw site-tool results, for the site agent's evidence blocks
+    research: list = field(default_factory=list)                # web_research outputs this turn (pages, never page bodies beyond facts)
 
     def reference(self, kind: str, ident: str | None, title: str | None = None) -> None:
         if not ident or not isinstance(ident, str):
