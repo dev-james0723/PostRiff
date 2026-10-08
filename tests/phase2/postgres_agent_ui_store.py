@@ -265,6 +265,11 @@ def _eligibility():
     return {}
 
 
+def _events_in(token, workspace, artifact):
+    with ui_transaction(RUNTIME, token, workspace, "read") as (cur, auth):
+        return store.events_after(cur, auth, artifact, 0, 10)
+
+
 @scenario("F-S04", "private events: monotonic seq, bounded replay after a cursor, heartbeats never persisted, scope-checked reads")
 def _events():
     artifact, attempt = STATE["artifact"], STATE["attempt"]
@@ -289,11 +294,6 @@ def _events():
     return {"seqs": seqs}
 
 
-def _events_in(token, workspace, artifact):
-    with ui_transaction(RUNTIME, token, workspace, "read") as (cur, auth):
-        return store.events_after(cur, auth, artifact, 0, 10)
-
-
 @scenario("F-S05", "checkpoint: queued→streaming, lease renewed, other owner refused with ui_lease_lost")
 def _checkpoint():
     attempt = STATE["attempt"]
@@ -302,7 +302,9 @@ def _checkpoint():
         store.checkpoint(db, attempt, "root = RafiiRoot([table])\n", lease_owner="pid:test")
     state, after, size = one("SELECT state, lease_expires_at, checkpoint_bytes FROM public.pr_ui_attempts WHERE id::text=%s", attempt)
     assert state == "streaming" and after >= before and size == len("root = RafiiRoot([table])\n"), (state, before, after, size)
-    assert one("SELECT generation_state FROM public.pr_ui_artifacts WHERE id::text=%s", STATE["artifact"])[0] == "streaming"
+    # The artifact row is not touched by checkpoints (no artifact-row contention per chunk); a reader sees the attempt's state.
+    snap = store.snapshot_http(RUNTIME, wid, OWNER, STATE["artifact"])
+    assert snap["artifact"]["generationState"] == "streaming" and snap["display"]["mode"] == "pending" and snap["attempt"]["live"], snap
     with connection() as db:
         denied(lambda: store.checkpoint(db, attempt, "x", lease_owner="pid:someone-else"), 409, "ui_lease_lost")
         assert store.attempt_state(db, attempt) == "streaming"
