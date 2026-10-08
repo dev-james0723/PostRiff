@@ -32,4 +32,7 @@ python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-
 if [ -f web/tests/library-intelligence-browser.cjs ]; then
   python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser
 fi
+# A031 search latency at 10,000 mixed assets, 8 concurrent scoped searches (pgvector installed by the intelligence stage).
+# Informational: the JSON receipt is the evidence; an over-budget result is reported, never hidden.
+python scripts/library-intelligence-bench.py || echo "LIBRARY_BENCH_EXIT=$?"
 npm --prefix web audit --audit-level=high
