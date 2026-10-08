@@ -19,7 +19,7 @@ const MAX_POINTS = 400;
 
 const seriesSchema = z.object({ field: z.string().min(1).max(120), label: z.union([z.string(), z.number()]), unit: z.string().max(16).optional() });
 const chartProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   kind: z.enum(['line', 'bar']),
   x: z.string().min(1).max(120),
   series: z.array(seriesSchema).min(1),
