@@ -62,13 +62,7 @@ def _binding(effective: dict, action_id: str):
 
 
 def _require_drawable(artifact: dict, supported: dict | None = None) -> None:
-    """NC18, defense in depth: a view whose stored component-library hash this build cannot draw is the native fallback, so
-    it has no controls. The same rule as F's snapshot (ui_store.compatibility: the current library hash plus the declared
-    compatibleLibraryHashes and RAFII_GENUI_COMPATIBLE_LIBRARIES); refused before any activation, receipt or domain write."""
-    from . import ui_store
-    record = {"revision": int(artifact.get("revision") or 0), "libraryHash": str(artifact.get("library_hash") or ""), "scope": artifact.get("scope") or "workspace"}
-    if not ui_store.compatibility(record, supported)["supported"]:
-        raise AlphaError("This view was made with an earlier version and can't be changed here.", 409, code="library_unsupported")
+    ui_capabilities.require_drawable(artifact, supported)
 
 
 def _require_current(artifact: dict, revision: int) -> None:
