@@ -166,7 +166,7 @@ seen_raw = []
 def extract_run(job):
     raw = job.raw()  # bounded private read with identity and sha256 check
     seen_raw.append(hashlib.sha256(raw).hexdigest() == job.version["sha256"])
-    return {"state": "ready", "media": {"pgExtract": True}}
+    return {"state": "ready", "media": {"pages": 3, "notAMediaFact": True}}
 
 
 extract_calls = register("extract", "pg-extract-1", run=extract_run)
@@ -210,7 +210,8 @@ summary = intel.tick(connection, max_jobs=10, max_seconds=60)["jobs"]
 check("tick: both jobs ran", summary["claimed"] == 2 and summary["completed"] == 1 and summary["partial"] == 1, summary)
 check("tick: raw bytes were hash-verified", seen_raw == [True], seen_raw)
 check("capabilities: extract ready, preview partial", (cap_state(doc, "extract"), cap_state(doc, "preview")) == ("ready", "partial"))
-check("derivative: media merged into the version row", scalar("SELECT media->>'pgExtract' FROM public.pr_library_assets WHERE id=%s", (doc,)) == "true")
+check("derivative: media merged into the version row", scalar("SELECT media->>'pages' FROM public.pr_library_assets WHERE id=%s", (doc,)) == "3")
+check("derivative: only allowlisted media facts are stored", scalar("SELECT media ? 'notAMediaFact' FROM public.pr_library_assets WHERE id=%s", (doc,)) is False)
 
 # --- lease expiry recovery ------------------------------------------------------------------------------------------------
 lease_calls = register("visual", "pg-lease-1", category="vision", run=lambda job: {"state": "ready", "media": {"leaseAttempt": job.attempt}})
