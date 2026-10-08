@@ -155,7 +155,8 @@ async function openLibrary(page, query = '') {
             faux: /SHEET PREVIEW|SLIDE PREVIEW|Extracted text preview/.test(document.body.textContent || '')
           };
         });
-        const honest = ['first-page-raster', 'preparing', 'unavailable', 'audio-waveform', 'audio-file', 'image', 'video-poster'];
+        // 'audio-player' is the inline preview's own player (its waveform is decoded from the file after a press).
+        const honest = ['first-page-raster', 'preparing', 'unavailable', 'audio-waveform', 'audio-file', 'audio-player', 'image', 'video-poster'];
         check(`${label}: every cover is a real rendition or says it is not`, covers.kinds.length > 0 && covers.kinds.every((kind) => honest.includes(kind)), covers.kinds);
         check(`${label}: only a real page raster carries a page label`, covers.pageLabels.every((kind) => kind === 'first-page-raster'), covers.pageLabels);
         check(`${label}: no faux sheet, slide or text-cover labels`, !covers.faux);
