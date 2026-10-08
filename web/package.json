@@ -13,7 +13,7 @@
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "audit:copy": "node scripts/copy-audit.mjs",
     "test:browser:durable": "node tests/consumer-durable-browser.cjs",
-    "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-cloud-validation.sh",
+    "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash -c 'bash ../scripts/library-cloud-validation.sh && cd .. && export PYTHONPATH=src:tests POSTRIFF_PG_BIN=\"$(pg_config --bindir)\" && python scripts/postriff_pg_suite.py postgres_dial_phone'",
     "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh"
   },
   "dependencies": {
