@@ -725,9 +725,106 @@ class Waveforms(unittest.TestCase):
         self.assertEqual(argv[argv.index("-f") + 1], "mp3", "the demuxer is forced, so a playlist can't be probed into fetching")
         self.assertIn("-nostdin", argv)
         self.assertLessEqual(seen["timeout"], 60)
+        self.assertEqual((argv[argv.index("-ac") + 1], argv[argv.index("-ar") + 1]), ("1", "8000"), "mono 8 kHz keeps the stream small")
         for x, y in zip(peaks, media.build_waveform(fx.ramp_samples(), 10)):
             self.assertAlmostEqual(x, y, delta=0.01)
         self.assertIsNone(media.ffmpeg_peaks(b"x", "exe", 10, runner=runner, binary="/usr/bin/ffmpeg"), "unknown containers are never handed to ffmpeg")
+
+    def test_long_decode_streams_with_bounded_memory(self):
+        """~64 MiB of decoded PCM (about 70 minutes at 8 kHz) must never be held at once: peaks come out exact while the
+        largest buffer handed to the accumulator stays one stream chunk and traced peak memory stays a few MiB.
+        Amplitudes stay <= 256 because CPython caches those ints, so tracemalloc measures the streaming buffers rather
+        than millions of boxed samples; a one-byte misalignment would still surface as values near 14000."""
+        import tracemalloc
+        from array import array
+        media = mod("media")
+        amplitudes = [32, 64, 96, 128, 160, 192, 224, 256]
+        chunks_per_segment, edge = 128, 6  # 8 segments x 128 chunks x 64 KiB; silent edges absorb bucket-boundary rounding
+        silence = bytes(media.STREAM_CHUNK)
+        square = {a: array("h", [a, -a] * (media.STREAM_CHUNK // 4)).tobytes() for a in amplitudes}
+        handed = {"bytes": 0, "largest": 0, "closed": False}
+
+        def runner(argv, raw_path, timeout):
+            try:
+                for n, amplitude in enumerate(amplitudes):
+                    for k in range(chunks_per_segment):
+                        chunk = silence if k < edge or k >= chunks_per_segment - edge else square[amplitude]
+                        if n == 0 and k == edge:  # split one chunk on an odd byte: a sample straddles two reads
+                            for part in (chunk[:30001], chunk[30001:]):
+                                handed["bytes"] += len(part)
+                                yield part
+                            continue
+                        handed["bytes"] += len(chunk)
+                        yield chunk
+            finally:
+                handed["closed"] = True
+
+        largest = {"samples": 0}
+        original = media.PeakAccumulator
+
+        bound = media.STREAM_CHUNK // 2 + 1
+
+        class Recording(original):
+            def add(self, samples):
+                largest["samples"] = max(largest["samples"], len(samples))
+                if len(samples) > bound:  # fail at once: a buffered decode would otherwise crawl through 33M samples
+                    raise AssertionError(f"{len(samples)} samples handed over at once; the decode was buffered")
+                super().add(samples)
+
+        media.PeakAccumulator = Recording
+        tracemalloc.start()
+        try:
+            peaks = media.ffmpeg_peaks(b"ID3" + b"\0" * 64, "mp3", len(amplitudes), runner=runner, binary="/usr/bin/ffmpeg")
+            _, peak_memory = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+            media.PeakAccumulator = original
+        self.assertEqual(handed["bytes"], len(amplitudes) * chunks_per_segment * media.STREAM_CHUNK)
+        self.assertTrue(handed["closed"])
+        self.assertEqual(peaks, [round(a / 32768, 4) for a in amplitudes], "exact peaks, including across the odd-byte split")
+        self.assertLessEqual(largest["samples"], bound, "no buffer larger than one stream chunk reaches the accumulator")
+        self.assertLess(peak_memory, 8 * 1024 * 1024, f"peak traced memory {peak_memory} bytes for a {handed['bytes']}-byte stream")
+
+    def test_decoder_output_caps(self):
+        media = mod("media")
+        state = {"yielded": 0, "closed": False}
+
+        def endless(argv, raw_path, timeout):
+            try:
+                yield b"fLaC"
+                while True:
+                    state["yielded"] += 1
+                    yield bytes(media.STREAM_CHUNK)
+            finally:
+                state["closed"] = True
+
+        original = media.ffmpeg_path
+        media.ffmpeg_path = lambda: "/usr/bin/ffmpeg"
+        try:
+            with self.assertRaises(media.OutputTooLarge):
+                media.ffmpeg_audio_flac(b"\0" * 64, "mov", runner=endless)
+        finally:
+            media.ffmpeg_path = original
+        self.assertTrue(state["closed"], "the decoder is stopped at the cap")
+        self.assertLessEqual(state["yielded"] * media.STREAM_CHUNK, media.MAX_AUDIO_BYTES + media.STREAM_CHUNK)
+        state.update(yielded=0, closed=False)
+        cap = media.MAX_PCM_BYTES
+        media.MAX_PCM_BYTES = 4 * media.STREAM_CHUNK
+        try:
+            self.assertIsNone(media.ffmpeg_peaks(b"\0" * 64, "mp3", 10, runner=endless, binary="/usr/bin/ffmpeg"), "over the PCM cap: no peaks, not a partial guess")
+        finally:
+            media.MAX_PCM_BYTES = cap
+        self.assertTrue(state["closed"])
+        self.assertLessEqual(state["yielded"], 5)
+        original_flac = media.ffmpeg_audio_flac
+        media.ffmpeg_audio_flac = lambda raw, ext: (_ for _ in ()).throw(media.OutputTooLarge("cap"))
+        try:
+            db = Memory()
+            mov = version_of(db, db.add_asset(kind="video", ext="mov", mime="video/quicktime", media={"durationMs": 1000}))
+            result = media.transcribe_processor_run(Job(mov, b"\0" * 64, Providers(environ=ENV, transport=Transport())))
+        finally:
+            media.ffmpeg_audio_flac = original_flac
+        self.assertEqual((result["state"], result["errorCode"]), ("unsupported", "media_too_large"))
 
     def test_browser_peaks_validation(self):
         media = mod("media")
