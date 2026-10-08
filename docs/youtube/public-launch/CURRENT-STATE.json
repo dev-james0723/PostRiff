@@ -6,15 +6,18 @@
     "id": "rafii-youtube-production",
     "number": "568838253270",
     "name": "Rafii YouTube Production",
-    "status": "VERIFIED PROJECT CREATION ONLY",
-    "evidence": "Coordinating release agent observed successful project creation in Google Console during this mission on 2026-10-08.",
+    "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+    "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
     "oauthClientId": null,
     "oauthConfiguration": "NOT CONFIGURED",
-    "apisEnabled": "UNVERIFIED / NOT CONFIGURED IN THIS MISSION",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ],
     "oauthAudience": null,
     "oauthPublishingStatus": null,
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "Console debugger ownership/unattached prevented subsequent configuration; no OAuth/API/verification configuration claimed.",
+    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
     "existingReferenceProjectId": "rafii-509720"
   },
   "stagingGoogleProject": {
@@ -35,12 +38,12 @@
     "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
   },
   "approvedProductionQuotas": {
-    "dailyUploads": null,
-    "searchCalls": null,
-    "generalUnits": null,
+    "dailyUploads": 100,
+    "searchCalls": 100,
+    "generalUnits": 10000,
     "analytics": null,
-    "status": "UNVERIFIED",
-    "note": "New project allocations have not been inspected. Prior staging/default figures are not a production quota approval."
+    "status": "VERIFIED CONFIGURED DEFAULT DATA API ALLOCATION; EXTENSION NOT SUBMITTED",
+    "note": "GOOGLE-QUOTAS.observed.json retains exact Console labels. This does not establish audit approval, public-upload eligibility or sufficient rollout capacity."
   },
   "submissions": {
     "googleOAuth": "NOT SUBMITTED",
@@ -54,9 +57,11 @@
     "privateVideoUploaded": false,
     "nativeScheduleCreated": false,
     "publicVideoPublished": false,
-    "autopilotProviderExecuted": false
+    "autopilotProviderExecuted": false,
+    "youtubeDataApiEnabled": true,
+    "youtubeAnalyticsApiEnabled": true
   },
-  "releaseGate": "Cloud engineering validation passed (ftch52s5jv). PR regression checks, merge/deploy and running-version smoke remain pending in this pre-release record. Reviewed migrations 089/097 are applied. Only deploy with unapproved public/agentic publishing disabled.",
+  "releaseGate": "JCB cfj6vg03bh passed the synthetic subset. PR #136 at 668a1cc9 passed Library/aux/Vercel but full PG failed a premature synthetic fleet attempt cutoff on 4 CPU; fixture coordination corrected, current-head full CI still required before merge/deploy. Public/agentic/fleet execution remains off.",
   "ownerInputsPending": [
     "verified operator/legal/contact facts",
     "legal approval/required attestations",

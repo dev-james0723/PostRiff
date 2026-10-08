@@ -122,12 +122,17 @@
     "googleVerification": "NOT SUBMITTED",
     "youtubeAudit": "NOT SUBMITTED",
     "quotaExtension": "NOT SUBMITTED",
-    "approvedDailyUploads": null,
+    "approvedDailyUploads": 100,
     "publicUploadEligibility": "UNVERIFIED",
     "independentAccounts": "UNEXECUTED",
     "privateUpload": "UNEXECUTED",
     "nativeSchedule": "UNEXECUTED",
-    "providerAutopilot": "UNEXECUTED"
+    "providerAutopilot": "UNEXECUTED",
+    "quotaObservation": "VERIFIED DEFAULT:100 uploads/day,100 search/day,10,000 Queries/day; extension NOT SUBMITTED, public eligibility UNVERIFIED",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ]
   },
   "releaseConfiguration": {
     "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "0",
@@ -140,7 +145,7 @@
     "Free storage provider currently limits video objects to 50 MB; no paid upgrade authorized",
     "Sustainable media/identity/agent worker fleets are not provisioned or provider benchmarked; isolated lane code and synthetic concurrent claim acceptance remain separate from activation",
     "Verified legal/operator details, legal approval, actual account consent and disposable private asset remain pending",
-    "Google Console connection is unattached; actual client/API/verification/quota configuration remains pending"
+    "Console access recovered; APIs enabled and default Data API allocation verified. OAuth contacts, policy agreement, client, verification/audit and quota extension remain pending"
   ],
   "postSnapshotCorrections": {
     "status": "VERIFIED BY SOURCE-BOUND JCB cfj6vg03bh; latest-head full PR regression still required",
@@ -153,7 +158,15 @@
       "Default-off isolated YouTube upload/identity/planner lanes, fenced concurrent claims and separate cloud-only concurrency fixture",
       "Workspace reservation/limit/delay dashboard with explicit unknown Google remaining quota"
     ],
-    "reuse": "The complete corrected source was included in JCB cfj6vg03bh. Earlier source-bound results remain historical. Latest-head full PR CI additionally covers the complete Library Chromium/WebKit path and other product regressions."
+    "reuse": "The complete corrected source was included in JCB cfj6vg03bh. Earlier source-bound results remain historical. Latest-head full PR CI additionally covers the complete Library Chromium/WebKit path and other product regressions.",
+    "currentPullRequestFailure": {
+      "head": "668a1cc92c0daf1733607e7d74380ded84be4e9a",
+      "run": 37846834540,
+      "case": "postgres_youtube_fleet concurrent_claims",
+      "cause": "Fixture exhausted 128 expected nonblocking advisory-lock denials before the original 30-second deadline on 4 CPU",
+      "repair": "Deadline-based staggered backoff; all 8 x 8 claim, latency, uniqueness, isolation and quota assertions retained",
+      "validation": "PENDING LATEST-HEAD CLOUD GHA; no runtime change"
+    }
   },
   "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/136",
   "historicalCloudRuns": [

@@ -7,7 +7,14 @@
   "quotaRequestSubmitted": false,
   "productionProjectId": "rafii-youtube-production",
   "productionProjectNumber": "568838253270",
-  "actualApprovedQuota": null,
+  "actualApprovedQuota": {
+    "observedReference": "GOOGLE-QUOTAS.observed.json",
+    "configuredDefaultDailyUploads": 100,
+    "configuredDefaultSearchCallsPerDay": 100,
+    "configuredDefaultGeneralQueriesPerDay": 10000,
+    "extensionApproved": false,
+    "publicUploadEligibility": "UNVERIFIED"
+  },
   "source": {
     "costs": "https://developers.google.com/youtube/v3/determine_quota_cost",
     "audit": "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits",
@@ -270,7 +277,7 @@
   ],
   "limitations": [
     "Not measured customer traffic",
-    "No production quota or throughput proof",
+    "Production default Data API allocation verified; no extension or production throughput proof",
     "Analytics quota/cost is a separate Console verification task",
     "Headroom is not permission to retry uncertain writes",
     "Storage, egress, worker and per-account eligibility require independent acceptance",

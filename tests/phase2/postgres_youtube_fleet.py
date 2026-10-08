@@ -116,24 +116,37 @@ def concurrent_claims(factory):
     deadline = time.monotonic() + THRESHOLDS['stageDeadlineSeconds']
     def collect(index):
         attempt, selected, durations = factory(index), [], []
-        for _ in range(128):
-            if len(selected) == CLAIMS_PER_THREAD or time.monotonic() >= deadline:
-                break
+        attempts = empty_claims = consecutive_empty = 0
+        caller_started = time.monotonic()
+        # Worker claims deliberately return None when the shared advisory lock
+        # is busy. Fast denied calls must not exhaust an attempt count before
+        # the same bounded deadline used on slower cloud runners.
+        while len(selected) < CLAIMS_PER_THREAD and time.monotonic() < deadline:
             started = time.monotonic()
             result = attempt()
+            attempts += 1
             if result:
                 selected.append(result)
                 durations.append((time.monotonic() - started) * 1000)
+                consecutive_empty = 0
             else:
-                time.sleep(.005)
-        assert len(selected) == CLAIMS_PER_THREAD, 'A fleet caller did not make bounded claim progress'
-        return selected, durations
+                empty_claims += 1
+                consecutive_empty += 1
+                backoff = min(.05, .005 * 2 ** min(consecutive_empty - 1, 4) + index * .001)
+                time.sleep(min(backoff, max(0, deadline - time.monotonic())))
+        progress = {'caller': index, 'claims': len(selected), 'attempts': attempts,
+                    'emptyClaims': empty_claims, 'elapsedSeconds': round(time.monotonic() - caller_started, 4)}
+        assert len(selected) == CLAIMS_PER_THREAD, ('A fleet caller did not make bounded claim progress', progress)
+        return selected, durations, progress
     started = time.monotonic()
     with ThreadPoolExecutor(max_workers=THREADS) as pool:
         groups = list(pool.map(collect, range(THREADS)))
-    claims = [item for selected, _ in groups for item in selected]
-    times = [value for _, durations in groups for value in durations]
+    claims = [item for selected, _, _ in groups for item in selected]
+    times = [value for _, durations, _ in groups for value in durations]
     summary = {'threads': THREADS, 'claims': len(claims), 'elapsedSeconds': round(time.monotonic() - started, 4),
+        'claimsPerCaller': [progress['claims'] for _, _, progress in groups],
+        'attempts': sum(progress['attempts'] for _, _, progress in groups),
+        'emptyClaims': sum(progress['emptyClaims'] for _, _, progress in groups),
         'p50Ms': round(statistics.median(times), 4),
         'p95Ms': round(sorted(times)[math.ceil(len(times) * .95) - 1], 4), 'maxMs': round(max(times), 4)}
     assert summary['p95Ms'] <= THRESHOLDS['claimP95Ms'] and summary['maxMs'] <= THRESHOLDS['claimMaxMs'], summary

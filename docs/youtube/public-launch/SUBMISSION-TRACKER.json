@@ -9,15 +9,18 @@
     "id": "rafii-youtube-production",
     "number": "568838253270",
     "name": "Rafii YouTube Production",
-    "status": "VERIFIED PROJECT CREATION ONLY",
-    "evidence": "Coordinating release agent observed successful project creation in Google Console during this mission on 2026-10-08.",
+    "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+    "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
     "oauthClientId": null,
     "oauthConfiguration": "NOT CONFIGURED",
-    "apisEnabled": "UNVERIFIED / NOT CONFIGURED IN THIS MISSION",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ],
     "oauthAudience": null,
     "oauthPublishingStatus": null,
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "Console debugger ownership/unattached prevented subsequent configuration; no OAuth/API/verification configuration claimed.",
+    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
     "existingReferenceProjectId": "rafii-509720"
   },
   "workstreams": [
