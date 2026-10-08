@@ -1,0 +1,318 @@
+{
+ "analytics_posts": {
+  "partial": {
+   "state": "partial",
+   "data": {
+    "posts": [
+     {
+      "ref": "job:job_1",
+      "jobId": "job_1",
+      "provider": "threads",
+      "platform": "Threads",
+      "connectionId": "ch_th",
+      "providerPostId": "p1",
+      "language": "zh-Hant-HK",
+      "publishedAt": "2026-10-01T01:00:00Z",
+      "publishedLocal": "2026-10-01T09:00",
+      "contentOrigin": "postriff_published",
+      "metrics": {
+       "views": {
+        "value": 240,
+        "availability": "available",
+        "unit": "count",
+        "readOffset": "24h",
+        "observedAt": "2026-10-07T00:00:00Z",
+        "definitionVersion": "2026-09"
+       },
+       "likes": {
+        "value": 12,
+        "availability": "available",
+        "unit": "count",
+        "readOffset": "24h",
+        "observedAt": "2026-10-07T00:00:00Z",
+        "definitionVersion": "2026-09"
+       },
+       "replies": {
+        "value": null,
+        "availability": "unavailable",
+        "unit": "count",
+        "readOffset": null,
+        "observedAt": "2026-10-07T00:00:00Z",
+        "definitionVersion": "2026-09"
+       }
+      },
+      "rates": {
+       "likesPerView": {
+        "value": "1/20",
+        "display": "12/240",
+        "numerator": 12,
+        "denominator": 240
+       }
+      },
+      "cohort": {
+       "provider": "threads"
+      },
+      "freshness": {
+       "observedAt": null,
+       "ingestedAt": null
+      }
+     },
+     {
+      "ref": "job:job_2",
+      "jobId": "job_2",
+      "provider": "threads",
+      "platform": "Threads",
+      "connectionId": "ch_th",
+      "providerPostId": "p2",
+      "language": "zh-Hant-HK",
+      "publishedAt": "2026-10-01T01:00:00Z",
+      "publishedLocal": "2026-10-01T09:00",
+      "contentOrigin": "postriff_published",
+      "metrics": {
+       "views": {
+        "value": 0,
+        "availability": "available",
+        "unit": "count",
+        "readOffset": "24h",
+        "observedAt": "2026-10-07T00:00:00Z",
+        "definitionVersion": "2026-09"
+       },
+       "likes": {
+        "value": null,
+        "availability": "not_read",
+        "unit": "count",
+        "readOffset": null,
+        "observedAt": "2026-10-07T00:00:00Z",
+        "definitionVersion": "2026-09"
+       }
+      },
+      "rates": {
+       "likesPerView": {
+        "value": "1/20",
+        "display": "12/240",
+        "numerator": 12,
+        "denominator": 240
+       }
+      },
+      "cohort": {
+       "provider": "threads"
+      },
+      "freshness": {
+       "observedAt": null,
+       "ingestedAt": null
+      }
+     }
+    ],
+    "offset": 0,
+    "timeZone": "Asia/Hong_Kong",
+    "startUtc": "2026-09-07T16:00:00Z",
+    "endUtc": "2026-10-07T16:00:00Z",
+    "families": {},
+    "rules": {},
+    "definitionVersion": "2026-09",
+    "undated": 1,
+    "verifiedPostsInWindow": 3,
+    "postsWithReadings": 2
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": "Unavailable is never 0. Reach is never summed across platforms."
+   },
+   "warnings": [
+    "Some verified posts in this period have no reading yet."
+   ]
+  }
+ },
+ "analytics_series": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "metric": "views",
+    "bucket": "week",
+    "timeZone": "Asia/Hong_Kong",
+    "series": [
+     {
+      "provider": "threads",
+      "platform": "Threads",
+      "connectionId": "ch_th",
+      "points": [
+       {
+        "bucket": "2026-09-07",
+        "posts": 1,
+        "measured": 0,
+        "total": null,
+        "mean": null
+       },
+       {
+        "bucket": "2026-09-14",
+        "posts": 2,
+        "measured": 2,
+        "total": 300.0,
+        "mean": "150"
+       },
+       {
+        "bucket": "2026-09-21",
+        "posts": 0,
+        "measured": 0,
+        "total": null,
+        "mean": null
+       }
+      ]
+     }
+    ],
+    "definitionVersion": "2026-09",
+    "unit": "count",
+    "rule": "one series per provider account; a bucket with no reading is null, never 0",
+    "undated": 0
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "analytics_compare": {
+  "normal": {
+   "state": "partial",
+   "data": {
+    "metric": "views",
+    "basis": "24h",
+    "comparisons": [
+     {
+      "cohort": {
+       "provider": "threads",
+       "language": "zh-Hant-HK",
+       "window": "24h"
+      },
+      "metric": "views",
+      "interpretation": "insufficient_sample",
+      "sampleSize": 2,
+      "measured": 2,
+      "missing": 0,
+      "minimum": 3,
+      "jobIds": []
+     },
+     {
+      "cohort": {
+       "provider": "threads",
+       "language": "en",
+       "window": "24h"
+      },
+      "metric": "views",
+      "interpretation": "observation_only",
+      "sampleSize": 4,
+      "measured": 3,
+      "missing": 1,
+      "mean": "15/2",
+      "causalityEstablished": false,
+      "jobIds": []
+     }
+    ],
+    "rules": {
+     "minimum": 3,
+     "basis": "24h",
+     "definitionVersion": "2026-09",
+     "like_for_like": "same account, provider, window, language, content type and definition version only",
+     "causalityEstablished": false
+    },
+    "startUtc": null,
+    "endUtc": null,
+    "timeZone": "Asia/Hong_Kong",
+    "undated": 0
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "analytics_coverage": {
+  "unavailable": {
+   "state": "unavailable",
+   "data": {
+    "state": "unavailable",
+    "connections": [
+     {
+      "connectionId": "ch_li",
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "level": "Unsupported",
+      "direct": false,
+      "providerOffersAnalytics": false,
+      "verifiedPosts": 2,
+      "readPosts": 0,
+      "readings": 0,
+      "lastObservedAt": null,
+      "evidence": null,
+      "enableHref": "/app/channels"
+     }
+    ],
+    "unmatchedReadings": 0,
+    "usesPlatformFallback": false,
+    "rule": "no Direct account → unavailable"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": "No account shares analytics with Rafii directly."
+   },
+   "warnings": []
+  },
+  "partial": {
+   "state": "partial",
+   "data": {
+    "state": "partial",
+    "connections": [
+     {
+      "connectionId": "ch_th",
+      "platform": "Threads",
+      "account": "@jamesau.piano",
+      "level": "Direct",
+      "direct": true,
+      "providerOffersAnalytics": true,
+      "verifiedPosts": 3,
+      "readPosts": 2,
+      "readings": 5,
+      "lastObservedAt": "2026-10-07T00:00:00Z",
+      "evidence": null,
+      "enableHref": "/app/channels"
+     }
+    ],
+    "unmatchedReadings": 0,
+    "usesPlatformFallback": false,
+    "rule": "some verified posts unread → partial"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": "Some verified posts have no reading yet."
+   },
+   "warnings": []
+  }
+ }
+}

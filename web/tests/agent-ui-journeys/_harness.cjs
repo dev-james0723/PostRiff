@@ -67,8 +67,11 @@ function makeEnvironment({ streaming = false, store = {}, manifestActions = [], 
       return React.createElement('button', { type: props.type ?? 'button', disabled: props.disabled, 'aria-busy': props['aria-busy'] }, props.children);
     },
   };
+  env.selections = [];
+  const selection = { useRecordSelection: () => (listId, items, visible) => env.selections.push({ listId, items, visible }) };
   const loader = createLoader({
     stubs: {
+      [path.join(GENUI, 'state/selection')]: selection,
       [path.join(GENUI, 'core/openui')]: openui,
       [path.join(GENUI, 'bridges/context')]: context,
       [path.join(SRC, 'components/ui/button')]: button,

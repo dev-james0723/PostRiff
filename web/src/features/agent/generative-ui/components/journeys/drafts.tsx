@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { textAttributes } from '@/lib/locales';
 import { cn } from '@/lib/utils';
 import { formatCount, formatInstant, textLength } from '../../journeys/format';
-import { useBound, useJourneyEnvironment } from '../../journeys/runtime';
+import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { DraftDetail as DraftDetailData, DraftRow } from '../../journeys/views';
 import { CountLabel, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
 import type { JourneyRendererProps } from './types';
@@ -74,9 +74,21 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
   const literal = titleProps.safeParse(props);
   const selection = useBound<string[]>(`${statementId ?? 'draftList'}Selected`, props.selected);
   const selected = strings(selection.value);
+  const record = useSelectionRecorder(statementId ?? 'drafts');
   return (
     <QueryFrame value={props.data} binding='drafts_list' label={copy.drafts.title} title={literal.success ? literal.data.title : null}>
-      {(data) => (
+      {(data) => {
+        const titleOf = (d: DraftRow) => `${d.platform ?? ''} · ${d.excerpt.slice(0, 60)}`.trim();
+        const toggle = (draft: DraftRow) => {
+          const next = toggleInOrder(selected, draft.draftId, MAX_SELECTED_DRAFTS);
+          selection.set(next);
+          const byId = new Map(data.drafts.map((d) => [d.draftId, d]));
+          record(
+            next.map((id) => ({ type: 'draft', id, title: byId.get(id) ? titleOf(byId.get(id) as DraftRow) : undefined })),
+            data.drafts.map((d) => ({ type: 'draft', id: d.draftId })),
+          );
+        };
+        return (
         <div className='flex flex-col gap-2'>
           {selected.length > 0 ? (
             <p className='text-muted-foreground text-xs' role='status'>
@@ -92,7 +104,7 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
                     selected={isSelected}
                     label={`${draft.platform ?? copy.drafts.title} · ${draft.excerpt.slice(0, 40)}`}
                     disabled={!isSelected && selected.length >= MAX_SELECTED_DRAFTS}
-                    onToggle={() => selection.set(toggleInOrder(selected, draft.draftId, MAX_SELECTED_DRAFTS))}
+                    onToggle={() => toggle(draft)}
                   />
                   <div className='flex min-w-0 flex-1 flex-col gap-1'>
                     <DraftMeta draft={draft} />
@@ -107,7 +119,8 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
           </ul>
           {data.missingIds && data.missingIds.length > 0 ? <p className='text-muted-foreground text-xs'>{copy.drafts.missingRequested}</p> : null}
         </div>
-      )}
+        );
+      }}
     </QueryFrame>
   );
 }

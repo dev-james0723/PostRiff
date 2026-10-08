@@ -139,19 +139,18 @@ export function QueryFrame<B extends BindingName>({ value, binding, label, title
 /** Pick / unpick one record. Selection only changes this view and the follow-up context; it never approves anything. */
 export function SelectToggle({ selected, label, onToggle, disabled }: { selected: boolean; label: string; onToggle: () => void; disabled?: boolean }) {
   return (
-    <button
+    <Button
       type='button'
+      variant={selected ? 'default' : 'outline'}
+      size='icon-xs'
       aria-pressed={selected}
       aria-label={label}
       disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        'rafii-focus flex size-5 shrink-0 items-center justify-center rounded-md border text-xs disabled:opacity-50',
-        selected ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background',
-      )}
+      onClick={() => onToggle()}
+      className='shrink-0'
     >
       {selected ? '✓' : ''}
-    </button>
+    </Button>
   );
 }
 
@@ -173,6 +172,8 @@ export function GuardedAction({
   inputs,
   ready,
   notReadyHint,
+  label,
+  quiet,
 }: {
   actionId: string | undefined;
   controlId: string | undefined;
@@ -180,6 +181,10 @@ export function GuardedAction({
   /** The component's own inputs are complete and valid. */
   ready: boolean;
   notReadyHint?: string;
+  /** Rafii's own native copy for this button (e.g. "Remember" / "Dismiss" for one decide action); never model text. */
+  label?: string;
+  /** Compact row control: no summary line. */
+  quiet?: boolean;
 }) {
   const { copy } = useJourneyEnvironment();
   const streaming = useStreaming();
@@ -204,7 +209,7 @@ export function GuardedAction({
             if (inputs) action.request(inputs, event);
           }}
         >
-          {busy ? copy.common.working : action.binding.label}
+          {busy ? copy.common.working : label ?? action.binding.label}
         </Button>
         {result ? <ActionOutcomeLine outcome={result.outcome} verified={result.verified} /> : null}
       </div>
@@ -214,9 +219,9 @@ export function GuardedAction({
           {action.state.error}
         </p>
       ) : null}
-      {streaming ? <p className='text-muted-foreground text-xs'>{copy.common.waitForView}</p> : null}
+      {streaming && !quiet ? <p className='text-muted-foreground text-xs'>{copy.common.waitForView}</p> : null}
       {!ready && notReadyHint ? <p className='text-muted-foreground text-xs'>{notReadyHint}</p> : null}
-      {action.binding.summary ? <p className='text-muted-foreground text-xs'>{action.binding.summary}</p> : null}
+      {action.binding.summary && !quiet ? <p className='text-muted-foreground text-xs'>{action.binding.summary}</p> : null}
     </div>
   );
 }
