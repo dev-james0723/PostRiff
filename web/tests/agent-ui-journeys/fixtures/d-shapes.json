@@ -8,6 +8,72 @@
   "founder_sources",
   "job_detail"
  ],
+ "optional": {
+  "analytics_compare": {
+   "keys": [],
+   "lists": {
+    "comparisons": [
+     "sampleSize",
+     "measured",
+     "missing",
+     "mean",
+     "minimum",
+     "reason",
+     "causalityEstablished"
+    ]
+   }
+  },
+  "campaign_items": {
+   "keys": [],
+   "lists": {
+    "items": [
+     "draftId",
+     "platform",
+     "revision",
+     "excerpt",
+     "jobId",
+     "state",
+     "local",
+     "timeZone",
+     "atUtc",
+     "assetId"
+    ]
+   }
+  },
+  "campaign_timeline": {
+   "keys": [],
+   "lists": {
+    "events": [
+     "automationId",
+     "name",
+     "scheduleZone",
+     "scheduleLocal",
+     "runId",
+     "items",
+     "jobId",
+     "jobZone",
+     "jobLocal",
+     "platform"
+    ]
+   }
+  },
+  "draft_evidence": {
+   "keys": [],
+   "lists": {
+    "sources": [
+     "ref"
+    ]
+   }
+  },
+  "research_results": {
+   "keys": [
+    "reason",
+    "searches",
+    "note"
+   ],
+   "lists": {}
+  }
+ },
  "shapes": {
   "analytics_compare": {
    "keys": [
@@ -25,7 +91,14 @@
      "cohort",
      "metric",
      "interpretation",
-     "jobIds"
+     "jobIds",
+     "sampleSize",
+     "measured",
+     "missing",
+     "mean",
+     "minimum",
+     "reason",
+     "causalityEstablished"
     ]
    }
   },
@@ -266,7 +339,19 @@
      "kind",
      "addedAt",
      "needsReview",
-     "addedByYou"
+     "addedByYou",
+     "ref",
+     "exists",
+     "draftId",
+     "platform",
+     "revision",
+     "excerpt",
+     "jobId",
+     "state",
+     "local",
+     "timeZone",
+     "atUtc",
+     "assetId"
     ]
    }
   },
@@ -282,9 +367,20 @@
    "lists": {
     "events": [
      "kind",
+     "ref",
      "atUtc",
      "local",
-     "status"
+     "status",
+     "automationId",
+     "name",
+     "scheduleZone",
+     "scheduleLocal",
+     "runId",
+     "items",
+     "jobId",
+     "jobZone",
+     "jobLocal",
+     "platform"
     ]
    }
   },
@@ -777,7 +873,8 @@
     "pages",
     "recorded",
     "searches",
-    "note"
+    "note",
+    "reason"
    ],
    "lists": {
     "pages": [

@@ -27,7 +27,8 @@ function strings(value: unknown): string[] {
 
 /** Preview through lane C's AssetPreviewView: only this workspace's own preview routes, never a signed URL. */
 export function AssetCover({ row, size = 'card' }: { row: LibraryRow; size?: 'row' | 'card' | 'detail' }) {
-  return <AssetPreviewView item={row} size={size} />;
+  // The card prints the title itself; the preview keeps it only as the image's alternative text.
+  return <AssetPreviewView item={{ ...row, alt: row.alt ?? row.title ?? null, title: null }} size={size} />;
 }
 
 function RowFlags({ row }: { row: LibraryRow }) {

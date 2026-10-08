@@ -97,7 +97,8 @@ class BrowserSnapshotsMatchDomain(unittest.TestCase):
                          "D's catalog changed: regenerate web/tests/agent-ui-journeys/fixtures/d-catalog.json and update the journey views")
 
     def test_shapes_snapshot_equals_the_live_contract(self):
-        self.assertEqual(_json(FIXTURES / "d-shapes.json"), _roundtrip({"shapes": shapes.SHAPES, "open": sorted(shapes.OPEN_SHAPES)}),
+        self.assertEqual(_json(FIXTURES / "d-shapes.json"),
+                         _roundtrip({"shapes": shapes.SHAPES, "optional": shapes.OPTIONAL, "open": sorted(shapes.OPEN_SHAPES)}),
                          "D's data shapes changed: regenerate d-shapes.json and update the journey views")
 
     def test_every_rendered_fixture_has_only_keys_d_handlers_return(self):
@@ -110,6 +111,7 @@ class BrowserSnapshotsMatchDomain(unittest.TestCase):
                     continue
                 self.assertIn(binding, shapes.SHAPES, f"{path.name}: {binding}")
                 shape = shapes.SHAPES[binding]
+                required = shapes.required(binding)
                 for scenario, envelope in scenarios.items():
                     self.assertIn(envelope["state"], ui_contracts.DATA_STATES, f"{path.name}:{binding}:{scenario}")
                     data = envelope["data"]
@@ -117,10 +119,15 @@ class BrowserSnapshotsMatchDomain(unittest.TestCase):
                         continue
                     extra = set(data) - set(shape["keys"])
                     self.assertFalse(extra, f"{path.name}:{binding}:{scenario} has keys D never returns: {sorted(extra)}")
+                    if envelope["state"] not in ("denied", "unavailable"):
+                        missing = set(required["keys"]) - set(data)
+                        self.assertFalse(missing, f"{path.name}:{binding}:{scenario} lacks keys D always returns: {sorted(missing)}")
                     for list_key, row_keys in shape["lists"].items():
                         for row in data.get(list_key) or []:
                             row_extra = set(row) - set(row_keys)
                             self.assertFalse(row_extra, f"{path.name}:{binding}.{list_key} rows have unknown keys: {sorted(row_extra)}")
+                            row_missing = set(required["lists"].get(list_key) or []) - set(row)
+                            self.assertFalse(row_missing, f"{path.name}:{binding}.{list_key} rows lack keys D always returns: {sorted(row_missing)}")
                     checked += 1
         self.assertGreater(checked, 25)
 

@@ -332,7 +332,8 @@
       "fromAutomation": false,
       "verified": false,
       "providerReference": false,
-      "lastEvent": null
+      "lastEvent": null,
+      "steps": []
      }
     ],
     "editable": false,
