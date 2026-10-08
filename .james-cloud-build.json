@@ -34,6 +34,16 @@
   "framework": "next",
   "cacheScope": "e408bbcd8242",
   "lockfile": "package-lock.json",
-  "inputExcludes": [],
-  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7"
+  "inputExcludes": [
+    "desktop/**",
+    "vendor/**",
+    "studio/**",
+    "motion/**",
+    "downloads/**",
+    "artifacts/**",
+    "*.zip"
+  ],
+  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7",
+  "transportMode": "remote_patch",
+  "baseRef": "refs/remotes/origin/consumer-saas"
 }

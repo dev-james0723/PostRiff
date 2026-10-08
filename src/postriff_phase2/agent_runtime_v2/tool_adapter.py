@@ -224,6 +224,7 @@ def _approval_gate(tool: Tool):
 
 # --- site-agent read tools, adapted ---------------------------------------------------------------------------------------
 _SITE_NAMES = {
+    "library.search": "library_search", "library.read": "library_read",
     "help.search": "help_search", "help.get": "help_get", "route.describe": "route_describe", "workspace.summary": "workspace_summary",
     "channels.capabilities": "channels_capabilities", "queue.summary": "queue_summary", "job.get": "job_get", "draft.get": "draft_get",
     "automation.list": "automation_list", "automation.get": "automation_get", "automation.explain": "automation_explain",

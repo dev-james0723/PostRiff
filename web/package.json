@@ -15,7 +15,9 @@
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "audit:copy": "node scripts/copy-audit.mjs",
     "test:browser:durable": "node tests/consumer-durable-browser.cjs",
-    "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs"
+    "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs",
+    "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-cloud-validation.sh",
+    "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

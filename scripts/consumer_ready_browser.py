@@ -13,6 +13,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
     parser.add_argument('--founder',action='store_true',help='consolidated Founder UI and synthetic identities against the real local API/database')
     parser.add_argument('--tour',action='store_true',help='record a short local Demo workflow instead of the full Founder acceptance suite')
     parser.add_argument('--customers',action='store_true',help='run only the Founder Customer 360 browser acceptance')
@@ -31,7 +32,7 @@ def main():
     if args.tour and not args.founder:parser.error('--tour requires --founder')
     if args.customers and (not args.founder or args.tour):parser.error('--customers requires --founder and cannot run with --tour')
     # Next bakes rewrites into the build. Runtime flags alone cannot change which API a test reaches.
-    manifest=ROOT/'.codex/consumer-ready/web/.next/routes-manifest.json'
+    manifest=ROOT/('web/.next/routes-manifest.json' if args.library else '.codex/consumer-ready/web/.next/routes-manifest.json')
     try:
         rewrites=json.loads(manifest.read_text())['rewrites']
         if isinstance(rewrites,dict):rewrites=[item for group in rewrites.values() for item in group]
@@ -61,11 +62,16 @@ def main():
     env.setdefault('PLAYWRIGHT_MODULE',str(ROOT/'.codex/consumer-ready/web/node_modules/playwright'))
     if args.history_import:
         env.update(RAFII_WEB_URL=f'http://127.0.0.1:{args.web_port}',RAFII_HISTORY_PG_PORT=str(args.pg_port),RAFII_FIXTURE_PYTHON=sys.executable,RAFII_HISTORY_REPORT_DIR=str(out/'history-import-browser'))
+    if args.library:
+        env['RAFII_LIBRARY_EVIDENCE']=str(out)
+        env['PLAYWRIGHT_MODULE']=str(ROOT/'web/node_modules/playwright')
     processes=[];logs=[]
     try:
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
         fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
         commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
+        if args.library:
+            commands[1]=('frontend',['npm','--prefix','web','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])
         for name,command in commands:
             log=(out/f'durable-{name}.log').open('w');logs.append(log)
             processes.append(subprocess.Popen(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True))
@@ -78,7 +84,7 @@ def main():
                         if response.status==200:break
                 except Exception:time.sleep(.25)
             else:raise RuntimeError('Local server readiness deadline exceeded')
-        test = 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        test = 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal

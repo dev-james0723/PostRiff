@@ -33,6 +33,8 @@ suite.addTests(loader.loadTestsFromNames([
     'test_hosted_wave3_connectors',
     'test_instagram_full_capabilities',
     'test_hosted_storage_video',
+    'test_library_extract',
+    'test_hosted_storage_library',
     'test_video_uploads',
     'test_postriff_phase2',
     'test_postriff_phase2_hosted',

@@ -243,6 +243,9 @@ class VideoUploads:
                 raise AlphaError("Hosted sample workspaces are read-only.", 403, code="sample_read_only")
             if state.get("accountDeletion"):
                 raise AlphaError("Account deletion is pending.", 409, code="account_deletion_pending")
+            library=getattr(self.service, "library", None)
+            if library is not None:
+                library.assert_capacity(cur,state,workspace_id,size)
             mine, total = self.rows.pending_counts(cur, workspace_id, principal)
             if mine >= PENDING_PER_MEMBER or total >= PENDING_PER_WORKSPACE:
                 raise AlphaError(MSG["caps"], 429, code="video_pending_caps")
