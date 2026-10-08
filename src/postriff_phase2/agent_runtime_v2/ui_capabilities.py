@@ -197,7 +197,8 @@ def current(cur, auth, manifest):
 
 # --- the persisted artifact a request names -----------------------------------------------------------------------------
 ARTIFACT_COLUMNS = ("id", "workspace_id", "scope", "scope_key", "conversation_id", "parent_run_id", "message_id", "actor", "surface", "journey_ids", "revision",
-                    "source_hash", "generation_state", "validation_state", "manifest", "manifest_id", "binding_version", "safe_state", "state_revision")
+                    "source_hash", "generation_state", "validation_state", "manifest", "manifest_id", "binding_version", "safe_state", "state_revision",
+                    "library_hash")
 _TEXT = ("id", "workspace_id", "conversation_id", "parent_run_id", "message_id", "actor")
 
 
