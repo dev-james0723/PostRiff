@@ -37,6 +37,9 @@ class MaintenanceDatabase:
     def fetchone(self):
         return self.row
 
+    def fetchall(self):
+        return [self.row] if self.row is not None else []
+
 
 class CreatorControlTests(unittest.TestCase):
     def test_returned_legacy_binding_requires_intervention_without_revoking_grant(self):
