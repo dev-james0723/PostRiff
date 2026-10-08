@@ -19,7 +19,7 @@ import type { JourneyRendererProps } from './types';
 
 /** library_selection accepts at most 4 items for one message. */
 export const MAX_SELECTED_ASSETS = 4;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v)) : [];

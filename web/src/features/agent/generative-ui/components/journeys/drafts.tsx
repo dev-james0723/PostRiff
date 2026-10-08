@@ -20,7 +20,7 @@ import type { JourneyRendererProps } from './types';
 
 /** drafts_list accepts at most 10 ids; comparing more than four is not readable. */
 export const MAX_SELECTED_DRAFTS = 10;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 160) : [];

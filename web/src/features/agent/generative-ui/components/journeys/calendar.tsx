@@ -29,7 +29,7 @@ const STATUS_TONE: Record<string, Tone> = {
   unknown: 'muted',
 };
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function StatusPill({ status }: { status: string }) {
   const { copy } = useJourneyEnvironment();

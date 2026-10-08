@@ -17,7 +17,7 @@ import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle, Pager } from '.
 import type { JourneyRendererProps } from './types';
 
 const ID = /^[A-Za-z0-9_.:-]{1,120}$/;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function idList(value: unknown, max: number): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && ID.test(v)).slice(0, max) : [];
