@@ -588,7 +588,8 @@ def main(argv=None) -> int:
         def workspace_factory(token):
             return (api.request("POST", "/api/auth/verify", token, {}).json() or {}).get("workspaceId")
         levels = [int(x) for x in str(args.levels).split(",") if x.strip()]
-        result = concurrency(api, token_factory, workspace_factory, levels, "Show what's still left in a table I can filter")
+        # The harness QA script's J05 flow (campaign specialist → campaign_list) with an explicit UI intent: eligible for a view.
+        result = concurrency(api, token_factory, workspace_factory, levels, "Chart what's missing in the campaign by status")
         payload = {"kind": "ci-harness", "mode": "concurrency", "candidateSha": sha, "origin": args.origin, "provider": "fixture", "levels": result,
                    "recordedAt": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         path = write_evidence(payload, args.out or EVIDENCE_DIR / f"concurrency-{sha[:12]}.json", sha)
