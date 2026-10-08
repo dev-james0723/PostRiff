@@ -323,8 +323,8 @@ class UniversalLibrary:
     @staticmethod
     def _preview_object(a, page=1):
         from .library_preview import VERSION
-        digest = hashlib.sha256((str(a['sha256']) + VERSION).encode()).hexdigest()
-        return str(a['id']).replace('-', '')+'-'+digest+('' if page==1 else '-'+str(page))+'.jpg'
+        digest = hashlib.sha256((str(a['sha256']) + VERSION + ('' if page==1 else ':page:'+str(page))).encode()).hexdigest()
+        return str(a['id']).replace('-', '')+'-'+digest+'.jpg'
 
     @classmethod
     def _preview_objects(cls,a):
