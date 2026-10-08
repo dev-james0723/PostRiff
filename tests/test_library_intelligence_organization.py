@@ -164,6 +164,8 @@ class OrgDB:
         if sql.startswith("INSERT INTO public.pr_audit_events"):
             self.audits.append((args[2], args[3], json.loads(args[4])))
             return []
+        if sql.startswith("SELECT pg_advisory_xact_lock("):
+            return [(None,)]  # actions serialize identical idempotency keys
         if "FROM public.pr_library_action_receipts" in sql:
             row = self.receipts.get(args[1])
             return [row] if row else []
