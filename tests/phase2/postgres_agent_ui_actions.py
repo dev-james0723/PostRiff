@@ -700,6 +700,45 @@ def _():
     return {}
 
 
+@scenario("A16", "Analytics on real observations: an unavailable metric is null (never 0), empty buckets are null, a 1-post comparison says insufficient sample")
+def _():
+    from postriff_phase2 import insights
+    job_id = "job-verified-" + uuid.uuid4().hex[:8]
+    published = time.time() - 86400
+
+    def add_job(s, actor):
+        s.setdefault("phase2", {}).setdefault("jobs", []).append({
+            "id": job_id, "state": "verified", "providerReference": "urn:li:share:1", "attempts": [], "events": [],
+            "manifest": {"platform": "LinkedIn", "account": "Studio page", "channelId": channel["id"], "variantId": DRAFT,
+                         "timing": {"timestamp": published, "local": "x", "timeZone": HK}, "payload": {"text": "Published post", "language": "en"}}})
+        return s
+    command(add_job)
+    with connection() as db:
+        for metric, value, availability in (("likes", 5, "available"), ("views", None, "unavailable")):
+            db.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,"
+                       "observed_at,source_endpoint) VALUES(%s,%s,'linkedin','urn:li:share:1',%s,%s,%s,%s,'count',%s,now(),'test')",
+                       (wid, channel["id"], job_id, metric, insights.DEFINITION_VERSION, value, availability))
+    art = make_artifact(["J06"])
+    posts = query("analytics_posts", {"zone": HK}, artifact=art)
+    check_shape("analytics_posts", posts)
+    row = next(p for p in posts["data"]["posts"] if p["jobId"] == job_id)
+    assert row["metrics"]["likes"]["value"] == 5 and row["metrics"]["views"]["value"] is None and row["metrics"]["views"]["availability"] == "unavailable", row["metrics"]
+    assert posts["coverage"]["known"] >= 1 and posts["data"]["definitionVersion"] == insights.DEFINITION_VERSION
+    series = query("analytics_series", {"metric": "views", "zone": HK, "bucket": "day"}, artifact=art)
+    check_shape("analytics_series", series)
+    points = [pt for line in series["data"]["series"] for pt in line["points"]]
+    assert points and all(pt["total"] is None and pt["mean"] is None for pt in points), "no reading is null, never 0"
+    assert any(pt["posts"] == 1 for pt in points)
+    likes = query("analytics_series", {"metric": "likes", "zone": HK, "bucket": "day"}, artifact=art)
+    assert any(pt["total"] == 5 for line in likes["data"]["series"] for pt in line["points"])
+    compare = query("analytics_compare", {"metric": "likes", "zone": HK}, artifact=art)
+    check_shape("analytics_compare", compare)
+    assert compare["data"]["comparisons"][0]["interpretation"] == "insufficient_sample" and compare["data"]["rules"]["causalityEstablished"] is False, compare["data"]
+    coverage = query("analytics_coverage", {}, artifact=art)
+    check_shape("analytics_coverage", coverage)
+    return {"coverage": coverage["data"]["state"]}
+
+
 failed = [r for r in RESULTS if r["result"] != "PASS"]
 print(json.dumps({"script": "postgres_agent_ui_actions", "passed": len(RESULTS) - len(failed), "failed": len(failed),
                   "scenarios": [{k: r.get(k) for k in ("id", "result", "ms")} for r in RESULTS]}), flush=True)

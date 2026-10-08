@@ -133,6 +133,16 @@ class ProjectionTest(unittest.TestCase):
         self.assertIn("voice_sample_grant", owner)
 
 
+class KillSwitchTest(unittest.TestCase):
+    def test_actions_flag_off_offers_no_write_control(self):
+        r = result([("draft_get", "verified")], ui={"journeyIds": ["J01", "J05"]})
+        off = ui_projection.project_ui_context(None, auth("owner"), r, "chat", None, flags={**ON, "actions": False})
+        self.assertEqual(off["action_bindings"], [])
+        self.assertTrue(off["data_bindings"])
+        on = ui_projection.project_ui_context(None, auth("owner"), r, "chat", None, flags=ON)
+        self.assertTrue(on["action_bindings"])
+
+
 class ManifestTest(unittest.TestCase):
     def test_consumer_manifests_never_carry_founder_bindings(self):
         manifest = ui_capabilities.build_manifest(None, auth(), {"journey_ids": ["J01", "J09", "J06"]}, scope="workspace")
