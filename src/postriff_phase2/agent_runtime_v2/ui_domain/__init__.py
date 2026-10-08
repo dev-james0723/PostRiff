@@ -207,9 +207,11 @@ def validate(schema_: dict, inputs: dict | None) -> dict:
 
 def data_shape(name: str) -> dict:
     """Field names only (no values): what a row path and row fields look like, for the presenter and E's components."""
-    from .shapes import OPEN_SHAPES, SHAPES
+    from .shapes import OPEN_SHAPES, OPTIONAL, SHAPES
     shape = SHAPES.get(name) or {"keys": [], "lists": {}}
-    return {"keys": list(shape["keys"]), "lists": {k: list(v) for k, v in shape["lists"].items()}, "open": name in OPEN_SHAPES}
+    optional = OPTIONAL.get(name) or {"keys": [], "lists": {}}
+    return {"keys": list(shape["keys"]), "lists": {k: list(v) for k, v in shape["lists"].items()},
+            "optional": {"keys": list(optional["keys"]), "lists": {k: list(v) for k, v in optional["lists"].items()}}, "open": name in OPEN_SHAPES}
 
 
 def public_query(binding: QueryBinding) -> dict:
