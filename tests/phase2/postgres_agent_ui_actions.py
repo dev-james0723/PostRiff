@@ -736,6 +736,8 @@ def _():
     assert compare["data"]["comparisons"][0]["interpretation"] == "insufficient_sample" and compare["data"]["rules"]["causalityEstablished"] is False, compare["data"]
     coverage = query("analytics_coverage", {}, artifact=art)
     check_shape("analytics_coverage", coverage)
+    assert coverage["state"] == "available" and coverage["data"]["state"] == "unavailable", coverage   # LinkedIn shares no analytics: said so, with the link
+    assert coverage["data"]["connections"][0]["enableHref"].startswith("/app/channels")
     return {"coverage": coverage["data"]["state"]}
 
 

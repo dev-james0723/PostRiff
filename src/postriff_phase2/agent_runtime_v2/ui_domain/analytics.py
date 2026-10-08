@@ -282,8 +282,9 @@ def analytics_coverage(dctx, _inputs, _cursor):
     data = {"state": state_name, "connections": rows, "unmatchedReadings": len(coverage["unmatchedPosts"]), "usesPlatformFallback": coverage["usesPlatformFallback"],
             "rule": "no Direct account → unavailable; Direct but nothing read → pending; some verified posts unread → partial; all read → ready"}
     direct = [r for r in rows if r["direct"]]
-    return ui_contracts.query_result({"ready": "available", "partial": "partial", "pending": "partial", "unavailable": "unavailable"}[state_name] if rows else "empty",
-                                     data if rows else data, as_of=common.iso(dctx.now), known=sum(r["readPosts"] for r in direct), total=sum(r["verifiedPosts"] for r in direct),
+    # The read succeeded: the coverage itself (including "unavailable": no account shares analytics) is the data, with the
+    # accounts and their enable links; it is never dropped as an unavailable read.
+    return ui_contracts.query_result("available" if rows else "empty", data, as_of=common.iso(dctx.now), known=sum(r["readPosts"] for r in direct), total=sum(r["verifiedPosts"] for r in direct),
                                      note=None if state_name == "ready" else {"unavailable": "No account shares analytics with Rafii directly.",
                                                                                "pending": "Waiting for the first reading.", "partial": "Some verified posts have no reading yet."}.get(state_name))
 
