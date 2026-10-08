@@ -5,10 +5,10 @@
  */
 import type { JourneyRenderer, JourneyRendererProps } from './types';
 
-export function tagged(name: string, Renderer: JourneyRenderer): JourneyRenderer {
+export function tagged(name: string, Inner: JourneyRenderer): JourneyRenderer {
   const Tagged = (input: JourneyRendererProps) => (
     <div className='contents' data-genui={name} data-statement-id={input.statementId ?? undefined}>
-      <Renderer {...input} />
+      <Inner {...input} />
     </div>
   );
   Tagged.displayName = `Journey(${name})`;

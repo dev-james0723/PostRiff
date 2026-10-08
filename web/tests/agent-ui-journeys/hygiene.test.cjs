@@ -135,7 +135,9 @@ test('every journey component renders a loading state (not an error) while its q
     for (const data of usesData ? [null, undefined] : [undefined]) {
       const props = { ...(LITERALS[spec.name] ?? {}), ...(usesData ? { data } : {}), title: null, selected: null, cursor: null };
       const html = render(makeEnvironment(), renderer, props);
-      const text = textOf(html);
+      // A form with no query prop reaches its guarded control at once; with no action bridge in this harness that control
+      // truthfully says the action isn't available. Only the data-loading error states are under test here.
+      const text = usesData ? textOf(html) : textOf(html).replace('This action isn’t available here.', '');
       assert.doesNotMatch(text, /couldn’t show this data|can’t be shown|isn’t available here/, `${spec.name} with data=${String(data)}`);
       assert.match(html, new RegExp(`data-genui="${spec.name}"`), `${spec.name} root is tagged`);
       if (usesData) {

@@ -370,7 +370,7 @@ export function VoiceSampleImport({ props, statementId }: JourneyRendererProps) 
         <Input id={`${fieldId}-title`} value={titleValue} maxLength={160} onChange={(e) => title.set(e.target.value)} />
       </label>
       <label className='flex items-start gap-2 text-xs' htmlFor={`${fieldId}-confirm`}>
-        <input id={`${fieldId}-confirm`} type='checkbox' className='mt-0.5' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+        <input id={`${fieldId}-confirm`} type='checkbox' className='mt-0.5' aria-label={copy.voice.importConfirm} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         <span>{copy.voice.importConfirm}</span>
       </label>
       <p className='text-muted-foreground text-xs'>{copy.voice.importHint}</p>
