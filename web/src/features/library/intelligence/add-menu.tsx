@@ -132,10 +132,10 @@ function PasteLinkDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpe
         <form onSubmit={(event) => void submit(event)} className='flex min-h-0 flex-1 flex-col'>
           <RafiiDialogHeader title='Paste link' intro='Rafii saves the public page’s text privately in this workspace. It doesn’t sign in anywhere or follow other links.' />
           <RafiiDialogBody className='flex flex-col gap-2'>
-            <label htmlFor={`${id}-url`} className='text-sm font-medium'>
+            <label htmlFor={`${id}-url`} className='flex flex-col gap-1.5 text-sm font-medium'>
               Link
+              <Input id={`${id}-url`} type='url' inputMode='url' autoComplete='off' value={url} maxLength={2048} onChange={(event) => setUrl(event.target.value)} placeholder='https://' aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className='h-11 font-normal' />
             </label>
-            <Input id={`${id}-url`} type='url' inputMode='url' autoComplete='off' value={url} maxLength={2048} onChange={(event) => setUrl(event.target.value)} placeholder='https://' aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className='h-11' />
             {error ? (
               <p id={`${id}-error`} role='alert' className='text-destructive text-sm'>
                 {error}
@@ -209,19 +209,32 @@ function QuickNoteDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpe
               Note
               <textarea
                 id={`${id}-text`}
+                aria-label='Note'
                 value={text}
                 maxLength={20000}
                 onChange={(event) => setText(event.target.value)}
                 className='rafii-field rafii-focus min-h-40 w-full rounded-[var(--rafii-radius-control)] p-3 text-base font-normal md:text-sm'
               />
             </label>
-            <label htmlFor={`${id}-mine`} className='flex min-h-11 items-start gap-3 text-sm'>
-              <input id={`${id}-mine`} type='checkbox' checked={authoredByMe} onChange={(event) => setAuthoredByMe(event.target.checked)} className='accent-foreground mt-1 size-5 shrink-0' />
-              <span className='flex flex-col gap-0.5'>
-                <span className='font-medium'>I wrote this</span>
-                <span className='text-muted-foreground text-xs'>Leave this off for quotes, copied text or someone else’s words. Only your own writing can ever teach Rafii your voice, and only after you approve it.</span>
-              </span>
-            </label>
+            <div className='flex items-start gap-3 text-sm'>
+              <input
+                id={`${id}-mine`}
+                type='checkbox'
+                aria-label='I wrote this'
+                aria-describedby={`${id}-mine-help`}
+                checked={authoredByMe}
+                onChange={(event) => setAuthoredByMe(event.target.checked)}
+                className='accent-foreground mt-3 size-5 shrink-0'
+              />
+              <div className='flex flex-col gap-0.5'>
+                <label htmlFor={`${id}-mine`} className='flex min-h-11 items-center font-medium'>
+                  I wrote this
+                </label>
+                <p id={`${id}-mine-help`} className='text-muted-foreground text-xs'>
+                  Leave this off for quotes, copied text or someone else’s words. Only your own writing can ever teach Rafii your voice, and only after you approve it.
+                </p>
+              </div>
+            </div>
             {error ? (
               <p role='alert' className='text-destructive text-sm'>
                 {error}

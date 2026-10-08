@@ -34,28 +34,37 @@ export function resolveHitAsset(group: HitGroup, byKey: ReadonlyMap<string, Asse
  */
 export function HitDetails({ group, onOpenAt, onPlayFrom }: { group: HitGroup; onOpenAt: (locator: Locator | null) => void; onPlayFrom?: (startMs: number) => void }) {
   const reasons = matchSummary(group.hits.flatMap((hit) => hit.matchReasons));
-  const passages = group.hits.filter((hit) => hit.locator || hit.snippet).slice(0, 3);
+  // Every matching passage or moment the server listed (the best one first), each opening at its own locator.
+  const passages = group.hits
+    .flatMap((hit) => [
+      { key: `${hit.segmentId ?? 'asset'}-best`, title: hit.displayTitle, locator: hit.locator ?? null, label: hit.locatorLabel ?? '', snippet: hit.snippet },
+      ...(hit.passages ?? [])
+        .filter((passage) => passage.segmentId !== hit.segmentId && passage.locator)
+        .map((passage, index) => ({ key: `${passage.segmentId ?? 'passage'}-${index}`, title: hit.displayTitle, locator: passage.locator ?? null, label: passage.locatorLabel ?? '', snippet: '' }))
+    ])
+    .filter((passage) => passage.locator || passage.snippet)
+    .slice(0, 3);
   return (
     <div className='flex min-w-0 flex-col gap-1.5'>
       {reasons ? <p className='text-muted-foreground text-xs'>{reasons}</p> : null}
       {passages.length ? (
         <ul aria-label='Matching passages' className='flex flex-col gap-1'>
-          {passages.map((hit, index) => {
-            const where = hit.locatorLabel || locatorLabel(hit.locator ?? null);
-            const time = hit.locator?.kind === 'time' ? hit.locator : null;
+          {passages.map((passage) => {
+            const where = passage.label || locatorLabel(passage.locator);
+            const time = passage.locator?.kind === 'time' ? passage.locator : null;
             return (
-              <li key={`${hit.segmentId ?? 'asset'}-${index}`} className='flex min-w-0 flex-col gap-0.5'>
+              <li key={passage.key} className='flex min-w-0 flex-col gap-0.5'>
                 <button
                   type='button'
                   className='rafii-focus hover:rafii-quiet flex min-h-11 min-w-0 flex-col items-start gap-0.5 rounded-[var(--rafii-radius-control)] px-2 py-1.5 text-left'
-                  onClick={() => onOpenAt(hit.locator ?? null)}
-                  aria-label={`Open ${hit.displayTitle}${where ? ` at ${where}` : ''}`}
+                  onClick={() => onOpenAt(passage.locator)}
+                  aria-label={`Open ${passage.title}${where ? ` at ${where}` : ''}`}
                 >
                   {where ? <span className='text-foreground text-xs font-medium'>{where}</span> : null}
-                  {hit.snippet ? <span className='text-muted-foreground line-clamp-2 text-xs'>{hit.snippet}</span> : null}
+                  {passage.snippet ? <span className='text-muted-foreground line-clamp-2 text-xs'>{passage.snippet}</span> : null}
                 </button>
                 {time && onPlayFrom ? (
-                  <Button variant='quiet' size='lg' className='h-11 self-start' onClick={() => onPlayFrom(time.startMs)} aria-label={`Play ${hit.displayTitle} from ${formatClock(time.startMs)}`}>
+                  <Button variant='quiet' size='lg' className='h-11 self-start' onClick={() => onPlayFrom(time.startMs)} aria-label={`Play ${passage.title} from ${formatClock(time.startMs)}`}>
                     <Icons.play aria-hidden />
                     Play from {formatClock(time.startMs)}
                   </Button>

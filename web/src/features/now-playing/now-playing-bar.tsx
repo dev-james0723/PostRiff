@@ -21,6 +21,7 @@ export function NowPlayingBar() {
   const seconds = useNowPlaying((s) => s.seconds);
   const duration = useNowPlaying((s) => s.duration);
   const expanded = useNowPlaying((s) => s.expanded);
+  const seekRequest = useNowPlaying((s) => s.seekRequest);
   const [playbackError, setPlaybackError] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +66,13 @@ export function NowPlayingBar() {
     if (playing && element.paused && element.readyState >= 2) void element.play().catch(() => useNowPlaying.getState().setPlaying(false));
     else if (!playing && !element.paused) element.pause();
   }, [playing, track]);
+
+  // A seek from elsewhere in the app (the Library's audio controls, a saved moment) moves this element in place.
+  useEffect(() => {
+    const element = video.current;
+    if (!element || !track || !seekRequest || seekRequest.assetId !== track.assetId) return;
+    if (element.readyState >= 1) element.currentTime = Number.isFinite(element.duration) ? Math.min(seekRequest.seconds, element.duration) : seekRequest.seconds;
+  }, [seekRequest, track]);
 
   async function save() {
     if (!track?.conversationId || saving) return;

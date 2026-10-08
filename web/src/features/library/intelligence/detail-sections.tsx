@@ -278,13 +278,25 @@ export function VoiceControl({ assetKey, card, isOwner }: { assetKey: string; ca
         </>
       ) : isOwner ? (
         <>
-          <label htmlFor={`${id}-author`} className='flex min-h-11 items-start gap-3 text-sm'>
-            <input id={`${id}-author`} type='checkbox' checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className='accent-foreground mt-1 size-5 shrink-0' />
-            <span className='flex flex-col gap-0.5'>
-              <span>I wrote or said this myself</span>
-              <span className='text-muted-foreground text-xs'>Interviews, quotes and other people’s writing should not teach your voice.</span>
-            </span>
-          </label>
+          <div className='flex items-start gap-3 text-sm'>
+            <input
+              id={`${id}-author`}
+              type='checkbox'
+              aria-label='I wrote or said this myself'
+              aria-describedby={`${id}-author-help`}
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+              className='accent-foreground mt-3 size-5 shrink-0'
+            />
+            <div className='flex flex-col gap-0.5'>
+              <label htmlFor={`${id}-author`} className='flex min-h-11 items-center'>
+                I wrote or said this myself
+              </label>
+              <p id={`${id}-author-help`} className='text-muted-foreground text-xs'>
+                Interviews, quotes and other people’s writing should not teach your voice.
+              </p>
+            </div>
+          </div>
           <Button variant='glass' size='control' className='self-start' disabled={!confirmed || busy} onClick={() => void grant()}>
             Use as my voice
           </Button>

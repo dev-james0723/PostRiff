@@ -49,9 +49,10 @@ export interface LibrarySearchState {
   unavailable: boolean;
   queryId: string | null;
   loadingMore: boolean;
+  totalHits: SearchResponse['totalHits'] | null;
 }
 
-const EMPTY: LibrarySearchState = { loading: false, hits: [], coverage: null, facets: null, warnings: [], nextCursor: null, failed: null, unavailable: false, queryId: null, loadingMore: false };
+const EMPTY: LibrarySearchState = { loading: false, hits: [], coverage: null, facets: null, warnings: [], nextCursor: null, failed: null, unavailable: false, queryId: null, loadingMore: false, totalHits: null };
 
 /**
  * Exact and semantic search over the entire permitted scope (UI spec §5). Each new request aborts the obsolete one
@@ -102,7 +103,8 @@ export function useLibrarySearch({
             nextCursor: response.nextCursor,
             failed: null,
             unavailable: false,
-            queryId: response.queryId
+            queryId: response.queryId,
+            totalHits: response.totalHits ?? null
           });
         })
         .catch((error: unknown) => {

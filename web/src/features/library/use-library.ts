@@ -211,14 +211,14 @@ export function useLibrary({
     });
   }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort, tag, collection, only]);
 
-  const firstPage = normalized.data?.pages[0] as unknown as { total?: unknown } | undefined;
+  const firstPage = normalized.data?.pages[0];
   // Every page is here (or the media-only snapshot fallback, which is the whole set): counts over it are totals.
   const complete = normalized.data ? !normalized.hasNextPage : !normalized.isPending;
   return {
     snapshot,
     normalized,
     complete,
-    /** A total the server stated for this filter, when the list route provides one. */
+    /** The total the server states for this query and its server-side filters. */
     serverTotal: typeof firstPage?.total === 'number' ? firstPage.total : null,
     /** Loaded items still being extracted or indexed. */
     processingCount: derived.live.filter((asset) => ['pending', 'queued', 'processing'].includes(asset.processing ?? '')).length,
