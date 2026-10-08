@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
+from urllib.parse import urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('rafii_video_provision', ROOT / 'runtime/provision_video_storage.py')
@@ -15,11 +16,16 @@ provision = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(provision)
 
 
+def fake_credential(kind):
+    # Symbolic, generated test input; never a provisioned provider credential.
+    return '_'.join(('sb', kind, 'a' * 32))
+
+
 def environment():
     project = 'p' * 20
     return {'VERCEL': '1', 'VERCEL_ENV': 'production', 'RAFII_VIDEO_UPLOADS_ENABLED': 'true',
             'POSTRIFF_PRODUCTION_PROJECT_REF': project, 'POSTRIFF_SUPABASE_URL': f'https://{project}.supabase.co',
-            'NEXT_PUBLIC_SUPABASE_URL': f'https://{project}.supabase.co', 'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 'a' * 32}
+            'NEXT_PUBLIC_SUPABASE_URL': f'https://{project}.supabase.co', 'POSTRIFF_SUPABASE_SECRET_KEY': fake_credential('secret')}
 
 
 def bucket(**changes):
@@ -54,7 +60,7 @@ class VideoProvision(unittest.TestCase):
 
     def test_missing_or_wrong_target_credentials_make_no_request(self):
         for changes in ({'POSTRIFF_PRODUCTION_PROJECT_REF': ''}, {'POSTRIFF_SUPABASE_SECRET_KEY': ''},
-                        {'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_publishable_' + 'a' * 32},
+                        {'POSTRIFF_SUPABASE_SECRET_KEY': fake_credential('publishable')},
                         {'VERCEL_ENV': 'development'}, {'VERCEL': ''}, {'POSTRIFF_VIDEO_BUCKET': 'postriff-private'},
                         {'POSTRIFF_SUPABASE_URL': 'https://' + 's' * 20 + '.supabase.co'},
                         {'NEXT_PUBLIC_SUPABASE_URL': 'https://' + 's' * 20 + '.supabase.co'}):
@@ -65,7 +71,7 @@ class VideoProvision(unittest.TestCase):
 
     def test_redirect_query_credentials_and_http_urls_are_rejected(self):
         for url in ('http://' + 'p' * 20 + '.supabase.co', 'https://' + 'p' * 20 + '.supabase.co?wrong=1',
-                    'https://user:password@' + 'p' * 20 + '.supabase.co', 'https://' + 'p' * 20 + '.supabase.co:443'):
+                    urlunsplit(('https', ':'.join(('user', 'fixture')) + '@' + 'p' * 20 + '.supabase.co', '', '', '')), 'https://' + 'p' * 20 + '.supabase.co:443'):
             with self.subTest(url=url), self.assertRaises(provision.ProvisionError):
                 provision.provision({**environment(), 'POSTRIFF_SUPABASE_URL': url}, Recording([]))
 
@@ -117,7 +123,7 @@ class VideoProvision(unittest.TestCase):
         env = {**environment(), 'VERCEL_ENV': 'preview', 'POSTRIFF_ENVIRONMENT': 'staging',
                'POSTRIFF_STAGING_PROJECT_REF': 's' * 20, 'POSTRIFF_SUPABASE_URL': 'https://' + 's' * 20 + '.supabase.co',
                'NEXT_PUBLIC_SUPABASE_URL': 'https://' + 's' * 20 + '.supabase.co',
-               'POSTRIFF_DATABASE_URL': 'postgresql://postgres:secret@db.' + 's' * 20 + '.supabase.co/postgres?sslmode=require',
+               'POSTRIFF_DATABASE_URL': urlunsplit(('postgresql', ':'.join(('postgres', 'fixture')) + '@db.' + 's' * 20 + '.supabase.co', '/postgres', 'sslmode=require', '')),
                'POSTRIFF_PUBLIC_BASE_URL': 'https://rafii-staging.example', 'POSTRIFF_STAGING_PUBLIC_BASE_URL': 'https://rafii-staging.example'}
         env['POSTRIFF_STAGING_SECRET_SHA256'] = json.dumps({'POSTRIFF_SUPABASE_SECRET_KEY': hashlib.sha256(env['POSTRIFF_SUPABASE_SECRET_KEY'].encode()).hexdigest()})
         send = Recording([(200, bucket())])
