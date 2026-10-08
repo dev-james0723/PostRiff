@@ -423,6 +423,22 @@ class Failures(Base):
         self.assertEqual(self.transport.calls, [])
         self.assertEqual([(s["costState"], s["actual"]) for s in self.db.settlements_for(self.only_reservation()["id"])], [("released", 0)])
 
+    def test_library_skew_and_other_unfixable_codes_are_terminal_without_a_repair(self):
+        cases = {"errors:library_unsupported": "library_unsupported", "errors:contract_mismatch": "library_unsupported",
+                 "errors:missing_base": "revision_conflict", "errors:source_too_large": "source_too_large",
+                 "errors:unresolved_ref,library_unsupported": "library_unsupported", "errors:bad_request": "validation_unavailable",
+                 "errors:unauthorized": "validation_unavailable", "errors:validation_unavailable": "validation_unavailable"}
+        for n, (verdict, reason) in enumerate(cases.items()):
+            with self.subTest(verdict=verdict):
+                self.validator.verdicts = [verdict]
+                calls, reservations = len(self.transport.calls), len(self.db.ui_reservations())
+                _, _, events = self.run_one(self.db.add_parent(), key=f"presentation-skew-{n:06d}")
+                self.assertEqual((events[-1]["kind"], events[-1]["payload"]["reason"]), ("ui.failed", reason))
+                self.assertEqual([e["kind"] for e in events].count("ui.started"), 1, "no repair attempt")
+                self.assertEqual(len(self.transport.calls), calls + 1, "no second paid presenter call")
+                self.assertEqual(len(self.db.ui_reservations()), reservations + 1, "no second reservation")
+                self.assertEqual(len(self.db.settlements_for(self.db.ui_reservations()[-1]["id"])), 1, "the first attempt settles once")
+
     def test_validator_unavailable_is_not_repaired(self):
         self.validator.verdicts = ["unavailable"]
         _, _, events = self.run_one(self.db.add_parent())

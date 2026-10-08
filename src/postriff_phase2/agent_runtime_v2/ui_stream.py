@@ -75,6 +75,10 @@ PROBE_SPLIT_SECONDS = 0.25
 PROBE_LIMIT_PER_MINUTE = 6
 PROBE_TEXT = "粵語 ✓ 🎹 Rafii"          # multi-byte UTF-8 (3- and 4-byte characters) for the fragmentation check
 LIVE_STATES = ("queued", "streaming", "validating")
+# Validator codes no presenter output can fix → the terminal reason (no automatic repair, no second reservation).
+NOT_REPAIRABLE = {"validation_unavailable": "validation_unavailable", "source_too_large": "source_too_large", "library_unsupported": "library_unsupported",
+                  "contract_mismatch": "library_unsupported", "missing_base": "revision_conflict", "validator_error": "validation_unavailable",
+                  "bad_request": "validation_unavailable", "unauthorized": "validation_unavailable"}
 _sleep = time.sleep
 
 
@@ -464,8 +468,10 @@ class _Producer:
                     yield from self._ready(candidate, validation, outcome.usage)
                     return
                 errors = [str(e) for e in validation.get("errors") or []] or ["parse_rejected"]
-                if errors[0] in ("validation_unavailable", "source_too_large"):
-                    yield from self._terminal("ui.failed", "failed", errors[0], outcome.usage)
+                fatal = next((NOT_REPAIRABLE[e.split(":", 1)[0]] for e in errors if e.split(":", 1)[0] in NOT_REPAIRABLE), None)
+                if fatal is not None:
+                    # The model can't fix this (seam down, deploy/asset skew, size, missing base): no second paid call.
+                    yield from self._terminal("ui.failed", "failed", fatal, outcome.usage)
                     return
                 if self.attempt.get("kind") == "repair":
                     yield from self._terminal("ui.failed", "failed", "repair_exhausted", outcome.usage)
