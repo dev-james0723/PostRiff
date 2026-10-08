@@ -140,3 +140,19 @@ reset role;
 select 'PASS: two-user RLS, 9 object families, service-only chat media tables, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone' as result;
 
 \ir ../../migrations/postriff/094_universal_library_lifecycle.sql
+\ir ../../migrations/postriff/095_universal_library_storage.sql
+do $$ begin
+ if not exists (
+  select 1 from storage.buckets
+  where id='postriff-library' and name='postriff-library' and public=false
+    and file_size_limit=52428800
+    and allowed_mime_types @> array[
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm',
+      'text/csv', 'text/html', 'text/json', 'text/markdown', 'text/plain'
+    ]
+ ) then raise exception 'Library bucket is not private or lacks an accepted upload MIME'; end if;
+end $$;

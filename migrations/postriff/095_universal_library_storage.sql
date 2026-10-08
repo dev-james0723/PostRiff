@@ -1,13 +1,17 @@
--- Keep the Library bucket private and allow the audio containers accepted by the server.
+-- Keep the Library bucket private and allow every document, generic, and audio MIME accepted by the server.
 -- This is configuration-only; it preserves every existing MIME entry and file object.
 begin;
 do $$
 declare
   bucket storage.buckets%rowtype;
   required_mimes text[] := array[
-    'application/octet-stream',
+    'application/csv', 'application/json', 'application/octet-stream', 'application/pdf',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'audio/aac', 'audio/flac', 'audio/mp3', 'audio/mp4', 'audio/mpeg',
-    'audio/ogg', 'audio/wav', 'audio/webm', 'audio/x-flac', 'audio/x-m4a', 'audio/x-wav'
+    'audio/ogg', 'audio/wav', 'audio/webm', 'audio/x-flac', 'audio/x-m4a', 'audio/x-wav',
+    'text/csv', 'text/html', 'text/json', 'text/markdown', 'text/plain'
   ];
 begin
   select * into bucket from storage.buckets where id='postriff-library' for update;
