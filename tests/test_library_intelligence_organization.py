@@ -971,6 +971,7 @@ class Lineage(unittest.TestCase):
                              "created": db.now})
         state_before = copy.deepcopy(db.state)
         pack_before = copy.deepcopy(db.packs[PACK]["evidence_refs"])
+        pre_link = ref(db, N)  # minted before N joins O's stack: assetId is N itself
 
         linked = relations.link_versions(self.ctx, {"relation": "version_of", "from": ref(db, N), "to": ref(db, O)})
         self.assertEqual((db.assets[N]["lineage"], db.assets[N]["version_no"]), (O, 2))
@@ -998,13 +999,17 @@ class Lineage(unittest.TestCase):
         self.assertEqual(listing["versions"][1]["approval"]["status"], "not_reviewed", "the new version is never presented as approved")
 
         new_ref, old_ref = ref(db, N), ref(db, O)
+        self.assertEqual(pre_link["assetId"], N)
+        self.assertEqual(versions.resolve(self.ctx, pre_link)["versionId"], N, "a pre-link reference still names the same version")
+        compared = comparison.compare_versions(self.ctx, [old_ref, pre_link])
+        self.assertEqual(compared["right"]["assetRef"], new_ref, "responses always carry the canonical lineage reference")
         with self.assertRaises(AlphaError) as stale_revision:
             relations.accept_replacement(self.ctx, versions.get(self.ctx, O), versions.get(self.ctx, N), {"kind": "source_pack", "key": PACK}, 2)
         self.assertEqual(stale_revision.exception.status, 409)
         viewer = context(db, role="viewer")
         self.assertEqual(actions.apply(viewer, envelope("version.accept_replacement", targets=[old_ref, new_ref], revision=3,
                                                         payload={"dependentKind": "source_pack", "dependentKey": PACK}))["status"], "denied")
-        applied = actions.apply(self.ctx, envelope("version.accept_replacement", targets=[old_ref, new_ref], revision=3,
+        applied = actions.apply(self.ctx, envelope("version.accept_replacement", targets=[old_ref, pre_link], revision=3,
                                                    payload={"dependentKind": "source_pack", "dependentKey": PACK}))
         self.assertEqual((applied["status"], applied["revision"]), ("applied", 4), applied)
         self.assertEqual(db.packs[PACK]["evidence_refs"], [{"assetRef": new_ref}], "only the explicitly accepted item changes")
