@@ -35,6 +35,7 @@ test('preview holds require the current deployment and definitive no-submission 
     events:[{state:'held',message:'Live provider transport is not configured; nothing was submitted'}],
     attempts:[{number:1,startedAt:90,endedAt:91}]};
   assert.equal(canPublishApprovedJob(legacy,100,true,preview),true);
+  assert.equal(canPublishApprovedJob({...legacy,manifest:{...legacy.manifest,expiresAt:100}},100,true,preview),false,'Expired no-submit holds still require fresh approval');
   for (const change of [{providerReference:'urn:li:share:123'},{providerUpload:{id:'upload'}},
     {state:'uncertain'},{resultSchema:undefined},{attempts:[{number:1,startedAt:90}]},
     {attempts:[{number:1,startedAt:90,endedAt:Infinity}]},{providerConfirmed:'Provider outcome unknown'},

@@ -233,13 +233,16 @@ function ApprovedBy({ job }: { job: QueueJob }) {
 
 function FooterActions({ job, nowSeconds, workerBinding, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, draftAvailable }: JobSheetProps & { job: QueueJob }) {
   const failed = job.state === 'failed';
-  const prepare = canSchedule && (HELD.has(job.state) || failed) && !recoverablePreviewHold(job, workerBinding);
+  const recoverable = recoverablePreviewHold(job, workerBinding);
+  const expired = recoverable && job.manifest.expiresAt <= nowSeconds;
+  const prepare = canSchedule && (HELD.has(job.state) || failed) && (!recoverable || expired);
   const cancel = canApprove && canCancel(job);
   const publish = canPublishApprovedJob(job, nowSeconds, canApprove, workerBinding);
   if (!prepare && !cancel && !publish) return null;
   const available = draftAvailable(job.manifest.variantId);
   return (
     <div className='flex flex-wrap items-center gap-2 [&_button]:min-h-11'>
+      {expired && <p className='text-muted-foreground w-full text-xs'>Approval window closed. Prepare this post again for a fresh review.</p>}
       {publish && <PublishApprovedPostButton job={job} nowSeconds={nowSeconds} allowed={canApprove} workerBinding={workerBinding} />}
       {prepare && (
         <Button

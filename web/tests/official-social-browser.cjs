@@ -125,6 +125,13 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    await page.getByRole('dialog').getByText(heldMessage,{exact:true}).first().waitFor();
    assert.equal(await page.getByRole('dialog').getByRole('button',{name:'Publish approved post',exact:true}).count(),0,'Future approved post is never sent early');
    assert.equal(await page.getByRole('dialog').getByRole('button',{name:'Prepare again',exact:true}).count(),0,'Definitive no-submit recovery keeps its existing job');
+   activeSnapshot.state.phase2.jobs[0].manifest.expiresAt=now-1;
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.getByRole('dialog').getByRole('button',{name:'Prepare again',exact:true}).waitFor();
+   await page.getByRole('dialog').getByText('Approval window closed. Prepare this post again for a fresh review.',{exact:true}).waitFor();
+   assert.equal(await page.getByRole('dialog').getByRole('button',{name:'Publish approved post',exact:true}).count(),0,'An expired no-submit approval requires a fresh review');
+   assert.equal(dispatches,0,'Showing expired recovery never dispatches');
+   activeSnapshot.state.phase2.jobs[0].manifest.expiresAt=now+3600;
    activeSnapshot.state.phase2.jobs[0].nextAt=now-1;
    await page.reload({waitUntil:'domcontentloaded'});
    await page.getByRole('dialog').getByRole('button',{name:'Publish approved post',exact:true}).click();
@@ -145,7 +152,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
    await page.waitForURL('**/app/channels?connected=fixture-ig');
    assert.equal(completionWorkspace,wid);
-   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,sharePermissionSeparatedFromLiveQualification:true,restrictedOrganizationRemainsBlocked:true,approvedJobScopedDispatchOnce:true,futureJobNotDispatched:true,heldRecoveryKeepsOriginalJob:true,acceptedLinkedInReceiptVisibleWithoutPrivateRead:true,ownerCheckNeverApiVerified:true,noAcceptedPostResubmission:true,minimumIdentitySelected:true,latestIdentityVerificationShown:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,sharePermissionSeparatedFromLiveQualification:true,restrictedOrganizationRemainsBlocked:true,approvedJobScopedDispatchOnce:true,futureJobNotDispatched:true,heldRecoveryKeepsOriginalJob:true,expiredNoSubmitApprovalCanPrepareAgain:true,acceptedLinkedInReceiptVisibleWithoutPrivateRead:true,ownerCheckNeverApiVerified:true,noAcceptedPostResubmission:true,minimumIdentitySelected:true,latestIdentityVerificationShown:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}
