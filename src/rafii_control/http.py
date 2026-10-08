@@ -279,6 +279,8 @@ class ControlApplication:
         if match := re.fullmatch(f'/agent/runs/({ID})', path): return founder_module('founder_agent').run(self.consumer(), principal, match[1], request_id, control=self)
         if match := re.fullmatch(f'/agent/runs/({ID})/cancel', path): return founder_module('founder_agent').cancel(self.consumer(), principal, match[1], request_id, control=self)
         if match := re.fullmatch(f'/agent/conversations/({ID})/state', path): return founder_module('founder_agent').conversation_state(self.consumer(), principal, match[1], request_id, control=self)
+        # Generative UI (rafii-genui/1, J09): founder-scoped artifacts, read-only manifest, polling replay (no streaming here).
+        if path.startswith('/agent/ui/'): return founder_module('founder_agent_ui').handle(self.consumer(), principal, method, path, body, query, request_id, control=self)
         raise ControlError('SCOPE_DENIED', 404)
 
     def terminal_audit(self, action, result, principal, request_id, code=None):
@@ -324,6 +326,7 @@ class ControlApplication:
             if path in ('/incidents', '/follow-ups', '/contact-policy', '/briefing-schedules'): return 'control.read'
             if path == '/usage/unknown': return 'metrics.query'
             if re.fullmatch(f'/agent/runs/{ID}', path) or re.fullmatch(f'/agent/conversations/{ID}/state', path): return 'copilot.use'
+            if re.fullmatch(f'/agent/ui/presentations/{ID}(/events)?', path) or re.fullmatch(f'/agent/ui/messages/{ID}', path): return 'copilot.use'
         if method == 'POST':
             if path in ('/workspace/live/query','/workspace/demo/query'): return 'control.read'
             if path == '/workspace/demo/action': return 'control.read'
@@ -337,6 +340,7 @@ class ControlApplication:
             if path == '/follow-ups' or re.fullmatch(f'/follow-ups/{ID}', path): return 'followups.write'
             if path in ('/briefing-schedules', '/calls/test'): return 'control.settings'
             if path == '/agent/turns' or re.fullmatch(f'/agent/runs/{ID}/cancel', path): return 'copilot.use'
+            if path in ('/agent/ui/presentations', '/agent/ui/queries') or re.fullmatch(f'/agent/ui/presentations/{ID}/(cancel|edits|state)', path): return 'copilot.use'
         if method == 'PUT' and path == '/contact-policy': return 'control.settings'
         if method == 'DELETE' and re.fullmatch(f'/briefing-schedules/{ID}', path): return 'control.settings'
         route, _ = extension_route(path, method)

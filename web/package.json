@@ -14,7 +14,9 @@
     "audit:copy": "node scripts/copy-audit.mjs",
     "test:browser:durable": "node tests/consumer-durable-browser.cjs",
     "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-cloud-validation.sh",
-    "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh"
+    "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh",
+    "test:agent-ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/agent_ui_validation.sh jcb",
+    "ci:agent-ui": "bash ../scripts/cloud-python-bootstrap.sh bash -c \"bash ../scripts/agent_ui_validation.sh unit && bash ../scripts/agent_ui_validation.sh database && bash ../scripts/agent_ui_validation.sh regression\""
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -24,6 +26,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@gsap/react": "^2.1.2",
     "@internationalized/date": "^3.12.4",
+    "@openuidev/lang-core": "0.3.2",
+    "@openuidev/react-lang": "0.3.2",
     "@react-aria/i18n": "^3.13.1",
     "@sentry/nextjs": "^10.45.0",
     "@shadcn/react": "^0.2.1",

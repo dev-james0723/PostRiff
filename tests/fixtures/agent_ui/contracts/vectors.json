@@ -1,0 +1,72 @@
+{
+  "canonical": [
+    {
+      "canonical": "{\"a\":[1,2,{\"z\":\"中\"}],\"b\":1}",
+      "value": {
+        "a": [
+          1,
+          2,
+          {
+            "z": "中"
+          }
+        ],
+        "b": 1.0
+      }
+    },
+    {
+      "canonical": "{\"emoji\":\"🎹\",\"f\":0.25,\"n\":-3,\"nested\":{\"x\":true,\"y\":null}}",
+      "value": {
+        "emoji": "🎹",
+        "f": 0.25,
+        "n": -3,
+        "nested": {
+          "x": true,
+          "y": null
+        }
+      }
+    },
+    {
+      "canonical": "[]",
+      "value": []
+    },
+    {
+      "canonical": "{\"k\":\"line\\nbreak \\\"quoted\\\"\"}",
+      "value": {
+        "k": "line\nbreak \"quoted\""
+      }
+    },
+    {
+      "canonical": "{\"big\":9007199254740991}",
+      "value": {
+        "big": 9007199254740991
+      }
+    }
+  ],
+  "contractHash": "c4e2c3aeeb388728e6fc8972799384d1d2d56361949042d9ca10bbc003b94fb5",
+  "digests": [
+    {
+      "actionId": "draft_edit",
+      "digest": "feacc807c03fdcaaa786b55cac9cf292c1473758275dc8adb2b4f6bdede0f065",
+      "inputs": {
+        "draftId": "6c1f2f3e-1111-4222-8333-944455556666",
+        "text": "新版本 ✨"
+      }
+    }
+  ],
+  "sseFrame": {
+    "event": {
+      "artifactId": "6c1f2f3e-1111-4222-8333-944455556666",
+      "at": "2026-10-08T17:00:00.000Z",
+      "attemptId": "7d2f2f3e-1111-4222-8333-944455556666",
+      "contractVersion": "rafii-genui/1",
+      "kind": "ui.delta",
+      "payload": {
+        "offset": 0,
+        "text": "root = RafiiRoot([])\n"
+      },
+      "revision": 1,
+      "seq": 3
+    },
+    "frame": "id: 6c1f2f3e-1111-4222-8333-944455556666:3\nevent: ui.delta\ndata: {\"contractVersion\":\"rafii-genui/1\",\"artifactId\":\"6c1f2f3e-1111-4222-8333-944455556666\",\"attemptId\":\"7d2f2f3e-1111-4222-8333-944455556666\",\"revision\":1,\"seq\":3,\"kind\":\"ui.delta\",\"at\":\"2026-10-08T17:00:00.000Z\",\"payload\":{\"offset\":0,\"text\":\"root = RafiiRoot([])\\n\"}}\n\n"
+  }
+}

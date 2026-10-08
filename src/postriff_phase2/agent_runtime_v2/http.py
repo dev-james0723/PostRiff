@@ -14,6 +14,7 @@ Mounted by hosted_app with the same session, request guard, origin checks and JS
     POST voice/sessions                      start GPT-Live: SDP offer in, SDP answer out (server-held key)
     POST voice/sessions/{v}/transcript       text of what was said (no audio)
     POST voice/sessions/{v}/end              end and settle the session
+    *    ui/...                              Generative UI presentations, queries and guarded actions (ui_http.py)
 """
 from __future__ import annotations
 
@@ -50,6 +51,10 @@ def handle(app, environ, start_response, service, token, method, parts):
     workspace_id, resource = parts[2], parts[4]
     runtime = runtime_for(service)
     rest = parts[5:]
+    if resource == "ui":
+        # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
+        from . import ui_http
+        return ui_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
     if resource == "status" and not rest and method == "GET":
         return app._json(start_response, 200, runtime.status(workspace_id, token))
     if resource == "turns" and not rest and method == "POST":

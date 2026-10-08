@@ -8,8 +8,8 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:library",
-    "ci": "ci:library"
+    "test": "test:agent-ui",
+    "ci": "ci:agent-ui"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
@@ -19,13 +19,15 @@
   "envAllowlist": [],
   "localFallback": false,
   "environment": {
+    "DO_NOT_TRACK": "1",
+    "LC_ALL": "C",
     "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
-    "NEXT_PUBLIC_SUPABASE_URL": "",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
     "NEXT_PUBLIC_SENTRY_DISABLED": "1",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "OPENUI_TELEMETRY_DISABLED": "1",
     "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
-    "POSTRIFF_DEV_SSR": "1",
-    "LC_ALL": "C"
+    "POSTRIFF_DEV_SSR": "1"
   },
   "taskArgs": {},
   "inputExcludes": [
@@ -44,7 +46,7 @@
   "cacheScope": "e408bbcd8242",
   "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7",
+  "lockfileSha256": "c347e642ee841cdcc2ca1a8450c4acc09cd391ea6962735c7b1f31fe6c551504",
   "orgId": "jf34f85hr0",
   "baseRef": "refs/remotes/origin/consumer-saas"
 }

@@ -120,6 +120,9 @@ class RafiiRunContext:
     deadline: float | None = None             # time.monotonic() by which the turn must be done (tools and providers fit inside it)
     style: dict | None = None                 # how this person wants Rafii to talk (style.load); None: the default style
     command: dict | None = None               # a validated slash command {name, args} (commands.parse), or None
+    ui_context: dict | None = None            # validated uiContext {artifactId, artifactRevision, stateRevision} (rafii-genui/1)
+    ui_selection: dict | None = None          # selection re-resolved from persisted UI state {references, note}
+    voice_choice: dict | None = None          # {mode, sourceIds} the person chose for drafting; never swapped by the model
     clients: list = field(default_factory=list)  # AsyncOpenAI clients this run created, closed inside its own event loop
 
     # --- workspace access ------------------------------------------------------------------------------------------
