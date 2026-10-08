@@ -66,9 +66,21 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
   try {
     await region.waitFor({ state: 'attached', timeout: 45000 });
   } catch {
-    const answered = await page.locator('#rafii-panel article[aria-label="Rafii\'s answer"]').count();
-    t.shared.noRegion = `lane F/C: no ${GENERATED} region within 45 s of the native answer to an eligible turn (native answers: ${answered}); surfaces/renderer not mounted yet`;
-    blocked(t.shared.noRegion);
+    // Lane F: an eligible answer without a view offers an explicit button (passive surfaces never generate on their own).
+    const build = page.locator('#rafii-panel').getByRole('button', { name: /build interactive view/i }).last();
+    let clicked = false;
+    if (await build.count()) {
+      await build.click();
+      clicked = true;
+      await region.waitFor({ state: 'attached', timeout: 45000 }).catch(() => {});
+    }
+    if (!(await region.count())) {
+      const answered = await page.locator('#rafii-panel article[aria-label="Rafii\'s answer"]').count();
+      t.shared.noRegion = `lane F/C: no ${GENERATED} region within 45 s of the native answer to an eligible turn (native answers: ${answered}; `
+        + `'Build interactive view' ${clicked ? 'clicked' : 'absent'})`;
+      blocked(t.shared.noRegion);
+    }
+    t.shared.buildButtonNeeded = (t.shared.buildButtonNeeded || 0) + 1;
   }
   await page.evaluate((sel) => {
     const nodes = document.querySelectorAll(sel);
@@ -279,10 +291,16 @@ scene('native-fallback', async (t) => {
   await answer.waitFor({ timeout: 120000 });
   await page.waitForTimeout(8000);
   await arm(t, null);
+  const host = page.locator('#rafii-panel [data-rafii-generated-host]').last();
   const region = page.locator(`#rafii-panel ${GENERATED}`).last();
-  if (!(await region.count())) blocked('lane F: no generated region mounted (failure path cannot be told apart from not mounted)');
+  if (!(await host.count()) && !(await region.count())) blocked('lane F: no generated host/region mounted (failure path cannot be told apart from not mounted)');
   t.assert(await answer.isVisible(), 'the native answer stays visible after a failed generation');
-  t.assert(await noRawDsl(region), 'no raw DSL or error dump in the fallback');
+  t.assert(await noRawDsl((await region.count()) ? region : host), 'no raw DSL or error dump in the fallback');
+  if (await region.count()) {
+    const state = await region.getAttribute('data-generation-state');
+    t.assert(state === 'failed', 'the region reports data-generation-state="failed" (lane C frame contract)', { state });
+    t.assert((await region.locator('[data-genui]').count()) === 0, 'no generated component is rendered from rejected source');
+  }
   const errorOverlay = await page.locator('nextjs-portal, [data-nextjs-dialog]').count();
   t.assert(errorOverlay === 0, 'no framework error overlay');
   return 'native answer kept; fallback without DSL';
