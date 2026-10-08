@@ -22,7 +22,7 @@ from postriff_phase2.library_intelligence import actions, api, artifacts, contra
 from postriff_phase2.permissions import Membership
 from test_library_intelligence_voice import NOW, USES, WROTE, VoiceCursor, VoiceDB
 
-ENV = {"RAFII_LIBRARY_VOICE_ENABLED": "1", "RAFII_LIBRARY_RETRIEVAL_ENABLED": "1", "RAFII_LIBRARY_TASK_UI_ENABLED": "1"}
+ENV = {"RAFII_LIBRARY_VOICE_ENABLED": "1", "RAFII_LIBRARY_RETRIEVAL_ENABLED": "1", "RAFII_LIBRARY_TASK_UI_ENABLED": "1", "RAFII_LIBRARY_ARTIFACTS_ENABLED": "1"}
 DOC, USED, REVIEW, NOTE, OLD, NEW, PHOTO, POSTER_VIDEO = ("a1" * 16, "a2" * 16, "a3" * 16, "b1" * 16, "c1" * 16, "c2" * 16, "d1" * 16, "d2" * 16)
 RUN, OTHER_RUN, FAILED_RUN = "11111111-2222-4333-8444-555555555555", "11111111-2222-4333-8444-666666666666", "11111111-2222-4333-8444-777777777777"
 NOTE_TEXT = "I practise Brahms slowly before every recital."
@@ -712,7 +712,7 @@ class ArtifactTests(Base):
         parents = {r["to_version"] for r in db.relations if r["relation"] == "derived_from" and r["from_version"] == artifact_key}
         self.assertTrue({DOC, NOTE} <= parents, parents)
         self.assertEqual(str(db.artifacts[0]["source_pack_id"]).replace("-", ""), pack["packId"])
-        with mock.patch.dict(os.environ, {"RAFII_LIBRARY_TASK_UI_ENABLED": ""}):
+        with mock.patch.dict(os.environ, {"RAFII_LIBRARY_ARTIFACTS_ENABLED": ""}):
             self.assertEqual(artifacts.capture_effect(make_ctx(db).cur, WS, before, db.state, ACTOR), [], "off unless enabled")
 
 

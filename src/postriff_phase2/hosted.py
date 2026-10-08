@@ -433,6 +433,9 @@ class HostedWorkspaceService:
         from .library_intelligence import effects as library_effects
         # Scheduled posts record Library usage; changed drafts get a quiet, debounced suggestion pass (savepoint, never raises).
         self.repository.effects.append(library_effects.capture)
+        from .library_intelligence.artifacts import capture_effect as library_artifact_capture
+        # Final-artifact return: a draft accepted for use comes home to the Library once, in the same transaction.
+        self.repository.effects.append(library_artifact_capture)
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is

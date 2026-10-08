@@ -319,7 +319,7 @@ def main():
     if args.library_intelligence:
         # Local, private processing only (lexical index, structural extraction, perceptual image features). Cloud ASR,
         # embeddings and vision stay off unless an explicitly authorized credential file is named.
-        for name in ("ENRICHMENT", "RETRIEVAL", "VOICE", "SUGGESTIONS", "TASK_UI"):
+        for name in ("ENRICHMENT", "RETRIEVAL", "VOICE", "SUGGESTIONS", "TASK_UI", "ARTIFACTS"):
             os.environ[f"RAFII_LIBRARY_{name}_ENABLED"] = "1"
         library_env = dict(os.environ)
         if args.library_provider_env:

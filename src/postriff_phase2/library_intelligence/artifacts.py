@@ -425,7 +425,7 @@ def capture_effect(cur, workspace_id, before, after, principal) -> list:
     """Repository effect (hosted.PostgresWorkspaceRepository.effects): when a command accepts a draft, store and register it
     in the same transaction. Each registration runs under its own savepoint and never fails the person's command; a
     refusal (not final, loop) is skipped and a byte problem stays a retryable 'failed' registration."""
-    if not policy.enabled("task_ui"):
+    if not policy.enabled("artifacts"):
         return []
     try:
         accepted = newly_accepted(before, after)

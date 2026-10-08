@@ -17,7 +17,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-for _flag in ("RAFII_LIBRARY_VOICE_ENABLED", "RAFII_LIBRARY_RETRIEVAL_ENABLED", "RAFII_LIBRARY_TASK_UI_ENABLED"):
+for _flag in ("RAFII_LIBRARY_VOICE_ENABLED", "RAFII_LIBRARY_RETRIEVAL_ENABLED", "RAFII_LIBRARY_TASK_UI_ENABLED", "RAFII_LIBRARY_ARTIFACTS_ENABLED"):
     os.environ[_flag] = "1"
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 

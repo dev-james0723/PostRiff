@@ -464,6 +464,7 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
         ctx.ledger.assets.append(view)
         ctx.ledger.reference("asset", asset_id, f"{lineage['operation']} image")
         ctx.ledger.changed.append({"type": "asset", "id": asset_id, "change": lineage["operation"], "expected": "saved image", "actual": "saved image", "verified": True})
+        _register_in_library(ctx, saved)
     return {"ok": verified, "verified": verified, "asset": view, "revisedPrompt": result.get("revisedPrompt"), "digest": digest({"asset": asset_id, "hash": record["hash"]}),
             **({} if verified else {"error": "The image could not be confirmed in the workspace after saving."})}
 
@@ -548,3 +549,16 @@ def image_edit(ctx: RafiiRunContext, args: dict) -> dict:
           "Made an image variant")
 def image_variant(ctx: RafiiRunContext, args: dict) -> dict:
     return _step(ctx, {**args, "quality": args.get("quality") or "fast"}, lambda: _generate(ctx, {**args, "quality": args.get("quality") or "fast"}, operation="variant"))
+
+
+def _register_in_library(ctx, saved):
+    """Final-artifact return (Library intelligence R13): the verified image already lives in the Library; record its run
+    identity and lineage once. Never fails the image turn; a byte problem stays a retryable 'failed' registration."""
+    from ..library_intelligence import api as library_api, artifacts as library_artifacts, policy as library_policy
+    if not ctx.run_id or not library_policy.enabled("artifacts"):
+        return
+    try:
+        with ctx.workspace() as (cur, _row, principal, _member, _state):
+            library_artifacts.register_generated_image(library_api.context(cur, principal, ctx.workspace_id, service=ctx.service), ctx.run_id, saved)
+    except Exception:  # noqa: BLE001
+        pass
