@@ -13,7 +13,7 @@ const checks=[];
   const browser=await browserType.launch({headless:true});
   try{for(const width of [1440,390]){
    const principal=randomUUID(),context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
-   const headers={Authorization:'Bearer dev:'+principal,'Content-Type':'application/json',Origin:base};
+   const headers={Authorization:'Bearer dev:'+principal,'Content-Type':'application/json','X-PostRiff-Request':'founder-alpha',Origin:base};
    await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base}]);
    await context.addInitScript(id=>localStorage.setItem('postriff-dev-principal',id),principal);
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
