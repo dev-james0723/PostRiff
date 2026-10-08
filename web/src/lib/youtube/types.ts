@@ -14,6 +14,13 @@ export interface YouTubeResource {
   id: string;
   snippet?: {
     title?: string;
+    thumbnails?: Partial<
+      Record<'default' | 'medium' | 'high' | 'standard' | 'maxres', {
+        url?: string;
+        width?: number;
+        height?: number;
+      }>
+    >;
     description?: string;
     videoId?: string;
     liveChatId?: string;

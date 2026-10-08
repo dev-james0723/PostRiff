@@ -15,6 +15,7 @@ import type { YouTubeActionReview, YouTubeData, YouTubeResource } from '@/lib/yo
 import { LiveCreatorControls, MetadataControls } from './creator-controls';
 import { CreatorReceipts } from './creator-receipts';
 import { UploadRecovery, StreamConfiguration } from './creator-recovery';
+import { YouTubeResourceList } from './resource-list';
 
 const control = 'border-input bg-background w-full rounded-md border px-3 py-2 text-sm';
 const actionLabels: Record<string, string> = {
@@ -90,6 +91,19 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
       {children}
     </section>
   );
+}
+// Uploads are playlistItem resources: their own ID must remain available for playlist operations.
+function videoSelectionId(item: YouTubeResource): string | undefined {
+  const details = item.contentDetails;
+  const candidates: unknown[] = [];
+  if (details && 'videoId' in details) candidates.push(details.videoId);
+  if (item.snippet?.resourceId) candidates.push(item.snippet.resourceId.videoId);
+  if (!candidates.length && 'kind' in item && item.kind === 'youtube#video') {
+    candidates.push(item.id);
+  }
+  const id = candidates[0];
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id) &&
+    candidates.every((candidate) => candidate === id) ? id : undefined;
 }
 function Items({ data, select }: { data?: YouTubeData; select: (x: YouTubeResource) => void }) {
   return (
@@ -279,11 +293,29 @@ export function YouTubeCreatorView() {
   }
   function pick(item: YouTubeResource) {
     if (tab === 'videos') {
-      setVideoId(item.snippet?.resourceId?.videoId || item.id);
+      const selectedVideoId = videoSelectionId(item);
+      if (!selectedVideoId) {
+        setVideoId('');
+        setError('This item has no valid YouTube video ID. Refresh videos and select an available video.');
+        return;
+      }
+      setVideoId(selectedVideoId);
       setTitle(item.snippet?.title || '');
       setDescription(item.snippet?.description || '');
     }
     if (tab === 'playlists') {
+      if (lastRead?.resource === 'playlist_items') {
+        const selectedVideoId = videoSelectionId(item);
+        if (!selectedVideoId || typeof item.id !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/.test(item.id)) {
+          setItemId('');
+          setVideoId('');
+          setError('This playlist item has no valid item or video ID. Refresh the playlist and select an available item.');
+          return;
+        }
+        setItemId(item.id);
+        setVideoId(selectedVideoId);
+        return;
+      }
       setPlaylistId(item.id);
       setTitle(item.snippet?.title || '');
       setDescription(item.snippet?.description || '');
@@ -498,7 +530,17 @@ export function YouTubeCreatorView() {
                     </Link>
                     {command('Refresh videos', can('identity'), () => read('videos'))}
                   </div>
-                  <Items data={result} select={pick} />
+                  {lastRead?.resource === 'videos' ? (
+                    <YouTubeResourceList
+                      data={result}
+                      resourceType='video'
+                      select={pick}
+                      getIdentifier={videoSelectionId}
+                      isSelected={(item) => videoSelectionId(item) === videoId}
+                    />
+                  ) : (
+                    <Items data={result} select={pick} />
+                  )}
                 </Panel>
                 <Panel title='Manage an existing video'>
                   <Field label='Video ID' value={videoId} change={setVideoId} />
@@ -713,7 +755,15 @@ export function YouTubeCreatorView() {
                 <div className='flex flex-wrap gap-2'>
                   {command('List playlists', can('identity'), () => read('playlists'))}
                 </div>
-                <Items data={result} select={pick} />
+                <YouTubeResourceList
+                  data={result}
+                  resourceType={lastRead?.resource === 'playlist_items' ? 'video' : 'playlist'}
+                  select={pick}
+                  getIdentifier={lastRead?.resource === 'playlist_items' ? videoSelectionId : undefined}
+                  isSelected={(item) => lastRead?.resource === 'playlist_items'
+                    ? item.id === itemId
+                    : item.id === playlistId}
+                />
                 <Field label='Playlist ID' value={playlistId} change={setPlaylistId} />
                 <Field label='Playlist title' value={title} change={setTitle} />
                 <Field
