@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 import sys
-import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -338,31 +337,29 @@ check("grant revoke: no approved span remains", all(r[5] == "revoked" for r in v
 # --- TOCTOU: a revoke that commits while an approval is between its check and its write wins -----------------------------------
 status, grant_b = route("POST", w1, ["grants"], "owner", {"grantType": "purpose", "purpose": "voice", "scope": {"kind": "asset", "assetId": note},
                                                           "attestation": WROTE})
-locked, outcome_box = threading.Event(), {}
+outcome_box = {}
+original_recheck = policy.recheck
 
 
-def concurrent_revoke():
+def recheck_after_concurrent_revoke(rctx_unused, decisions):
+    # Deterministic interleaving: the approval has passed its first check; another session commits the revoke before
+    # the approval's recheck runs (recheck reads the committed revision without holding a lock).
+    policy.recheck = original_recheck
     with connection() as db, db.cursor() as cur:
-        cur.execute("SELECT 1 FROM public.pr_library_policy WHERE workspace_id=%s FOR UPDATE", (w1,))
-        locked.set()
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:  # wait until the approval is blocked on its recheck
-            if scalar("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE %s", ("%pr_library_policy%FOR SHARE%",)):
-                outcome_box["waited"] = True
-                break
-            time.sleep(0.05)
         rctx = api.context(cur, OWNER, w1, service=service, now=clock[0])
         outcome_box["revoke"] = policy.revoke(rctx, grant_b["grantId"])
+    outcome_box["interleaved"] = True
+    return original_recheck(rctx_unused, decisions)
 
 
-thread = threading.Thread(target=concurrent_revoke)
-thread.start()
-locked.wait(10)
-with ctx() as c1:
-    expect_error("toctou: approval refused after the concurrent revoke",
-                 lambda: voice.approve_voice_span(c1, ref, span(0, [P0, P1, P2]), "default", WROTE, uses=USES, confirmed=True), 403, "library_grant_required")
-thread.join(30)
-check("toctou: the approval had passed its first check and waited on the recheck", outcome_box.get("waited") is True, outcome_box)
+policy.recheck = recheck_after_concurrent_revoke
+try:
+    with ctx() as c1:
+        expect_error("toctou: approval refused after the concurrent revoke",
+                     lambda: voice.approve_voice_span(c1, ref, span(0, [P0, P1, P2]), "default", WROTE, uses=USES, confirmed=True), 403, "library_grant_required")
+finally:
+    policy.recheck = original_recheck
+check("toctou: the revoke committed between the approval's check and its write", outcome_box.get("interleaved") is True and outcome_box.get("revoke"), outcome_box)
 check("toctou: nothing admitted", all(r[5] == "revoked" for r in voice_rows(w1))
       and not any(s.get("active") for s in samples_in(state_of(w1)[1])), voice_rows(w1))
 

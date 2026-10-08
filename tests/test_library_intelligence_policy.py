@@ -187,7 +187,7 @@ class Revocation(unittest.TestCase):
         decision = policy.authorize_source(context, v, "answer")
         self.assertTrue(decision.allowed)
         # A revoke commits between retrieval and delivery: the revision moved and the grant is gone.
-        cur.on(r"SELECT grant_revision FROM public.pr_library_policy WHERE workspace_id=%s FOR SHARE", [(4,)])
+        cur.on(r"SELECT grant_revision FROM public.pr_library_policy WHERE workspace_id=%s$", [(4,)])
         cur.on(r"FROM public.pr_library_grants", [])
         cur.on(r"SELECT grant_revision,index_generation,organization_revision", [(4, 1, 0)])
         original = versions.load
@@ -198,10 +198,10 @@ class Revocation(unittest.TestCase):
             versions.load = original
         self.assertFalse(fresh.allowed)
         self.assertEqual(fresh.reason, "grant_required")
-        self.assertTrue(cur.sql(r"FOR SHARE"), "the recheck serializes with a concurrent revoke")
+        self.assertFalse(cur.sql(r"FOR SHARE"), "the recheck never holds a lock that would block revocations")
 
     def test_unchanged_revision_keeps_decision(self):
-        cur = FakeCursor().on(r"FOR SHARE", [(3,)])
+        cur = FakeCursor().on(r"SELECT grant_revision FROM public.pr_library_policy WHERE workspace_id=%s$", [(3,)])
         context = ctx(cur, grants=[grant("answer")], revision=3)
         decision = policy.authorize_source(context, version(), "answer")
         self.assertIs(policy.recheck(context, decision), decision)

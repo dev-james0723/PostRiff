@@ -145,7 +145,7 @@ class VoiceCursor:
                                "fixture", "1", None, s["superseded"], 1.0) for s in rows[:limit]])
         if sql.startswith("SELECT grant_revision,index_generation,organization_revision FROM public.pr_library_policy"):
             return self._set([(db.grant_revision, 1, 0)])
-        if sql.startswith("SELECT grant_revision FROM public.pr_library_policy") and "FOR SHARE" in sql:
+        if sql.startswith("SELECT grant_revision FROM public.pr_library_policy"):  # policy.recheck (no lock)
             if db.on_share:
                 hook, db.on_share = db.on_share, None
                 hook(db)

@@ -294,7 +294,7 @@ class FakeCur:
             if name in self.db.fail and name != "knn":
                 raise RuntimeError("synthetic database failure")
             rows = getattr(self.db, "q_" + name.replace("-", "_"))(args)
-        elif "FOR SHARE" in sql and "pr_library_policy" in sql:
+        elif sql.startswith("SELECT grant_revision FROM public.pr_library_policy"):  # policy.recheck (no lock)
             rows = [(self.db.revision.get(args[0], 0),)]
         elif "grant_revision,index_generation,organization_revision FROM public.pr_library_policy" in sql:
             rows = [(self.db.revision.get(args[0], 0), self.db.generation.get(args[0], 1), 0)]

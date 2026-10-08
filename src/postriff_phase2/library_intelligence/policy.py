@@ -279,10 +279,11 @@ def require(decision: Decision) -> Decision:
 
 def recheck(ctx, decisions):
     """Before delivering a response or finalizing a derivative: if the grant revision moved, re-authorize from fresh
-    state and drop anything no longer allowed. Locks the policy row FOR SHARE so a concurrent revoke serializes."""
+    state and drop anything no longer allowed. A plain read of the committed revision: taking a row lock here would let a
+    slow answer or job (which may still wait on a provider) block every revocation in the workspace."""
     single = isinstance(decisions, Decision)
     items = [decisions] if single else list(decisions)
-    ctx.cur.execute("SELECT grant_revision FROM public.pr_library_policy WHERE workspace_id=%s FOR SHARE", (ctx.workspace_id,))
+    ctx.cur.execute("SELECT grant_revision FROM public.pr_library_policy WHERE workspace_id=%s", (ctx.workspace_id,))
     row = ctx.cur.fetchone()
     current = int(row[0]) if row else 0
     if all(d.grant_revision == current for d in items):
