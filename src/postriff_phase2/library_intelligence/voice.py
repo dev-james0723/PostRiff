@@ -43,6 +43,14 @@ WITHDRAWN = "(withdrawn)"
 PERSONA = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:\-]{0,79}$")
 LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
 QUOTES = {'"': '"', "“": "”", "‘": "’", "'": "'", "「": "」", "『": "』", "«": "»"}
+QUOTE_PAIRS = (("“", "”"), ("「", "」"), ("『", "』"), ("‘", "’"), ('"', '"'))
+QUOTE_RUN_WORDS, QUOTE_RUN_CJK, QUOTE_SHARE = 8, 12, 0.2
+QUOTE_WORD = re.compile(r"[A-Za-zÀ-ɏ0-9]+(?:['’][A-Za-z]+)?")
+CJK_CHAR = re.compile(r"[㐀-䶿一-鿿豈-﫿぀-ヿ가-힯]")
+TRIM_LEAD = " \t\n,;:—–-·、，；：…"
+TRIM_TAIL = " \t\n,;:—–-·、，；：…"
+ATTRIBUTION = re.compile(r"(?i)(?:\b(?:said|says|wrote|writes|asked|asks|told me|tells me|puts it|put it|quipped|replied|according to)\b[\s,:]*$)"
+                         r"|(?:(?:講|話|說|说|讲|话|表示|寫道|写道|曰|問|问)[\s，,：:]*$)")
 EXPLANATION = ("Rafii shows the passages it learns your style from, where each came from and how many there are. "
                "It does not compute a voice-match percentage.")
 COLUMNS = ("id,voice_source_id,asset_key,version_key,source_sha256,locator,text,text_hash,persona_id,brand,language,polarity,attestation,"
@@ -288,6 +296,13 @@ def resolve_span(ctx, version: dict, loc: dict) -> dict:
             _refuse("Select at least one character.", 422, "library_voice_no_passage")
         spans = [(s, *r) for s in segments if (r := _range(s, page)) is not None and (loc["kind"] == "page") == (s["locator"]["kind"] == "page")]
         pieces = _pieces(spans, start, end)
+    anchor = None
+    if loc["kind"] == "text" and len(pieces) == 1:
+        # One offset-aligned passage: positions in the span text map exactly onto source offsets (used to suggest a sub-span).
+        only, piece = pieces[0]
+        a, b = only["locator"]["start"], only["locator"]["end"]
+        if len(only["text"]) == b - a and "\r" not in piece:
+            anchor = max(loc["start"], a) + (len(piece) - len(piece.lstrip()))
     used = list({s["id"]: s for s, _ in pieces}.values())
     if len(segments) > 1 and {s["id"] for s in used} == {s["id"] for s in segments}:
         _refuse("Select passages, not the whole file. Only the passages you choose teach your voice.", 422, "library_voice_whole_document")
@@ -296,7 +311,7 @@ def resolve_span(ctx, version: dict, loc: dict) -> dict:
         _refuse("There is no text at this place in the item.", 422, "library_voice_no_passage")
     if len(text) > MAX_SPAN_CHARS:
         _refuse(f"Select a shorter passage (up to {MAX_SPAN_CHARS:,} characters).", 413, "library_voice_too_long")
-    return {"text": text, "segments": used, "speakers": {s.get("speakerLabel") for s in used},
+    return {"text": text, "anchor": anchor, "segments": used, "speakers": {s.get("speakerLabel") for s in used},
             "generated": any(s.get("origin") == "ai_suggested" for s in used),
             "language": next((s["language"] for s in used if s.get("language")), None)}
 
@@ -314,11 +329,92 @@ def _check_speaker(span: dict, attestation: dict):
             _refuse(f"This passage is spoken by {label}, not by you. A guest's words never teach your voice.", 403, "library_voice_other_speaker")
 
 
-def _check_quoted(text: str):
-    if len(text) >= 2 and text[0] in QUOTES and text[-1] == QUOTES[text[0]]:
-        inner = text[1:-1]
-        if QUOTES[text[0]] not in inner and (text[0] == QUOTES[text[0]] or text[0] not in inner):
+class QuotedSpan(AlphaError):
+    """A span that contains someone else's quoted words. `suggestion` is the person's own words around the quotation
+    ({text, locator?}) when there are enough of them to approve instead."""
+
+    def __init__(self, message: str, suggestion: dict | None):
+        super().__init__(message, 403, code="library_voice_quoted")
+        self.suggestion = suggestion
+
+
+def quoted_runs(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each quotation in “”, "", 「」, 『』 or ‘’, marks included, outermost first. A ’ followed by a
+    letter is an apostrophe (can’t), never a closing mark."""
+    runs = []
+    for open_, close in QUOTE_PAIRS:
+        at = 0
+        while True:
+            a = text.find(open_, at)
+            if a < 0:
+                break
+            b, look = -1, a + 1
+            while True:
+                b = text.find(close, look)
+                if b < 0 or not (close == "’" and b + 1 < len(text) and text[b + 1].isalpha()):
+                    break
+                look = b + 1
+            if b < 0:
+                break
+            runs.append((a, b + 1))
+            at = b + 1
+    out = []
+    for run in sorted(runs):
+        if not out or run[0] >= out[-1][1]:
+            out.append(run)
+    return out
+
+
+def _counts(text: str) -> tuple[int, int]:
+    return len(QUOTE_WORD.findall(text)), len(CJK_CHAR.findall(text))
+
+
+def _own_words(text: str, runs: list, anchor) -> dict | None:
+    """The longest stretch outside the quotations that isn't just the attribution ("As Jobs said,"), with its exact
+    text locator when the span maps one-to-one onto source offsets."""
+    best = None
+    edges = [0] + [x for run in runs for x in run] + [len(text)]
+    for a, b in zip(edges[0::2], edges[1::2]):
+        piece = text[a:b]
+        lead = len(piece) - len(piece.lstrip(TRIM_LEAD))
+        stripped = piece.strip(TRIM_LEAD).rstrip(TRIM_TAIL).strip()
+        if not stripped or ATTRIBUTION.search(stripped):
+            continue
+        words, cjk = _counts(stripped)
+        if words < 2 and cjk < 4:
+            continue
+        start = a + lead + (len(piece[lead:]) - len(piece[lead:].lstrip()))
+        size = words + cjk
+        if best is None or size > best[0]:
+            best = (size, stripped, start, start + len(stripped))
+    if best is None:
+        return None
+    out = {"text": best[1]}
+    if anchor is not None:
+        out["locator"] = {"kind": "text", "start": anchor + best[2], "end": anchor + best[3]}
+    return out
+
+
+def _check_quoted(text: str, anchor=None):
+    """Spec §10: quoted speakers are kept apart. A wholly quoted span is refused; so is a span with a substantial
+    quotation (a quoted run of QUOTE_RUN_WORDS+ words or QUOTE_RUN_CJK+ CJK characters, or quotations making up
+    QUOTE_SHARE+ of the text with at least a few words). A short scare-quoted term is the person's own phrasing."""
+    stripped = text.strip()
+    if len(stripped) >= 2 and stripped[0] in QUOTES and stripped[-1] == QUOTES[stripped[0]]:
+        inner = stripped[1:-1]
+        if QUOTES[stripped[0]] not in inner and (stripped[0] == QUOTES[stripped[0]] or stripped[0] not in inner):
             _refuse("This passage is a quotation. Someone else's words never teach your voice.", 403, "library_voice_quoted")
+    runs = quoted_runs(text)
+    if not runs:
+        return
+    inner = [text[a + 1:b - 1] for a, b in runs]
+    counts = [_counts(x) for x in inner]
+    quoted = sum(len("".join(x.split())) for x in inner)
+    total = max(1, len("".join(text.split())))
+    long_run = any(w >= QUOTE_RUN_WORDS or k >= QUOTE_RUN_CJK for w, k in counts)
+    share = quoted / total >= QUOTE_SHARE and (sum(w for w, _ in counts) >= 3 or sum(k for _, k in counts) >= 4)
+    if long_run or share:
+        raise QuotedSpan("This passage contains a quotation; select only your own words.", _own_words(text, runs, anchor))
 
 
 # --- contracts ---------------------------------------------------------------------------------------------------------------
@@ -359,9 +455,11 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
                        select: bool = False, expected_revision: int | None = None) -> dict:
     """approve_voice_span(ctx, ref, locator, persona_id, author_attestation) -> VoiceSample (implementation plan T07).
 
-    Owner only. Every refusal happens before any write. Right before the canonical import the workspace row is locked
-    (hold_workspace) and the purpose grant rechecked (TOCTOU), so a revoke that committed first wins, and one that comes
-    later waits for this write and then withdraws the span."""
+    Owner only. Every check, including span, speaker, quotation and duplicate checks, runs before the first write. That
+    first write is the voice grant when the request asks for one; the canonical import comes after it. Called through
+    actions.apply, a refused outcome is also rolled back by the dispatcher's savepoint. Right before the canonical import
+    the workspace row is locked (hold_workspace) and the purpose grant rechecked (TOCTOU). A revoke that committed first
+    wins, and one that comes later waits for this write and then withdraws the span."""
     ctx.require("owner")
     seg.writable(ctx)
     if not policy.enabled("voice"):
@@ -392,13 +490,13 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
     if expected_revision is not None and expected_revision != revisions["grantRevision"]:
         raise AlphaError("Library permissions changed. Review them again.", 409, code="library_grant_conflict")
     loc = c.locator(locator, **seg.bounds(ctx.cur, ctx.workspace_id, version))
-    if grant_voice is True and not policy.authorize_source(ctx, version, "voice").allowed:
-        policy.grant(ctx, {"grantType": "purpose", "purpose": "voice", "scope": {"kind": "asset", "assetId": version["assetId"]},
-                           "attestation": attestation})
-    decision = policy.require(policy.authorize_source(ctx, version, "voice"))
+    before = policy.authorize_source(ctx, version, "voice")
+    needs_grant = not before.allowed and grant_voice is True and before.reason == "grant_required"
+    if not before.allowed and not needs_grant:
+        policy.require(before)  # refused: a grant can't fix this (not ready, withdrawn, no permission asked for)
     span = resolve_span(ctx, version, loc)
     _check_speaker(span, attestation)
-    _check_quoted(span["text"])
+    _check_quoted(span["text"], span["anchor"])
     if span["generated"] and approve_generated_text is not True:
         _refuse("Part of this passage was suggested by AI. Approve AI-written text separately before it can teach your voice.", 409,
                 "library_voice_generated_needs_approval")
@@ -415,6 +513,11 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
     if existing:
         out = sample_contract(existing[0], ctx.state)
         return {**out, "alreadyApproved": True, "warnings": ["This passage was already approved."]}
+    if needs_grant:
+        # The first write, only after every refusal above: the per-item voice grant, carrying the authorship attestation.
+        policy.grant(ctx, {"grantType": "purpose", "purpose": "voice", "scope": {"kind": "asset", "assetId": version["assetId"]},
+                           "attestation": attestation})
+    decision = policy.require(policy.authorize_source(ctx, version, "voice"))
     hold_workspace(ctx)
     decision = policy.recheck(ctx, decision)
     policy.require(decision)
@@ -764,6 +867,10 @@ def approve_span_action(ctx, envelope: dict, targets: list[dict]) -> dict:
     except AlphaError as error:
         if error.code == "library_voice_generated_needs_approval":
             return c.action_result("requires_confirmation", result={"confirm": "approveGeneratedText"}, warnings=[str(error)])
+        if isinstance(error, QuotedSpan) and error.suggestion:
+            # Not admitted. The person's own words around the quotation are offered as the passage to approve instead.
+            return c.action_result("requires_confirmation", result={"confirm": "selectOwnWords", "suggestedText": error.suggestion["text"],
+                                                                     "suggestedLocator": error.suggestion.get("locator")}, warnings=[str(error)])
         raise
     warnings = sample.pop("warnings", [])
     return c.action_result("applied", revision=sample["revision"], result=sample, warnings=warnings)
