@@ -1177,9 +1177,12 @@ def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
     access = access_for(record, auth, flags, compat, revoked)
     if not access["canAct"]:
         manifest["actions"] = []                    # no write control is offered where writes are off, expired or not allowed
+    names, forms = declared_fields(cur, record) if record["revision"] >= 1 else (set(), set())
     return {"artifact": artifact, "manifest": manifest, "revisions": revisions, "attempt": public_attempt(attempt), "compatibility": compat,
             "display": display, "access": access, "lastSeq": max(0, record["nextSeq"] - 1), "journeyIds": record["journeyIds"],
-            "surface": record["surface"], "scope": record["scope"]}
+            "surface": record["surface"], "scope": record["scope"],
+            # Which UI-state fields this revision persists (the browser saves only these; the server re-checks every write).
+            "declared": {"stateNames": sorted(names), "formNames": sorted(forms)}}
 
 
 def by_message(cur, auth, message_id, *, flags=None, supported=None) -> dict:
