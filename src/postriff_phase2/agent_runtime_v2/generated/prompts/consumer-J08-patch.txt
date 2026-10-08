@@ -76,6 +76,33 @@ Inputs only change this view. Bind them to $variables and use those in Query arg
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.
 
+### Rafii’s note
+Commentary(text: string) — Your own short explanation, shown apart from the records and labelled as Rafii’s note. Never put figures, dates, titles or statuses in it: those come from bound components.
+Commentary is your explanation only. Records, figures and statuses always come from bound components.
+To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.
+
+### Task progress
+TaskProgress(data: QueryRef) — Steps of this conversation’s multi-step task from a task_progress Query: done, open, blocked and failed, with reasons. A step shows done only when the tool that did it says so.
+
+### Publishing queue
+QueueStatus(data: QueryRef) — The publishing queue now (queue_status Query): waiting for approval, approved and waiting for their time, needing attention.
+
+### Waiting proposals
+ProposalList(data: QueryRef) — Proposals in this conversation still waiting for the person (open_proposals Query). They are applied only on their own card.
+
+### Automations
+AutomationList(data: QueryRef, selected?: $binding<string>, cursor?: $binding<string>) — Every live automation from an automations_list Query: status, schedule, time zone, policy, platforms and next run. Bind selected to a $variable (one automation id).
+AutomationDetail(data: QueryRef) — One automation from an automation_detail Query: plan, what it still needs and its next runs in its own time zone.
+AutomationChangeForm(actionId: "automation_change_prepare", name: string, automation?: $binding<string>) — Describe a change to the picked automation (automation is the selection $variable) and prepare it as a proposal. name is the form field name. Nothing changes until the person applies it on its card.
+AutomationChangeForm only prepares a proposal; pausing, resuming and applying happen on their own cards and pages.
+
+### Run history
+RunHistory(data: QueryRef, cursor?: $binding<string>) — An automation’s recent runs from an automation_history Query: when, status, outcome per platform and cost (unknown stays unknown).
+
+### Accounts and recovery
+ConnectionHealth(data: QueryRef) — Connected accounts from a connections_status Query: state, verified capability levels, whether posts can publish, and the in-app way to fix one.
+RecoveryGuides(data: QueryRef) — The in-app step-by-step guides that fix common problems (recovery_guides Query).
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -146,6 +173,12 @@ platform = Select("platform", "Platform", [{value: "all", label: "All platforms"
 
 compare = null
 root = RafiiRoot([pick, next])
+
+root = RafiiRoot([list, detail, history, change, accounts, guides])
+conn = Query("connections_status", {}, null)
+help = Query("recovery_guides", {}, null)
+accounts = ConnectionHealth(conn)
+guides = RecoveryGuides(help)
 
 
 ## Edit Mode

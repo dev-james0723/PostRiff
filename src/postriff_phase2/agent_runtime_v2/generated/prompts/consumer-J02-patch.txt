@@ -76,6 +76,29 @@ Inputs only change this view. Bind them to $variables and use those in Query arg
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.
 
+### Rafii’s note
+Commentary(text: string) — Your own short explanation, shown apart from the records and labelled as Rafii’s note. Never put figures, dates, titles or statuses in it: those come from bound components.
+Commentary is your explanation only. Records, figures and statuses always come from bound components.
+To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.
+
+### Task progress
+TaskProgress(data: QueryRef) — Steps of this conversation’s multi-step task from a task_progress Query: done, open, blocked and failed, with reasons. A step shows done only when the tool that did it says so.
+
+### Calendar
+CalendarAgenda(data: QueryRef, selected?: $binding<string>, title?: string, cursor?: $binding<string>) — Scheduled, waiting and planned posts from a calendar_agenda Query, by day, each time in its zone, with rule-labelled close-together notes. Bind selected to a $variable to pick a waiting post (job id).
+RescheduleForm(actionId: "schedule_prepare", target: "job" | "draft", targetId?: $binding<string>, when?: $binding<string>, zone?: $binding<string>) — Pick a local date and time for a waiting post (target "job") or a draft (target "draft") and prepare a schedule proposal. targetId, when ("YYYY-MM-DDTHH:MM") and zone (IANA) are $variables. Nothing is scheduled until the person applies the proposal on its card.
+Pass dates as YYYY-MM-DD and the person’s time zone to calendar_agenda. RescheduleForm only prepares a proposal; it is applied on its own card.
+
+### Time check
+SlotCheck(data: QueryRef) — Whether a chosen local time works and which posts on the same account are less than 2 hours away (slot_check Query). Read only.
+slot = Query("slot_check", {jobId: $selectedJob, local: $when, zone: $zone}, null) checks the time the form holds.
+
+### Publishing queue
+QueueStatus(data: QueryRef) — The publishing queue now (queue_status Query): waiting for approval, approved and waiting for their time, needing attention.
+
+### Waiting proposals
+ProposalList(data: QueryRef) — Proposals in this conversation still waiting for the person (open_proposals Query). They are applied only on their own card.
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -146,6 +169,9 @@ platform = Select("platform", "Platform", [{value: "all", label: "All platforms"
 
 compare = null
 root = RafiiRoot([pick, next])
+
+cal = Query("calendar_agenda", {start: "2026-10-12", end: "2026-10-18", zone: "Asia/Hong_Kong"}, null, 60)
+root = RafiiRoot([agenda, queue], "Next week")
 
 
 ## Edit Mode

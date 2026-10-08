@@ -12,7 +12,7 @@
   "libraries": {
     "consumer": {
       "id": "rafii-consumer",
-      "libraryHash": "8bf620d07784c2957bc0cd3f2e138f9b3fcd60289d2b7982fc09d29ac6c41704",
+      "libraryHash": "bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48",
       "compatibleLibraryHashes": [],
       "root": "RafiiRoot",
       "components": [
@@ -43,7 +43,52 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceConsentPanel",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "AutomationList",
+        "AutomationDetail",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "AutomationChangeForm"
       ],
       "groups": {
         "layout": [
@@ -85,12 +130,98 @@
         ],
         "actions": [
           "ActionButton"
+        ],
+        "journey_common": [
+          "Commentary"
+        ],
+        "tasks": [
+          "TaskProgress"
+        ],
+        "drafts": [
+          "DraftList",
+          "DraftCompare",
+          "DraftDetail",
+          "DraftEvidence",
+          "DraftEditor"
+        ],
+        "calendar": [
+          "CalendarAgenda",
+          "RescheduleForm"
+        ],
+        "schedule_check": [
+          "SlotCheck"
+        ],
+        "queue": [
+          "QueueStatus"
+        ],
+        "proposals": [
+          "ProposalList"
+        ],
+        "library": [
+          "LibraryBrowser",
+          "LibraryAssetCard",
+          "LibraryLineage"
+        ],
+        "library_selection": [
+          "LibrarySelectionCheck"
+        ],
+        "voice": [
+          "VoiceSourcePicker",
+          "VoiceAnalyzeLocal",
+          "VoiceProfileReview",
+          "VoicePreferenceList",
+          "VoiceLearningStatus",
+          "VoiceSampleImport"
+        ],
+        "consent": [
+          "VoiceConsentPanel"
+        ],
+        "campaigns": [
+          "CampaignList",
+          "CampaignPlan",
+          "CampaignItems",
+          "CampaignTimeline",
+          "CampaignBriefForm",
+          "CampaignBriefEditor",
+          "CampaignLinkDrafts"
+        ],
+        "automations": [
+          "AutomationList",
+          "AutomationDetail",
+          "AutomationChangeForm"
+        ],
+        "automation_history": [
+          "RunHistory"
+        ],
+        "recovery": [
+          "ConnectionHealth",
+          "RecoveryGuides"
+        ],
+        "analytics": [
+          "MetricTable",
+          "MetricChart",
+          "ComparisonSummary",
+          "CoverageNote",
+          "PostFeedback"
+        ],
+        "research": [
+          "ResearchStatus",
+          "ResearchBrief",
+          "ComparisonMatrix"
+        ],
+        "research_sources": [
+          "SavedSources"
         ]
       },
       "fieldHosts": {
         "TextField": "name",
         "Select": "name",
-        "DateRange": "name"
+        "DateRange": "name",
+        "DraftEditor": "name",
+        "VoiceSampleImport": "name",
+        "CampaignBriefForm": "name",
+        "CampaignBriefEditor": "name",
+        "AutomationChangeForm": "name"
       },
       "rules": {
         "ToolBoundTable": {
@@ -121,6 +252,145 @@
           "item": "bound"
         },
         "ActionButton": {
+          "actionId": "action-id"
+        },
+        "TaskProgress": {
+          "data": "query"
+        },
+        "DraftList": {
+          "data": "query"
+        },
+        "DraftCompare": {
+          "data": "query"
+        },
+        "DraftDetail": {
+          "data": "query"
+        },
+        "DraftEvidence": {
+          "data": "query"
+        },
+        "DraftEditor": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "CalendarAgenda": {
+          "data": "query"
+        },
+        "RescheduleForm": {
+          "actionId": "action-id"
+        },
+        "SlotCheck": {
+          "data": "query"
+        },
+        "QueueStatus": {
+          "data": "query"
+        },
+        "ProposalList": {
+          "data": "query"
+        },
+        "LibraryBrowser": {
+          "data": "query"
+        },
+        "LibraryAssetCard": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "LibraryLineage": {
+          "data": "query"
+        },
+        "LibrarySelectionCheck": {
+          "data": "query"
+        },
+        "VoiceSourcePicker": {
+          "data": "query"
+        },
+        "VoiceAnalyzeLocal": {
+          "actionId": "action-id"
+        },
+        "VoiceProfileReview": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "VoicePreferenceList": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "VoiceConsentPanel": {
+          "data": "query"
+        },
+        "VoiceLearningStatus": {
+          "data": "query"
+        },
+        "VoiceSampleImport": {
+          "actionId": "action-id"
+        },
+        "CampaignList": {
+          "data": "query"
+        },
+        "CampaignPlan": {
+          "data": "query"
+        },
+        "CampaignItems": {
+          "data": "query"
+        },
+        "CampaignTimeline": {
+          "data": "query"
+        },
+        "CampaignBriefForm": {
+          "actionId": "action-id"
+        },
+        "CampaignBriefEditor": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "CampaignLinkDrafts": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "MetricTable": {
+          "data": "query"
+        },
+        "MetricChart": {
+          "data": "query"
+        },
+        "ComparisonSummary": {
+          "data": "query"
+        },
+        "CoverageNote": {
+          "data": "query"
+        },
+        "PostFeedback": {
+          "data": "query"
+        },
+        "ResearchStatus": {
+          "data": "query"
+        },
+        "ResearchBrief": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "ComparisonMatrix": {
+          "data": "query"
+        },
+        "SavedSources": {
+          "data": "query"
+        },
+        "AutomationList": {
+          "data": "query"
+        },
+        "AutomationDetail": {
+          "data": "query"
+        },
+        "RunHistory": {
+          "data": "query"
+        },
+        "ConnectionHealth": {
+          "data": "query"
+        },
+        "RecoveryGuides": {
+          "data": "query"
+        },
+        "AutomationChangeForm": {
           "actionId": "action-id"
         }
       },
@@ -157,12 +427,57 @@
         "Select": [],
         "DateRange": [],
         "Button": [],
-        "ActionButton": []
+        "ActionButton": [],
+        "Commentary": [],
+        "TaskProgress": [],
+        "DraftList": [],
+        "DraftCompare": [],
+        "DraftDetail": [],
+        "DraftEvidence": [],
+        "DraftEditor": [],
+        "CalendarAgenda": [],
+        "RescheduleForm": [],
+        "SlotCheck": [],
+        "QueueStatus": [],
+        "ProposalList": [],
+        "LibraryBrowser": [],
+        "LibraryAssetCard": [],
+        "LibraryLineage": [],
+        "LibrarySelectionCheck": [],
+        "VoiceSourcePicker": [],
+        "VoiceAnalyzeLocal": [],
+        "VoiceProfileReview": [],
+        "VoicePreferenceList": [],
+        "VoiceConsentPanel": [],
+        "VoiceLearningStatus": [],
+        "VoiceSampleImport": [],
+        "CampaignList": [],
+        "CampaignPlan": [],
+        "CampaignItems": [],
+        "CampaignTimeline": [],
+        "CampaignBriefForm": [],
+        "CampaignBriefEditor": [],
+        "CampaignLinkDrafts": [],
+        "MetricTable": [],
+        "MetricChart": [],
+        "ComparisonSummary": [],
+        "CoverageNote": [],
+        "PostFeedback": [],
+        "ResearchStatus": [],
+        "ResearchBrief": [],
+        "ComparisonMatrix": [],
+        "SavedSources": [],
+        "AutomationList": [],
+        "AutomationDetail": [],
+        "RunHistory": [],
+        "ConnectionHealth": [],
+        "RecoveryGuides": [],
+        "AutomationChangeForm": []
       }
     },
     "founder": {
       "id": "rafii-founder",
-      "libraryHash": "80964aaba33b8b674692bb259b5a1942bb2d03180cd30db432445e403ee4d493",
+      "libraryHash": "a8a343425ee77dfec88b2b3d7c0118550433fc8a3c41ccc1613d1bfbd61b1847",
       "compatibleLibraryHashes": [],
       "root": "RafiiRoot",
       "components": [
@@ -190,7 +505,12 @@
         "TextField",
         "Select",
         "DateRange",
-        "Button"
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
       ],
       "groups": {
         "layout": [
@@ -227,6 +547,13 @@
           "Select",
           "DateRange",
           "Button"
+        ],
+        "founder": [
+          "FounderNote",
+          "FounderMetricsTable",
+          "FounderCostBreakdown",
+          "FounderAttentionList",
+          "FounderSourceHealth"
         ]
       },
       "fieldHosts": {
@@ -258,6 +585,18 @@
         },
         "SelectionList": {
           "source": "query"
+        },
+        "FounderMetricsTable": {
+          "data": "query"
+        },
+        "FounderCostBreakdown": {
+          "data": "query"
+        },
+        "FounderAttentionList": {
+          "data": "query"
+        },
+        "FounderSourceHealth": {
+          "data": "query"
         }
       },
       "schemaFile": "founder.schema.json",
@@ -290,7 +629,12 @@
         "TextField": [],
         "Select": [],
         "DateRange": [],
-        "Button": []
+        "Button": [],
+        "FounderNote": [],
+        "FounderMetricsTable": [],
+        "FounderCostBreakdown": [],
+        "FounderAttentionList": [],
+        "FounderSourceHealth": []
       }
     }
   },
@@ -303,7 +647,12 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "drafts",
+        "library_selection",
+        "research_sources",
+        "tasks"
       ]
     },
     "J02": {
@@ -314,7 +663,13 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "calendar",
+        "schedule_check",
+        "queue",
+        "proposals",
+        "tasks"
       ]
     },
     "J03": {
@@ -325,7 +680,10 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "library",
+        "library_selection"
       ]
     },
     "J04": {
@@ -336,7 +694,10 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "voice",
+        "consent"
       ]
     },
     "J05": {
@@ -347,7 +708,13 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "campaigns",
+        "calendar",
+        "proposals",
+        "automations",
+        "tasks"
       ]
     },
     "J06": {
@@ -358,7 +725,9 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "analytics"
       ]
     },
     "J07": {
@@ -369,7 +738,11 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "research",
+        "research_sources",
+        "consent"
       ]
     },
     "J08": {
@@ -380,7 +753,14 @@
         "data",
         "selection",
         "inputs",
-        "actions"
+        "actions",
+        "journey_common",
+        "automations",
+        "automation_history",
+        "recovery",
+        "queue",
+        "proposals",
+        "tasks"
       ]
     },
     "J09": {
@@ -390,14 +770,15 @@
         "states",
         "data",
         "selection",
-        "inputs"
+        "inputs",
+        "founder"
       ]
     }
   },
   "prompts": {
     "consumer:all:generate": {
       "file": "prompts/consumer-all-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "2d3555c1120cbacf89df0121a2049f3343e032984078f823e743bf5d50d3bba4",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -426,12 +807,57 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources"
       ]
     },
     "consumer:all:patch": {
       "file": "prompts/consumer-all-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "5c9063a8d5b7d41a82604901f8b1c4f447e282df8d3594b0ac45a830d8c1150b",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -460,12 +886,57 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources"
       ]
     },
     "consumer:J01:generate": {
       "file": "prompts/consumer-J01-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "427900a1cd0f4c8ce1a0b1b6d99157a55fc653f2a3105205a130f914b679fd69",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -494,12 +965,21 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "LibrarySelectionCheck",
+        "SavedSources",
+        "TaskProgress"
       ]
     },
     "consumer:J01:patch": {
       "file": "prompts/consumer-J01-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "4d2fc0aec7e424ab72d9af49fce6300fdb4b1a18ad12e82ce337b5d3f2f53d82",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -528,12 +1008,21 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "LibrarySelectionCheck",
+        "SavedSources",
+        "TaskProgress"
       ]
     },
     "consumer:J02:generate": {
       "file": "prompts/consumer-J02-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "9a27c8c8f4bf9f8dee4bd942b1c8842b44fdb715022acef3fb620389f91b15b9",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -562,12 +1051,19 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
       ]
     },
     "consumer:J02:patch": {
       "file": "prompts/consumer-J02-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "13ab2504267ba5683896cf94e8734514a21bc8faefe76f69b6013ce6607811ba",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -596,12 +1092,19 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
       ]
     },
     "consumer:J03:generate": {
       "file": "prompts/consumer-J03-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "cdb9bfe8a699c03e5dc197fc8c72fce970ef9d94812d335434d920eda21c60a0",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -630,12 +1133,17 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck"
       ]
     },
     "consumer:J03:patch": {
       "file": "prompts/consumer-J03-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "90899e10675c8e4d7c77ac60237d647709519750a9b0440f322b6ac095eba519",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -664,12 +1172,17 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck"
       ]
     },
     "consumer:J04:generate": {
       "file": "prompts/consumer-J04-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "9e859ac77c249e46677044718d2f794f1724e2e6160ab5fab81acab36ca9eea6",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -698,12 +1211,20 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel"
       ]
     },
     "consumer:J04:patch": {
       "file": "prompts/consumer-J04-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "d02eeb7573a944d6943660e251656314ce3109211db86a608bb18e1a3ccb73ee",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -732,12 +1253,20 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel"
       ]
     },
     "consumer:J05:generate": {
       "file": "prompts/consumer-J05-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "e8bdb657dd6036e5ac16c562fd4c47af1aa212cb3ef66955b4b970d641301cbe",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -766,12 +1295,27 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "ProposalList",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "TaskProgress"
       ]
     },
     "consumer:J05:patch": {
       "file": "prompts/consumer-J05-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "15d594a85ee6cae01b5131fee2f0d41f8708f5e2e4bcb2c3b69bd57a0714cc1e",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -800,12 +1344,27 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "ProposalList",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "TaskProgress"
       ]
     },
     "consumer:J06:generate": {
       "file": "prompts/consumer-J06-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "4549a8d46237832fbc8d109e118bf190671d1daa2f4e1e76bc304f118dc43795",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -834,12 +1393,18 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback"
       ]
     },
     "consumer:J06:patch": {
       "file": "prompts/consumer-J06-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "9152373e363029efcb37bb2fe11a7f814a9f506e5b16f5dc4698b71271f8cad4",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -868,12 +1433,18 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback"
       ]
     },
     "consumer:J07:generate": {
       "file": "prompts/consumer-J07-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "c2088bffede645ea0c816362f89571dfb8c8ddf30d4dcef7fa731703be53fce7",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -902,12 +1473,18 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "VoiceConsentPanel"
       ]
     },
     "consumer:J07:patch": {
       "file": "prompts/consumer-J07-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "c04f9d1cc79645c40a7c0f3626a7b35c12d6f52ee8155eb9f57325398128979d",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -936,12 +1513,18 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "VoiceConsentPanel"
       ]
     },
     "consumer:J08:generate": {
       "file": "prompts/consumer-J08-generate.txt",
-      "promptHash": "7cd00ce3a83adc4aa57804e09393e587479fc33987e45c5ff24bd0af7c6fbcca",
+      "promptHash": "ab694f60d1cddb5796807e97387d9246581b6e2968bf2cafc743143d4e5e19f6",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -970,12 +1553,22 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
       ]
     },
     "consumer:J08:patch": {
       "file": "prompts/consumer-J08-patch.txt",
-      "promptHash": "70b8611b65e25593bcf6828f72d209da7b0f4ad7ed5391ff15a937b4191eff4c",
+      "promptHash": "6077ea88ed38a98223881e7c987b8a00c9d5d211697d8ad2e0572e471022b9f5",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1004,12 +1597,22 @@
         "Select",
         "DateRange",
         "Button",
-        "ActionButton"
+        "ActionButton",
+        "Commentary",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
       ]
     },
     "founder:all:generate": {
       "file": "prompts/founder-all-generate.txt",
-      "promptHash": "88b0c38e979f76ef22d7fc6b8f3548e328916de49d1671a684ebe48530f47669",
+      "promptHash": "dad34597ec4386245376a6207621b3a9f534bfb5468364f5249b9591085a858a",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1035,12 +1638,17 @@
         "TextField",
         "Select",
         "DateRange",
-        "Button"
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
       ]
     },
     "founder:all:patch": {
       "file": "prompts/founder-all-patch.txt",
-      "promptHash": "e4c5573794b2199da5b1018ff45a8a857f86f3ff35f263413161941cfba9fff9",
+      "promptHash": "fb4a45cc7f5c83d2be430801d4fa4f0d344b64422352f0e2c851fbbe1cdc77fb",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1066,12 +1674,17 @@
         "TextField",
         "Select",
         "DateRange",
-        "Button"
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
       ]
     },
     "founder:J09:generate": {
       "file": "prompts/founder-J09-generate.txt",
-      "promptHash": "88b0c38e979f76ef22d7fc6b8f3548e328916de49d1671a684ebe48530f47669",
+      "promptHash": "dad34597ec4386245376a6207621b3a9f534bfb5468364f5249b9591085a858a",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1097,12 +1710,17 @@
         "TextField",
         "Select",
         "DateRange",
-        "Button"
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
       ]
     },
     "founder:J09:patch": {
       "file": "prompts/founder-J09-patch.txt",
-      "promptHash": "e4c5573794b2199da5b1018ff45a8a857f86f3ff35f263413161941cfba9fff9",
+      "promptHash": "fb4a45cc7f5c83d2be430801d4fa4f0d344b64422352f0e2c851fbbe1cdc77fb",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1128,7 +1746,12 @@
         "TextField",
         "Select",
         "DateRange",
-        "Button"
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
       ]
     }
   }

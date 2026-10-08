@@ -76,6 +76,30 @@ Inputs only change this view. Bind them to $variables and use those in Query arg
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.
 
+### Rafii’s note
+Commentary(text: string) — Your own short explanation, shown apart from the records and labelled as Rafii’s note. Never put figures, dates, titles or statuses in it: those come from bound components.
+Commentary is your explanation only. Records, figures and statuses always come from bound components.
+To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.
+
+### Task progress
+TaskProgress(data: QueryRef) — Steps of this conversation’s multi-step task from a task_progress Query: done, open, blocked and failed, with reasons. A step shows done only when the tool that did it says so.
+
+### Drafts
+DraftList(data: QueryRef, selected?: $binding<string[]>, title?: string, cursor?: $binding<string>) — Drafts from a drafts_list Query: platform, language, length against the platform limit, review and queue state. Bind selected to a $variable (draft ids, in the order picked). Picking only selects.
+DraftCompare(data: QueryRef, selected?: $binding<string[]>, title?: string) — Two to four picked drafts side by side, in the order picked: data is a drafts_list Query whose ids argument is the selection $variable, and selected is that same $variable.
+DraftDetail(data: QueryRef) — One draft from a draft_read Query as it will read on its platform: full text, length against the limit, open questions, warnings, a waiting rewrite and its queue state.
+DraftEvidence(data: QueryRef) — Where one draft came from (draft_evidence Query): its sources with approved facts, linked records and the voice check.
+DraftEditor(data: QueryRef, actionId: "draft_edit", name: string) — Edit the text of one unscheduled draft from a draft_read Query. name is the form field name. Saving shows Rafii’s confirmation; drafts already in the queue cannot be edited here.
+To compare picked drafts: picks = Query("drafts_list", {ids: $selectedDrafts}, null) and DraftCompare(picks, $selectedDrafts).
+Selecting a draft is not approval. For a rewrite or another platform, add Button("…", Action([@ToAssistant("…")])) so the person asks in the conversation.
+
+### Library selection
+LibrarySelectionCheck(data: QueryRef) — What a selection of Library items becomes in the next message (library_selection Query with assetIds = the selection $variable): attachments, sources, and why anything can’t be used yet.
+check = Query("library_selection", {assetIds: $selectedAssets}, null) shows what the picked files become in the next message.
+
+### Saved sources
+SavedSources(data: QueryRef, cursor?: $binding<string>) — Web sources saved in this workspace (research_sources Query) with site, date, read time and approved facts.
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -146,6 +170,9 @@ platform = Select("platform", "Platform", [{value: "all", label: "All platforms"
 
 compare = null
 root = RafiiRoot([pick, next])
+
+root = RafiiRoot([list, compare], "Unscheduled drafts")
+compare = DraftCompare(picks, $selectedDrafts, "The two you picked")
 
 
 ## Edit Mode
