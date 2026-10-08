@@ -28,8 +28,7 @@ from postriff_phase2 import memory, voice_sources  # noqa: E402
 from postriff_phase2.growth.service import GrowthService  # noqa: E402
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from postriff_phase2.hosted_storage import PrivateAssetService  # noqa: E402
-from postriff_phase2.library_intelligence import api, intake, policy, segments, versions, voice  # noqa: E402
-from postriff_phase2.library_intelligence.http import write_context  # noqa: E402
+from postriff_phase2.library_intelligence import api, policy, segments, versions, voice  # noqa: E402
 
 DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
 PHASE = os.environ.get("LIBRARY_PG_PHASE", "no_vector")
@@ -152,8 +151,9 @@ def envelope(action, ref, payload, key, expected=None):
 
 
 def ingest_note(ws, token, text, key):
-    with write_context(service, token, ws) as c1:
-        note = intake.note_http(c1, {"params": {}, "query": {}, "body": {"text": text, "authoredByMe": True, "idempotencyKey": key}})
+    # Through the HTTP route: ingest runs in read mode and stores through ctx.open_write (worker A), as in production.
+    status, note = route("POST", ws, ["ingest", "note"], token, {"text": text, "authoredByMe": True, "idempotencyKey": key})
+    assert status == 201, (status, note)
     asset = note["asset"]["assetRef"]["assetId"]
     service.library.process(connection, ws, asset)
     return asset

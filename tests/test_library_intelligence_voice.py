@@ -607,7 +607,7 @@ class RevocationTests(Base):
     def test_withdraw_keeps_spans_still_covered_by_another_voice_grant(self):
         db, refs = self.db, self.refs
         asset_grant = db.grant("voice", ESSAY)
-        db.grant("voice")  # workspace-wide voice permission remains
+        db.grant("voice", ESSAY)  # a second, still-active per-item voice permission (voice is never workspace-wide)
         approve(db, refs["essay"], span(0, [P0, P1, P2]))
         receipt = policy.revoke(make_ctx(db), asset_grant)
         self.assertEqual(receipt["propagation"]["voiceSpansWithdrawn"], 0)
