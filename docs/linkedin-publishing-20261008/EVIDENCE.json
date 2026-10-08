@@ -1,11 +1,11 @@
 {
-  "state": "LOCAL_CANDIDATE_NOT_RELEASED",
-  "asOf": "2026-10-08T04:38:37.475885+00:00",
+  "state": "FULL_GITHUB_DISPATCH_FACEBOOK_CHECKS_PASSED; EXPIRED_APPROVAL_UI_REPAIR_FOCUSED_PASS; FINAL_PREVIEW_DELIVERY_PENDING",
+  "asOf": "2026-10-08T08:04:02.004791+00:00",
   "branch": "codex/linkedin-publishing-recovery-20261008",
   "baseHead": "37bb00bbaa1a9fb3de4f0089d3487ae5c55160fd",
   "startingCandidate": "82b4c28260641659dca357c83487c66c17a07bf2",
   "reconciledProductionBase": "07b3295eb5518f604760e507c0bbbb2d73c8e048",
-  "implementationRevision": "e7ab9e1c6aa72c1e65e7276c9ea10575989d4ee39271c2cc62e9400241466547",
+  "implementationRevision": "d38ec79284f17001a37f8d315d7d6fbeac254968",
   "originalScope": 205,
   "linkedinRows": 44,
   "originalMatrixSha256": "30072536f73a3de02af29fefd9bed0fde94b47c916b1e42e293aad5bb2665afa",
@@ -19,23 +19,26 @@
     "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
     "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
     "displayLabel": "James Au",
-    "subtitle": "LinkedIn \u00b7 member",
+    "subtitle": "LinkedIn · member",
     "actualScopes": [
       "openid",
-      "profile"
+      "profile",
+      "w_member_social"
     ],
     "notFounder": true,
     "notProviderAppRole": "user-attested; parent ordinary-user evidence",
     "parentEvidence": "docs/official-social-20261007/evidence/linkedin-tester-b-20261008.json",
-    "publishingScopeConsent": "PENDING_OWNER_CONSENT"
+    "publishingScopeConsent": "REAL_NORMAL_UI_CONSENT_SAVED_SAME_ACCOUNT_AND_WORKSPACE",
+    "publishingGrantEvidence": "evidence/connection-7a4cefba.json"
   },
   "preview": {
     "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
-    "observedDeployment": "dpl_FXUewGAhV15JfCzyCuooTw1FuVCP",
-    "observedSource": "82b4c28260641659dca357c83487c66c17a07bf2",
+    "observedDeployment": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
+    "observedSource": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
     "project": "postriff-phase2-private",
     "candidateDeployed": false,
-    "runtimeVERCEL_ENV": "UNVERIFIED; must equal preview before activation"
+    "runtimeVERCEL_ENV": "preview verified from actual backend catalog",
+    "liveObservation": "evidence/connection-7a4cefba.json"
   },
   "primarySources": {
     "identity": "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication",
@@ -59,12 +62,69 @@
     "Community-management-app-review version2026-09 fetch failed; official indexed2026-03 primary body was available and current portal facts remain authoritative.",
     "Native article/newsletter and organic document analytics have no newly verified authoring/organic-metric contract; preserve historical unresolved evidence."
   ],
-  "externalEffectsPerformed": [],
+  "externalEffectsPerformed": [
+    "Existing authorized recovery branch push/PR131/preview at7a4",
+    "Approved preview-only Share evidence/LinkedIn flag and real owner write consent persisted on7a4",
+    "One exact normal-UI approved job held before provider submission; original approval now expired. No public provider POST."
+  ],
   "originalMatricesEditedByWorker": false,
   "matrixHashMeaning": "Historical baseline hashes before parent-owned evidence-only updates; worker did not edit original205/196 matrices.",
-  "candidateSourceSha": "4e69d89936c788bab3408ad5e39106c8a817f930",
+  "candidateSourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
   "validation": "VALIDATION.json",
   "pilotCandidate": "PILOT-APPROVAL.md",
-  "runtimePresenceDiagnostic": "memberPublishingStatus.runtimeEnvironmentVerified plus allowlisted runtimeEnvironment are observable before product evidence activation. Actual deployed value still UNVERIFIED.",
-  "targetPreviewBranch": "codex/social-connection-recovery-20261007"
+  "runtimePresenceDiagnostic": "Actual preview runtime/client/callback/Share product binding verified; member publishing permission available. No liveVerified/fullyAvailable promotion.",
+  "targetPreviewBranch": "codex/social-connection-recovery-20261007",
+  "historicalWorkerCandidateState": {
+    "state": "LOCAL_CANDIDATE_NOT_RELEASED",
+    "asOf": "2026-10-08T04:38:37.475885+00:00",
+    "baseHead": "37bb00bbaa1a9fb3de4f0089d3487ae5c55160fd",
+    "candidateSourceSha": "4e69d89936c788bab3408ad5e39106c8a817f930",
+    "preview": {
+      "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+      "observedDeployment": "dpl_FXUewGAhV15JfCzyCuooTw1FuVCP",
+      "observedSource": "82b4c28260641659dca357c83487c66c17a07bf2",
+      "project": "postriff-phase2-private",
+      "candidateDeployed": false,
+      "runtimeVERCEL_ENV": "UNVERIFIED; must equal preview before activation"
+    },
+    "runtimePresenceDiagnostic": "memberPublishingStatus.runtimeEnvironmentVerified plus allowlisted runtimeEnvironment are observable before product evidence activation. Actual deployed value still UNVERIFIED."
+  },
+  "implementationCommit": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+  "currentCloudValidation": "VALIDATION.json",
+  "privatePilotDraft": "evidence/private-pilot-draft-b7ee0e68.json",
+  "historicalPreviewBeforeWriteConsent": {
+    "state": "PREVIEW_DEPLOYED_CLOUD_CHECKS_PASSED_PUBLISHING_HUMAN_GATES_PENDING",
+    "asOf": "2026-10-08T05:47:34.218642+00:00",
+    "preview": {
+      "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+      "observedDeployment": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+      "observedSource": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "project": "postriff-phase2-private",
+      "candidateDeployed": false,
+      "runtimeVERCEL_ENV": "preview verified from actual backend catalog",
+      "liveObservation": "evidence/tester-b-publishing-grant-20261008.json"
+    },
+    "ordinaryTesterB": {
+      "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+      "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
+      "displayLabel": "James Au",
+      "subtitle": "LinkedIn · member",
+      "actualScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "notFounder": true,
+      "notProviderAppRole": "user-attested; parent ordinary-user evidence",
+      "parentEvidence": "docs/official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+      "publishingScopeConsent": "REAL_NORMAL_UI_CONSENT_SAVED_SAME_ACCOUNT_AND_WORKSPACE",
+      "publishingGrantEvidence": "evidence/tester-b-publishing-grant-20261008.json"
+    },
+    "externalEffectsPerformed": [
+      "Existing authorized recovery branch push, PR131 update and preview deployment; worker branch remains local",
+      "Private draft through ordinary B UI; no paid model, schedule, job or public publication"
+    ]
+  },
+  "approvedPilotJob": "evidence/approved-pilot-job-expired-20261008.json",
+  "dispatchCandidate": "evidence/parent-integration-source-deltas.json"
 }

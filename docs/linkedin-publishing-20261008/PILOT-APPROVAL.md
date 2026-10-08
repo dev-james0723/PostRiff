@@ -1,17 +1,8 @@
-# LinkedIn preview pilot — exact approval candidate
+# LinkedIn preview pilot — approved scope and current execution
 
-Execution state: **CANDIDATE ONLY; no wider consent, configuration activation, post, deletion, push or deployment performed.**
+The user approved the exact preview pilot. Preview Share product evidence/workflow settings were applied; Tester B completed actual openid/profile/w_member_social consent and confirmed intended JamesAu member. Do not repeat those approvals. One normal-UI approved job was held before provider submission, then its one-hour approval window expired07:27Z. No provider POST/publication occurred. Preserve it; never extend/replay the expired approval. The same existing draft can receive a fresh normal-UI exact review after the no-submit old job is canceled. Maximum authorized public create count remains one. Permanent cleanup still requires action-time confirmation naming its returned ID.
 
-The current verified connection preview remains SHA82b4c282. These publishing repairs are local to branch `codex/linkedin-publishing-recovery-20261008`; implementation source is `4e69d89936c788bab3408ad5e39106c8a817f930`; final remote check receipts and actual preview deployment identity will be attached before activation.
-
-## Proposed sequence
-
-1. Parent reviews this tested local worker commit and integrates it into the already-authorized recovery branch `codex/social-connection-recovery-20261007` / existing PR131, then updates the existing **preview only** on Vercel project `postriff-phase2-private` at the fixed registered origin below. Existing push/PR/preview authorization is preserved; no new worker-branch push or alias is proposed. Production merge/deployment remains excluded. Activation, optional consent and the exact one-post/cleanup pilot below still require action-time approval.
-2. Approve the preview-only product-evidence and LinkedIn workflow configuration candidate in `share-on-linkedin-preview.candidate.json`. The observed app already has Share on LinkedIn Added (Default Tier); this records that evidence with strict environment/client/callback binding. It does not change provider registrations or create approval. Operator first securely checks the actual Python runtime `VERCEL_ENV=preview`, public origin and client match. The existing provider catalog exposes `memberPublishingStatus.runtimeEnvironmentVerified` and the allowlisted runtime label even before a Share record exists. Missing/mismatched runtime evidence stops activation.
-3. Tester B, in their own existing Rafii browser session/workspace, confirms the visible destination below and chooses **Channels → LinkedIn → Enable Publish**. The owner completes official consent requesting only `openid profile w_member_social`. No email equality is required between Rafii and LinkedIn. Password/passkey/MFA/consent remain with the owner; no credentials go into chat.
-4. Through Rafii's normal draft → review → exact approval → worker journey, create **one immediate PUBLIC organic personal text post** with the exact text below. Do not schedule, attach media, include links/mentions, boost, advertise or create a second post. Stop if the UI selects another destination or requests unrelated permission.
-5. Retain the real HTTP201 + `x-restli-id` receipt, app/environment/source revision, actual grants and trace reference. Open only the canonical URL derived from that returned ID; the owner checks the exact text/account in LinkedIn. Capture redacted native inspection evidence separately from API verification. No restricted historical member read is requested merely to inspect this post.
-6. Delete **only that newly returned post ID** using the same account and existing exact operation approval. Record the actual deletion response and owner's native disappearance check. If any create/delete outcome is ambiguous, stop and reconcile; never repeat an uncertain create or deletion blindly.
+Last verified preview7a4/dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ; all required GitHub checks passed. Currentd38 expiry-recovery candidate passed focused Depot browser; final preview delivery pending. Historical reviewed proposal is frozen in share-on-linkedin-preview.request.candidate.json and original approval receipt. Current source/deployment/checks are in VALIDATION.json and HANDOFF.md.
 
 ## Exact target, content and effect
 
@@ -22,21 +13,16 @@ The current verified connection preview remains SHA82b4c282. These publishing re
 - Exact visible destination: **James Au · LinkedIn · member**. The owner must confirm this is their intended profile. Tester A has a similarly named but different subject; never substitute it.
 - New scope: **w_member_social**, added to existing `openid profile`. Effect: publish/manage this member's posts. No organization, feed/comment, analytics or historical-read scope requested.
 - Visibility: **PUBLIC**. Maximum create count: **1**. Time: **immediately after owner consent and exact draft approval**, no scheduled time.
-- Cleanup: delete exactly the returned pilot ID after native inspection. No older posts or other workspace records are affected.
+- Cleanup: only the returned pilot ID after native inspection and confirmation at the permanent-deletion boundary. No older posts or other workspace records are affected.
 - Cost ceiling: **$0 additional billing authority; no ads, boosts, subscription or metered X calls.** This is an authority limit, not an undocumented provider-price assertion.
 
 Exact post text:
 
 > Rafii integration test: verifying a LinkedIn text post. This test post will be removed after verification.
 
-## What a successful API acceptance shows
 
-A genuine201 + `x-restli-id` yields **Accepted — confirm on LinkedIn**, the retained Post ID, and a strictly validated **Open post to confirm** link. It does not become API verified just because the provider accepted it or the owner inspected it. With no `r_member_social`, reconciliation sends no predictably forbidden historical GET; it retains acceptance, directs native inspection and blocks duplicate resubmission. The existing worker keeps the job in-flight, then backs off after bounded checks. There is currently no owner action that forges terminal API verification. This limitation is visible and does not prevent creating a separately approved new post.
+## Execution safeguards
 
-## Evidence needed to advance
+Use normal Rafii draft → exact review/approval → scoped Publishapprovedpost. New preview jobs start held and bind fixed preview environment/origin before digest and idempotency. Server rechecks current user/workspace/approver, entitlement, destination/grant/content/timing/expiry and lease. Accepted or uncertain receipts never create again. Retain real201/x-restli-id, then inspect only returned canonical native URL. Do not use restricted historical member GET merely for native inspection. API acceptance/native inspection/full API verification remain distinct.
 
-Exact source/deployment identity and remote checks; preview-only runtime/client/callback binding; owner's confirmed intended profile and actual write grant; one normal-UI create receipt and native inspection; only-created-ID deletion receipt; no cross-workspace access; a fresh Rafii session retains connection. Each is recorded independently. Publishing public readiness stays unverified until the ordinary-user pilot actually passes. Scheduling, media formats, edits, comments, analytics and organization operations keep their separate tests/permissions/reviews. Real iPhone Safari and time-dependent renewal remain pending.
-
-## Rollback
-
-Restore the previous preview LinkedIn-only flag and `share_on_linkedin` evidence key, preserving OIDC evidence, other product records, existing customer connections, encrypted grants and stable credential key. Restore the approved previous preview source if needed. Never use rollback to rotate secrets, revoke grants, replay a create or alter production.
+Rollback only exact preview source/settings IDs recorded in evidence/preview-environment-applied-20261008.json. Preserve encryption key, grant, basic connection and other providers/settings. Production excluded. Later scheduling/media/reply/delete/upload/organization operations need exact separate content/destination/visibility/cost/cleanup approval and real evidence.

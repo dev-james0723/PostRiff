@@ -1,0 +1,70 @@
+{
+  "execution": "DIRECT_DEPOT_FALLBACK_NOT_JCB",
+  "recordedAt": "2026-10-08T05:02:16.561703+00:00",
+  "sourceHead": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+  "implementationCommit": "4e69d89936c788bab3408ad5e39106c8a817f930",
+  "implementationRevision": "e7ab9e1c6aa72c1e65e7276c9ea10575989d4ee39271c2cc62e9400241466547",
+  "baseSha": "07b3295eb5518f604760e507c0bbbb2d73c8e048",
+  "sourceIdentity": "Depot API sha/head_sha is the base07b; auto-applied tracked delta and truthful source proof identify2e. Not a deployment or JCB receipt.",
+  "runId": "lhz2r5w6md",
+  "workflowId": "dvmd6j3g6n",
+  "jobId": "1s5kp526hs",
+  "attemptId": "jr4qcj8f7r",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/dvmd6j3g6n?job=1s5kp526hs&attempt=jr4qcj8f7r",
+  "startedAt": "2026-10-08T04:58:50Z",
+  "finishedAt": "2026-10-08T04:59:49Z",
+  "exitCode": 0,
+  "status": "PASS",
+  "job": "existing .depot/workflows/james-cloud-build.yml e2e only; npm run e2e:social",
+  "proof": "source-proof.json",
+  "snapshotBoundary": "tracked-delta-boundary.json",
+  "sourceDeltaSha256": "75bbac0f403955aab01f2d5f8db4a4075d77106183361dbeabf6a0885d13bca2",
+  "uploadedPatchCacheKey": "patch/07b3295eb551/69b6724813a8aa60",
+  "uploadedPatchBytes": 3205737,
+  "browserChecks": "browser-checks.json",
+  "images": "image-manifest.json",
+  "visualInspection": {
+    "acceptedBadge1280": "PASS",
+    "acceptedBadge390": "PASS",
+    "receiptLink": "DOM functional checks passed; below initial screenshot viewport, no visual link-visibility claim",
+    "horizontalOverflow1280And390": false
+  },
+  "executionBoundary": "Synthetic Chromium only. No live publishing, no real iPhone Safari, no operator-record activation, no consent or provider/billing change.",
+  "cleanup": {
+    "ownMarkerRemoved": true,
+    "ownTemporaryIndexRemoved": true,
+    "realIndexUntouched": true,
+    "stagedChanges": false,
+    "otherSessionsPreserved": true
+  },
+  "upstreamGitPostJobWarning": "Existing vendor/xiaohongshu-mcp-v2.5.0-login-fix gitlink has no .gitmodules URL; post-job warning preserved; job exit0. No submodule reset or deletion.",
+  "parentObservedPreview": {
+    "state": "READY",
+    "deploymentId": "dpl_Gnh3TyrKp3FCvid4XaYywQ3XXxno",
+    "sourceHead": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+    "project": "postriff-phase2-private",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "observation": "Parent normal Chrome B reload and authenticated same-origin GET channels200; intended connected member retained with2 permissions. No cookie/header export.",
+    "actualPythonStatus": {
+      "approved": false,
+      "code": "share_evidence_missing",
+      "runtimeEnvironmentVerified": true,
+      "runtimeEnvironment": "preview"
+    },
+    "appEvidenceApplied": false,
+    "publishingLiveVerified": false
+  },
+  "parentObservedBEntitlement": {
+    "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "source": "Parent read-only staging billing rows; lifecycle derivation, not a billing change",
+    "subscriptionStatus": "trial",
+    "currentPeriodEnd": "2026-10-22T01:36:02.643587Z",
+    "trialExpiresAt": "2026-10-22T01:36:02.643587Z",
+    "cancelAtPeriodEnd": false,
+    "grace": false,
+    "derivedCanPublish": true,
+    "normalUiGateRecheck": "Required at pilot time; no exemption/subscription/spending authority added"
+  },
+  "integratedGitHubChecks": "Parent monitoring current-source required checks; still running at receipt creation. No claim of current-source integrated pass yet.",
+  "supersedes": "VALIDATION.json browser-unavailable item only. JCB launcher TOOL_ACCESS remains; current-source integrated checks remain distinct."
+}

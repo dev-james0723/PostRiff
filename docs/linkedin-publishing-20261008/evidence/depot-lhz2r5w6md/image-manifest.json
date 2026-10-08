@@ -1,0 +1,26 @@
+[
+  {
+    "label": "1280",
+    "file": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/1280.png",
+    "bytes": 399222,
+    "sha256": "9dcc2bcb33deb1adf88f6183d7aa60bcece65147271a277d2d73271dc69e8e1b"
+  },
+  {
+    "label": "linkedin-receipt-1280",
+    "file": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/linkedin-receipt-1280.png",
+    "bytes": 262856,
+    "sha256": "bf08ac2693c0c57bc1b4ad84ee1c03e04bd856306f2cf90713942b1fb63a4229"
+  },
+  {
+    "label": "390",
+    "file": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/390.png",
+    "bytes": 275831,
+    "sha256": "0959cbefb6102cfb94eeccc29c66a408e53a78435467474a08a21615b9162660"
+  },
+  {
+    "label": "linkedin-receipt-390",
+    "file": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/linkedin-receipt-390.png",
+    "bytes": 104383,
+    "sha256": "0f3612495ee7e479a0f8504f853263eb379a8b2d94f58a5c750227e3c8d4db4c"
+  }
+]

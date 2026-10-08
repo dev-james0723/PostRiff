@@ -1,6 +1,6 @@
 {
   "execution": "engineering catalogue export; no live provider execution",
-  "scopeObservation": "No OAuth was executed in this task. actualRequestedScopes is empty for new task requests; null actualGrantedScopes means unobserved, not zero scopes for existing production connections.",
+  "scopeObservation": "Connection recovery evidence: ordinary B actual openid/profile consent/exchange/identity and persistence observed on verified preview. Only connected/member_identity are PARTIAL. Other203 capabilities remain NOT_RUN; production and publishing acceptance are unverified.",
   "rows": [
     {
       "provider": "linkedin",
@@ -15,22 +15,31 @@
       "scopeAlternatives": [],
       "product": "openid_connect",
       "accountPrerequisite": "member",
-      "reviewRequirement": "Enable Sign In with LinkedIn using OpenID Connect; no Community Management permission implied.",
-      "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "reviewRequirement": "Verify actual Sign In with LinkedIn using OpenID Connect product and external-user eligibility for openid/profile. No organization/restricted-read or publication approval prerequisite.",
+      "reviewState": "OIDC_STANDARD_TIER_OBSERVED_PREVIEW_CALLBACK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Basic connection remains openid/profile. Separately approved real Enable Publish consent saved openid/profile/w_member_social onb7 activated preview; C671 normal reload retained the original B connection. Actual write scope is grant evidence only. No provider POST, fake refresh, iPhone, live tenant-negative or production pass.",
       "implemented": true,
-      "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
-      "eligibility": "NOT_VERIFIED",
+      "liveE2E": "PARTIAL",
+      "liveEvidence": "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/connection-c671ca5c.json",
+      "eligibility": "ORDINARY_TESTER_B_MEMBER_VERIFIED_PREVIEW; owner attested no provider-app role; no Rafii Founder record",
       "scheduling": "none",
       "limitation": "",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — minimum preview connection/reload/fresh-session, disconnect/reconnect and expired-callback rejection observed; live-isolation/iPhone/genuine expiry and production pending",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv (synthetic engineering only; publishing live tests NOT_RUN)"
     },
     {
       "provider": "linkedin",
@@ -45,22 +54,31 @@
       "scopeAlternatives": [],
       "product": "openid_connect",
       "accountPrerequisite": "member",
-      "reviewRequirement": "Enable Sign In with LinkedIn using OpenID Connect; no Community Management permission implied.",
-      "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "reviewRequirement": "Verify actual Sign In with LinkedIn using OpenID Connect product and external-user eligibility for openid/profile. No organization/restricted-read or publication approval prerequisite.",
+      "reviewState": "OIDC_STANDARD_TIER_OBSERVED_PREVIEW_CALLBACK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Basic connection remains openid/profile. Separately approved real Enable Publish consent saved openid/profile/w_member_social onb7 activated preview; C671 normal reload retained the original B connection. Actual write scope is grant evidence only. No provider POST, fake refresh, iPhone, live tenant-negative or production pass.",
       "implemented": true,
-      "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
-      "eligibility": "NOT_VERIFIED",
+      "liveE2E": "PARTIAL",
+      "liveEvidence": "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/connection-c671ca5c.json",
+      "eligibility": "ORDINARY_TESTER_B_MEMBER_VERIFIED_PREVIEW; owner attested no provider-app role; no Rafii Founder record",
       "scheduling": "none",
       "limitation": "",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — minimum preview connection/reload/fresh-session, disconnect/reconnect and expired-callback rejection observed; live-isolation/iPhone/genuine expiry and production pending",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv (synthetic engineering only; publishing live tests NOT_RUN)"
     },
     {
       "provider": "linkedin",
@@ -88,7 +106,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -117,7 +135,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -134,20 +152,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -163,20 +190,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -192,20 +228,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -221,20 +266,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -250,20 +304,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -279,20 +342,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -308,20 +380,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -337,20 +418,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -366,20 +456,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -395,20 +494,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -424,20 +532,29 @@
       "accountPrerequisite": "member",
       "reviewRequirement": "Enable Share on LinkedIn. Member write is self-service; app product enablement still unverified.",
       "reviewState": "NOT_VERIFIED",
-      "actualRequestedScopes": [],
-      "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualRequestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "actualGrantObservation": "Real ordinary B write consent saved and persisted. One exact text-pilot job was approved through normal UI, held before provider submission, and its approval expired2026-10-08T07:27Z. No capability E2E or public post success; media/edit/delete/scheduling remain independently untested.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
-      "liveEvidence": null,
+      "liveEvidence": "",
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
       "limitation": "ArticleContent is an external link card. Media must reach AVAILABLE before posting.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
-      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN",
+      "connectionRecoveryEvidence": "../official-social-20261007/CONNECTION-ACCEPTANCE.json; ../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json; ../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json; ../linkedin-publishing-20261008/CAPABILITY-MAP.csv"
     },
     {
       "provider": "linkedin",
@@ -466,7 +583,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -496,7 +613,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -526,7 +643,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -556,7 +673,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -586,7 +703,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -616,7 +733,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -646,7 +763,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -676,7 +793,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -706,7 +823,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -736,7 +853,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -766,7 +883,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -796,7 +913,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -826,7 +943,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -856,7 +973,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -886,7 +1003,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -916,7 +1033,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -958,7 +1075,7 @@
       "scopeAlternatives": [],
       "product": "restricted_member_read",
       "accountPrerequisite": "member",
-      "reviewRequirement": "BLOCKED \u2014 LINKEDIN APPROVAL: specifically approved r_member_social.",
+      "reviewRequirement": "BLOCKED — LINKEDIN APPROVAL: specifically approved r_member_social.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -968,11 +1085,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "none",
-      "limitation": "BLOCKED \u2014 LINKEDIN APPROVAL unless specifically approved.",
+      "limitation": "BLOCKED — LINKEDIN APPROVAL unless specifically approved.",
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 LINKEDIN APPROVAL",
+      "productionVerdict": "BLOCKED — LINKEDIN APPROVAL",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1001,7 +1118,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1030,7 +1147,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1059,7 +1176,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1088,7 +1205,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1117,7 +1234,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1146,7 +1263,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1175,7 +1292,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1204,7 +1321,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1234,7 +1351,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1261,7 +1378,7 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE",
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE",
       "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
@@ -1317,7 +1434,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1345,7 +1462,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1373,7 +1490,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1398,11 +1515,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1427,11 +1544,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1456,11 +1573,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1485,11 +1602,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1514,11 +1631,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1543,11 +1660,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1572,11 +1689,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1601,11 +1718,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1630,11 +1747,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1659,11 +1776,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1688,11 +1805,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1717,11 +1834,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Carousel 2\u201320 children in order. Publish parent only after processing.",
+      "limitation": "Carousel 2–20 children in order. Publish parent only after processing.",
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1750,7 +1867,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1779,7 +1896,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1808,7 +1925,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1837,7 +1954,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1866,7 +1983,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1895,7 +2012,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1924,7 +2041,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1953,7 +2070,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -1982,7 +2099,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -2012,7 +2129,7 @@
       "source": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "threads",
@@ -2066,7 +2183,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2094,7 +2211,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2122,7 +2239,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2151,7 +2268,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2180,7 +2297,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2209,7 +2326,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2238,7 +2355,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2267,7 +2384,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2296,7 +2413,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2325,7 +2442,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2354,7 +2471,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2383,7 +2500,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2412,7 +2529,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE"
     },
     {
       "provider": "instagram",
@@ -2441,7 +2558,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE"
     },
     {
       "provider": "instagram",
@@ -2470,7 +2587,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE"
     },
     {
       "provider": "instagram",
@@ -2499,7 +2616,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "instagram",
@@ -2525,7 +2642,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE"
     },
     {
       "provider": "instagram",
@@ -2551,7 +2668,7 @@
       "source": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED — OFFICIAL AUDIT UNAVAILABLE"
     },
     {
       "provider": "instagram",
@@ -2617,21 +2734,22 @@
       "scopeAlternatives": [],
       "product": "facebook_login_business",
       "accountPrerequisite": "managed Page",
-      "reviewRequirement": "Facebook Login for Business; reviewed Page discovery permissions/configuration.",
-      "reviewState": "NOT_VERIFIED",
+      "reviewRequirement": "Actual Meta pages_show_list external/Advanced Access approval and applicable business verification. Basic Page listing/explicit selection needs no publishing scope or Page publishing token. public_profile is automatic.",
+      "reviewState": "PUBLISHED_APP_STANDARD_ACCESS_READY_FOR_TESTING; ADVANCED_ACCESS_NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualGrantObservation": "No Facebook consent or token exchange performed. Minimum Page/task and debug_token contracts verified in official Meta documentation. Existing broad config preserved; separate minimal config/callback/credentials candidate awaits approval.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "none",
-      "limitation": "",
+      "limitation": "Preview credentials/minimal config/exact callback absent; no ordinary-user public-access approval. Basic Page selection repair is engineering only; live NOT_RUN.",
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "connectionRecoveryEvidence": "../facebook-connection-20261008/OPERATOR-PLAN.md; ../facebook-connection-20261008/CONFIGURATION.candidate.json"
     },
     {
       "provider": "facebook",
@@ -2645,21 +2763,22 @@
       "scopeAlternatives": [],
       "product": "facebook_login_business",
       "accountPrerequisite": "managed Page",
-      "reviewRequirement": "Facebook Login for Business; reviewed Page discovery permissions/configuration.",
-      "reviewState": "NOT_VERIFIED",
+      "reviewRequirement": "Actual Meta pages_show_list external/Advanced Access approval and applicable business verification. Basic Page listing/explicit selection needs no publishing scope or Page publishing token. public_profile is automatic.",
+      "reviewState": "PUBLISHED_APP_STANDARD_ACCESS_READY_FOR_TESTING; ADVANCED_ACCESS_NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualGrantObservation": "No Facebook consent or token exchange performed. Minimum Page/task and debug_token contracts verified in official Meta documentation. Existing broad config preserved; separate minimal config/callback/credentials candidate awaits approval.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "none",
-      "limitation": "",
+      "limitation": "Preview credentials/minimal config/exact callback absent; no ordinary-user public-access approval. Basic Page selection repair is engineering only; live NOT_RUN.",
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "connectionRecoveryEvidence": "../facebook-connection-20261008/OPERATOR-PLAN.md; ../facebook-connection-20261008/CONFIGURATION.candidate.json"
     },
     {
       "provider": "facebook",
@@ -2673,21 +2792,22 @@
       "scopeAlternatives": [],
       "product": "facebook_login_business",
       "accountPrerequisite": "managed Page",
-      "reviewRequirement": "Facebook Login for Business; reviewed Page discovery permissions/configuration.",
-      "reviewState": "NOT_VERIFIED",
+      "reviewRequirement": "Actual Meta pages_show_list external/Advanced Access approval and applicable business verification. Basic Page listing/explicit selection needs no publishing scope or Page publishing token. public_profile is automatic.",
+      "reviewState": "PUBLISHED_APP_STANDARD_ACCESS_READY_FOR_TESTING; ADVANCED_ACCESS_NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualGrantObservation": "No Facebook consent or token exchange performed. Minimum Page/task and debug_token contracts verified in official Meta documentation. Existing broad config preserved; separate minimal config/callback/credentials candidate awaits approval.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "none",
-      "limitation": "",
+      "limitation": "Preview credentials/minimal config/exact callback absent; no ordinary-user public-access approval. Basic Page selection repair is engineering only; live NOT_RUN.",
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "connectionRecoveryEvidence": "../facebook-connection-20261008/OPERATOR-PLAN.md; ../facebook-connection-20261008/CONFIGURATION.candidate.json"
     },
     {
       "provider": "facebook",
@@ -2701,21 +2821,22 @@
       "scopeAlternatives": [],
       "product": "facebook_login_business",
       "accountPrerequisite": "managed Page",
-      "reviewRequirement": "Facebook Login for Business; reviewed Page discovery permissions/configuration.",
-      "reviewState": "NOT_VERIFIED",
+      "reviewRequirement": "Actual Meta pages_show_list external/Advanced Access approval and applicable business verification. Basic Page listing/explicit selection needs no publishing scope or Page publishing token. public_profile is automatic.",
+      "reviewState": "PUBLISHED_APP_STANDARD_ACCESS_READY_FOR_TESTING; ADVANCED_ACCESS_NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
-      "actualGrantObservation": "NOT_OBSERVED_IN_THIS_TASK",
+      "actualGrantObservation": "No Facebook consent or token exchange performed. Minimum Page/task and debug_token contracts verified in official Meta documentation. Existing broad config preserved; separate minimal config/callback/credentials candidate awaits approval.",
       "implemented": true,
       "liveE2E": "NOT_RUN",
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "none",
-      "limitation": "",
+      "limitation": "Preview credentials/minimal config/exact callback absent; no ordinary-user public-access approval. Basic Page selection repair is engineering only; live NOT_RUN.",
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified",
+      "connectionRecoveryEvidence": "../facebook-connection-20261008/OPERATOR-PLAN.md; ../facebook-connection-20261008/CONFIGURATION.candidate.json"
     },
     {
       "provider": "facebook",
@@ -2745,7 +2866,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2775,7 +2896,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2805,7 +2926,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2835,7 +2956,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2865,7 +2986,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2895,7 +3016,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2925,7 +3046,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2955,7 +3076,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -2985,7 +3106,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3015,7 +3136,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3045,7 +3166,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3075,7 +3196,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3104,7 +3225,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3134,7 +3255,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3164,7 +3285,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3193,7 +3314,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3221,7 +3342,7 @@
       "source": "https://developers.facebook.com/docs/pages-api/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "facebook",
@@ -3277,7 +3398,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3307,7 +3428,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3338,7 +3459,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3369,7 +3490,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3400,7 +3521,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3427,11 +3548,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Official create-post documentation excludes quote_tweet_id from self-serve pay-per-use. BLOCKED \u2014 X ENTERPRISE ACCESS until verified.",
+      "limitation": "Official create-post documentation excludes quote_tweet_id from self-serve pay-per-use. BLOCKED — X ENTERPRISE ACCESS until verified.",
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 X ENTERPRISE ACCESS"
+      "productionVerdict": "BLOCKED — X ENTERPRISE ACCESS"
     },
     {
       "provider": "x",
@@ -3462,7 +3583,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3493,7 +3614,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3524,7 +3645,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3555,7 +3676,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3586,7 +3707,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3618,7 +3739,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3650,7 +3771,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3682,7 +3803,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3714,7 +3835,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3746,7 +3867,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3776,7 +3897,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3806,7 +3927,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3836,7 +3957,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3866,7 +3987,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3897,7 +4018,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "x",
@@ -3927,7 +4048,7 @@
       "source": "https://docs.x.com/openapi.json",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -3955,7 +4076,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -3983,7 +4104,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4011,7 +4132,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4039,7 +4160,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4067,7 +4188,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4095,7 +4216,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4123,7 +4244,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4151,7 +4272,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4183,7 +4304,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4211,7 +4332,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4239,7 +4360,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4267,7 +4388,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4295,7 +4416,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4323,7 +4444,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4351,7 +4472,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4379,7 +4500,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4407,7 +4528,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4435,7 +4556,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4463,7 +4584,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4491,7 +4612,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4519,7 +4640,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4547,7 +4668,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4575,7 +4696,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4603,7 +4724,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4631,7 +4752,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4659,7 +4780,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4687,7 +4808,7 @@
       "source": "https://developers.google.com/youtube/v3/docs/",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "youtube",
@@ -4741,7 +4862,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4769,7 +4890,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4784,7 +4905,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4794,11 +4915,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4813,7 +4934,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4823,11 +4944,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4842,7 +4963,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4852,11 +4973,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4871,7 +4992,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4881,11 +5002,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4900,7 +5021,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4910,11 +5031,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4929,7 +5050,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4939,11 +5060,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4958,7 +5079,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4968,11 +5089,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -4987,7 +5108,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "current creator capabilities and domain verification for URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -4997,11 +5118,11 @@
       "liveEvidence": null,
       "eligibility": "NOT_VERIFIED",
       "scheduling": "rafii",
-      "limitation": "Public Publishing: BLOCKED \u2014 TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
+      "limitation": "Public Publishing: BLOCKED — TIKTOK AUDIT until approved. Creator information is refreshed before every post.",
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5030,7 +5151,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5059,7 +5180,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5074,7 +5195,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "verified URL domain for PULL_FROM_URL; current creator capabilities",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -5088,7 +5209,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5103,7 +5224,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "verified URL domain for PULL_FROM_URL; current creator capabilities",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -5117,7 +5238,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5132,7 +5253,7 @@
       "scopeAlternatives": [],
       "product": "content_posting",
       "accountPrerequisite": "verified URL domain for PULL_FROM_URL; current creator capabilities",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -5146,7 +5267,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5166,7 +5287,7 @@
       ],
       "product": "content_posting",
       "accountPrerequisite": "owned publish ID; still-cancellable URL transfer",
-      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED \u2014 TIKTOK AUDIT.",
+      "reviewRequirement": "TikTok Content Posting Direct Post audit; unaudited public publishing BLOCKED — TIKTOK AUDIT.",
       "reviewState": "NOT_VERIFIED",
       "actualRequestedScopes": [],
       "actualGrantedScopes": null,
@@ -5180,7 +5301,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5209,7 +5330,7 @@
       "source": "https://developers.tiktok.com/doc/content-posting-api-get-started",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "tiktok",
@@ -5367,7 +5488,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5395,7 +5516,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5424,7 +5545,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5453,7 +5574,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5483,7 +5604,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5513,7 +5634,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5543,7 +5664,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5573,7 +5694,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5603,7 +5724,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5633,7 +5754,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5662,7 +5783,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5691,7 +5812,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5720,7 +5841,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5749,7 +5870,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5777,7 +5898,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5805,7 +5926,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5833,7 +5954,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5862,7 +5983,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5893,7 +6014,7 @@
       "source": "https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY — approvals, actual grant, eligibility and live E2E unverified"
     },
     {
       "provider": "pinterest",
@@ -5950,8 +6071,16 @@
   ],
   "publishingRecovery": {
     "evidence": "../linkedin-publishing-20261008/EVIDENCE.json",
-    "execution": "SYNTHETIC_ENGINEERING_CANDIDATE; NO_REAL_PUBLICATION",
+    "execution": "FINAL_SOURCE_PREVIEW_DEPLOYED_CLOUD_CHECKS_PASS; real write consent/create/delete/media/schedule NOT_RUN",
     "originalRowsPreserved": 205,
-    "liveStatusesPromoted": false
-  }
+    "liveStatusesPromoted": false,
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "requiredChecksEvidence": "../linkedin-publishing-20261008/evidence/github-b7ee0e68.json",
+    "privateDraftEvidence": "../linkedin-publishing-20261008/evidence/private-pilot-draft-b7ee0e68.json",
+    "writeGrantEvidence": "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+    "heldApprovedJobEvidence": "../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json",
+    "currentCandidateSource": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "livePublishingPassed": false
+  },
+  "historicalScopeObservation20261005": "No OAuth was executed in this task. actualRequestedScopes is empty for new task requests; null actualGrantedScopes means unobserved, not zero scopes for existing production connections."
 }

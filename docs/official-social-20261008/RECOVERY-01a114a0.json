@@ -1,8 +1,8 @@
 {
   "schema": "rafii.connection-recovery.receipt.v1",
-  "updatedAtUtc": "2026-10-08T04:56:36.855928+00:00",
+  "updatedAtUtc": "2026-10-08T08:04:02.004791+00:00",
   "sessionId": "01a114a0-509b-7a43-a3bc-8f52d884ea1a",
-  "state": "CONNECTION_PREVIEW_VERIFIED_PUBLISHING_AGENT_ACTIVE",
+  "state": "FULL_GITHUB_DISPATCH_FACEBOOK_CHECKS_PASSED; EXPIRED_APPROVAL_UI_REPAIR_FOCUSED_PASS; FINAL_PREVIEW_DELIVERY_PENDING",
   "authority": {
     "pushPrPreview": true,
     "targetRepository": "dev-james0723/PostRiff",
@@ -13,31 +13,116 @@
     "productionDDL": false,
     "otherProviderLiveChanges": false,
     "meteredXCalls": false,
-    "realPublication": false,
-    "ownerPerformsLoginMfaConsent": true
+    "realPublication": "Only exact approved one-post LinkedIn pilot; all other publications remain unapproved",
+    "ownerPerformsLoginMfaConsent": true,
+    "linkedinExactPilot": {
+      "approved": true,
+      "onePublicOrganicTextPost": true,
+      "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+      "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
+      "textSha256": "ac7ccf55c06ba249a8fb19d237934378235a1cce4a1c04060567b720adf587f0",
+      "additionalBillingAuthorityUsd": 0,
+      "permanentCleanup": "Action-time confirmation required for only returned pilot post ID"
+    },
+    "facebookMinimumPreviewSetup": "CANDIDATE_PREPARED_APPROVAL_PENDING; no settings changed"
   },
   "preview": {
-    "sha": "82b4c28260641659dca357c83487c66c17a07bf2",
-    "deploymentId": "dpl_FXUewGAhV15JfCzyCuooTw1FuVCP",
+    "sha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "deploymentId": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
     "state": "READY",
     "url": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/app/channels",
     "aliasProjectAndSourceVerified": true,
     "testerBReload": "PASS",
     "actualScopes": [
       "openid",
-      "profile"
+      "profile",
+      "w_member_social"
     ],
-    "redactedScreenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-b-preview-82b4c282.jpg"
+    "redactedScreenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-b-preview-b7ee0e68.jpg",
+    "immutableUrl": "https://postriff-phase2-private-m19k33zmh-jamesau0723-6572s-projects.vercel.app",
+    "verifiedAtUtc": "2026-10-08T07:52:13.295Z",
+    "authenticatedChannelsStatus": 200,
+    "connectionState": "publish_verified",
+    "memberPublishingApproved": true,
+    "runtimeEnvironmentVerified": true,
+    "runtimeEnvironment": "preview",
+    "twoWorkspacePositiveObservations": [
+      {
+        "tester": "B",
+        "status": 200,
+        "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+        "channels": [
+          {
+            "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+            "scopes": [
+              "openid",
+              "profile"
+            ],
+            "state": "read_verified",
+            "publish": "Assisted"
+          }
+        ],
+        "runtime": {
+          "approved": false,
+          "code": "share_evidence_missing",
+          "runtimeEnvironmentVerified": true,
+          "runtimeEnvironment": "preview",
+          "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+        }
+      },
+      {
+        "tester": "A",
+        "status": 200,
+        "workspaceRef": "a58131ee20e1ece4c84521a0f93c264b",
+        "channels": [
+          {
+            "connectionRef": "73f65b0074242d0fb7ab3cf1866af5f1",
+            "scopes": [
+              "openid",
+              "profile",
+              "w_member_social"
+            ],
+            "state": "read_verified",
+            "publish": "Assisted"
+          }
+        ],
+        "runtime": {
+          "approved": false,
+          "code": "share_evidence_missing",
+          "runtimeEnvironmentVerified": true,
+          "runtimeEnvironment": "preview",
+          "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+        }
+      }
+    ],
+    "latestRealIdentityRecheck": {
+      "source": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+      "atUtc": "2026-10-08T05:18:59.166Z",
+      "normalUI": true,
+      "status": 200,
+      "actualScopes": [
+        "openid",
+        "profile"
+      ],
+      "sameApplicationCodeAtCurrentSource": true,
+      "refreshTest": false
+    },
+    "latestIdentityRecheckSourceSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+    "latestDeploymentIdentityEvidence": "docs/linkedin-publishing-20261008/evidence/preview-deployment-7a4cefba.json",
+    "fullyAvailable": false,
+    "liveVerified": false,
+    "currentEvidence": "docs/linkedin-publishing-20261008/evidence/connection-7a4cefba.json"
   },
   "production": {
-    "source": "07b3295eb5518f604760e507c0bbbb2d73c8e048",
-    "deploymentId": "dpl_FftzybN56AvCf93cx7eEYjtBjTzw",
+    "source": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+    "deploymentId": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
     "state": "READY",
     "branch": "consumer-saas",
     "releasedByThisTask": false,
-    "sourceReason": "Independent Library PR132",
+    "sourceReason": "Independent production advance; this task performed no production release",
     "mustRecheckBeforeFutureRelease": true,
-    "connectionAcceptanceNotReverified": true
+    "connectionAcceptanceNotReverified": true,
+    "evidence": "docs/linkedin-publishing-20261008/evidence/preview-production-source-guard-20261008.json"
   },
   "acceptance": {
     "ordinaryExternalBasicConnectionProviders": [
@@ -62,14 +147,14 @@
       "name": "LinkedIn",
       "minimumScopes": "openid profile",
       "publicReadiness": "Ordinary external minimum connection demonstrated on approved preview; complete live acceptance pending.",
-      "customerConnection": "CONNECTED_IDENTITY_ONLY",
+      "customerConnection": "CONNECTED_REAL_WRITE_GRANT_VERIFICATION_PENDING",
       "blockerClass": "UNVERIFIED",
       "additionalBlockers": [
         "UNVERIFIED",
         "TOOL_ACCESS"
       ],
       "owner": "Agent: connection security/preview checks; account owner: real iPhone/fresh-session acceptance; publishing agent: separate feature candidate.",
-      "nextAction": "Preserve existing grants. No repeated basic consent/disconnect approval. Complete live acceptance; separately approve exact publishing pilot after candidate is ready."
+      "nextAction": "Complete final expired-approval UI delivery; freshly review the same authorized post after preserving/canceling expired no-submit original. Full connection acceptance remains pending."
     },
     {
       "provider": "threads",
@@ -83,7 +168,8 @@
         "HUMAN_CONSENT"
       ],
       "owner": "James/operator",
-      "nextAction": "Prepare exact hosted callback and missing product credentials, genuine integration demo and applicable external-access review; existing app only."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Prepare exact hosted callback and missing product credentials, genuine integration demo and applicable external-access review; existing app only.",
+      "previewConfiguration": "NOT_CONFIGURED"
     },
     {
       "provider": "instagram",
@@ -93,26 +179,29 @@
       "customerConnection": "NOT_RUN",
       "blockerClass": "PROVIDER_REVIEW",
       "additionalBlockers": [
-        "REGISTERED_CALLBACK_UNVERIFIED",
-        "HUMAN_CONSENT"
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "REGISTERED_CALLBACK_UNVERIFIED"
       ],
       "owner": "James/operator + Meta",
-      "nextAction": "Verify exact product callback and advanced/public basic access; use a real minimum-scope demo and review, separately from publishing/insights."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Verify exact product callback and advanced/public basic access; use a real minimum-scope demo and review, separately from publishing/insights.",
+      "previewConfiguration": "NOT_CONFIGURED"
     },
     {
       "provider": "facebook",
       "name": "Facebook",
-      "minimumScopes": "pages_show_list (selected baseline; Page-token identity permission contract still UNVERIFIED)",
+      "minimumScopes": "pages_show_list; public_profile automatic",
       "publicReadiness": "NOT_VERIFIED",
       "customerConnection": "NOT_RUN",
       "blockerClass": "CONFIGURATION",
       "additionalBlockers": [
         "PROVIDER_REVIEW",
-        "MINIMUM_ENDPOINT_CONTRACT_UNVERIFIED",
         "HUMAN_CONSENT"
       ],
       "owner": "James/operator + Meta",
-      "nextAction": "Confirm minimum Page endpoint contract, then approve a separate exact-scope basic login config; do not reuse publishing config for identity."
+      "nextAction": "Approve prepared existing-app minimum preview setup; secure credential handoff only. Verify real Advanced Access/business status before ordinary-user testing. No publishing permission prerequisite.",
+      "previewConfiguration": "NOT_CONFIGURED",
+      "candidatePlan": "docs/facebook-connection-20261008/OPERATOR-PLAN.md"
     },
     {
       "provider": "x",
@@ -122,12 +211,14 @@
       "customerConnection": "NOT_RUN",
       "blockerClass": "ENGINEERING",
       "additionalBlockers": [
-        "BILLING_AUTHORIZATION",
         "APP_MAPPING_UNVERIFIED",
+        "BILLING_AUTHORIZATION",
+        "CONFIGURATION",
         "HUMAN_CONSENT"
       ],
       "owner": "James/operator",
-      "nextAction": "Validate/review migration101, map actual app, configure OAuth2 only after approval, then explicit current-price endpoint-limited spending policy and migration100."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Validate/review migration101, map actual app, configure OAuth2 only after approval, then explicit current-price endpoint-limited spending policy and migration100.",
+      "previewConfiguration": "NOT_CONFIGURED"
     },
     {
       "provider": "youtube",
@@ -137,10 +228,12 @@
       "customerConnection": "NOT_RUN",
       "blockerClass": "PROVIDER_REVIEW",
       "additionalBlockers": [
+        "CONFIGURATION",
         "HUMAN_CONSENT"
       ],
       "owner": "James/operator + Google",
-      "nextAction": "Review production-audience and applicable verification for this existing project, preserving unrelated declared scopes; genuine ordinary-user channel read acceptance."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Review production-audience and applicable verification for this existing project, preserving unrelated declared scopes; genuine ordinary-user channel read acceptance.",
+      "previewConfiguration": "NOT_CONFIGURED"
     },
     {
       "provider": "tiktok",
@@ -150,11 +243,13 @@
       "customerConnection": "NOT_RUN",
       "blockerClass": "CONFIGURATION",
       "additionalBlockers": [
-        "PROVIDER_REVIEW",
-        "HUMAN_CONSENT"
+        "CONFIGURATION",
+        "HUMAN_CONSENT",
+        "PROVIDER_REVIEW"
       ],
       "owner": "James/operator + TikTok",
-      "nextAction": "Complete truthful production Login Kit metadata and minimum user.info.basic; record required genuine sandbox demo, approve review submission, then deliberate production credential switch after approval."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Complete truthful production Login Kit metadata and minimum user.info.basic; record required genuine sandbox demo, approve review submission, then deliberate production credential switch after approval.",
+      "previewConfiguration": "NOT_CONFIGURED"
     },
     {
       "provider": "pinterest",
@@ -168,11 +263,37 @@
         "HUMAN_CONSENT"
       ],
       "owner": "James/operator + Pinterest",
-      "nextAction": "Await actual existing request outcome; configure credentials/callback when issued and prepare genuine applicable review demo. Do not create another app."
+      "nextAction": "Existing reviewed app only: prepare exact preview credential/callback configuration through the approved secret store after target-specific approval. Await actual existing request outcome; configure credentials/callback when issued and prepare genuine applicable review demo. Do not create another app.",
+      "previewConfiguration": "NOT_CONFIGURED"
     }
   ],
   "validation": {
-    "github": {
+    "depot": [
+      {
+        "run": "ntmbjzz255",
+        "task": "ci",
+        "exitCode": 0
+      },
+      {
+        "run": "0j6slmkf5x",
+        "task": "e2e",
+        "exitCode": 0
+      }
+    ],
+    "depotSnapshotFingerprint": "0d302bab4bad4d97d0efa3939732545eaa7281bb8050ab82c6166761681c7169",
+    "depotApplicationSourceMatchesPreview": true,
+    "depotFullSnapshotDiff": "Preview82b4c282 changes docs and disposable SQL harness include ordering only from merged2bdab047. Required new-head GitHub checks passed.",
+    "local": [
+      {
+        "command": "PYTHONPATH=tests python3 -m unittest -v test_migration_numbers.ChatMediaMigrationTests.test_rls_harness_loads_it_in_order",
+        "redExitCode": 1,
+        "greenExitCode": 0,
+        "testCount": 1,
+        "runtimeSeconds": 0.001
+      }
+    ],
+    "heavyValidationLocation": "cloud only",
+    "priorVerifiedConnectionGitHub": {
       "observedAtUtc": "2026-10-08T04:30:36.927349+00:00",
       "head": "82b4c28260641659dca357c83487c66c17a07bf2",
       "base": "8377ebbb037633d7a360207872f37c51ae088fba",
@@ -243,31 +364,850 @@
         }
       ]
     },
-    "depot": [
-      {
-        "run": "ntmbjzz255",
-        "task": "ci",
-        "exitCode": 0
+    "github": {
+      "schema": "rafii.github-validation.v1",
+      "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+      "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+      "state": "ALL_REQUIRED_CHECKS_PASSED",
+      "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+      "isDraft": true,
+      "mergeable": "MERGEABLE",
+      "checks": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:50:21Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462686/job/113202876400",
+          "name": "founder",
+          "startedAt": "2026-10-08T07:37:21Z",
+          "status": "COMPLETED",
+          "workflowName": "Founder admin browser"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:38:30Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462541/job/113202543508",
+          "name": "growth-studio",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "COMPLETED",
+          "workflowName": "Growth Studio browser acceptance"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:42:32Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462654/job/113202543146",
+          "name": "native-learning-browser",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "COMPLETED",
+          "workflowName": "Growth metrics acceptance"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:40:17Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462532/job/113202542366",
+          "name": "local-foundation",
+          "startedAt": "2026-10-08T07:36:21Z",
+          "status": "COMPLETED",
+          "workflowName": "Rafii Control foundation"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:44:54Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462656/job/113202543610",
+          "name": "scenes",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "COMPLETED",
+          "workflowName": "Rafii browser scenes"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:59:52Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832",
+          "name": "local-gates",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "COMPLETED",
+          "workflowName": "Rafii local release gates"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:43:36Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202543373",
+          "name": "library",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "COMPLETED",
+          "workflowName": "Universal Library release validation"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:36:20Z",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202544624",
+          "name": "dependency-lock",
+          "startedAt": "2026-10-08T07:36:20Z",
+          "status": "COMPLETED",
+          "workflowName": "Universal Library release validation"
+        },
+        {
+          "__typename": "StatusContext",
+          "context": "Vercel",
+          "startedAt": "2026-10-08T07:37:27Z",
+          "state": "SUCCESS",
+          "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/HUGEcuSxUJCJYwxaP31XTpNV2mrQ"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-08T07:37:28Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://vercel.com/github",
+          "name": "Vercel Preview Comments",
+          "startedAt": "2026-10-08T07:37:28Z",
+          "status": "COMPLETED",
+          "workflowName": ""
+        }
+      ],
+      "integratedRunId": "37744462566",
+      "integratedJobId": "113202542832",
+      "run": {
+        "conclusion": "success",
+        "headSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+        "jobs": [
+          {
+            "completedAt": "2026-10-08T07:59:52Z",
+            "conclusion": "success",
+            "databaseId": 113202542832,
+            "name": "local-gates",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "completed",
+            "steps": [
+              {
+                "completedAt": "2026-10-08T07:36:23Z",
+                "conclusion": "success",
+                "name": "Set up job",
+                "number": 1,
+                "startedAt": "2026-10-08T07:36:22Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:36:31Z",
+                "conclusion": "success",
+                "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "number": 2,
+                "startedAt": "2026-10-08T07:36:23Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:36:31Z",
+                "conclusion": "success",
+                "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+                "number": 3,
+                "startedAt": "2026-10-08T07:36:31Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:36:39Z",
+                "conclusion": "success",
+                "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+                "number": 4,
+                "startedAt": "2026-10-08T07:36:31Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:37:17Z",
+                "conclusion": "success",
+                "name": "Install pinned application and validation tools",
+                "number": 5,
+                "startedAt": "2026-10-08T07:36:39Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:37:33Z",
+                "conclusion": "success",
+                "name": "Install PostgreSQL 17 using its signed official repository",
+                "number": 6,
+                "startedAt": "2026-10-08T07:37:17Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:37:46Z",
+                "conclusion": "success",
+                "name": "Install ffmpeg (media decoding tests render a test image with it)",
+                "number": 7,
+                "startedAt": "2026-10-08T07:37:34Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:42:24Z",
+                "conclusion": "success",
+                "name": "Python domain and security contracts",
+                "number": 8,
+                "startedAt": "2026-10-08T07:37:46Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:52:54Z",
+                "conclusion": "success",
+                "name": "Disposable DB integration, migrations and restore",
+                "number": 9,
+                "startedAt": "2026-10-08T07:42:24Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:53:10Z",
+                "conclusion": "success",
+                "name": "Web contracts and locale checks",
+                "number": 10,
+                "startedAt": "2026-10-08T07:52:54Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:54:53Z",
+                "conclusion": "success",
+                "name": "Types, lint and isolated production build",
+                "number": 11,
+                "startedAt": "2026-10-08T07:53:10Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:54:54Z",
+                "conclusion": "success",
+                "name": "Product copy audit",
+                "number": 12,
+                "startedAt": "2026-10-08T07:54:53Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:55:14Z",
+                "conclusion": "success",
+                "name": "Actual isolated Python function archive",
+                "number": 13,
+                "startedAt": "2026-10-08T07:54:54Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:56:57Z",
+                "conclusion": "success",
+                "name": "Offline source secret scan",
+                "number": 14,
+                "startedAt": "2026-10-08T07:55:14Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:57:06Z",
+                "conclusion": "success",
+                "name": "Dependency audits",
+                "number": 15,
+                "startedAt": "2026-10-08T07:56:57Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:48Z",
+                "conclusion": "success",
+                "name": "Real local browser, API and database integration",
+                "number": 16,
+                "startedAt": "2026-10-08T07:57:06Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:50Z",
+                "conclusion": "success",
+                "name": "Retain evidence tied to this commit",
+                "number": 17,
+                "startedAt": "2026-10-08T07:59:48Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:50Z",
+                "conclusion": "success",
+                "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+                "number": 32,
+                "startedAt": "2026-10-08T07:59:50Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:50Z",
+                "conclusion": "success",
+                "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+                "number": 33,
+                "startedAt": "2026-10-08T07:59:50Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:50Z",
+                "conclusion": "success",
+                "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "number": 34,
+                "startedAt": "2026-10-08T07:59:50Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-08T07:59:50Z",
+                "conclusion": "success",
+                "name": "Complete job",
+                "number": 35,
+                "startedAt": "2026-10-08T07:59:50Z",
+                "status": "completed"
+              }
+            ],
+            "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832"
+          }
+        ],
+        "status": "completed"
       },
-      {
-        "run": "0j6slmkf5x",
-        "task": "e2e",
-        "exitCode": 0
+      "artifacts": [
+        {
+          "created_at": "2026-10-08T07:59:50Z",
+          "digest": "sha256:380adaac0b9d9f73afee9b1630327509d70ff69a5101ba7580399cc7f177bf04",
+          "expired": false,
+          "expires_at": "2026-10-22T07:59:48Z",
+          "id": 11536033176,
+          "name": "local-gates-d8eb4e698da25108b2d82ebdc320241f3d727c69",
+          "size_in_bytes": 4765809
+        }
+      ],
+      "actualTestedPrMerge": {
+        "parents": [
+          "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+          "7a4cefbaba92ac65ca17da8082a208a092faf5ca"
+        ],
+        "sha": "d8eb4e698da25108b2d82ebdc320241f3d727c69",
+        "tree": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+        "deployedHeadSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+        "deployedHeadTreeSha": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+        "treesIdentical": true
       }
-    ],
-    "depotSnapshotFingerprint": "0d302bab4bad4d97d0efa3939732545eaa7281bb8050ab82c6166761681c7169",
-    "depotApplicationSourceMatchesPreview": true,
-    "depotFullSnapshotDiff": "Preview82b4c282 changes docs and disposable SQL harness include ordering only from merged2bdab047. Required new-head GitHub checks passed.",
-    "local": [
-      {
-        "command": "PYTHONPATH=tests python3 -m unittest -v test_migration_numbers.ChatMediaMigrationTests.test_rls_harness_loads_it_in_order",
-        "redExitCode": 1,
-        "greenExitCode": 0,
-        "testCount": 1,
-        "runtimeSeconds": 0.001
-      }
-    ],
-    "heavyValidationLocation": "cloud only"
+    },
+    "directDepotBrowser": {
+      "runId": "lhz2r5w6md",
+      "workflowId": "dvmd6j3g6n",
+      "url": "https://depot.dev/orgs/jf34f85hr0/workflows/dvmd6j3g6n?job=1s5kp526hs&attempt=jr4qcj8f7r",
+      "exitCode": 0,
+      "testedSource": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+      "currentSource": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "scope": "Synthetic official-social-browser.cjs Chromium1280/390 including accepted receipt; frontend/script/workflow unchanged. New backend validation remains required GitHub source checks.",
+      "frontendTree": "36c504b99c79beb6561eead3eb9f71a3a9a022c5",
+      "browserWorkflowSha256": "5524a728fe0a07666e99cf5a6aef8f995797579b5e5dbdd9e1b0aa5e4fc49e49",
+      "execution": "DIRECT_DEPOT_FALLBACK_NOT_JCB",
+      "receipt": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/RESULT.json"
+    },
+    "compatibilityRepair": {
+      "sha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+      "triggerRun": "37729976628",
+      "triggerJob": "113156652915",
+      "originalError": "AttributeError during disposable LinkedIn OAuth completion",
+      "repair": "Optional member Share evidence method defaults false at generic adapter consumers; identity retained.",
+      "lightweightLocalRedExit": 1,
+      "lightweightLocalGreenExit": 0,
+      "testCount": 1,
+      "remoteIntegrationSeed": "PASS at new source",
+      "receipt": "docs/linkedin-publishing-20261008/evidence/compatibility-5e4644fb/RESULT.json"
+    },
+    "previousRequiredPythonFailure": {
+      "runId": "37730908113",
+      "sourceSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+      "testsRun": 3823,
+      "failures": 1,
+      "skipped": 371,
+      "cause": "Stale existing test expected uncertain for a genuinely accepted reference; repaired with retained acceptance/unknown outcome/no forbidden GET/no duplicate POST assertions.",
+      "artifactId": "11530420688",
+      "artifactSha256": "bfddd3afc972030e7808eb8321a9fe1db7987a3a23e2581773cb09a24763346c",
+      "repairSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "focusedRedExit": 1,
+      "focusedGreenExit": 0,
+      "newSourceFullSuite": "PASS on b7ee0e68; full required integrated workflow passed"
+    },
+    "historical5eFounderRetry": {
+      "runId": "37730908101",
+      "attempt": 2,
+      "reason": "Unchanged Merriweather font generation failed on one runner while Vercel and other same-source web builds passed; one bounded failed-job retry.",
+      "retryBuild": "PASS",
+      "finalResult": "Superseded by b7 push after retry build PASS; final b7 founder required check PASS."
+    },
+    "matrixMirrorRepair": {
+      "evidence": "docs/linkedin-publishing-20261008/evidence/matrix-mirror-b7ee0e68.json",
+      "capabilityCounts": {
+        "PARTIAL": 2,
+        "NOT_RUN": 203
+      },
+      "casesPreserved": {
+        "PARTIAL": 2,
+        "NOT_RUN": 194
+      },
+      "untestedFeaturesPromoted": false
+    },
+    "finalLocalReceiptValidation": "docs/linkedin-publishing-20261008/evidence/local-receipts-validation-b7ee0e68.json",
+    "connectionRecoveryCandidate": {
+      "sourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+      "baseIntegratedGithub": {
+        "schema": "rafii.github-validation.v1",
+        "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+        "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+        "state": "ALL_REQUIRED_CHECKS_PASSED",
+        "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "checks": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:50:21Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462686/job/113202876400",
+            "name": "founder",
+            "startedAt": "2026-10-08T07:37:21Z",
+            "status": "COMPLETED",
+            "workflowName": "Founder admin browser"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:38:30Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462541/job/113202543508",
+            "name": "growth-studio",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "COMPLETED",
+            "workflowName": "Growth Studio browser acceptance"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:42:32Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462654/job/113202543146",
+            "name": "native-learning-browser",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "COMPLETED",
+            "workflowName": "Growth metrics acceptance"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:40:17Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462532/job/113202542366",
+            "name": "local-foundation",
+            "startedAt": "2026-10-08T07:36:21Z",
+            "status": "COMPLETED",
+            "workflowName": "Rafii Control foundation"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:44:54Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462656/job/113202543610",
+            "name": "scenes",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "COMPLETED",
+            "workflowName": "Rafii browser scenes"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:59:52Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832",
+            "name": "local-gates",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "COMPLETED",
+            "workflowName": "Rafii local release gates"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:43:36Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202543373",
+            "name": "library",
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "COMPLETED",
+            "workflowName": "Universal Library release validation"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:36:20Z",
+            "conclusion": "SKIPPED",
+            "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202544624",
+            "name": "dependency-lock",
+            "startedAt": "2026-10-08T07:36:20Z",
+            "status": "COMPLETED",
+            "workflowName": "Universal Library release validation"
+          },
+          {
+            "__typename": "StatusContext",
+            "context": "Vercel",
+            "startedAt": "2026-10-08T07:37:27Z",
+            "state": "SUCCESS",
+            "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/HUGEcuSxUJCJYwxaP31XTpNV2mrQ"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-08T07:37:28Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://vercel.com/github",
+            "name": "Vercel Preview Comments",
+            "startedAt": "2026-10-08T07:37:28Z",
+            "status": "COMPLETED",
+            "workflowName": ""
+          }
+        ],
+        "integratedRunId": "37744462566",
+        "integratedJobId": "113202542832",
+        "run": {
+          "conclusion": "success",
+          "headSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+          "jobs": [
+            {
+              "completedAt": "2026-10-08T07:59:52Z",
+              "conclusion": "success",
+              "databaseId": 113202542832,
+              "name": "local-gates",
+              "startedAt": "2026-10-08T07:36:22Z",
+              "status": "completed",
+              "steps": [
+                {
+                  "completedAt": "2026-10-08T07:36:23Z",
+                  "conclusion": "success",
+                  "name": "Set up job",
+                  "number": 1,
+                  "startedAt": "2026-10-08T07:36:22Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:36:31Z",
+                  "conclusion": "success",
+                  "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                  "number": 2,
+                  "startedAt": "2026-10-08T07:36:23Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:36:31Z",
+                  "conclusion": "success",
+                  "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+                  "number": 3,
+                  "startedAt": "2026-10-08T07:36:31Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:36:39Z",
+                  "conclusion": "success",
+                  "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+                  "number": 4,
+                  "startedAt": "2026-10-08T07:36:31Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:37:17Z",
+                  "conclusion": "success",
+                  "name": "Install pinned application and validation tools",
+                  "number": 5,
+                  "startedAt": "2026-10-08T07:36:39Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:37:33Z",
+                  "conclusion": "success",
+                  "name": "Install PostgreSQL 17 using its signed official repository",
+                  "number": 6,
+                  "startedAt": "2026-10-08T07:37:17Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:37:46Z",
+                  "conclusion": "success",
+                  "name": "Install ffmpeg (media decoding tests render a test image with it)",
+                  "number": 7,
+                  "startedAt": "2026-10-08T07:37:34Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:42:24Z",
+                  "conclusion": "success",
+                  "name": "Python domain and security contracts",
+                  "number": 8,
+                  "startedAt": "2026-10-08T07:37:46Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:52:54Z",
+                  "conclusion": "success",
+                  "name": "Disposable DB integration, migrations and restore",
+                  "number": 9,
+                  "startedAt": "2026-10-08T07:42:24Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:53:10Z",
+                  "conclusion": "success",
+                  "name": "Web contracts and locale checks",
+                  "number": 10,
+                  "startedAt": "2026-10-08T07:52:54Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:54:53Z",
+                  "conclusion": "success",
+                  "name": "Types, lint and isolated production build",
+                  "number": 11,
+                  "startedAt": "2026-10-08T07:53:10Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:54:54Z",
+                  "conclusion": "success",
+                  "name": "Product copy audit",
+                  "number": 12,
+                  "startedAt": "2026-10-08T07:54:53Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:55:14Z",
+                  "conclusion": "success",
+                  "name": "Actual isolated Python function archive",
+                  "number": 13,
+                  "startedAt": "2026-10-08T07:54:54Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:56:57Z",
+                  "conclusion": "success",
+                  "name": "Offline source secret scan",
+                  "number": 14,
+                  "startedAt": "2026-10-08T07:55:14Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:57:06Z",
+                  "conclusion": "success",
+                  "name": "Dependency audits",
+                  "number": 15,
+                  "startedAt": "2026-10-08T07:56:57Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:48Z",
+                  "conclusion": "success",
+                  "name": "Real local browser, API and database integration",
+                  "number": 16,
+                  "startedAt": "2026-10-08T07:57:06Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:50Z",
+                  "conclusion": "success",
+                  "name": "Retain evidence tied to this commit",
+                  "number": 17,
+                  "startedAt": "2026-10-08T07:59:48Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:50Z",
+                  "conclusion": "success",
+                  "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+                  "number": 32,
+                  "startedAt": "2026-10-08T07:59:50Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:50Z",
+                  "conclusion": "success",
+                  "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+                  "number": 33,
+                  "startedAt": "2026-10-08T07:59:50Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:50Z",
+                  "conclusion": "success",
+                  "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                  "number": 34,
+                  "startedAt": "2026-10-08T07:59:50Z",
+                  "status": "completed"
+                },
+                {
+                  "completedAt": "2026-10-08T07:59:50Z",
+                  "conclusion": "success",
+                  "name": "Complete job",
+                  "number": 35,
+                  "startedAt": "2026-10-08T07:59:50Z",
+                  "status": "completed"
+                }
+              ],
+              "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832"
+            }
+          ],
+          "status": "completed"
+        },
+        "artifacts": [
+          {
+            "created_at": "2026-10-08T07:59:50Z",
+            "digest": "sha256:380adaac0b9d9f73afee9b1630327509d70ff69a5101ba7580399cc7f177bf04",
+            "expired": false,
+            "expires_at": "2026-10-22T07:59:48Z",
+            "id": 11536033176,
+            "name": "local-gates-d8eb4e698da25108b2d82ebdc320241f3d727c69",
+            "size_in_bytes": 4765809
+          }
+        ],
+        "actualTestedPrMerge": {
+          "parents": [
+            "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+            "7a4cefbaba92ac65ca17da8082a208a092faf5ca"
+          ],
+          "sha": "d8eb4e698da25108b2d82ebdc320241f3d727c69",
+          "tree": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+          "deployedHeadSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+          "deployedHeadTreeSha": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+          "treesIdentical": true
+        }
+      },
+      "expiredApprovalRegression": {
+        "red": {
+          "runId": "cdltwwq04q",
+          "workflowId": "tn4w6rw0w2",
+          "jobId": "vtswz9vtk8",
+          "attemptId": "v9lddbchrp",
+          "state": "RED_REPRODUCED",
+          "failure": "Prepare again not visible for expired definitive no-submit hold; locator timeout30s",
+          "sourceHead": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+          "snapshot": "7a4cefba plus the new focused browser regression, before UI fix",
+          "localReceipt": "/private/tmp/rafii-expired-approval-red-cloud.json",
+          "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/tn4w6rw0w2?job=vtswz9vtk8&attempt=v9lddbchrp",
+          "cliFollowExitCode": 0,
+          "cliExitCodeIsNotJobVerdict": true
+        },
+        "green": {
+          "runId": "td827856ht",
+          "workflowId": "45wsxmd3d6",
+          "jobId": "1f2slb3r11",
+          "attemptId": "gc3djgc26s",
+          "state": "PASS",
+          "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+          "snapshot": {
+            "transportMode": "remote_patch",
+            "baseSha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+            "baseRef": "refs/remotes/origin/consumer-saas",
+            "branch": "codex/linkedin-publishing-recovery-20261008",
+            "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+            "includedFileCount": 2748,
+            "includedBytes": 1902272,
+            "sourceFingerprint": "9f76df7da95844f146f7fa5038d8fec7204de61046ef19048650513f01d965d8",
+            "markerPath": ".depot/jcb-source.json",
+            "patchBytes": 699352,
+            "patchSha256": "cf93313149c7734af36fec12f17f4826bb7ed69edda866abea2b2f30aa4a4d99",
+            "excludedForbiddenCount": 28,
+            "inputExcludes": [
+              "docs/**",
+              "downloads/**",
+              "motion/**",
+              "artifacts/**",
+              "vendor/**",
+              ".preview/**",
+              "audio-reactive-fix/**",
+              "PostRiff_Research_2026-09-18/**",
+              "*.zip",
+              "desktop/**",
+              "studio/**",
+              "docs/linkedin-publishing-20261008/evidence/**",
+              "docs/facebook-connection-20261008/**",
+              "docs/official-social-20261008/**"
+            ],
+            "explicitExcludedCount": 2549,
+            "changedPathCount": 103,
+            "recoverableRawReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json"
+          },
+          "localReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json",
+          "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+          "status": {
+            "org_id": "jf34f85hr0",
+            "run_id": "td827856ht",
+            "status": "finished",
+            "workflows": [
+              {
+                "workflow_id": "45wsxmd3d6",
+                "status": "finished",
+                "name": "James Cloud Build",
+                "jobs": [
+                  {
+                    "job_display_name": "e2e",
+                    "job_id": "1f2slb3r11",
+                    "job_key": "_inline_0.yaml:e2e",
+                    "status": "finished",
+                    "attempts": [
+                      {
+                        "attempt_id": "gc3djgc26s",
+                        "attempt": 1,
+                        "status": "finished",
+                        "sandbox_id": "wptl6d4plwcqpz2fkg7j",
+                        "session_id": "1d074db8-cd6d-49e2-9162-7c7f192b6297",
+                        "logs_command": "depot ci logs gc3djgc26s --org jf34f85hr0",
+                        "download_available": true,
+                        "download_command": "depot ci logs gc3djgc26s --output-file logs.txt --org jf34f85hr0",
+                        "view_url": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+                        "ssh_available": false
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "browser": {
+            "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+            "checks": [
+              {
+                "callbackThroughNormalUI": true,
+                "restoresOriginatingWorkspaceFromOtherSelection": true,
+                "width": 1280,
+                "granularCapabilities": true,
+                "savedIdentitySeparatedFromRelease": true,
+                "sharePermissionSeparatedFromLiveQualification": true,
+                "restrictedOrganizationRemainsBlocked": true,
+                "approvedJobScopedDispatchOnce": true,
+                "futureJobNotDispatched": true,
+                "heldRecoveryKeepsOriginalJob": true,
+                "expiredNoSubmitApprovalCanPrepareAgain": true,
+                "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+                "ownerCheckNeverApiVerified": true,
+                "noAcceptedPostResubmission": true,
+                "minimumIdentitySelected": true,
+                "latestIdentityVerificationShown": true,
+                "noReadyFromIdentity": true,
+                "readHierarchy": true,
+                "immutableApproval": true,
+                "noDuplicateAfterUnknown": true,
+                "horizontalOverflow": false
+              },
+              {
+                "callbackThroughNormalUI": true,
+                "restoresOriginatingWorkspaceFromOtherSelection": true,
+                "width": 390,
+                "granularCapabilities": true,
+                "savedIdentitySeparatedFromRelease": true,
+                "sharePermissionSeparatedFromLiveQualification": true,
+                "restrictedOrganizationRemainsBlocked": true,
+                "approvedJobScopedDispatchOnce": true,
+                "futureJobNotDispatched": true,
+                "heldRecoveryKeepsOriginalJob": true,
+                "expiredNoSubmitApprovalCanPrepareAgain": true,
+                "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+                "ownerCheckNeverApiVerified": true,
+                "noAcceptedPostResubmission": true,
+                "minimumIdentitySelected": true,
+                "latestIdentityVerificationShown": true,
+                "noReadyFromIdentity": true,
+                "readHierarchy": true,
+                "immutableApproval": true,
+                "noDuplicateAfterUnknown": true,
+                "horizontalOverflow": false
+              }
+            ]
+          },
+          "execution": "Synthetic cloud Next/Chromium only; not real iPhone or live provider proof"
+        }
+      },
+      "remoteOnlyHeavyValidation": true
+    }
   },
   "linkedInProductEvidence": {
     "products": {
@@ -322,7 +1262,7 @@
   ],
   "publishingAgent": {
     "task": "/root/linkedin_publishing",
-    "state": "LOCAL_COMMIT_READY_FINAL_REMOTE_CHECKS_PENDING",
+    "state": "IMPLEMENTATION_AND_REQUIRED_REMOTE_CHECKS_COMPLETE_HUMAN_GATES_PENDING",
     "worktree": "/Users/ouxianxing/Documents/James-Au-Studio/.worktrees/linkedin-publishing-20261008",
     "branch": "codex/linkedin-publishing-recovery-20261008",
     "base": "82b4c28260641659dca357c83487c66c17a07bf2",
@@ -336,14 +1276,113 @@
     "integratedCiDepotRun": "njs1p84h8q",
     "integratedCiExitCode": 0,
     "integratedCiFingerprint": "5de87d6c29b57c100828de33019d2738d363e0462240d8336518a18d5d8de21f",
-    "browserDepotRun": "qgncxfxxl7",
+    "browserDepotRun": "lhz2r5w6md",
     "browserExitCode": 0,
-    "latestSourceChecks": "Required new-head GitHub integration and existing Depot e2e fallback pending. Installed internal JCB loader stalled before submission; native installed Depot is supported.",
+    "latestSourceChecks": "All required GitHub checks PASS on b7ee0e68; dependency-lock intentionally SKIPPED; Depot browser PASS on unchanged frontend/workflow inputs.",
     "exactPilotCandidate": "docs/linkedin-publishing-20261008/PILOT-APPROVAL.md",
-    "operatorActivationPerformed": false,
+    "operatorActivationPerformed": true,
     "realPublicPostPerformed": false,
-    "candidateSourceSha": "4e69d89936c788bab3408ad5e39106c8a817f930",
-    "directDepotFallback": "Existing unchanged e2e job only; tracked reviewed source + truthful ephemeral source proof; no secrets or browser sessions."
+    "candidateSourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "directDepotFallback": "Existing unchanged e2e job only; tracked reviewed source + truthful ephemeral source proof; no secrets or browser sessions.",
+    "implementationCommit": "4e69d89936c788bab3408ad5e39106c8a817f930",
+    "existingAuthorizedRecoveryBranchPushPerformed": true,
+    "exactRequestCandidate": "docs/linkedin-publishing-20261008/share-on-linkedin-preview.request.candidate.json",
+    "exactRequestCandidateSha256": "fa4ff7a0cc464a4216eacc4509c4f08e9ec5a14dc142b5cb7cf9ae014b29eac4",
+    "privatePilotDraft": {
+      "schema": "rafii.linkedin.private-pilot-draft.v1",
+      "atUtc": "2026-10-08T05:36:02.102Z",
+      "execution": "PRIVATE_DRAFT_ONLY_UNPOSTED_UNAPPROVED",
+      "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "deploymentId": "dpl_E6mrgNSbYf8ZSHG6XxU6rynUTg3T",
+      "environment": "preview",
+      "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+      "variantRef": "0b4ea76b74eb2b656745adaa0b6d3243",
+      "revision": 2,
+      "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+      "expectedConnectionMatches": true,
+      "runRef": "5244b73de9562429610692f8125b451e",
+      "text": "Rafii integration test: verifying a LinkedIn text post. This test post will be removed after verification.",
+      "textSha256": "ac7ccf55c06ba249a8fb19d237934378235a1cce4a1c04060567b720adf587f0",
+      "platform": "LinkedIn",
+      "formatId": null,
+      "needsReview": true,
+      "modelRoute": "Explicit Templates (no AI model) / No model charge; normal UI confirmed no language model called.",
+      "publicationJobCount": 0,
+      "assetCount": 0,
+      "approved": false,
+      "posted": false,
+      "scheduled": false,
+      "billingChanged": false,
+      "previewUrl": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/app/queue?view=drafts",
+      "screenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-pilot-draft-b7ee0e68.jpg"
+    },
+    "requiredChecksEvidence": "docs/linkedin-publishing-20261008/evidence/github-b7ee0e68.json",
+    "permanentCleanupConfirmation": "Required at action time for only newly returned pilot post ID; no deletion yet.",
+    "prBodyUpdated": {
+      "url": "https://github.com/dev-james0723/PostRiff/pull/131",
+      "applied": true,
+      "bodySha256": "7d3bea08d4e9f8927a0fa73150b1fad606f665d5b2712553643574ffe57b805e",
+      "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "remoteEditExitCode": 0
+    },
+    "remainingHumanGate": "Owner consent completed and exact one-post authorization retained. Agent must deliver final source/checks, cancel expired no-submit original through normal UI and freshly review the same draft. No expired approval, duplicate draft or uncertain retry. Native inspection and exact-ID cleanup confirmation follow a real receipt.",
+    "activationDeploymentVerified": true,
+    "latestApproval": "docs/linkedin-publishing-20261008/evidence/preview-pilot-approval-20261008.json",
+    "previewConfigurationApplied": {
+      "execution": "APPLIED_PREVIEW_ONLY_REDEPLOY_VERIFIED",
+      "atUtc": "2026-10-08T06:08:08.061364+00:00",
+      "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+      "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+      "gitBranch": "codex/social-connection-recovery-20261007",
+      "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "candidateSha256": "fa4ff7a0cc464a4216eacc4509c4f08e9ec5a14dc142b5cb7cf9ae014b29eac4",
+      "mcpCreateDenied403": true,
+      "cliFallback": "Official installed Vercel CLI using own existing authorized credentials; same POST/v10 action/explicit project/team",
+      "priorAbsenceReconciledAfterMcpFailure": true,
+      "upsert": false,
+      "created": [
+        {
+          "id": "563MitzNzDuimC2W",
+          "key": "POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON",
+          "target": [
+            "preview"
+          ],
+          "gitBranch": "codex/social-connection-recovery-20261007",
+          "type": "encrypted",
+          "createdAt": 1791439689626
+        },
+        {
+          "id": "h1qhxQvW4R8kkaGD",
+          "key": "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED",
+          "target": [
+            "preview"
+          ],
+          "gitBranch": "codex/social-connection-recovery-20261007",
+          "type": "encrypted",
+          "createdAt": 1791439691997
+        }
+      ],
+      "productionChangePerformed": false,
+      "secretValuesReadOrPrinted": false,
+      "deploymentStillRequired": false,
+      "protectedCredentialAndConnectionReviewIdsUnchanged": true,
+      "createdCount": 2
+    },
+    "activationDeployment": {
+      "id": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+      "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+      "target": "preview",
+      "state": "READY",
+      "immutableUrl": "https://postriff-phase2-private-78gsyblbd-jamesau0723-6572s-projects.vercel.app",
+      "fixedOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+      "creationRoute": "Supported official CLI redeploy existing preview with --target preview --no-wait",
+      "priorMcpInvalidTarget400NoCreation": true
+    },
+    "publishingGrantEvidence": "docs/linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+    "approvedHeldJobEvidence": "docs/linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json",
+    "dispatchCandidateSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+    "publicPublicationPerformed": false
   },
   "localRecovery": {
     "originalWorktree": "/Users/ouxianxing/Documents/James-Au-Studio-social-connection-recovery",
@@ -352,8 +1391,8 @@
     "mergeHead": "8377ebbb037633d7a360207872f37c51ae088fba",
     "originalIndexSha256": "343c0df8869f43f200533f9c4ab92afeca4dae29479ed0dd1f5a0f0a7b45bb09",
     "originalIndexAndWorkingFilesPreserved": true,
-    "remoteHead": "82b4c28260641659dca357c83487c66c17a07bf2",
-    "remoteAdvancedVia": "Reviewed saved-index tree, commit-tree and nonforce explicit SHA push; original local branch/merge state untouched.",
+    "remoteHead": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "remoteAdvancedVia": "Original inaccessible checkout and dirty merge/index preserved. Reviewed worker commits pushed nonforce by exact SHA to the existing authorized recovery branch; worker branch not pushed.",
     "reconcileRequirement": "Recover supported filesystem access and preserve unrelated HANDOFF/submodules before reconciling local branch. Never reset or blanket-stash.",
     "temporaryCandidateDirectory": "/private/tmp/rafii-social-index-recovery-20261008",
     "sampleDiagnostic": "/private/tmp/rafii-shell-stall-sample.txt"
@@ -366,5 +1405,402 @@
   },
   "secretsOrCookiesExported": false,
   "reviewSubmissionsPerformed": [],
-  "receiptState": "PREDEPLOYMENT_SNAPSHOT; observation asOf only. Task-owned local receipt is updated after deployment without a docs-only CI push."
+  "publishingActivationPreconditions": {
+    "checkedAtUtc": "2026-10-08T05:17:54.855896+00:00",
+    "clientMatchesApprovedApp": true,
+    "publicOriginMatchesRegisteredCallback": true,
+    "runtimeEnvironmentVerified": true,
+    "runtimeEnvironment": "preview",
+    "existingBranchProductKeyPresent": false,
+    "existingBranchPublishingFlagPresent": false,
+    "existingConnectionReviewPreserved": true,
+    "previewDatabaseLinkedInJobs": 0,
+    "productionChangePerformed": false,
+    "configurationChangePerformed": false,
+    "secretValuesReadOrPrinted": false,
+    "secureCliFallbackUsed": true,
+    "immediateRecheckBeforeActivationRequired": true
+  },
+  "testerBBillingReadOnly": {
+    "status": "trial",
+    "trialExpiresAt": "2026-10-22T01:36:02.643587Z",
+    "canPublishUnderExistingBillingRules": true,
+    "subscriptionChangePerformed": false,
+    "billingExemptionOrBypass": false
+  },
+  "providerRuntimeSnapshot": {
+    "atUtc": "2026-10-08T05:24:07.079Z",
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "environment": "preview",
+    "evidence": "docs/linkedin-publishing-20261008/evidence/connection-b7ee0e68.json",
+    "providers": [
+      {
+        "provider": "linkedin",
+        "configured": true,
+        "connectReady": true,
+        "publicConnectionReady": true,
+        "configurationState": "configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": true,
+          "clientSecret": true
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback"
+      },
+      {
+        "provider": "threads",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/threads/callback"
+      },
+      {
+        "provider": "instagram",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/instagram/callback"
+      },
+      {
+        "provider": "x",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/x/callback"
+      },
+      {
+        "provider": "facebook",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback"
+      },
+      {
+        "provider": "youtube",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/youtube/callback"
+      },
+      {
+        "provider": "tiktok",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/tiktok/callback"
+      },
+      {
+        "provider": "pinterest",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/pinterest/callback"
+      }
+    ],
+    "runtimeFlagsNotApprovalEvidence": true
+  },
+  "historicalProgressSnapshots": [
+    {
+      "capturedAtUtc": "2026-10-08T07:21:07.930091+00:00",
+      "state": "APPROVED_LINKEDIN_PREVIEW_CONFIGURATION_APPLIED_REDEPLOY_IN_PROGRESS",
+      "preview": {
+        "sha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+        "deploymentId": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+        "state": "READY",
+        "url": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/app/channels",
+        "aliasProjectAndSourceVerified": true,
+        "testerBReload": "PASS",
+        "actualScopes": [
+          "openid",
+          "profile",
+          "w_member_social"
+        ],
+        "redactedScreenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-b-preview-b7ee0e68.jpg",
+        "immutableUrl": "https://postriff-phase2-private-78gsyblbd-jamesau0723-6572s-projects.vercel.app",
+        "verifiedAtUtc": "2026-10-08T05:23:47.828Z",
+        "authenticatedChannelsStatus": 200,
+        "connectionState": "publish_verified",
+        "memberPublishingApproved": true,
+        "runtimeEnvironmentVerified": true,
+        "runtimeEnvironment": "preview",
+        "twoWorkspacePositiveObservations": [
+          {
+            "tester": "B",
+            "status": 200,
+            "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+            "channels": [
+              {
+                "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+                "scopes": [
+                  "openid",
+                  "profile"
+                ],
+                "state": "read_verified",
+                "publish": "Assisted"
+              }
+            ],
+            "runtime": {
+              "approved": false,
+              "code": "share_evidence_missing",
+              "runtimeEnvironmentVerified": true,
+              "runtimeEnvironment": "preview",
+              "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+            }
+          },
+          {
+            "tester": "A",
+            "status": 200,
+            "workspaceRef": "a58131ee20e1ece4c84521a0f93c264b",
+            "channels": [
+              {
+                "connectionRef": "73f65b0074242d0fb7ab3cf1866af5f1",
+                "scopes": [
+                  "openid",
+                  "profile",
+                  "w_member_social"
+                ],
+                "state": "read_verified",
+                "publish": "Assisted"
+              }
+            ],
+            "runtime": {
+              "approved": false,
+              "code": "share_evidence_missing",
+              "runtimeEnvironmentVerified": true,
+              "runtimeEnvironment": "preview",
+              "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+            }
+          }
+        ],
+        "latestRealIdentityRecheck": {
+          "source": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+          "atUtc": "2026-10-08T05:18:59.166Z",
+          "normalUI": true,
+          "status": 200,
+          "actualScopes": [
+            "openid",
+            "profile"
+          ],
+          "sameApplicationCodeAtCurrentSource": true,
+          "refreshTest": false
+        },
+        "latestIdentityRecheckSourceSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+        "latestDeploymentIdentityEvidence": "docs/linkedin-publishing-20261008/evidence/preview-deployment-b7ee0e68.json",
+        "fullyAvailable": false,
+        "liveVerified": false,
+        "currentEvidence": "docs/linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json"
+      },
+      "production": {
+        "source": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+        "deploymentId": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+        "state": "READY",
+        "branch": "consumer-saas",
+        "releasedByThisTask": false,
+        "sourceReason": "Independent production advance; this task performed no production release",
+        "mustRecheckBeforeFutureRelease": true,
+        "connectionAcceptanceNotReverified": true,
+        "evidence": "docs/linkedin-publishing-20261008/evidence/preview-production-source-guard-20261008.json"
+      },
+      "publishingAgentRemainingGate": "Account owner optional w_member_social consent after verified preview redeploy. One exact PUBLIC pilot is approved. Permanent cleanup still requires confirmation at action time."
+    },
+    {
+      "capturedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+      "preview": {
+        "sha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+        "deploymentId": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
+        "state": "READY",
+        "url": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/app/channels",
+        "aliasProjectAndSourceVerified": true,
+        "testerBReload": "PASS",
+        "actualScopes": [
+          "openid",
+          "profile",
+          "w_member_social"
+        ],
+        "redactedScreenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-b-preview-b7ee0e68.jpg",
+        "immutableUrl": "https://postriff-phase2-private-m19k33zmh-jamesau0723-6572s-projects.vercel.app",
+        "verifiedAtUtc": "2026-10-08T07:52:13.295Z",
+        "authenticatedChannelsStatus": 200,
+        "connectionState": "publish_verified",
+        "memberPublishingApproved": true,
+        "runtimeEnvironmentVerified": true,
+        "runtimeEnvironment": "preview",
+        "twoWorkspacePositiveObservations": [
+          {
+            "tester": "B",
+            "status": 200,
+            "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+            "channels": [
+              {
+                "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+                "scopes": [
+                  "openid",
+                  "profile"
+                ],
+                "state": "read_verified",
+                "publish": "Assisted"
+              }
+            ],
+            "runtime": {
+              "approved": false,
+              "code": "share_evidence_missing",
+              "runtimeEnvironmentVerified": true,
+              "runtimeEnvironment": "preview",
+              "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+            }
+          },
+          {
+            "tester": "A",
+            "status": 200,
+            "workspaceRef": "a58131ee20e1ece4c84521a0f93c264b",
+            "channels": [
+              {
+                "connectionRef": "73f65b0074242d0fb7ab3cf1866af5f1",
+                "scopes": [
+                  "openid",
+                  "profile",
+                  "w_member_social"
+                ],
+                "state": "read_verified",
+                "publish": "Assisted"
+              }
+            ],
+            "runtime": {
+              "approved": false,
+              "code": "share_evidence_missing",
+              "runtimeEnvironmentVerified": true,
+              "runtimeEnvironment": "preview",
+              "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+            }
+          }
+        ],
+        "latestRealIdentityRecheck": {
+          "source": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+          "atUtc": "2026-10-08T05:18:59.166Z",
+          "normalUI": true,
+          "status": 200,
+          "actualScopes": [
+            "openid",
+            "profile"
+          ],
+          "sameApplicationCodeAtCurrentSource": true,
+          "refreshTest": false
+        },
+        "latestIdentityRecheckSourceSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+        "latestDeploymentIdentityEvidence": "docs/linkedin-publishing-20261008/evidence/preview-deployment-7a4cefba.json",
+        "fullyAvailable": false,
+        "liveVerified": false,
+        "currentEvidence": "docs/linkedin-publishing-20261008/evidence/connection-7a4cefba.json"
+      },
+      "state": "LINKEDIN_REAL_WRITE_CONSENT_SAVED_EXACT_JOB_HELD_DISPATCH_AND_FACEBOOK_REPAIR_CLOUD_VALIDATION_PENDING"
+    }
+  ],
+  "localCandidate": {
+    "sourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+    "implementationCommit": "381ac2d01a8cd5666f48647e0d6ff0d8ae44b4f7",
+    "fixtureCorrection": "c671ca5ce985bbf911e8185b917d1179ff962565",
+    "branch": "codex/linkedin-publishing-recovery-20261008",
+    "pushed": false,
+    "deployed": false,
+    "cloudValidation": "Focused browser PASS; full dispatch/Facebook checks PASS7a4; final delivery checks pending",
+    "worktree": "/Users/ouxianxing/Documents/James-Au-Studio/.worktrees/linkedin-publishing-20261008"
+  },
+  "linkedinPilotJob": {
+    "schema": "rafii.linkedin.approved-pilot-job.v1",
+    "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+    "execution": "NORMAL_UI_APPROVED_JOB_HELD_WITH_NO_PROVIDER_SUBMISSION",
+    "environment": "preview",
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "deploymentId": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+    "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
+    "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+    "jobRef": "c793d630a6a6118e0454de0ca9afcf9b",
+    "state": "held",
+    "attemptCount": 1,
+    "dueAtUtc": "2026-10-08T06:27:00.000Z",
+    "approvalExpiresAtUtc": "2026-10-08T07:27:00.000Z",
+    "approvalDigestMatches": true,
+    "exactTextSha256": "ac7ccf55c06ba249a8fb19d237934378235a1cce4a1c04060567b720adf587f0",
+    "providerReferencePresent": false,
+    "providerPostPerformed": false,
+    "visibleHeldReason": "Live provider transport is not configured; nothing was submitted",
+    "originalManifestBindingAbsent": true,
+    "originalApprovalPreserved": true,
+    "noReplacementJobCreated": true,
+    "costAuthority": "$0 additional; one exact organic text post approved",
+    "currentRepairSource": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+    "repairCloudValidation": "ALL_REQUIRED_GITHUB_7A4_PASSED; D38_FOCUSED_BROWSER_PASSED; FINAL_DELIVERY_CHECKS_PENDING",
+    "approvalNowExpired": true,
+    "oldApprovalMayExecute": false,
+    "oldApprovalExtended": false,
+    "nextAction": "Preserve expired original job and no-submission receipt. Cancel it through normal authenticated UI before preparing a fresh review of the same existing draft; at most one provider create remains authorized."
+  },
+  "mainMatrixMirror": "Main matrices differ from active worktree bytes and were preserved; updated original205/196 matrices in active worktree are the delivery candidate."
 }

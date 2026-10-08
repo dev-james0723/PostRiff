@@ -39,7 +39,9 @@
       },
       "evidenceRefs": [
         "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
-        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json"
+        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+        "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+        "../linkedin-publishing-20261008/evidence/connection-c671ca5c.json"
       ],
       "ordinaryExternalBasicConnectionObserved": true,
       "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
@@ -47,7 +49,8 @@
       "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
       "disconnectReconnect": "PASS_SAME_ACCOUNT_WORKSPACE_MINIMUM_GRANT",
       "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session",
-      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json"
+      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json",
+      "additionalOptionalGrant": "Real separately approved w_member_social consent saved; no change to this case minimum or its PARTIAL status."
     },
     {
       "provider": "linkedin",
@@ -85,7 +88,9 @@
       },
       "evidenceRefs": [
         "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
-        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json"
+        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+        "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+        "../linkedin-publishing-20261008/evidence/connection-c671ca5c.json"
       ],
       "ordinaryExternalBasicConnectionObserved": true,
       "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
@@ -93,7 +98,8 @@
       "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
       "disconnectReconnect": "PASS_SAME_ACCOUNT_WORKSPACE_MINIMUM_GRANT",
       "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session",
-      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json"
+      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json",
+      "additionalOptionalGrant": "Real separately approved w_member_social consent saved; no change to this case minimum or its PARTIAL status."
     },
     {
       "provider": "linkedin",
@@ -971,19 +977,20 @@
       "execution": "real provider API",
       "state": "NOT_RUN",
       "evidence": null,
-      "externalBlocker": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval. Account-owner minimum read consent and ordinary-user acceptance pending.",
-      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
-      "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
+      "externalBlocker": "Actual pages_show_list external/Advanced Access approval and eligible owner/Page consent remain required. No publishing manifest or Page publishing permission is required for identity/selection.",
+      "toolingBlocker": "Current native browser works. Prepared exact preview callback/minimal config/encrypted connector credentials await approval; none applied.",
+      "publicationApproval": "NOT_REQUIRED for this connection-only case. No Facebook writes authorized.",
       "historicalBlockers20261005": {
         "externalBlocker": "Ordinary managed Page/task, Business Login configuration, Page token and Meta app review unverified.",
         "toolingBlocker": "Live browser request-header policy failed to load; no authorized provider OAuth session inspected.",
         "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
       },
       "blockerClass": [
-        "TOOL_ACCESS",
-        "HUMAN_CONSENT",
-        "UNVERIFIED"
-      ]
+        "CONFIGURATION",
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT"
+      ],
+      "connectionRecoveryEvidence": "../facebook-connection-20261008/OPERATOR-PLAN.md"
     },
     {
       "provider": "facebook",
@@ -2256,8 +2263,15 @@
     "date": "2026-10-08",
     "evidence": "../linkedin-publishing-20261008/EVIDENCE.json",
     "approvalCandidate": "../linkedin-publishing-20261008/PILOT-APPROVAL.md",
-    "execution": "SYNTHETIC_ENGINEERING_CANDIDATE; optional write consent/create/delete NOT_RUN",
+    "execution": "FINAL_SOURCE_PREVIEW_DEPLOYED_CLOUD_CHECKS_PASS; real write consent/create/delete/media/schedule NOT_RUN",
     "liveStatusesPromoted": false,
-    "originalCasesPreserved": 196
+    "originalCasesPreserved": 196,
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "requiredChecksEvidence": "../linkedin-publishing-20261008/evidence/github-b7ee0e68.json",
+    "privateDraftEvidence": "../linkedin-publishing-20261008/evidence/private-pilot-draft-b7ee0e68.json",
+    "writeGrantEvidence": "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+    "heldApprovedJobEvidence": "../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json",
+    "currentCandidateSource": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "livePublishingPassed": false
   }
 }

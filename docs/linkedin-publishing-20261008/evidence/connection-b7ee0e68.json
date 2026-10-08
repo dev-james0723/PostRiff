@@ -1,0 +1,213 @@
+{
+  "schema": "rafii.linkedIn.preview-observation.v1",
+  "atUtc": "2026-10-08T05:24:07.079Z",
+  "environment": "preview",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "deploymentId": "dpl_E6mrgNSbYf8ZSHG6XxU6rynUTg3T",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "url": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/app/channels",
+  "app": {
+    "id": "263833009",
+    "name": "James Studio"
+  },
+  "observations": [
+    {
+      "tester": "B",
+      "status": 200,
+      "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+      "channels": [
+        {
+          "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+          "scopes": [
+            "openid",
+            "profile"
+          ],
+          "state": "read_verified",
+          "publish": "Assisted"
+        }
+      ],
+      "runtime": {
+        "approved": false,
+        "code": "share_evidence_missing",
+        "runtimeEnvironmentVerified": true,
+        "runtimeEnvironment": "preview",
+        "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+      }
+    },
+    {
+      "tester": "A",
+      "status": 200,
+      "workspaceRef": "a58131ee20e1ece4c84521a0f93c264b",
+      "channels": [
+        {
+          "connectionRef": "73f65b0074242d0fb7ab3cf1866af5f1",
+          "scopes": [
+            "openid",
+            "profile",
+            "w_member_social"
+          ],
+          "state": "read_verified",
+          "publish": "Assisted"
+        }
+      ],
+      "runtime": {
+        "approved": false,
+        "code": "share_evidence_missing",
+        "runtimeEnvironmentVerified": true,
+        "runtimeEnvironment": "preview",
+        "message": "Rafii member publishing access is not verified for this deployment. The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app."
+      }
+    }
+  ],
+  "priorRealIdentityRecheck": {
+    "source": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+    "atUtc": "2026-10-08T05:18:59.166Z",
+    "normalUI": true,
+    "status": 200,
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "sameApplicationCodeAtCurrentSource": true,
+    "refreshTest": false
+  },
+  "ordinaryExternalProof": "Tester B non-Founder and owner-attested no provider-app admin/developer/tester role; Tester A app-role independence unverified.",
+  "negativeCrossTenantTest": false,
+  "freshSessionAfterReconnect": false,
+  "realIPhone": false,
+  "realPublication": false,
+  "configurationActivation": false,
+  "networkObserversDisabled": true,
+  "cookiesOrTokensExported": false,
+  "redactedScreenshot": "/Users/ouxianxing/.codex/visualizations/2026/10/07/01a114a0-509b-7a43-a3bc-8f52d884ea1a/rafii-social-recovery-20261008/linkedin-b-preview-b7ee0e68.jpg",
+  "providerRuntime": [
+    {
+      "provider": "linkedin",
+      "configured": true,
+      "connectReady": true,
+      "publicConnectionReady": true,
+      "configurationState": "configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": true,
+        "clientSecret": true
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback"
+    },
+    {
+      "provider": "threads",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/threads/callback"
+    },
+    {
+      "provider": "instagram",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/instagram/callback"
+    },
+    {
+      "provider": "x",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/x/callback"
+    },
+    {
+      "provider": "facebook",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback"
+    },
+    {
+      "provider": "youtube",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/youtube/callback"
+    },
+    {
+      "provider": "tiktok",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/tiktok/callback"
+    },
+    {
+      "provider": "pinterest",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "reviewStatus": "not_confirmed",
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/pinterest/callback"
+    }
+  ]
+}
