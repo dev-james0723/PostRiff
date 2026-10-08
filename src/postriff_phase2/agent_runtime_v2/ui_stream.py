@@ -454,7 +454,9 @@ class _Producer:
                     return
                 status = (outcome.usage or {}).get("status")
                 if status not in ("ok", "incomplete"):
-                    yield from self._terminal("ui.failed", "failed", "provider_timeout" if status == "timeout" else "provider_error", outcome.usage)
+                    given = (outcome.usage or {}).get("reason")
+                    reason = given if given in contracts.REASON_CODES else ("provider_timeout" if status == "timeout" else "provider_error")
+                    yield from self._terminal("ui.failed", "failed", reason, outcome.usage)
                     return
                 candidate = ui_presenter.strip_fences(outcome.candidate)
                 validation = self._validate(candidate)
@@ -479,6 +481,7 @@ class _Producer:
             raise
         except Exception as error:  # noqa: BLE001 — every failure ends in a terminal frame with a stable reason
             log.error(json.dumps({"event": "agent_ui.stream_failed", "errorClass": type(error).__name__, "requestId": self.request_id}))
+            self._stop_worker()          # book what the provider task knows before settling, never after
             frame = self._safe_terminal("ui.failed", "failed", "internal_error")
             if frame is not None:
                 yield frame

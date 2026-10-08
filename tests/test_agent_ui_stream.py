@@ -399,6 +399,30 @@ class Failures(Base):
         self.assertEqual((events[-1]["kind"], events[-1]["payload"]["reason"]), ("ui.failed", "budget"))
         self.assertEqual(len(self.transport.calls), 1)
 
+    def test_database_failure_mid_stream_ends_in_a_terminal_frame_and_settles(self):
+        self.transport.scripts.append([("delta", "root = RafiiRoot([a])\n"), ("sleep", 0.2), ("delta", "a = x\n"), ("final", usage_final())])
+        original = self.store.append_event
+        calls = {"n": 0}
+
+        def flaky(conn_or_cur, artifact_id, attempt_id, revision, kind, payload):
+            if kind == "ui.delta":
+                calls["n"] += 1
+                if calls["n"] == 2:
+                    raise ConnectionError("database went away")
+            return original(conn_or_cur, artifact_id, attempt_id, revision, kind, payload)
+        with mock.patch.object(ui_store, "append_event", flaky):
+            _, _, events = self.run_one(self.db.add_parent())
+        self.assertEqual((events[-1]["kind"], events[-1]["payload"]["reason"]), ("ui.failed", "internal_error"))
+        self.assertEqual(len(self.db.settlements_for(self.only_reservation()["id"])), 1)
+        self.assertEqual(next(iter(self.db.attempts.values()))["state"], "failed")
+
+    def test_no_time_left_is_a_timeout_without_dispatch(self):
+        with mock.patch.object(ui_stream, "GENERATION_SECONDS", 0.5):
+            _, _, events = self.run_one(self.db.add_parent())
+        self.assertEqual(events[-1]["payload"]["reason"], "provider_timeout")
+        self.assertEqual(self.transport.calls, [])
+        self.assertEqual([(s["costState"], s["actual"]) for s in self.db.settlements_for(self.only_reservation()["id"])], [("released", 0)])
+
     def test_validator_unavailable_is_not_repaired(self):
         self.validator.verdicts = ["unavailable"]
         _, _, events = self.run_one(self.db.add_parent())
