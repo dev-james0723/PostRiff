@@ -1,16 +1,14 @@
 'use client';
 
-import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
-import { StatefulButton } from '@/components/motion/button';
-import { DigitSwap } from '@/components/motion/digit-swap';
-import { ActiveFilters, FilterPanel, FilterSelect, SegmentedControl, StateMessage, Surface, Workbar } from '@/components/rafii';
+import { FilterSelect, SegmentedControl, StateMessage, Surface } from '@/components/rafii';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,24 +21,39 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
+import type { Locator, LibraryFilters as SearchFilters, LibraryScope } from '@/lib/api/library-intelligence-types';
 import { putSignedUpload } from '@/lib/api/upload';
 import { keys, useAct } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
-import { formatBytes } from '@/lib/time';
-import { cn } from '@/lib/utils';
-import { CollectionManager, useLibraryCollections } from './library-organizer';
-import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata } from '../agent/attachments/video-file';
+import { bottomClearance } from '@/lib/library/layout';
+import { MAX_SELECTED, assetRefFor, normalizeKey, reconcileSelection, scrollKey, type LibraryKindParam, type LibrarySortParam } from '@/lib/library/url-state';
+import { countLabel, coverageLabel, processingLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
 import { kindOf } from '@/lib/media/asset-kinds';
+import { useNowPlaying } from '@/lib/media/now-playing';
+import { formatBytes } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
+import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
+import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata } from '../agent/attachments/video-file';
+import { AssetCard, assetTitle, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetListRow } from './asset-list-row';
 import { AssetDetail } from './asset-detail';
-import { MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibraryKindFilter, type LibrarySort } from './use-library';
+import { useLibraryCollections } from './library-organizer';
+import { MAX_PICK_BYTES, useLibrary, type LibraryAsset } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
+import { AddMenu } from './intelligence/add-menu';
+import { AnimatedCount } from './intelligence/animated-count';
+import { BatchBar, type SelectedItem } from './intelligence/batch-bar';
+import { CollectionRail } from './intelligence/collection-rail';
+import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewControls } from './intelligence/library-toolbar';
+import { HitDetails, resolveHitAsset } from './intelligence/search-results';
+import { useBatchActions } from './intelligence/use-batch-actions';
+import { groupHits, useLibraryIntelligence, useLibrarySearch } from './intelligence/use-library-search';
+import { useLibraryUrlState } from './intelligence/use-library-url-state';
 
 const infoContent = {
   title: 'Library',
@@ -55,7 +68,7 @@ const infoContent = {
     },
     {
       title: 'Current upload paths',
-      description: 'Add photos, MP4/MOV videos, audio, PDF, Office documents, text and other files. Documents are indexed in the background. All files remain private to this workspace.'
+      description: 'Add photos, MP4/MOV videos, audio, PDF, Office documents, text and other files, paste a public link, or write a quick note. Documents are indexed in the background. All files remain private to this workspace.'
     },
     {
       title: 'Used',
@@ -64,36 +77,16 @@ const infoContent = {
   ]
 };
 
-const FILTERS: { value: LibraryFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'unused', label: 'Unused' },
-  { value: 'used', label: 'Used' }
-];
-
 const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/quicktime']);
 const VIDEO_UPLOAD_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
 
-const SORT_LABELS: Record<LibrarySort, string> = {
-  newest: 'Newest first',
-  stored: 'Workspace order',
-  largest: 'Largest first'
+const SKELETON_KEYS = Array.from({ length: 8 }, (_, index) => `skeleton-${index}`);
+
+/* Grid geometry per density. Comfortable keeps two columns on a 390 px phone so the first item shows in full. */
+const GRID: Record<'comfortable' | 'compact', string> = {
+  comfortable: 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4 2xl:grid-cols-5',
+  compact: 'grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8'
 };
-
-const KIND_LABELS: Record<LibraryKindFilter, string> = {
-  all: 'All assets',
-  image: 'Photos',
-  video: 'Videos',
-  audio: 'Audio',
-  document: 'Documents',
-  file: 'Files'
-};
-
-type LibraryViewMode = 'gallery' | 'list';
-
-const SKELETON_KEYS = Array.from({ length: 12 }, (_, index) => `skeleton-${index}`);
-
-/* The one inverted commitment (Upload assets, DNA §21.9) on the motion button. */
-const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent hover:brightness-[1.06]';
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
@@ -127,7 +120,7 @@ function UploadTray({ items, progress, onDismiss }: { items: UploadItem[]; progr
           {progress ? uploadingText(progress) : `${done} of ${items.length} uploaded`}
         </h3>
         {!progress && (
-          <Button variant='quiet' size='lg' onClick={onDismiss}>
+          <Button variant='quiet' size='control' className='h-11' onClick={onDismiss}>
             Dismiss
           </Button>
         )}
@@ -155,97 +148,250 @@ function UploadTray({ items, progress, onDismiss }: { items: UploadItem[]; progr
   );
 }
 
-/** Loading keeps the loaded geometry (DNA §20.1): the workbar's shape, then the grid. */
-function LibrarySkeleton() {
+/** Loading keeps the loaded geometry (DNA §20.1). */
+function ResultsSkeleton({ density }: { density: 'comfortable' | 'compact' }) {
   return (
-    <div className='flex flex-col gap-4' role='status' aria-busy='true' aria-label='Loading the library'>
-      <div className='flex flex-col gap-2 md:flex-row md:items-center'>
-        <Skeleton className='h-11 w-full rounded-[var(--rafii-radius-control)] md:flex-1' />
-        <Skeleton className='h-11 w-full rounded-[var(--rafii-radius-segment)] md:w-64' />
-        <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)] md:w-28' />
-      </div>
-      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'>
-        {SKELETON_KEYS.map((key) => (
-          <Skeleton key={key} className='aspect-[4/5] w-full rounded-[var(--rafii-radius-card)]' />
-        ))}
-      </div>
+    <div className={GRID[density]} role='status' aria-busy='true' aria-label='Loading the library'>
+      {SKELETON_KEYS.map((key) => (
+        <Skeleton key={key} className='aspect-[4/5] w-full rounded-[var(--rafii-radius-card)]' />
+      ))}
     </div>
   );
 }
 
+/** One polite live region for the page: search, upload and batch results, without repeating itself. */
+function useAnnouncer() {
+  const [message, setMessage] = useState('');
+  const last = useRef({ text: '', at: 0 });
+  const announce = useCallback((text: string) => {
+    const now = Date.now();
+    if (!text || (text === last.current.text && now - last.current.at < 4000)) return;
+    last.current = { text, at: now };
+    setMessage('');
+    window.requestAnimationFrame(() => setMessage(text));
+  }, []);
+  return [message, announce] as const;
+}
+
+/** The collection rail sits beside the results from 1024 px; below that it is a one-row switcher. */
+function useWideLayout() {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return wide;
+}
+
+const RAIL_KEY = 'rafii-library-rail-collapsed';
+
+function readRailCollapsed() {
+  try {
+    return window.localStorage.getItem(RAIL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function LibraryView() {
+  // The address carries the Library's state (nuqs); the boundary keeps the first render static-safe.
+  return (
+    <Suspense fallback={null}>
+      <LibraryPage />
+    </Suspense>
+  );
+}
+
+function LibraryPage() {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const canApprove = checkAccess(access, { permission: 'approve' });
+  const isOwner = access.role === 'owner';
   const reduce = useReducedMotion();
   const client = useQueryClient();
   const { api, workspaceId } = useWorkspaceApi();
   const act = useAct();
   const upload = useUploadQueue();
-
-  const [filter, setFilter] = useState<LibraryFilter>('all');
-  const [kindFilter, setKindFilter] = useState<LibraryKindFilter>('all');
-  const [view, setView] = useState<LibraryViewMode>('gallery');
-  const [sort, setSort] = useState<LibrarySort>('newest');
-  const [query, setQuery] = useState('');
-  const [tag, setTag] = useState('');
-  const [collection, setCollection] = useState('');
-  const collections = useLibraryCollections();
-  const pendingFile = useRef<{ file: File; assetId: string; put: boolean; video?: { frames: { at: number; data: string }[]; locationCleared: boolean } } | null>(null);
-  const [fileFailure, setFileFailure] = useState<string | null>(null);
-  const [fileProgress, setFileProgress] = useState('');
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const filePicker = useRef<HTMLInputElement>(null);
   const auth = useAuth();
-  const library = useLibrary({ filter, kindFilter, sort, query, tag, collection });
-  const { snapshot, assets, visible, counts, totals } = library;
+  const isMobile = useIsMobile();
+  const wide = useWideLayout();
+  const { state: url, update } = useLibraryUrlState();
+  const intel = useLibraryIntelligence();
+  const collections = useLibraryCollections();
+  const [announcement, announce] = useAnnouncer();
 
-  const [detail, setDetail] = useState<LibraryAsset | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  /* --- query, scope and search --------------------------------------------------------------------------------- */
+
+  // The field answers every keystroke; the address follows a moment later (and never carries a link or token).
+  const [query, setQuery] = useState(url.q);
+  useEffect(() => {
+    const timer = window.setTimeout(() => update({ q: query }), 300);
+    return () => window.clearTimeout(timer);
+  }, [query, update]);
+
+  const collectionList = useMemo(() => collections.data?.collections ?? [], [collections.data]);
+  const activeCollection = url.collection ? (collectionList.find((collection) => collection.id === url.collection) ?? null) : null;
+  const selection = url.sel;
+  const scopeKind: ScopeKind = url.scope === 'selection' && selection.length ? 'selection' : url.collection ? 'collection' : 'workspace';
+  const scope = { kind: scopeKind, collectionName: activeCollection?.name ?? null, selectedCount: selection.length };
+  const searchScope: LibraryScope = useMemo(
+    () =>
+      scopeKind === 'selection'
+        ? { kind: 'selection', assetRefs: selection.map(assetRefFor) }
+        : scopeKind === 'collection'
+          ? { kind: 'collection', collectionId: normalizeKey(url.collection) }
+          : { kind: 'workspace' },
+    [scopeKind, selection, url.collection]
+  );
+  const searchFilters: SearchFilters = useMemo(
+    () => ({
+      ...(url.kind !== 'all' ? { kinds: [url.kind] } : {}),
+      ...(url.tag ? { tags: [url.tag] } : {}),
+      ...(url.use !== 'all' ? { usage: url.use } : {})
+    }),
+    [url.kind, url.tag, url.use]
+  );
+  const search = useLibrarySearch({ enabled: intel.retrieval, query, scope: searchScope, filters: searchFilters });
+  // Intelligent results while that search answers; the deterministic Library otherwise, always.
+  const intelligent = search.active && !search.failed;
+
+  const library = useLibrary({
+    filter: url.use,
+    kindFilter: url.kind,
+    sort: url.sort,
+    query: intelligent ? '' : query,
+    tag: url.tag,
+    collection: scopeKind === 'collection' ? url.collection : '',
+    onlyIds: scopeKind === 'selection' ? selection : null
+  });
+  const { snapshot, assets } = library;
+  const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+
+  /* --- batch, overlay and selection ---------------------------------------------------------------------------- */
+
+  const batch = useBatchActions({ assets: assetsById, onAnnounce: announce });
+  const shown = useMemo(
+    () =>
+      library.visible
+        .map(batch.apply)
+        .filter((asset): asset is LibraryAsset => asset !== null)
+        .filter((asset) => scopeKind !== 'collection' || Boolean(asset.collections?.includes(url.collection))),
+    [library.visible, batch.apply, scopeKind, url.collection]
+  );
+  const groups = useMemo(() => groupHits(search.hits), [search.hits]);
+  const hitItems = useMemo(
+    () => groups.map((group) => ({ group, asset: batch.apply(resolveHitAsset(group, library.byKey)) })).filter((entry): entry is { group: (typeof groups)[number]; asset: LibraryAsset } => entry.asset !== null),
+    [groups, library.byKey, batch.apply]
+  );
+  const orderedIds = intelligent ? hitItems.map((entry) => entry.asset.id) : shown.map((asset) => asset.id);
+  const selectedSet = useMemo(() => new Set(selection), [selection]);
+  const lastToggled = useRef<string | null>(null);
+
+  const setSelection = useCallback(
+    (ids: string[]) => {
+      if (ids.length > MAX_SELECTED) announce(`Up to ${MAX_SELECTED} items can be selected at once.`);
+      update({ sel: ids.slice(0, MAX_SELECTED), ...(ids.length === 0 && url.scope === 'selection' ? { scope: 'all' as const } : {}) });
+    },
+    [announce, update, url.scope]
+  );
+
+  const toggle = useCallback(
+    (id: string, on: boolean, extend: boolean) => {
+      const next = new Set(selection);
+      const anchor = lastToggled.current;
+      if (extend && anchor && orderedIds.includes(anchor) && orderedIds.includes(id)) {
+        const [from, to] = [orderedIds.indexOf(anchor), orderedIds.indexOf(id)].sort((a, b) => a - b);
+        for (const value of orderedIds.slice(from, to + 1)) {
+          if (on) next.add(value);
+          else next.delete(value);
+        }
+      } else if (on) next.add(id);
+      else next.delete(id);
+      lastToggled.current = id;
+      setSelection([...next]);
+    },
+    [orderedIds, selection, setSelection]
+  );
+
+  // Items that are gone (deleted elsewhere, or access withdrawn) leave the selection with a generic notice. Only the
+  // whole, unfiltered list can tell: a filter or a collection hides items without them being gone.
+  const unfiltered = !query.trim() && url.kind === 'all' && !url.tag && scopeKind === 'workspace';
+  useEffect(() => {
+    if (!library.complete || snapshot.isPending || selection.length === 0 || intelligent || !unfiltered || library.normalized.isFetching) return;
+    const { kept, dropped } = reconcileSelection(selection, assets.map((asset) => asset.id), true);
+    if (dropped > 0) {
+      setSelection(kept);
+      toast.info('Some selected items are no longer available, so they were removed from your selection.');
+    }
+  }, [library.complete, library.normalized.isFetching, snapshot.isPending, selection, assets, intelligent, unfiltered, setSelection]);
+
+  // After a delete run, the deleted items simply leave the selection.
+  const lastRun = batch.run;
+  useEffect(() => {
+    if (!lastRun || lastRun.running || lastRun.kind !== 'delete') return;
+    const gone = new Set(lastRun.outcomes.filter((outcome) => outcome.status === 'applied' || outcome.status === 'skipped').map((outcome) => outcome.id));
+    if (selection.some((id) => gone.has(id))) setSelection(selection.filter((id) => !gone.has(id)));
+  }, [lastRun, selection, setSelection]);
+
+  /* --- detail ----------------------------------------------------------------------------------------------------- */
+
+  const [detailAsset, setDetailAsset] = useState<LibraryAsset | null>(null);
+  const [focusLocator, setFocusLocator] = useState<Locator | null>(null);
+  const phase2Assets = snapshot.data?.state.phase2?.assets;
+  // The item opened in this visit, or one named by the address (a deep link or a return from a draft).
+  const known = detailAsset && url.asset && normalizeKey(detailAsset.id) === normalizeKey(url.asset) ? detailAsset : null;
+  const fromLists = url.asset && !known ? (library.byKey.get(normalizeKey(url.asset)) ?? phase2Assets?.find((asset) => asset.id === url.asset) ?? null) : null;
+  // Not on the loaded pages: ask for that one item. Media always arrive with the snapshot, so this is for files.
+  const deepLink = useQuery({
+    queryKey: ['library-file-detail', workspaceId, url.asset],
+    queryFn: () => api.libraryFile(workspaceId, url.asset),
+    enabled: Boolean(workspaceId && url.asset && !known && !fromLists && !snapshot.isPending && !library.normalized.isPending),
+    retry: false
+  });
+  const resolvedDetail = known ?? fromLists ?? deepLink.data?.asset ?? null;
+  useEffect(() => {
+    if (resolvedDetail && resolvedDetail !== detailAsset) setDetailAsset(resolvedDetail);
+  }, [resolvedDetail, detailAsset]);
+  // Gone or no longer permitted: close it and say so without naming it.
+  const detailGone = Boolean(url.asset) && !resolvedDetail && deepLink.isError && deepLink.error instanceof ApiError && [403, 404].includes(deepLink.error.status);
+  useEffect(() => {
+    if (!detailGone) return;
+    update({ asset: '' });
+    toast.info('That item is no longer available.');
+  }, [detailGone, update]);
+  const current = detailAsset ? (assetsById.get(detailAsset.id) ?? detailAsset) : null;
+  const detailOpen = Boolean(url.asset) && current !== null && normalizeKey(current.id) === normalizeKey(url.asset);
+
+  const openDetail = useCallback(
+    (asset: LibraryAsset, locator: Locator | null = null) => {
+      setDetailAsset(asset);
+      setFocusLocator(locator);
+      update({ asset: asset.id });
+    },
+    [update]
+  );
+
+  /** Playback only ever starts from a press on a result: never on opening anything. */
+  const playFrom = useCallback(
+    async (asset: LibraryAsset, startMs: number) => {
+      try {
+        const kind = kindOf(asset);
+        const { url: mediaUrl } = kind === 'video' ? await api.mediaUrl(workspaceId, asset.id) : await api.libraryFileUrl(workspaceId, asset.id);
+        useNowPlaying.getState().open({ kind: kind === 'video' ? 'video' : 'audio', workspaceId, assetId: asset.id, title: assetTitle(asset), url: mediaUrl, startAt: startMs / 1000 });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Playback unavailable');
+      }
+    },
+    [api, workspaceId]
+  );
+
+  /* --- single delete ---------------------------------------------------------------------------------------------- */
+
   const [pendingDelete, setPendingDelete] = useState<LibraryAsset | null>(null);
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(() => new Set());
-  /**
-   * A preview request was answered "Private media storage is not configured." The latest answer wins: a preview
-   * that loads afterwards clears it. Other 503s (storage briefly unreachable, a restart) keep Retry on the card instead.
-   */
-  const [mediaStorageMissing, setMediaStorageMissing] = useState(false);
-  const markStorageMissing = useCallback(() => setMediaStorageMissing(true), []);
-  const markPreviewLoaded = useCallback(() => setMediaStorageMissing(false), []);
-
-  const { getRootProps, getInputProps, isDragActive, isDragReject, open: openPicker } = useDropzone({
-    maxSize: 50 * 1024 * 1024,
-    minSize: 1,
-    multiple: true,
-    noClick: true,
-    noKeyboard: true,
-    disabled: !canEdit || library.revision === null,
-    onDrop: (accepted, rejected) => {
-      for (const rejection of rejected) toast.error(rejectionMessage(rejection));
-      void uploadFiles(accepted);
-    }
-  });
-
-  // The asset stays in state while the sheet closes; it only counts as open while the image still exists.
-  const current = detail ? (assets.find((asset) => asset.id === detail.id) ?? detail) : null;
-  const detailVisible = detailOpen && detail !== null && assets.some((asset) => asset.id === detail.id);
-  const uploadStorageMissing = saysStorageNotConfigured(upload.blocker);
-  const storageMissing = mediaStorageMissing || uploadStorageMissing;
-
-  // The sort is a display choice inside the labelled Filters panel; the default is not a narrowing (DNA §10.5).
-  const defaultSort: LibrarySort = library.hasTimestamps ? 'newest' : 'stored';
-  const sortActive = library.sort !== defaultSort ? 1 : 0;
-  const kindActive = kindFilter === 'all' ? 0 : 1;
-  const filterCount = sortActive + kindActive + (tag ? 1 : 0) + (collection ? 1 : 0);
-  const sortOptions = [...(library.hasTimestamps ? [{ value: 'newest', label: SORT_LABELS.newest }] : []), { value: 'stored', label: SORT_LABELS.stored }, { value: 'largest', label: SORT_LABELS.largest }];
-  const activeFilterSummary = [
-    kindActive ? KIND_LABELS[kindFilter] : null,
-    sortActive ? SORT_LABELS[library.sort] : null
-  ].filter(Boolean).join(' · ');
-
-  function openDetail(asset: LibraryAsset) {
-    setDetail(asset);
-    setDetailOpen(true);
-  }
 
   async function remove(asset: LibraryAsset) {
     const revision = library.revision;
@@ -259,7 +405,9 @@ export function LibraryView() {
       } else {
         await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
       }
-      // The card leaves the grid, so success needs no toast.
+      if (url.asset && normalizeKey(url.asset) === normalizeKey(asset.id)) update({ asset: '' });
+      // The card leaves the grid; the announcement says so once.
+      announce(`${assetTitle(asset)} deleted.`);
     } catch (error) {
       toast.error('Couldn’t delete this asset', { description: error instanceof ApiError ? error.message : undefined });
       if (error instanceof ApiError && error.status === 409) {
@@ -273,6 +421,37 @@ export function LibraryView() {
       });
     }
   }
+
+  /* --- uploads (the image compatibility path, documents and videos stay as they were) ---------------------------- */
+
+  const pendingFile = useRef<{ file: File; assetId: string; put: boolean; video?: { frames: { at: number; data: string }[]; locationCleared: boolean } } | null>(null);
+  const [fileFailure, setFileFailure] = useState<string | null>(null);
+  const [fileProgress, setFileProgress] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const filePicker = useRef<HTMLInputElement>(null);
+  /**
+   * A preview request was answered "Private media storage is not configured." The latest answer wins: a preview
+   * that loads afterwards clears it. Other 503s (storage briefly unreachable, a restart) keep Retry on the card instead.
+   */
+  const [mediaStorageMissing, setMediaStorageMissing] = useState(false);
+  const markStorageMissing = useCallback(() => setMediaStorageMissing(true), []);
+  const markPreviewLoaded = useCallback(() => setMediaStorageMissing(false), []);
+
+  const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
+    maxSize: 50 * 1024 * 1024,
+    minSize: 1,
+    multiple: true,
+    noClick: true,
+    noKeyboard: true,
+    disabled: !canEdit || library.revision === null,
+    onDrop: (accepted, rejected) => {
+      for (const rejection of rejected) toast.error(rejectionMessage(rejection));
+      void uploadFiles(accepted);
+    }
+  });
+
+  const uploadStorageMissing = saysStorageNotConfigured(upload.blocker);
+  const storageMissing = mediaStorageMissing || uploadStorageMissing;
 
   async function uploadLibraryFile(file: File) {
     if (!canEdit) return;
@@ -336,9 +515,17 @@ export function LibraryView() {
       if (tooLong) throw new Error(tooLong);
       const blanked = await blankLocation(file);
       const frames = await extractFrames(blanked.blob);
-      const encoded = await Promise.all(frames.map(async (frame) => ({ at: frame.at, data: await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] ?? ''); reader.onerror = () => reject(new Error('Could not prepare preview')); reader.readAsDataURL(frame.blob);
-      }) })));
+      const encoded = await Promise.all(
+        frames.map(async (frame) => ({
+          at: frame.at,
+          data: await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+            reader.onerror = () => reject(new Error('Could not prepare preview'));
+            reader.readAsDataURL(frame.blob);
+          })
+        }))
+      );
       const ticket = await api.beginVideoUpload(workspaceId, { mime: checked.mime, bytes: blanked.blob.size, duration: metadata?.duration ?? null, width: metadata?.width ?? null, height: metadata?.height ?? null });
       pending = { file, assetId: ticket.upload.assetId, put: false, video: { frames: encoded, locationCleared: blanked.locationCleared } };
       pendingFile.current = pending;
@@ -356,6 +543,7 @@ export function LibraryView() {
 
   async function uploadFiles(files: File[]) {
     if (uploadingFile) return;
+    // Photos keep the compatibility path (HEIC and other formats become JPEG in the browser first).
     const photos = files.filter((file) => file.type.startsWith('image/'));
     for (const file of photos.filter((photo) => photo.size > MAX_PICK_BYTES)) toast.error(`${file.name} is over 30 MB`);
     upload.enqueue(photos.filter((photo) => photo.size <= MAX_PICK_BYTES));
@@ -365,26 +553,158 @@ export function LibraryView() {
     }
   }
 
-  const uploadButton = canEdit ? (
-    <StatefulButton
-      data-tour='library-upload'
-      className={ACTION}
-      state={upload.buttonState}
-      icon={<Icons.upload className='size-4' />}
-      loadingText={uploadingText(upload.progress)}
-      successText={upload.resultLabel || 'Uploaded'}
-      errorText={upload.resultLabel || 'Upload failed'}
-      // Each upload sends the snapshot revision, so the button waits until the snapshot has loaded.
-      disabled={library.revision === null}
-      onClick={openPicker}
-    >
-      Upload images
-    </StatefulButton>
-  ) : undefined;
+  // A finished photo batch is announced once (the tray keeps the per-file detail).
+  const uploadResult = upload.progress === null ? upload.resultLabel : '';
+  useEffect(() => {
+    if (uploadResult) announce(uploadResult);
+  }, [uploadResult, announce]);
+
+  /* --- layout state ----------------------------------------------------------------------------------------------- */
+
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useEffect(() => setRailCollapsed(readRailCollapsed()), []);
+  const collapseRail = useCallback((value: boolean) => {
+    setRailCollapsed(value);
+    try {
+      window.localStorage.setItem(RAIL_KEY, value ? '1' : '0');
+    } catch {
+      /* storage blocked: the rail simply opens next time */
+    }
+  }, []);
+
+  const track = useNowPlaying((state) => state.track);
+  const playerExpanded = useNowPlaying((state) => state.expanded);
+  const clearance = bottomClearance({ mobile: isMobile, playerOpen: Boolean(track), playerExpanded: playerExpanded && track?.kind !== 'audio' });
+
+  // Return to the same place: the scroll position is kept per view for this browser tab.
+  const viewKey = scrollKey(workspaceId, { ...url, q: query });
+  useEffect(() => {
+    let frame = 0;
+    const save = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        try {
+          window.sessionStorage.setItem(viewKey, String(Math.round(window.scrollY)));
+        } catch {
+          /* storage blocked: no restore */
+        }
+      });
+    };
+    window.addEventListener('scroll', save, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', save);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [viewKey]);
+  const restoredScroll = useRef(false);
+  const resultCount = intelligent ? hitItems.length : shown.length;
+  useEffect(() => {
+    if (restoredScroll.current || snapshot.isPending || resultCount === 0) return;
+    restoredScroll.current = true;
+    let saved = 0;
+    try {
+      saved = Number(window.sessionStorage.getItem(viewKey) ?? 0);
+    } catch {
+      saved = 0;
+    }
+    if (saved > 0) window.requestAnimationFrame(() => window.scrollTo({ top: saved }));
+  }, [snapshot.isPending, resultCount, viewKey]);
+
+  // Keyboard: Escape clears the selection, Ctrl/Cmd+A selects every shown item, while focus is in the results.
+  const resultsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = resultsRef.current;
+    if (!node) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input[type="search"], input[type="text"], textarea')) return;
+      if (event.key === 'Escape' && selection.length) {
+        event.preventDefault();
+        setSelection([]);
+        announce('Selection cleared.');
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && orderedIds.length) {
+        event.preventDefault();
+        setSelection([...new Set([...selection, ...orderedIds])]);
+      }
+    };
+    node.addEventListener('keydown', onKey);
+    return () => node.removeEventListener('keydown', onKey);
+  }, [selection, orderedIds, setSelection, announce]);
+
+  // Settled result counts are announced once per query, never while results are still arriving.
+  const settling = intelligent ? search.loading : library.normalized.isFetching;
+  const settledCount = intelligent ? hitItems.length : shown.length;
+  const settledMessage = !query.trim() || settling ? '' : settledCount === 0 ? `No items match “${query.trim()}”.` : `${countLabel(settledCount, 'matching item')} for “${query.trim()}”${intelligent && search.nextCursor ? ', more available' : ''}.`;
+  useEffect(() => {
+    if (settledMessage) announce(settledMessage);
+  }, [settledMessage, announce]);
+
+  /* --- render ------------------------------------------------------------------------------------------------------ */
+
+  const defaultSort: LibrarySortParam = library.hasTimestamps ? 'newest' : 'stored';
+  const sortOptions: LibrarySortParam[] = [...(library.hasTimestamps ? (['newest'] as const) : []), 'stored', 'largest'];
+  const exactCounts = library.complete && !intelligent;
+  const kindCounts = intelligent ? (search.facets?.kinds as Partial<Record<LibraryKindParam, number>> | undefined) ?? null : exactCounts ? library.kindCounts : null;
+  const notice = library.storage ? storageNotice(library.storage.usedBytes, library.storage.limitBytes) : null;
+  const filtersActive = url.kind !== 'all' || Boolean(url.tag) || url.use !== 'all' || scopeKind !== 'workspace';
+  const normalizedQuery = query.trim();
+  const density = url.density;
+
+  const facetTotal = search.facets?.kinds ? Object.values(search.facets.kinds).reduce((sum, value) => sum + (typeof value === 'number' ? value : 0), 0) : null;
+  const statusLine: ReactNode = intelligent ? (
+    <span className='flex flex-col gap-0.5'>
+      <span>{search.loading && !hitItems.length ? 'Searching…' : totalLabel({ total: facetTotal, loaded: hitItems.length, complete: !search.nextCursor, singular: 'matching item' })}</span>
+      {search.coverage ? <span>{coverageLabel(search.coverage)}</span> : null}
+    </span>
+  ) : (
+    <span className='flex flex-wrap items-center gap-x-1'>
+      {exactCounts && url.use === 'all' && scopeKind !== 'selection' ? (
+        <AnimatedCount value={library.serverTotal ?? shown.length} />
+      ) : (
+        <span>{totalLabel({ total: url.use === 'all' && scopeKind !== 'selection' ? library.serverTotal : null, loaded: shown.length, complete: library.complete })}</span>
+      )}
+      {processingLabel(library.processingCount) ? <span>· {processingLabel(library.processingCount)}{library.complete ? '' : ' (of those loaded)'}</span> : null}
+    </span>
+  );
+
+  const selectedItems: SelectedItem[] = selection.map((id) => {
+    const asset = assetsById.get(id) ?? library.byKey.get(normalizeKey(id)) ?? null;
+    return { id, asset, title: asset ? assetTitle(asset) : 'An item not loaded on this page', ref: assetRefFor(id) };
+  });
+  const selectedUsed = selectedItems.filter((item) => item.asset && library.usesOf(item.asset.id).length > 0).length;
+
+  const cardProps = (asset: LibraryAsset, index: number, footer?: ReactNode) => ({
+    asset,
+    uses: library.usesOf(asset.id),
+    publishing: library.isPublishing(asset.id),
+    first: index === 0,
+    canEdit,
+    canApprove,
+    deleting: deletingIds.has(asset.id),
+    onOpen: () => openDetail(asset),
+    onDelete: () => setPendingDelete(asset),
+    onStorageMissing: markStorageMissing,
+    onPreviewLoaded: markPreviewLoaded,
+    selected: selectedSet.has(asset.id),
+    selecting: selection.length > 0,
+    onSelect: (on: boolean, extend: boolean) => toggle(asset.id, on, extend),
+    density,
+    footer
+  });
+
+  const renderItems = (items: { asset: LibraryAsset; footer?: ReactNode }[]) => (
+    <div role='list' aria-label='Library items' className={url.mode === 'gallery' ? GRID[density] : cn('flex flex-col', density === 'compact' ? 'gap-1.5' : 'gap-2')}>
+      <AnimatePresence initial={false}>
+        {items.map(({ asset, footer }, index) =>
+          url.mode === 'gallery' ? <AssetCard key={asset.id} {...cardProps(asset, index, footer)} /> : <AssetListRow key={asset.id} {...cardProps(asset, index, footer)} />
+        )}
+      </AnimatePresence>
+    </div>
+  );
 
   let content: ReactNode;
   if (snapshot.isPending) {
-    content = <LibrarySkeleton />;
+    content = <ResultsSkeleton density={density} />;
   } else if (snapshot.isError && !snapshot.data) {
     content = (
       <StateMessage
@@ -399,16 +719,9 @@ export function LibraryView() {
         }
       />
     );
-  } else if (assets.length === 0) {
+  } else if (assets.length === 0 && !normalizedQuery && !filtersActive && library.complete) {
     content = (
-      <motion.div
-        key='empty'
-        data-tour='library-empty'
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.2, ease: EASE_OUT }}
-        className='flex flex-1 flex-col'
-      >
+      <motion.div key='empty' data-tour='library-empty' initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.2, ease: EASE_OUT }} className='flex flex-1 flex-col'>
         <StateMessage
           kind='empty'
           media={
@@ -417,204 +730,98 @@ export function LibraryView() {
             </span>
           }
           title='No assets yet'
-          description={canEdit ? 'Upload a photo here. Videos added from Rafii chat also appear in this Library.' : 'Only editors can add media.'}
-          action={
-            canEdit ? (
-              <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null} title='Or drop JPEG or PNG files anywhere on this page'>
-                <Icons.upload aria-hidden />
-                Upload images
-              </Button>
-            ) : undefined
-          }
+          description={canEdit ? 'Upload a photo here. Videos added from Rafii chat also appear in this Library. Use Add to upload files, paste a link or write a quick note, or drop files anywhere on this page.' : 'Only editors can add media.'}
         />
       </motion.div>
     );
-  } else {
-    const normalizedQuery = query.trim();
+  } else if (intelligent) {
     content = (
-      <div className='flex flex-col gap-4'>
-        {/* WHAT (use filter) → FIND (search) → VIEW (sort, inside Filters); the Gallery is the one representation this collection has. */}
-        <Workbar
-          search={query}
-          onSearch={setQuery}
-          searchPlaceholder='Search titles, tags and extracted text'
-          searchLabel='Search Library assets by title, filename, summary, tag, hash or dimensions'
-          tabs={
-            <div data-tour='library-filter' className='sm:w-fit'>
-              <SegmentedControl
-                label='Filter images by use'
-                value={filter}
-                onChange={setFilter}
-                options={FILTERS.map((option) => ({
-                  value: option.value,
-                  label: (
-                    <>
-                      {option.label}
-                      <DigitSwap value={counts[option.value]} className='text-muted-foreground text-xs' />
-                    </>
-                  )
-                }))}
-              />
-            </div>
-          }
-          view={
-            <SegmentedControl
-              label='Library view'
-              value={view}
-              onChange={(value) => setView(value as LibraryViewMode)}
-              options={[
-                { value: 'gallery', label: 'Gallery' },
-                { value: 'list', label: 'List' }
-              ]}
-            />
-          }
-          filters={
-            <FilterPanel
-              count={filterCount}
-              onClear={() => {
-                setKindFilter('all');
-                setSort(defaultSort);
-                setTag('');
-                setCollection('');
-              }}
-            >
-              <FilterSelect
-                id='library-kind'
-                label='Type'
-                value={kindFilter}
-                onChange={(value) => setKindFilter(value as LibraryKindFilter)}
-                options={[
-                  { value: 'all', label: `${KIND_LABELS.all} (${library.kindCounts.all})` },
-                  { value: 'image', label: `${KIND_LABELS.image} (${library.kindCounts.image})` },
-                  { value: 'video', label: `${KIND_LABELS.video} (${library.kindCounts.video})` },
-                  { value: 'audio', label: `${KIND_LABELS.audio} (${library.kindCounts.audio})` },
-                  { value: 'document', label: `${KIND_LABELS.document} (${library.kindCounts.document})` },
-                  { value: 'file', label: `${KIND_LABELS.file} (${library.kindCounts.file})` }
-                ]}
-              />
-              <FilterSelect id='library-tag' label='Tag' value={tag} onChange={setTag} options={[{ value: '', label: 'All tags' }, ...library.tags.map((t) => ({ value: t, label: t }))]} />
-              <FilterSelect id='library-collection' label='Collection' value={collection} onChange={setCollection} options={[{ value: '', label: 'All collections' }, ...(collections.data?.collections ?? []).map((c) => ({ value: c.id, label: c.name }))]} />
-              <FilterSelect id='library-sort' label='Sort' value={library.sort} onChange={(value) => setSort(value as LibrarySort)} options={sortOptions} />
-            </FilterPanel>
-          }
-          count={
-            <span data-tour='library-stats' className='inline-flex items-center gap-1'>
-              <DigitSwap value={totals.count} />
-              <span>{totals.count === 1 ? 'asset' : 'assets'}</span>
-              <span className='hidden md:inline' title={totals.unknownBytes > 0 ? `${totals.unknownBytes} without a size` : undefined}>
-                · {formatBytes(totals.bytes)}
-              </span>
-            </span>
-          }
-          summary={
-            <ActiveFilters
-              count={filterCount}
-              summary={activeFilterSummary}
-              onClear={() => {
-                setKindFilter('all');
-                setSort(defaultSort);
-                setTag('');
-                setCollection('');
-              }}
-              clearLabel='Clear filters'
-            />
-          }
-        />
-
-        {visible.length === 0 ? (
-          // No matches is not an empty library (DNA §13.5): say what can be cleared.
+      <div className='flex flex-col gap-3'>
+        {search.warnings.length ? <StateMessage kind='partial' layout='inline' title={search.warnings[0]} /> : null}
+        {search.loading && hitItems.length === 0 ? (
+          <ResultsSkeleton density={density} />
+        ) : hitItems.length === 0 ? (
           <StateMessage
             kind='empty'
-            title={
-              normalizedQuery
-                ? `No asset matches “${normalizedQuery}”`
-                : kindFilter !== 'all'
-                  ? `No ${kindFilter === 'image' ? 'photos' : kindFilter === 'video' ? 'videos' : kindFilter === 'audio' ? 'audio files' : kindFilter === 'document' ? 'documents' : 'files'} match these filters`
-                  : filter === 'unused'
-                    ? 'Every asset is used in a post'
-                    : 'No asset is used in a post yet'
-            }
+            title={`No item matches “${normalizedQuery}” in ${scopeKind === 'workspace' ? 'your Library' : scopeKind === 'collection' ? 'this collection' : 'the selected items'}`}
+            description={search.coverage && search.coverage.pendingAssetCount > 0 ? `${search.coverage.pendingAssetCount} ${search.coverage.pendingAssetCount === 1 ? 'item is' : 'items are'} still being indexed and may match later.` : undefined}
             action={
-              <Button
-                variant='glass'
-                size='control'
-                onClick={() => {
-                  if (normalizedQuery) setQuery('');
-                  else setFilter('all');
-                }}
-              >
-                {normalizedQuery ? 'Clear search' : 'Show all'}
-              </Button>
+              <div className='flex flex-wrap justify-center gap-2'>
+                <Button variant='glass' size='control' onClick={() => setQuery('')}>
+                  Clear search
+                </Button>
+                {scopeKind !== 'workspace' ? (
+                  <Button variant='quiet' size='control' onClick={() => update({ collection: '', scope: 'all' })}>
+                    Search entire Library
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         ) : (
-          <div
-            role='list'
-            aria-label='Library assets'
-            className={cn(
-              view === 'gallery'
-                ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'
-                : 'flex flex-col gap-2'
-            )}
-          >
-            <AnimatePresence>
-              {visible.map((asset, index) =>
-                view === 'gallery' ? (
-                  <AssetCard
-                    key={asset.id}
-                    asset={asset}
-                    uses={library.usesOf(asset.id)}
-                    publishing={library.isPublishing(asset.id)}
-                    first={index === 0}
-                    canEdit={canEdit}
-                    canApprove={canApprove}
-                    deleting={deletingIds.has(asset.id)}
-                    onOpen={() => openDetail(asset)}
-                    onDelete={() => setPendingDelete(asset)}
-                    onStorageMissing={markStorageMissing}
-                    onPreviewLoaded={markPreviewLoaded}
-                  />
-                ) : (
-                  <AssetListRow
-                    key={asset.id}
-                    asset={asset}
-                    uses={library.usesOf(asset.id)}
-                    publishing={library.isPublishing(asset.id)}
-                    first={index === 0}
-                    canEdit={canEdit}
-                    canApprove={canApprove}
-                    deleting={deletingIds.has(asset.id)}
-                    onOpen={() => openDetail(asset)}
-                    onDelete={() => setPendingDelete(asset)}
-                    onStorageMissing={markStorageMissing}
-                    onPreviewLoaded={markPreviewLoaded}
-                  />
-                )
-              )}
-            </AnimatePresence>
-          </div>
+          renderItems(
+            hitItems.map(({ group, asset }) => ({
+              asset,
+              footer: <HitDetails group={group} onOpenAt={(locator) => openDetail(asset, locator)} onPlayFrom={kindOf(asset) === 'audio' || kindOf(asset) === 'video' ? (startMs) => void playFrom(asset, startMs) : undefined} />
+            }))
+          )
         )}
-
+        {search.nextCursor ? (
+          <Button variant='glass' size='control' className='self-center' disabled={search.loadingMore} onClick={search.loadMore}>
+            {search.loadingMore ? 'Loading…' : 'Show more results'}
+          </Button>
+        ) : null}
       </div>
     );
+  } else if (shown.length === 0) {
+    // No matches is not an empty library (DNA §13.5): say what can be cleared.
+    content = (
+      <StateMessage
+        kind='empty'
+        title={
+          normalizedQuery
+            ? `No asset matches “${normalizedQuery}”`
+            : scopeKind === 'collection'
+              ? 'This collection is empty'
+              : url.kind !== 'all'
+                ? `No ${KIND_OPTIONS.find((option) => option.value === url.kind)?.label.toLowerCase() ?? 'items'} match these filters`
+                : url.use === 'unused'
+                  ? 'Every asset is used in a post'
+                  : url.use === 'used'
+                    ? 'No asset is used in a post yet'
+                    : 'Nothing matches these filters'
+        }
+        action={
+          <Button
+            variant='glass'
+            size='control'
+            onClick={() => {
+              if (normalizedQuery) setQuery('');
+              else update({ use: 'all', kind: 'all', tag: '', collection: '', scope: 'all' });
+            }}
+          >
+            {normalizedQuery ? 'Clear search' : 'Show all'}
+          </Button>
+        }
+      />
+    );
+  } else {
+    content = renderItems(shown.map((asset) => ({ asset })));
   }
 
   const headerActions = canEdit ? (
-    <div className='flex flex-wrap items-center gap-2'>
-      <Button variant='glass' size='control' disabled={uploadingFile} onClick={() => filePicker.current?.click()}>
-        {uploadingFile ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.upload aria-hidden />}
-        {uploadingFile ? 'Adding assets…' : 'Add assets'}
-      </Button>
-      {uploadButton}
-    </div>
+    <AddMenu
+      disabled={library.revision === null}
+      busy={uploadingFile || upload.uploading}
+      busyLabel={uploadingFile ? 'Adding a file…' : uploadingText(upload.progress)}
+      onUploadFiles={() => filePicker.current?.click()}
+      storage={library.storage ?? null}
+      onAdded={announce}
+    />
   ) : undefined;
 
   return (
-    <PageContainer
-      pageTitle='Library'
-      infoContent={infoContent}
-      pageHeaderAction={headerActions}
-    >
+    <PageContainer pageTitle='Library' infoContent={infoContent} pageHeaderAction={headerActions}>
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
         <input {...getInputProps({ 'aria-label': 'Drop assets into Library' })} />
         <input
@@ -628,37 +835,173 @@ export function LibraryView() {
             if (files.length) void uploadFiles(files);
           }}
         />
+        <p role='status' aria-live='polite' aria-atomic='true' className='sr-only'>
+          {announcement}
+        </p>
 
-        {uploadingFile ? <p role='status' className='text-muted-foreground text-sm'>{fileProgress}</p> : null}
-        {fileFailure ? <StateMessage kind='error' layout='inline' title='Upload needs attention' description={fileFailure} action={pendingFile.current ? <div className='flex gap-2'><Button variant='glass' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>Retry</Button><Button variant='quiet' onClick={() => { const pending = pendingFile.current; if (pending) void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId)).then(() => { pendingFile.current = null; setFileFailure(null); void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }).catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload')); }}>Remove pending upload</Button></div> : undefined} /> : null}
-        <CollectionManager canEdit={canEdit} />
-        {library.storage ? <p className='text-muted-foreground text-xs'>{formatBytes(library.storage.usedBytes)} of {formatBytes(library.storage.limitBytes)} workspace storage used</p> : null}
-        {library.normalized.isError ? <StateMessage kind='error' layout='inline' title='Documents could not be loaded' description='Your media remains available. Retry to load the full Library.' action={<Button variant='glass' onClick={() => void library.normalized.refetch()}>Retry Library</Button>} /> : null}
-        {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
-        {storageMissing ? (
-          <StateMessage kind='unsupported' layout='inline' title='Media uploads aren’t available yet.' />
-        ) : upload.blocker ? (
-          <StateMessage
-            kind={upload.blocker.status === 503 ? 'offline' : 'error'}
-            title='Couldn’t upload'
-            description={upload.blocker.status === 503 ? 'Files that weren’t sent can be uploaded again.' : upload.blocker.message}
+        <div className={cn('grid min-w-0 gap-3 lg:gap-x-8', railCollapsed && wide ? 'lg:grid-cols-[2.75rem_minmax(0,1fr)]' : 'lg:grid-cols-[13.5rem_minmax(0,1fr)]')}>
+          <div className='min-w-0 lg:col-start-2 lg:row-start-1'>
+            <LibrarySearchField value={query} onChange={setQuery} scope={scope} searching={intelligent && search.loading} />
+          </div>
+
+          <CollectionRail
+            className='lg:col-start-1 lg:row-span-4 lg:row-start-1 lg:self-start'
+            active={url.collection}
+            onSelect={(collectionId) => update({ collection: collectionId, scope: collectionId ? 'collection' : 'all' })}
+            canEdit={canEdit}
+            collapsed={railCollapsed && wide}
+            onCollapsedChange={collapseRail}
+            storage={library.storage ?? null}
           />
-        ) : null}
 
-        <AnimatePresence initial={false}>
-          {upload.items.length > 0 && (
-            <motion.div
-              key='uploads'
-              initial={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
-              exit={{ opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } }}
-            >
-              <UploadTray items={upload.items} progress={upload.progress} onDismiss={upload.dismiss} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+          <div className='flex min-w-0 flex-col gap-3 lg:col-start-2 lg:row-start-2'>
+            <LibraryFilters
+              use={url.use}
+              onUse={(value) => update({ use: value })}
+              counts={exactCounts ? library.counts : null}
+              kind={url.kind}
+              onKind={(value) => update({ kind: value })}
+              typeSelect={
+                <FilterSelect
+                  id='library-kind'
+                  label='Type'
+                  value={url.kind}
+                  onChange={(value) => update({ kind: value as LibraryKindParam })}
+                  options={KIND_OPTIONS.map((option) => ({ value: option.value, label: kindCounts && typeof kindCounts[option.value] === 'number' ? `${option.label} (${kindCounts[option.value]})` : option.label }))}
+                />
+              }
+              tag={url.tag}
+              onTag={(value) => update({ tag: value })}
+              tags={library.tags}
+              sort={library.sort}
+              onSort={(value) => update({ sort: value })}
+              sortOptions={sortOptions}
+              defaultSort={defaultSort}
+              searching={intelligent}
+            />
+            <LibraryViewControls
+              status={statusLine}
+              viewSwitch={
+                <SegmentedControl
+                  label='Library view'
+                  value={url.mode}
+                  onChange={(value) => update({ mode: value })}
+                  widths='content'
+                  options={[
+                    { value: 'gallery', label: 'Gallery' },
+                    { value: 'list', label: 'List' }
+                  ]}
+                />
+              }
+              density={density}
+              onDensity={(value) => update({ density: value })}
+            />
+          </div>
 
-        {content}
+          <div ref={resultsRef} className='flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-3'>
+            {uploadingFile ? (
+              <p role='status' className='text-muted-foreground text-sm'>
+                {fileProgress}
+              </p>
+            ) : null}
+            {fileFailure ? (
+              <StateMessage
+                kind='error'
+                layout='inline'
+                title='Upload needs attention'
+                description={fileFailure}
+                action={
+                  pendingFile.current ? (
+                    <div className='flex gap-2'>
+                      <Button variant='glass' size='control' className='h-11' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>
+                        Retry
+                      </Button>
+                      <Button
+                        variant='quiet'
+                        size='control'
+                        className='h-11'
+                        onClick={() => {
+                          const pending = pendingFile.current;
+                          if (pending)
+                            void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId))
+                              .then(() => {
+                                pendingFile.current = null;
+                                setFileFailure(null);
+                                void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
+                              })
+                              .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload'));
+                        }}
+                      >
+                        Remove pending upload
+                      </Button>
+                    </div>
+                  ) : undefined
+                }
+              />
+            ) : null}
+            {notice?.warning ? <StateMessage kind={notice.level === 'full' ? 'error' : 'partial'} layout='inline' title={notice.warning} /> : null}
+            {library.normalized.isError ? (
+              <StateMessage
+                kind='error'
+                layout='inline'
+                title='Documents could not be loaded'
+                description='Your media remains available. Retry to load the full Library.'
+                action={
+                  <Button variant='glass' size='control' className='h-11' onClick={() => void library.normalized.refetch()}>
+                    Retry Library
+                  </Button>
+                }
+              />
+            ) : null}
+            {search.failed && normalizedQuery ? <StateMessage kind='partial' layout='inline' title='Showing name and text matches' description='The Library search service didn’t answer, so these results come from the basic search.' /> : null}
+            {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
+            {storageMissing ? (
+              <StateMessage kind='unsupported' layout='inline' title='Media uploads aren’t available yet.' />
+            ) : upload.blocker ? (
+              <StateMessage kind={upload.blocker.status === 503 ? 'offline' : 'error'} title='Couldn’t upload' description={upload.blocker.status === 503 ? 'Files that weren’t sent can be uploaded again.' : upload.blocker.message} />
+            ) : null}
+
+            <AnimatePresence initial={false}>
+              {upload.items.length > 0 && (
+                <motion.div
+                  key='uploads'
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.2, ease: EASE_OUT } }}
+                  exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.15, ease: EASE_OUT } }}
+                >
+                  <UploadTray items={upload.items} progress={upload.progress} onDismiss={upload.dismiss} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {content}
+
+            {!intelligent && library.normalized.hasNextPage ? (
+              <Button variant='glass' size='control' className='self-center' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>
+                Load more assets
+              </Button>
+            ) : null}
+
+            <BatchBar
+              selected={selectedItems}
+              collections={collectionList}
+              activeCollection={scopeKind === 'collection' && activeCollection ? activeCollection : null}
+              canEdit={canEdit}
+              usedCount={selectedUsed}
+              run={batch.run}
+              onRun={(kind, ids, params) => void batch.execute(kind, ids, params)}
+              onRetry={batch.retry}
+              onDismissRun={batch.dismiss}
+              onSelectAll={() => setSelection([...new Set([...selection, ...orderedIds])])}
+              onClear={() => setSelection([])}
+              canSelectMore={orderedIds.some((id) => !selectedSet.has(id))}
+              searchWithin={scopeKind === 'selection'}
+              onSearchWithin={(on) => update({ scope: on ? 'selection' : url.collection ? 'collection' : 'all' })}
+              stickyBottom={clearance.stickyBottom}
+              onAnnounce={announce}
+            />
+          </div>
+        </div>
 
         <AnimatePresence>
           {isDragActive && (
@@ -666,8 +1009,8 @@ export function LibraryView() {
               key='drop'
               aria-hidden
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.15, ease: EASE_OUT } }}
-              exit={{ opacity: 0, transition: { duration: 0.08, ease: EASE_OUT } }}
+              animate={{ opacity: 1, transition: { duration: reduce ? 0 : 0.15, ease: EASE_OUT } }}
+              exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.08, ease: EASE_OUT } }}
               className={cn(
                 'rafii-elevated pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-[var(--rafii-radius-card)] text-sm font-medium outline-2 outline-dashed -outline-offset-[12px]',
                 isDragReject ? 'outline-destructive text-destructive' : 'outline-foreground/50 text-foreground'
@@ -680,19 +1023,27 @@ export function LibraryView() {
         </AnimatePresence>
       </div>
 
-      {library.normalized.hasNextPage ? <Button variant='glass' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>Load more assets</Button> : null}
+      {/* Room for the Now Playing bar above the tab bar, so it never covers the last result or action. */}
+      <div aria-hidden data-library-bottom-clearance='' style={{ height: clearance.spacer }} />
+
       <AssetDetail
         asset={current}
-        open={detailVisible}
-        onOpenChange={setDetailOpen}
+        open={detailOpen}
+        onOpenChange={(open) => {
+          if (!open) update({ asset: '' });
+        }}
         uses={current ? library.usesOf(current.id) : []}
         publishing={current ? library.isPublishing(current.id) : false}
         canEdit={canEdit}
         canApprove={canApprove}
+        isOwner={isOwner}
         deleting={current ? deletingIds.has(current.id) : false}
         currentUserId={auth.user?.id ?? null}
         platforms={library.platforms}
         onDelete={setPendingDelete}
+        intelligence={intel.reachable}
+        focusLocator={focusLocator}
+        onAnnounce={announce}
       />
 
       <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
@@ -700,14 +1051,14 @@ export function LibraryView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this asset?</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingDelete && library.usesOf(pendingDelete.id).length > 0
-                ? `Used in ${library.usesOf(pendingDelete.id).length} ${library.usesOf(pendingDelete.id).length === 1 ? 'post' : 'posts'}. `
-                : ''}
+              {pendingDelete && library.usesOf(pendingDelete.id).length > 0 ? `Used in ${library.usesOf(pendingDelete.id).length} ${library.usesOf(pendingDelete.id).length === 1 ? 'post' : 'posts'}. ` : ''}
               This permanently deletes the stored media. Scheduled posts using it will need a new review; published posts aren’t affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel variant='glass' size='control'>Keep</AlertDialogCancel>
+            <AlertDialogCancel variant='glass' size='control'>
+              Keep
+            </AlertDialogCancel>
             <AlertDialogAction
               variant='destructive'
               size='control'

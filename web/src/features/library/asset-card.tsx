@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -25,7 +25,8 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { kindOf } from '@/lib/media/asset-kinds';
-import { AssetFileThumbnail } from './asset-thumbnail';
+import { AssetFileThumbnail, documentPreviewSuffix, isPdfAsset } from './asset-thumbnail';
+import { SelectToggle } from './intelligence/select-toggle';
 
 /**
  * The server's own wording when the deployment has no private media storage (`hosted.py` upload_media,
@@ -96,6 +97,28 @@ export function usageLabel(count: number) {
   return count === 0 ? 'Unused' : `Used in ${count}`;
 }
 
+export function kindLabel(asset: LibraryAsset) {
+  const kind = kindOf(asset);
+  return kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : kind === 'document' ? 'Document' : kind === 'file' ? 'File' : 'Photo';
+}
+
+export function assetTitle(asset: LibraryAsset) {
+  return asset.displayTitle?.trim() || asset.originalFilename?.trim() || kindLabel(asset);
+}
+
+/** One status at most on a card (UI spec §3): processing beats usage while a file is still being prepared. */
+export function cardStatus(asset: LibraryAsset): string | null {
+  const kind = kindOf(asset);
+  if (kind === 'image' || kind === 'video') return null;
+  const processing = asset.processing ?? '';
+  if (['pending', 'queued', 'processing'].includes(processing)) return 'Being indexed';
+  if (processing === 'failed') return 'Indexing failed';
+  if (processing === 'unsupported') return 'Stored privately';
+  return null;
+}
+
+export type LibraryDensity = 'comfortable' | 'compact';
+
 interface AssetCardProps {
   asset: LibraryAsset;
   uses: AssetUse[];
@@ -111,11 +134,19 @@ interface AssetCardProps {
   onStorageMissing?: () => void;
   /** Called when the preview loads, which shows storage works and clears an earlier "not configured" alert. */
   onPreviewLoaded?: () => void;
+  selected?: boolean;
+  /** Something is selected: every card shows its checkbox. */
+  selecting?: boolean;
+  onSelect?: (selected: boolean, extend: boolean) => void;
+  density?: LibraryDensity;
+  /** Search context under the caption: why it matched, passages and moments (outside the open button). */
+  footer?: ReactNode;
 }
 
 /**
- * Gallery card anatomy (DNA §13.2, §21.9): the real image in its own colours on top, quiet neutral
- * metadata below, the usage state as monochrome text. Broken media says so instead of rendering a blank.
+ * Gallery card anatomy (DNA §13.2, §21.9; UI spec §3): the real preview in its own colours on top — whole, never
+ * cropped — then a readable title, concise metadata and at most one status. Broken media says so instead of
+ * rendering a blank.
  */
 export function AssetCard({
   asset,
@@ -128,7 +159,12 @@ export function AssetCard({
   onOpen,
   onDelete,
   onStorageMissing,
-  onPreviewLoaded
+  onPreviewLoaded,
+  selected = false,
+  selecting = false,
+  onSelect,
+  density = 'comfortable',
+  footer
 }: AssetCardProps) {
   const reduce = useReducedMotion();
   const router = useRouter();
@@ -137,7 +173,7 @@ export function AssetCard({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
-  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
+  const pdfAsset = isPdfAsset(asset);
   const image = useAssetImage(asset.id, nearView && mediaAsset);
   const storageMissing = mediaAsset && image.storageNotConfigured;
   const loaded = Boolean(image.data);
@@ -149,10 +185,12 @@ export function AssetCard({
   }, [loaded, onPreviewLoaded]);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo');
-  const wordAsset = assetKind === 'document' && ['doc', 'docx', 'odt', 'rtf'].includes((asset.extension || '').toLowerCase());
-  const previewLabel = assetKind === 'video' ? ', video thumbnail' : assetKind === 'document' ? (pdfAsset || wordAsset ? ', first-page preview' : `, ${asset.extension?.toUpperCase() || 'document'} preview`) : '';
-  const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const itemTitle = assetTitle(asset);
+  const kindWord = kindLabel(asset);
+  const previewLabel = assetKind === 'video' ? ', video thumbnail' : documentPreviewSuffix(asset);
+  const status = cardStatus(asset);
+  const label = `${kindWord} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}${status ? `, ${status.toLowerCase()}` : ''}`;
+  const compact = density === 'compact';
 
   return (
     <ContextMenu>
@@ -161,41 +199,42 @@ export function AssetCard({
           ref={ref}
           role='listitem'
           data-tour={first ? 'library-card' : undefined}
+          data-library-item={asset.id}
           aria-busy={deleting || undefined}
           layout={reduce ? false : 'position'}
           initial={reduce ? false : { opacity: 0, scale: 0.98 }}
-          animate={{ opacity: deleting ? 0.55 : 1, scale: 1, transition: { duration: 0.24, ease: EASE_OUT } }}
-          exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_OUT } }}
+          animate={{ opacity: deleting ? 0.55 : 1, scale: 1, transition: { duration: reduce ? 0 : 0.24, ease: EASE_OUT } }}
+          exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_OUT } }}
           transition={{ layout: SPRING_LAYOUT }}
-          className='bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
+          className={cn(
+            'group/asset bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]',
+            selected && 'ring-foreground ring-offset-background ring-2 ring-offset-2'
+          )}
         >
           <button
             type='button'
             onClick={onOpen}
             aria-label={label}
+            data-library-open={asset.id}
             className='focus-visible:ring-ring/50 flex min-w-0 flex-col rounded-[var(--rafii-radius-card)] text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
-            {/* Only the image tilts; the caption stays still. The card clips the corners. */}
+            {/* Only the preview tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='gallery' loadPreview={false} />
               ) : image.data ? (
-                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='relative'>
-                  <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
+                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='rafii-quiet relative'>
+                  {/* Letterboxed, not cropped: the whole picture in its own proportions. */}
+                  <Image src={image.data} alt='' width={asset.width ?? 400} height={asset.height ?? 400} unoptimized loading='lazy' className='aspect-square w-full object-contain' />
                   {kindOf(asset) === 'video' && (
-                    <span className='bg-background/80 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
+                    <span className='bg-background/85 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
                       <Icons.play aria-hidden className='size-3' />
                       {typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : 'Video'}
                     </span>
                   )}
                 </div>
               ) : image.isError ? (
-                <div
-                  className={cn(
-                    'rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs',
-                    image.canRetry && 'pb-12'
-                  )}
-                >
+                <div className={cn('rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs', image.canRetry && 'pb-12')}>
                   <Icons.media className='size-5' aria-hidden />
                   Preview unavailable
                 </div>
@@ -203,40 +242,40 @@ export function AssetCard({
                 <Skeleton className='aspect-square w-full rounded-none' />
               )}
             </TiltCard>
-            <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
+            <span className={cn('flex min-w-0 flex-col items-start gap-1.5 p-2.5', compact && 'gap-1 p-2')}>
               <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
-              {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
-              <AnimatedBadge
-                size='sm'
-                status={publishing ? 'loading' : 'neutral'}
-                showIcon={count > 0}
-                icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
-                className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground')}
-                title={publishing ? 'A post using this asset is publishing now' : undefined}
-              >
-                {usageLabel(count)}
-              </AnimatedBadge>
-              <span className='text-muted-foreground w-full truncate text-xs tabular-nums'>
-                {[dims, typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null].filter(Boolean).join(' · ') || 'Size not recorded'}
-              </span>
+              {status ? (
+                <span className='text-muted-foreground text-xs'>{status}</span>
+              ) : (
+                <AnimatedBadge
+                  size='sm'
+                  status={publishing ? 'loading' : 'neutral'}
+                  showIcon={count > 0}
+                  icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
+                  className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground', compact && 'hidden sm:inline-flex')}
+                  title={publishing ? 'A post using this asset is publishing now' : undefined}
+                >
+                  {usageLabel(count)}
+                </AnimatedBadge>
+              )}
+              {!compact ? (
+                <span className='text-muted-foreground w-full truncate text-xs tabular-nums'>
+                  {[assetKind === 'audio' && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null, dims, typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null].filter(Boolean).join(' · ') || 'Size not recorded'}
+                </span>
+              ) : null}
             </span>
           </button>
+          {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-2.5 pb-2.5'>{footer}</div> : null}
           {pdfAsset && nearView ? (
             <div className='pointer-events-none absolute inset-x-0 top-0 z-10 aspect-square overflow-hidden rounded-t-[var(--rafii-radius-card)]'>
               <AssetFileThumbnail asset={asset} size='gallery' loadPreview />
             </div>
           ) : null}
+          {onSelect ? <SelectToggle title={itemTitle} checked={selected} visible={selecting} onChange={onSelect} className='top-1.5 left-1.5' /> : null}
           {image.canRetry && (
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
-              <Button
-                size='lg'
-                variant='glass'
-                className='pointer-events-auto'
-                aria-label='Retry loading this preview'
-                disabled={image.isFetching}
-                onClick={() => void image.refetch()}
-              >
+              <Button size='lg' variant='glass' className='pointer-events-auto' aria-label='Retry loading this preview' disabled={image.isFetching} onClick={() => void image.refetch()}>
                 <Icons.refresh className={cn(image.isFetching && 'animate-spin')} aria-hidden />
                 Retry
               </Button>
@@ -244,16 +283,22 @@ export function AssetCard({
           )}
           {deleting && (
             <span className='rafii-elevated absolute top-2 right-2 grid size-7 place-items-center rounded-full' aria-hidden>
-              <Icons.spinner className='size-3.5 animate-spin' />
+              <Icons.spinner className='size-3.5 animate-spin motion-reduce:animate-none' />
             </span>
           )}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel={`${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} actions`}>
+      <ContextMenuContent ariaLabel={`${kindWord} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
         </ContextMenuItem>
+        {onSelect ? (
+          <ContextMenuItem onSelect={() => onSelect(!selected, false)}>
+            <Icons.check className='text-muted-foreground size-4' aria-hidden />
+            {selected ? 'Deselect' : 'Select'}
+          </ContextMenuItem>
+        ) : null}
         {canApprove && mediaAsset ? (
           <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />

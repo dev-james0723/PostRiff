@@ -14,32 +14,7 @@ export function useLibraryCollections() {
   return useQuery({ queryKey: ['library-collections', workspaceId], queryFn: () => api.libraryCollections(workspaceId), enabled: Boolean(workspaceId) });
 }
 
-export function CollectionManager({ canEdit }: { canEdit: boolean }) {
-  const { api, workspaceId } = useWorkspaceApi();
-  const client = useQueryClient();
-  const collections = useLibraryCollections();
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function change(action: () => Promise<unknown>) {
-    setBusy(true);
-    try { await action(); setName(''); await client.invalidateQueries({ queryKey: ['library-collections', workspaceId] }); await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update collections'); }
-    finally { setBusy(false); }
-  }
-  if (!canEdit) return null;
-  return <details className='rafii-quiet rounded-[var(--rafii-radius-card)] px-4 py-3'>
-    <summary className='rafii-focus cursor-pointer text-sm'>Manage collections</summary>
-    <form className='mt-3 flex gap-2' onSubmit={(e) => { e.preventDefault(); void change(() => api.createLibraryCollection(workspaceId, name)); }}>
-      <Input aria-label='New collection name' value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder='Collection name' />
-      <Button type='submit' variant='glass' disabled={busy || !name.trim()}>Create</Button>
-    </form>
-    <ul className='mt-3 space-y-2'>{collections.data?.collections.map((c) => <li key={c.id} className='flex items-center justify-between gap-3 text-sm'>
-      <span>{c.name} <span className='text-muted-foreground'>({c.count})</span></span>
-      <Button variant='quiet' size='sm' disabled={busy} aria-label={`Remove collection ${c.name}`} onClick={() => void change(() => api.deleteLibraryCollection(workspaceId, c.id))}>Remove collection</Button>
-    </li>)}</ul>
-    <p className='text-muted-foreground mt-2 text-xs'>Removing a collection keeps its files in your Library.</p>
-  </details>;
-}
+/* Collection management moved into the collection rail (intelligence/collection-rail.tsx), its navigation context. */
 
 export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdit: boolean }) {
   const { api, workspaceId } = useWorkspaceApi();
