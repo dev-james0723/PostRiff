@@ -1384,6 +1384,10 @@ export interface ChannelView {
   evidenceSource: string;
   scopes: string[];
   expiresAt?: number;
+  /** True only when the server vault has a usable refresh token for this connection. */
+  refreshSupported?: boolean;
+  /** Access-token deadline; this does not establish the Google grant's expiry. */
+  accessTokenExpiresAt?: number | null;
   /** SHA-256 of the account's stored profile picture; null when the provider gave none. */
   pictureDigest?: string | null;
 }
@@ -1812,6 +1816,8 @@ export interface MyChannel {
   accountType?: string | null;
   connectionState: string;
   expiresAt?: number | null;
+  refreshSupported?: boolean;
+  accessTokenExpiresAt?: number | null;
   verifiedAt?: number | null;
   evidenceSource: string;
   /** Whether the user holds `manage_connections` in that workspace. */

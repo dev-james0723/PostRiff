@@ -30,6 +30,29 @@ def set_level(matrix, capability, level, evidence, verified_at, capability_versi
     return matrix
 
 
+def youtube_credential_status(cur, workspace_ids):
+    """Secret-free vault facts; an access-token deadline is not a grant deadline."""
+    if not workspace_ids:
+        return {}
+    cur.execute("SELECT workspace_id::text,connection_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=ANY(%s::uuid[]) AND provider='youtube'", (list(workspace_ids),))
+    return {(workspace, connection): {
+        "refreshSupported": bool(supported and present and not revoked),
+        "accessTokenExpiresAt": float(expires) if expires is not None else None,
+        "revoked": bool(revoked),
+    } for workspace, connection, supported, present, expires, revoked in cur.fetchall()}
+
+
+def with_youtube_credential_status(channel, status):
+    """Overlay current vault facts without changing the persisted channel or inventing grant expiry."""
+    if channel.get("platform") != "YouTube":
+        return channel
+    if status is None:
+        return {**channel, "refreshSupported": False}
+    return {**channel, **status,
+            "expiresAt": status["accessTokenExpiresAt"] if status["accessTokenExpiresAt"] is not None else channel.get("expiresAt"),
+            "revoked": bool(channel.get("revoked") or status["revoked"])}
+
+
 def connection_state(channel, now):
     """Provider-neutral OAuth candidate dimensions (improvement SPEC §5)."""
     if not channel.get("configured"):
@@ -38,7 +61,8 @@ def connection_state(channel, now):
         return "reauthorization_required"
     if not channel.get("identityVerified"):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
-    if channel.get("expiresAt", 0) <= now:
+    refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
+    if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
         return "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"
@@ -56,4 +80,6 @@ def customer_view(channel, matrix, now):
         "evidenceSource": channel.get("evidenceSource", "synthetic"),
         "scopes": list(channel.get("scopes", [])),
         "expiresAt": channel.get("expiresAt"),
+        "refreshSupported": channel.get("refreshSupported") is True,
+        "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
     }

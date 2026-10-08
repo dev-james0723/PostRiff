@@ -21,7 +21,7 @@ from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
-from .channels import connection_state
+from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
 from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
@@ -881,6 +881,7 @@ class HostedWorkspaceService:
                 # Who connected each channel: the newest channel.connected audit event names the actor.
                 cur.execute("SELECT DISTINCT ON (e.subject) e.subject,e.actor::text,coalesce(p.display_name,''),extract(epoch from e.at) FROM public.pr_audit_events e LEFT JOIN public.pr_profiles p ON p.user_id=e.actor WHERE e.kind='channel.connected' AND e.workspace_id=ANY(%s::uuid[]) ORDER BY e.subject,e.at DESC", ([row[0] for row in rows],))
                 connected = {item[0]: {"userId": item[1], "displayName": item[2], "at": float(item[3])} for item in cur.fetchall()}
+                credentials = youtube_credential_status(cur, [row[0] for row in rows])
         channels = []
         for row in rows:
             membership = Membership.from_row(*row[1:6])
@@ -888,10 +889,12 @@ class HostedWorkspaceService:
             for channel in items:
                 if not isinstance(channel, dict) or not channel.get("configured"):
                     continue
+                channel = with_youtube_credential_status(channel, credentials.get((row[0], channel.get("id"))))
                 channels.append({
                     "workspaceId": row[0], "workspaceName": row[6] or "My workspace",
                     "id": channel.get("id"), "platform": channel.get("platform"), "account": channel.get("account"), "accountType": channel.get("accountType"),
                     "connectionState": connection_state(channel, now), "expiresAt": channel.get("expiresAt"), "verifiedAt": channel.get("verifiedAt"),
+                    "refreshSupported": channel.get("refreshSupported") is True, "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
                     "evidenceSource": channel.get("evidenceSource", "synthetic"), "canManage": membership.allows("manage_connections"),
                     "connectedBy": connected.get(channel.get("id")),
                 })

@@ -235,6 +235,9 @@ class YouTubeApi:
         method, params, body, media = None, {}, None, None
         ident = x.get('id')
         if action.startswith('video.'):
+            if (action == 'video.edit' and isinstance(x.get('patch'), dict)
+                    and isinstance(x['patch'].get('status'), dict) and 'publishAt' in x['patch']['status']):
+                raise AlphaError('Use the dedicated scheduling or cancellation controls to change publishAt.', 409, code='youtube_invalid_scheduling_state')
             current = self.owned('videos', ident)
             if action == 'video.delete':
                 method, params = 'videos.delete', {'id': ident}

@@ -17,7 +17,7 @@ from postriff_alpha.domain import AlphaError, clean
 from .audience import COMMENT_READ_PROVIDERS
 from . import account_pictures
 from .permissions import require
-from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix
+from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix, with_youtube_credential_status, youtube_credential_status
 
 TRANSACTION_TTL = 600
 PUBLISH_CAPABILITIES = ("publish", "schedule")
@@ -762,13 +762,14 @@ class OAuthService:
             cur.execute("SELECT connection_id,capability,level,evidence,capability_version,extract(epoch from verified_at) FROM public.pr_channel_capabilities WHERE workspace_id=%s", (workspace_id,))
             rows = cur.fetchall()
             pictures = account_pictures.guarded(cur, account_pictures.digests, workspace_id) or {}
+            credentials = youtube_credential_status(cur, [workspace_id])
         matrices = {}
         for connection_id, capability, level, evidence, version, verified in rows:
             matrices.setdefault(connection_id, unsupported_matrix())[capability] = {"level": level, "evidence": evidence, "capabilityVersion": version, "verifiedAt": float(verified) if verified else None}
         now = self.clock()
         catalog = self.provider_catalog()
         by_platform = {provider['platform']: provider for provider in catalog}
-        views = [{**customer_view(c, matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
+        views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         return {'channels': views, 'providers': catalog}
@@ -832,8 +833,18 @@ class OAuthService:
                 access_token = self.vault.decrypt(access_ct, key_id)
                 inspector = getattr(self._provider(provider), "inspect_scopes", None)
                 if inspector:
-                    reported = inspector(access_token, account_id)
-                    scopes = reported if isinstance(reported, list) and all(isinstance(s, str) for s in reported) else []
+                    try:
+                        reported = inspector(access_token, account_id)
+                    except AlphaError as error:
+                        if provider != 'youtube' or error.code == 'youtube_revoked_oauth':
+                            raise
+                        raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable') from error
+                    authoritative = isinstance(reported, list) and all(isinstance(s, str) for s in reported)
+                    if provider == 'youtube' and not authoritative:
+                        # An unavailable tokeninfo observation is not an empty grant.
+                        # Block this request without erasing the last verified scope set.
+                        raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable')
+                    scopes = reported if authoritative else []
                     cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                 return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires, 'providerAccountId': account_id}
 
@@ -866,7 +877,15 @@ class OAuthService:
             changed = set(reported) != set(scopes)
             result = {"connectionId": connection_id, "identityVerified": not drift, "scopes": list(scopes) if lower_bound else reported,
                       "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed"}
-        except AlphaError:
+        except AlphaError as error:
+            if provider_id == 'youtube' and error.code == 'youtube_verification_unavailable':
+                # Manual Verify must preserve the same authority as worker revalidation
+                # when Google cannot provide an authoritative scope observation.
+                with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                    from .hosted import _membership, audit
+                    require(_membership(row), 'manage_connections')
+                    audit(cur, workspace_id, principal, 'channel.verified', connection_id, {'state': 'verification_unavailable'})
+                return {'connectionId': connection_id, 'identityVerified': False, 'scopes': list(scopes), 'state': 'verification_unavailable'}
             # Do not leak provider responses, nor label a transient network failure as token expiry.
             result = {"connectionId": connection_id, "identityVerified": False, "scopes": [], "state": "verification_unavailable"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):

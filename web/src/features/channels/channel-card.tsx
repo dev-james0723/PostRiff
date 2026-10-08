@@ -29,6 +29,7 @@ import type { ChannelView, ProviderView } from '@/lib/api/types';
 import {
   ATTENTION_STATES,
   attentionSentence,
+  automaticallyRenews,
   channelBadge,
   disconnectedByCustomer,
   expiringSoon,
@@ -201,7 +202,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const badge = channelBadge(channel);
   const attention = needsAttention(channel, undefined, held);
   const expiring = expiringSoon(channel);
-  const expired = typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
+  const renewable = automaticallyRenews(channel);
+  const expired = !renewable && typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
@@ -350,7 +352,12 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       {/* A div, not a p: the scopes list expands a block inside this row. */}
       {!disconnected && (
         <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
-          {channel.expiresAt ? (
+          {renewable ? (
+            <>
+              <span>Automatic renewal enabled</span>
+              <span aria-hidden>·</span>
+            </>
+          ) : channel.expiresAt ? (
             <>
               <span className={cn((expiring || expired) && 'text-foreground font-medium')} title={formatDate(channel.expiresAt)}>
                 {expired ? `Expired ${relativeTime(channel.expiresAt)}` : `Expires ${relativeTime(channel.expiresAt)}`}

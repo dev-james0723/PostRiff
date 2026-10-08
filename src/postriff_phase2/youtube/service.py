@@ -621,6 +621,9 @@ class YouTubeCreatorService:
             current = api.owned(resource, rid)
             fields = plan.get('body') or {}
             exact = all(part == 'id' or all(current.get(part, {}).get(k) == v for k, v in values.items()) for part, values in fields.items())
+            if plan.get('action') == 'video.cancel_schedule':
+                exact = (exact and rid == fields.get('id') and current.get('id') == fields.get('id')
+                         and current.get('status', {}).get('publishAt') is None)
             return {'verified': exact, 'method': resource + '.list', 'resourceId': rid, 'observed': redacted(current)}
         if method.endswith('.delete') and resource in ('videos', 'playlists', 'liveBroadcasts', 'liveStreams'):
             body = api.call(resource + '.list', {'part': 'id', 'id': plan['params']['id']})

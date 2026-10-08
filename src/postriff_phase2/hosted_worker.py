@@ -92,11 +92,9 @@ class PostgresWorker:
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
-                        # YouTube reconciliation may send a chunk or finish approved private-video steps.
-                        # It needs the same current authority as submission. Accepted native schedules only read back.
-                        if youtube_forward and reconciliation and not self._approved(cur, workspace_id, state, job):
-                            self._event(job, 'held', 'YouTube approval or authority changed; no further bytes or publication actions were sent')
-                            continue
+                        # YouTube forward authority is checked after the fenced claim,
+                        # following exact-connection revalidation outside database locks.
+                        # Accepted native schedules only read back.
                         if forward and not self._approved(cur, workspace_id, state, job):
                             self._event(job, 'held', 'Approval, account, media, timing or permission changed; a new review is required')
                             continue
@@ -120,6 +118,7 @@ class PostgresWorker:
                             from . import product_events
                             product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
+                        previous_state = job['state']
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
                         job["leaseId"] = uuid.uuid4().hex
@@ -127,9 +126,12 @@ class PostgresWorker:
                             job["checks"] = job.get("checks", 0) + 1
                         elif not forward:
                             self._event(job, "claimed", "Hosted worker acquired the fenced lease")
-                            job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
-                            self._event(job, "submitting", "Hosted worker began the approved provider operation")
+                            if not youtube_forward:
+                                job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
+                                self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if youtube_forward:
+                            selected.update(youtubeForward=True, previousState=previous_state)
                         if instagram and not reconciliation:
                             action = 'status' if stage == 'container_created' else 'publish' if stage == 'container_ready' else 'create'
                             if action != 'status':
@@ -214,7 +216,7 @@ class PostgresWorker:
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), claimed["workspaceId"], revision))
                 return cur.rowcount == 1
 
-    def authorize_dispatch(self, claimed):
+    def authorize_dispatch(self, claimed, *, youtube_verified=False):
         """Re-read cancellation, exact approval and fence immediately before forward work."""
         with self.connection_factory() as db:
             with db.cursor() as cur:
@@ -227,19 +229,68 @@ class PostgresWorker:
                 if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
                         or job.get('leaseUntil', 0) <= self.clock()):
                     return False
-                if job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job):
+                youtube_cancel = (claimed.get('youtubeForward') and claimed['reconciliation']
+                                  and claimed['job'].get('cancelRequested') is True)
+                if (claimed.get('youtubeForward') and claimed['reconciliation']
+                        and job.get('cancelRequested') and not youtube_cancel):
+                    # The claimed copy would continue uploading. Release this fence
+                    # so the next reconciliation observes the pending cancellation.
+                    self._event(job, job['state'], 'Cancellation changed during verification; reconcile a fresh fenced snapshot')
+                    job['leaseOwner'], job['leaseUntil'] = None, 0
+                    job['nextAt'] = self.clock() + 1
+                    cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
+                    return False
+                if ((job.get('cancelRequested') and not youtube_cancel)
+                        or (claimed.get('youtubeForward') and not youtube_verified)
+                        or not self._approved(cur, claimed['workspaceId'], state, job)):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
-                    self._event(job, 'canceled' if job.get('cancelRequested') else 'held', 'Stopped before provider dispatch; cancellation or approval changed')
+                    stopped = 'canceled' if job.get('cancelRequested') and not claimed['reconciliation'] else 'held'
+                    self._event(job, stopped, 'Stopped before provider dispatch; cancellation or approval changed')
                     job['leaseOwner'], job['leaseUntil'] = None, 0
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
+                if claimed.get('youtubeForward') and not claimed['reconciliation']:
+                    job.setdefault('attempts', []).append({'number': len(job.get('attempts', [])) + 1,
+                        'startedAt': self.clock(), 'idempotencyKey': job['manifest']['idempotencyKey']})
+                    self._event(job, 'submitting', 'Hosted worker began the approved provider operation')
+                    cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                 return True
+
+    def defer_youtube_dispatch(self, claimed):
+        """Release an unsent fenced operation after unavailable grant verification."""
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
+            row = cur.fetchone()
+            if not row:
+                return False
+            state = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            job = find(state['phase2']['jobs'], claimed['job']['id'])
+            if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
+                    or job.get('leaseUntil', 0) <= self.clock()):
+                return False
+            if job['state'] == 'claimed':
+                self._event(job, claimed['previousState'], 'YouTube verification unavailable; no provider operation was sent')
+            job['leaseOwner'], job['leaseUntil'] = None, 0
+            job['nextAt'] = self.clock() + 60
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
+            return True
 
     def step(self, crash=None):
         claimed = self.claim()
         if not claimed or crash == "after_claim":
             return bool(claimed)
-        if not claimed['reconciliation'] and not self.authorize_dispatch(claimed):
+        if claimed.get('youtubeForward'):
+            try:
+                verification = self.social.youtube.oauth.reverify_for_worker(claimed['workspaceId'], claimed['job']['manifest']['channelId'])
+            except AlphaError as error:
+                verification = {'state': 'reauthorization_required' if error.status == 404 or error.code == 'youtube_revoked_oauth' else 'verification_unavailable'}
+            if verification.get('state') == 'verification_unavailable':
+                self.defer_youtube_dispatch(claimed)
+                return True
+            verified = verification.get('state') == 'read_verified' and verification.get('ready') is True
+            if not self.authorize_dispatch(claimed, youtube_verified=verified):
+                return True
+        elif not claimed['reconciliation'] and not self.authorize_dispatch(claimed):
             return True
         try:
             if claimed.get('instagramAction'):

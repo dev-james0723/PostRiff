@@ -5,7 +5,7 @@ const path = require('node:path');
 const ts = require('typescript');
 
 // state.ts reads two app modules at runtime; the rules under test need neither.
-const STUBS = { '@/lib/status-labels': { STATUS: {} }, '@/lib/time': { relativeTime: () => '' } };
+const STUBS = { '@/lib/status-labels': { STATUS: { readOnly: 'Read only', expiringSoon: 'Expiring soon', reconnect: 'Reconnect', missingPermissions: 'Missing permissions' } }, '@/lib/time': { relativeTime: () => 'in 58 minutes' } };
 
 function state() {
   const file = path.resolve(__dirname, '../src/lib/channels/state.ts');
@@ -40,4 +40,35 @@ test('a disconnected account does not count as connected', () => {
   const { isConnected } = state();
   assert.equal(isConnected(disconnected), false);
   assert.equal(isConnected({ connectionState: 'read_verified', capabilities: {} }), true);
+});
+
+test('refreshable access-token deadlines do not ask the user to reconnect', () => {
+  const { automaticallyRenews, attentionSentence, channelBadge, expiringSoon, needsAttention, needsReconnect } = state();
+  const now = 1800000000;
+  for (const expiresAt of [now + 3480, now - 1]) {
+    const channel = { connectionState: 'read_verified', refreshSupported: true, expiresAt, canManage: true };
+    assert.equal(automaticallyRenews(channel), true);
+    assert.equal(expiringSoon(channel, now), false);
+    assert.deepEqual(channelBadge(channel, now), { label: 'Read only', status: 'success' });
+    assert.equal(attentionSentence(channel, now), null);
+    assert.equal(needsAttention(channel, now), false);
+    assert.equal(needsReconnect(channel), false);
+  }
+});
+
+test('missing refresh, expired, revoked and missing-permission warnings remain visible', () => {
+  const { automaticallyRenews, attentionSentence, channelBadge, expiringSoon, needsAttention, needsReconnect } = state();
+  const now = 1800000000;
+  const nonrefreshable = { connectionState: 'read_verified', refreshSupported: false, expiresAt: now + 3480 };
+  assert.equal(expiringSoon(nonrefreshable, now), true);
+  assert.equal(channelBadge(nonrefreshable, now).label, 'Expiring soon');
+  assert.equal(attentionSentence(nonrefreshable, now), 'Access ends in 58 minutes.');
+  for (const connectionState of ['token_expired', 'reauthorization_required', 'scope_missing']) {
+    const channel = { connectionState, refreshSupported: true, expiresAt: now - 1, canManage: true };
+    assert.equal(automaticallyRenews(channel), false);
+    assert.equal(needsAttention(channel, now), true);
+    assert.equal(needsReconnect(channel), true);
+    assert.notEqual(attentionSentence(channel, now), null);
+    assert.equal(channelBadge(channel, now).status, 'warning');
+  }
 });

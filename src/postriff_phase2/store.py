@@ -86,6 +86,17 @@ class Phase2Store(Store):
             return "Finish setup"
         return "Ready for posting"
 
+    def channel_reverification_due(self, c):
+        """Hosted YouTube age checks defer a job; they never authorize dispatch.
+
+        A worker must refresh and verify this exact vault grant before applying
+        channel_state and the immutable approval checks again.
+        """
+        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') == 'YouTube'
+                    and c.get('configured') and not c.get('revoked')
+                    and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
+                    and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
+
     def mutate(self, wid, token, expected_revision, action, payload):
         if wid in self.samples:
             return super().mutate(wid, token, expected_revision, action, payload)
@@ -538,7 +549,8 @@ class Phase2Store(Store):
             if j["state"] not in ("scheduled", "approved", "claimed"):
                 continue
             c = find(data["channels"], j["manifest"]["channelId"])
-            if not self.current(s, j["manifest"]) or self.channel_state(c) != "Ready for posting" or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
+            unavailable = self.channel_state(c) != "Ready for posting" and not self.channel_reverification_due(c)
+            if not self.current(s, j["manifest"]) or unavailable or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
                 self.event(j, "held", "Approval, capability or entitlement changed. Review timing and approve a new job; reconnection does not release this one.")
 
     def export(self, wid, token):

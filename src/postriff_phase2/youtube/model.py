@@ -27,8 +27,8 @@ CAPABILITIES = {
     'comment_read': ('Read comments', (MANAGE,), None), 'top_level_comment': ('Post a comment', (MANAGE,), None),
     'reply': ('Reply to a comment', (MANAGE,), None), 'comment_edit': ('Edit own comment', (MANAGE,), None),
     'comment_delete': ('Delete own comment', (MANAGE,), None), 'moderation': ('Moderate comments', (MANAGE,), 'moderation'),
-    'analytics': ('Creator analytics', (ANALYTICS,), None), 'shorts_analytics': ('Shorts analytics', (ANALYTICS,), None),
-    'monetary_analytics': ('Revenue analytics', (MONEY,), 'monetary'), 'reporting': ('Bulk YouTube reports', (ANALYTICS,), None),
+    'analytics': ('Creator analytics', (READ, ANALYTICS), None), 'shorts_analytics': ('Shorts analytics', (READ, ANALYTICS), None),
+    'monetary_analytics': ('Revenue analytics', (READ, MONEY), 'monetary'), 'reporting': ('Bulk YouTube reports', (ANALYTICS,), None),
     'live_broadcast': ('Live broadcasts', (MANAGE,), 'live'), 'live_schedule': ('Schedule Live', (MANAGE,), 'live'),
     'live_stream': ('Live streams', (MANAGE,), 'live'), 'live_chat_read': ('Read Live Chat', (READ,), 'chat'),
     'live_chat_write': ('Write Live Chat', (MANAGE,), 'chat'), 'live_moderation': ('Moderate Live Chat', (MANAGE,), 'live_moderation'),
@@ -108,8 +108,12 @@ def capability_matrix(provider, granted=(), identity=None, evidence=None, author
         elif not enabled:
             reason, usable = 'Creator execution is disabled in this deployment.', False
         proof = evidence.get(key) or {}
+        project_id = (getattr(provider, 'project_evidence', {}) or {}).get('projectId')
         if (usable and proof.get('status') == 'PASS' and proof.get('execution') == 'real'
-                and proof.get('channelId') == channel_id and proof.get('reference') and fresh_evidence(proof.get('verifiedAt'))):
+                and proof.get('channelId') == channel_id and project_id
+                and proof.get('clientId') == getattr(provider, 'client_id', None)
+                and proof.get('projectId') == project_id
+                and proof.get('reference') and fresh_evidence(proof.get('verifiedAt'))):
             state, reason = 'READY', 'Supported by real official API acceptance evidence for this channel.'
         result[key] = {'label': label, 'state': state, 'canExecute': usable, 'officialSupported': gate != 'unsupported',
                        'reason': reason, 'evidence': proof if state == 'READY' else None}
