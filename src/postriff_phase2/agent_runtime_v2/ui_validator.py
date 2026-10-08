@@ -30,7 +30,7 @@ KEY_ID = "v1"
 
 def _rejected(code: str) -> dict:
     return {"accepted": False, "canonicalSource": None, "sourceHash": None, "statementCount": 0, "queryNames": [], "actionIds": [],
-            "componentNames": [], "errors": [code], "libraryHash": None, "libraryVersion": None}
+            "componentNames": [], "stateNames": [], "formNames": [], "errors": [code], "libraryHash": None, "libraryVersion": None}
 
 
 def sign(secret: str, timestamp: str, body: bytes) -> str:
@@ -110,4 +110,7 @@ def validate_and_merge_ui(base_source: str | None, candidate_source: str, librar
     return {"accepted": True, "canonicalSource": canonical, "sourceHash": answer["sourceHash"],
             "statementCount": int(answer.get("statementCount") or 0), "queryNames": [str(q) for q in answer.get("queryNames") or []][:100],
             "actionIds": [str(a) for a in answer.get("actionIds") or []][:100], "componentNames": [str(c) for c in answer.get("componentNames") or []][:200],
+            # Declared reactive `$vars` and Form names of the canonical source (official parser), the only UI state fields ui_store persists.
+            "stateNames": [str(s)[:64] for s in answer.get("stateNames") or [] if isinstance(s, str)][:200],
+            "formNames": [str(f)[:64] for f in answer.get("formNames") or [] if isinstance(f, str)][:100],
             "errors": [], "libraryHash": library_hash, "libraryVersion": answer.get("libraryVersion")}

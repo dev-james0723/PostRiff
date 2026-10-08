@@ -95,13 +95,27 @@ jobs:
         # the agent runtime's local QA harness (RAFII_AGENT_HARNESS=1: scripted Manager, GPT-Live session and Open-Meteo
         # stand-ins; refused on Vercel) and the scriptable in-page GPT-Live transport, which only development builds
         # contain (web/src/lib/agent-runtime/live-transport.ts, createTransport). --phone-fixture adds fake-only phone
-        # verification and call delivery for the request-call scene. Nothing here reaches a provider. If this
-        # step fails, the live agent step still runs; its voice sections report what is missing.
-        continue-on-error: true
+        # verification and call delivery for the request-call scene. Nothing here reaches a provider.
+        # A failed voice backend is a startup failure; do not run weather against a dead proxy target.
         run: |
           RAFII_AGENT_HARNESS=1 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4441 nohup python scripts/postriff_dev_hosted.py --port 4440 --pg-port 55480 --phone-fixture > voice-harness.log 2>&1 &
+          voice_pid=$!
+          preserve_voice_startup() {
+            tail -n 160 voice-harness.log voice-web.log
+            mkdir -p docs/design/rafii-live-agent/evidence/ci-startup
+            for pg_log in /tmp/postriff-dev-pg-*/postgres.log; do
+              if [ -f "$pg_log" ]; then
+                cp "$pg_log" "docs/design/rafii-live-agent/evidence/ci-startup/$(basename "$(dirname "$pg_log")").log"
+              fi
+            done
+          }
           (cd web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4440 POSTRIFF_DEV_SSR=1 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4441 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= nohup npx next dev -p 4441 -H 127.0.0.1 > ../voice-web.log 2>&1 &)
           for i in $(seq 1 150); do
+            if ! kill -0 "$voice_pid" 2>/dev/null; then
+              echo "voice harness exited before readiness"
+              preserve_voice_startup
+              exit 1
+            fi
             if curl -sf http://127.0.0.1:4440/api/health > /dev/null && curl -s -o /dev/null --max-time 120 http://127.0.0.1:4441/; then
               # Compile the app shell and the scenes' page once, so the first scene does not wait for it.
               curl -s -o /dev/null --max-time 300 -b 'postriff_dev=1' http://127.0.0.1:4441/app/calendar || true
@@ -109,7 +123,9 @@ jobs:
             fi
             sleep 2
           done
-          echo "voice harness or development web server did not start"; tail -n 50 voice-harness.log voice-web.log; exit 1
+          echo "voice harness or development web server did not start"
+          preserve_voice_startup
+          exit 1
       - name: Rafii style, commands and weather, Chromium
         env:
           # Weather uses the development build and synthetic voice harness; style and commands use the main build.
@@ -163,6 +179,7 @@ jobs:
             docs/design/rafii-v9/evidence/theme-bars/
             docs/design/site-agent/evidence/ci-browser-chromium/
             docs/design/site-agent/evidence/ci-browser-webkit/
+            docs/design/rafii-live-agent/evidence/ci-startup/
             docs/design/rafii-live-agent/evidence/ci-browser-chromium/
             docs/design/rafii-live-agent/evidence/ci-thinkingops-chromium/
             docs/design/rafii-live-agent/evidence/ci-guide-chromium/

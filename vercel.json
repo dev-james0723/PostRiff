@@ -14,7 +14,8 @@
           "maxDuration": 300,
           "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
         }
-      }
+      },
+      "buildCommand": "python3 runtime/build_document_renderer.py && python3 runtime/provision_video_storage.py"
     },
     "rafii_phone_media": {
       "root": ".",
@@ -23,7 +24,7 @@
       "functions": {
         "api/phone.py": {
           "maxDuration": 660,
-          "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
+          "excludeFiles": "{.document-runtime/**,runtime/**,.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
         }
       }
     }

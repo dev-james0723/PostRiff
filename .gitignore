@@ -46,6 +46,9 @@ desktop/artifacts/
 # scripts/consumer_ready_secrets.py is the offline secret scanner the release gates run (CI): it is source, not a
 # credential helper, and must stay tracked.
 
+# Generated cloud-only document rendering runtime
+/.document-runtime/
+
 # Local release-gate evidence (CI uploads it as an artifact)
 docs/consumer-ready/evidence/
 .control-venv/

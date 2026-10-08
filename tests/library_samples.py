@@ -21,6 +21,24 @@ def pdf():
     return out+f'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
 
 
+def viewer_pdf():
+    """Two real PDF pages with distinct text and artwork for reader acceptance."""
+    streams = [b'1 0 0 rg 40 600 200 100 re f 0 0 0 rg BT /F1 18 Tf 40 750 Td (Viewer first page Brahms) Tj ET',
+               b'0 0 1 rg 40 600 200 100 re f 0 0 0 rg BT /F1 18 Tf 40 750 Td (Viewer second page Mozart) Tj ET']
+    objects = [b'<< /Type /Catalog /Pages 2 0 R >>',b'<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>',
+               b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+               b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+               b'<< /Length '+str(len(streams[0])).encode()+b' >>\nstream\n'+streams[0]+b'\nendstream',
+               b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>',
+               b'<< /Length '+str(len(streams[1])).encode()+b' >>\nstream\n'+streams[1]+b'\nendstream']
+    out=b'%PDF-1.4\n'; offsets=[0]
+    for n,obj in enumerate(objects,1):
+        offsets.append(len(out));out+=str(n).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
+    xref=len(out);out+=b'xref\n0 8\n0000000000 65535 f \n'
+    for offset in offsets[1:]: out+=f'{offset:010} 00000 n \n'.encode()
+    return out+f'trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+
+
 def office(ext):
     main={
         'docx':('word/document.xml','application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>'+TEXT+'</w:t></w:r></w:p><w:sectPr/></w:body></w:document>'),
@@ -35,7 +53,7 @@ def office(ext):
         extras=[('/xl/worksheets/sheet1.xml','application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml')]
     if ext=='pptx':
         files['ppt/_rels/presentation.xml.rels']='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'
-        files['ppt/slides/slide1.xml']='<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>'+TEXT+'</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+        files['ppt/slides/slide1.xml']='<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Rehearsal notes"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="500000" y="500000"/><a:ext cx="8000000" cy="5000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="2400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:rPr><a:t>'+TEXT+'</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
         extras=[('/ppt/slides/slide1.xml','application/vnd.openxmlformats-officedocument.presentationml.slide+xml')]
     files['[Content_Types].xml']='<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'+''.join(f'<Override PartName="{n}" ContentType="{m}"/>' for n,m in [('/'+name,mime),*extras])+'</Types>'
     out=io.BytesIO()
@@ -61,3 +79,4 @@ if __name__=='__main__':
     from pathlib import Path
     dest=Path(sys.argv[1]);dest.mkdir(parents=True,exist_ok=True)
     for ext,raw in samples().items():(dest/('archive-acceptance.'+ext)).write_bytes(raw)
+    (dest/'archive-viewer.pdf').write_bytes(viewer_pdf())
