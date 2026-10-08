@@ -258,8 +258,10 @@ def supported_library_hashes(path: Path | None = None, values=None) -> dict:
         assets = json.loads((path or _ASSETS).read_text("utf-8"))
         for name, scope in (("consumer", "workspace"), ("founder", "founder")):
             library = (assets.get("libraries") or {}).get(name) or {}
-            if contracts.valid_hash(library.get("libraryHash") or ""):
-                out[scope].add(library["libraryHash"])
+            # Same rule as the browser's supportedLibraryHashes: the current hash plus declared compatible older hashes.
+            for value in [library.get("libraryHash")] + list(library.get("compatibleLibraryHashes") or []):
+                if isinstance(value, str) and contracts.valid_hash(value):
+                    out[scope].add(value)
     except (OSError, ValueError, AttributeError, TypeError):
         pass
     for raw in str(values.get("RAFII_GENUI_COMPATIBLE_LIBRARIES") or "").split(","):
@@ -1034,6 +1036,9 @@ def persist_ui_state(cur, auth, artifact_id, expected_state_revision, patch):
     record = _load(cur, auth, artifact_id, lock=True)
     if record["revision"] < 1 or record["validationState"] != "accepted":
         raise AlphaError("This view is not ready yet.", 409, code="ui_not_ready")
+    if not compatibility(record)["supported"]:
+        # The native fallback of an old library version has no controls to save (NC18).
+        raise AlphaError("This view was made with an earlier version and can't be changed here.", 409, code="library_unsupported")
     if expected_state_revision != record["stateRevision"]:
         raise StateConflict({"artifactId": record["artifactId"], "stateRevision": record["stateRevision"], "safeState": record["safeState"]})
     names, forms = declared_fields(cur, record)
@@ -1133,18 +1138,26 @@ def _expired(manifest: dict) -> bool:
         return True
 
 
-def access_for(record: dict, auth, flags: dict, compat: dict, revoked: list) -> dict:
+def access_for(record: dict, auth, flags: dict, compat: dict, revoked: list, display: dict | None = None) -> dict:
     """What this caller may do with the view right now (re-derived on every read; nothing here is stored or trusted later):
-    every route still re-checks server-side. A historical view (expired capability) reads as-of data until the person goes live."""
+    every route still re-checks server-side. A historical view (expired capability) reads as-of data until the person goes live.
+    A view this build cannot draw (library version not supported) is the native fallback: no reads, writes, edits, retries or
+    saved state are offered on it (NC18), and `fallback` says so explicitly."""
     founder = record["scope"] == "founder"
     enabled = bool(flags.get("enabled"))
     editor = bool(auth.allows("edit"))
     expired = _expired(record["manifest"])
     is_actor = record["actor"] == str(auth.principal)
-    return {"role": getattr(auth, "role", "") or "", "isActor": is_actor, "enabled": enabled, "live": enabled and compat["supported"],
-            "canQuery": enabled and compat["supported"], "canAct": enabled and bool(flags.get("actions")) and editor and not founder and not expired,
-            "canEdit": enabled and bool(flags.get("edits")) and editor and record["revision"] >= 1, "canRetry": enabled and editor,
-            "canPersistState": enabled and editor, "manifestExpired": expired, "historical": expired, "revokedRefs": revoked}
+    renderable = bool(compat.get("supported"))
+    fallback = not renderable or bool(display and display.get("mode") == "fallback")
+    generated = renderable and (display is None or display.get("mode") == "generated")
+    return {"role": getattr(auth, "role", "") or "", "isActor": is_actor, "enabled": enabled, "live": enabled and renderable,
+            "canQuery": enabled and renderable,
+            "canAct": enabled and generated and bool(flags.get("actions")) and editor and not founder and not expired,
+            "canEdit": enabled and generated and bool(flags.get("edits")) and editor and record["revision"] >= 1,
+            "canRetry": enabled and renderable and editor,
+            "canPersistState": enabled and generated and editor,
+            "fallback": fallback, "manifestExpired": expired, "historical": expired, "revokedRefs": revoked}
 
 
 def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
@@ -1174,13 +1187,14 @@ def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
     if display["mode"] != "generated":
         artifact["canonicalSource"] = None          # an old library or unfinished source is never rendered: native fallback
     manifest = contracts.public_manifest(record["manifest"])
-    access = access_for(record, auth, flags, compat, revoked)
+    access = access_for(record, auth, flags, compat, revoked, display)
     if not access["canAct"]:
-        manifest["actions"] = []                    # no write control is offered where writes are off, expired or not allowed
+        # No write control is offered where writes are off, expired, not allowed, or the view falls back natively.
+        manifest["actions"] = []
     names, forms = declared_fields(cur, record) if record["revision"] >= 1 else (set(), set())
     return {"artifact": artifact, "manifest": manifest, "revisions": revisions, "attempt": public_attempt(attempt), "compatibility": compat,
             "display": display, "access": access, "lastSeq": max(0, record["nextSeq"] - 1), "journeyIds": record["journeyIds"],
-            "surface": record["surface"], "scope": record["scope"],
+            "surface": record["surface"], "scope": record["scope"], "fallback": access["fallback"],
             # Which UI-state fields this revision persists (the browser saves only these; the server re-checks every write).
             "declared": {"stateNames": sorted(names), "formNames": sorted(forms)}}
 

@@ -80,7 +80,10 @@ export function presentationKey(scopeKey: string, runId: string): string {
 
 /** A turn answered in this tab: it may start its presentation (once). */
 export function markFresh(scopeKey: string, runId: string) {
+  if (fresh.has(`${scopeKey}|${runId}`)) return;
   fresh.set(`${scopeKey}|${runId}`, Date.now());
+  // A slot that rendered before the turn's response arrived re-reads its plan (the mark is not otherwise reactive).
+  notify();
 }
 
 export function isFresh(scopeKey: string, runId: string | null | undefined): boolean {
@@ -92,7 +95,7 @@ export function setUiContext(scopeKey: string, conversationId: string | null, co
   const entry = { scopeKey, conversationId, context, at: Date.now() };
   inUse.set(`${scopeKey}|${conversationId ?? ''}`, entry);
   byArtifact.set(context.artifactId, entry);
-  for (const listener of listeners) listener();
+  notify();
 }
 
 /** A component reported an interaction (selection, filter): that view becomes the one in use for its conversation. */
@@ -137,13 +140,24 @@ export function enterUiScope(scopeKey: string | null): boolean {
   for (const [artifactId, entry] of byArtifact.entries()) if (entry.scopeKey !== scopeKey) byArtifact.delete(artifactId);
   for (const key of memoryKeys.keys()) if (!key.startsWith(`${scopeKey ?? '\u0000'}|`)) memoryKeys.delete(key);
   writeKeys(Object.fromEntries(Object.entries(readKeys()).filter(([key]) => scopeKey && key.startsWith(`${scopeKey}|`))));
-  for (const listener of listeners) listener();
+  notify();
   return true;
 }
 
 export function onUiScopeChange(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+let version = 0;
+function notify() {
+  version += 1;
+  for (const listener of listeners) listener();
+}
+
+/** A counter that changes whenever a fresh mark, the view in use or the scope changes (for useSyncExternalStore). */
+export function registryVersion(): number {
+  return version;
 }
 
 /** Test helper: the registries' sizes (no private values). */

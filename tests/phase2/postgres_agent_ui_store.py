@@ -506,6 +506,15 @@ def _old_library():
     snap = store.snapshot_http(RUNTIME, wid, OWNER, lease["artifact"]["artifactId"])
     assert snap["display"]["mode"] == "fallback" and snap["display"]["reason"] == "library_unsupported", snap["display"]
     assert snap["artifact"]["canonicalSource"] is None and snap["compatibility"]["supported"] is False
+    # NC18: no write control, read, edit or saved state is offered on a view this build cannot draw; the flag says fallback.
+    assert snap["manifest"]["actions"] == [] and snap["fallback"] is True and snap["access"]["fallback"] is True, (snap["manifest"], snap["access"])
+    assert not any(snap["access"][k] for k in ("canAct", "canEdit", "canQuery", "canPersistState")), snap["access"]
+    listed = store.by_message_http(RUNTIME, wid, OWNER, run["message"])["artifacts"][0]
+    assert listed["manifest"]["actions"] == [] and listed["fallback"] is True
+    denied(lambda: store.persist_state_http(RUNTIME, wid, OWNER, lease["artifact"]["artifactId"], {"expectedStateRevision": 0, "patch": {"$period": "7d"}}),
+           409, "library_unsupported")
+    current = store.snapshot_http(RUNTIME, wid, OWNER, STATE["artifact"])
+    assert current["fallback"] is False and [a["actionId"] for a in current["manifest"]["actions"]] == ["draft_save"]
     assert counts() == before
     return {"providerAttemptsDelta": 0}
 

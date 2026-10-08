@@ -203,6 +203,33 @@ class Access(unittest.TestCase):
         access = store.access_for(founder, auth(scope="founder", scope_key="founder:live:production"), {"enabled": True, "actions": True}, {"supported": True}, [])
         self.assertFalse(access["canAct"])
 
+    def test_unsupported_library_offers_no_controls_and_says_fallback(self):
+        """NC18: a view this build cannot draw is the native fallback: no reads, actions, edits, retries or saved state."""
+        flags = {"enabled": True, "actions": True, "edits": True}
+        old = store.compatibility(record(libraryHash="f" * 64), {"workspace": {"b" * 64}, "founder": set()})
+        display = store.display_for(record(libraryHash="f" * 64), None, old, [])
+        access = store.access_for(record(libraryHash="f" * 64), auth(), flags, old, [], display)
+        for key in ("canQuery", "canAct", "canEdit", "canRetry", "canPersistState", "live"):
+            self.assertFalse(access[key], key)
+        self.assertTrue(access["fallback"])
+        # The same caller on a supported, generated view keeps every control.
+        ok = {"supported": True, "reason": None}
+        live = store.access_for(record(), auth(), flags, ok, [], store.display_for(record(), None, ok, []))
+        self.assertTrue(live["canAct"] and live["canEdit"] and live["canPersistState"])
+        self.assertFalse(live["fallback"])
+        # A first generation that failed is a fallback too: nothing to act on.
+        failed = record(revision=0, validationState="rejected", generationState="failed", reason="parse_rejected")
+        refused = store.access_for(failed, auth(), flags, ok, [], store.display_for(failed, None, ok, []))
+        self.assertFalse(refused["canAct"] or refused["canPersistState"])
+        self.assertTrue(refused["fallback"] and refused["canRetry"])
+
+    def test_declared_compatible_hashes_count_as_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "openui-assets.json"
+            path.write_text(json.dumps({"libraries": {"consumer": {"libraryHash": "b" * 64, "compatibleLibraryHashes": ["c" * 64]}}}))
+            supported = store.supported_library_hashes(path, values={})
+        self.assertEqual(supported["workspace"], {"b" * 64, "c" * 64})
+
     def test_expired_manifest_is_historical(self):
         expired = record(manifest={"expiresAt": "2020-01-01T00:00:00Z"})
         access = store.access_for(expired, auth(), {"enabled": True, "actions": True}, {"supported": True}, [])

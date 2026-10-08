@@ -32,12 +32,14 @@ export interface UiArtifactViewV1 {
   compatibility: { supported: boolean; reason: string | null };
   display: { mode: 'generated' | 'pending' | 'fallback'; reason: string | null; updating: boolean; revokedRefs?: number };
   access: { role: string; isActor: boolean; enabled: boolean; live: boolean; canQuery: boolean; canAct: boolean; canEdit: boolean; canRetry: boolean;
-    canPersistState: boolean; manifestExpired: boolean; historical: boolean; revokedRefs: string[] };
+    canPersistState: boolean; manifestExpired: boolean; historical: boolean; revokedRefs: string[]; fallback?: boolean };
   lastSeq: number;
   journeyIds: string[];
   surface: string;
   scope: 'workspace' | 'founder';
   declared?: DeclaredState;
+  /** The server shows this view as its native fallback (old library, failed first view): no controls are offered (NC18). */
+  fallback?: boolean;
 }
 
 export type ArtifactPhase = 'idle' | 'starting' | 'pending' | 'streaming' | 'ready' | 'updating' | 'fallback';
