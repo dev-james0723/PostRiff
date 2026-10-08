@@ -217,7 +217,7 @@ def runtime_from_environment(environ=None):
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
         p.production_reviewed or getattr(p, "account_scoped_direct", False)
-        or (getattr(p, 'id', None) == 'linkedin' and p.member_publishing_approved()) for p in providers.values()
+        or (getattr(p, 'id', None) == 'linkedin' and getattr(p, 'member_publishing_approved', lambda: False)()) for p in providers.values()
     ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None

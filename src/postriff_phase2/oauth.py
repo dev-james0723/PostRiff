@@ -754,7 +754,7 @@ class OAuthService:
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
-        member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and adapter.member_publishing_approved())
+        member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and getattr(adapter, 'member_publishing_approved', lambda: False)())
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))

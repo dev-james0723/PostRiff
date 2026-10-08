@@ -83,7 +83,7 @@ class HostedSocial:
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.
         options = manifest.get('publishOptions') or {}
-        member_product = (getattr(provider, 'id', None) == 'linkedin' and provider.member_publishing_approved()
+        member_product = (getattr(provider, 'id', None) == 'linkedin' and getattr(provider, 'member_publishing_approved', lambda: False)()
                           and options.get('destinationType', 'member') == 'member'
                           and not str(options.get('authorUrn', '')).startswith('urn:li:organization:'))
         if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False) and not member_product:

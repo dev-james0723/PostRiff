@@ -31,6 +31,21 @@ def approved_member_app():
 
 
 class MemberPublishingAccess(unittest.TestCase):
+    def test_adapter_without_member_product_method_keeps_identity_and_fails_closed(self):
+        scopes = {'publish': ['openid', 'profile', 'w_member_social']}
+        adapter = SimpleNamespace(id='linkedin', platform='LinkedIn', assisted_fallback=True,
+                                  production_reviewed=False, capability_version=1,
+                                  capability_scopes=lambda name: scopes.get(name, []))
+        host = HostedSocial(SimpleNamespace(), {'linkedin': adapter})
+        for reviewed in (False, True):
+            with self.subTest(existing_review=reviewed):
+                adapter.production_reviewed = reviewed
+                matrix = OAuthService._capabilities(adapter, 'publish', scopes['publish'], [], 1000)
+                self.assertEqual(matrix['identity']['level'], 'Direct')
+                self.assertEqual(matrix['publish']['level'] == 'Direct', reviewed,
+                                 'A missing Share evidence method cannot supply publishing access')
+                self.assertIs(host._provider({'platform': 'LinkedIn'}), adapter if reviewed else None)
+
     def test_linkedin_expanded_workflow_flag_cannot_enable_another_provider(self):
         values = {'POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID':'synthetic-client','POSTRIFF_OAUTH_LINKEDIN_CLIENT_SECRET':'synthetic-secret',
                   'POSTRIFF_OAUTH_THREADS_CLIENT_ID':'synthetic-threads','POSTRIFF_OAUTH_THREADS_CLIENT_SECRET':'synthetic-secret',
