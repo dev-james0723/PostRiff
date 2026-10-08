@@ -97,6 +97,13 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    // Let real RSC prefetches finish before the harness destroys their document.
    // Track current requests explicitly; an earlier load-state event is not readiness.
    // Ignore periodic Library polling here, while keeping every runtime error below.
+   // The open item lives in the address (Library URL state); a close is finished only when the panel is gone
+   // and ?asset= has left the URL, so a following reload or click never meets a reopened panel.
+   const closeDetails=async()=>{
+    await page.getByRole('button',{name:'Close asset details'}).click();
+    await page.getByRole('button',{name:'Close asset details'}).waitFor({state:'detached',timeout:15000});
+    await page.waitForFunction(()=>!new URL(location.href).searchParams.get('asset'),null,{timeout:5000});
+   };
    const settleBeforeNavigation=async phase=>{
     navigationPhase='settling before '+phase;
     const deadline=Date.now()+15000;
@@ -245,11 +252,11 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    // Search only words inside the file; server full-text results drive the UI.
    const search=page.getByRole('searchbox');await search.fill('Finger exercises');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().waitFor();
    await search.fill('');
@@ -364,10 +371,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:/Document sample, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).waitFor();
    assert.ok(await page.locator('[data-library-thumbnail="pdf"][data-thumbnail-preview="first-page-raster"] img').count()>=2,'Actual PDF page must also appear in asset details');
-   await page.getByRole('button',{name:'Close asset details'}).click();
-   // The open item lives in the address; closing must leave nothing to reopen on reload.
-   await page.getByRole('button',{name:'Close asset details'}).waitFor({state:'detached',timeout:15000});
-   await page.waitForFunction(()=>!new URL(location.href).searchParams.get('asset'),null,{timeout:5000});
+   await closeDetails();
    // Real two-page PDF: the reader must navigate source pages, not reuse its thumbnail.
    const viewerBytes=readFileSync(resolve(__dirname,'../../.codex/library-samples/archive-viewer.pdf'));
    const viewerTicketResponse=await context.request.post(path+'/files',{headers,data:{filename:'archive-viewer.pdf',mime:'application/pdf',bytes:viewerBytes.length}});
@@ -429,14 +433,14 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.deepEqual(viewerAccessibility,[],'document viewer serious/critical accessibility violations');
    await page.screenshot({path:resolve(out,`document-viewer-${engine}-${width}.png`),fullPage:true});
    await reader.getByRole('button',{name:'Close document viewer',exact:true}).click();
-   await reader.waitFor({state:'hidden'});await page.getByRole('button',{name:'Close asset details'}).click();
+   await reader.waitFor({state:'hidden'});await closeDetails();
    checks.push({engine,width,format:'pdf',viewer:'two actual pages; source text; sidebar; page jump; keyboard; zoom; rotation; current-page find; responsive close',execution:'real source bytes/UI/API/renderer/DB; synthetic identity/storage'});
    await search.fill(videoName);
    const videoRow=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoRow.waitFor({timeout:15000});
    const listPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await listPoster.waitFor({state:'visible',timeout:15000});
    await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
    await videoRow.click();await page.locator('[data-library-thumbnail="video"][data-thumbnail-preview="video-poster"]').last().waitFor({timeout:15000});
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    // A real four-second PCM file with changing amplitude must produce changing
    // waveform peaks. This is actual source decoding, not a drawn fixture cover.
    const audioRate=8000,audioSeconds=4,audioSamples=audioRate*audioSeconds,audioBytes=Buffer.alloc(44+audioSamples*2);
@@ -558,7 +562,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:'Play audio in Now Playing'}).click();
    await page.getByLabel('Now Playing',{exact:true}).waitFor();
    await page.getByText('Add or replace transcript',{exact:true}).click();await page.getByLabel('Transcript',{exact:true}).fill('Searchable audio bowing lesson.');await page.getByRole('button',{name:'Save transcript',exact:true}).click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    await page.getByRole('button',{name:'Close player',exact:true}).click();
    await search.fill('');
    await page.screenshot({path:resolve(out,`library-${engine}-${width}.png`),fullPage:true});
