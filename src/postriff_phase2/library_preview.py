@@ -63,7 +63,7 @@ def _safe_html(source):
     parser = Clean(); parser.feed(source)
     return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'+''.join(parser.out)+'</body></html>'
 
-def render(raw, extension):
+def render(raw, extension, page_number=1, metadata=False):
     import pypdfium2 as pdfium
     if extension not in SUPPORTED or not raw or len(raw) > 50 * 1024 * 1024:
         raise ValueError('No first-page renderer for this file')
@@ -102,7 +102,10 @@ def render(raw, extension):
     with pdfium.PdfDocument(pdf) as doc:
         if not len(doc):
             raise ValueError('Document has no pages')
-        page = doc[0]
+        page_count = len(doc)
+        if type(page_number) is not int or not 1 <= page_number <= page_count:
+            raise ValueError("Page outside document")
+        page = doc[page_number-1]
         try:
             width, height = page.get_size()
             if not 0 < width <= 20000 or not 0 < height <= 20000:
@@ -111,19 +114,35 @@ def render(raw, extension):
             try:
                 image = bitmap.to_pil().convert('RGB')
                 output = io.BytesIO(); image.save(output, 'JPEG', quality=85)
-                return output.getvalue()
+                jpeg = output.getvalue()
+                if metadata:
+                    import base64
+                    text_page = page.get_textpage()
+                    try: text = text_page.get_text_range()[:50000]
+                    finally: text_page.close()
+                    return {'image':base64.b64encode(jpeg).decode(), 'pageCount':page_count, 'page':page_number, 'width':image.width, 'height':image.height, 'text':text}
+                return jpeg
             finally:
                 bitmap.close()
         finally:
             page.close()
 
-def render_isolated(raw, extension):
+def render_isolated(raw, extension, page_number=None):
     env = {'PATH':os.environ.get('PATH','/usr/bin:/bin'), 'PYTHONPATH':os.pathsep.join(dict.fromkeys([str(Path(__file__).resolve().parents[1]),*sys.path])), 'PYTHONDONTWRITEBYTECODE':'1'}
-    process = subprocess.Popen([sys.executable, '-m', 'postriff_phase2.library_preview', extension], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, start_new_session=True)
+    command = [sys.executable, '-m', 'postriff_phase2.library_preview', extension]
+    if page_number is not None: command.append(str(page_number))
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, start_new_session=True)
     try:
         result, error_output = process.communicate(raw, timeout=60)
-        if process.returncode or not result.startswith(b'\xff\xd8') or len(result)>2*1024*1024:
+        if process.returncode or len(result)>3*1024*1024 or (page_number is None and not result.startswith(b'\xff\xd8')):
             raise ValueError('First-page preview unavailable (renderer exit '+str(process.returncode)+')')
+        if page_number is not None:
+            import json, base64
+            data = json.loads(result)
+            data['image'] = base64.b64decode(data['image'], validate=True)
+            if not data['image'].startswith(b'\xff\xd8') or len(data['image'])>2*1024*1024:
+                raise ValueError('Invalid page raster')
+            return data
         return result
     except BaseException:
         import signal
@@ -139,4 +158,9 @@ if __name__ == '__main__':
     resource.setrlimit(resource.RLIMIT_FSIZE, (32*1024*1024,32*1024*1024))
     resource.setrlimit(resource.RLIMIT_NOFILE, (512,512))
     _deny_internet()
-    sys.stdout.buffer.write(render(sys.stdin.buffer.read(50*1024*1024+1), sys.argv[1]))
+    raw = sys.stdin.buffer.read(50*1024*1024+1)
+    if len(sys.argv)>2:
+        import json
+        sys.stdout.write(json.dumps(render(raw,sys.argv[1],int(sys.argv[2]),True)))
+    else:
+        sys.stdout.buffer.write(render(raw,sys.argv[1]))

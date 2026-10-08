@@ -2,7 +2,7 @@
 import io
 import unittest
 from PIL import Image
-from library_samples import samples, pdf
+from library_samples import samples, pdf, viewer_pdf
 from postriff_phase2.library_preview import render_isolated
 
 class FirstPageRendering(unittest.TestCase):
@@ -20,6 +20,16 @@ class FirstPageRendering(unittest.TestCase):
         # Text/graphics must be visibly rasterized, not an empty white page.
         self.assertLess(min(image.convert('L').getdata()), 180)
         return image
+
+    def test_actual_two_page_reader_navigation_and_text(self):
+        first=render_isolated(viewer_pdf(),'pdf',1)
+        second=render_isolated(viewer_pdf(),'pdf',2)
+        self.assertEqual(first['pageCount'],2)
+        self.assertEqual(second['page'],2)
+        self.assertIn('Viewer first page Brahms',first['text'])
+        self.assertIn('Viewer second page Mozart',second['text'])
+        self.assertNotEqual(first['image'],second['image'])
+        with self.assertRaises(ValueError):render_isolated(viewer_pdf(),'pdf',3)
 
     def test_actual_supported_source_bytes(self):
         for ext,raw in samples().items():

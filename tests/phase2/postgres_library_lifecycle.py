@@ -32,6 +32,12 @@ check('actual JPEG page preview',preview['mime']=='image/jpeg' and preview['page
 thumb=library.detail(wid,'one',i)['asset']['provenance']['thumbnail']['objectName']
 check('preview stores actual raster bytes',storage.objects[(wid,thumb)][0].startswith(b'\xff\xd8'))
 check('preview cache reuses immutable object',library.preview(wid,'one',i)==preview)
+page=library.viewer_page(wid,'one',i,1)
+check('viewer returns actual page text and dimensions',page['pageCount']==1 and page['page']==1 and page['width']>500 and 'Unique lifecycle' in page['text'])
+try:library.viewer_page(wid,'one',i,2);raise AssertionError('Invalid viewer page escaped')
+except AlphaError as e:check('viewer page bounds',e.status==422)
+used=library.list(wid,'one')['storage']['usedBytes']
+check('rendered page bytes count toward workspace storage',used>=len(text)+len(storage.objects[(wid,thumb)][0]))
 try: library.preview(viewer_workspace,'viewer',i); raise AssertionError('Cross-workspace preview escaped')
 except AlphaError as e: check('preview workspace isolation',e.status in (403,404))
 check('full text search',any(x['id']==i for x in library.list(wid,'one','lifecycle search')['assets']))

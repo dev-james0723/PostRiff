@@ -332,6 +332,8 @@ export function createApi(getToken: TokenSource) {
       send<{ asset: Asset; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(assetId)}/commit`, {}),
     libraryFile: (w: string, assetId: string) =>
       get<{ asset: Asset; extractedText: string; chunks: { ordinal: number; text: string }[] }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
+    libraryViewerPage: (w: string, assetId: string, page = 1) =>
+      get<{ pageCount: number; page: number; url: string; width: number; height: number; text: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/viewer?page=${encodeURIComponent(String(page))}`, true, 90_000),
     libraryPreviewUrl: (w: string, assetId: string) =>
       get<{ url: string; mime: string; page: number }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/preview`, true, 90_000),
     libraryFileUrl: (w: string, assetId: string, download = false) =>
