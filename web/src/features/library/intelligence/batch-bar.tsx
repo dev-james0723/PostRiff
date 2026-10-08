@@ -62,6 +62,7 @@ export function BatchBar({
   canSelectMore,
   searchWithin,
   onSearchWithin,
+  sourcePacks,
   stickyBottom,
   onAnnounce
 }: {
@@ -81,6 +82,8 @@ export function BatchBar({
   /** Search only the selected items ("Selected N items" scope). */
   searchWithin: boolean;
   onSearchWithin: (on: boolean) => void;
+  /** Source packs are offered only when the Library intelligence service answers in this build (T08 lands them). */
+  sourcePacks: boolean;
   stickyBottom: string;
   onAnnounce: (message: string) => void;
 }) {
@@ -163,10 +166,10 @@ export function BatchBar({
                       setTagOpen(false);
                     }}
                   >
-                    <label htmlFor={tagId} className='text-sm font-medium'>
+                    <label htmlFor={tagId} className='flex flex-col gap-1.5 text-sm font-medium'>
                       Tag for {countLabel(count)}
+                      <Input id={tagId} value={tag} maxLength={60} onChange={(event) => setTag(event.target.value)} className='h-11 font-normal' />
                     </label>
-                    <Input id={tagId} value={tag} maxLength={60} onChange={(event) => setTag(event.target.value)} className='h-11' />
                     <Button type='submit' variant='action' size='control' disabled={!tag.trim()}>
                       Add tag
                     </Button>
@@ -174,7 +177,7 @@ export function BatchBar({
                 </PopoverContent>
               </Popover>
             ) : null}
-            {canEdit ? (
+            {canEdit && sourcePacks ? (
               <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy} onClick={() => setDialog('pack')}>
                 <Icons.sparkles aria-hidden />
                 Build source pack
@@ -223,7 +226,7 @@ export function BatchBar({
         </AlertDialogContent>
       </AlertDialog>
 
-      <SourcePackDialog open={dialog === 'pack'} onOpenChange={(open) => setDialog(open ? 'pack' : null)} items={selected} onAnnounce={onAnnounce} />
+      {sourcePacks ? <SourcePackDialog open={dialog === 'pack'} onOpenChange={(open) => setDialog(open ? 'pack' : null)} items={selected} onAnnounce={onAnnounce} /> : null}
       {count === 2 ? <CompareDialog open={dialog === 'compare'} onOpenChange={(open) => setDialog(open ? 'compare' : null)} items={selected} /> : null}
     </div>
   );

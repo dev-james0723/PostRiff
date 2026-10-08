@@ -177,7 +177,8 @@ test('test_audio_no_autoplay: real peaks or a neutral symbol, and playback only 
   assert.match(player, /onClick=\{\(\) => void startPlayback\(\)\}/);
   assert.match(player, /Play audio in Now Playing/);
   assert.match(player, /actionType: 'moment\.save'/);
-  assert.match(player, /payload: \{ locator: \{ kind: 'time', startMs: check\.startMs, endMs: check\.endMs \} \}/);
+  assert.match(player, /payload: \{ startMs: check\.startMs, endMs: check\.endMs \}/, 'media.save_moment_action takes {startMs, endMs, label?}');
+  assert.match(player, /useNowPlaying\.getState\(\)\.seek\(seconds, assetId\)/, 'seeking goes through the Now Playing store');
 
   assert.deepEqual(W.momentInterval(42, 57, 120), { ok: true, startMs: 42000, endMs: 57000 });
   assert.equal(W.momentInterval(57, 42, 120).ok, false);
@@ -377,4 +378,28 @@ test('detail: sections, provenance in words, no voice scores, and a separate dan
   assert.equal(W.locatorLabel({ kind: 'page', page: 4, section: 'Programme' }), 'Page 4 · Programme');
   assert.equal(W.locatorLabel({ kind: 'sheet', sheetName: 'Budget', cellRange: 'A1:C9' }), 'Budget · A1:C9');
   assert.equal(W.matchSummary([{ kind: 'phrase' }, { kind: 'title' }, { kind: 'phrase' }]), 'Matched: Exact phrase · Title');
+});
+
+test('now playing: seek moves the loaded track in place and refuses other items', () => {
+  const media = load(path.join(SRC, 'lib', 'media', 'now-playing.ts'));
+  const store = media.useNowPlaying;
+  store.getState().close();
+  assert.equal(store.getState().seek(10), false, 'nothing loaded');
+  store.getState().open({ kind: 'audio', workspaceId: 'w', assetId: 'a', title: 'Take', url: '/take' });
+  store.getState().setPosition(0, 60);
+  assert.equal(store.getState().seek(12, 'b'), false, 'another item');
+  assert.equal(store.getState().seek(12, 'a'), true);
+  const first = store.getState().seekRequest;
+  assert.deepEqual({ assetId: first.assetId, seconds: first.seconds }, { assetId: 'a', seconds: 12 });
+  assert.equal(store.getState().seconds, 12);
+  store.getState().seek(90, 'a');
+  assert.equal(store.getState().seekRequest.seconds, 60, 'bounded by the known duration');
+  assert.notEqual(store.getState().seekRequest.nonce, first.nonce);
+  store.getState().close();
+  assert.equal(store.getState().seekRequest, null);
+  const bar = read('features', 'now-playing', 'now-playing-bar.tsx');
+  assert.match(bar, /seekRequest\.assetId !== track\.assetId/);
+  assert.equal(W.hitTotalLabel({ value: 1000, relation: 'gte' }), '1,000+ matching items');
+  assert.equal(W.hitTotalLabel({ value: 1, relation: 'eq' }), '1 matching item');
+  assert.equal(W.hitTotalLabel(null), null);
 });

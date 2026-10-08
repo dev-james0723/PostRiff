@@ -42,6 +42,12 @@ export function totalLabel({
   return `${formatCount(loaded)} loaded · more available`;
 }
 
+/** The search's own hit count: exact, or a lower bound when a bounded ranking stage reached its limit. */
+export function hitTotalLabel(totalHits: { value: number; relation: 'eq' | 'gte' } | null | undefined): string | null {
+  if (!totalHits || !Number.isFinite(totalHits.value) || totalHits.value < 0) return null;
+  return totalHits.relation === 'gte' ? `${formatCount(totalHits.value)}+ matching items` : countLabel(totalHits.value, 'matching item');
+}
+
 /* --- scope ----------------------------------------------------------------------------------------------------- */
 
 export type ScopeKind = 'workspace' | 'collection' | 'selection';

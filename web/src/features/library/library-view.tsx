@@ -31,7 +31,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { bottomClearance } from '@/lib/library/layout';
 import { MAX_SELECTED, assetRefFor, normalizeKey, reconcileSelection, scrollKey, type LibraryKindParam, type LibrarySortParam } from '@/lib/library/url-state';
-import { countLabel, coverageLabel, processingLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
+import { countLabel, coverageLabel, hitTotalLabel, processingLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { formatBytes } from '@/lib/time';
@@ -273,18 +273,19 @@ function LibraryPage() {
   /* --- batch, overlay and selection ---------------------------------------------------------------------------- */
 
   const batch = useBatchActions({ assets: assetsById, onAnnounce: announce });
+  const applyOverlay = batch.apply;
   const shown = useMemo(
     () =>
       library.visible
-        .map(batch.apply)
+        .map((asset) => applyOverlay(asset))
         .filter((asset): asset is LibraryAsset => asset !== null)
         .filter((asset) => scopeKind !== 'collection' || Boolean(asset.collections?.includes(url.collection))),
-    [library.visible, batch.apply, scopeKind, url.collection]
+    [library.visible, applyOverlay, scopeKind, url.collection]
   );
   const groups = useMemo(() => groupHits(search.hits), [search.hits]);
   const hitItems = useMemo(
-    () => groups.map((group) => ({ group, asset: batch.apply(resolveHitAsset(group, library.byKey)) })).filter((entry): entry is { group: (typeof groups)[number]; asset: LibraryAsset } => entry.asset !== null),
-    [groups, library.byKey, batch.apply]
+    () => groups.map((group) => ({ group, asset: applyOverlay(resolveHitAsset(group, library.byKey)) })).filter((entry): entry is { group: (typeof groups)[number]; asset: LibraryAsset } => entry.asset !== null),
+    [groups, library.byKey, applyOverlay]
   );
   const orderedIds = intelligent ? hitItems.map((entry) => entry.asset.id) : shown.map((asset) => asset.id);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -303,7 +304,7 @@ function LibraryPage() {
       const next = new Set(selection);
       const anchor = lastToggled.current;
       if (extend && anchor && orderedIds.includes(anchor) && orderedIds.includes(id)) {
-        const [from, to] = [orderedIds.indexOf(anchor), orderedIds.indexOf(id)].sort((a, b) => a - b);
+        const [from, to] = [orderedIds.indexOf(anchor), orderedIds.indexOf(id)].toSorted((a, b) => a - b);
         for (const value of orderedIds.slice(from, to + 1)) {
           if (on) next.add(value);
           else next.delete(value);
@@ -520,8 +521,8 @@ function LibraryPage() {
           at: frame.at,
           data: await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-            reader.onerror = () => reject(new Error('Could not prepare preview'));
+            reader.addEventListener('load', () => resolve(String(reader.result).split(',')[1] ?? ''), { once: true });
+            reader.addEventListener('error', () => reject(new Error('Could not prepare preview')), { once: true });
             reader.readAsDataURL(frame.blob);
           })
         }))
@@ -653,7 +654,7 @@ function LibraryPage() {
   const facetTotal = search.facets?.kinds ? Object.values(search.facets.kinds).reduce((sum, value) => sum + (typeof value === 'number' ? value : 0), 0) : null;
   const statusLine: ReactNode = intelligent ? (
     <span className='flex flex-col gap-0.5'>
-      <span>{search.loading && !hitItems.length ? 'Searching…' : totalLabel({ total: facetTotal, loaded: hitItems.length, complete: !search.nextCursor, singular: 'matching item' })}</span>
+      <span>{search.loading && !hitItems.length ? 'Searching…' : (hitTotalLabel(search.totalHits) ?? totalLabel({ total: facetTotal, loaded: hitItems.length, complete: !search.nextCursor, singular: 'matching item' }))}</span>
       {search.coverage ? <span>{coverageLabel(search.coverage)}</span> : null}
     </span>
   ) : (
@@ -997,6 +998,7 @@ function LibraryPage() {
               canSelectMore={orderedIds.some((id) => !selectedSet.has(id))}
               searchWithin={scopeKind === 'selection'}
               onSearchWithin={(on) => update({ scope: on ? 'selection' : url.collection ? 'collection' : 'all' })}
+              sourcePacks={intel.reachable}
               stickyBottom={clearance.stickyBottom}
               onAnnounce={announce}
             />

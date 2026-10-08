@@ -11,6 +11,13 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useLibraryCollections } from '../library-organizer';
 
+function chip(selected: boolean) {
+  return cn(
+    'rafii-focus inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[var(--rafii-radius-control)] px-3.5 text-sm whitespace-nowrap transition-colors lg:w-full lg:justify-between lg:whitespace-normal',
+    selected ? 'rafii-glass-selected text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:rafii-quiet'
+  );
+}
+
 /**
  * Collection navigation (UI spec §1): a collapsible rail beside the results on wide screens, a single-row switcher on
  * tablets and phones. One element in one place in the DOM, so the switcher and its management are never duplicated
@@ -38,12 +45,6 @@ export function CollectionRail({
   const [managing, setManaging] = useState(false);
   const panelId = useId();
   const notice = storage ? storageNotice(storage.usedBytes, storage.limitBytes) : null;
-
-  const chip = (selected: boolean) =>
-    cn(
-      'rafii-focus inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[var(--rafii-radius-control)] px-3.5 text-sm whitespace-nowrap transition-colors lg:w-full lg:justify-between lg:whitespace-normal',
-      selected ? 'rafii-glass-selected text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:rafii-quiet'
-    );
 
   if (collapsed) {
     return (

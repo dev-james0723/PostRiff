@@ -17,17 +17,11 @@ function randomKey() {
 }
 
 /**
- * Seek the one Rafii player (the Now Playing bar's own element) without reloading it. Returns false when this item
- * is not the loaded track, so the caller starts it at that point instead — always from the person's own action.
+ * Seek the one Rafii player (the Now Playing bar) in place. Returns false when this item is not the loaded track, so
+ * the caller starts it at that point instead — always from the person's own action.
  */
 function seekNowPlaying(assetId: string, seconds: number): boolean {
-  const state = useNowPlaying.getState();
-  if (state.track?.assetId !== assetId || typeof document === 'undefined') return false;
-  const element = document.querySelector<HTMLVideoElement>('[aria-label="Now Playing"] video');
-  if (!element || !Number.isFinite(element.duration) || element.duration <= 0) return false;
-  element.currentTime = Math.min(Math.max(0, seconds), element.duration);
-  state.setPosition(element.currentTime);
-  return true;
+  return useNowPlaying.getState().seek(seconds, assetId);
 }
 
 /**
@@ -95,7 +89,7 @@ export function AudioMomentPlayer({
         targetRefs: [ref],
         expectedRevision: null,
         idempotencyKey: momentKey.current.key,
-        payload: { locator: { kind: 'time', startMs: check.startMs, endMs: check.endMs } }
+        payload: { startMs: check.startMs, endMs: check.endMs }
       });
       const outcome = outcomeFromActionResult(asset.id, result);
       if (outcome.status === 'applied') {
