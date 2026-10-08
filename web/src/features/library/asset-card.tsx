@@ -228,7 +228,7 @@ export function AssetCard({
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
-                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='rafii-quiet relative'>
+                <div data-library-thumbnail='image' data-thumbnail-preview='image' className='rafii-quiet relative'>
                   {/* Letterboxed, not cropped: the whole picture in its own proportions. */}
                   <Image src={image.data} alt='' width={asset.width ?? 400} height={asset.height ?? 400} unoptimized loading='lazy' className='aspect-square w-full object-contain' />
                   {kindOf(asset) === 'video' && (
