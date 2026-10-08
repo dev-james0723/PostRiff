@@ -199,11 +199,13 @@ function EditView({ session, onDone }: { session: ArtifactSession; onDone: () =>
   };
   return (
     <form onSubmit={(event) => void submit(event)} className='rafii-quiet mt-2 flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
-      <label htmlFor={inputId} className='text-sm font-medium'>What should change?</label>
-      <input id={inputId} value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
-        onCompositionStart={() => ime.current.onCompositionStart()} onCompositionEnd={() => ime.current.onCompositionEnd()}
-        placeholder='For example: add a chart, compare the selected two, show last month'
-        className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base' />
+      <label htmlFor={inputId} className='flex flex-col gap-2 text-sm font-medium'>
+        What should change?
+        <input id={inputId} value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
+          onCompositionStart={() => ime.current.onCompositionStart()} onCompositionEnd={() => ime.current.onCompositionEnd()}
+          placeholder='For example: add a chart, compare the selected two, show last month'
+          className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base font-normal' />
+      </label>
       <p className='text-muted-foreground text-xs'>Updating the view is billed separately. The answer and anything you approved stay as they are.</p>
       {problem && <p role='alert' className='text-destructive text-xs'>{problem}</p>}
       <div className='flex flex-wrap gap-2'>

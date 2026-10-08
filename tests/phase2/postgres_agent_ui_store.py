@@ -554,6 +554,11 @@ def _disconnect():
     return {"reaped": reaped}
 
 
+def _replay(runtime, artifact_id):
+    with ui_transaction(runtime, OWNER, wid, "read") as (cur, auth):
+        return store.replay_view(cur, auth, artifact_id, 0)
+
+
 @scenario("F-S16", "founder scope: founder views exist only on founder routes; consumer views are 404 there")
 def _founder():
     founder_run = STATE["founder_run"]
@@ -566,7 +571,31 @@ def _founder():
     denied(lambda: claim(OWNER, founder_run["run"], key(), runtime=Runtime(service, CFG, founder={"namespace": "founder:demo:production"}), surface="founder"), 404)
     with ui_transaction(FOUNDER_RUNTIME, OWNER, wid, "read") as (cur, auth):
         assert auth.scope == "founder" and auth.scope_key == FOUNDER_KEY
-    return {}
+    # Every F-owned route works on the founder artifact through the founder runtime (scope from runtime.founder), and each one is
+    # the same 404 through the consumer runtime; the founder runtime gets 404 on the consumer artifact.
+    founder_key = lease["attempt"]["idempotencyKey"]
+    denied(lambda: commit(OWNER, founder_artifact, founder_key, 0, None, SOURCE), 404)                                    # consumer scope
+    denied(lambda: commit(OWNER, founder_artifact, founder_key, 0, None, SOURCE, runtime=FOUNDER_RUNTIME, actionIds=["draft_save"]), 422)   # read-only
+    ready = commit(OWNER, founder_artifact, founder_key, 0, None, SOURCE, runtime=FOUNDER_RUNTIME)
+    assert ready["revision"] == 1
+    snap = store.snapshot_http(FOUNDER_RUNTIME, wid, OWNER, founder_artifact)
+    assert snap["scope"] == "founder" and snap["access"]["canAct"] is False and snap["manifest"]["actions"] == []
+    listed = store.by_message_http(FOUNDER_RUNTIME, wid, OWNER, founder_run["message"])
+    assert [a["artifact"]["artifactId"] for a in listed["artifacts"]] == [founder_artifact]
+    saved = store.persist_state_http(FOUNDER_RUNTIME, wid, OWNER, founder_artifact, {"expectedStateRevision": 0, "patch": {"$period": "7d"}})
+    assert saved["stateRevision"] == 1
+    with ui_transaction(FOUNDER_RUNTIME, OWNER, wid, "read") as (cur, auth):
+        replay = store.replay_view(cur, auth, founder_artifact, 0)
+    assert replay["artifactId"] == founder_artifact and replay["done"] is True
+    denied(lambda: store.persist_state_http(RUNTIME, wid, OWNER, founder_artifact, {"expectedStateRevision": 1, "patch": {"$period": "1d"}}), 404)
+    denied(lambda: _replay(RUNTIME, founder_artifact), 404)
+    denied(lambda: store.persist_state_http(FOUNDER_RUNTIME, wid, OWNER, STATE["artifact"], {"expectedStateRevision": 0, "patch": {}}), 404)
+    denied(lambda: _replay(FOUNDER_RUNTIME, STATE["artifact"]), 404)
+    denied(lambda: store.by_message_http(FOUNDER_RUNTIME, wid, OWNER, MAIN["message"]), 404)
+    demo = Runtime(service, CFG, founder={"namespace": "founder:demo:production"})
+    denied(lambda: store.snapshot_http(demo, wid, OWNER, founder_artifact), 404)                                          # Demo never sees Live
+    return {"founderRoutes": ["claim", "commit", "snapshot", "byMessage", "state", "events"]}
+
 
 
 @scenario("F-S17", "RLS: the authenticated role cannot read any migration-102 table directly (service-only)")
