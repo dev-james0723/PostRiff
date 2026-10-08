@@ -434,7 +434,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
             {messages.map((message) => (
               <ThreadItem key={message.messageId} message={message} conversationId={conversationId} latest={message.messageId === lastAssistant} liveEvents={message.runId ? live[message.runId] : undefined}
                           onAsk={(value) => void send(value)} onNavigate={onNavigate} onStop={message.runId ? () => void api.siteAgentCancel(workspaceId as string, message.runId as string) : undefined}
-                          surface={surface} onContinue={continueFromView} />
+                          surface={surface} onContinue={continueFromView} onOpenPath={(path) => { router.push(path); onNavigate?.(); }} />
             ))}
             {optimistic && (
               <li className='flex flex-col items-end gap-1'>
@@ -524,7 +524,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   );
 }
 
-function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavigate, onStop, surface, onContinue }: {
+function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavigate, onStop, surface, onContinue, onOpenPath }: {
   message: Message;
   conversationId: string | null;
   latest: boolean;
@@ -534,6 +534,7 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
   onStop?: () => void;
   surface: UiSurface;
   onContinue: (request: ContinueRequest) => void;
+  onOpenPath: (path: string) => void;
 }) {
   const body = message.body as SiteAgentMessageBody;
   const agentBody = (body as { agent?: AgentResult & { modality?: string } }).agent;
@@ -577,7 +578,8 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
         <RafiiAvatar size={24} className='mt-0.5' />
         <article className='min-w-0 flex-1' aria-label={`${siteConfig.name}'s answer`}>
           <SiteAgentAnswer body={body.siteAgent} actions={{ onAsk, onNavigate, messageId: message.messageId, conversationId, latest }}
-            generated={agentBody ? <GeneratedAnswerSlot message={message} conversationId={conversationId} surface={surface} latest={latest} onContinue={onContinue} /> : undefined} />
+            generated={agentBody ? <GeneratedAnswerSlot message={message} conversationId={conversationId} surface={surface} latest={latest} onContinue={onContinue}
+              onNavigate={onOpenPath} /> : undefined} />
           {agentBody && agentBody.traceId && <AgentExtras result={agentBody} conversationId={conversationId} />}
         </article>
       </li>

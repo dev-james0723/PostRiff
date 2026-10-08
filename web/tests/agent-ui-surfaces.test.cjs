@@ -20,13 +20,27 @@ function resolveFile(request, from) {
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')]) if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   return null;
 }
+const STUBS = {
+  // C's renderer is lazy (next/dynamic): stand in for it and expose the props F hands it, so F's wiring is checked in isolation.
+  'next/dynamic': () => function StubRenderer(props) {
+    const React = require(require.resolve('react', { paths: [WEB] }));
+    return React.createElement('div', { 'data-stub-renderer': '', 'data-mode': props.render?.mode, 'data-status': props.status ?? '', 'data-active': String(props.active),
+      'data-retry': props.onRetry ? '1' : '0', 'data-expand': props.onExpand ? '1' : '0', 'data-historical': String(props.historical), 'data-surface': props.surface,
+      'data-manifest': props.manifest?.manifestId ?? '' });
+  }
+};
 function load(file) {
   const filename = path.isAbsolute(file) ? file : path.join(WEB, file);
   if (cache.has(filename)) return cache.get(filename);
-  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }, fileName: filename }).outputText;
+  if (filename.endsWith('.json')) {
+    const data = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    cache.set(filename, { __esModule: true, default: data, ...data });
+    return cache.get(filename);
+  }
+  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true, resolveJsonModule: true }, fileName: filename }).outputText;
   const module = { exports: {} };
   cache.set(filename, module.exports);
-  const req = (name) => (name.startsWith('@/') || name.startsWith('.') ? load(resolveFile(name, filename)) : require(require.resolve(name, { paths: [WEB] })));
+  const req = (name) => (STUBS[name] ? { __esModule: true, default: STUBS[name] } : name.startsWith('@/') || name.startsWith('.') ? load(resolveFile(name, filename)) : require(require.resolve(name, { paths: [WEB] })));
   vm.runInThisContext(`(function(require, exports, module){${code}\n})`, { filename })(req, module.exports, module);
   cache.set(filename, module.exports);
   return module.exports;
@@ -35,7 +49,7 @@ function load(file) {
 const plan = load('src/features/agent/generative-ui/surfaces/plan.ts');
 const selectors = load('src/features/agent/generative-ui/surfaces/selectors.ts');
 const sessions = load('src/features/agent/generative-ui/surfaces/session.ts');
-const frame = load('src/features/agent/generative-ui/surfaces/frame.tsx');
+const artifactView = load('src/features/agent/generative-ui/surfaces/artifact.tsx');
 const registry = load('src/features/agent/generative-ui/state/registry.ts');
 const React = require(require.resolve('react', { paths: [WEB] }));
 const { renderToStaticMarkup } = require(require.resolve('react-dom/server', { paths: [WEB] }));
@@ -48,10 +62,10 @@ const flush = async (n = 20) => { for (let i = 0; i < n; i += 1) await new Promi
 const enc = new TextEncoder();
 const handoff = { eligible: true, slot: 'main', reason: 'table', journeyIds: ['J06'] };
 
-function view(over = {}) {
-  return { artifact: { contractVersion: 'rafii-genui/1', artifactId: ART, conversationId: ART, messageId: MSG, runId: RUN, revision: 1, generationAttemptId: ATT, generationState: 'ready',
+function view(over = {}, art = {}) {
+  return { artifact: { ...{ contractVersion: 'rafii-genui/1', artifactId: ART, conversationId: ART, messageId: MSG, runId: RUN, revision: 1, generationAttemptId: ATT, generationState: 'ready',
     validationState: 'accepted', language: 'openui-lang', languageVersion: '', libraryVersion: '', libraryHash: 'b'.repeat(64), promptHash: '', sourceHash: 'a'.repeat(64),
-    canonicalSource: 'root = RafiiRoot([])', fallbackText: 'Native answer.', manifestId: 'm', bindingVersion: 1, safeState: {}, stateRevision: 0, createdAt: 'x', updatedAt: 'x', asOf: null },
+    canonicalSource: 'root = RafiiRoot([])', fallbackText: 'Native answer.', manifestId: 'm', bindingVersion: 1, safeState: {}, stateRevision: 0, createdAt: 'x', updatedAt: 'x', asOf: null }, ...art },
     manifest: { manifestId: 'm', bindingVersion: 1, journeyIds: [], componentGroups: [], queries: [], actions: [], expiresAt: null }, revisions: [],
     attempt: { attemptId: ATT, kind: 'generate', state: 'ready', reason: null, targetRevision: 1, baseRevision: null, retryOf: null, live: false },
     compatibility: { supported: true, reason: null }, display: { mode: 'generated', reason: null, updating: false },
@@ -167,16 +181,31 @@ test('the outline and the panel Escape handling skip generated layers (same sele
   assert.ok(selectors.ESCAPE_SKIP_SELECTORS.includes(selectors.GENERATED_DIALOG_SELECTOR));
 });
 
-test('the native frame: markers for tests, one status line, no DSL, no fixed height or vertical scroller', () => {
-  const html = renderToStaticMarkup(React.createElement(frame.GeneratedFrame, { surface: 'mobile', busy: true, status: 'Building the interactive view…', artifactId: ART,
-    generationState: 'streaming', controls: React.createElement(frame.QuietButton, { onClick() {} }, 'Stop building') }, React.createElement('div', null, 'view')));
-  assert.match(html, /data-rafii-generated=""/);
-  assert.match(html, new RegExp(`data-artifact-id="${ART}"`));
-  assert.match(html, /data-generation-state="streaming"/);
-  assert.match(html, /aria-busy="true"/);
-  assert.match(html, /role="status"/);
-  assert.doesNotMatch(html, /overflow-y|max-h-|h-\[|RafiiRoot|Query\(/);
-  assert.match(html, /overflow-x-auto/, 'only genuinely wide content scrolls sideways');
-  const quiet = renderToStaticMarkup(React.createElement(frame.GeneratedFrame, { surface: 'chat', busy: false, status: null }));
-  assert.doesNotMatch(quiet, /aria-busy|role="status"/);
+test('the surface host: C renders the frame (no duplicated markers), F passes status, render, active and its controls; no DSL, no fixed height', () => {
+  registry.enterUiScope('workspace:u4:w1');
+  sessions.setActiveSessionScope('workspace:u4:w1');
+  const t = transport('workspace:u4:w1', () => json(view()));
+  const session = sessions.sessionFor(t, ART, 'c1');
+  session.adopt(view());
+  const html = renderToStaticMarkup(React.createElement(artifactView.GeneratedArtifact, { session, surface: 'mobile', runId: RUN, onExpand() {} }));
+  assert.match(html, /data-rafii-generated-host=""/);
+  assert.doesNotMatch(html, /data-rafii-generated=""|data-artifact-id=|data-generation-state=/, 'C’s frame owns those markers');
+  assert.match(html, /data-stub-renderer=""/);
+  assert.match(html, /data-mode="generated"/);
+  assert.match(html, /data-active="true"/);
+  assert.match(html, /data-expand="0"/, 'a phone renders in place: no expand');
+  assert.match(html, /data-manifest="m"/);
+  assert.match(html, /Change this view/);
+  assert.doesNotMatch(html, /RafiiRoot|Query\(|overflow-y|max-h-|h-\[/);
+  const panelHtml = renderToStaticMarkup(React.createElement(artifactView.GeneratedArtifact, { session, surface: 'panel', runId: RUN, onExpand() {} }));
+  assert.match(panelHtml, /data-expand="1"/);
+
+  const failed = sessions.sessionFor(t, '1c1f2f3e-1111-4222-8333-944455556666', 'c1');
+  failed.adopt(view({ attempt: { attemptId: ATT, kind: 'generate', state: 'failed', reason: 'provider_timeout', targetRevision: 1, baseRevision: null, retryOf: null, live: false },
+    display: { mode: 'fallback', reason: 'provider_timeout', updating: false } }, { artifactId: '1c1f2f3e-1111-4222-8333-944455556666' }));
+  const failedHtml = renderToStaticMarkup(React.createElement(artifactView.GeneratedArtifact, { session: failed, surface: 'panel', runId: RUN }));
+  assert.match(failedHtml, /data-mode="fallback"/);
+  assert.match(failedHtml, /data-retry="1"/, 'an explicit Try again is offered (with its cost note before anything is sent)');
+  assert.match(failedHtml, /data-status="The interactive view isn’t available for this answer. The answer above is complete."/);
+  assert.equal(t.calls.filter((c) => c.method === 'POST').length, 0, 'rendering never sends anything');
 });

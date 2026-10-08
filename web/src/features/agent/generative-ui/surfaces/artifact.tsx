@@ -11,11 +11,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import type { JsonValue, UiSurface } from '@/lib/agent-runtime/ui-contracts';
 import type { ContinueRequest } from '@/features/agent/generative-ui/bridges/types';
 import { createImeGuard } from '@/lib/ime';
-import { formatDateTime } from '@/lib/time';
 import { renderOf, statusLine, type ArtifactViewState } from '../state/artifact-machine';
 import { UiArtifactStateContext, type UiArtifactStateBridge } from '../state/context';
 import { noteUiInteraction } from '../state/registry';
-import { GeneratedFrame, QuietButton } from './frame';
+import { QuietButton } from './frame';
 import { canExpand } from './plan';
 import { GeneratedRenderer } from './renderer-adapter';
 import type { ArtifactSession } from './session';
@@ -34,11 +33,16 @@ export function generationStateOf(state: ArtifactViewState): string | null {
 function useOnScreen(session: ArtifactSession) {
   const ref = useRef<HTMLDivElement>(null);
   const viewId = useId();
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
     const node = ref.current;
     let onScreen = true;
     let pageVisible = typeof document === 'undefined' || document.visibilityState !== 'hidden';
-    const update = () => session.setVisible(viewId, onScreen && pageVisible);
+    const update = () => {
+      const now = onScreen && pageVisible;
+      session.setVisible(viewId, now);
+      setVisible(now);
+    };
     const observer = node && typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver((entries) => {
         onScreen = entries.some((entry) => entry.isIntersecting);
@@ -58,7 +62,7 @@ function useOnScreen(session: ArtifactSession) {
       session.setVisible(viewId, false);
     };
   }, [session, viewId]);
-  return ref;
+  return { ref, visible };
 }
 
 export interface GeneratedArtifactProps {
@@ -68,12 +72,13 @@ export interface GeneratedArtifactProps {
   runId: string | null;
   onContinue?: (request: ContinueRequest) => void;
   onExpand?: () => void;
+  onNavigate?: (path: string) => void;
   nativeResult?: ReactNode;
 }
 
-export function GeneratedArtifact({ session, surface, runId, onContinue, onExpand, nativeResult }: GeneratedArtifactProps) {
+export function GeneratedArtifact({ session, surface, runId, onContinue, onExpand, onNavigate, nativeResult }: GeneratedArtifactProps) {
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
-  const ref = useOnScreen(session);
+  const { ref, visible } = useOnScreen(session);
   useEffect(() => {
     session.retain();
     return () => session.release();
@@ -95,7 +100,7 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
         controller.update(snapshot);
         noteUiInteraction(view.artifact.artifactId);
       },
-      recordSelection: (listId, items, visible) => controller.recordSelection(listId, items, visible),
+      recordSelection: (listId, items, visibleOrder) => controller.recordSelection(listId, items, visibleOrder),
       dirtyFields: () => controller.dirtyFields(),
       declared: view.declared ?? { stateNames: [], formNames: [] },
       canPersist: Boolean(view.access?.canPersistState)
@@ -127,38 +132,23 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
     setProblem(result.ok ? null : result.code === 'ui_not_eligible' ? 'This answer can’t get a new interactive view.' : 'The view couldn’t be started again. The answer above is complete.');
   };
 
-  const notices: ReactNode[] = [];
-  if (access?.historical && view?.artifact.asOf) {
-    notices.push(<p key='asof' className='text-muted-foreground text-xs'>Shown as of {formatDateTime(Date.parse(view.artifact.asOf) / 1000)}. Live data needs a fresh answer.</p>);
-  }
-  if (access?.revokedRefs?.length) {
-    notices.push(<p key='revoked' role='note' className='text-muted-foreground text-xs'>Some items in this view were removed or are no longer shared, so they are left out.</p>);
-  }
-  if (session.lostFields.length) {
-    notices.push(<LostFields key='lost' session={session} />);
-  }
-  if (problem) notices.push(<p key='problem' role='alert' className='text-destructive text-xs'>{problem}</p>);
-
-  const controls: ReactNode[] = [];
-  if (live && access?.isActor && state.view?.artifact.artifactId) {
-    controls.push(<QuietButton key='stop' onClick={() => void session.cancel()} disabled={session.busy('cancel')}>Stop building</QuietButton>);
-  }
-  if (canRetry && !confirmRetry) controls.push(<QuietButton key='retry' onClick={() => setConfirmRetry(true)}>Try again</QuietButton>);
-  if (canEdit && !editing) controls.push(<QuietButton key='edit' onClick={() => setEditing(true)}>Change this view</QuietButton>);
-  if (accepted && onExpand && canExpand(surface)) controls.push(<QuietButton key='expand' label='Expand interactive view' onClick={onExpand}>Expand</QuietButton>);
-
   return (
-    <div ref={ref} className='min-w-0'>
-      <GeneratedFrame surface={surface} busy={live} status={status} artifactId={view?.artifact.artifactId ?? session.artifactId} generationState={generationStateOf(state)}
-        notices={notices.length ? <>{notices}</> : null} controls={controls.length ? <>{controls}</> : null}>
-        {(render.mode === 'generated' || render.mode === 'preview') && (
-          <UiArtifactStateContext.Provider value={bridge}>
-            <GeneratedRenderer render={render} transport={session.transport} surface={surface} onContinue={continueWith} nativeResult={nativeResult} />
-          </UiArtifactStateContext.Provider>
-        )}
-      </GeneratedFrame>
+    <div ref={ref} data-rafii-generated-host='' data-surface={surface} data-generation-phase={generationStateOf(state) ?? undefined} className='flex min-w-0 flex-col gap-2'>
+      <UiArtifactStateContext.Provider value={bridge}>
+        <GeneratedRenderer render={render} view={view} transport={session.transport} surface={surface} status={status} active={visible} onContinue={continueWith}
+          onRetry={canRetry && !confirmRetry ? () => setConfirmRetry(true) : null} onExpand={onExpand && canExpand(surface) ? onExpand : null} onNavigate={onNavigate}
+          nativeResult={nativeResult} />
+      </UiArtifactStateContext.Provider>
+      {access?.revokedRefs?.length ? <p role='note' className='text-muted-foreground text-xs'>Some items in this view were removed or are no longer shared, so they are left out.</p> : null}
+      {problem && <p role='alert' className='text-destructive text-xs'>{problem}</p>}
+      {(live && access?.isActor && view?.artifact.artifactId) || (canEdit && !editing) ? (
+        <div className='flex flex-wrap items-center gap-2'>
+          {live && access?.isActor && view?.artifact.artifactId ? <QuietButton onClick={() => void session.cancel()} disabled={session.busy('cancel')}>Stop building</QuietButton> : null}
+          {canEdit && !editing ? <QuietButton onClick={() => setEditing(true)}>Change this view</QuietButton> : null}
+        </div>
+      ) : null}
       {confirmRetry && (
-        <div role='group' aria-label='Try again' className='rafii-quiet mt-2 flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3 text-sm'>
+        <div role='group' aria-label='Try again' className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3 text-sm'>
           <p>Build this view again? It runs a new presentation and is billed like the original answer. Nothing else is repeated.</p>
           <div className='flex flex-wrap gap-2'>
             <QuietButton onClick={() => void retry()} disabled={session.busy('retry')}>Build again</QuietButton>
@@ -201,7 +191,7 @@ function EditView({ session, onDone }: { session: ArtifactSession; onDone: () =>
     <form onSubmit={(event) => void submit(event)} className='rafii-quiet mt-2 flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
       <label htmlFor={inputId} className='flex flex-col gap-2 text-sm font-medium'>
         What should change?
-        <input id={inputId} value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
+        <input id={inputId} aria-label='What should change?' value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
           onCompositionStart={() => ime.current.onCompositionStart()} onCompositionEnd={() => ime.current.onCompositionEnd()}
           placeholder='For example: add a chart, compare the selected two, show last month'
           className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base font-normal' />
@@ -215,26 +205,5 @@ function EditView({ session, onDone }: { session: ArtifactSession; onDone: () =>
         <QuietButton onClick={onDone}>Cancel</QuietButton>
       </div>
     </form>
-  );
-}
-
-/** A newer revision no longer has fields the person typed into: say so and keep the values readable (never silently lost). */
-function LostFields({ session }: { session: ArtifactSession }) {
-  const values = session.lostValues;
-  const [dismissed, setDismissed] = useState(false);
-  if (dismissed) return null;
-  return (
-    <div data-rafii-dirty-conflict='' role='alertdialog' aria-label='Values not in the updated view' className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3 text-xs'>
-      <p>The updated view doesn’t have {session.lostFields.length === 1 ? 'one field' : `${session.lostFields.length} fields`} you typed into. Your values are kept here until you leave.</p>
-      <details>
-        <summary className='rafii-focus cursor-pointer rounded'>Show what you typed</summary>
-        <ul className='mt-1 flex flex-col gap-0.5'>
-          {session.lostFields.map((field) => (
-            <li key={field} className='break-words'><span className='font-medium'>{field.replace(/^\$/, '')}</span>: {String(typeof values[field] === 'object' ? JSON.stringify(values[field]) : values[field] ?? '')}</li>
-          ))}
-        </ul>
-      </details>
-      <QuietButton onClick={() => setDismissed(true)}>OK</QuietButton>
-    </div>
   );
 }
