@@ -65,12 +65,14 @@ function compareValues(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
 
-/** A horizontally scrollable region for genuinely wide tables only (keyboard-focusable, labelled). */
+/**
+ * A horizontally scrollable region for genuinely wide tables only. It holds the table's sort buttons, so keyboard users
+ * reach (and scroll) it through them; the region itself needs no tab stop.
+ */
 function ScrollRegion(props: { label: string; children: JSX.Element; wide: boolean }): JSX.Element {
   if (!props.wide) return <div className="min-w-0">{props.children}</div>;
   return (
-    // A scrollable region must be focusable so keyboard users can scroll it.
-    <div role="region" aria-label={props.label} tabIndex={0} className="min-w-0 overflow-x-auto overscroll-x-contain rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+    <div role="region" aria-label={props.label} className="min-w-0 overflow-x-auto overscroll-x-contain rounded-md">
       {props.children}
     </div>
   );
@@ -285,7 +287,7 @@ export const Comparison: RafiiComponentRenderer = ({ props, statementId }) => {
     <div data-genui="Comparison" data-statement-id={statementId} className="grid min-w-0 gap-2">
       <QueryStateNote view={view} rows={3} />
       {rows.length ? (
-        runtime.compact ? (
+        runtime.compact || rows.length > 3 ? (
           <div className="grid gap-2">
             {rows.map((row, index) => (
               <div key={rowId(row, p.value.idField) ?? `c${index}`} className="grid gap-1.5 rounded-[var(--rafii-radius-card,0.875rem)] border border-border p-3">
@@ -308,11 +310,13 @@ export const Comparison: RafiiComponentRenderer = ({ props, statementId }) => {
             ))}
           </div>
         ) : (
-          <ScrollRegion label={l.t('dataTable')} wide={rows.length > 2}>
+          <ScrollRegion label={l.t('dataTable')} wide={false}>
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <td />
+                  <th scope="col" className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">
+                    <span className="sr-only">{l.t('dataTable')}</span>
+                  </th>
                   {rows.map((row, index) => (
                     <th key={rowId(row, p.value.idField) ?? `h${index}`} scope="col" dir="auto" className="px-2 py-1.5 text-left text-xs font-semibold">
                       {plainText(getPath(row, p.value.labelField), 200) || l.t('notAvailable')}

@@ -76,7 +76,7 @@ Use only action ids listed under Rafii bindings. If none fits, explain with Text
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
-Use @-prefixed built-in functions (@Count, @Sum, @Avg, @Min, @Max, @Round) on Query results — do NOT hardcode computed values.
+Use @Count, @Sort, @Filter and @Each to arrange and count the rows you show. Totals, averages and other figures come from Query fields computed by the server; never compute them with @Sum, @Avg, @Min or @Max, and never type them.
 
 @Count(array) → number — Returns array length
 @First(array) → element — Returns first element of array
@@ -94,12 +94,12 @@ Use @-prefixed built-in functions (@Count, @Sum, @Avg, @Min, @Max, @Round) on Qu
 @Each(array, varName, template) — Evaluate template for each element. varName is the loop variable — use it ONLY inside the template expression (inline). Do NOT create a separate statement for the template.
 
 Builtins compose — output of one is input to the next:
-`@Count(@Filter(data.rows, "field", "==", "val"))` for KPIs/chart values, `@Round(@Avg(data.rows.score), 1)`, `@Each(data.rows, "item", Comp(item.field))` for per-item rendering.
-Array pluck: `data.rows.field` extracts a field from every row → use with @Sum, @Avg, charts, tables.
+`@Count(@Filter(rows.data.items, "status", "==", "draft"))` counts rows that are shown; `@Each(rows.data.items, "item", EvidenceLink(item.title, item.href))` renders one component per row.
+Array pluck: `rows.data.items.title` extracts a field from every row.
 
 IMPORTANT @Each rule: The loop variable (e.g. "item") is ONLY available inside the @Each template expression. Always inline the template — do NOT extract it to a separate statement.
-CORRECT: `Col("Actions", @Each(rows, "t", Button("Edit", Action([@Set($id, t.id)]))))`
-WRONG: `myBtn = Button("Edit", Action([@Set($id, t.id)]))` then `Col("Actions", @Each(rows, "t", myBtn))` — t is undefined in myBtn.
+CORRECT: `Stack(@Each(rows.data.items, "t", Button(t.title, Action([@Set($id, t.id)]))))`
+WRONG: `myBtn = Button(t.title, Action([@Set($id, t.id)]))` then `Stack(@Each(rows.data.items, "t", myBtn))` — t is undefined in myBtn.
 
 ## Action — Button Behavior
 
@@ -108,13 +108,13 @@ Buttons without an explicit Action prop automatically send their label to the as
 
 Available steps:
 - @ToAssistant("message") — Send a message to the assistant (for conversational buttons like "Tell me more", "Explain this")
-- @OpenUrl("https://...") — Navigate to a URL
+- @OpenUrl("/app/...") — Open an in-app page (in-app paths only; never a web address)
 - @Set($variable, value) — Set a $variable to a specific value
 - @Reset($var1, $var2, ...) — Reset $variables to their declared defaults (e.g. @Reset($title, $priority) restores $title="" and $priority="medium")
 
 Example — simple nav:
 ```
-viewBtn = Button("View", Action([@OpenUrl("https://example.com")]))
+viewBtn = Button("Open the Library", Action([@OpenUrl("/app/library")]))
 ```
 
 - Action can be assigned to a variable or inlined: Button("Go", onSubmit) and Button("Go", Action([...])) both work
@@ -128,7 +128,7 @@ During streaming, the output is re-parsed on every chunk. Undefined references a
 **Recommended statement order for optimal streaming:**
 1. `root = RafiiRoot(...)` — UI shell appears immediately
 2. $variable declarations — state ready for bindings
-3. Query statements — defaults resolve immediately so components render with data
+3. Query statements (the third argument is always null) — their reads start once Rafii accepts the view
 4. Component definitions — fill in with data already available
 5. Data values — leaf content last
 
