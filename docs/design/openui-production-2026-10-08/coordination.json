@@ -5,7 +5,7 @@
   "timezone": "America/Indiana/Indianapolis",
   "exact_launch_time": null,
   "spec_status": "prepared",
-  "implementation_status": "not_started_by_this_task",
+  "implementation_status": "R1-R5 lanes dispatched",
   "release_status": "unverified",
   "observed_remote_sha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
   "observed_local_head": "80bc24d20397a90257cb5571f8a3914a652bfb51",
@@ -20,58 +20,58 @@
   "roles": [
     {
       "id": "A",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "integrating",
+      "branch": "claude/rafii-openui-production-20261008",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-a-integration-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "B",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-b-runtime",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-b-runtime-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "C",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-c-renderer",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-c-renderer-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "D",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-d-data",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-d-data-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "E",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-e-journeys",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-e-journeys-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "F",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-f-surfaces",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-f-surfaces-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     },
     {
       "id": "G",
-      "status": "not_started",
-      "branch": null,
-      "worktree": null,
-      "sha": null,
+      "status": "dispatched",
+      "branch": "claude/rafii-openui-g-acceptance",
+      "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-openui-g-acceptance-20261008",
+      "sha": "3b40bdba",
       "receipt": null
     }
   ],
@@ -98,8 +98,31 @@
     "J08",
     "J09"
   ],
-  "contract_hash": null,
-  "integration_sha": null,
-  "external_blockers": [],
-  "notes": "Seed state only. No sessions were launched and no product tests were run while preparing this package."
+  "contract_hash": "c4e2c3aeeb388728e6fc8972799384d1d2d56361949042d9ca10bbc003b94fb5",
+  "integration_sha": "3b40bdba",
+  "external_blockers": [
+    {
+      "kind": "canonical_origin",
+      "detail": "rafii.io NXDOMAIN (8.8.8.8/1.1.1.1) and not attached to any Vercel project in team_PgXY5VdAYKcsv0RLoDPHscNq",
+      "affects": [
+        "G24"
+      ]
+    },
+    {
+      "kind": "live_model_credential",
+      "detail": "No model credential in CI/JCB/Preview; production has OPENAI_API_KEY -> live samples on production canary",
+      "affects": [
+        "G03",
+        "G17"
+      ]
+    }
+  ],
+  "notes": "A is the only writer. Lanes report via evidence/lanes/<role>.json in their own worktree and their final structured result.",
+  "production_deployment_before": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+  "production_origin_observed": "https://postriff-phase2-private.vercel.app",
+  "integration_branch": "claude/rafii-openui-production-20261008",
+  "migrations_reserved": [
+    "102",
+    "103"
+  ]
 }
