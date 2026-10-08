@@ -486,7 +486,10 @@ class ApprovalChecks(unittest.TestCase):
         variant, channel = self.prepared
         state = copy.deepcopy(self.j.state)
         state["variants"][0].update(platform=platform, text="Rehearsal notes")
-        next(c for c in state["phase2"]["channels"] if c["id"] == channel["id"])["platform"] = platform
+        prepared_channel = next(c for c in state["phase2"]["channels"] if c["id"] == channel["id"])
+        prepared_channel["platform"] = platform
+        if platform == "Facebook":
+            prepared_channel.update(destinationId="1234567890", accountType="page")
         payload = {"channelId": channel["id"], "variantId": variant["id"], "localTime": datetime.fromtimestamp(self.now + 60, timezone.utc).replace(tzinfo=None).isoformat(),
                    "timeZone": "UTC", "acknowledgedWarnings": variant["warnings"], "publishOptions": options}
         if image:
