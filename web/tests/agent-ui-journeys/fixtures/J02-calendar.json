@@ -432,7 +432,8 @@
    "state": "empty",
    "data": {
     "proposals": [],
-    "conversationId": "conv_1"
+    "conversationId": "conv_1",
+    "applyWith": "the native proposal card (agent/approvals/decide)"
    },
    "asOf": "2026-10-08T14:00:00Z",
    "sourceRefs": [],
