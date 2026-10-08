@@ -329,6 +329,7 @@ create table if not exists public.pr_library_suggestions (
   unique (workspace_id, recipient, dedup_key)
 );
 create index if not exists pr_library_suggestions_inbox on public.pr_library_suggestions(workspace_id, recipient, state, created_at desc);
+create index if not exists pr_library_suggestions_person_day on public.pr_library_suggestions(recipient, created_at desc) where not critical;
 create table if not exists public.pr_library_suggestion_prefs (
   workspace_id uuid not null references public.pr_workspaces(id) on delete cascade,
   recipient uuid not null,
