@@ -192,6 +192,38 @@ try:
     expect_error(lambda: service.youtube.read(workspace, 'other', connected, 'videos'), 'youtube_policy_acceptance_required')
     checks.append('policy changes invalidate pending OAuth even after renewed acceptance; new OAuth and Creator read succeed')
 
+    # Exercise the real shared-composer gate even though a fresh channel needs
+    # no OAuth revalidation. The connecting holder's receipt is not the second
+    # active actor's agreement. This is preflight only, never a publication.
+    composer_variant = 'synthetic-policy-composer-' + uuid4().hex
+    with connection() as db:
+        db.execute("UPDATE public.pr_memberships SET can_publish=true WHERE workspace_id=%s AND user_id=%s AND status='active'",
+                   (workspace, USERS['other']))
+        db.execute("""UPDATE public.pr_workspaces
+            SET state=jsonb_set(state,'{variants}',coalesce(state->'variants','[]'::jsonb)||jsonb_build_array(%s::jsonb)),
+                revision=revision+1 WHERE id=%s""",
+            (json.dumps({'id': composer_variant, 'platform': 'YouTube', 'channelId': connected}), workspace))
+    composer_snapshot = service.repository.get(workspace, 'other')
+    composer_channel = next(item for item in composer_snapshot['state']['phase2']['channels'] if item['id'] == connected)
+    assert service.commands.engine.hosted_entitlements is True
+    assert composer_channel['configured'] and composer_channel['identityVerified'] and composer_channel['capabilityVerified']
+    assert composer_channel['expiresAt'] > service.clock() and composer_channel['verifiedAt'] + 3600 >= service.clock()
+    assert service.commands.engine.channel_reverification_due(composer_channel) is False
+    assert service.oauth.youtube_policy.status(workspace, 'holder')['accepted'] is True
+    assert service.oauth.youtube_policy.status(workspace, 'other')['accepted'] is False
+    composer_payload = {'variantId': composer_variant, 'channelId': connected}
+    before_composer = len(google.calls)
+    expect_error(lambda: service.oauth.refresh_for_composer(workspace, 'other', composer_snapshot['revision'],
+        'p2_review', composer_payload), 'youtube_policy_acceptance_required')
+    assert service.repository.get(workspace, 'other') == composer_snapshot
+    second_receipt = accept_synthetic_policy(service, workspace, 'other')['receipt']
+    assert second_receipt['userId'] == USERS['other'] and second_receipt['workspaceId'] == workspace
+    assert service.oauth.refresh_for_composer(workspace, 'other', composer_snapshot['revision'],
+        'p2_review', composer_payload) is None
+    assert len(google.calls) == before_composer, 'Fresh composer admission must neither revalidate nor dispatch Google.'
+    assert service.repository.get(workspace, 'other') == composer_snapshot
+    checks.append('fresh generic p2_review requires actual second-actor agreement; the same preflight passes after their acceptance without Google or state changes')
+
     register_synthetic_policy(connection, ORIGIN, replace=True)
     expect_error(lambda: held.identity(grant['accessToken']), 'youtube_policy_acceptance_required')
     expect_error(lambda: service.oauth.token_for_worker(workspace, connected), 'youtube_policy_acceptance_required')
