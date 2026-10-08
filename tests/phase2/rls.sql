@@ -9,7 +9,13 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 grant usage on schema auth to authenticated,service_role;
 grant execute on function auth.uid() to authenticated,service_role;
 create schema storage;
-create table storage.buckets(id text primary key,name text,public boolean);
+create table storage.buckets(
+  id text primary key,
+  name text,
+  public boolean,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
 create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
 alter table storage.objects enable row level security;
 grant usage on schema storage to authenticated,service_role;
@@ -47,6 +53,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
+\ir ../../migrations/postriff/093_universal_library.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset
@@ -131,3 +138,29 @@ do $$ begin
 end $$;
 reset role;
 select 'PASS: two-user RLS, 9 object families, service-only chat media tables, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone' as result;
+
+\ir ../../migrations/postriff/094_universal_library_lifecycle.sql
+\ir ../../migrations/postriff/095_universal_library_storage.sql
+\ir ../../migrations/postriff/096_universal_library_duplicate_index.sql
+do $$ begin
+ if not exists (
+  select 1 from pg_indexes
+  where schemaname='public' and tablename='pr_library_assets'
+    and indexname='pr_library_assets_duplicate_of'
+ ) then raise exception 'Library duplicate references are not indexed'; end if;
+end $$;
+do $$ begin
+ if not exists (
+  select 1 from storage.buckets
+  where id='postriff-library' and name='postriff-library' and public=false
+    and file_size_limit=52428800
+    and allowed_mime_types @> array[
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm',
+      'text/csv', 'text/html', 'text/json', 'text/markdown', 'text/plain'
+    ]
+ ) then raise exception 'Library bucket is not private or lacks an accepted upload MIME'; end if;
+end $$;

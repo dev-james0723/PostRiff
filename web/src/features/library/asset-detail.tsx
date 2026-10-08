@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
@@ -16,6 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { formatBytes, formatDateTime, relativeTime } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
+import { AssetOrganizer } from './library-organizer';
 import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
@@ -93,9 +95,26 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
 
 /** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
-  const image = useAssetImage(asset.id);
+  const assetKind = kindOf(asset);
+  const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const image = useAssetImage(asset.id, mediaAsset);
   const { api, workspaceId } = useWorkspaceApi();
-  const isVideo = kindOf(asset) === 'video';
+  const isVideo = assetKind === 'video';
+  if (assetKind === 'audio') {
+    return <div className='rafii-quiet flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--rafii-radius-card)] p-6'>
+      <Icons.play aria-hidden className='size-8' />
+      <p className='text-muted-foreground text-sm'>Private audio · {asset.extension?.toUpperCase()}</p>
+      <Button variant='glass' size='control' disabled={!['ready', 'unsupported'].includes(asset.processing ?? '')} onClick={() => void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ kind: 'audio', workspaceId, assetId: asset.id, title: asset.displayTitle || asset.originalFilename || 'Audio', url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Audio unavailable'))}>Play audio in Now Playing</Button>
+    </div>;
+  }
+  if (!mediaAsset) {
+    return (
+      <div className='rafii-quiet text-muted-foreground flex min-h-40 flex-col items-center justify-center gap-2 rounded-[var(--rafii-radius-card)] p-6 text-center'>
+        <span className='text-foreground text-lg font-semibold'>{asset.extension?.toUpperCase() || 'FILE'}</span>
+        <span className='text-sm'>{assetKind === 'document' ? 'Document' : 'File'} · private workspace asset</span>
+      </div>
+    );
+  }
   if (isVideo) {
     return (
       <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
@@ -135,6 +154,31 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
         <Skeleton className='max-h-[40vh] w-full rounded-none md:max-h-[50vh]' style={{ aspectRatio: ratio }} />
       )}
     </div>
+  );
+}
+
+function DocumentText({ asset }: { asset: LibraryAsset }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const detail = useQuery({
+    queryKey: ['library-file-detail', workspaceId, asset.id],
+    queryFn: () => api.libraryFile(workspaceId, asset.id),
+    enabled: Boolean(workspaceId),
+    refetchInterval: (query) => ['pending', 'queued', 'processing'].includes(query.state.data?.asset.processing ?? '') ? 3000 : false,
+    staleTime: 10_000
+  });
+  return (
+    <section aria-labelledby='asset-extracted-text' className='flex flex-col gap-2'>
+      <h3 id='asset-extracted-text' className='rafii-eyebrow'>Extracted text</h3>
+      {detail.isPending ? (
+        <Skeleton className='h-24 w-full' />
+      ) : detail.isError ? (
+        <Button variant='glass' size='control' onClick={() => void detail.refetch()}>Retry text preview</Button>
+      ) : detail.data.extractedText ? (
+        <pre className='rafii-quiet max-h-72 overflow-auto whitespace-pre-wrap rounded-[var(--rafii-radius-card)] p-3 text-xs leading-relaxed'>{detail.data.extractedText}</pre>
+      ) : (
+        <p role='status' className='text-muted-foreground text-sm'>{['pending', 'queued', 'processing'].includes(asset.processing ?? '') ? 'Extracting and indexing in the background…' : asset.extractionError || (kindOf(asset) === 'audio' ? 'Add a transcript below to make this audio searchable. Automatic transcription is unavailable.' : 'No extractable text. Scanned PDFs need a text layer. The original is stored privately.')}</p>
+      )}
+    </section>
   );
 }
 
@@ -205,16 +249,19 @@ function DetailBody({
   uses,
   publishing,
   currentUserId,
-  platforms
-}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms'> & { asset: LibraryAsset }) {
+  platforms,
+  canEdit
+}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit'> & { asset: LibraryAsset }) {
   const dims = dimensionsOf(asset);
   const reencoded = asset.mime === 'image/jpeg' && asset.processing === 'decoded';
   return (
     <div className='flex flex-col gap-6'>
       <LargeImage asset={asset} />
+      {!['image', 'video'].includes(kindOf(asset) ?? '') ? <DocumentText asset={asset} /> : null}
+      <AssetOrganizer key={asset.id} asset={asset} canEdit={canEdit} />
 
       {publishing && (
-        <StateMessage kind='loading' layout='inline' title='A post using this image is publishing' description='You can delete it once that post finishes.' />
+        <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />
       )}
 
       {/* Provenance and rights are inspectable facts (DNA §21.9), read as quiet rows without dividers. */}
@@ -223,9 +270,14 @@ function DetailBody({
           Details
         </h3>
         <dl className='flex flex-col'>
-          <Fact term='Dimensions'>{dims ? `${dims} px` : 'Not recorded'}</Fact>
+          {dims ? <Fact term='Dimensions'>{dims} px</Fact> : null}
+          <Fact term='Processing'>{(asset.processing ?? 'unknown').replaceAll('_', ' ')}</Fact>
+          {asset.extractionError ? <Fact term='Issue'>{asset.extractionError}</Fact> : null}
           <Fact term='Size'>{typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : 'Not recorded'}</Fact>
+          {asset.originalFilename ? <Fact term='Original file'>{asset.originalFilename}</Fact> : null}
           <Fact term='Format'>{reencoded ? 'JPEG · metadata removed' : asset.mime}</Fact>
+          {asset.aiSummary ? <Fact term='Summary'>{asset.aiSummary}</Fact> : null}
+          {asset.aiTags?.length ? <Fact term='Tags'>{asset.aiTags.join(' · ')}</Fact> : null}
           <HashFact term='Stored hash' hash={asset.hash} />
           {asset.sourceHash && <HashFact term='Source hash' hash={asset.sourceHash} />}
           {typeof asset.createdAt === 'number' && (
@@ -258,7 +310,7 @@ function DetailBody({
         )}
       </section>
 
-      <ImageRules asset={asset} platforms={platforms} />
+      {kindOf(asset) === 'image' ? <ImageRules asset={asset} platforms={platforms} /> : null}
     </div>
   );
 }
@@ -272,11 +324,13 @@ function DetailActions({
   deleting,
   onDelete
 }: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
   return (
     <>
-      {!canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use images in posts.</p>}
+      {mediaAsset && !canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use media in posts.</p>}
       <div className='flex flex-wrap gap-2'>
-        {canApprove ? (
+        {canApprove && mediaAsset ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
             Use in a post
@@ -287,13 +341,23 @@ function DetailActions({
             <LearnMoreChevron />
           </Link>
         ) : null}
+        {!mediaAsset ? (
+          <Button
+            variant='glass'
+            size='control'
+            onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to open the original.'); }).catch(() => { target?.close(); toast.error('File unavailable'); }); }}
+          >
+            Open original
+          </Button>
+        ) : null}
+        {!mediaAsset ? <Button variant='quiet' size='control' onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id, true).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to download the file.'); }).catch(() => { target?.close(); toast.error('Download unavailable'); }); }}>Download</Button> : null}
         {canEdit && (
           <Button
             variant='destructive'
             size='control'
             className='rounded-[var(--rafii-radius-control)] sm:ml-auto'
             disabled={deleting || publishing}
-            title={publishing ? 'A post using this image is publishing' : undefined}
+            title={publishing ? 'A post using this asset is publishing' : undefined}
             onClick={() => onDelete(asset)}
           >
             {deleting ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.trash aria-hidden />}
@@ -309,7 +373,9 @@ export function AssetDetail(props: AssetDetailProps) {
   const { asset, open, onOpenChange } = props;
   const isMobile = useIsMobile();
   const dims = asset ? dimensionsOf(asset) : null;
-  const title = dims ? `Image ${dims}` : 'Image';
+  const assetKind = asset ? kindOf(asset) : null;
+  const fallbackTitle = assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo';
+  const title = asset?.displayTitle?.trim() || asset?.originalFilename?.trim() || (dims ? `${fallbackTitle} ${dims}` : fallbackTitle);
   const description = props.uses.length === 0 ? 'Not used in a post yet' : `Used in ${props.uses.length} ${props.uses.length === 1 ? 'post' : 'posts'}`;
 
   if (isMobile) {
@@ -323,12 +389,12 @@ export function AssetDetail(props: AssetDetailProps) {
                   <DrawerTitle>{title}</DrawerTitle>
                   <DrawerDescription>{description}</DrawerDescription>
                 </div>
-                <DrawerClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' />}>
+                <DrawerClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' />}>
                   <Icons.close aria-hidden />
                 </DrawerClose>
               </DrawerHeader>
               <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4'>
-                <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} />
+                <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} canEdit={props.canEdit} />
               </div>
               <DrawerFooter className='pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]'>
                 <DetailActions
@@ -352,7 +418,7 @@ export function AssetDetail(props: AssetDetailProps) {
       <SheetContent side='right' showCloseButton={false} className={SHEET_CLASS}>
         {asset && (
           <>
-            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' className='absolute top-3 right-3 z-10' />}>
+            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' className='absolute top-3 right-3 z-10' />}>
               <Icons.close aria-hidden />
             </SheetClose>
             <SheetHeader className='pr-16'>
@@ -360,7 +426,7 @@ export function AssetDetail(props: AssetDetailProps) {
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>
             <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4'>
-              <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} />
+              <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} canEdit={props.canEdit} />
             </div>
             <SheetFooter className='pt-3'>
               <DetailActions

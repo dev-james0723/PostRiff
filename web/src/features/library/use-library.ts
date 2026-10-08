@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSnapshot } from '@/lib/api/hooks';
 import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
-import { isLibraryAsset } from '@/lib/media/asset-kinds';
+import { isLibraryAsset, kindOf } from '@/lib/media/asset-kinds';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /**
  * Everything the Library reads, derived from the workspace snapshot: the live images in a stated order,
@@ -32,6 +34,7 @@ export interface AssetUse {
 }
 
 export type LibraryFilter = 'all' | 'unused' | 'used';
+export type LibraryKindFilter = 'all' | 'image' | 'video' | 'audio' | 'document' | 'file';
 /** `newest` is offered only when assets carry an upload time; `stored` is the order the API returns. */
 export type LibrarySort = 'newest' | 'stored' | 'largest';
 
@@ -92,7 +95,17 @@ function buildUsage(reviews: Review[], jobs: Job[]) {
 
 function matchesQuery(asset: LibraryAsset, query: string) {
   if (!query) return true;
-  if (asset.hash.toLowerCase().startsWith(query)) return true;
+  const text = [
+    asset.displayTitle,
+    asset.originalFilename,
+    asset.aiSummary,
+    ...(asset.aiTags ?? [])
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+  if (text.includes(query)) return true;
+  if (asset.hash?.toLowerCase().startsWith(query)) return true;
   if (asset.sourceHash?.toLowerCase().startsWith(query)) return true;
   if (asset.width && asset.height) {
     const dims = query.replace(/\s+/g, '').replace(/[x*]/g, '×');
@@ -101,13 +114,40 @@ function matchesQuery(asset: LibraryAsset, query: string) {
   return false;
 }
 
-export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sort: LibrarySort; query: string }) {
+export function useLibrary({
+  filter,
+  kindFilter,
+  sort,
+  query,
+  tag = '',
+  collection = ''
+}: {
+  filter: LibraryFilter;
+  kindFilter: LibraryKindFilter;
+  sort: LibrarySort;
+  query: string;
+  tag?: string;
+  collection?: string;
+}) {
   const snapshot = useSnapshot();
   const phase2 = snapshot.data?.state.phase2;
+  const { api, workspaceId } = useWorkspaceApi();
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalized = useInfiniteQuery({
+    queryKey: ['library-assets', workspaceId, normalizedQuery, kindFilter, tag, collection, sort],
+    queryFn: ({ pageParam }) => api.library(workspaceId, normalizedQuery, 200, pageParam, { kind: kindFilter, tag, collection, sort }),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    refetchInterval: (q) => q.state.data?.pages.some((p) => p.assets.some((a) => ["pending", "queued", "processing"].includes(a.processing ?? ""))) ? 3_000 : false,
+    enabled: Boolean(workspaceId) && !snapshot.isPending,
+    staleTime: 15_000
+  });
 
   const derived = useMemo(() => {
-    // Photos and videos; a video's poster and frames live inside its record, never as separate tiles.
-    const live = (phase2?.assets ?? []).filter(isLibraryAsset);
+    // The normalized endpoint merges legacy photos/videos with document/file rows. During rollout or a temporary
+    // endpoint failure, the existing snapshot remains a truthful media-only fallback.
+    const source = normalized.data?.pages.flatMap((p) => p.assets) ?? phase2?.assets ?? [];
+    const live = source.filter(isLibraryAsset);
     const usage = buildUsage(phase2?.reviews ?? [], phase2?.jobs ?? []);
     const hasTimestamps = live.some((asset) => typeof asset.createdAt === 'number');
     const used = live.filter((asset) => usage.has(asset.id)).length;
@@ -120,24 +160,35 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
       platforms,
       hasTimestamps,
       counts: { all: live.length, used, unused: live.length - used },
+      kindCounts: {
+        all: live.length,
+        image: live.filter((asset) => kindOf(asset) === 'image').length,
+        video: live.filter((asset) => kindOf(asset) === 'video').length,
+        audio: live.filter((asset) => kindOf(asset) === 'audio').length,
+        document: live.filter((asset) => kindOf(asset) === 'document').length,
+        file: live.filter((asset) => kindOf(asset) === 'file').length
+      },
       totals: {
         count: live.length,
         bytes: knownBytes.reduce((sum, asset) => sum + (asset.bytes ?? 0), 0),
         unknownBytes: live.length - knownBytes.length
       }
     };
-  }, [phase2]);
+  }, [phase2, normalized.data]);
 
   // `newest` without timestamps would be a guess, so it falls back to the stored order.
   const effectiveSort: LibrarySort = sort === 'newest' && !derived.hasTimestamps ? 'stored' : sort;
-  const normalizedQuery = query.trim().toLowerCase();
+  const backendSearch = Boolean(normalized.data && normalizedQuery);
 
   const visible = useMemo(() => {
     const filtered = derived.live.filter((asset) => {
       const used = derived.usage.has(asset.id);
       if (filter === 'used' && !used) return false;
       if (filter === 'unused' && used) return false;
-      return matchesQuery(asset, normalizedQuery);
+      if (kindFilter !== 'all' && kindOf(asset) !== kindFilter) return false;
+      if (tag && !(asset.tags ?? asset.aiTags ?? []).includes(tag)) return false;
+      if (collection && !asset.collections?.includes(collection)) return false;
+      return backendSearch || matchesQuery(asset, normalizedQuery);
     });
     if (effectiveSort === 'stored') return filtered;
     const order = new Map(derived.live.map((asset, index) => [asset.id, index]));
@@ -150,15 +201,19 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
       if (typeof right !== 'number') return -1;
       return right - left || stable(a, b);
     });
-  }, [derived, filter, normalizedQuery, effectiveSort]);
+  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort, tag, collection]);
 
   return {
     snapshot,
+    normalized,
     revision: snapshot.data?.revision ?? null,
     assets: derived.live,
     visible,
     counts: derived.counts,
+    kindCounts: derived.kindCounts,
     totals: derived.totals,
+    tags: [...new Set(derived.live.flatMap((a) => a.tags ?? a.aiTags ?? []))].toSorted(),
+    storage: normalized.data?.pages[0]?.storage,
     hasTimestamps: derived.hasTimestamps,
     platforms: derived.platforms,
     sort: effectiveSort,

@@ -12,7 +12,9 @@
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "audit:copy": "node scripts/copy-audit.mjs",
-    "test:browser:durable": "node tests/consumer-durable-browser.cjs"
+    "test:browser:durable": "node tests/consumer-durable-browser.cjs",
+    "test:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-cloud-validation.sh",
+    "ci:library": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/library-release-validation.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -59,7 +61,7 @@
     "react-resizable-panels": "^4.12.2",
     "react-responsive": "^10.0.1",
     "recharts": "3.8.0",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "simple-icons": "^16.31.0",
     "sonner": "^1.7.4",
     "tailwind-merge": "^3.5.0",
@@ -88,7 +90,9 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "postcss": "8.5.25",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.5",
+    "tinypool": "2.1.2",
+    "source-map-js": "1.2.2"
   },
   "engines": {
     "node": "24.x"

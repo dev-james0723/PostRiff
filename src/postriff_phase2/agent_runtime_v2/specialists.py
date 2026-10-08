@@ -40,7 +40,7 @@ is limited to what is shared. Offer a revision only as a suggestion; the Content
     },
     "content": {
         "title": "Content", "workload": "standard_reasoning",
-        "tools": ["draft_get", "content_search", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search"],
+        "tools": ["draft_get", "content_search", "library_search", "library_read", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search"],
         "purpose": "Draft, rewrite, shorten, expand, adapt or localise posts through Rafii's writing pipeline, keeping source provenance.",
         "instructions": """Content. You write through Rafii's writing pipeline (draft_create for new drafts, draft_rewrite for an existing one).
 The pipeline uses the person's chosen writer, Brand Brain and voice; you pass a clear brief and the platforms. Rewrites of a draft become a
@@ -68,7 +68,7 @@ provider-accepted ≠ verified-published. If the app refuses (review first, the 
     },
     "research": {
         "title": "Research", "workload": "standard_reasoning",
-        "tools": ["help_search", "help_get", "content_search", "web_research"],
+        "tools": ["help_search", "help_get", "content_search", "library_search", "library_read", "web_research"],
         "purpose": "Rafii help, workspace sources and (when the owner allowed it) web research with dated sources.",
         "instructions": """Research. Answer from Rafii's help, the workspace's sources, or web research when it is allowed. Every web finding keeps its
 source URL and date; say when research is off. Research findings are not preferences and are never saved to Brand Brain.""",

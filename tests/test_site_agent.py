@@ -255,10 +255,12 @@ class ToolTest(unittest.TestCase):
             self.assertNotIn(forbidden, tools.CATALOG)
 
     def test_catalogue_pin(self):
-        # Deliberate pin: chat-context adds the workspace.search read; the live agent adds the ui.guide and
-        # ui.voice client actions. Adding a tool changes tools.RELEASE and the policy epoch.
-        self.assertEqual(len(tools.CATALOG), 35)
+        # Deliberate pin: chat-context adds workspace.search, the live agent adds its UI actions,
+        # and the Library adds two read-only source tools. Adding a tool changes the release digest.
+        self.assertEqual(len(tools.CATALOG), 37)
         self.assertEqual(tools.CATALOG["workspace.search"]["effect"], "read")
+        self.assertEqual(tools.CATALOG["library.search"]["effect"], "read")
+        self.assertEqual(tools.CATALOG["library.read"]["effect"], "read")
         self.assertEqual(sorted(t for t, spec in tools.CATALOG.items() if spec["effect"] != "read"),
                          ["automation.patch_propose", "ui.guide", "ui.navigate", "ui.show_help", "ui.voice"])
 

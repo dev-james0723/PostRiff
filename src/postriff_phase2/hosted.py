@@ -424,6 +424,9 @@ class HostedWorkspaceService:
         # change after construction).
         self.commands.writers = lambda: rt if (rt := self.ideas.default_runtime()) and getattr(rt, 'cost_class', None) == 'paid' and getattr(rt, 'provider_class', None) == 'cloud' else None
         self._wire_chat_media(chat_media or {})
+        from .library_assets import UniversalLibrary
+        library_storage = getattr(assets, 'storage', None) if assets is not None else None
+        self.library = UniversalLibrary(self, storage=library_storage, clock=clock, bucket=getattr(library_storage, "file_bucket", "postriff-library"))
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is
@@ -1212,7 +1215,7 @@ class HostedWorkspaceService:
         self.commands._require_mutable_media(saved["state"])
         asset = self.assets.stage_upload(workspace_id, payload)
         try:
-            saved = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.add_asset(state, actor, asset))
+            saved = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.add_asset(state, actor, asset), after=lambda cur,state,p: self.library.assert_capacity(cur,state,workspace_id))
         except Exception:
             self.assets.remove(workspace_id, asset)
             raise
@@ -1225,8 +1228,15 @@ class HostedWorkspaceService:
         asset = find(prepared["state"]["phase2"]["assets"], asset_id)
         self.assets.remove(workspace_id, asset)
         from .media_notes import purge_asset
+        def purge_metadata(cur, _state, _principal):
+            purge_asset(cur, workspace_id, asset_id)
+            # Shared organization must not retain deleted legacy media references.
+            cur.execute("SELECT to_regclass('public.pr_library_labels')")
+            if cur.fetchone()[0]:
+                cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(workspace_id,asset_id))
+                cur.execute('DELETE FROM public.pr_library_labels WHERE workspace_id=%s AND asset_key=%s',(workspace_id,asset_id))
         finished = self.repository.command(workspace_id, token, prepared["revision"], lambda state, actor: self.commands.finish_asset_delete(state, actor, asset_id),
-                                           after=lambda cur, _state, _principal: purge_asset(cur, workspace_id, asset_id))
+                                           after=purge_metadata)
         return self._present(finished)
 
     def media(self, workspace_id, token, asset_id):
