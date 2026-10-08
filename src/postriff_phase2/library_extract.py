@@ -112,7 +112,11 @@ def extract_isolated(raw, ext):
     import os
     import subprocess
     import sys
-    env = {**os.environ, 'PYTHONPATH': str(__import__('pathlib').Path(__file__).resolve().parents[1]), 'PYTHONDONTWRITEBYTECODE':'1'}
+    # Vercel installs vendored dependencies through site.addsitedir; these are
+    # present in sys.path but absent from a fresh subprocess's default path.
+    paths = [str(__import__('pathlib').Path(__file__).resolve().parents[1]), *sys.path]
+    env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
+           'PYTHONPATH': os.pathsep.join(dict.fromkeys(paths)), 'PYTHONDONTWRITEBYTECODE': '1'}
     try:
         result = subprocess.run([sys.executable,'-m','postriff_phase2.library_extract',ext],input=raw,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20,env=env,check=False)
         if result.returncode != 0 or len(result.stdout)>12*MAX_TEXT:

@@ -35,6 +35,17 @@ def main():
         rpms = sorted(str(p) for p in (work / 'rpms').rglob('*.rpm'))
         subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', 'libXinerama', 'cups-libs', 'dbus-glib', 'cairo', 'libseccomp', 'nss', 'fontconfig', 'dejavu-sans-fonts', 'dejavu-serif-fonts', *rpms], check=True)
     office = next(Path('/opt').glob('libreoffice26.2'))
+    # RPM packages do not declare every dynamically loaded headless dependency.
+    # Resolve the actual binary's complete transitive graph before packaging.
+    link_env = {**os.environ, 'LD_LIBRARY_PATH': str(office / 'program')}
+    for attempt in range(4):
+        links = subprocess.run(['ldd', str(office / 'program/soffice.bin')], capture_output=True, text=True, env=link_env, check=False)
+        missing = sorted(set(re.findall(r'(\S+) => not found', links.stdout)))
+        if not missing:
+            break
+        if attempt == 3:
+            raise SystemExit('Unresolved document runtime dependencies: ' + ', '.join(missing))
+        subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', *['/usr/lib64/' + name for name in missing]], check=True)
     shutil.copytree(office, root / 'office', dirs_exist_ok=True, symlinks=False)
     libdir = root / 'lib'
     libdir.mkdir(exist_ok=True)
@@ -48,7 +59,7 @@ def main():
         seen.add(str(binary))
         if not binary.is_relative_to(office):
             shutil.copy2(binary, libdir / binary.name, follow_symlinks=True)
-        output = subprocess.run(['ldd', str(binary)], capture_output=True, text=True, check=False).stdout
+        output = subprocess.run(['ldd', str(binary)], capture_output=True, text=True, env=link_env, check=False).stdout
         for path in re.findall(r'=>\s+(/[^\s]+)', output):
             dep = Path(path)
             # Use the function runtime's glibc and loader, never a copied loader.
