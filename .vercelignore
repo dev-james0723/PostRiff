@@ -1,5 +1,6 @@
 # Vercel uploads source before function-level excludeFiles runs.
 # Keep only the two service source trees and their deployment configuration.
+.document-runtime/
 .env*
 .gitignore
 .vercelignore
