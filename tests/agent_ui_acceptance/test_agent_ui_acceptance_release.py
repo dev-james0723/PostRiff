@@ -241,10 +241,32 @@ class LiveRunnerGuards(unittest.TestCase):
         self.assertEqual(v["G10-live"]["status"], "unverified")
         self.assertEqual(len(v["G10-live"]["missingCases"]), 9)
         self.assertEqual(v["G05"]["status"], "unverified", "no filter check was collected: never assumed")
+        records = LIVE.gate_records(v, sha=SHA, origin="https://rafii.io", data_scope=LIVE.scope_hash(UUID), evidence_path="evidence/g/live-x.json")
+        kinds = {(r["gate"], r["environment"]["kind"]): r["status"] for r in records}
+        self.assertEqual(kinds[("G03", "live-provider")], "pass")
+        self.assertEqual(kinds[("G03", "production-canary")], "pass")
+        self.assertEqual(kinds[("G10", "live-provider")], "unverified")
+        self.assertTrue(all(r["candidateSha"] == SHA for r in records))
         del browser["cases"]["J05-b"]
         short = LIVE.ingest(browser, rows, plan)["verdicts"]["G03"]
         self.assertEqual(short["status"], "unverified")
         self.assertEqual(short["missingCases"], ["J05-b"])
+
+    def test_ingest_end_to_end_writes_evidence_and_records(self):
+        plan = LIVE.sample_plan()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"RAFII_LIVE_CHECKS": "1"}):
+            Path(tmp, "consumer.json").write_text(json.dumps({"cases": {"J01-a": {}}, "marks": [], "resources": [], "userAgent": "UA"}))
+            Path(tmp, "founder.json").write_text(json.dumps({"cases": {"J09-a": {}}, "marks": [], "resources": []}))
+            Path(tmp, "rows.json").write_text("[]")
+            code = LIVE.main(["ingest", "--origin", "https://rafii.io", "--workspace", UUID, "--budget-usd", "1", "--sha", SHA, "--out", str(Path(tmp, "live.json")),
+                              "--browser-results", str(Path(tmp, "consumer.json")), str(Path(tmp, "founder.json")), "--server-rows", str(Path(tmp, "rows.json"))])
+            self.assertEqual(code, 1, "an incomplete sample never exits 0")
+            written = json.loads(Path(tmp, "live.json").read_text())
+            self.assertEqual({c["caseId"] for c in written["cases"]}, {"J01-a", "J09-a"})
+            self.assertNotIn(UUID, json.dumps(written))
+            records = json.loads(Path(tmp, "live.records.json").read_text())["records"]
+            self.assertTrue(records and all(r["status"] != "pass" for r in records))
+        self.assertEqual(plan["normal"][0]["caseId"], "J01-a")
 
 
 class FixtureProvider(unittest.TestCase):

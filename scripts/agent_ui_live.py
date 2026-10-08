@@ -53,7 +53,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
-from agent_ui_acceptance import redaction  # noqa: E402
+from agent_ui_acceptance import evidence, redaction  # noqa: E402
 from agent_ui_acceptance.client import Api  # noqa: E402
 
 EVIDENCE_DIR = ROOT / "docs/design/openui-production-2026-10-08/evidence/g"
@@ -184,6 +184,40 @@ class Budget:
     def report(self):
         return {"capUsd": self.cap, "perCaseEstimateUsd": self.estimate, "spentUsd": round(self.spent, 6), "unknownCostCases": self.unknown,
                 "costSource": "server-reported usage (unknown counted at the per-case estimate)"}
+
+
+LIVE_GATE_KINDS = {"G03": ("live-provider", "production-canary"), "G04": ("production-canary",), "G05": ("production-canary",),
+                   "G10-live": ("live-provider",), "G17": ("live-provider",), "G18": ("production-canary",)}
+
+
+def gate_records(verdicts: dict, *, sha: str, origin: str, data_scope: str, evidence_path: str) -> list:
+    """Release-checkable records (evidence.record shape) for the gates a live browser run can evidence."""
+    out = []
+    for name, kinds in LIVE_GATE_KINDS.items():
+        verdict = verdicts.get(name) or {}
+        status = verdict.get("status") or "unverified"
+        gate = name.split("-")[0]
+        actual = json.dumps({k: v for k, v in verdict.items() if k not in ("status", "timeOrigins")}, ensure_ascii=False)[:900]
+        for kind in kinds:
+            out.append(evidence.record(gate, status, kind=kind, origin=origin, sha=sha, actor="A (real UI, passkey session) + G runner",
+                                       command="scripts/agent_ui_live.py ingest (browser mode; docs/design/openui-production-2026-10-08/evidence/g/live-runbook.md)",
+                                       expected=f"04-ACCEPTANCE {gate} live criteria", actual=actual, data_scope=f"allowlisted test workspace {data_scope}",
+                                       evidence_paths=[evidence_path]))
+    return out
+
+
+def merge_browser(files) -> dict:
+    """Several window.__rafiiLive.collect() files (e.g. the consumer chat page and the founder panel) as one collection."""
+    merged = {"cases": {}, "marks": [], "resources": []}
+    for file in files:
+        data = json.loads(Path(file).read_text(encoding="utf-8"))
+        merged["cases"].update(data.get("cases") or {})
+        merged["marks"] += data.get("marks") or []
+        merged["resources"] += data.get("resources") or []
+        for key in ("probe", "filterCheck", "hiddenCheck", "userAgent", "faults"):
+            if data.get(key) is not None and key not in merged:
+                merged[key] = data[key]
+    return merged
 
 
 def write_evidence(payload: dict, out: Path | None, sha: str) -> Path:
@@ -373,7 +407,8 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
                     "targets": {"firstUsefulComponentP95Ms": FIRST_COMPONENT_P95_MS, "fullUiP95Ms": FULL_UI_P95_MS}},
             "G04": {"status": g04, "frames": len(frames), "splitInsideCharacterObserved": probe.get("splitInsideCharacter"),
                     "spanMs": round(frames[-1]["at"] - frames[0]["at"], 1) if len(frames) >= 2 else None},
-            "G05": {"status": "unverified" if not filt else ("pass" if filt.get("modelAttemptDelta") == 0 and filt.get("queryRequests", 0) >= 1 else "fail"), **filt},
+            "G05": {"status": "unverified" if not filt or filt.get("modelAttemptDelta") is None else
+                    ("pass" if filt.get("modelAttemptDelta") == 0 and filt.get("queryRequests", 0) >= 1 and not filt.get("presentationOrEditRequests") else "fail"), **filt},
             "G18": {"status": "unverified" if not hidden else ("pass" if hidden.get("hiddenCount") == 0 else "fail"), **hidden},
         },
     }
@@ -493,7 +528,8 @@ def main(argv=None) -> int:
         p.add_argument("--out", type=Path)
         p.add_argument("--case-estimate-usd", type=float, default=DEFAULT_CASE_ESTIMATE_USD)
         if name == "ingest":
-            p.add_argument("--browser-results", type=Path, required=True, help="JSON from window.__rafiiLive.collect() (+ probe/filterCheck/hiddenCheck)")
+            p.add_argument("--browser-results", type=Path, nargs="+", required=True,
+                           help="JSON from window.__rafiiLive.collect() (+ probe/filterCheck/hiddenCheck); one file per page (consumer, founder)")
             p.add_argument("--server-rows", type=Path, required=True, help="JSON array from server-sql")
         if name == "run":
             p.add_argument("--cases", default="normal", help="normal | all | comma list of case ids")
@@ -515,7 +551,7 @@ def main(argv=None) -> int:
     plan = sample_plan()
     if args.command == "ingest":
         guard_live(args, needs_token=False)
-        browser = json.loads(args.browser_results.read_text(encoding="utf-8"))
+        browser = merge_browser(args.browser_results)
         rows = json.loads(args.server_rows.read_text(encoding="utf-8"))
         rows = rows[0] if rows and isinstance(rows[0], list) else rows
         merged = ingest(browser, rows if isinstance(rows, list) else [], plan)
@@ -527,7 +563,14 @@ def main(argv=None) -> int:
                                                                     "overCap": spent > args.budget_usd},
                    **merged}
         path = write_evidence(payload, args.out, sha)
-        print(json.dumps({"written": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path), "verdicts": {k: v["status"] for k, v in merged["verdicts"].items()}}))
+        shown = str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
+        records = gate_records(merged["verdicts"], sha=sha, origin=args.origin, data_scope=scope_hash(args.workspace), evidence_path=shown)
+        results = (path.parent / "results") if args.out is None else path.parent
+        results.mkdir(parents=True, exist_ok=True)
+        record_path = results / (path.stem + ".records.json")
+        redaction.assert_clean({"records": records})
+        record_path.write_text(json.dumps({"records": records}, indent=1, ensure_ascii=False))
+        print(json.dumps({"written": shown, "gateRecords": str(record_path), "verdicts": {k: v["status"] for k, v in merged["verdicts"].items()}}))
         return 0 if all(v["status"] == "pass" for v in merged["verdicts"].values()) else 1
     if args.command == "concurrency":
         if os.environ.get("RAFII_LIVE_CHECKS") != "1":
