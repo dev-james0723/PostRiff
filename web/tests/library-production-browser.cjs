@@ -110,7 +110,18 @@ const checks=[];
     await previewVideo.waitFor({state:'attached'});
     assert.ok(await previewVideo.evaluate(video=>video.paused),'reduced motion disables automatic video preview');
     await page.emulateMedia({reducedMotion:'no-preference'});
-    await page.waitForFunction(()=>{const video=document.querySelector('[data-library-media-player="video"] video');return video instanceof HTMLVideoElement&&!video.paused&&video.currentTime>0&&video.muted;},null,{timeout:20000});
+    const waitForSilentVideo=async()=>{
+     try{await page.waitForFunction(()=>{const video=document.querySelector('[data-library-media-player="video"] video');return video instanceof HTMLVideoElement&&!video.paused&&video.currentTime>0&&video.muted;},null,{timeout:20000});}
+     catch(error){
+      const diagnostic=await previewVideo.evaluate(video=>({paused:video.paused,muted:video.muted,time:video.currentTime,duration:Number.isFinite(video.duration)?video.duration:null,readyState:video.readyState,networkState:video.networkState,error:video.error?{code:video.error.code,message:video.error.message}:null,hasSource:Boolean(video.currentSrc),visible:document.visibilityState,motionReduced:matchMedia('(prefers-reduced-motion: reduce)').matches,bounds:{top:video.getBoundingClientRect().top,bottom:video.getBoundingClientRect().bottom},playerText:video.closest('[data-library-media-player]')?.textContent}));
+      throw new Error(`${error.message}\nActual video diagnostics: ${JSON.stringify(diagnostic)}`);
+     }
+    };
+    await waitForSilentVideo();
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.waitForFunction(()=>document.querySelector('[data-library-media-player="video"] video')?.paused===true,null,{timeout:5000});
+    await page.emulateMedia({reducedMotion:'no-preference'});
+    await waitForSilentVideo();
     await inlineVideo.getByRole('button',{name:'Pause video preview',exact:true}).click();
     const videoTimeline=inlineVideo.getByRole('slider',{name:'Video preview timeline',exact:true});
     await videoTimeline.focus();await videoTimeline.press('Home');await videoTimeline.press('ArrowRight');

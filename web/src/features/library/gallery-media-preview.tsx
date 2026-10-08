@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
-import { useInView, useReducedMotion } from 'motion/react';
+import { useInView } from 'motion/react';
 import { Icons } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -64,7 +64,8 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   asset: LibraryAsset; video?: boolean; posterUrl?: string; compact?: boolean; enabled?: boolean;
 }) {
   const { api, workspaceId } = useWorkspaceApi();
-  const reduce = useReducedMotion();
+  // Motion 11 snapshots this preference; media playback must follow live OS changes.
+  const [reduce, setReduce] = useState(true);
   const container = useRef<HTMLDivElement>(null);
   const media = useRef<HTMLMediaElement | null>(null);
   const visible = useInView(container, { amount: 0.25 });
@@ -102,6 +103,12 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     gcTime: 60_000,
     retry: false
   });
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduce(preference.matches);
+    update(); preference.addEventListener('change', update);
+    return () => preference.removeEventListener('change', update);
+  }, []);
   useEffect(() => {
     const update = () => setForeground(document.visibilityState === 'visible');
     update(); document.addEventListener('visibilitychange', update);
