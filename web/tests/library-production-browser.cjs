@@ -30,7 +30,9 @@ const checks=[];
    });
    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
    await page.goto(base+'/app/library');
-   const welcome=page.getByRole('button',{name:'Not now',exact:true});if(await welcome.isVisible().catch(()=>false))await welcome.click();
+   const welcome=page.getByRole('button',{name:'Not now',exact:true});
+   try{await welcome.waitFor({state:'visible',timeout:5000});await welcome.click();await welcome.waitFor({state:'hidden',timeout:5000});}
+   catch(error){if(await welcome.isVisible().catch(()=>false))throw error;}
    const picker=page.getByLabel('Choose assets');await picker.waitFor({state:'attached'});
    await picker.setInputFiles({name:'rehearsal-'+width+'.md',mimeType:'text/markdown',buffer:Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.')});
    try{await page.getByRole('button',{name:/Document rehearsal/}).first().waitFor({timeout:30000});}
