@@ -19,8 +19,8 @@ test('the Library accepts HEIC and lists only Library assets', () => {
 
 test('the Library copy tells the truth about current photo and video upload paths', () => {
   const view = read('features', 'library', 'library-view.tsx');
-  assert.match(view, /Add photos here\./);
-  assert.match(view, /Videos added from Rafii chat also appear here once the server verifies them\./);
+  assert.match(view, /Upload a photo here\./);
+  assert.match(view, /Videos added from Rafii chat also appear in this Library\./);
   assert.doesNotMatch(view, /video is not accepted/i);
 });
 
@@ -32,7 +32,7 @@ test('the Living Archive exposes gallery\/list views, media filters and universa
   assert.match(view, /value: 'gallery'/);
   assert.match(view, /value: 'list'/);
   assert.match(view, /id='library-kind'/);
-  assert.match(library, /export type LibraryKindFilter = 'all' \| 'image' \| 'video'/);
+  assert.match(library, /export type LibraryKindFilter = 'all' \| 'image' \| 'video' \| 'audio'/);
   assert.match(library, /asset\.displayTitle/);
   assert.match(library, /asset\.originalFilename/);
   assert.match(types, /displayTitle\?: string/);
