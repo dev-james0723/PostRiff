@@ -946,7 +946,8 @@ def _start_presentation(runtime, tx, workspace_id, request, *, started, request_
             raise AlphaError("This answer is too old to start an interactive view; ask again for a fresh one.", 409, code="ui_not_eligible")
         verified = {**result, "runId": parent["runId"], "conversationId": parent["conversationId"]}
         projection = ui_projection.project_ui_context(cur, auth, verified, request["surface"], {})
-        manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope)
+        # Lane D's projection carries the manifest it built from the same journeys for this member (deterministic per issue).
+        manifest = projection.get("manifest") if isinstance(projection.get("manifest"), dict) else ui_capabilities.build_manifest(cur, auth, projection, scope=scope)
         plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind=kind, mode="generate"))
         lease = _call(store.create_or_resume_artifact, cur, auth, parent["runId"], request["slot"], key, surface=request["surface"], manifest=manifest,
                       projection=projection, kind=kind, retry_of=retry_of, lease_owner=owner, library=_library_info(plan))
