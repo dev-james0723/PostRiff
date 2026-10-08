@@ -33,7 +33,12 @@ const checks=[];
    const welcome=page.getByRole('button',{name:'Not now',exact:true});if(await welcome.isVisible().catch(()=>false))await welcome.click();
    const picker=page.getByLabel('Choose assets');await picker.waitFor({state:'attached'});
    await picker.setInputFiles({name:'rehearsal-'+width+'.md',mimeType:'text/markdown',buffer:Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.')});
-   await assert.doesNotReject(async()=>{await page.getByRole('button',{name:/Document rehearsal/}).first().waitFor({timeout:30000});});
+   try{await page.getByRole('button',{name:/Document rehearsal/}).first().waitFor({timeout:30000});}
+   catch(error){
+    const response=await context.request.get(path,{headers}),listing=await response.text();
+    const body=await page.locator('body').innerText().catch(()=>''),buttons=await page.getByRole('button').allTextContents({timeoutMs:3000}).catch(()=>[]);
+    throw new Error(`${error.message}\nLibrary API ${response.status()}: ${listing.slice(0,3000)}\nVisible page: ${body.slice(0,2000)}\nButtons: ${JSON.stringify(buttons.slice(0,40))}`);
+   }
    let listing=await (await context.request.get(path,{headers})).json();let doc=listing.assets.find(a=>a.originalFilename==='rehearsal-'+width+'.md');assert.ok(doc);assert.equal(doc.indexingStatus,'ready');
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
