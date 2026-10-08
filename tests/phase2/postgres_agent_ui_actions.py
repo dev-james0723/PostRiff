@@ -207,15 +207,15 @@ def check_shape(binding, out):
     if out["data"] is None:
         assert out["state"] in ("unavailable", "denied", "empty"), (binding, out["state"])
         return
-    declared = shapes.SHAPES[binding]
+    declared, needed = shapes.SHAPES[binding], shapes.required(binding)
     keys = set(out["data"])
-    if binding in shapes.OPEN_SHAPES:
-        assert set(declared["keys"]) <= keys, (binding, sorted(set(declared["keys"]) - keys))
-    else:
-        assert keys == set(declared["keys"]), (binding, "extra", sorted(keys - set(declared["keys"])), "missing", sorted(set(declared["keys"]) - keys))
+    assert set(needed["keys"]) <= keys, (binding, "missing", sorted(set(needed["keys"]) - keys))
+    if binding not in shapes.OPEN_SHAPES:
+        assert keys <= set(declared["keys"]), (binding, "undeclared", sorted(keys - set(declared["keys"])))
     for list_key, row_keys in declared["lists"].items():
         for row in out["data"].get(list_key) or []:
-            assert set(row_keys) <= set(row), (binding, list_key, sorted(set(row_keys) - set(row)))
+            assert set(needed["lists"][list_key]) <= set(row), (binding, list_key, "missing", sorted(set(needed["lists"][list_key]) - set(row)))
+            assert set(row) <= set(row_keys), (binding, list_key, "undeclared", sorted(set(row) - set(row_keys)))
 
 
 # ===========================================================================================================================

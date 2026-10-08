@@ -73,14 +73,14 @@ def keys_match(test, binding, out):
     test.assertIn(out["state"], ui_contracts.DATA_STATES)
     if out["data"] is None:
         return
-    declared = shapes.SHAPES[binding]
-    if binding in shapes.OPEN_SHAPES:
-        test.assertLessEqual(set(declared["keys"]), set(out["data"]), binding)
-    else:
-        test.assertEqual(set(out["data"]), set(declared["keys"]), binding)
+    declared, needed = shapes.SHAPES[binding], shapes.required(binding)
+    test.assertLessEqual(set(needed["keys"]), set(out["data"]), binding)
+    if binding not in shapes.OPEN_SHAPES:
+        test.assertLessEqual(set(out["data"]), set(declared["keys"]), binding)
     for list_key, row_keys in declared["lists"].items():
         for row in out["data"].get(list_key) or []:
-            test.assertLessEqual(set(row_keys), set(row), (binding, list_key))
+            test.assertLessEqual(set(needed["lists"][list_key]), set(row), (binding, list_key))
+            test.assertLessEqual(set(row), set(row_keys), (binding, list_key, sorted(set(row) - set(row_keys))))
 
 
 class DraftsTest(unittest.TestCase):

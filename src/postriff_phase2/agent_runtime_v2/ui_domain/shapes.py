@@ -1,7 +1,9 @@
 """The `data` shape of every read binding (rafii-genui/1): top-level keys and, for lists, the keys of each row.
 
-This is a contract with lane E (journey components safe-parse these keys) and is checked against the handlers' real output
-in tests (unit fixtures and the PostgreSQL scenarios). A key is added, never renamed or removed, without telling A.
+`keys`/`lists` name every key a result may carry (a result never has an undeclared key); `OPTIONAL` names the ones present
+only for some rows or branches (a draft row of campaign_items has no jobId), so everything else is always present. This is a
+contract with lane E (journey components safe-parse these keys) and is checked against the handlers' real output in tests
+(unit fixtures and the PostgreSQL scenarios). A key is added, never renamed or removed, without telling A.
 `data` is null for `denied`/`unavailable` results.
 """
 from __future__ import annotations
@@ -55,20 +57,23 @@ SHAPES: dict[str, dict] = {
     # J05
     "campaigns_list": _s("campaigns offset", campaigns=_CAMPAIGN_VIEW + " ref version itemCount createdAt updatedAt"),
     "campaign_detail": _s(_CAMPAIGN_VIEW + " drafts draftCount posts lastWeek upcomingRuns derived ref version accountIds itemCount progress note"),
-    "campaign_items": _s("campaignId version items offset max", items="itemId kind addedAt needsReview addedByYou"),
-    "campaign_timeline": _s("campaignId timeZone startUtc endUtc events truncated", events="kind atUtc local status"),
+    "campaign_items": _s("campaignId version items offset max", items="itemId kind addedAt needsReview addedByYou ref exists draftId platform revision excerpt "
+                                                                       "jobId state local timeZone atUtc assetId"),
+    "campaign_timeline": _s("campaignId timeZone startUtc endUtc events truncated",
+                            events="kind ref atUtc local status automationId name scheduleZone scheduleLocal runId items jobId jobZone jobLocal platform"),
     "task_progress": _s("task summary rule"),
     # J06
     "analytics_posts": _s("posts offset timeZone startUtc endUtc families rules definitionVersion undated verifiedPostsInWindow postsWithReadings",
                           posts="ref jobId provider platform connectionId providerPostId language publishedAt publishedLocal contentOrigin metrics rates cohort freshness"),
-    "analytics_compare": _s("metric basis comparisons rules startUtc endUtc timeZone undated", comparisons="cohort metric interpretation jobIds"),
+    "analytics_compare": _s("metric basis comparisons rules startUtc endUtc timeZone undated",
+                            comparisons="cohort metric interpretation jobIds sampleSize measured missing mean minimum reason causalityEstablished"),
     "analytics_series": _s("metric bucket timeZone series definitionVersion unit rule undated", series="provider platform connectionId points"),
     "analytics_coverage": _s("state connections unmatchedReadings usesPlatformFallback rule",
                              connections="connectionId platform account level direct providerOffersAnalytics verifiedPosts readPosts readings lastObservedAt evidence enableHref"),
     "post_feedback": _s("jobId readings minimumBaselinePosts causal"),
     # J07
     "research_state": _s("allowed web enabledOnDeployment hosted decidedAt processors canTurnOn guide reason"),
-    "research_results": _s("pages recorded searches note", pages="index title host url urlUnsafe published publishedLabel fetchedAt facts untrusted"),
+    "research_results": _s("pages recorded searches note reason", pages="index title host url urlUnsafe published publishedLabel fetchedAt facts untrusted"),
     "research_sources": _s("sources offset", sources="sourceId ref title host url published publishedLabel fetchedAt status active retracted facts approvedFacts"),
     # J08
     "automations_list": _s("automations offset statusCounts", automations=_AUTOMATION_ROW),
@@ -87,6 +92,23 @@ SHAPES: dict[str, dict] = {
     "founder_search": _s("mode collection rows"),
     "founder_entity": _s("mode collection record"),
 }
+
+# Keys present only for some rows or result branches (all other declared keys are always present).
+OPTIONAL: dict[str, dict] = {
+    "campaign_items": _s("", items="draftId platform revision excerpt jobId state local timeZone atUtc assetId"),
+    "campaign_timeline": _s("", events="automationId name scheduleZone scheduleLocal runId items jobId jobZone jobLocal platform"),
+    "analytics_compare": _s("", comparisons="sampleSize measured missing mean minimum reason causalityEstablished"),
+    "research_results": _s("reason searches note"),
+    "draft_evidence": _s("", sources="ref"),
+}
+
+
+def required(binding: str) -> dict:
+    """The keys every result of `binding` carries (declared minus optional)."""
+    shape, optional = SHAPES[binding], OPTIONAL.get(binding) or {"keys": [], "lists": {}}
+    return {"keys": [k for k in shape["keys"] if k not in optional["keys"]],
+            "lists": {name: [k for k in rows if k not in (optional["lists"].get(name) or [])] for name, rows in shape["lists"].items()}}
+
 
 # Bindings whose `data` is the existing tool's own record (site-agent `job.get`, founder tools): only the keys listed are
 # guaranteed; others may appear.
