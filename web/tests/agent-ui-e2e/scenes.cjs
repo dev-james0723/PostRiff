@@ -88,17 +88,28 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
     new MutationObserver(() => { window.__g.mutations += 1; if (!window.__g.firstChildAt && node.querySelector('*')) window.__g.firstChildAt = performance.now(); })
       .observe(node, { childList: true, subtree: true, characterData: true });
   }, `#rafii-panel ${GENERATED}`);
-  if (wait === 'ready') await waitReady(page, timeout);
+  if (wait === 'ready') await waitReady(page, timeout, t);
   return { region, startedAt };
 }
 
-async function waitReady(page, timeout = 120000) {
+/** Ready (mark or frame state) — or a terminal failure, which is proven once per run so later scenes don't wait for it. */
+async function waitReady(page, timeout = 90000, t = null) {
+  if (t && t.shared.noReady) blocked(t.shared.noReady);
+  let outcome;
   try {
-    await page.waitForFunction(() => performance.getEntriesByName('rafii-genui:ready').length > 0
-      || document.querySelector('[data-rafii-generated][data-generation-state="ready"]'), null, { timeout });
+    outcome = await page.waitForFunction(() => {
+      if (performance.getEntriesByName('rafii-genui:ready').length > 0 || document.querySelector('[data-rafii-generated][data-generation-state="ready"]')) return 'ready';
+      return document.querySelector('[data-rafii-generated][data-generation-state="failed"]') ? 'failed' : false;
+    }, null, { timeout }).then((h) => h.jsonValue());
   } catch {
-    blocked("lane C/F: neither the 'rafii-genui:ready' performance mark nor data-generation-state=ready appeared");
+    outcome = 'timeout';
   }
+  if (outcome === 'ready') return;
+  const why = outcome === 'failed'
+    ? 'lanes B/C: the fixture view ended data-generation-state="failed" (validator/stream path; see api-corpus.json for the reason)'
+    : "lane C/F: neither the 'rafii-genui:ready' mark nor data-generation-state=ready appeared within the timeout";
+  if (t) t.shared.noReady = why;
+  blocked(why);
 }
 
 const marks = (page) => page.evaluate(() => ['rafii-genui:first-component', 'rafii-genui:ready']
@@ -147,7 +158,7 @@ scene('typing-during-stream', async (t) => {
   await composer.click();
   const phrase = 'typed while streaming 廣東話 🎹';
   await composer.type(phrase, { delay: 25 });
-  await waitReady(page);
+  await waitReady(page, 90000, t);
   t.assert((await composer.inputValue()) === phrase, 'the composer value survived the stream', await composer.inputValue());
   t.assert(await composer.evaluate((el) => el === document.activeElement), 'focus stayed in the composer');
   const input = await firstInput(region);
@@ -165,10 +176,13 @@ scene('typing-during-patch', async (t) => {
   if (!artifactId) blocked('lane F: the generated region has no data-artifact-id to address an edit');
   const editButton = page.locator('#rafii-panel').getByRole('button', { name: /edit|change this view|修改/i }).first();
   if (!(await editButton.count())) blocked('lane F: no explicit edit affordance on the generated view');
+  const readyBefore = await page.evaluate(() => performance.getEntriesByName('rafii-genui:ready').length);
   await editButton.click();
   await page.keyboard.type('change the period');
   await page.keyboard.press('Enter');
-  await waitReady(page);
+  const edited = await page.waitForFunction((n) => performance.getEntriesByName('rafii-genui:ready').length > n
+    || document.querySelector('[data-rafii-generated][data-generation-state="failed"]'), readyBefore, { timeout: 90000 }).then(() => true).catch(() => false);
+  if (!edited) blocked('lanes B/F: the explicit edit produced no new ready revision within 90 s');
   const value = await input.inputValue().catch(() => null);
   const conflict = await page.locator('[data-rafii-dirty-conflict], [role="alertdialog"]').count();
   t.assert(value === 'dirty value 普通话' || conflict > 0, 'the dirty value survived the patch or a native conflict UI protects it', { value, conflict });
