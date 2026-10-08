@@ -823,7 +823,7 @@ test('test_return_to_no_url_or_secret: the Library state a draft carries is stab
   assert.equal(back.query, undefined, 'a query that looks like a link is left out, not sent');
   assert.equal(back.filters.tags, undefined);
   assert.deepEqual(back.filters.kinds, ['document']);
-  assert.deepEqual(back.selection, ['2f0c6c1e5a1b4c6a9d0e3b2a1c0d9e8f', HEX('a')], 'only 32-hex keys');
+  assert.deepEqual(back.selection, ['2f0c6c1e5a1b4c6a9d0e3b2a1c0d9e8f', HEX('a')], 'only 32-hex keys');  // pragma: allowlist secret -- synthetic asset key
   assert.equal(back.scope.kind, 'selection');
   assert.equal(back.anchor, HEX('a'));
   for (const key of Object.keys(back)) assert.ok(['query', 'scope', 'filters', 'sort', 'density', 'selection', 'anchor', 'view'].includes(key), key);

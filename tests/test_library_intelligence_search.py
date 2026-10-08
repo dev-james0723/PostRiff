@@ -1295,7 +1295,7 @@ class RetrievalEvaluation(unittest.TestCase):
         secret = "sk-test-NEVER-PRINT-ME"  # pragma: allowlist secret -- placeholder proving the eval loader never prints keys
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / "provider.env"
-            env_file.write_text(f"# local\nexport AI_GATEWAY_API_KEY='{secret}'\nOPENAI_API_KEY=other-secret\nUNRELATED=1\n", encoding="utf-8")
+            env_file.write_text(f"# local\nexport AI_GATEWAY_API_KEY='{secret}'\nOPENAI_API_KEY=other-secret\nUNRELATED=1\n", encoding="utf-8")  # pragma: allowlist secret -- placeholder values in a temporary env file
             os.chmod(env_file, 0o600)
             self.assertEqual(ev.load_env_file(env_file), {"AI_GATEWAY_API_KEY": secret, "OPENAI_API_KEY": "other-secret"})  # pragma: allowlist secret -- placeholder values in a temporary env file
             self.assertIsNone(ev.env_file_mode_warning(env_file))

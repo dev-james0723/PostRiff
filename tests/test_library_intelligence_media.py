@@ -623,7 +623,7 @@ class Providerless(unittest.TestCase):
         db = Memory()
         version = audio_version(db)
         transport = Transport()
-        off = Providers(environ={"OPENAI_API_KEY": "contract-test-not-a-key"}, transport=transport)
+        off = Providers(environ={"OPENAI_API_KEY": "contract-test-not-a-key"}, transport=transport)  # pragma: allowlist secret -- placeholder provider variable
         outcome = media.transcribe_processor_run(Job(version, b"\0" * 1024, off))
         self.assertEqual((outcome["state"], outcome["errorCode"], outcome["retryable"], outcome["provider"]),
                          ("unsupported", "provider_unavailable", False, None))
