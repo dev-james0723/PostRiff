@@ -599,6 +599,107 @@ def _():
     return {}
 
 
+@scenario("A12", "Automations: list/detail/history read the real plan; a change is prepared as a proposal and applied only by the native decide")
+def _():
+    payload = {"name": "Weekly practice tip", "goal": "One practical piano practice tip", "audience": "Adult piano students",
+               "schedule": {"weekdays": ["Wednesday"], "localTime": "9:00", "timeZone": HK},
+               "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": channel["id"]}],
+               "contentType": {"contentTypeId": "postriff:teach", "formatId": "short_text", "label": "How-to · Text post", "library": {"editorialId": "how-to", "nativeId": "text-post"}},
+               "route": "deterministic-preview", "reasoning": "standard", "maxCostUsdMicro": 250_000}
+    service.repository.mutate(wid, OWNER, service.get(wid, OWNER)["revision"], "raffi_recurrence_save", payload)
+    tasks = service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"]
+    task = next(t for t in tasks if t.get("name") == "Weekly practice tip")
+    art = make_artifact(["J08", "J05"])
+    for binding, inputs in (("automations_list", {}), ("automation_detail", {"automationId": task["id"]}), ("automation_history", {"automationId": task["id"]}),
+                            ("connections_status", {}), ("recovery_guides", {})):
+        out = query(binding, inputs, artifact=art, token=EDITOR)
+        check_shape(binding, out)
+    listed = query("automations_list", {}, artifact=art)["data"]["automations"]
+    assert any(a["automationId"] == task["id"] and a["timeZone"] == HK for a in listed), listed
+    request = {"automationId": task["id"], "request": "move it to Thursday at 10:00"}
+    act = activate("automation_change_prepare", request, token=EDITOR, artifact=art)
+    before = counts()
+    prepared = execute("automation_change_prepare", request, act["activationId"], token=EDITOR, artifact=art)
+    assert prepared["outcome"] == "prepared" and prepared["verified"] is False and prepared["proposalRef"], prepared
+    assert counts()["revision"] == before["revision"], "preparing changes no automation"
+    unchanged = next(t for t in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"] if t["id"] == task["id"])
+    assert unchanged["version"] == task["version"]
+    ctx = prepared["nextContext"]["proposal"]
+    decided = approvals.decide(service, wid, EDITOR, conversation_id=CONVERSATION, message_id=ctx["messageId"], proposal_id=ctx["proposalId"], digest=ctx["digest"],
+                               decision="apply")
+    assert decided["outcome"] == "applied" and decided["verified"] is True, decided
+    changed = next(t for t in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"] if t["id"] == task["id"])
+    assert "Thursday" in json.dumps(changed["schedule"]), changed["schedule"]
+    return {"proposal": prepared["proposalRef"]}
+
+
+@scenario("A13", "Learned preferences: a pending proposal is decided only by the owner, through HostedLearning.decide; learned vs proposed read truthfully")
+def _():
+    from postriff_phase2 import learning_service
+    state = service.get(wid, OWNER)["state"]
+    with connection() as db, db.cursor() as cur:
+        created = learning_service.create_proposal(cur, wid, state, {"type": "writing_preference", "ruleKey": "emoji.use", "polarity": "avoid", "scope": {},
+                                                                     "statement": "Avoid emojis in posts", "source": "chat"}, time.time())
+    assert created is not None
+    prefs = query("voice_preferences")["data"]
+    assert any(p["id"] == created["id"] for p in prefs["pending"]) and not any(l.get("statement") == "Avoid emojis in posts" for l in prefs["learned"])
+    inputs = {"proposalId": created["id"], "decision": "remember"}
+    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 404, "ui_action")
+    decided = execute("preference_decide", inputs, activate("preference_decide", inputs)["activationId"])
+    assert decided["outcome"] == "applied" and decided["verified"] is True, decided
+    after = query("voice_preferences")["data"]
+    assert any(l.get("statement") == "Avoid emojis in posts" and l.get("status") == "active" for l in after["learned"]), after["learned"]
+    denied(lambda: activate("preference_decide", inputs), 409, "proposal_closed")
+    return {}
+
+
+@scenario("A14", "Campaign brief update is refused unless the campaign is still at the version the person saw; it names what pauses")
+def _():
+    campaign = next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
+    stale = {"campaignId": CAMPAIGN_ID, "expectedVersion": campaign["version"] + 5, "goal": "A different goal"}
+    denied(lambda: activate("campaign_update", stale, token=EDITOR), 409, "campaign_version_conflict")
+    good = {"campaignId": CAMPAIGN_ID, "expectedVersion": campaign["version"], "goal": "Autumn practice journal launch, week two"}
+    act = activate("campaign_update", good, token=EDITOR)
+    assert any("version" in line for line in act["confirmation"]["summary"]), act["confirmation"]
+    updated = execute("campaign_update", good, act["activationId"], token=EDITOR)
+    assert updated["outcome"] == "applied" and updated["verified"] is True, updated
+    saved = next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
+    assert saved["version"] == campaign["version"] + 1 and saved["goal"] == good["goal"]
+    replay = execute("campaign_update", good, act["activationId"], updated["idempotencyKey"], token=EDITOR)
+    assert replay == updated
+    assert next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)["version"] == saved["version"]
+    return {}
+
+
+@scenario("A15", "Research: with research allowed, chosen pages are saved as web sources once (consent re-checked inside the command)")
+def _():
+    previous = os.environ.get("POSTRIFF_RESEARCH")
+    os.environ["POSTRIFF_RESEARCH"] = "1"
+    try:
+        result = {"composedBy": "manager", "usage": {"billing": "metered"}, "answerText": "x", "ui": {"journeyIds": ["J07"]},
+                  "toolActivity": [{"tool": "web_research", "status": "verified", "effect": "READ"}],
+                  "research": {"state": "available", "query": "slow practice", "warnings": [],
+                               "pages": [{"title": "Slow practice study", "url": "https://example.org/study", "host": "example.org", "published": "",
+                                          "fetchedAt": "2026-10-08T01:00:00Z", "facts": ["Slow practice improved accuracy in a small study."]}]}}
+        art = make_artifact(["J07"], result=result)
+        out = query("research_results", artifact=art)
+        assert out["data"]["recorded"] == "structured" and out["data"]["pages"][0]["publishedLabel"] == "no date", out["data"]
+        inputs = {"indexes": [0]}
+        saved = execute("research_save_sources", inputs, activate("research_save_sources", inputs, token=EDITOR, artifact=art)["activationId"], token=EDITOR, artifact=art)
+        assert saved["outcome"] == "applied" and saved["verified"] is True, saved
+        source_id = saved["nextContext"]["references"][0]["id"]
+        again = execute("research_save_sources", inputs, activate("research_save_sources", inputs, token=EDITOR, artifact=art)["activationId"], token=EDITOR, artifact=art)
+        assert again["nextContext"]["references"][0]["id"] == source_id, "the same page is one source"
+        listed = query("research_sources", {}, artifact=art)["data"]["sources"]
+        assert [s["sourceId"] for s in listed].count(source_id) == 1 and listed[0]["publishedLabel"] == "no date"
+    finally:
+        if previous is None:
+            os.environ.pop("POSTRIFF_RESEARCH", None)
+        else:
+            os.environ["POSTRIFF_RESEARCH"] = previous
+    return {}
+
+
 failed = [r for r in RESULTS if r["result"] != "PASS"]
 print(json.dumps({"script": "postgres_agent_ui_actions", "passed": len(RESULTS) - len(failed), "failed": len(failed),
                   "scenarios": [{k: r.get(k) for k in ("id", "result", "ms")} for r in RESULTS]}), flush=True)
