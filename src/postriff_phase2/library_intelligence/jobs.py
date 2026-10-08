@@ -30,11 +30,15 @@ from typing import Any, Callable
 
 from postriff_alpha.domain import AlphaError
 
+from .. import ai_call_events
 from ..contracts import digest
-from . import capabilities, policy, providers, versions
+from . import capabilities, policy, providers, telemetry, versions
 from . import contracts as c
 
-LEASE_SECONDS = 300
+# The longest single provider call (providers.transcribe uploads with a 300 s timeout). The lease must outlive it, so a
+# slow ASR call is never reclaimed and paid for twice; processors also heartbeat through job.recheck()/job.progress().
+LONGEST_PROVIDER_TIMEOUT = 300
+LEASE_SECONDS = 600
 MAX_ATTEMPTS = 3
 BACKOFF_BASE, BACKOFF_CAP, JITTER, RETRY_AFTER_CAP = 30, 900, 0.25, 3600
 ORPHAN_MINUTES = 15
@@ -66,17 +70,22 @@ REVIVE = ("/*lij:job.revive*/ UPDATE public.pr_library_jobs SET status='queued',
           f"WHERE workspace_id=%s AND id=%s AND status IN ('failed','cancelled','blocked') RETURNING {JOB_COLS}")
 GET = f"/*lij:job.get*/ SELECT {JOB_COLS} FROM public.pr_library_jobs WHERE workspace_id=%s AND id=%s FOR UPDATE"
 CLAIM = ("/*lij:job.claim*/ UPDATE public.pr_library_jobs j SET status='processing',lease_token=%s,lease_expires_at=now()+make_interval(secs=>%s),"
-         "heartbeat_at=now(),attempts=j.attempts+1,updated_at=now() WHERE j.id=(SELECT d.id FROM public.pr_library_jobs d "
+         "heartbeat_at=now(),attempts=j.attempts+1,updated_at=now(),timings=j.timings||jsonb_build_object('reclaimed',j.status='processing') "
+         "WHERE j.id=(SELECT d.id FROM public.pr_library_jobs d "
          "WHERE ((d.status='queued' AND d.next_attempt_at<=now()) OR (d.status='processing' AND d.lease_expires_at<now())) AND d.attempts<d.max_attempts "
          "AND EXISTS(SELECT 1 FROM public.pr_workspaces w WHERE w.id=d.workspace_id AND NOT (w.state ? 'accountBlock') AND NOT (w.state ? 'accountDeletion')) "
-         f"ORDER BY d.next_attempt_at,d.created_at LIMIT 1 FOR UPDATE OF d SKIP LOCKED) RETURNING {JOB_COLS}")
+         f"ORDER BY d.next_attempt_at,d.created_at LIMIT 1 FOR UPDATE OF d SKIP LOCKED) RETURNING {JOB_COLS},"
+         "extract(epoch from now()-j.next_attempt_at),(j.timings->>'reclaimed')::boolean")
 RESERVE = "/*lij:job.reserve*/ UPDATE public.pr_library_jobs SET reservation=%s::jsonb,updated_at=now() WHERE id=%s AND lease_token=%s"
 HEARTBEAT = ("/*lij:job.heartbeat*/ UPDATE public.pr_library_jobs SET heartbeat_at=now(),lease_expires_at=now()+make_interval(secs=>%s),updated_at=now() "
              "WHERE id=%s AND lease_token=%s AND status='processing' RETURNING 1")
-FINISH = ("/*lij:job.finish*/ UPDATE public.pr_library_jobs SET status=%s,error_category=%s,error_code=%s,cost=%s::jsonb,reservation=%s::jsonb,cleanup=%s,"
+FINISH = ("/*lij:job.finish*/ UPDATE public.pr_library_jobs SET status=%s,error_category=%s,error_code=%s,reservation=%s::jsonb,cleanup=%s,"
           "timings=timings||%s::jsonb,lease_token=null,lease_expires_at=null,finished_at=now(),updated_at=now() WHERE id=%s")
 REQUEUE = ("/*lij:job.requeue*/ UPDATE public.pr_library_jobs SET status='queued',error_category=%s,error_code=%s,reservation=%s::jsonb,"
            "timings=timings||%s::jsonb,lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>%s),updated_at=now() WHERE id=%s")
+# One cost entry per attempt ({kind: actual|estimated|unknown, usdMicro}); a late, more accurate entry replaces an earlier one.
+COST = ("/*lij:job.cost*/ UPDATE public.pr_library_jobs SET cost=coalesce(cost,'{}'::jsonb)||jsonb_build_object('byAttempt',"
+        "coalesce(cost->'byAttempt','{}'::jsonb)||jsonb_build_object(%s::text,%s::jsonb)),updated_at=now() WHERE id=%s")
 SETTLED = "/*lij:job.settled*/ UPDATE public.pr_library_jobs SET reservation=%s::jsonb,updated_at=now() WHERE id=%s AND reservation->>'reservationId'=%s"
 CANCEL = ("/*lij:job.cancel*/ UPDATE public.pr_library_jobs SET status='cancelled',error_category='cancelled',error_code='library_cancelled',lease_token=null,"
           "lease_expires_at=null,finished_at=now(),updated_at=now() WHERE workspace_id=%s AND asset_key=%s AND status IN ('queued','processing') "
@@ -134,6 +143,7 @@ class JobContext:
     _segments: Callable[[], list] | None = None
     _frames: Callable[[], list] | None = None
     _poster: Callable[[], bytes | None] | None = None
+    _recheck: Callable[[], bool] | None = None
     _raw: bytes | None = field(default=None, repr=False)
 
     def raw(self) -> bytes:
@@ -147,6 +157,14 @@ class JobContext:
     def heartbeat(self) -> bool:
         """Extend the lease. False means the job was cancelled, revoked or taken over: stop and return."""
         return bool(self._heartbeat()) if self._heartbeat else True
+
+    def recheck(self) -> bool:
+        """Call immediately before EVERY provider call. Re-authorizes processing for this version in a fresh short transaction
+        (the committed grant revision, the source's current policy) and heartbeats the lease. False: do not call the
+        provider; return {"state": "blocked_permission"} (or any state: finalize records the permission loss anyway)."""
+        if self._recheck is None:
+            return self.heartbeat()
+        return bool(self._recheck())
 
     def segments(self) -> list:
         """This version's active segments (contract shape), read in a fresh short transaction; [] when none."""
@@ -362,7 +380,7 @@ def on_asset_processed(connect, workspace_id, asset_key) -> dict:
             with connect() as db, db.cursor() as cur:
                 collections.reevaluate_for_asset(cur, workspace_id, asset_key)
         except Exception as error:  # reconcile_due repairs a missed evaluation
-            print(json.dumps({"event": "library_intelligence.collections_hook_failed", "error": type(error).__name__}), flush=True)
+            telemetry.log("library_intelligence.collections_hook_failed", error=error)
         if not policy.enabled("enrichment"):
             return {"status": "disabled"}
         key = c.asset_key(asset_key)
@@ -381,7 +399,7 @@ def on_asset_processed(connect, workspace_id, asset_key) -> dict:
                 out.append({"capability": capability, "state": result["state"], "duplicate": result["duplicate"]})
         return {"status": "enqueued", "capabilities": out}
     except Exception as error:  # the upload already succeeded; intelligence is additive
-        print(json.dumps({"event": "library_intelligence.enqueue_failed", "error": type(error).__name__}), flush=True)
+        telemetry.log("library_intelligence.enqueue_failed", error=error)
         return {"status": "error"}
 
 
@@ -535,7 +553,8 @@ def _legacy_asset(state, key):
 
 # --- claim / prepare / run / finalize -----------------------------------------------------------------------------------
 def _settle(cur, workspace_id, reservation: dict | None, outcome: dict | None) -> dict | None:
-    """Settle one attempt's reservation exactly once. Errors leave it unsettled for the orphan sweep, never block finalize."""
+    """Settle one attempt's reservation. Errors leave it unsettled for the orphan sweep, never block finalize. The Ledger
+    keeps each reservation to one terminal settlement; an 'unknown' settlement may later be reconciled by a real receipt."""
     if not reservation or reservation.get("status") != "reserved" or reservation.get("settled"):
         return reservation
     outcome = outcome or {}
@@ -555,8 +574,30 @@ def _settle(cur, workspace_id, reservation: dict | None, outcome: dict | None) -
         return {**reservation, "settled": True, "settlement": settlement}
     except Exception as error:
         cur.execute("ROLLBACK TO SAVEPOINT library_settle")
-        print(json.dumps({"event": "library_intelligence.settle_failed", "error": type(error).__name__}), flush=True)
+        telemetry.log("library_intelligence.settle_failed", error=error)
         return reservation
+
+
+def _attempt_cost(outcome: dict | None, settled: dict | None) -> dict | None:
+    """What one attempt cost, kept separate by kind: the provider receipt when there is one, 'unknown' when a reservation
+    was settled without one (the call may have happened), nothing when no paid call was possible or it was released."""
+    receipt_value = (outcome or {}).get("provider") if isinstance((outcome or {}).get("provider"), dict) else None
+    if receipt_value is not None:
+        cost = receipt_value.get("cost") if isinstance(receipt_value.get("cost"), dict) else {}
+        kind = cost.get("kind") if cost.get("kind") in ("actual", "estimated", "unknown") else "unknown"
+        usd = cost.get("usdMicro") if type(cost.get("usdMicro")) is int and kind != "unknown" else None
+        return {"kind": kind if usd is not None or kind == "unknown" else "unknown", "usdMicro": usd}
+    if settled and settled.get("settlement") == "unknown":
+        return {"kind": "unknown", "usdMicro": None}
+    return None
+
+
+def _record_cost(cur, workspace_id, job: dict, attempt, entry: dict | None, category: str | None = None):
+    if entry is None or attempt is None:
+        return
+    cur.execute(COST, (str(int(attempt)), json.dumps(entry), _uuid(job["id"])))
+    telemetry.record(cur, "library.jobs", "cost", entry["usdMicro"], {"capability": job["capability"], "category": category, "costKind": entry["kind"],
+                                                                         "attempt": int(attempt)}, workspace_id=workspace_id)
 
 
 def _settle_orphans(connect) -> int:
@@ -568,6 +609,7 @@ def _settle_orphans(connect) -> int:
             settled = _settle(cur, job["workspaceId"], job["reservation"], None)
             if settled and settled.get("settled"):
                 cur.execute(SETTLED, (json.dumps(settled), _uuid(job["id"]), job["reservation"].get("reservationId")))
+                _record_cost(cur, job["workspaceId"], job, job["reservation"].get("attempt"), _attempt_cost(None, settled))
                 count += 1
     return count
 
@@ -581,9 +623,12 @@ def _recover(connect) -> int:
             settled = _settle(cur, job["workspaceId"], job["reservation"], None)
             if settled is not job["reservation"]:
                 cur.execute(SETTLED, (json.dumps(settled), _uuid(job["id"]), (job["reservation"] or {}).get("reservationId")))
+                _record_cost(cur, job["workspaceId"], job, (job["reservation"] or {}).get("attempt"), _attempt_cost(None, settled))
             capabilities.set_state(cur, job["workspaceId"], job["assetKey"], job["capability"], "failed", job_id=job["id"], job_guard=job["id"],
                                    error_code="library_job_timeout", detail="Processing timed out. You can try again.", retryable=True,
                                    processor_version=job["processorVersion"])
+            telemetry.record(cur, "library.jobs", "stale_lease_timeout", 1, {"capability": job["capability"], "attempt": job["attempts"]},
+                             workspace_id=job["workspaceId"])
     return len(rows)
 
 
@@ -597,7 +642,8 @@ def claim_next(intel, connect) -> dict | None:
         return None
     job = _job(row)
     prepared = {"job": job, "leaseToken": str(lease), "reservation": None, "processor": None, "grantRevision": job["consentRevision"],
-                "context": None, "early": None}
+                "context": None, "early": None, "queueAgeSeconds": _f(row[20]) if len(row) > 20 else None,
+                "reclaimed": bool(row[21]) if len(row) > 21 else False}
     try:
         _prepare(intel, connect, prepared)
     except Exception as error:
@@ -612,10 +658,17 @@ def _prepare(intel, connect, prepared):
         if ctx is None:
             prepared["early"] = {"state": "cancelled", "errorCode": "library_workspace_unavailable", "cleanup": "workspace_unavailable"}
             return
+        telemetry.record(cur, "library.jobs", "queue_age_seconds", prepared.get("queueAgeSeconds"),
+                         {"capability": job["capability"], "attempt": job["attempts"], "reclaimed": prepared.get("reclaimed", False)},
+                         workspace_id=job["workspaceId"])
+        if prepared.get("reclaimed"):
+            telemetry.record(cur, "library.jobs", "stale_lease_recovered", 1, {"capability": job["capability"], "attempt": job["attempts"]},
+                             workspace_id=job["workspaceId"])
         if job["reservation"] and job["reservation"].get("status") == "reserved" and not job["reservation"].get("settled"):
             # A previous attempt reserved and then died: its provider call may or may not have happened.
             settled = _settle(cur, job["workspaceId"], job["reservation"], None)
             cur.execute(SETTLED, (json.dumps(settled), _uuid(job["id"]), job["reservation"].get("reservationId")))
+            _record_cost(cur, job["workspaceId"], job, job["reservation"].get("attempt"), _attempt_cost(None, settled))
         version = versions.load(ctx, [job["assetKey"]]).get(job["assetKey"])
         if version is None or version["status"] in ("deleting", "duplicate", "missing"):
             prepared["early"] = {"state": "cancelled", "errorCode": "library_source_unavailable", "cleanup": "source_unavailable"}
@@ -648,6 +701,24 @@ def _prepare(intel, connect, prepared):
                 hcur.execute(HEARTBEAT, (LEASE_SECONDS, _uuid(jid), prepared["leaseToken"]))
                 return hcur.fetchone() is not None
 
+        def recheck():
+            """Lease still ours, version still present, processing still allowed (committed grants and source policy)."""
+            with connect() as rc, rc.cursor() as rcur:
+                rcur.execute(HEARTBEAT, (LEASE_SECONDS, _uuid(jid), prepared["leaseToken"]))
+                if rcur.fetchone() is None:
+                    return False
+                fresh = system_context(rcur, job["workspaceId"], job["requestedBy"])
+                if fresh is None:
+                    return False
+                current = versions.load(fresh, [version["versionId"]]).get(version["versionId"])
+                if current is None or current["status"] in ("deleting", "duplicate", "missing"):
+                    return False
+                allowed = policy.authorize_processing(fresh, current, proc["location"], proc["category"]).allowed
+                if not allowed:
+                    telemetry.record(rcur, "library.jobs", "recheck_denied", 1, {"capability": job["capability"], "category": proc["category"]},
+                                     workspace_id=job["workspaceId"])
+                return allowed
+
         def progress(done, total, unit):
             with connect() as pg, pg.cursor() as pcur:
                 pcur.execute(HEARTBEAT, (LEASE_SECONDS, _uuid(jid), prepared["leaseToken"]))
@@ -656,6 +727,7 @@ def _prepare(intel, connect, prepared):
                 capabilities.set_state(pcur, job["workspaceId"], version["versionId"], job["capability"], "processing", job_id=jid, job_guard=jid,
                                        progress={"done": done, "total": total, "unit": unit}, processor_version=proc["version"])
                 return True
+
         def segments_of():
             from . import segments as seg
             with connect() as sg, sg.cursor() as scur:
@@ -682,7 +754,7 @@ def _prepare(intel, connect, prepared):
         jobctx = JobContext(job_id=jid, workspace_id=job["workspaceId"], actor=ctx.actor, version=version, providers=getattr(intel, "providers", None),
                             now=time.time(), processor=proc, consent_revision=decision.grant_revision, attempt=job["attempts"],
                             _reader=_reader(storage, job["workspaceId"], version, obj, legacy), _heartbeat=heartbeat, _progress=progress,
-                            _segments=segments_of, _frames=frames_of, _poster=poster_of)
+                            _segments=segments_of, _frames=frames_of, _poster=poster_of, _recheck=recheck)
         prepared["context"] = jobctx
         if not capabilities.is_local(proc):
             estimate = proc["estimate"](jobctx) if proc.get("estimate") else None
@@ -708,13 +780,21 @@ def _prepare(intel, connect, prepared):
 
 
 def run_claimed(intel, connect, prepared) -> str:
-    """Run a prepared job's processor outside any transaction, then finalize it in a new one."""
+    """Run a prepared job's processor outside any transaction, then finalize it in a new one. A cloud run is an AI-call
+    scope linked to its budget reservation, so provider attempts land in pr_ai_call_events with the reservation id."""
     job = prepared["job"]
     started = time.monotonic()
     result = prepared["early"]
     if result is None:
+        reservation = prepared.get("reservation")
+        scope = (ai_call_events.scope(feature="library_intelligence", workspace_id=job["workspaceId"], user_id=job["requestedBy"],
+                                      reservation_id=reservation.get("reservationId"), connect=connect) if reservation else None)
         try:
-            result = prepared["processor"]["run"](prepared["context"])
+            if scope is not None:
+                with scope:
+                    result = prepared["processor"]["run"](prepared["context"])
+            else:
+                result = prepared["processor"]["run"](prepared["context"])
         except Exception as error:
             result = classify(error)
     timings = {"runMs": round((time.monotonic() - started) * 1000), "attempt": job["attempts"]}
@@ -722,6 +802,9 @@ def run_claimed(intel, connect, prepared) -> str:
         ctx = system_context(cur, job["workspaceId"], job["requestedBy"])
         if ctx is None:
             return "lost"
+        raw = getattr(prepared.get("context"), "_raw", None)
+        if raw:
+            telemetry.record(cur, "library.jobs", "bytes_processed", len(raw), {"capability": job["capability"]}, workspace_id=job["workspaceId"])
         return complete_capability(ctx, job["id"], result, prepared["grantRevision"], lease_token=prepared["leaseToken"],
                                    reservation=prepared["reservation"], processor=prepared["processor"], timings=timings)
 
@@ -762,9 +845,9 @@ def _write(ctx, version, proc, outcome) -> dict:
 
 
 def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_token=None, reservation=None, processor=None, timings=None) -> str:
-    """Finalize one job inside the caller's transaction. Order: lease -> source still present -> grant recheck (TOCTOU) ->
-    derivatives -> state -> settlement. Returns the capability state written, 'retrying', or why nothing was written
-    ('lost', 'cancelled', 'missing', or the job's existing terminal status)."""
+    """Finalize one job inside the caller's transaction. Order: lease -> source still present -> grant recheck (a plain read
+    of the committed revision; TOCTOU) -> derivatives -> state -> settlement. Returns the capability state written,
+    'retrying', or why nothing was written ('lost', 'cancelled', 'missing', or the job's existing terminal status)."""
     cur = ctx.cur
     cur.execute(GET, (ctx.workspace_id, _uuid(job_id)))
     row = cur.fetchone()
@@ -773,42 +856,51 @@ def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_t
     job = _job(row)
     outcome = _outcome(result) if not (isinstance(result, dict) and result.get("state") == "cancelled") else dict(result)
     held = reservation if reservation is not None else job["reservation"]
+    attempt = (reservation or {}).get("attempt", job["attempts"]) if reservation is not None else job["attempts"]
     if job["status"] != "processing" or (lease_token is not None and job["leaseToken"] != str(lease_token)):
-        # Cancelled, revoked or taken over: write nothing. The provider may still have run, so settle what we hold.
+        # Cancelled, revoked or taken over: write nothing. The provider may still have run, so settle and record what we hold.
         if reservation is not None:
             settled = _settle(cur, ctx.workspace_id, reservation, outcome)
             if settled is not reservation:
                 cur.execute(SETTLED, (json.dumps(settled), _uuid(job["id"]), reservation.get("reservationId")))
+            _record_cost(cur, ctx.workspace_id, job, reservation.get("attempt"), _attempt_cost(outcome, settled),
+                         (processor or {}).get("category"))
+        telemetry.record(cur, "library.jobs", "finalize_skipped", 1, {"capability": job["capability"], "status": job["status"]},
+                         workspace_id=ctx.workspace_id)
         return "lost" if job["status"] == "processing" else job["status"]
     key = job["assetKey"]
     timings = dict(timings or {})
     proc = processor or capabilities.processor(job["capability"], job["processorVersion"])
+    category = (proc or {}).get("category")
 
-    def finish(state, *, category=None, code=None, detail=None, retryable=False, cleanup=None, provider=None):
+    def finish(state, *, category_=None, code=None, detail=None, retryable=False, cleanup=None, provider=None):
         settled = _settle(cur, ctx.workspace_id, held, outcome)
-        cost = (provider or {}).get("cost") if isinstance(provider, dict) else None
-        cur.execute(FINISH, (JOB_STATUS[state], category, code, json.dumps(cost) if cost else None, json.dumps(settled) if settled else None,
-                             cleanup, json.dumps(timings), _uuid(job["id"])))
+        cur.execute(FINISH, (JOB_STATUS[state], category_, code, json.dumps(settled) if settled else None, cleanup, json.dumps(timings), _uuid(job["id"])))
+        _record_cost(cur, ctx.workspace_id, job, attempt, _attempt_cost({**outcome, "provider": provider or outcome.get("provider")}, settled), category)
         if cleanup != "source_unavailable":
             capabilities.set_state(cur, ctx.workspace_id, key, job["capability"], state, job_id=job["id"], job_guard=job["id"], error_code=code,
                                    detail=detail, retryable=retryable, processor_version=job["processorVersion"], provider=provider)
+        telemetry.record(cur, "library.jobs", "outcome", 1, {"capability": job["capability"], "state": state, "processorVersion": job["processorVersion"],
+                                                               "location": (proc or {}).get("location"), "category": category, "attempt": job["attempts"],
+                                                               "code": code}, workspace_id=ctx.workspace_id)
         return state
 
     if outcome["state"] == "cancelled":
-        return finish("cancelled", category="cancelled", code=outcome.get("errorCode"), cleanup=outcome.get("cleanup"))
+        return finish("cancelled", category_="cancelled", code=outcome.get("errorCode"), cleanup=outcome.get("cleanup"))
     version = versions.load(ctx, [key]).get(key)
     if version is None or version["status"] in ("deleting", "duplicate", "missing"):
-        return finish("cancelled", category="cancelled", code="library_source_unavailable", cleanup="source_unavailable")
+        return finish("cancelled", category_="cancelled", code="library_source_unavailable", cleanup="source_unavailable")
     if proc is None:
-        return finish("failed", category="permanent", code="library_capability_unavailable", detail="This processor is not available in this build.",
+        return finish("failed", category_="permanent", code="library_capability_unavailable", detail="This processor is not available in this build.",
                       retryable=True)
-    if outcome["state"] in ("ready", "partial") or outcome.get("provider"):
-        decision = policy.Decision(True, "processing", key, grant_revision=int(expected_grant_revision), source_sha256=version.get("sha256") or "",
-                                   processing={"location": proc["location"], "category": proc["category"]})
-        fresh = policy.recheck(ctx, decision)
-        if not fresh.allowed:
-            return finish("blocked_permission", category="permission", code="library_" + (fresh.reason or "grant_revoked"),
-                          detail=policy.message(fresh.reason), provider=outcome.get("provider"), cleanup="derivatives_discarded")
+    # Always recheck before anything is written or recorded as done: a permission lost during the run is the truthful state,
+    # whatever the processor returned. policy.recheck is a plain read of the committed revision (no lock to block revokes).
+    decision = policy.Decision(True, "processing", key, grant_revision=int(expected_grant_revision), source_sha256=version.get("sha256") or "",
+                               processing={"location": proc["location"], "category": proc["category"]})
+    fresh = policy.recheck(ctx, decision)
+    if not fresh.allowed:
+        return finish("blocked_permission", category_="permission", code="library_" + (fresh.reason or "grant_revoked"),
+                      detail=policy.message(fresh.reason), provider=outcome.get("provider"), cleanup="derivatives_discarded")
     state = outcome["state"]
     if state in ("ready", "partial"):
         cur.execute("SAVEPOINT library_finalize")
@@ -832,7 +924,7 @@ def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_t
                            retryable=error.status >= 500, errorCategory="retryable" if error.status >= 500 else "corrupt")
         except Exception as error:
             cur.execute("ROLLBACK TO SAVEPOINT library_finalize")
-            print(json.dumps({"event": "library_intelligence.finalize_failed", "error": type(error).__name__}), flush=True)
+            telemetry.log("library_intelligence.finalize_failed", error=error)
             outcome.update(state="failed", errorCode="library_finalize_failed", detail="Results could not be stored.", retryable=True,
                            errorCategory="retryable")
         state = outcome["state"]
@@ -841,12 +933,15 @@ def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_t
         delay = backoff(job["attempts"], outcome.get("retryAfterSeconds"))
         cur.execute(REQUEUE, (outcome.get("errorCategory") or "retryable", outcome.get("errorCode"), json.dumps(settled) if settled else None,
                               json.dumps(timings), delay, _uuid(job["id"])))
+        _record_cost(cur, ctx.workspace_id, job, attempt, _attempt_cost(outcome, settled), category)
         capabilities.set_state(cur, ctx.workspace_id, key, job["capability"], "queued", job_id=job["id"], job_guard=job["id"],
                                error_code=outcome.get("errorCode"), detail="Retrying after a temporary problem.", retryable=True,
                                processor_version=job["processorVersion"])
+        telemetry.record(cur, "library.jobs", "retry", delay, {"capability": job["capability"], "errorCategory": outcome.get("errorCategory"),
+                                                                "code": outcome.get("errorCode"), "attempt": job["attempts"]}, workspace_id=ctx.workspace_id)
         return "retrying"
     retryable = bool(outcome.get("retryable") or outcome.get("userRetryable"))
-    return finish(state, category=outcome.get("errorCategory") if state != "ready" else None, code=outcome.get("errorCode"), detail=outcome.get("detail"),
+    return finish(state, category_=outcome.get("errorCategory") if state != "ready" else None, code=outcome.get("errorCode"), detail=outcome.get("detail"),
                   retryable=retryable if state not in ("ready", "partial") else False, provider=outcome.get("provider"), cleanup=outcome.get("cleanup"))
 
 
@@ -872,7 +967,7 @@ def tick(intel, connect, *, max_jobs: int = 4, max_seconds: float = 20.0, clock=
             outcome = run_claimed(intel, connect, prepared)
         except Exception as error:
             # The lease expires and the next tick retries or fails the job; nothing partial was committed.
-            print(json.dumps({"event": "library_intelligence.job_error", "error": type(error).__name__}), flush=True)
+            telemetry.log("library_intelligence.job_error", error=error)
             summary["errors"] += 1
             continue
         summary[SUMMARY_KEYS.get(outcome, "lost")] += 1

@@ -58,6 +58,7 @@ class FakeDB:
         self.state = {"sources": [], "phase2": {"assets": []}}
         self.frozen = False
         self.statements = []
+        self.metrics = []
 
     # --- connection protocol ------------------------------------------------------------------------------------------
     def connect(self):
@@ -148,6 +149,9 @@ class FakeDBCursor:
             return self._set([db.version_row(a) for k, a in db.assets.items() if k in keys and args[0] == WS])
         if "FROM public.pr_library_labels" in sql:
             return self._set([])
+        if "/*lit:metrics.insert*/" in sql:
+            db.metrics.append(args)
+            return self._set([], 1)
         raise AssertionError("FakeDB does not know this statement: " + sql[:120])
 
     # --- jobs ------------------------------------------------------------------------------------------------------------
@@ -198,8 +202,9 @@ class FakeDBCursor:
         if not due:
             return self._set([])
         job = sorted(due, key=lambda j: (j["next_at"], j["created"]))[0]
+        reclaimed = job["status"] == "processing"
         job.update(status="processing", lease=str(lease), lease_exp=db.now + seconds, attempts=job["attempts"] + 1)
-        self._set([db.job_row(job)])
+        self._set([db.job_row(job) + (db.now - job["next_at"], reclaimed)])
 
     def _job_reserve(self, sql, args):
         payload, jid, lease = args
@@ -218,11 +223,20 @@ class FakeDBCursor:
         self._set([])
 
     def _job_finish(self, sql, args):
-        status, category, code, cost, reservation, cleanup, timings, jid = args
+        status, category, code, reservation, cleanup, timings, jid = args
         job = self.db.jobs[_hex(jid)]
-        job.update(status=status, category=category, code=code, cost=json.loads(cost) if cost else None,
-                   reservation=json.loads(reservation) if reservation else None, cleanup=cleanup, lease=None, lease_exp=None, finished=self.db.now)
+        job.update(status=status, category=category, code=code, reservation=json.loads(reservation) if reservation else None, cleanup=cleanup,
+                   lease=None, lease_exp=None, finished=self.db.now)
         job["timings"].update(json.loads(timings))
+        self._set([], 1)
+
+    def _job_cost(self, sql, args):
+        attempt, entry, jid = args
+        job = self.db.jobs.get(_hex(jid))
+        if job is not None:
+            cost = dict(job["cost"] or {})
+            cost["byAttempt"] = {**(cost.get("byAttempt") or {}), str(attempt): json.loads(entry)}
+            job["cost"] = cost
         self._set([], 1)
 
     def _job_requeue(self, sql, args):
