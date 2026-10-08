@@ -14,7 +14,7 @@
     {
       "provider": "linkedin",
       "name": "LinkedIn",
-      "environment": "READY preview 18798a19; B saved connection survives reload. Resolved merge with current Library 8377ebbb passed Depot CI/browser; new candidate push/preview checks pending.",
+      "environment": "READY protected preview2bdab047; B saved credential survived reload and real minimum identity re-verification04:00:53Z. Test-harness include-order repair/new-head checks pending.",
       "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
       "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
       "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
@@ -27,7 +27,7 @@
         "profile"
       ],
       "accountRequirements": "Member; no organization required",
-      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary B minimum connection demonstrated on dd199b02, persistence on 18798a19. Full live tenancy/iPhone/time-dependent and production acceptance pending.",
+      "publicReadiness": "OIDC Standard Tier/app/callback and ordinary B minimum consent/exchange/identity verified; saved token usable on2bdab047. Full live tenant-negative, real iPhone, genuine expiry and production acceptance pending.",
       "customerConnection": "CONNECTED_IDENTITY_ONLY",
       "featurePermission": "Tester B actual identity-only grant verified; publishing not enabled. No publishing/organization/read/analytics capability promoted.",
       "tokenExchange": "REAL_EXCHANGED: Tester B Account only transaction consumed; Tester A identity/extension history retained separately.",
@@ -35,7 +35,7 @@
       "persistence": "PASS: encrypted durable connection, reload and genuinely new Rafii session retained the original Tester B credential and workspace binding. A survives deployment/reload separately.",
       "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
       "disconnectReconnect": "PASS: approved remote revocation/local removal, then real same-account/workspace reconnect on dd199b02 with openid/profile only; A unchanged. Two expired callbacks were safely rejected before successful third attempt.",
-      "failureStep": "No current identity failure. Frontier CI regression repaired; resolved merge CI/browser pass. Required new-head checks/preview, live tenant-negative, real iPhone and genuine expiry remain pending.",
+      "failureStep": "No current LinkedIn basic identity failure. Required CI found only the merged disposable SQL include-order contract; focused red/green repaired it, new-head cloud check pending.",
       "blockerClass": "UNVERIFIED",
       "owner": "Agent: remaining CI/security validation; account owner: supported real iPhone consent/session test when device available.",
       "nextAction": "Preserve both grants; complete remaining acceptance and exact production release review. No repeat basic consent or disconnect approval needed.",
@@ -120,7 +120,9 @@
         "evidence/preview-status-dd199b02.json",
         "evidence/linkedin-tester-b-reconnect-dd199b02.json",
         "evidence/preview-status-18798a19.json",
-        "evidence/library-merge-validation-20261008.json"
+        "evidence/library-merge-validation-20261008.json",
+        "evidence/preview-status-2bdab047.json",
+        "evidence/migration-order-ci-repair-20261008.json"
       ],
       "freshSessionEvidence": "evidence/linkedin-tester-b-fresh-session-20261008.json",
       "historicalObservationBeforeAuthorizedDisconnect": {
@@ -473,8 +475,8 @@
     "desktop and real iPhone Safari"
   ],
   "latestConsoleObservationAt": "2026-10-07T07:26:52.475Z",
-  "latestEvidenceRef": "evidence/preview-status-18798a19.json",
-  "latestLiveObservationAt": "2026-10-08T03:11:35.515828+00:00",
+  "latestEvidenceRef": "evidence/preview-status-2bdab047.json",
+  "latestLiveObservationAt": "2026-10-08T04:00:53.158977Z",
   "ordinaryExternalConnectionObservedProviders": 1,
   "countDefinitions": {
     "ordinaryExternalConnectionObservedProviders": "At least one non-Founder user with attested no provider-app role completed real minimum consent/exchange/identity and reload on this preview.",
