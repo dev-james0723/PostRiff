@@ -23,8 +23,10 @@ import json
 import re
 import socket
 import ssl
+import threading
 import time
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -99,11 +101,29 @@ def _target(url):
     return {"scheme": scheme, "host": host, "port": default, "path": path, "url": clean}
 
 
-def _vet(host, port, resolver):
-    try:
-        answers = resolver(host, port, type=socket.SOCK_STREAM)
-    except (OSError, UnicodeError):
-        _fail("This link's site couldn't be found.", "library_link_unreachable")
+def _resolve(resolver, host, port, deadline, clock):
+    """DNS bounded by the request deadline: a resolver that hangs is abandoned (daemon thread), never waited on."""
+    box = {}
+
+    def work():
+        try:
+            box["answers"] = resolver(host, port, type=socket.SOCK_STREAM)
+        except BaseException as error:  # handed to the caller below
+            box["error"] = error
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    worker.join(max(0.0, deadline - clock()))
+    if worker.is_alive():
+        _fail("The link took too long to respond.", "library_link_timeout", 504)
+    if "error" in box:
+        if isinstance(box["error"], (OSError, UnicodeError)):
+            _fail("This link's site couldn't be found.", "library_link_unreachable")
+        raise box["error"]
+    return box.get("answers")
+
+
+def _vet(host, port, resolver, deadline=None, clock=time.monotonic):
+    answers = _resolve(resolver, host, port, deadline if deadline is not None else clock() + LINK_TIMEOUT, clock)
     addresses = []
     for answer in answers or []:
         try:
@@ -122,17 +142,37 @@ def _vet(host, port, resolver):
 # --- pinned transport ---------------------------------------------------------------------------------------------------
 def pinned_get(scheme, host, address, port, path, timeout, deadline, clock):
     """GET over a socket connected to the vetted address; TLS is verified for the original host name. Never follows a
-    redirect, never decompresses, reads at most LINK_MAX_BYTES + 1 of a 2xx body within the deadline."""
+    redirect, never decompresses, reads at most LINK_MAX_BYTES + 1 of a 2xx body. A watchdog shuts the socket down at the
+    deadline, so connect, TLS, slow headers and a trickling body together can never exceed the request budget (per-read
+    socket timeouts alone reset on every byte)."""
     context = ssl.create_default_context() if scheme == "https" else None
     conn = (http.client.HTTPSConnection(host, port, timeout=timeout, context=context) if scheme == "https"
             else http.client.HTTPConnection(host, port, timeout=timeout))
+    fired, holder = threading.Event(), {}
+
+    def kill():
+        fired.set()
+        sock = holder.get("sock")
+        if sock is not None:
+            for stop in (lambda: sock.shutdown(socket.SHUT_RDWR), sock.close):
+                try:
+                    stop()
+                except OSError:
+                    pass
+    watchdog = threading.Timer(max(0.0, deadline - clock()), kill)
+    watchdog.daemon = True
+    watchdog.start()
     try:
-        raw_socket = socket.create_connection((address, port), timeout=timeout)
+        raw_socket = socket.create_connection((address, port), timeout=max(0.01, min(timeout, deadline - clock())))
+        holder["sock"] = raw_socket
         try:
             conn.sock = context.wrap_socket(raw_socket, server_hostname=host) if context else raw_socket
         except Exception:
             raw_socket.close()
             raise
+        holder["sock"] = conn.sock
+        if fired.is_set():
+            raise TimeoutError()
         conn.request("GET", path, headers={"User-Agent": USER_AGENT, "Accept": ACCEPT, "Accept-Encoding": "identity"})
         response = conn.getresponse()
         headers = {k.lower(): v for k, v in response.getheaders()}
@@ -154,11 +194,12 @@ def pinned_get(scheme, host, address, port, path, timeout, deadline, clock):
                 size += len(piece)
             body = b"".join(pieces)
         return {"status": response.status, "headers": headers, "body": body}
-    except TimeoutError as error:
-        raise AlphaError("The link took too long to respond.", 504, code="library_link_timeout") from error
-    except (OSError, ssl.SSLError, http.client.HTTPException) as error:
+    except (OSError, ssl.SSLError, http.client.HTTPException, ValueError) as error:
+        if fired.is_set() or isinstance(error, TimeoutError):
+            raise AlphaError("The link took too long to respond.", 504, code="library_link_timeout") from error
         raise AlphaError("The link could not be reached.", 502, code="library_link_unreachable") from error
     finally:
+        watchdog.cancel()
         conn.close()
 
 
@@ -254,7 +295,7 @@ def fetch_link(url, *, resolver=None, connector=None, clock=None) -> dict:
     redirects = 0
     for _ in range(MAX_REDIRECTS + 1):
         target = _target(current)
-        address = _vet(target["host"], target["port"], resolver)
+        address = _vet(target["host"], target["port"], resolver, deadline, clock)
         remaining = deadline - clock()
         if remaining <= 0:
             _fail("The link took too long to respond.", "library_link_timeout", 504)
@@ -291,37 +332,73 @@ def _storage(ctx):
     return library, storage
 
 
-def _store(ctx, *, filename, mime, raw, title, title_source, source_kind, provenance) -> dict:
-    """Same path as an upload: type/MIME validation, workspace quota, an immutable private object verified by HEAD, then
-    a queued row for the existing Library worker (hash, duplicate check, extraction)."""
+def _stage(ctx, *, filename, mime, raw) -> dict:
+    """Same validation and quota path as an upload, then an immutable private object verified by HEAD. Runs with NO
+    workspace lock (a read-mode route): storage round-trips never hold the workspace row."""
     from ..library_assets import _type
     library, storage = _storage(ctx)
     name, ext, mime, kind = _type(filename, mime)
     if not isinstance(raw, bytes) or not 0 < len(raw) <= library_extract.MAX_FILE_BYTES:
         _fail("This item is empty or over 50 MB.", "library_too_large", 413)
-    library.assert_capacity(ctx.cur, ctx.state, ctx.workspace_id, len(raw))
+    library.assert_capacity(ctx.cur, ctx.state, ctx.workspace_id, len(raw))  # early refusal; re-checked under the lock
     asset_id = uuid.uuid4().hex
     object_name = f"{asset_id}.{ext}"
     storage.put_immutable(ctx.workspace_id, "file", object_name, raw, mime)
+    staged = {"library": library, "storage": storage, "assetId": asset_id, "objectName": object_name, "name": name, "ext": ext, "mime": mime,
+              "kind": kind, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "etag": None}
     try:
         info = storage.object_info(ctx.workspace_id, "file", object_name)
         if (info.get("bytes"), info.get("mime")) != (len(raw), mime) or not info.get("etag"):
             raise AlphaError("Private storage did not keep this item intact. Try again.", 503, code="library_storage_mismatch")
-        ctx.cur.execute(
-            "/*lij:intake.insert*/ INSERT INTO public.pr_library_assets(id,workspace_id,created_by,original_filename,display_title,title_source,kind,mime,"
-            "extension,bytes,bucket,object_name,etag,processing_status,next_attempt_at,provenance,transcription_status,source_kind) "
-            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued',now(),%s::jsonb,'not_applicable',%s)",
-            (uuid.UUID(hex=asset_id), ctx.workspace_id, ctx.actor, name, (title or name.rsplit(".", 1)[0])[:160], title_source, kind, mime, ext, len(raw),
-             getattr(library, "bucket", "postriff-library"), object_name, info["etag"], json.dumps(provenance), source_kind))
     except Exception:
-        try:
-            storage.delete(ctx.workspace_id, "file", object_name)
-        except Exception:
-            pass  # an orphan object is swept with the workspace prefix; the row was never committed
+        _discard(ctx, staged)
         raise
-    return {"assetRef": {"assetId": asset_id, "versionId": asset_id, "sha256": ""}, "displayTitle": (title or name.rsplit(".", 1)[0])[:160],
-            "originalFilename": name, "kind": kind, "mime": mime, "bytes": len(raw), "sourceKind": source_kind, "processing": "queued",
-            "contentSha256": hashlib.sha256(raw).hexdigest(), "provenance": provenance}
+    staged["etag"] = info["etag"]
+    return staged
+
+
+def _discard(ctx, staged):
+    try:
+        staged["storage"].delete(ctx.workspace_id, "file", staged["objectName"])
+    except Exception:
+        pass  # an orphan object is swept with the workspace prefix; no row ever referenced it
+
+
+def _insert(wctx, staged, *, title, title_source, source_kind, provenance, recheck_quota: bool) -> dict:
+    """The short locked step: quota re-check (serialized with other uploads) and the queued row for the existing worker."""
+    if recheck_quota:
+        staged["library"].assert_capacity(wctx.cur, wctx.state, wctx.workspace_id, staged["bytes"])
+    display = (title or staged["name"].rsplit(".", 1)[0])[:160]
+    wctx.cur.execute(
+        "/*lij:intake.insert*/ INSERT INTO public.pr_library_assets(id,workspace_id,created_by,original_filename,display_title,title_source,kind,mime,"
+        "extension,bytes,bucket,object_name,etag,processing_status,next_attempt_at,provenance,transcription_status,source_kind) "
+        "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued',now(),%s::jsonb,'not_applicable',%s)",
+        (uuid.UUID(hex=staged["assetId"]), wctx.workspace_id, wctx.actor, staged["name"], display, title_source, staged["kind"], staged["mime"], staged["ext"],
+         staged["bytes"], getattr(staged["library"], "bucket", "postriff-library"), staged["objectName"], staged["etag"], json.dumps(provenance), source_kind))
+    return {"assetRef": {"assetId": staged["assetId"], "versionId": staged["assetId"], "sha256": ""}, "displayTitle": display,
+            "originalFilename": staged["name"], "kind": staged["kind"], "mime": staged["mime"], "bytes": staged["bytes"], "sourceKind": source_kind,
+            "processing": "queued", "contentSha256": staged["sha256"], "provenance": provenance}
+
+
+def _commit(ctx, staged, *, key, action, request_hash, **row) -> dict:
+    """Open the locked write transaction only for the insert (ctx.open_write from a read-mode route; in-process callers that
+    already hold a write context use it directly). A key that another request stored meanwhile returns that result."""
+    separate = callable(getattr(ctx, "open_write", None))
+    kept = False
+    try:
+        with (ctx.open_write() if separate else nullcontext(ctx)) as wctx:
+            _writable(wctx)
+            prior = jobs.receipt(wctx, key, action, request_hash)
+            if prior is not None:
+                return prior
+            asset = _insert(wctx, staged, recheck_quota=separate, **row)
+            result = {"asset": asset, "status": "queued"}
+            jobs.put_receipt(wctx, key, action, request_hash, result)
+            kept = True
+    finally:
+        if not kept:
+            _discard(ctx, staged)
+    return {**result, "_status": 201}
 
 
 def _writable(ctx):
@@ -352,17 +429,15 @@ def link_http(ctx, request):
     if prior is not None:
         return prior
     _storage(ctx)  # never fetch what cannot be kept
-    fetched = fetch_link(url)
+    fetched = fetch_link(url)  # no workspace lock is held: link_http is a read-mode route
     provenance = {"source": "link", "sourceUrl": fetched["sourceUrl"], "finalUrl": fetched["finalUrl"], "retrievedAt": _now_iso(),
                   "httpStatus": fetched["httpStatus"], "contentType": fetched["contentType"], "redirects": fetched["redirects"],
                   "fetchedBytes": fetched["fetchedBytes"], "sanitized": fetched["sanitized"], "capturedBy": ctx.actor}
     if fetched.get("title"):
         provenance["pageTitle"] = fetched["title"]
-    asset = _store(ctx, filename=_filename(title or fetched["filename"], fetched["ext"]), mime=fetched["mime"], raw=fetched["raw"],
-                   title=title or fetched.get("title"), title_source="user" if title else "generated", source_kind="link", provenance=provenance)
-    result = {"asset": asset, "status": "queued"}
-    jobs.put_receipt(ctx, key, "ingest.link", request_hash, result)
-    return {**result, "_status": 201}
+    staged = _stage(ctx, filename=_filename(title or fetched["filename"], fetched["ext"]), mime=fetched["mime"], raw=fetched["raw"])
+    return _commit(ctx, staged, key=key, action="ingest.link", request_hash=request_hash, title=title or fetched.get("title"),
+                   title_source="user" if title else "generated", source_kind="link", provenance=provenance)
 
 
 def note_http(ctx, request):
@@ -389,8 +464,6 @@ def note_http(ctx, request):
     provenance = {"source": "note", "authoredByMe": authored, "createdBy": ctx.actor, "capturedAt": _now_iso()}
     if authored:
         provenance["author"] = ctx.actor
-    asset = _store(ctx, filename=_filename(display, "txt"), mime="text/plain", raw=text.encode("utf-8"), title=display,
+    staged = _stage(ctx, filename=_filename(display, "txt"), mime="text/plain", raw=text.encode("utf-8"))
+    return _commit(ctx, staged, key=key, action="ingest.note", request_hash=request_hash, title=display,
                    title_source="user" if title else "generated", source_kind="note", provenance=provenance)
-    result = {"asset": asset, "status": "queued"}
-    jobs.put_receipt(ctx, key, "ingest.note", request_hash, result)
-    return {**result, "_status": 201}
