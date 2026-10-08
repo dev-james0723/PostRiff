@@ -74,6 +74,12 @@ import { navigationId } from '@/features/context-navigation/markers';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import type { MediaMoment, NavigationItem } from '@/lib/api/types';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import type { UiTurnContextV1 } from '@/lib/agent-runtime/ui-contracts';
+import type { ContinueRequest } from '@/features/agent/generative-ui/bridges/types';
+import { currentUiContext, markFresh } from '@/features/agent/generative-ui/state/registry';
+import { GeneratedAnswerSlot } from '@/features/agent/generative-ui/surfaces/generated-slot';
+import { flushConversation } from '@/features/agent/generative-ui/surfaces/session';
+import { useConsumerUiTransport } from '@/features/agent/generative-ui/surfaces/transport';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
@@ -306,6 +312,37 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const { autoWriter } = choice;
   const autoModel = useMemo(() => ({ label: autoWriter.option ? `Auto · ${modelName(autoWriter.option, autoWriter.model)}` : 'Auto', option: autoWriter.option }), [autoWriter]);
   const timeZone = useTimeZone();
+  // Generated views (rafii-genui/1): a follow-up from a view goes through the agent turn path with the view's uiContext, the
+  // same path as agent slash commands (the writing composer needs a channel selection, a view's follow-up doesn't).
+  const uiTransport = useConsumerUiTransport();
+  const uiScope = uiTransport?.scopeKey ?? null;
+  const genuiOn = Boolean(agent.status?.genui?.enabled);
+  const askAgent = async (message: string, uiContext?: UiTurnContextV1) => {
+    const text = message.trim().slice(0, 4000);
+    if (!text || !workspaceId || !gate.enter()) return;
+    setBusy(true);
+    try {
+      if (genuiOn) await flushConversation(uiScope, conversationId);
+      const context = genuiOn ? (uiContext ?? currentUiContext(uiScope, conversationId)) : undefined;
+      const response = await agent.api.turn(workspaceId, { message: text, idempotencyKey: crypto.randomUUID(), conversationId, modality: 'text', timeZone,
+        ...choice.requestFields, ...(context ? { uiContext: context } : {}) });
+      if (genuiOn && uiScope && response.runId && response.result?.ui?.eligible) markFresh(uiScope, response.runId);
+      if (!gate.alive()) return;
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) }),
+        client.invalidateQueries({ queryKey: keys.conversations(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.usage(workspaceId) })
+      ]);
+    } catch (err) {
+      if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Rafii couldn’t answer that.');
+    } finally {
+      gate.leave();
+      if (gate.alive()) setBusy(false);
+    }
+  };
+  const continueFromView = (request: ContinueRequest) =>
+    void askAgent(request.message, { artifactId: request.artifactId, artifactRevision: request.artifactRevision, stateRevision: request.stateRevision });
   /** The follow-up body the server receives (and a credit estimate describes), minus key and image. */
   // `requestFields` leaves out the model on Auto (the server resolves the workspace default) and the Auto level.
   // Chat attachments (chat-context SPEC §11.2): the same chip fields go to the estimate, the quote and the turn; quick
@@ -592,7 +629,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                             </span>
                           )
                         ) : (
-                          <SiteAgentAnswer body={siteAnswer} actions={{ messageId: message.messageId, conversationId, latest: message.messageId === lastSiteAnswer }} />
+                          <SiteAgentAnswer body={siteAnswer} actions={{ messageId: message.messageId, conversationId, latest: message.messageId === lastSiteAnswer, onAsk: (value) => void askAgent(value) }}
+                            generated={(body as { agent?: unknown }).agent ? <GeneratedAnswerSlot message={message} conversationId={conversationId} surface='chat' latest={message.messageId === lastSiteAnswer}
+                              onContinue={continueFromView} onNavigate={(path) => router.push(path)} /> : undefined} />
                         )}
                         <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
                       </MessageContent>
