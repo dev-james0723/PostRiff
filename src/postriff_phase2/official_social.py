@@ -98,7 +98,7 @@ _add("instagram", "messaging", "Messenger for Instagram /{user}/messages", "inst
 _add("instagram", "edit delete", "contract not verified", "", "instagram_login", "professional account", support="audit_unavailable", limitation="Selected Login path write contract must be verified; SDK method existence alone is not authorization.")
 _unsupported("instagram", "location_tag product_tag", "The selected Instagram Login official collection excludes tagging and ads.")
 
-_add("facebook", "connected_person page_selected page_identity page_roles", "GET /me; GET /me/accounts?fields=id,name,tasks,access_token", "pages_show_list", "facebook_login_business", "managed Page", implemented=True)
+_add("facebook", "connected_person page_selected page_identity page_roles", "GET /me; GET /me/accounts?fields=id,name,tasks", "pages_show_list", "facebook_login_business", "managed Page", implemented=True)
 _add("facebook", "page_publish text link photo multi_photo video reel story schedule edit delete", "POST /{page}/feed|photos|videos|video_reels|photo_stories|video_stories; POST|DELETE /{post}", "pages_show_list pages_read_engagement pages_manage_posts", "pages", "Page with CREATE_CONTENT", "publish", scheduling="per_format", limitation="Native feed scheduling; Reels use start/upload/status/finish. Current SDK confirms Story endpoints, but ordinary-account live eligibility remains unverified.")
 _add("facebook", "comments", "GET /{post}/comments", "pages_show_list pages_read_engagement pages_read_user_content", "pages", "Page with MODERATE", "comments_read")
 _add("facebook", "reactions", "GET /{post}/reactions", "pages_show_list pages_read_engagement", "pages", "selected authorized Page", "identity")
@@ -201,8 +201,9 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
             # callback and deployment. A generic approved flag is insufficient.
             app_approved = member_publishing_approved is True
         member_identity = provider == "linkedin" and key in ("connected", "member_identity")
+        facebook_identity = provider == 'facebook' and key in ('connected_person', 'page_selected', 'page_identity', 'page_roles')
         approved_connection_scopes = connection_approval.get("approvedScopes")
-        if (member_identity and not app_approved and connection_approval.get("state") == "approved"
+        if ((member_identity or facebook_identity) and not app_approved and connection_approval.get("state") == "approved"
                 and connection_approval.get("audience") == "external"
                 and isinstance(connection_approval.get("appId"), str) and connection_approval["appId"].strip()
                 and isinstance(connection_approval.get("evidenceRef"), str) and connection_approval["evidenceRef"].strip()
@@ -213,7 +214,9 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
         # A verified /userinfo response proves member identity, not organization
         # eligibility, publication approval or a complete live acceptance test.
         eligible = (channel.get("eligibility", {}).get(key) is True
-                    or ((member_identity or member_publication) and connected and channel.get("accountType") == "member"))
+                    or ((member_identity or member_publication) and connected and channel.get("accountType") == "member")
+                    or (facebook_identity and connected and (key == 'connected_person'
+                        or (channel.get('accountType') == 'page' and bool(channel.get('destinationId'))))))
         built = feature.implemented or key in implemented
         live = (proof.get("state") == "passed" and proof.get("kind") == "live_api"
                 and proof.get("accountId") == channel.get("providerAccountId")

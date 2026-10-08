@@ -195,4 +195,199 @@ class OfficialPersistence(unittest.TestCase):
         self.assertEqual(saved['manifest']['payload']['text'],'Approved exact reply');self.assertEqual(saved['state'],'uncertain')
 
 
+class ScopedWorkerPersistence(unittest.TestCase):
+    """Real SQL fences around one user-selected job; every transport is synthetic."""
+    def setUp(self):
+        self.now = fixture.clock[0]
+        self.state = copy.deepcopy(BASE)
+        target = self.state['phase2']['jobs'][0]
+        target.update(state='scheduled', attempts=[], checks=0, events=[], leaseOwner=None, leaseUntil=0,
+                      cancelRequested=False, nextAt=self.now - 1)
+        for key in ('providerReference', 'providerConfirmed', 'verification', 'progress', 'providerAssets',
+                    'providerUpload', 'container', 'providerThread', 'nextAction'):
+            target.pop(key, None)
+        target['approvalDigest'] = digest(target['manifest'])
+        self.target = target
+        other = copy.deepcopy(target)
+        other['id'] = 'unrelated-due-job'
+        other['manifest']['expiresAt'] = self.now - 1
+        other['approvalDigest'] = digest(other['manifest'])
+        self.state['phase2']['jobs'] = [other, target]
+        foreign = copy.deepcopy(self.state)
+        foreign['workspace']['id'] = fixture.foreign
+        with connection() as db:
+            self.foreign_before = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (fixture.foreign,)).fetchone()[0]
+            db.execute("UPDATE public.pr_memberships SET role='owner',status='active' WHERE user_id=%s AND workspace_id=%s", (fixture.one, wid))
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(foreign), fixture.foreign))
+        self.save()
+
+    def tearDown(self):
+        with connection() as db:
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(self.foreign_before), fixture.foreign))
+            db.execute("UPDATE public.pr_memberships SET role='owner',status='active' WHERE user_id=%s AND workspace_id=%s", (fixture.one, wid))
+
+    def save(self):
+        with connection() as db:
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(self.state), wid))
+
+    def saved(self):
+        with connection() as db:
+            return db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (wid,)).fetchone()[0]
+
+    def worker(self, social, binding=None):
+        return PostgresWorker(connection, social=social, clock=lambda: self.now, worker_binding=binding)
+
+    def run_job(self, worker):
+        return worker.execute_job(service.repository, wid, 'fixture-one', self.target['id'], self.target['approvalDigest'])
+
+    def test_concurrent_and_repeated_requests_cannot_create_twice_or_touch_other_jobs(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        started, release = Event(), Event()
+        calls = []
+        class Social:
+            def submit(_, manifest):
+                calls.append(('create', manifest['idempotencyKey']))
+                started.set()
+                if not release.wait(10): raise AssertionError('Synthetic concurrent dispatch timed out')
+                return {'state':'provider_accepted', 'reference':'urn:li:share:123', 'confirmed':'Synthetic201 receipt'}
+            def reconcile(_, manifest, job):
+                calls.append(('reconcile', job.get('providerReference')))
+                return {'state':'provider_accepted', 'reference':job['providerReference'], 'confirmed':'Known receipt; no restricted read; do not resubmit'}
+        before_other = copy.deepcopy(self.state['phase2']['jobs'][0])
+        with connection() as db:
+            before_foreign = db.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s', (fixture.foreign,)).fetchone()
+        social = Social()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            first = pool.submit(self.run_job, self.worker(social))
+            try:
+                self.assertTrue(started.wait(10))
+                self.assertEqual(self.run_job(self.worker(social))['processed'], 0, 'A live lease is never dispatched again')
+            finally:
+                release.set()
+            self.assertEqual(first.result(timeout=10)['processed'], 1)
+        self.assertEqual([kind for kind, _ in calls], ['create'])
+        self.now += 6  # Synthetic queue eligibility; not provider token-aging evidence.
+        self.state = self.saved()
+        known = next(j for j in self.state['phase2']['jobs'] if j['id'] == self.target['id'])
+        known['state'] = 'scheduled'  # A stale state label cannot erase a known create receipt.
+        self.save()
+        self.assertEqual(self.run_job(self.worker(social))['processed'], 1)
+        self.assertEqual([kind for kind, _ in calls], ['create', 'reconcile'])
+        saved = self.saved()
+        self.assertEqual(saved['phase2']['jobs'][0], before_other, 'Do not invalidate even an unrelated expired job')
+        target = next(j for j in saved['phase2']['jobs'] if j['id'] == self.target['id'])
+        self.assertEqual(target['state'], 'provider_accepted')
+        self.assertEqual(len(target['attempts']), 1)
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s', (fixture.foreign,)).fetchone(), before_foreign)
+
+    def test_not_due_canceled_stale_or_unentitled_job_never_submits(self):
+        from unittest.mock import Mock, patch
+        original = copy.deepcopy(self.state)
+        for condition in ('future', 'canceled', 'stale-content', 'billing'):
+            with self.subTest(condition=condition):
+                self.state = copy.deepcopy(original)
+                target = self.state['phase2']['jobs'][1]
+                if condition == 'future': target['nextAt'] = self.now + 600
+                if condition == 'canceled': target['cancelRequested'] = True
+                if condition == 'stale-content': target['manifest']['expiresAt'] = self.now - 1; target['approvalDigest'] = digest(target['manifest'])
+                self.target = target
+                self.save()
+                social = SimpleNamespace(submit=Mock(side_effect=AssertionError('No create authorized')))
+                if condition == 'billing':
+                    with patch('postriff_phase2.billing.require_publishing', side_effect=AlphaError('Publishing entitlement unavailable', 402)):
+                        self.run_job(self.worker(social))
+                else:
+                    self.run_job(self.worker(social))
+                social.submit.assert_not_called()
+                saved = self.saved()['phase2']['jobs']
+                self.assertEqual(saved[0], original['phase2']['jobs'][0])
+                self.assertEqual(len(saved[1]['attempts']), 0)
+
+    def test_lost_membership_between_request_and_claim_cannot_dispatch(self):
+        from unittest.mock import Mock, patch
+        social = SimpleNamespace(submit=Mock(side_effect=AssertionError('Revoked member cannot publish')))
+        worker = self.worker(social)
+        claim = worker.claim
+        def revoke_before_claim(**scope):
+            with connection() as db:
+                db.execute("UPDATE public.pr_memberships SET role='viewer',can_publish=false WHERE workspace_id=%s AND user_id=%s", (wid, fixture.one))
+            return claim(**scope)
+        with patch.object(worker, 'claim', side_effect=revoke_before_claim), self.assertRaises(AlphaError) as error:
+            self.run_job(worker)
+        self.assertEqual(error.exception.status, 403)
+        social.submit.assert_not_called()
+        self.assertEqual(self.saved()['phase2']['jobs'], self.state['phase2']['jobs'])
+
+    def test_preview_hold_is_released_atomically_only_by_matching_scoped_worker(self):
+        from unittest.mock import Mock
+        preview = {'environment':'preview', 'origin':'https://preview.example.invalid'}
+        self.target['manifest']['workerBinding'] = preview
+        self.target['approvalDigest'] = digest(self.target['manifest'])
+        self.target.update(state='held', previewDispatchPending=True,
+                           events=[{'at':self.now, 'state':'held', 'message':'Approved preview post; choose Publish approved post when due.'}])
+        # The global worker may touch its own unbound job, but cannot invalidate or claim this preview job.
+        self.save()
+        before = copy.deepcopy(self.target)
+        self.assertIsNone(self.worker(SimpleNamespace()).claim())
+        saved = next(j for j in self.saved()['phase2']['jobs'] if j['id'] == self.target['id'])
+        self.assertEqual(saved, before)
+        wrong = self.worker(SimpleNamespace(), {**preview, 'origin':'https://other.example.invalid'})
+        with self.assertRaises(AlphaError) as error:
+            self.run_job(wrong)
+        self.assertEqual(error.exception.status, 409)
+        social = SimpleNamespace(submit=Mock(return_value={'state':'provider_accepted','reference':'urn:li:share:456','confirmed':'Synthetic201 receipt'}))
+        worker = self.worker(social, preview)
+        self.assertIsNone(worker.claim(), 'A preview hold is not a global-cron release')
+        self.assertEqual(self.run_job(worker)['processed'], 1)
+        social.submit.assert_called_once_with(before['manifest'])
+        saved = next(j for j in self.saved()['phase2']['jobs'] if j['id'] == self.target['id'])
+        self.assertEqual(saved['state'], 'provider_accepted')
+        self.assertEqual(saved['manifest'], before['manifest'])
+        self.assertEqual(saved['approvalDigest'], before['approvalDigest'])
+        self.assertNotIn('previewDispatchPending', saved)
+        self.assertEqual(len(saved['attempts']), 1)
+        self.assertEqual(len(self.saved()['phase2']['jobs']), 2, 'No replacement job is created')
+
+    def test_definitive_legacy_no_submit_recovers_original_job_without_rearming_unknown_outcome(self):
+        from unittest.mock import Mock
+        preview = {'environment':'preview', 'origin':'https://preview.example.invalid'}
+        message = 'Live provider transport is not configured; nothing was submitted'
+        self.target.update(state='held', resultSchema='postriff.result.v1', providerConfirmed=message,
+                           events=[{'state':'held','at':self.now,'message':message}],
+                           attempts=[{'number':1,'startedAt':self.now-10,'endedAt':self.now-9}])
+        self.save()
+        original = copy.deepcopy(self.state)
+        social = SimpleNamespace(submit=Mock(return_value={'state':'provider_accepted','reference':'urn:li:share:789','confirmed':'Synthetic201 receipt'}))
+        for change in ({'providerConfirmed':'Provider response unknown'}, {'providerReference':'urn:li:share:777'},
+                       {'nextAt':self.now+600}, {'cancelRequested':True}):
+            with self.subTest(change=change):
+                self.state = copy.deepcopy(original)
+                self.target = self.state['phase2']['jobs'][1]
+                self.target.update(change)
+                self.save()
+                try:
+                    self.run_job(self.worker(social, preview))
+                except AlphaError as error:
+                    self.assertEqual(error.status, 409)
+                social.submit.assert_not_called()
+                self.assertEqual(self.saved()['phase2']['jobs'], self.state['phase2']['jobs'])
+        self.state = copy.deepcopy(original)
+        self.target = self.state['phase2']['jobs'][1]
+        self.save()
+        before = copy.deepcopy(self.target)
+        self.assertEqual(self.run_job(self.worker(social, preview))['processed'], 1)
+        social.submit.assert_called_once_with(before['manifest'])
+        saved = self.saved()['phase2']['jobs']
+        self.assertEqual(saved[0], original['phase2']['jobs'][0])
+        self.assertEqual(saved[1]['manifest'], before['manifest'])
+        self.assertEqual(saved[1]['approvalDigest'], before['approvalDigest'])
+        self.assertEqual(saved[1]['workerBinding'], preview)
+        self.assertEqual(saved[1]['attempts'][0], before['attempts'][0])
+        self.assertEqual(len(saved[1]['attempts']), 2, 'Original definitive no-submit attempt remains in history')
+        self.assertEqual(saved[1]['state'], 'provider_accepted')
+        self.assertEqual(len(saved), 2)
+
+
 if __name__=='__main__': unittest.main()

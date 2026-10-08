@@ -81,8 +81,9 @@ class FacebookAdapter(unittest.TestCase):
         plain = parse_qs(urlparse(FacebookPagesProvider("app", "secret").authorize_url(BASE + "/cb", "S", "C", ["pages_show_list", "pages_manage_posts"])).query)
         self.assertEqual(plain["scope"][0], "pages_show_list,pages_manage_posts")
 
-    def test_exchange_makes_a_long_lived_token_proves_every_call_and_picks_the_only_page(self):
+    def test_exchange_validates_the_person_token_and_retains_explicit_page_choice(self):
         wire = Wire([ok({"access_token": "SHORT"}), ok({"access_token": "LONG", "expires_in": 5184000}), ok({"id": "777", "name": "James Au"}),
+                     ok({'data': {'app_id': 'app', 'user_id': '777', 'is_valid': True}}),
                      ok({"data": [{"permission": "pages_manage_posts", "status": "granted"}, {"permission": "pages_read_engagement", "status": "granted"},
                                   {"permission": "business_management", "status": "declined"}]}), ok(PAGES)])
         facebook = FacebookPagesProvider("app", "secret", transport=wire)
@@ -96,9 +97,9 @@ class FacebookAdapter(unittest.TestCase):
         self.assertNotIn("secret", wire.calls[0]["url"])  # the app secret travels in the form body
         query = parse_qs(urlparse(wire.calls[2]["url"]).query)
         self.assertEqual(query["appsecret_proof"][0], hmac.new(b"secret", b"LONG", hashlib.sha256).hexdigest())
-        wire.responses.append(ok({"id": "10001", "name": "James Au Studio"}))
+        wire.responses.append(ok(PAGES))
         self.assertEqual(facebook.identity(grant["accessToken"]), {"providerAccountId": "777", "handle": "James Au Studio", "accountType": "page"})
-        self.assertIn("access_token=PT1", wire.calls[-1]["url"])  # a chosen Page proves access with its own token
+        self.assertIn("access_token=LONG", wire.calls[-1]["url"])  # minimum Page identity uses the person's authorized Page list
 
     def test_destinations_are_pages_with_create_content_and_revocation_uses_the_query(self):
         session = json.dumps({"v": 1, "user": "777", "ut": "LONG", "scope": ["pages_manage_posts"], "page": None})
@@ -110,7 +111,7 @@ class FacebookAdapter(unittest.TestCase):
         with self.assertRaises(AlphaError):
             FacebookPagesProvider("app", "secret", transport=Wire([ok(PAGES)])).revalidate_page(json.dumps({**json.loads(session), "page":{"id":"10002"}}), "CREATE_CONTENT")
 
-    def test_scopes_stand_on_the_page_token_after_the_user_token_lapses(self):
+    def test_expired_person_token_does_not_reuse_historical_page_scopes(self):
         session = json.dumps({"v": 1, "user": "777", "ut": "EXPIRED", "scope": ["pages_manage_posts"], "page": {"id": "10001", "name": "Studio", "token": "PT1"}})
         facebook = FacebookPagesProvider("app", "secret", transport=Wire([ok({"error": {"code": 190}}, 400), ok({"id": "10001", "name": "Studio"})]))
         self.assertIsNone(facebook.inspect_scopes(session, "777"))

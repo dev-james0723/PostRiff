@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SuccessCheck } from '@/components/ui/success-check';
 import { useFlash } from '@/hooks/use-flash';
@@ -311,7 +311,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           layout='inline'
           title={sentence}
           action={
-            canManage && provider ? (
+            held > 0 && !disconnected && !ATTENTION_STATES.has(channel.connectionState) && !expiring ? (
+              <Link href={`/app/queue?channel=${encodeURIComponent(channel.id)}`} className={buttonVariants({ variant: 'glass', size: 'control' })}>Review held posts</Link>
+            ) : canManage && provider ? (
               <Button variant='glass' size='control' onClick={reconnect}>
                 <Icons.refresh className='size-4' />
                 Reconnect

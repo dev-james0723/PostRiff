@@ -205,6 +205,8 @@ export function createApi(getToken: TokenSource) {
     snapshot: (w: string) => get<Snapshot>(ws(w)),
     act: (w: string, expectedRevision: number, action: string, payload: Record<string, unknown> = {}) =>
       send<Snapshot>('POST', `${ws(w)}/actions`, { expectedRevision, action, payload }),
+    executeJob: (w: string, jobId: string, approvalDigest: string) =>
+      send<{ processed: number; execution: string; jobId: string }>('POST', `${ws(w)}/jobs/${encodeURIComponent(jobId)}/execute`, { approvalDigest }),
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
     /** A connected account's profile picture; the digest in the URL makes a changed picture a new request. */
     channelPicture: (w: string, channelId: string, digest: string) =>

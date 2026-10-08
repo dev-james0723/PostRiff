@@ -525,9 +525,11 @@ class OAuthService:
         short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership
-            require(_membership(row), requirement)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
+            # Choosing a Facebook Page finishes connection; it does not require publishing authority.
+            permission = ('manage_connections' if stored and stored[0] == 'facebook' else 'approve') if requirement == 'destination_list' else requirement
+            require(_membership(row), permission)
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         adapter = self._provider(stored[0])
@@ -535,7 +537,7 @@ class OAuthService:
 
     def destinations(self, workspace_id, token, connection_id):
         """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
-        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "destination_list")
         if not getattr(adapter, "has_destinations", False):
             raise AlphaError("This account has nothing to choose.", 409)
         return {"connectionId": connection_id, "scope": getattr(type(adapter), "destination_scope", "connection"),
@@ -573,6 +575,14 @@ class OAuthService:
                 if channel is None or page.get('id') != destination_id:
                     raise AlphaError('Choose an eligible Facebook Page again.', 409)
                 channel.update(destinationId=destination_id, accountType='page', account=page['name'])
+                # A fresh authorized Page-list entry is connection evidence only. Optional write/read
+                # grants and Page tasks retain independent capability checks.
+                matrix = self._capabilities(adapter, 'identity', grant['scopes'], [], self.clock(), updated)
+                channel['capabilityVerified'] = matrix['publish']['level'] == 'Direct'
+                for name, value in matrix.items():
+                    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()",
+                                (workspace_id, connection_id, name, value['level'], value['evidence'], value['capabilityVersion'], value['verifiedAt']))
+                self.commands.engine.invalidate(state)
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if adapter.id == "google_business_profile":
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
@@ -754,6 +764,10 @@ class OAuthService:
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
+        facebook_page = None
+        if getattr(adapter, 'id', None) == 'facebook' and access_token:
+            facebook_page = adapter.session(access_token).get('page')
+            direct_allowed = direct_allowed and isinstance(facebook_page, dict) and bool(facebook_page.get('id'))
         member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and getattr(adapter, 'member_publishing_approved', lambda: False)())
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
@@ -765,6 +779,9 @@ class OAuthService:
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
         )
+        if getattr(adapter, 'id', None) == 'facebook':
+            publisher_ready = publisher_ready and bool(isinstance(facebook_page, dict) and facebook_page.get('token')
+                and {'CREATE_CONTENT', 'PROFILE_PLUS_CREATE_CONTENT', 'MANAGE', 'PROFILE_PLUS_FULL_CONTROL'} & set(facebook_page.get('tasks') or []))
         if publish_granted and (direct_allowed or member_product) and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)

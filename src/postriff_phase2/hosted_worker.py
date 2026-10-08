@@ -1,6 +1,7 @@
 """Bounded PostgreSQL worker for browser-independent Phase 2 schedules."""
 import copy
 import json
+import math
 import time
 import uuid
 
@@ -9,26 +10,35 @@ from .store import IN_FLIGHT, TERMINAL, find
 from .hosted import HostedPhase2Commands
 from .contracts import digest
 from .outcomes import normalize_result, unknown
-from .permissions import Membership
+from .permissions import Membership, require
 from .learning_service import record_published
+
+NO_SUBMISSION_CONFIRMED = 'Live provider transport is not configured; nothing was submitted'
+PREVIEW_PENDING_MESSAGE = 'Approved preview post; choose Publish approved post when due.'
+
+
+def _no_provider_effect(job):
+    return not any(job.get(key) for key in ('providerReference', 'container', 'providerUpload',
+                                            'providerAssets', 'providerThread', 'progress', 'url', 'verification'))
 
 
 class DisabledHostedSocial:
     """Fail closed until an exact provider transport and token vault are configured."""
     def submit(self, _manifest):
-        return {"state": "held", "confirmed": "Live provider transport is not configured; nothing was submitted"}
+        return {"state": "held", "confirmed": NO_SUBMISSION_CONFIRMED}
 
     def reconcile(self, _manifest, _job):
         return {"state": "uncertain", "confirmed": "Provider reconciliation is unavailable; do not resubmit"}
 
 
 class PostgresWorker:
-    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None):
+    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, worker_binding=None):
         self.connection_factory = connection_factory
         self.social = social or DisabledHostedSocial()
         self.clock = clock
         self.worker_id = worker_id or "worker-" + uuid.uuid4().hex
-        self.commands = HostedPhase2Commands(clock)
+        self.commands = HostedPhase2Commands(clock, worker_binding=worker_binding)
+        self.worker_binding = self.commands.engine.worker_binding
         # Optional server-side hook (e.g. native insights ingestion) run in the same transaction once verified.
         self.on_verified = on_verified
 
@@ -36,10 +46,50 @@ class PostgresWorker:
         job["state"] = state
         job.setdefault("events", []).append({"at": self.clock(), "state": state, "message": message, "execution": "hosted-worker"})
 
+    def _binding_matches(self, job):
+        manifest = job.get('manifest') or {}
+        if 'workerBinding' in manifest and 'workerBinding' in job and manifest['workerBinding'] != job['workerBinding']:
+            return False
+        binding = job.get('workerBinding', manifest.get('workerBinding'))
+        return binding == self.worker_binding
+
+    def _may_adopt_legacy_hold(self, job):
+        """One definitive disabled-transport result, never an unknown provider outcome."""
+        attempts = job.get('attempts') or []
+        event = (job.get('events') or [{}])[-1]
+        return bool(self.worker_binding is not None and 'workerBinding' not in job
+                    and 'workerBinding' not in (job.get('manifest') or {})
+                    and job.get('state') == 'held' and not job.get('cancelRequested')
+                    and job.get('resultSchema') == 'postriff.result.v1' and _no_provider_effect(job)
+                    and job.get('providerConfirmed') == NO_SUBMISSION_CONFIRMED
+                    and event.get('state') == 'held' and event.get('message') == NO_SUBMISSION_CONFIRMED
+                    and len(attempts) == 1 and attempts[0].get('number') == 1
+                    and type(attempts[0].get('startedAt')) in (int, float)
+                    and type(attempts[0].get('endedAt')) in (int, float)
+                    and math.isfinite(attempts[0]['startedAt']) and math.isfinite(attempts[0]['endedAt'])
+                    and attempts[0]['endedAt'] >= attempts[0]['startedAt'])
+
+    def _preview_hold(self, job):
+        event = (job.get('events') or [{}])[-1]
+        return bool(self.worker_binding is not None and self._binding_matches(job)
+                    and job.get('manifest', {}).get('workerBinding') == self.worker_binding
+                    and job.get('state') == 'held' and job.get('previewDispatchPending') is True
+                    and not job.get('attempts') and _no_provider_effect(job)
+                    and event.get('state') == 'held' and event.get('message') == PREVIEW_PENDING_MESSAGE)
+
+    def _invalidate_owned(self, state):
+        # A shared database may contain approvals from another deployment. Filter before
+        # invalidation as well as before claim; neither reviews nor jobs may cross that boundary.
+        data = state['phase2']
+        view = {**state, 'phase2': {**data,
+                'jobs': [job for job in data['jobs'] if self._binding_matches(job)],
+                'reviews': [review for review in data['reviews'] if self._binding_matches({'manifest': review['manifest']})]}}
+        self.commands.engine.invalidate(view)
+
     def _approved(self, cur, workspace_id, state, job):
         from .billing import require_publishing
         try:
-            if state.get('accountDeletion'): return False
+            if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())
             manifest = job['manifest']
             channel = find(state['phase2']['channels'], manifest['channelId'])
@@ -53,23 +103,76 @@ class PostgresWorker:
         except (AlphaError, KeyError, TypeError):
             return False
 
-    def claim(self):
+    @staticmethod
+    def _requester_may_approve(cur, workspace_id, principal):
+        cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, principal))
+        member = cur.fetchone()
+        return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve'))
+
+    def execute_job(self, repository, workspace_id, token, job_id, approval_digest):
+        """An authenticated nudge of one existing approval, never a new or forced submission."""
+        if (not isinstance(approval_digest, str) or len(approval_digest) != 64
+                or set(approval_digest) - set('0123456789abcdef')):
+            raise AlphaError('Send the exact stored approval for this post.', 409)
+        with repository.transaction(token, workspace_id) as (_, row, principal):
+            require(Membership.from_row(*row[2:7]), 'approve')
+            state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+            if state.get('workspace', {}).get('sample'):
+                raise AlphaError('Hosted sample workspaces are read-only.', 403)
+            job = find(state.get('phase2', {}).get('jobs', []), job_id)
+            if (job['manifest'].get('workspaceId') != workspace_id
+                    or approval_digest != job.get('approvalDigest') or approval_digest != digest(job['manifest'])):
+                raise AlphaError('This approval changed. Reload the post before continuing.', 409)
+            if not self._binding_matches(job) and not self._may_adopt_legacy_hold(job):
+                raise AlphaError('Open this approved post in the deployment where it was reviewed.', 409)
+        processed = self.step(workspace_id=workspace_id, job_id=job_id, approval_digest=approval_digest,
+                              dispatch_principal=principal)
+        return {'processed': int(processed), 'execution': 'hosted-worker', 'jobId': job_id}
+
+    def claim(self, *, workspace_id=None, job_id=None, approval_digest=None, dispatch_principal=None):
+        scoped = any(value is not None for value in (workspace_id, job_id, approval_digest, dispatch_principal))
+        if scoped and not all(isinstance(value, str) and value for value in (workspace_id, job_id, approval_digest, dispatch_principal)):
+            raise AlphaError('Select one workspace, job and exact approval.', 409)
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
                 if not cur.fetchone()[0]:
                     return None
                 # A founder account block freezes the workspace like a pending deletion; lifting it resumes the same jobs.
-                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock' ORDER BY id FOR UPDATE SKIP LOCKED")
+                query = "SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'"
+                if scoped:
+                    cur.execute(query + ' AND id=%s ORDER BY id FOR UPDATE SKIP LOCKED', (workspace_id,))
+                else:
+                    cur.execute(query + ' ORDER BY id FOR UPDATE SKIP LOCKED')
                 for workspace_id, revision, raw_state in cur.fetchall():
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
                     original = json.dumps(state, sort_keys=True)
-                    self.commands.engine.invalidate(state)
+                    if scoped:
+                        if not self._requester_may_approve(cur, workspace_id, dispatch_principal):
+                            raise AlphaError("This action needs the 'approve' permission in this workspace.", 403)
+                        target = find(state['phase2']['jobs'], job_id)
+                        if (target['manifest'].get('workspaceId') != workspace_id
+                                or approval_digest != target.get('approvalDigest') or approval_digest != digest(target['manifest'])):
+                            raise AlphaError('This approval changed. Reload the post before continuing.', 409)
+                    else:
+                        self._invalidate_owned(state)
                     selected = None
                     for job in state["phase2"]["jobs"]:
-                        now = self.clock()
-                        if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
+                        if scoped and job.get('id') != job_id:
                             continue
+                        adopt_legacy = scoped and self._may_adopt_legacy_hold(job)
+                        if not self._binding_matches(job) and not adopt_legacy:
+                            if scoped:
+                                raise AlphaError('Open this approved post in the deployment where it was reviewed.', 409)
+                            continue
+                        now = self.clock()
+                        if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in TERMINAL:
+                            continue
+                        release_hold = scoped and (self._preview_hold(job) or adopt_legacy)
+                        if job.get('state') == 'held' and not release_hold:
+                            continue
+                        if scoped and job.get('providerReference') and job.get('state') not in IN_FLIGHT:
+                            self._event(job, 'uncertain', 'Known provider receipt retained; reconcile without creating another post')
                         stage = job.get('progress', {}).get('stage')
                         from .official_publishers import ASYNC_PLATFORMS, FORWARD_STAGES
                         official = (job['manifest']['platform'] in ASYNC_PLATFORMS and hasattr(self.social, 'official_enabled')
@@ -84,7 +187,7 @@ class PostgresWorker:
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
-                        if forward and not self._approved(cur, workspace_id, state, job):
+                        if (forward or (scoped and not reconciliation)) and not self._approved(cur, workspace_id, state, job):
                             self._event(job, 'held', 'Approval, account, media, timing or permission changed; a new review is required')
                             continue
                         if not reconciliation:
@@ -107,6 +210,13 @@ class PostgresWorker:
                             from . import product_events
                             product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
+                        if release_hold:
+                            if adopt_legacy:
+                                # Retain the original exact manifest/digest and attempt history.
+                                # The requester authorizes this server-owned deployment binding now.
+                                job['workerBinding'] = copy.deepcopy(self.worker_binding)
+                            job.pop('previewDispatchPending', None)
+                            self._event(job, 'scheduled', 'Approved preview post released by the authenticated exact-job worker action')
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
                         job["leaseId"] = uuid.uuid4().hex
@@ -117,6 +227,8 @@ class PostgresWorker:
                             job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                             self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if scoped:
+                            selected['dispatchPrincipal'] = dispatch_principal
                         if official and reconciliation and job.get('cancelRequested') and job['manifest'].get('nativeScheduleAt') and job.get('providerReference'):
                             if job.get('progress', {}).get('stage') != 'cancel_attempted':
                                 job['progress'] = {'version': 1, 'stage': 'cancel_attempted'}
@@ -217,7 +329,10 @@ class PostgresWorker:
                 if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
                         or job.get('leaseUntil', 0) <= self.clock()):
                     return False
-                if job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job):
+                requester_allowed = (not claimed.get('dispatchPrincipal')
+                                     or self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal']))
+                if (job.get('cancelRequested') or not requester_allowed or not self._binding_matches(job)
+                        or not self._approved(cur, claimed['workspaceId'], state, job)):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
                     self._event(job, 'canceled' if job.get('cancelRequested') and not job.get('providerThread') else 'held', 'Stopped before provider dispatch; prior provider posts, if any, remain')
                     job['leaseOwner'], job['leaseUntil'] = None, 0
@@ -225,8 +340,10 @@ class PostgresWorker:
                     return False
                 return True
 
-    def step(self, crash=None):
-        claimed = self.claim()
+    def step(self, crash=None, *, workspace_id=None, job_id=None, approval_digest=None, dispatch_principal=None):
+        scope = (workspace_id, job_id, approval_digest, dispatch_principal)
+        claimed = (self.claim(workspace_id=workspace_id, job_id=job_id, approval_digest=approval_digest,
+                              dispatch_principal=dispatch_principal) if any(value is not None for value in scope) else self.claim())
         if not claimed or crash == "after_claim":
             return bool(claimed)
         if not claimed['reconciliation'] and not self.authorize_dispatch(claimed):

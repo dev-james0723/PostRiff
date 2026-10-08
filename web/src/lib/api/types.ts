@@ -159,7 +159,10 @@ export interface RunContentType {
   contentSkillRouteIds?: string[];
 }
 
+export interface WorkerBinding { environment: 'preview'; origin: string }
+
 export interface Manifest {
+  workerBinding?: WorkerBinding;
   workspaceId: string;
   actor: string;
   /** The connection this post goes out through (a `ChannelView.id`). */
@@ -189,6 +192,9 @@ export interface Job {
   approvedAt?: number;
   approvalDigest?: string;
   nextAt?: number;
+  leaseUntil?: number;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
   checks?: number;
   scheduleId?: string | null;
   url?: string;
@@ -199,6 +205,9 @@ export interface Job {
   progress?: { version: number; stage: string };
   providerReference?: string;
   providerConfirmed?: string;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
@@ -748,6 +757,7 @@ export interface RecurringOccurrence {
 
 export interface Snapshot {
   revision: number;
+  workerBinding?: WorkerBinding | null;
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;

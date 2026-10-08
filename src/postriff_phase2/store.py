@@ -305,6 +305,9 @@ class Phase2Store(Store):
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
+            if (getattr(self, 'worker_binding', None) is not None
+                    and manifest.get('workerBinding') != self.worker_binding):
+                raise AlphaError('This review belongs to another deployment. Prepare a new review.', 409)
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
@@ -321,7 +324,13 @@ class Phase2Store(Store):
             review["status"] = "approved"
             job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
             self.event(job, "approved", "Exact local fixture approval recorded")
-            self.event(job, "scheduled", "Waiting for the local durable worker")
+            if getattr(self, 'worker_binding', None) is not None:
+                # Older workers sharing staging storage skip held jobs. Only an authenticated,
+                # exact-job dispatch may release this preview approval under the same SQL lease.
+                job['previewDispatchPending'] = True
+                self.event(job, 'held', 'Approved preview post; choose Publish approved post when due.')
+            else:
+                self.event(job, "scheduled", "Waiting for the local durable worker")
             data["jobs"].append(job)
             review["jobId"] = job["id"]
         elif action == "approve_many":
@@ -444,6 +453,11 @@ class Phase2Store(Store):
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        if c['platform'] == 'Facebook':
+            # The person subject is stable across Pages; freeze the exact selected Page separately.
+            if not c.get('destinationId') or c.get('accountType') != 'page':
+                raise AlphaError('Choose the Facebook Page for this connection before reviewing a post.', 409)
+            manifest['destinationId'] = c['destinationId']
         if options is not None:
             manifest["publishOptions"] = options
             native_at = options.get('scheduledPublishTime')
@@ -462,6 +476,8 @@ class Phase2Store(Store):
         from .growth.advice_context import prediction_current
         if prediction_current(advice, s, {**v, "text": text}):
             manifest["postDoctor"] = copy.deepcopy(advice)
+        if getattr(self, 'worker_binding', None) is not None:
+            manifest['workerBinding'] = copy.deepcopy(self.worker_binding)
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
@@ -515,7 +531,11 @@ class Phase2Store(Store):
 
     def current(self, s, m):
         try:
+            if 'workerBinding' in m and m['workerBinding'] != getattr(self, 'worker_binding', None):
+                return False
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
+            if c['platform'] == 'Facebook' and (not c.get('destinationId') or m.get('destinationId') != c['destinationId']):
+                return False
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]
                     or m.get("briefRevision") != s["brief"]["revision"]

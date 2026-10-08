@@ -68,6 +68,21 @@ class Phase2Acceptance(unittest.TestCase):
         self.j.act('p2_approve',reviewId=r['id'],digest=r['digest'],confirmed=True)
         return self.j.state['phase2']['jobs'][-1]
 
+    def test_facebook_page_change_invalidates_approval_even_when_names_match(self):
+        job = self.enqueue()
+        state = copy.deepcopy(self.j.state)
+        manifest = copy.deepcopy(job['manifest'])
+        channel = next(c for c in state['phase2']['channels'] if c['id'] == manifest['channelId'])
+        variant = next(v for v in state['variants'] if v['id'] == manifest['variantId'])
+        channel.update(platform='Facebook', accountType='page', destinationId='10001')
+        variant['platform'] = 'Facebook'
+        from postriff_phase2.contracts import LIMITS
+        manifest.update(platform='Facebook', destinationId='10001', operation=LIMITS['Facebook']['operation'],
+                        limitsVersion=LIMITS['Facebook']['version'])
+        self.assertTrue(self.store.current(state, manifest))
+        channel['destinationId'] = '10002'
+        self.assertFalse(self.store.current(state, manifest))
+
     def test_source_changes_only_invalidate_dependent_drafts_and_posts(self):
         from postriff_phase2 import source_policy
         original_job = copy.deepcopy(self.enqueue())

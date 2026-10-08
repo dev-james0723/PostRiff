@@ -65,7 +65,7 @@ esac
 cd -- "$jcb_social_root"
 export PYTHONPATH="$jcb_social_root/src:$jcb_social_root/tests"
 if [ "$jcb_social_connection_only" -eq 0 ]; then
-python -m unittest test_postriff_channels test_postriff_phase2 test_postriff_audience_contract test_official_social test_linkedin_publishing_recovery test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video test_asset_consumers test_asset_kinds test_instagram_full_capabilities test_social_voice_preflight test_postriff_hosted_deployment test_consumer_deployment
+python -m unittest test_postriff_channels test_postriff_phase2 test_postriff_audience_contract test_official_social test_linkedin_publishing_recovery test_hosted_job_dispatch test_facebook_connection test_postriff_providers test_hosted_wave1_connectors test_hosted_wave3_connectors test_social_readiness_hardening test_hosted_storage_video test_asset_consumers test_asset_kinds test_instagram_full_capabilities test_social_voice_preflight test_postriff_hosted_deployment test_consumer_deployment
 fi
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
@@ -73,7 +73,7 @@ if ! command -v pg_config >/dev/null; then
 fi
 export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 if [ "$jcb_social_connection_only" -eq 0 ]; then
-  python scripts/postriff_disposable_postgres.py tests/phase2/postgres_instagram_lifecycle.py tests/phase2/postgres_safety.py tests/phase2/postgres_official_social.py
+  python scripts/postriff_disposable_postgres.py tests/phase2/postgres_instagram_lifecycle.py tests/phase2/postgres_safety.py tests/phase2/postgres_official_social.py tests/phase2/postgres_facebook_connection.py
 fi
 # Each legacy connection suite requires a fresh cluster. Keep these in the
 # scoped Depot gate too so its coverage cannot hide GitHub scope-drift failures.
