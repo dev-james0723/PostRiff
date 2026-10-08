@@ -26,12 +26,14 @@ import { loadMessageViews, startPresentation, type ArtifactSession } from './ses
 import { bundledLibraryHashes } from './renderer-adapter';
 import { useConsumerUiTransport } from './transport';
 
-export function GeneratedAnswerSlot({ message, conversationId, surface, latest, onContinue }: {
+export function GeneratedAnswerSlot({ message, conversationId, surface, latest, onContinue, onNavigate }: {
   message: Message;
   conversationId: string | null;
   surface: UiSurface;
   latest: boolean;
   onContinue?: (request: ContinueRequest) => void;
+  /** In-app navigation for an `@OpenUrl("/app/…")` in the view (same-origin paths only; the surface may close itself). */
+  onNavigate?: (path: string) => void;
 }) {
   const agent = useAgent();
   const transport = useConsumerUiTransport();
@@ -86,10 +88,11 @@ export function GeneratedAnswerSlot({ message, conversationId, surface, latest, 
     <>
       {sessions.map((session) => (
         <GeneratedArtifact key={`${session.scopeKey}|${session.artifactId}`} session={session} surface={surface} runId={message.runId} onContinue={onContinue}
-          onExpand={() => setExpanded(session)} />
+          onExpand={() => setExpanded(session)} onNavigate={onNavigate} />
       ))}
       {problem && <p role='status' className='text-muted-foreground text-xs'>{problem}</p>}
-      {expanded && <ExpandedArtifact session={expanded} open onOpenChange={(open) => !open && setExpanded(null)} runId={message.runId} onContinue={onContinue} />}
+      {expanded && <ExpandedArtifact session={expanded} open onOpenChange={(open) => !open && setExpanded(null)} runId={message.runId} onContinue={onContinue}
+        onNavigate={onNavigate} />}
     </>
   );
 }

@@ -12,12 +12,13 @@ import { GeneratedArtifact } from './artifact';
 import { GENERATED_DIALOG_ATTR } from './selectors';
 import type { ArtifactSession } from './session';
 
-export function ExpandedArtifact({ session, open, onOpenChange, runId, onContinue, title = 'Interactive view', nativeResult }: {
+export function ExpandedArtifact({ session, open, onOpenChange, runId, onContinue, onNavigate, title = 'Interactive view', nativeResult }: {
   session: ArtifactSession;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   runId: string | null;
   onContinue?: (request: ContinueRequest) => void;
+  onNavigate?: (path: string) => void;
   title?: string;
   nativeResult?: ReactNode;
 }) {
@@ -30,6 +31,9 @@ export function ExpandedArtifact({ session, open, onOpenChange, runId, onContinu
             <GeneratedArtifact session={session} surface='expanded' runId={runId} onContinue={(request) => {
               onOpenChange(false);
               onContinue?.(request);
+            }} onNavigate={(path) => {
+              onOpenChange(false);
+              onNavigate?.(path);
             }} nativeResult={nativeResult} />
           </RafiiDialogBody>
         </RafiiDialogContent>
