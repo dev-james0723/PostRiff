@@ -23,10 +23,26 @@ def workspace_allowed(workspace_id: str, values=None) -> bool:
     try:
         workspace_id = uuid(workspace_id)
         source = flags._source(values)
+        from ...customer_access import enabled as customers_enabled, BINDING, CustomerAccess
+        if customers_enabled(source):
+            access=source.get(BINDING)
+            return enabled('INTELLIGENCE',source) and isinstance(access,CustomerAccess) and access.allowed(workspace_id)
         allowed = {uuid(part.strip()) for part in str(source.get("RAFII_TREND_WORKSPACE_ALLOWLIST", "")).split(",") if part.strip()}
         return enabled("INTELLIGENCE", source) and workspace_id in allowed
     except ValueError:
         return False
+
+
+def admitted_workspaces(values=None):
+    """The worker enumerates the same current customer admission as interactive reads."""
+    source=flags._source(values)
+    from ...customer_access import enabled as customers_enabled, BINDING, CustomerAccess
+    if not enabled('INTELLIGENCE',source):return []
+    if customers_enabled(source):
+        access=source.get(BINDING)
+        return access.workspaces() if isinstance(access,CustomerAccess) else []
+    return sorted({part.strip() for part in str(source.get('RAFII_TREND_WORKSPACE_ALLOWLIST','')).split(',')
+                   if workspace_allowed(part.strip(),source)})
 
 
 def dispatch_allowed(provider_id: str, operation: str, values=None) -> bool:

@@ -295,7 +295,7 @@ def tick(store, values=None, limit=20):
               "duplicates": 0, "skipped": {}, "partial_workspaces": 0,
               "execution_state": "in_app_outbox_only"}
     try:
-        allowed = sorted({contracts.uuid(v.strip()) for v in str(source.get("RAFII_TREND_WORKSPACE_ALLOWLIST", "")).split(",") if v.strip()})
+        allowed = config.admitted_workspaces(source)
     except ValueError:
         return result
     allowed = [wid for wid in allowed if _enabled(wid, source)]

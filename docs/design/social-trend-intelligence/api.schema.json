@@ -7125,6 +7125,18 @@
                         "null"
                       ]
                     },
+                    "deadline_at": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "next_attempt_at": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
                     "reason": {
                       "type": [
                         "string",
@@ -7225,6 +7237,18 @@
                           ]
                         },
                         "due_at": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "deadline_at": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "next_attempt_at": {
                           "type": [
                             "number",
                             "null"

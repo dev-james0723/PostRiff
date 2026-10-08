@@ -2,6 +2,15 @@
 import time
 
 
+def _metric_workspaces(cur,values):
+    from .customer_access import enabled, BINDING, CustomerAccess
+    from .growth import metric_schedule
+    if enabled(values):
+        access=values.get(BINDING)
+        return access.workspaces(cursor=cur) if isinstance(access,CustomerAccess) else []
+    return sorted(metric_schedule.allowed_workspaces(values))
+
+
 def snapshot(connection_factory, now=None):
     now = time.time() if now is None else now
     with connection_factory() as db, db.cursor() as cur:
@@ -55,15 +64,15 @@ def snapshot(connection_factory, now=None):
         if cur.fetchone()[0]:
             cur.execute("SELECT count(*) FROM public.pr_growth_purges WHERE requested_at < to_timestamp(%s)", (now-600,))
             purges_pending = cur.fetchone()[0]
-        import os
         from .growth import metric_schedule
+        metric_values=flags._source()
         cur.execute("SELECT to_regclass('public.pr_metric_reads') IS NOT NULL AND to_regclass('public.pr_history_imports') IS NOT NULL")
-        if cur.fetchone()[0] and metric_schedule.enabled(os.environ):
+        if cur.fetchone()[0] and metric_schedule.enabled(metric_values):
             cur.execute("""SELECT count(*) FILTER (WHERE source='verification' AND status IN ('pending','claimed') AND due_at < to_timestamp(%s)),
                                   count(*) FILTER (WHERE source<>'verification' AND status IN ('pending','claimed') AND scheduled_at < to_timestamp(%s)),
                                   count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
                            FROM public.pr_metric_reads WHERE workspace_id=ANY(%s::uuid[])""",
-                        (now-600, now-86400, now-86400, sorted(metric_schedule.allowed_workspaces(os.environ))))
+                        (now-600, now-86400, now-86400, _metric_workspaces(cur,metric_values)))
             reads_overdue, backfill_stale, reads_dead = cur.fetchone()
             cur.execute("SELECT count(*) FROM public.pr_history_imports WHERE status='failed' AND updated_at > to_timestamp(%s)", (now-86400,))
             imports_failed = cur.fetchone()[0]

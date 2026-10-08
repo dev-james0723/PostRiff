@@ -259,7 +259,7 @@ class TrendEnrichment:
         result={"status":"disabled","queued":0,"existing":0,"cached":0,"unavailable":0,"provider_attempts":0}
         if not self.enabled(): return result
         result["status"]="stored_only"
-        allowed=[contracts.uuid(w.strip()) for w in str(flags._source(self.values).get("RAFII_TREND_WORKSPACE_ALLOWLIST","")).split(",") if w.strip()]
+        allowed=config.admitted_workspaces(self.values)
         if not allowed:return result
         with self.store.transaction() as cur:
             cur.execute("""SELECT w.id::text,m.user_id::text FROM pr_workspaces w JOIN LATERAL
@@ -321,7 +321,7 @@ class TrendEnrichment:
         output = {"status":"disabled","provider_attempts":0,"attached":0,"cached":0,"discarded":0,"blocked":0}
         if not self.enabled(): return output
         output["status"] = "bounded"
-        allowed=["workspace:"+contracts.uuid(w.strip()) for w in str(flags._source(self.values).get("RAFII_TREND_WORKSPACE_ALLOWLIST","")).split(",") if w.strip()]
+        allowed=["workspace:"+wid for wid in config.admitted_workspaces(self.values)]
         if not allowed:return output
         with self.store.transaction() as cur:
             cur.execute("SELECT * FROM pr_trend_jobs WHERE kind=%s AND scope_key=ANY(%s) AND state='queued' AND due_at<=clock_timestamp() AND NOT cancellation_requested ORDER BY due_at,job_id LIMIT %s", (self.kind,allowed,max_jobs*3))

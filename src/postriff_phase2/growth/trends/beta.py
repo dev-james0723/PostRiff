@@ -55,10 +55,13 @@ def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
                 EXISTS(SELECT 1 FROM public.pr_metric_observations o WHERE o.workspace_id=r.workspace_id
                   AND o.job_id=r.job_id AND o.connection_id=r.connection_id AND o.provider=r.provider
                   AND o.provider_post_id=r.provider_post_id AND o.read_offset=r.read_offset
-                  AND o.availability='available' AND o.value>=0 AND o.value<'Infinity'::float8)
+                  AND o.period_start=r.anchor_at
+                  AND o.observed_at>=r.anchor_at+make_interval(secs=>CASE r.read_offset WHEN 't0' THEN 0 WHEN '1h' THEN 3600 WHEN '24h' THEN 86400 WHEN '7d' THEN 604800 END)
+                  AND o.observed_at<=r.anchor_at+make_interval(secs=>CASE r.read_offset WHEN 't0' THEN 600 WHEN '1h' THEN 4200 WHEN '24h' THEN 87000 WHEN '7d' THEN 605400 END)
+                  AND o.availability='available' AND o.value>=0 AND o.value<'Infinity'::float8),extract(epoch from r.anchor_at)
                 FROM public.pr_metric_reads r WHERE r.workspace_id=%s AND r.job_id=ANY(%s)""",
                 (workspace_id, [j["id"] for j in jobs]))
-            rows = {tuple(r[:5]): {"status": r[5], "due": float(r[6]), "reason": r[7], "measured": r[8]}
+            rows = {tuple(r[:5]): {"status": r[5], "next_attempt": float(r[6]), "reason": r[7], "measured": r[8], "anchor": float(r[9])}
                     for r in cur.fetchall()}
     channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if not c.get("revoked")}
     for job in reversed(jobs):
@@ -71,9 +74,11 @@ def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
         horizons = []
         for offset, seconds in OFFSETS:
             row = rows.get((job["id"], account, provider, str(job["providerReference"]), offset))
-            due = row["due"] if row else anchor + seconds if type(anchor) in (int, float) else None
+            due = row['anchor']+seconds if row else anchor + seconds if type(anchor) in (int, float) else None
             measured_state = base or (horizon_state(row, due, now) if due is not None else "unavailable")
             horizons.append({"window": offset, "state": measured_state, "due_at": due,
+                             'deadline_at':due+600 if due is not None else None,
+                             'next_attempt_at':row['next_attempt'] if row else None,
                              "reason": row["reason"] if row and not base else None})
         result["posts"].append({"job_id": job["id"], "provider": provider, "account": account or "unknown", "horizons": horizons})
     return result

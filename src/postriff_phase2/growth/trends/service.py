@@ -20,7 +20,7 @@ from postriff_alpha.domain import AlphaError
 from ...permissions import require
 from . import config, contracts, opportunities, relevance, exposure_events
 
-PLATFORMS = ("bluesky", "reddit", "youtube", "x", "threads", "instagram", "tiktok", "linkedin", "facebook", "pinterest", "web")
+PLATFORMS = ("bluesky", "mastodon", "reddit", "youtube", "x", "threads", "instagram", "tiktok", "linkedin", "facebook", "pinterest", "web")
 FILTER_KEYS = {"query", "platforms", "stages", "languages", "regions", "niches", "since", "until", "limit", "cursor", "method_bundle", "view", "platform", "language", "niche", "pool"}
 DEAD = {"inputs_expired", "inputs_deleted", "policy_revoked"}
 KINDS = {"methodology": "methodology", "calibration": "calibration", "language-patterns": "language_pattern",

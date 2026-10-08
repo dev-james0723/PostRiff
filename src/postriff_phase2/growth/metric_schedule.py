@@ -24,6 +24,7 @@ import uuid
 from postriff_alpha.domain import AlphaError
 
 from .. import insights
+from .observation_windows import OFFSETS, missed
 
 FLAG = "POSTRIFF_METRIC_READS"
 WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
@@ -31,7 +32,6 @@ NATIVE_ANALYTICS_SCOPES = {
     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
 }
-OFFSETS = (("t0", 0), ("1h", 3600), ("24h", 86400), ("7d", 7 * 86400))
 LEASE_SECONDS = 120            # token_for_worker plus one insights GET can take 40 s
 MAX_BACKOFF = 3600
 TERMINAL_HTTP = (400, 401, 403, 404)
@@ -149,7 +149,7 @@ def then_schedule(on_verified, scheduler):
 
 
 class MetricScheduler:
-    def __init__(self, connection_factory, oauth, *, transport, workspace_allowlist=(), clock=time.time, monotonic=time.monotonic, worker_id=None):
+    def __init__(self, connection_factory, oauth, *, transport, workspace_allowlist=(), customer_access=None, clock=time.time, monotonic=time.monotonic, worker_id=None):
         self.connection_factory = connection_factory
         self.oauth = oauth
         self.transport = transport
@@ -157,15 +157,17 @@ class MetricScheduler:
         self.monotonic = monotonic
         self.worker_id = worker_id or f"mr-{uuid.uuid4().hex[:12]}"
         self.workspace_allowlist = frozenset(str(wid) for wid in workspace_allowlist)
+        self.customer_access = customer_access
 
-    def workspace_allowed(self, workspace_id):
+    def workspace_allowed(self, workspace_id, *, cursor=None):
+        if self.customer_access:return self.customer_access.allowed(workspace_id,cursor=cursor)
         return str(workspace_id) in self.workspace_allowlist
 
     def provider_allowed(self, provider):
         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
         reviewed_or_scoped = bool(adapter and (
             getattr(adapter, "production_reviewed", False) is True or
-            getattr(adapter, "account_scoped_direct", False) is True
+            (self.customer_access is None and getattr(adapter, "account_scoped_direct", False) is True)
         ))
         return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
                     and getattr(adapter, "execution_enabled", True) is True)
@@ -189,7 +191,7 @@ class MetricScheduler:
         probe_id = uuid.uuid4().hex
         with self.oauth.repository.transaction(token, workspace_id) as (cur, membership, actor):
             require(_membership(membership), "manage_connections")
-            if not self.workspace_allowed(workspace_id):
+            if not self.workspace_allowed(workspace_id, cursor=cur):
                 raise AlphaError("This workspace is not admitted for metric reads.", 404, code="feature_disabled")
             cur.execute("SELECT provider,provider_account_id FROM public.pr_encrypted_credentials "
                         "WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
@@ -212,6 +214,9 @@ class MetricScheduler:
                 result.update(state="cancelled", failure="not_eligible")
             elif self.oauth.providers["instagram"].identity(grant["accessToken"])["providerAccountId"] != stored[1]:
                 result.update(state="cancelled", failure="account_changed")
+            elif self._eligible(row) != "read" or (grant.get("expiresAt") is not None and grant["expiresAt"] <= self.clock()):
+                # Identity is provider I/O: access can change while it is in flight.
+                result.update(state="cancelled", failure="not_eligible")
             else:
                 url = f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(str(stored[1]), safe='')}/media?" + urlencode({"fields": "id", "limit": 1})
                 listed = self.transport("GET", url, headers={"Authorization": f"Bearer {grant['accessToken']}"})
@@ -232,7 +237,7 @@ class MetricScheduler:
             _note("metric_reads.canary_failed", error)
         with self.oauth.repository.transaction(token, workspace_id) as (cur, membership, actor):
             require(_membership(membership), "manage_connections")
-            if self._eligibility(cur, row) != "read":
+            if self._eligibility(cur, row, lock=True) != "read":
                 result.update(state="cancelled", failure="not_eligible", found={})
             audit(cur, workspace_id, actor, "metric_reads.canary_completed", connection_id,
                   {"probeId": probe_id, "state": result["state"], "http": result["http"],
@@ -248,7 +253,7 @@ class MetricScheduler:
 
     def on_post_verified(self, cur, workspace_id, job):
         def operation():
-            if not self.workspace_allowed(workspace_id):
+            if not self.workspace_allowed(workspace_id,cursor=cur):
                 return 0
             manifest = job.get("manifest") or {}
             provider = self.provider_for(manifest.get("platform"))
@@ -274,9 +279,11 @@ class MetricScheduler:
         300-post import (all due at once, anchored weeks back) never delays any workspace's t0/1h/24h/7d readings,
         and no step scans rows that are not yet due."""
         rows = []
-        if not self.workspace_allowlist:
+        if not self.workspace_allowlist and self.customer_access is None:
             return rows
         with self.connection_factory() as db, db.cursor() as cur:
+            admitted=self.customer_access.workspaces(cursor=cur) if self.customer_access else sorted(self.workspace_allowlist)
+            if not admitted:return rows
             for where, order in self.CLAIM_ORDER:
                 if len(rows) >= limit:
                     break
@@ -286,7 +293,7 @@ class MetricScheduler:
                                   AND workspace_id=ANY(%s::uuid[]) ORDER BY {order} LIMIT %s FOR UPDATE SKIP LOCKED)
                                 RETURNING r.id::text, r.workspace_id::text, r.job_id, r.connection_id, r.provider, r.provider_post_id,
                                           r.read_offset, extract(epoch from r.anchor_at)::float8, r.attempts, r.max_attempts""",
-                            (self.worker_id, LEASE_SECONDS, sorted(self.workspace_allowlist), limit - len(rows)))
+                            (self.worker_id, LEASE_SECONDS, admitted, limit - len(rows)))
                 rows += cur.fetchall()
             db.commit()
         keys = ("id", "workspaceId", "jobId", "connectionId", "provider", "postId", "offset", "anchorAt", "attempts", "maxAttempts")
@@ -302,15 +309,17 @@ class MetricScheduler:
     def _eligibility(self, cur, row, *, lock=False):
         # Completion serializes with workspace disconnect/deletion commands;
         # provider I/O still runs outside this short transaction.
-        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
+        if not self.provider_allowed(row["provider"]):
             return "cancel"
         cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s" +
                     (" FOR UPDATE" if lock else ""), (row["workspaceId"],))
         found = cur.fetchone()
         if not found or found[0]:
             return "cancel"
-        cur.execute("SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL" +
-                    (" FOR SHARE" if lock else ""), (row["workspaceId"], row["connectionId"]))
+        if not self.workspace_allowed(row['workspaceId'],cursor=cur):return 'cancel'
+        cur.execute("SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL "
+                    "AND (access_expires_at IS NULL OR access_expires_at>to_timestamp(%s))" +
+                    (" FOR SHARE" if lock else ""), (row["workspaceId"], row["connectionId"], self.clock()))
         credential = cur.fetchone()
         if (not credential or credential[0] != row["provider"] or
                 not NATIVE_ANALYTICS_SCOPES[row["provider"]] <= set(credential[1] or [])):
@@ -325,6 +334,7 @@ class MetricScheduler:
         """Outcome dict: {"state": "done"|"transient"|"unavailable"|"cancelled", ...}. Never raises."""
         requested = False
         try:
+            if missed(row,self.clock()):return {'state':'unavailable','failure':'horizon_missed'}
             if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
                 return {"state": "cancelled", "failure": "not_admitted"}
             eligibility = self._eligible(row)
@@ -340,11 +350,14 @@ class MetricScheduler:
                     not NATIVE_ANALYTICS_SCOPES[row["provider"]] <= set(grant.get("scopes") or [])):
                 return {"state": "cancelled", "failure": "analytics_scope_missing"}
             # Introspection can reveal a revoked scope. A reused grant never replaces current DB rights.
+            if grant.get("expiresAt") is not None and grant["expiresAt"] <= self.clock():
+                return {"state": "cancelled", "failure": "credential_expired"}
             eligibility = self._eligible(row)
             if eligibility == "wait":
                 return {"state": "transient", "failure": "purge_pending", "http": None}
             if eligibility != "read":
                 return {"state": "cancelled", "failure": "not_eligible"}
+            if missed(row,self.clock()):return {'state':'unavailable','failure':'horizon_missed'}
             requested = True
             fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
         except AlphaError as error:
@@ -358,7 +371,9 @@ class MetricScheduler:
             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
         status = fetched["status"]
         if status == 200:
-            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True}
+            at=self.clock()
+            return {"state": "unavailable" if missed(row,at) else "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
+                    'observedAt':at,**({'failure':'horizon_missed'} if missed(row,at) else {})}
         if status in TERMINAL_HTTP:
             return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
         return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
@@ -366,11 +381,16 @@ class MetricScheduler:
     def complete(self, row, outcome):
         """Fence on this claim generation, unexpired lease and current rights."""
         state = outcome["state"]
+        if state=='done' and missed(row,outcome.get('observedAt',self.clock())):
+            state='unavailable'
+            outcome.update(state=state,failure='horizon_missed')
         with self.connection_factory() as db, db.cursor() as cur:
-            if state == "done":
+            snapshot=state=='unavailable' and outcome.get('failure')=='horizon_missed' and 'found' in outcome
+            if state == "done" or snapshot:
                 eligibility = self._eligibility(cur, row, lock=True)
                 if eligibility != "read":
                     state = "cancelled" if eligibility == "cancel" else "transient"
+                    snapshot=False
                     outcome.update(state=state, failure="not_eligible" if eligibility == "cancel" else "purge_pending")
             fence = (row["id"], self.worker_id, row["attempts"])
             if state == "done":
@@ -380,7 +400,7 @@ class MetricScheduler:
                 recorded = cur.rowcount == 1
                 if recorded:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
-                                                 outcome["found"], outcome["endpoint"], self.clock(), read_offset=row["offset"],
+                                                 outcome["found"], outcome["endpoint"], outcome.get('observedAt',self.clock()), read_offset=row["offset"],
                                                  period_start=row["anchorAt"])
             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
@@ -395,6 +415,9 @@ class MetricScheduler:
                                       AND lease_until>clock_timestamp() AND status='claimed'""",
                             (final, outcome.get("http"), outcome.get("failure"), *fence))
                 recorded = cur.rowcount == 1
+                if recorded and snapshot:
+                    insights.record_observations(cur,row['workspaceId'],row['connectionId'],row['provider'],row['postId'],row['jobId'],
+                        outcome['found'],outcome['endpoint'],outcome.get('observedAt',self.clock()),read_offset=None,period_start=row['anchorAt'])
             db.commit()
         return recorded
 

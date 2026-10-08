@@ -15,6 +15,7 @@ const STATES = {
 
 export function readingState(window?: GrowthReadingWindow) {
   if (window?.available) return STATES.measured;
+  if (window?.reason === 'horizon_missed') return { label: 'window missed', title: 'This reading window was missed.', detail: 'Rafii did not collect a native reading within this window. A later snapshot cannot recreate it; future scheduled windows are still independent.' };
   const state = window?.state;
   if (!state || state === 'measured') return STATES.unavailable;
   return STATES[state] ?? STATES.unavailable;

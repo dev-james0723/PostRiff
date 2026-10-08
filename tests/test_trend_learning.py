@@ -91,10 +91,11 @@ class LearningSQL(unittest.TestCase):
         p = {"wid": self.wid, "account": "owned-account", "provider": "threads", "post": published_job["providerReference"], "job": published_job["id"],
              "metric": "views", "definition": "2026-09", "value": value, "unit": "count", "availability": "available",
              "observed": observed, "ingested": observed + 1, "window": "24h"} | changes
+        p['anchor']=published_job['verifiedAt']
         with self.connect() as db:
             db.execute("""INSERT INTO pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,
-                value,unit,availability,observed_at,ingested_at,read_offset) VALUES(%(wid)s,%(account)s,%(provider)s,%(post)s,%(job)s,%(metric)s,
-                %(definition)s,%(value)s,%(unit)s,%(availability)s,to_timestamp(%(observed)s),to_timestamp(%(ingested)s),%(window)s)""", p)
+                value,unit,availability,observed_at,ingested_at,read_offset,period_start) VALUES(%(wid)s,%(account)s,%(provider)s,%(post)s,%(job)s,%(metric)s,
+                %(definition)s,%(value)s,%(unit)s,%(availability)s,to_timestamp(%(observed)s),to_timestamp(%(ingested)s),%(window)s,to_timestamp(%(anchor)s))""", p)
 
     def test_denominator_joins_persisted_exposure_decision_and_exact_publication(self):
         self.event(); self.event("dismiss"); self.event("save")
@@ -218,6 +219,11 @@ class LearningSQL(unittest.TestCase):
                 result = beta.tracking(cur, self.wid, self.state, self.now, enabled=enabled)
                 return {h['window']: h['state'] for h in result['posts'][0]['horizons']}
             self.assertEqual(states(), {'t0': 'scheduled', '1h': 'scheduled', '24h': 'measured', '7d': 'pending_horizon'})
+            cur.execute("UPDATE pr_metric_reads SET due_at=to_timestamp(%s) WHERE workspace_id=%s AND read_offset='24h'",(self.now+120,self.wid))
+            window=next(h for h in beta.tracking(cur,self.wid,self.state,self.now,enabled=True)['posts'][0]['horizons'] if h['window']=='24h')
+            self.assertAlmostEqual(window['due_at'],job['verifiedAt']+86400,places=5)
+            self.assertAlmostEqual(window['deadline_at'],job['verifiedAt']+86400+600,places=5)
+            self.assertAlmostEqual(window['next_attempt_at'],self.now+120,places=5)
             self.assertEqual(set(states(False).values()), {'disabled'})
             cur.execute("UPDATE pr_metric_observations SET connection_id='other-account' WHERE workspace_id=%s", (self.wid,))
             self.assertEqual(states()['24h'], 'unavailable')

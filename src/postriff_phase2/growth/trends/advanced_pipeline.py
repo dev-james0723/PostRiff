@@ -652,7 +652,7 @@ class AdvancedPipeline:
         kinds = tuple(k for k in KINDS if config.enabled(FLAGS[k], self.values))
         if not kinds or not all(config.enabled(n, self.values) for n in ('INTELLIGENCE', 'RADAR', 'TRUST_RECEIPTS')):
             return result
-        allowed = sorted({contracts.uuid(w.strip()) for w in str(flags._source(self.values).get('RAFII_TREND_WORKSPACE_ALLOWLIST', '')).split(',') if w.strip()})
+        allowed = config.admitted_workspaces(self.values)
         if not allowed:
             return result
         with self.store.transaction() as cur:

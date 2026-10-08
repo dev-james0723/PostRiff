@@ -2,7 +2,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const engine = process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+assert.ok(['chromium','webkit'].includes(engine), 'Supported browser engine required');
 const { fixtures } = require('./trend-fixtures.cjs');
 const workspaceFixture = require('./fixtures/wp04a-workspace.json');
 const base = process.env.TREND_WEB_URL;
@@ -45,7 +47,7 @@ async function visibleText(page, pattern) {
   await page.getByText(pattern).first().waitFor();
 }
 async function run() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await ({chromium,webkit})[engine].launch({ headless: true });
   try {
     for (const width of (process.env.TREND_WIDTHS || '1440,390,820').split(',').map(Number)) {
       const context = await browser.newContext({
@@ -82,7 +84,9 @@ async function run() {
       const calls = [],
         unhandledMutations = [],
         external = [],
-        errors = [];
+        errors = [],
+        runtimeDiagnostics = [],
+        networkDiagnostics = [];
       await context.addCookies([
         { name: 'postriff_dev', value: '1', url: base },
         { name: 'postriff_theme', value: 'rafii', url: base }
@@ -107,15 +111,16 @@ async function run() {
         },
         { tours, colorScheme }
       );
-      await context.route('**/*', async (route) => {
+      await context.route((url) => url.origin !== base, (route) => {
+        external.push(new URL(route.request().url()).origin);
+        return route.abort();
+      });
+      // Only fixture API traffic needs interception. Let WebKit navigate and
+      // cancel same-origin documents/assets without Playwright route overrides.
+      await context.route(base + '/api/**', async (route) => {
         const req = route.request(),
           url = new URL(req.url()),
           pathname = url.pathname;
-        if (url.origin !== base) {
-          external.push(url.origin);
-          return route.abort();
-        }
-        if (!pathname.startsWith('/api/')) return route.continue();
         const body = req.method() === 'POST' ? req.postDataJSON() : null;
         calls.push({ method: req.method(), path: pathname, query: url.search, body });
         const send = (data, status = 200) =>
@@ -320,6 +325,12 @@ async function run() {
             trial: {},
             balances: []
           });
+        if (pathname.endsWith('/phone'))
+          return send({ available: false, providerReady: false, flags: {}, number: null,
+            preferences: { enabled: false, proactiveCalls: false, scheduledCalls: false,
+              quietStart: 22, quietEnd: 8, timeZone: 'UTC', maxCallsPerDay: 0,
+              maxMilliCreditsPerCall: 0, eventAllowlist: [], customRules: [],
+              fallbackToPush: false, fallbackToEmail: false }, calls: [], schedules: [] });
         if (pathname.endsWith('/memory')) return send(workspaceFixture.memory);
         if (pathname.endsWith('/memory/proposals'))
           return send({ pending: [], recent: [], learning: { items: [] } });
@@ -332,7 +343,22 @@ async function run() {
       });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
-      page.on('pageerror', (e) => errors.push(e.message));
+      page.on('pageerror', (e) => {
+        errors.push(e.message);
+        const diagnostic = { at: new Date().toISOString(), url: page.url(), scenario,
+          lastCheck: results.at(-1)?.name, message: e.message, stack: e.stack,
+          recentNetwork: networkDiagnostics.slice(-12) };
+        runtimeDiagnostics.push(diagnostic);
+        console.log('RUNTIME DIAGNOSTIC ' + JSON.stringify(diagnostic));
+      });
+      for (const event of ['requestfinished', 'requestfailed']) {
+        page.on(event, (request) => {
+          const url = new URL(request.url());
+          if (url.origin === base && url.pathname.startsWith('/api/'))
+            networkDiagnostics.push({ at: new Date().toISOString(), event,
+              path: url.pathname, scenario, failure: request.failure()?.errorText });
+        });
+      }
       try {
         await page.goto(base + '/app/trends', { waitUntil: 'domcontentloaded', timeout: 180000 });
         await visibleText(page, 'Trend Beta is off');
@@ -602,6 +628,10 @@ async function run() {
           await page.getByRole('combobox', { name: /^Platform/ }).selectOption('bluesky');
           await queryHas('platform', 'bluesky');
           await queryHas('cursor', null);
+          // queryHas observes request admission, not the completion of the list
+          // and its dependent panels. Finish this fixture scenario before a hard
+          // reload replaces its document; the separate Lab race stays in flight.
+          await page.waitForLoadState('networkidle');
           scenario = 'fresh';
           await page.reload({ waitUntil: 'domcontentloaded' });
           await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
@@ -790,15 +820,16 @@ async function run() {
           // Browser zoom changes the CSS viewport as well as pixel density; CSS `zoom` alone
           // leaves media queries at 820px and is not an equivalent test of browser zoom.
           await page.setViewportSize({ width: 410, height: 500 });
-          const cdp = await context.newCDPSession(page);
-          await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: 410,
-            height: 500,
-            deviceScaleFactor: 2,
-            mobile: false
-          });
+          if (engine === 'chromium') {
+            const cdp = await context.newCDPSession(page);
+            await cdp.send('Emulation.setDeviceMetricsOverride', {
+              width: 410, height: 500, deviceScaleFactor: 2, mobile: false
+            });
+          }
           assert.equal(await page.evaluate(() => matchMedia('(max-width: 767px)').matches), true);
-          record('200% browser-zoom-equivalent reflow: 820 physical pixels / 410 CSS pixels');
+          record(engine === 'chromium'
+            ? '200% browser-zoom-equivalent reflow: 820 physical pixels / 410 CSS pixels'
+            : 'WebKit 200% reflow layout: 410 CSS pixels; browser zoom and pixel density not emulated');
           await noOverflow(page, '820 at 200% zoom');
           await page.getByRole('button', { name: 'Why should I trust this?' }).click();
           await page.getByRole('dialog').getByRole('heading', { name: '1. What we saw' }).waitFor();
@@ -814,7 +845,7 @@ async function run() {
       } catch (error) {
         fs.writeFileSync(
           path.join(out, `failure-${width}.txt`),
-          JSON.stringify({ error: String(error), errors, calls }, null, 2) +
+          JSON.stringify({ error: String(error), errors, runtimeDiagnostics, networkDiagnostics, calls }, null, 2) +
             '\n' +
             (await page
               .locator('body')
@@ -834,7 +865,7 @@ async function run() {
     fs.writeFileSync(
       path.join(out, 'results.json'),
       JSON.stringify(
-        { execution: 'synthetic_intercepted_browser', colorScheme, longContent, results },
+        { execution: 'synthetic_intercepted_browser', engine, colorScheme, longContent, results },
         null,
         2
       )

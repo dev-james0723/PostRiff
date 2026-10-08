@@ -6,6 +6,11 @@ on:
       - 'tests/test_growth_metric_schedule.py'
       - 'tests/test_trend_learning.py'
       - 'tests/phase2/postgres_growth_*.py'
+      - 'tests/phase2/postgres_studio_customer.py'
+      - 'tests/test_studio_customer_trends.py'
+      - 'tests/test_product_acceptance.py'
+      - 'scripts/rafii_product_acceptance.py'
+      - 'docs/design/studio-customer-growth/**'
       - 'scripts/trend_browser.py'
       - 'scripts/trend_strategy_browser.py'
       - 'scripts/trend_learning_portable.py'
@@ -51,15 +56,20 @@ jobs:
           sudo apt-get install -y postgresql-17
           sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
       - name: Native metric schedule and disconnect rights (synthetic transport)
-        run: python scripts/postriff_pg_suite.py postgres_growth_metric_reads postgres_growth_history
+        run: |
+          python -m unittest discover -s tests -p test_product_acceptance.py
+          python -m unittest discover -s tests -p test_studio_customer_trends.py
+          python scripts/postriff_pg_suite.py postgres_growth_metric_reads postgres_growth_history postgres_growth_horizon_qualification postgres_growth_instagram_audience postgres_studio_customer
       - name: Account, definition and 24h cohort SQL (socket-only, no providers)
         run: python scripts/trend_learning_portable.py
-      - name: Install Chromium
-        run: npx --prefix web playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: npx --prefix web playwright install --with-deps chromium webkit
       - name: Real browser, API and DB admission and metric-choice proof
         run: python scripts/trend_browser.py --learning-only --metric-admission --out docs/consumer-ready/evidence/growth-metrics/learning
       - name: Real browser, API and DB owner review, expiry and strategy proof
         run: python scripts/trend_strategy_browser.py --out docs/consumer-ready/evidence/growth-metrics/strategy
+      - name: WebKit real browser, API and DB Radar, Ideas, Lab and dismissal proof
+        run: python scripts/trend_browser.py --browser-engine webkit --out docs/consumer-ready/evidence/growth-metrics/webkit
       - name: Retain source-bound synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -36,7 +36,8 @@
     "reads": "Retained history: {done} analytics reads finished · {waiting} waiting",
     "readFailures": "{unavailable} analytics reads unavailable",
     "retryAt": "Next attempt: {time}",
-    "fallback": "This feature’s consent is shown in English for your selected locale."
+    "fallback": "This feature’s consent is shown in English for your selected locale.",
+    "requesting": "Requesting import…"
   },
   "zh-Hant": {
     "open": "過往數據",
@@ -75,7 +76,8 @@
     "reads": "保留的過往數據：已完成 {done} 次分析讀取 · {waiting} 次等待中",
     "readFailures": "{unavailable} 次分析讀取不可用",
     "retryAt": "下次嘗試：{time}",
-    "fallback": "此功能的同意說明以英文顯示。"
+    "fallback": "此功能的同意說明以英文顯示。",
+    "requesting": "正在提交匯入要求…"
   },
   "zh-Hans": {
     "open": "过往数据",
@@ -114,7 +116,8 @@
     "reads": "保留的历史数据：已完成 {done} 次分析读取 · {waiting} 次等待中",
     "readFailures": "{unavailable} 次分析读取不可用",
     "retryAt": "下次尝试：{time}",
-    "fallback": "此功能的同意说明以英文显示。"
+    "fallback": "此功能的同意说明以英文显示。",
+    "requesting": "正在提交导入请求…"
   },
   "ja": {
     "open": "過去の分析",
@@ -153,7 +156,8 @@
     "reads": "保存した履歴：分析読み取り {done} 件完了 · {waiting} 件待機中",
     "readFailures": "分析読み取り {unavailable} 件が利用不可",
     "retryAt": "次回の試行：{time}",
-    "fallback": "この機能の同意説明は英語で表示されます。"
+    "fallback": "この機能の同意説明は英語で表示されます。",
+    "requesting": "取り込みを依頼中…"
   },
   "ko": {
     "open": "과거 분석",
@@ -192,7 +196,8 @@
     "reads": "보관된 기록: 분석 읽기 {done}개 완료 · {waiting}개 대기",
     "readFailures": "분석 읽기 {unavailable}개 사용 불가",
     "retryAt": "다음 시도: {time}",
-    "fallback": "이 기능의 동의 설명은 영어로 표시됩니다."
+    "fallback": "이 기능의 동의 설명은 영어로 표시됩니다.",
+    "requesting": "가져오기 요청 중…"
   },
   "fr": {
     "open": "Analyses passées",
@@ -231,7 +236,8 @@
     "reads": "Historique conservé : {done} analyses lues · {waiting} en attente",
     "readFailures": "{unavailable} analyses indisponibles",
     "retryAt": "Prochain essai : {time}",
-    "fallback": "Le consentement de cette fonctionnalité est affiché en anglais pour votre langue."
+    "fallback": "Le consentement de cette fonctionnalité est affiché en anglais pour votre langue.",
+    "requesting": "Demande d’import en cours…"
   },
   "de": {
     "open": "Frühere Analysen",
@@ -270,7 +276,8 @@
     "reads": "Gespeicherter Verlauf: {done} Analysen gelesen · {waiting} warten",
     "readFailures": "{unavailable} Analysen nicht verfügbar",
     "retryAt": "Nächster Versuch: {time}",
-    "fallback": "Die Einwilligung für diese Funktion wird für Ihre Sprache auf Englisch angezeigt."
+    "fallback": "Die Einwilligung für diese Funktion wird für Ihre Sprache auf Englisch angezeigt.",
+    "requesting": "Import wird angefordert…"
   },
   "es": {
     "open": "Analíticas anteriores",
@@ -309,7 +316,8 @@
     "reads": "Historial conservado: {done} lecturas terminadas · {waiting} pendientes",
     "readFailures": "{unavailable} lecturas no disponibles",
     "retryAt": "Próximo intento: {time}",
-    "fallback": "El consentimiento de esta función se muestra en inglés para tu idioma."
+    "fallback": "El consentimiento de esta función se muestra en inglés para tu idioma.",
+    "requesting": "Solicitando importación…"
   },
   "pt-BR": {
     "open": "Análises anteriores",
@@ -348,6 +356,7 @@
     "reads": "Histórico mantido: {done} leituras concluídas · {waiting} aguardando",
     "readFailures": "{unavailable} leituras indisponíveis",
     "retryAt": "Próxima tentativa: {time}",
-    "fallback": "O consentimento desta função é exibido em inglês para seu idioma."
+    "fallback": "O consentimento desta função é exibido em inglês para seu idioma.",
+    "requesting": "Solicitando importação…"
   }
 }

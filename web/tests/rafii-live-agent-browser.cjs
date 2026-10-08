@@ -566,7 +566,11 @@ async function slashSection(browser) {
     check('slash: Enter picks /weather without sending: the input reads “/weather ”', Boolean(picked) && net.turns.length === turnsBefore, { value: await input.inputValue(), turns: net.turns.length - turnsBefore });
     check('slash: … and the menu closes', await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false));
 
-    await input.fill('/we');
+    // Exercise typing, and let the controlled composer consume the new word
+    // before Escape; a fill followed immediately by a key can race its render.
+    await input.press('ControlOrMeta+A');
+    await input.pressSequentially('/we');
+    if (await input.inputValue() !== '/we') throw new Error('Controlled composer did not consume /we');
     await menu.waitFor({ timeout: 10000 });
     await input.press('Escape');
     const escaped = await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false);

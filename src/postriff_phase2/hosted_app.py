@@ -223,15 +223,19 @@ def runtime_from_environment(environ=None):
     on_verified = service.audience.on_post_verified
     # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
     from .growth import metric_schedule
-    # Explicit interactive canary shares admission, but does not mount the cron step.
+    from .customer_access import CustomerAccess, enabled as customers_enabled, BINDING
+    if customers_enabled(values):
+        service.customer_access=CustomerAccess(database,clock=service.clock)
+        values[BINDING]=service.customer_access
+    # Explicit interactive canary shares current customer admission without mounting cron.
     service.metric_probe = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
-        workspace_allowlist=metric_schedule.allowed_workspaces(values))
+        workspace_allowlist=metric_schedule.allowed_workspaces(values),customer_access=getattr(service,'customer_access',None))
     if metric_schedule.enabled(values):
         service.metric_reads = service.metric_probe
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
-            service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
+            service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport,customer_access=getattr(service,'customer_access',None))
     from .growth.service import GrowthService
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)

@@ -108,7 +108,7 @@ checks.append("the t0 reading is taken by the cron step and recorded per metric 
 
 def make_due(offset):
     with connection() as db:
-        db.execute("UPDATE public.pr_metric_reads SET due_at=now() - interval '1 second' WHERE read_offset=%s", (offset,))
+        db.execute("UPDATE public.pr_metric_reads SET due_at=now() - interval '1 second',anchor_at=now()-make_interval(secs=>%s) WHERE read_offset=%s", (dict(M.OFFSETS).get(offset,0)+1,offset))
 
 
 make_due("1h")

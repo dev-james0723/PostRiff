@@ -107,6 +107,8 @@ class GrowthService:
         self.repository = hosted.repository
         self.env = dict(os.environ if env is None else env)
         self.clock = clock or hosted.clock
+        from ..customer_access import CustomerAccess, enabled as customers_enabled
+        self.customer_access = (getattr(hosted,'customer_access',None) or CustomerAccess(hosted.connection_factory,clock=self.clock)) if customers_enabled(self.env) else None
         self.router_factory = router_factory
         self.profile = profile
         self.closed_loop = ClosedLoop(self)
@@ -133,6 +135,9 @@ class GrowthService:
     def gate(self,kind):
         if not self.enabled(kind):
             raise AlphaError('Growth intelligence is not enabled.',404,code='feature_disabled')
+
+    def require_access(self,cur,workspace_id):
+        if self.customer_access:self.customer_access.require(workspace_id,cursor=cur)
 
     @staticmethod
     def session(token):
@@ -197,7 +202,8 @@ class GrowthService:
     def guard(self,workspace_id,token,run):
         """Recheck permission/context before every retry, fallback and rewrite/recheck call; no lock across HTTP."""
         from ..hosted import _membership
-        with self.repository.transaction(token,workspace_id) as (_,row,_):
+        with self.repository.transaction(token,workspace_id) as (cur,row,_):
+            self.require_access(cur,workspace_id)
             require(_membership(row),run.get('requirement','edit'))
             state=row[1]
             if self._context(state)!=run['context']:
@@ -221,9 +227,12 @@ class GrowthService:
     def catalog(self,workspace_id,token):
         self.session(token)
         saved=self.repository.get(workspace_id,token)
+        access=self.customer_access.status(workspace_id) if self.customer_access else {'qualified':True,'reason':'private_beta','plan':None}
+        admitted=access['qualified']
         _runtime,writer,_note=self.hosted.ideas.resolve_writer(saved['state'],None)
-        return {'radar':self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctorV2':self.env.get('POSTRIFF_POST_DOCTOR_V2')=='1','postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
-                'postmortem':self.enabled('postmortem'),'audienceMiner':self.enabled('audience'),
+        return {'radar':admitted and self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctorV2':admitted and self.env.get('POSTRIFF_POST_DOCTOR_V2')=='1','postDoctor':admitted and self.enabled('check'),'genome':admitted and self.enabled('genome'),
+                'postmortem':admitted and self.enabled('postmortem'),'audienceMiner':admitted and self.enabled('audience'),
+                'customerAccess':{'mode':'paid_studio' if self.customer_access else 'private_beta',**access},
                 'summaryRoute':SUMMARY_ROUTE,'audienceConsent':saved['state'].get('growthConsent',{}).get('audience') is True,
                 'consented':bool(saved['state'].get('growthConsent',{}).get('routes')),
                 'routes':list(ROUTES),'allowedRoutes':saved['state'].get('growthConsent',{}).get('routes',[]),
@@ -231,6 +240,7 @@ class GrowthService:
                 'maxHistoryPosts':genome.MAX_POSTS,'checksPerDay':10,'rewritesPerDay':1}
 
     def _history(self,cur,workspace_id,state):
+        self.require_access(cur,workspace_id)
         cur.execute('SELECT id::text,source_id,source_revision,platform,connection_id,provider_post_id,language,format,time_bucket,labels,judgment,supplied_metrics FROM public.pr_post_history WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 300',(workspace_id,))
         sources={s['id']:s for s in state.get('sources',[]) if s.get('kind')=='voice_sample'}
         posts=[]
@@ -283,6 +293,7 @@ class GrowthService:
             raise AlphaError('Confirm the shown AI use before continuing.')
         fingerprint=digest(body)
         with self.repository.transaction(token,workspace_id) as (cur,row,principal):
+            self.require_access(cur,workspace_id)
             require(_membership(row),requirement)
             state=copy.deepcopy(row[1]);self._consent(state)
             cur.execute('SELECT id::text,status,fingerprint,body,context_fingerprint FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND request_key=%s',(workspace_id,key))
@@ -320,7 +331,7 @@ class GrowthService:
                         (run_id,workspace_id,key,kind,fingerprint,context,principal))
             return {'id':run_id,'state':state,'context':context,'prepared':prepared,'requirement':requirement}
 
-    def _finish(self,workspace_id,token,run,sink,result,error=None,store=None):
+    def _finish(self,workspace_id,token,run,sink,result,error=None,store=None,*,validate_current=None):
         from ..hosted import _membership
         # Record actual attempts even if the member/consent/input changed during the network call.
         with self.hosted.connection_factory() as db,db.cursor() as cur:
@@ -330,7 +341,8 @@ class GrowthService:
             with self.repository.transaction(token,workspace_id) as (cur,row,principal):
                 require(_membership(row),run.get('requirement','edit'))
                 current=row[1]
-                valid=self._context(current)==run['context']
+                if validate_current:validate_current(cur,current)
+                valid=(not self.customer_access or self.customer_access.allowed(workspace_id,cursor=cur)) and self._context(current)==run['context']
                 draft=(run.get('prepared') or {}).get('draft')
                 if draft and draft.get('id'):
                     candidate=next((v for v in current.get('variants',[]) if v['id']==draft['id']),{})
@@ -549,6 +561,7 @@ class GrowthService:
     def genome(self,workspace_id,token):
         self.session(token);self.gate('genome')
         with self.repository.transaction(token,workspace_id) as (cur,row,_):
+            self.require_access(cur,workspace_id)
             cur.execute('SELECT id::text,status,body FROM public.pr_genome_versions WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 20',(workspace_id,))
             versions=[{**r[2],'id':r[0],'status':r[1] if bindings_current(row[1],r[2].get('evidenceBindings',[])) and postmortem.bindings_current(row[1],r[2].get('outcomeBindings',[])) and r[2].get('consentDigest')==digest(row[1].get('growthConsent')) else 'stale'} for r in cur.fetchall()]
             sources={s['id']:s for s in row[1].get('sources',[]) if s.get('active') and s.get('selected')}
@@ -586,6 +599,8 @@ class GrowthService:
                                         'audience':payload.get('audience') is True and bool(routes)}
             return state
         def after(cur,state,principal):
+            # Permission revocation and removal remain available after billing expiry.
+            if action not in ('growth_consent','share_card_revoke'):self.require_access(cur,workspace_id)
             if action in ('genome_approve','genome_restore'):
                 cur.execute('SELECT body,status FROM public.pr_genome_versions WHERE workspace_id=%s AND id::text=%s FOR UPDATE',(workspace_id,payload.get('genomeId')))
                 row=cur.fetchone()
@@ -719,6 +734,7 @@ class GrowthService:
     def feedback(self,workspace_id,token,job_id):
         self.session(token);self.gate('check')
         with self.repository.transaction(token,workspace_id) as (cur,row,_):
+            self.require_access(cur,workspace_id)
             jobs=[j for j in row[1].get('phase2',{}).get('jobs',[]) if j.get('state')=='verified' and j.get('verification') and j.get('providerReference')]
             selected=next((j for j in jobs if j['id']==job_id),None)
             if not selected:return {'status':'unavailable','reason':'publication_not_verified','readings':[]}

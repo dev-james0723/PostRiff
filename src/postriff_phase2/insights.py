@@ -99,7 +99,7 @@ def rate(numerator, denominator):
     return {"value": str(Fraction(int(numerator), int(denominator))), "display": f"{numerator}/{denominator}", "numerator": numerator, "denominator": denominator}
 
 
-def latest_observations(cur, workspace_id, basis=None):
+def latest_observations(cur, workspace_id, basis=None, *, qualified_horizon=False):
     """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
     take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
     The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); databases without migration 035
@@ -108,6 +108,13 @@ def latest_observations(cur, workspace_id, basis=None):
     offset = read_offset_column(cur)
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
+    if qualified_horizon:
+        from .growth.observation_windows import SECONDS, MAX_LATENESS_SECONDS
+        if basis not in ('1h','24h','7d'):raise ValueError('A native horizon is required.')
+        # JSON access also fails closed on pre-035 schema; legacy unanchored rows cannot attest an age.
+        anchor="(to_jsonb(o)->>'period_start')::timestamptz"
+        where+=f' AND {offset}=%s AND {anchor} IS NOT NULL AND observed_at>={anchor}+make_interval(secs=>%s) AND observed_at<={anchor}+make_interval(secs=>%s)'
+        params+= (basis,SECONDS[basis],SECONDS[basis]+MAX_LATENESS_SECONDS)
     cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
 

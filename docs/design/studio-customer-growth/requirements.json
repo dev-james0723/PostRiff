@@ -1,0 +1,4840 @@
+{
+  "schemaVersion": 1,
+  "goal": "ordinary paid Studio / Studio Assist Growth Studio and Trending",
+  "historicalBaseline": {
+    "sha": "72a2eef0c10facf98e63c68a5c84f898b5866071",
+    "counts": {
+      "PASS": 5,
+      "BLOCKED": 134
+    },
+    "path": "/Users/ouxianxing/.codex/worktrees/rafii-product-finish-20261003/James-Au-Studio/.codex/product-finish-stage3/acceptance-matrix.json"
+  },
+  "planMapping": {
+    "Pro Studio": [
+      "studio-v1",
+      "assist-v1",
+      "assist-bounded-v1"
+    ],
+    "newPlan": false
+  },
+  "dependencies": {
+    "ordinary-account": {
+      "title": "Current ordinary paid Studio / Studio Assist",
+      "requirements": [
+        "Existing studio/assist plan terms; active provider-confirmed paid subscription/entitlement; current live paid invoice.",
+        "Acceptance principal is neither Founder/ops nor a provider app-role user. Fixture, trial and manual grants cannot certify ordinary paid production."
+      ]
+    },
+    "membership-isolation": {
+      "title": "Workspace role, isolation and fresh authentication",
+      "requirements": [
+        "Owner/editor/read actions must follow existing permissions. Second workspace, fresh/populated states and revoked membership are separately verified."
+      ]
+    },
+    "growth-lane-flags": {
+      "title": "Independent Growth lane activation",
+      "requirements": [
+        "Only the flag for the requested lane is a dependency. Genome and Post Doctor do not require Meta native analytics."
+      ]
+    },
+    "ai-consent-budget": {
+      "title": "Explicit AI routes, action consent and cumulative cost ceilings",
+      "requirements": [
+        "Owner route consent, separate confirmed action, configured approved finite per-workspace/global budgets, reservations and unknown-cost reconciliation. No model dispatch by acceptance tooling."
+      ]
+    },
+    "native-provider-rights": {
+      "title": "Public-customer native provider eligibility",
+      "requirements": [
+        "Matching app advanced/public approval and current exact scopes, connected account Direct capability, token expiry/revocation fences; app-role grant is insufficient for public access."
+      ]
+    },
+    "approved-publication": {
+      "title": "Exact approved owned public publication",
+      "requirements": [
+        "Verified provider publication of approved exact content/account/timing, frozen draft prediction and provider lookup. No fixture or READY claim."
+      ]
+    },
+    "native-horizons": {
+      "title": "Persistent native observations at actual horizons",
+      "requirements": [
+        "1h, 24h, 7d are measured from real verified anchor; persist missing/expired windows and retries. Never rebuild old windows from a current lifetime counter."
+      ]
+    },
+    "comments-consent": {
+      "title": "Explicit comment analysis consent",
+      "requirements": [
+        "Owner explicitly permits comment collection/analysis and synthesis routes; handles/contact patterns removed; revoke/purge fences preserved."
+      ]
+    },
+    "owned-comments": {
+      "title": "Collected comments on verified owned posts",
+      "requirements": [
+        "Provider + connection + post ownership and Direct comments capability. Real comments required for production evidence."
+      ]
+    },
+    "calibration-qualification": {
+      "title": "Existing chronological calibration minima",
+      "requirements": [
+        "At least existing 50-post sample and qualified chronological held-out correlations for at least three dimensions; do not lower thresholds."
+      ]
+    },
+    "genome-samples": {
+      "title": "Selected consented writing/history samples",
+      "requirements": [
+        "1–20 explicitly selected owned consented posts (existing maximum20, not a minimum20); retention and evidence grading unchanged. Writing samples are independent of native Meta history."
+      ]
+    },
+    "public-share-approval": {
+      "title": "Approved public Content DNA sharing",
+      "requirements": [
+        "Concrete public content/access approved before share; creation of private preview is not publication."
+      ]
+    },
+    "draft-revision-fence": {
+      "title": "Exact draft snapshot and allowances",
+      "requirements": [
+        "Current draft revision/prediction/factuality protected through retries and rewrite; entitlement, consent and cap rechecked."
+      ]
+    },
+    "history-consent": {
+      "title": "Separate 90-day History Import consent",
+      "requirements": [
+        "Exact account and consentDigest; bounded 90 days / 12 pages / 300 posts, dedupe, single backfill snapshot only; purge on revoke."
+      ]
+    },
+    "source-rights": {
+      "title": "Per-source provider policy and source entitlements",
+      "requirements": [
+        "Each source is independently qualified by supported provider operation/review/licence, current rights and workspace source entitlements. Unsupported sources stay unavailable."
+      ]
+    },
+    "trend-lane-flags": {
+      "title": "Independent Trending lane activation",
+      "requirements": [
+        "Existing lane flags, tenant admission and provider-operation caps. Native Meta unavailability does not block independently qualified Bluesky/Mastodon or other licensed sources."
+      ]
+    },
+    "trust-qualification": {
+      "title": "Current Trust Receipts and evidence provenance",
+      "requirements": [
+        "Valid rights/time/receipt basis, evidence freshness, current source, expiry/revocation and explainable native normalization; no stale/reconstructed claims."
+      ]
+    },
+    "notification-consent": {
+      "title": "Watches and notification delivery rights",
+      "requirements": [
+        "Explicit workspace watch/notification opt-in, exact channels/recipient scope, permissions, rights and dedupe; not implicit permission to send external messages."
+      ]
+    },
+    "failure-recovery": {
+      "title": "Durable bounded failure/expiry/revocation and rollback",
+      "requirements": [
+        "Private PostgreSQL leases/retry/idempotency/cancellation, purge and rollout flags; real production failures separately observed without inducing unapproved effects."
+      ]
+    },
+    "anonymous-auth": {
+      "title": "Production authentication denial",
+      "requirements": [
+        "No session needed; actual production Growth/Trends GET must deny401/403 without leaking tenant data."
+      ]
+    },
+    "ai-policy-disclosure": {
+      "title": "Current consent/routes/allowance policy",
+      "requirements": [
+        "Read-only policy, explicit owner consent and revocation controls do not require a paid model attempt; actual dispatch uses ai-consent-budget separately."
+      ]
+    },
+    "native-metric-catalog": {
+      "title": "Native metric definitions",
+      "requirements": [
+        "Display real provider definitions, unsupported/unknown distinctions and windows. Reading definitions does not require a publication or model call."
+      ]
+    },
+    "retained-postmortem": {
+      "title": "Current retained Postmortem",
+      "requirements": [
+        "A previously qualified report with current native rights/context and consent bindings; review/save/dismiss do not trigger another model attempt."
+      ]
+    },
+    "retained-audience": {
+      "title": "Current retained Audience insights",
+      "requirements": [
+        "A previously qualified redacted comment result, current ownership/provider/consent/expiry. Filtering/saving/linking is local and does not need a new paid dispatch."
+      ]
+    },
+    "retained-genome": {
+      "title": "Consented current Genome proposal/version",
+      "requirements": [
+        "Prior qualified sample/model provenance plus explicit owner review/version/restore; no new paid generation for read, approval or restore."
+      ]
+    },
+    "saturation-qualification": {
+      "title": "Saturation own semantic cohort qualification",
+      "requirements": [
+        "Current crowding method/model/task/cohort qualification, review, comparison scope, expiry and rights. Preserve existing saturation thresholds; Forecast/Whitespace qualification is not its dependency."
+      ]
+    },
+    "whitespace-qualification": {
+      "title": "Whitespace own review and retrieval qualification",
+      "requirements": [
+        "Current gap_review production method, reviewed contribution and provenance-bound comparison/disconfirming evidence; existing retrieval coverage/rights gates. No Forecast dependency; executable_ready is not empirical outcome qualification."
+      ]
+    },
+    "forecast-qualification": {
+      "title": "Forecast preregistration and chronological outcome qualification",
+      "requirements": [
+        "Qualified immutable candidate/evaluation/qualification/preregistration methods; real chronological holdout, exact predeclared min_episodes/min_pairs, primary loss, embargo and coverage tolerance. Fixture or shadow result does not enable forecast wording."
+      ]
+    },
+    "trend-semantic-qualification": {
+      "title": "Trend Genome semantic admission",
+      "requirements": [
+        "Current trend semantic task/model/cohort review, evidence bindings, narrative uncertainty and nonfixture qualification. Creator Genome1–20-owned-post cap is unrelated."
+      ]
+    },
+    "opportunity-qualification": {
+      "title": "Opportunity own current receipt and workspace-fit qualification",
+      "requirements": [
+        "Current typed opportunity method/semantic authority, receipt/context/fact review and source policy; require Forecast/Saturation only if this actual opportunity cites them."
+      ]
+    },
+    "retained-trend-result": {
+      "title": "Current stored receipt/result",
+      "requirements": [
+        "Current nonexpired stored source, signed receipt, scope/context/revision and applicable specific method qualification. Read/accept/dismiss/handoff does not itself generate AI."
+      ]
+    },
+    "fresh-empty-failure-ui": {
+      "title": "Fresh and failure UI independent of positive data",
+      "requirements": [
+        "Navigation, disclosures, empty/error/Unsupported states remain usable with absent provider data. Their success never certifies real positive acquisition or data-qualified outputs."
+      ]
+    }
+  },
+  "functions": [
+    {
+      "id": "G01",
+      "section": "Growth Studio",
+      "function": "Growth Studio load, empty, unavailable and retry states",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G02",
+      "section": "Growth Studio",
+      "function": "Your results tab, URL view and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "PASS",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G03",
+      "section": "Growth Studio",
+      "function": "Your audience tab, URL view and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "PASS",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G04",
+      "section": "Growth Studio",
+      "function": "Your patterns tab, URL view and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "PASS",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G05",
+      "section": "Growth Studio",
+      "function": "AI permissions and daily allowances disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G06",
+      "section": "Growth Studio",
+      "function": "Review permitted models, grant Growth AI and revoke consent",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G07",
+      "section": "Growth Studio",
+      "function": "Separate comment-analysis consent",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G08",
+      "section": "Growth Studio",
+      "function": "Publication selection and exact frozen draft context",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G09",
+      "section": "Growth Studio",
+      "function": "Native verification and t0 metric anchor",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G10",
+      "section": "Growth Studio",
+      "function": "1h readings: observed zero, missing and native metric definitions",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "verified-publication-plus-offset",
+        "horizon": "1h",
+        "seconds": 3600,
+        "latestSeconds": 4200
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G11",
+      "section": "Growth Studio",
+      "function": "24h readings: observed zero, missing and native metric definitions",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "verified-publication-plus-offset",
+        "horizon": "24h",
+        "seconds": 86400,
+        "latestSeconds": 87000
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G12",
+      "section": "Growth Studio",
+      "function": "7d readings: observed zero, missing and native metric definitions",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "verified-publication-plus-offset",
+        "horizon": "7d",
+        "seconds": 604800,
+        "latestSeconds": 605400
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G13",
+      "section": "Growth Studio",
+      "function": "Scheduled, future, in-progress and unscheduled reading states",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G14",
+      "section": "Growth Studio",
+      "function": "Disabled, disconnected, unavailable-rights and exhausted reading states",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G15",
+      "section": "Growth Studio",
+      "function": "Connect analytics, Open analytics and See drafts recovery links",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G16",
+      "section": "Growth Studio",
+      "function": "Postmortem per-run confirmation and Review this result",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G17",
+      "section": "Growth Studio",
+      "function": "Postmortem comparisons, uncertainty and evidence bindings",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-postmortem"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G18",
+      "section": "Growth Studio",
+      "function": "Lesson choice, conflicting evidence and owner confirmation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-postmortem"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G19",
+      "section": "Growth Studio",
+      "function": "Save to my Genome with version and draft-review invalidation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-postmortem"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G20",
+      "section": "Growth Studio",
+      "function": "Keep as observation / dismiss postmortem",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-postmortem"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G21",
+      "section": "Growth Studio",
+      "function": "Open Brand and voice from report",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "retained-postmortem",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-postmortem"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G22",
+      "section": "Growth Studio",
+      "function": "Audience look-back: 7, 14 and 30 days",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G23",
+      "section": "Growth Studio",
+      "function": "Audience per-run confirmation and Find audience insights",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "comments-consent",
+        "owned-comments",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "comments-consent",
+        "owned-comments",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "owned-comments"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G24",
+      "section": "Growth Studio",
+      "function": "Audience daily caps, partial results and privacy abstention",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "comments-consent",
+        "owned-comments",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "comments-consent",
+        "owned-comments",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "owned-comments"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G25",
+      "section": "Growth Studio",
+      "function": "Audience category filters and counts",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-audience"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G26",
+      "section": "Growth Studio",
+      "function": "Audience Read the evidence and redacted examples",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-audience"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G27",
+      "section": "Growth Studio",
+      "function": "Audience save-topic confirmation and Save this idea",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-audience"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G28",
+      "section": "Growth Studio",
+      "function": "Audience Saved to Ideas link and stored-source handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "comments-consent",
+        "retained-audience"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "retained-audience"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G29",
+      "section": "Growth Studio",
+      "function": "Audience empty-state Go to your inbox link",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G30",
+      "section": "Growth Studio",
+      "function": "Creator Calibration eligibility and held-out evidence display",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G31",
+      "section": "Growth Studio",
+      "function": "Prepare a calibration",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G32",
+      "section": "Growth Studio",
+      "function": "Calibration version selector and explicit confirmation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G33",
+      "section": "Growth Studio",
+      "function": "Use this calibration, owner approval and stale-evidence rejection",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G34",
+      "section": "Growth Studio",
+      "function": "Restore this calibration and evidence revalidation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "dataDependencies": [
+        "native-provider-rights",
+        "approved-publication",
+        "native-horizons",
+        "calibration-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G35",
+      "section": "Growth Studio",
+      "function": "Review Creator Genome navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G36",
+      "section": "Growth Studio",
+      "function": "Creator Genome owned-history CSV, size/schema and account selection",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples"
+      ],
+      "dataDependencies": [
+        "genome-samples"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G37",
+      "section": "Growth Studio",
+      "function": "CSV columns and user-supplied metric-evidence disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G38",
+      "section": "Growth Studio",
+      "function": "Creator Genome selected owned voice samples",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples"
+      ],
+      "dataDependencies": [
+        "genome-samples"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G39",
+      "section": "Growth Studio",
+      "function": "Owned history retention/analysis consent",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "genome-samples"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G40",
+      "section": "Growth Studio",
+      "function": "Propose my Genome with permitted real model routes",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "genome-samples",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [
+        "genome-samples"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G41",
+      "section": "Growth Studio",
+      "function": "Genome version selector, statements, grades and evidence",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "retained-genome"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G42",
+      "section": "Growth Studio",
+      "function": "Approve this Genome and draft-review invalidation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "retained-genome"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G43",
+      "section": "Growth Studio",
+      "function": "Restore approved Genome version",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "ai-policy-disclosure"
+      ],
+      "dataDependencies": [
+        "retained-genome"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G44",
+      "section": "Growth Studio",
+      "function": "Content DNA selected-label preview and public-link creation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "public-share-approval"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "public-share-approval"
+      ],
+      "dataDependencies": [
+        "retained-genome"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G45",
+      "section": "Growth Studio",
+      "function": "Open Content DNA card and revoke public share",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "public-share-approval"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "retained-genome",
+        "public-share-approval"
+      ],
+      "dataDependencies": [
+        "retained-genome"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G46",
+      "section": "Growth Studio",
+      "function": "Post Doctor draft/revision and advice-goal selection",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G47",
+      "section": "Growth Studio",
+      "function": "Post Doctor AI confirmation and Check draft / Check again",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G48",
+      "section": "Growth Studio",
+      "function": "Post Doctor Useful / Not useful feedback",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G49",
+      "section": "Growth Studio",
+      "function": "Post Doctor supplied facts/examples and Rewrite and recheck",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G50",
+      "section": "Growth Studio",
+      "function": "Post Doctor writing comparison, unknowns and missing facts",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G51",
+      "section": "Growth Studio",
+      "function": "Post Doctor sentence selection and recheck disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G52",
+      "section": "Growth Studio",
+      "function": "Use selected changes, partial recheck and fact-review handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G53",
+      "section": "Growth Studio",
+      "function": "Post Doctor ten-check / one-rewrite allowance and failure states",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G54",
+      "section": "Growth Studio",
+      "function": "History Import channel eligibility and explicit consent UI",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "dataDependencies": [
+        "native-provider-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G55",
+      "section": "Growth Studio",
+      "function": "History Import start, bounded 90-day/12-page/300-post backfill",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "dataDependencies": [
+        "native-provider-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G56",
+      "section": "Growth Studio",
+      "function": "History Import progress, partial failure, dedupe and resume",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "dataDependencies": [
+        "native-provider-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G57",
+      "section": "Growth Studio",
+      "function": "History Import one backfill observation without fabricated horizons",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "dataDependencies": [
+        "native-provider-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "G58",
+      "section": "Growth Studio",
+      "function": "History Import revocation/disconnect cleanup and retention",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "history-consent",
+        "native-provider-rights"
+      ],
+      "dataDependencies": [
+        "native-provider-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T01",
+      "section": "Social Trends Intel",
+      "function": "Social Trends Intel load, empty, unavailable and retry states",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T02",
+      "section": "Social Trends Intel",
+      "function": "For You section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T03",
+      "section": "Social Trends Intel",
+      "function": "Picking up section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T04",
+      "section": "Social Trends Intel",
+      "function": "Breaking out section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T05",
+      "section": "Social Trends Intel",
+      "function": "Active now section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T06",
+      "section": "Social Trends Intel",
+      "function": "Niche section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T07",
+      "section": "Social Trends Intel",
+      "function": "Platforms section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T08",
+      "section": "Social Trends Intel",
+      "function": "Language & Slang section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T09",
+      "section": "Social Trends Intel",
+      "function": "Watchlist section and keyboard navigation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T10",
+      "section": "Social Trends Intel",
+      "function": "How this works, methodology and known blind spots",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui",
+        "native-metric-catalog"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui",
+        "native-metric-catalog"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T11",
+      "section": "Social Trends Intel",
+      "function": "Metric definitions disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui",
+        "native-metric-catalog"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui",
+        "native-metric-catalog"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T12",
+      "section": "Social Trends Intel",
+      "function": "Qualification/calibration history and truthful unavailable state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T13",
+      "section": "Social Trends Intel",
+      "function": "Search submission and query-filter binding",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T14",
+      "section": "Social Trends Intel",
+      "function": "Filter disclosure and All platforms selection",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T15",
+      "section": "Social Trends Intel",
+      "function": "Bluesky source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "bluesky"
+    },
+    {
+      "id": "T16",
+      "section": "Social Trends Intel",
+      "function": "Mastodon source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "mastodon"
+    },
+    {
+      "id": "T17",
+      "section": "Social Trends Intel",
+      "function": "Reddit source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "reddit"
+    },
+    {
+      "id": "T18",
+      "section": "Social Trends Intel",
+      "function": "X source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "x"
+    },
+    {
+      "id": "T19",
+      "section": "Social Trends Intel",
+      "function": "Threads source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "threads"
+    },
+    {
+      "id": "T20",
+      "section": "Social Trends Intel",
+      "function": "TikTok source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "tiktok"
+    },
+    {
+      "id": "T21",
+      "section": "Social Trends Intel",
+      "function": "Instagram source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "instagram"
+    },
+    {
+      "id": "T22",
+      "section": "Social Trends Intel",
+      "function": "YouTube source filter and explicit qualification/unsupported state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification.",
+      "sourceProvider": "youtube"
+    },
+    {
+      "id": "T23",
+      "section": "Social Trends Intel",
+      "function": "Language filter",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T24",
+      "section": "Social Trends Intel",
+      "function": "Niche filter and query binding",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T25",
+      "section": "Social Trends Intel",
+      "function": "Time range: last 24 hours / last 7 days",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T26",
+      "section": "Social Trends Intel",
+      "function": "Earlier / Next page and signed cursor reset",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T27",
+      "section": "Social Trends Intel",
+      "function": "Sources and what is missing / Source details and limits",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T28",
+      "section": "Social Trends Intel",
+      "function": "Explore a conversation selector",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T29",
+      "section": "Social Trends Intel",
+      "function": "Signal summary: observed evidence versus interpretations",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T30",
+      "section": "Social Trends Intel",
+      "function": "Momentum curve and metric uncertainty",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T31",
+      "section": "Social Trends Intel",
+      "function": "Trend DNA profile with unknown dimensions and evidence",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T32",
+      "section": "Social Trends Intel",
+      "function": "Compare Trend DNA selector and compatible profile overlay",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T33",
+      "section": "Social Trends Intel",
+      "function": "Where It Is Moving platform buttons and reset",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T34",
+      "section": "Social Trends Intel",
+      "function": "Selected platform scope and current coverage details",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T35",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt drawer open/close and keyboard focus",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T36",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt Evidence tab and original source links",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T37",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt Timeline tab",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T38",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt Genome and narratives tab",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T39",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt Graph/list tab",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T40",
+      "section": "Social Trends Intel",
+      "function": "Trust Receipt Crowding tab",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T41",
+      "section": "Social Trends Intel",
+      "function": "Receipt manifest, signature, expiry, tamper and rights revalidation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T42",
+      "section": "Social Trends Intel",
+      "function": "Real model enrichment with evidence and context bindings",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "ai-consent-budget",
+        "trend-semantic-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "ai-consent-budget",
+        "trend-semantic-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "trend-semantic-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T43",
+      "section": "Social Trends Intel",
+      "function": "Trend Genome derivation and narrative variants",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "trend-semantic-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "trend-semantic-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "trend-semantic-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T44",
+      "section": "Social Trends Intel",
+      "function": "Saturation/crowding within observed source scope",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "saturation-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "saturation-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "saturation-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T45",
+      "section": "Social Trends Intel",
+      "function": "Whitespace contribution, comparison sample and disconfirming evidence",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "whitespace-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "whitespace-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "whitespace-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T46",
+      "section": "Social Trends Intel",
+      "function": "Optional Show stored forecast toggle",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T47",
+      "section": "Social Trends Intel",
+      "function": "Forecast stored values, method/window details and unavailable state",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "forecast-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T48",
+      "section": "Social Trends Intel",
+      "function": "Creative opportunity selector and workspace-fit evidence",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T49",
+      "section": "Social Trends Intel",
+      "function": "Original angle selection and custom angle",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T50",
+      "section": "Social Trends Intel",
+      "function": "Generate angles, durable job status and failure/replay fencing",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T51",
+      "section": "Social Trends Intel",
+      "function": "Destination account selector and goal input",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "opportunity-qualification"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T52",
+      "section": "Social Trends Intel",
+      "function": "Accept / Save to Ideas with current receipt and revision",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T53",
+      "section": "Social Trends Intel",
+      "function": "Not relevant / dismiss and replay fencing",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T54",
+      "section": "Social Trends Intel",
+      "function": "Ideas stored-source link and Create original post handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T55",
+      "section": "Social Trends Intel",
+      "function": "Add to weekly plan handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T56",
+      "section": "Social Trends Intel",
+      "function": "Turn into campaign handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T57",
+      "section": "Social Trends Intel",
+      "function": "Ask Rafii about this trend handoff",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T58",
+      "section": "Social Trends Intel",
+      "function": "Opportunity Lab current draft/revision disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T59",
+      "section": "Social Trends Intel",
+      "function": "Opportunity Lab evaluation, status, errors and evidence binding",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result",
+        "ai-consent-budget",
+        "draft-revision-fence"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T60",
+      "section": "Social Trends Intel",
+      "function": "Opportunity Lab variant selection / apply with new revision",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "dataDependencies": [
+        "source-rights",
+        "trust-qualification",
+        "retained-trend-result"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T61",
+      "section": "Social Trends Intel",
+      "function": "Watch this conversation disclosure",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T62",
+      "section": "Social Trends Intel",
+      "function": "Watch threshold: stage change / available evidence change",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T63",
+      "section": "Social Trends Intel",
+      "function": "Watch platform checkboxes and Save watch",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T64",
+      "section": "Social Trends Intel",
+      "function": "Watchlist stored watches and disable control",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T65",
+      "section": "Social Trends Intel",
+      "function": "In-app notification emission, dedupe, receipt link and rights expiry",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "T66",
+      "section": "Social Trends Intel",
+      "function": "Notification read/dismiss/preferences and revoked-source suppression",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "source-rights",
+        "notification-consent"
+      ],
+      "dataDependencies": [
+        "source-rights"
+      ],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S01",
+      "section": "Shared acceptance states",
+      "function": "Desktop authenticated acceptance across all mounted controls",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S02",
+      "section": "Shared acceptance states",
+      "function": "Mobile authenticated acceptance across all mounted controls",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S03",
+      "section": "Shared acceptance states",
+      "function": "Owner role: read/edit/approve behavior",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S04",
+      "section": "Shared acceptance states",
+      "function": "Editor role: read/edit and owner-only denial",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S05",
+      "section": "Shared acceptance states",
+      "function": "Read role: inspection and mutation denial",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S06",
+      "section": "Shared acceptance states",
+      "function": "Authenticated denied second workspace and retained API isolation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S07",
+      "section": "Shared acceptance states",
+      "function": "Provider failure, expiry, analytics revocation and reconnect",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S08",
+      "section": "Shared acceptance states",
+      "function": "Daily quotas and system/provider/workspace/attempt cost caps",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S09",
+      "section": "Shared acceptance states",
+      "function": "Unknown-cost reservation reconciliation and fail-closed limits",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery",
+        "ai-consent-budget"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery",
+        "ai-consent-budget"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S10",
+      "section": "Shared acceptance states",
+      "function": "Feature rollback, no new dispatch and cleanup preservation",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "failure-recovery"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S11",
+      "section": "Shared acceptance states",
+      "function": "Keyboard focus, reduced motion, dark mode and responsive overflow",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S12",
+      "section": "Shared acceptance states",
+      "function": "Workspace switch, shared navigation/search and account links",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S13",
+      "section": "Shared acceptance states",
+      "function": "Notification bell and product notification controls",
+      "dependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "notification-consent"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "BLOCKED",
+      "productionDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "notification-consent"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "ordinary-account",
+        "membership-isolation",
+        "growth-lane-flags",
+        "trend-lane-flags",
+        "fresh-empty-failure-ui"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S14",
+      "section": "Shared acceptance states",
+      "function": "Anonymous Growth catalog and Results API denial",
+      "dependencies": [
+        "anonymous-auth"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "PASS",
+      "productionDependencies": [
+        "anonymous-auth"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "anonymous-auth"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    },
+    {
+      "id": "S15",
+      "section": "Shared acceptance states",
+      "function": "Anonymous Trends stored-list API denial",
+      "dependencies": [
+        "anonymous-auth"
+      ],
+      "earliestAcceptance": {
+        "kind": "dependencies-and-real-evidence"
+      },
+      "historicalStatus": "PASS",
+      "productionDependencies": [
+        "anonymous-auth"
+      ],
+      "dataDependencies": [],
+      "uiStateDependencies": [
+        "anonymous-auth"
+      ],
+      "stateQualification": "Positive populated output requires all production/data dependencies. Empty, recovery and unavailable UI can be validated independently; it does not certify positive acquisition, dispatch or data qualification."
+    }
+  ]
+}

@@ -187,13 +187,13 @@ def seed_jobs(state,actor):
                   'payload':{'text':'Exact published draft','language':'en'},'payloadDigest':'exact',
                   'postDoctor':{'levels':result['dimensions'],'questionSet':result['questionSet'],'revision':3}}
         state['phase2']['jobs'].append({'id':job_id,'state':'verified' if i<4 else 'sending','manifest':manifest,
-                                      'providerReference':'observed-'+str(i),'verification':{'at':clock[0],'method':'fixture-provider-lookup'} if i<4 else None})
+                                      'providerReference':'observed-'+str(i),'verification':{'at':clock[0]-86400,'method':'fixture-provider-lookup'} if i<4 else None})
     return state
 host.repository.command(wid,TOKEN,saved()['revision'],seed_jobs)
 with connection() as db,db.cursor() as cur:
     for i,job in enumerate(saved()['state']['phase2']['jobs'][:4]):
         performance.on_verified(cur,wid,job)
-        cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,read_offset) VALUES(%s,'matching-account','threads',%s,%s,'likes','native-v1',%s,'count','available',now(),'24h')",(wid,job['providerReference'],job['id'],[5,10,15,30][i]))
+        cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,read_offset,period_start) VALUES(%s,'matching-account','threads',%s,%s,'likes','native-v1',%s,'count','available',to_timestamp(%s),'24h',to_timestamp(%s))",(wid,job['providerReference'],job['id'],[5,10,15,30][i],clock[0],clock[0]-86400))
 feedback=growth.feedback(wid,TOKEN,job_ids[3])
 observed=next(r for r in feedback['readings'] if r['horizon']=='24h')['metrics']['likes']
 assert observed['baselineCount']==3 and observed['median']==10 and observed['multiple']==3

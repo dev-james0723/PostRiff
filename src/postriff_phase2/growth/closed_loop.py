@@ -37,11 +37,40 @@ class ClosedLoop:
         self.g=growth
         self.repository=growth.repository
 
+    def _permitted_accounts(self,cur,wid,state,capability):
+        providers={'Threads':'threads','Instagram':'instagram'}
+        accounts={(providers[c['platform']],c['id']) for c in state.get('phase2',{}).get('channels',[])
+                  if not c.get('revoked') and c.get('platform') in providers
+                  and not (isinstance(c.get('expiresAt'),(int,float)) and c['expiresAt']<=self.g.clock())}
+        if not self.g.customer_access:return accounts
+        adapters=getattr(getattr(self.g.hosted,'oauth',None),'providers',{})
+        public={provider for provider,_ in accounts if provider in adapters
+                and getattr(adapters[provider],'production_reviewed',False) is True
+                and getattr(adapters[provider],'execution_enabled',False) is True}
+        if not public:return set()
+        # Persisted Direct is not enough: current public rights and exact credentials
+        # must still authorize retained native evidence at every attempt and completion.
+        cur.execute("""SELECT e.provider,e.connection_id,e.scopes FROM public.pr_encrypted_credentials e
+            JOIN public.pr_channel_capabilities c ON c.workspace_id=e.workspace_id AND c.connection_id=e.connection_id
+              AND c.capability=%s AND c.level='Direct'
+            WHERE e.workspace_id=%s AND e.revoked_at IS NULL
+              AND (e.access_expires_at IS NULL OR e.access_expires_at>to_timestamp(%s)) FOR SHARE OF e,c""",(capability,wid,self.g.clock()))
+        result=set()
+        for provider,cid,scopes in cur.fetchall():
+            if provider not in public or (provider,cid) not in accounts:continue
+            required=set(adapters[provider].capability_scopes(capability))
+            if required and required<=set(scopes or []):result.add((provider,cid))
+        return result
+
     def _observations(self,cur,wid,state):
+        self.g.require_access(cur,wid)
         revoked={c['id'] for c in state.get('phase2',{}).get('channels',[]) if c.get('revoked')}
         jobs=[j for j in state.get('phase2',{}).get('jobs',[]) if j.get('state')=='verified' and j.get('verification')
               and j.get('providerReference') and j.get('manifest',{}).get('platform') in ('Threads','Instagram')
               and j.get('manifest',{}).get('channelId') not in revoked]
+        if self.g.customer_access:
+            permitted=self._permitted_accounts(cur,wid,state,'analytics')
+            jobs=[j for j in jobs if (j['manifest']['platform'].lower(),j['manifest'].get('channelId')) in permitted]
         jobs=sorted(jobs,key=lambda j:j['verification'].get('at',0),reverse=True)[:300]
         posts=[]
         for job in jobs:
@@ -82,7 +111,8 @@ class ClosedLoop:
                     available=any(performance.available(r) for r in p.get('readings',{}).get(h,{}).values())
                     measured=windows.get(job['id'],{}).get(h,{})
                     readings.append({'horizon':h,'available':available,'state':'measured' if available else measured.get('state','unavailable'),
-                                     'dueAt':measured.get('due_at'),'reason':measured.get('reason')})
+                                     'dueAt':measured.get('due_at'),'deadlineAt':measured.get('deadline_at'),
+                                     'nextAttemptAt':measured.get('next_attempt_at'),'reason':measured.get('reason')})
                 entries.append({'jobId':job['id'],'title':job['manifest'].get('payload',{}).get('text','')[:120],
                                 'platform':p['platform'],'at':job['verification'].get('at'),
                                 'hasPrediction':job['id'] in predictions,
@@ -141,21 +171,31 @@ class ClosedLoop:
                        'judgmentStatus':judgment.status}}
         except Exception as caught:error=caught
         def store(cur,state,principal,result):
-            current(cur,state)
             cur.execute('INSERT INTO public.pr_postmortems(workspace_id,job_id,horizon,basis_digest,body) VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,job_id,horizon,basis_digest) DO UPDATE SET body=excluded.body RETURNING id::text,status',
                         (wid,basis['jobId'],basis['horizon'],basis['basisDigest'],json.dumps(result)))
             mid,status=cur.fetchone()
             return {**result,'id':mid,'status':status}
-        return self.g._finish(wid,token,run,sink,result,error,store)
+        return self.g._finish(wid,token,run,sink,result,error,store,validate_current=current)
 
     def _comments(self,cur,wid,state,days):
+        self.g.require_access(cur,wid)
         if type(days) is not int or days not in (7,14,30):raise AlphaError('Choose 7, 14 or 30 days.')
-        permitted={c['id'] for c in state.get('phase2',{}).get('channels',[]) if not c.get('revoked') and c.get('platform')=='Threads'}
-        owned={(j.get('manifest',{}).get('channelId'),str(j.get('providerReference'))) for j in state.get('phase2',{}).get('jobs',[])
-               if j.get('state')=='verified' and j.get('verification') and j.get('manifest',{}).get('platform')=='Threads'}
-        cur.execute("SELECT t.id::text,t.connection_id,t.provider_post_id,t.text,extract(epoch from t.ingested_at) FROM public.pr_audience_threads t JOIN public.pr_channel_capabilities c ON c.workspace_id=t.workspace_id AND c.connection_id=t.connection_id AND c.capability='comments_read' AND c.level='Direct' WHERE t.workspace_id=%s AND t.provider='threads' AND t.tombstoned_at IS NULL AND t.ingested_at>=to_timestamp(%s) ORDER BY t.ingested_at DESC,t.id LIMIT 301",(wid,self.g.clock()-days*86400))
-        comments=[{'id':r[0],'connectionId':r[1],'postId':r[2],'text':miner.redact(r[3]),'digest':digest(r[3]),'at':float(r[4])}
-                  for r in cur.fetchall() if r[1] in permitted and (r[1],r[2]) in owned and r[3].strip()]
+        providers={'Threads':'threads','Instagram':'instagram'}
+        permitted=self._permitted_accounts(cur,wid,state,'comments_read')
+        owned=[{'provider':providers[m['platform']],'connection':m.get('channelId'),'post':str(j['providerReference'])}
+               for j in state.get('phase2',{}).get('jobs',[]) for m in [j.get('manifest',{})]
+               if j.get('state')=='verified' and j.get('verification') and j.get('providerReference')
+               and m.get('platform') in providers and (providers[m['platform']],m.get('channelId')) in permitted]
+        # Apply ownership before LIMIT: unrelated comments must not crowd out eligible owned comments.
+        cur.execute("""SELECT t.id::text,t.connection_id,t.provider_post_id,t.provider,t.text,extract(epoch from t.ingested_at)
+            FROM public.pr_audience_threads t JOIN public.pr_channel_capabilities c
+              ON c.workspace_id=t.workspace_id AND c.connection_id=t.connection_id AND c.capability='comments_read' AND c.level='Direct'
+            WHERE t.workspace_id=%s AND t.tombstoned_at IS NULL AND t.ingested_at>=to_timestamp(%s)
+              AND (t.provider,t.connection_id,t.provider_post_id) IN
+                (SELECT e.provider,e.connection,e.post FROM jsonb_to_recordset(%s::jsonb) AS e(provider text,connection text,post text))
+            ORDER BY t.ingested_at DESC,t.id LIMIT 301""",(wid,self.g.clock()-days*86400,json.dumps(owned)))
+        comments=[{'id':r[0],'connectionId':r[1],'postId':r[2],'provider':r[3],'text':miner.redact(r[4]),'digest':digest(r[4]),'at':float(r[5])}
+                  for r in cur.fetchall() if r[4].strip()]
         return comments
 
     def audience(self,wid,token):
@@ -178,7 +218,8 @@ class ClosedLoop:
             return {'clusters':[i for i in items if i['createdAt']==latest],'eligibleComments':len(comments),
                     'conversion':conversion,
                     'maximumPerRun':miner.MAX_COMMENTS,'audienceConsent':state.get('growthConsent',{}).get('audience') is True,
-                    'coverage':'Threads comments already collected through an authorized account. Instagram remains unavailable pending connector and platform review.',
+                    'coverage':'Threads and Instagram comments already collected through authorized accounts, on verified owned posts with current comment permissions.',
+                    'coverageProviders':sorted({c['provider'] for c in comments}),
                     'notice':'Author handles are not sent. Contact patterns are removed before analysis. Sensitive or uncertain comments do not become suggestions.'}
 
     @staticmethod
@@ -237,7 +278,6 @@ class ClosedLoop:
                     'partial':len(classified)<run['prepared']['available'],'decisions':loop.events,'_comments':classified}
         except Exception as caught:error=caught
         def store(cur,state,principal,result):
-            current(cur,state)
             for comment in result.pop('_comments'):
                 cur.execute('INSERT INTO public.pr_comment_judgments(workspace_id,thread_id,input_digest,body) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,thread_id) DO UPDATE SET input_digest=excluded.input_digest,body=excluded.body,created_at=now(),expires_at=now()+interval \'90 days\'',
                             (wid,comment['id'],comment['digest'],json.dumps(comment['judgment'])))
@@ -246,7 +286,7 @@ class ClosedLoop:
                             (wid,run['id'],digest(group['bindings']),json.dumps(group)))
                 group['id']=cur.fetchone()[0]
             return result
-        return self.g._finish(wid,token,run,sink,result,error,store)
+        return self.g._finish(wid,token,run,sink,result,error,store,validate_current=current)
 
     def _calibrations(self,cur,wid,state,posts=None,predictions=None):
         if posts is None:_,posts,predictions=self._observations(cur,wid,state)
@@ -264,6 +304,7 @@ class ClosedLoop:
         response={}
         def command(state,actor):return state
         def after(cur,state,actor):
+            self.g.require_access(cur,wid)
             if action in ('postmortem_lesson_approve','postmortem_dismiss'):
                 cur.execute('SELECT body,status FROM public.pr_postmortems WHERE workspace_id=%s AND id::text=%s AND expires_at>now() FOR UPDATE',(wid,payload.get('reportId')))
                 row=cur.fetchone()

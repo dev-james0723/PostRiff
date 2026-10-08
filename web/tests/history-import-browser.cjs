@@ -1,5 +1,7 @@
 /** Actual Channels screen and hosted endpoint on disposable PG. Synthetic identities/providers/status seeds only. */
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const engine = process.env.POSTRIFF_BROWSER_ENGINE || 'chromium';
+if (!['chromium','webkit'].includes(engine)) throw new Error('Unsupported browser engine');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,7 +34,7 @@ async function api(method, url, body) {
   const fixture = (kind) => execFileSync(python, ['tests/phase2/history_import_browser_fixture.py',kind,pgPort,principal,wid,conn], {cwd:root,encoding:'utf8'});
   fixture('ready');
   const tours = Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
-  const browser = await chromium.launch({headless:true});
+  const browser = await ({chromium,webkit})[engine].launch({headless:true});
   const context = await browser.newContext({viewport:{width:1280,height:960},reducedMotion:'reduce',locale:'en-US'});
   await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await context.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:principal,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
@@ -46,7 +48,12 @@ async function api(method, url, body) {
   page.setDefaultTimeout(30000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   let posts=0;page.on('request',r=>{if(new URL(r.url()).pathname===endpoint && r.method()==='POST')posts++;});
-  const checks=[];
+  const checks=[], traffic=[];
+  page.on('response', async response => {
+    if (new URL(response.url()).pathname !== endpoint) return;
+    const record={method:response.request().method(),status:response.status()};traffic.push(record);
+    try {record.body=await response.json();} catch {record.bodyUnavailable=true;}
+  });
   async function visit() { await page.goto(base+'/app/channels',{waitUntil:'domcontentloaded',timeout:120000});await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({timeout:120000}); }
   async function open() { await page.getByRole('button',{name:'Past analytics',exact:true}).click();return page.getByRole('dialog').filter({has:page.getByText('Import past analytics',{exact:true})}); }
   async function shot(name) {await page.screenshot({path:path.join(out,name+'.png')});}
@@ -58,8 +65,20 @@ async function api(method, url, body) {
     await dialog.getByText(/300 posts and 12 pages/).waitFor();
     await dialog.getByText(/Caption text and caption hashes/).waitFor();
     assert.equal(posts,0);await shot('review-desktop');
+    // Delay this local real POST: a pending request is not an acknowledged queue entry.
+    let releasePost, markPostStarted;
+    const heldPost=new Promise(resolve=>{releasePost=resolve;});
+    const postStarted=new Promise(resolve=>{markPostStarted=resolve;});
+    const holdRequest=async route=>{if(route.request().method()==='POST'){markPostStarted();await heldPost;}await route.continue();};
+    await page.route('**/history-import',holdRequest);
     await confirm.check();await dialog.getByRole('button',{name:'Confirm import',exact:true}).click();
+    await postStarted;
+    assert.equal(await dialog.getByText('Import queued',{exact:true}).count(),0,'Pending POST must never claim queued');
+    await dialog.getByRole('button',{name:'Requesting import…',exact:true}).waitFor();
+    releasePost();
     await dialog.getByText('Import queued',{exact:true}).waitFor();assert.equal(posts,1);
+    await page.unroute('**/history-import',holdRequest);
+    checks.push('delayed real local POST remains requesting; queued is shown only after actual server acknowledgement');
     assert.equal((await api('GET',endpoint)).status,'pending');
     checks.push('opening/review does not POST; unchecked explicit metadata/analytics consent; real 202 request and queued status');
     fixture('retry');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
@@ -145,6 +164,7 @@ async function api(method, url, body) {
     await page.route('**/history-import',route=>route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'off',code:'feature_disabled'})}));
     const offResponse=page.waitForResponse(r=>new URL(r.url()).pathname===endpoint && r.status()===404);
     await page.reload({waitUntil:'domcontentloaded'});await offResponse;
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden'});
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('OFF-gate response hides the entry point');
     await page.unroute('**/history-import');await visit();
@@ -152,10 +172,17 @@ async function api(method, url, body) {
     const alert=page.getByRole('alertdialog');await alert.getByText(/removes imported metadata/).waitFor();
     await alert.getByRole('button',{name:'Disconnect',exact:true}).click();
     await page.getByText('Threads disconnected',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden'});
     assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);
-    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
+    const report={engine,execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
     fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+  } catch (error) {
+    let latest;
+    try {latest=await api('GET',endpoint);} catch (readError) {latest={unavailable:String(readError)};}
+    fs.writeFileSync(path.join(out,'failure.json'),JSON.stringify({engine,execution:'failed local synthetic acceptance; never production',error:String(error),checks,traffic,latest,pageErrors:errors},null,2));
+    await shot('failure').catch(()=>{});
+    throw error;
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

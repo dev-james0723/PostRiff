@@ -46,6 +46,38 @@ class NativeCanary(unittest.TestCase):
     def probe(self, payload=None, token="signed-in", wid="admitted"):
         return self.scheduler.probe(wid, token, "connection", {"confirmed": True} if payload is None else payload)
 
+    def test_current_paid_admission_uses_locked_customer_cursor_and_revocation_has_no_calls(self):
+        from unittest.mock import Mock
+        access = SimpleNamespace(allowed=Mock(return_value=True))
+        self.scheduler.customer_access = access
+        self.scheduler.oauth.providers["instagram"].production_reviewed = True
+        self.assertEqual(self.probe()['state'], 'done')
+        self.assertIn('cursor', access.allowed.call_args_list[0].kwargs)
+        self.assertIsNotNone(access.allowed.call_args_list[0].kwargs['cursor'])
+        self.calls.clear()
+        access.allowed.return_value = False
+        with self.assertRaises(AlphaError): self.probe()
+        self.assertEqual(self.calls, [])
+
+    def test_host_mounts_canary_on_same_customer_policy_with_metric_cron_off(self):
+        from unittest.mock import Mock
+        from postriff_phase2.hosted_app import runtime_from_environment
+        from postriff_phase2.oauth import CredentialVault
+        values = {'POSTRIFF_CUSTOMER_STUDIO_ENABLED': '1', 'POSTRIFF_METRIC_READS': '0',
+                  'POSTRIFF_DATABASE_URL': 'postgresql://synthetic@127.0.0.1:1/postgres',
+                  'POSTRIFF_SUPABASE_URL': 'https://synthetic.supabase.co',
+                  'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 's' * 32,
+                  # Opaque local fixture material, never a real provider key.
+                  'POSTRIFF_SUPABASE_SECRET_KEY': CredentialVault.generate_key(),
+                  'POSTRIFF_CREDENTIAL_KEY': CredentialVault.generate_key()}
+        no_io = Mock(side_effect=AssertionError('This configuration-only test forbids all DB/provider I/O'))
+        with patch('postriff_phase2.hosted_app.postgres_factory', return_value=no_io):
+            service, worker, _ = runtime_from_environment(values)
+        self.assertIs(service.metric_probe.customer_access, service.customer_access)
+        self.assertIsNone(getattr(service, 'metric_reads', None))
+        self.assertFalse(service.metric_probe.provider_allowed('instagram'))
+        no_io.assert_not_called()
+
     def test_one_post_and_one_insights_get_without_following_pages_or_retaining_content(self):
         result = self.probe()
         self.assertEqual((result["state"], result["http"], result["found"]), ("done", 200, {"reach": 17}))
@@ -91,6 +123,22 @@ class NativeCanary(unittest.TestCase):
             result = self.probe()
             self.assertNotEqual(result["state"], "done")
             self.assertNotIn("PRIVATE", json.dumps(result))
+
+    def test_revocation_during_identity_prevents_media_and_insights_dispatch(self):
+        def identity(token):
+            self.eligible = 'cancel'
+            return {'providerAccountId': 'account-1'}
+        self.scheduler.oauth.providers['instagram'].identity = identity
+        self.assertEqual(self.probe()['state'], 'cancelled')
+        self.assertEqual(self.calls, [])
+
+    def test_token_expiry_during_identity_prevents_media_and_insights_dispatch(self):
+        def identity(token):
+            self.grant['expiresAt'] = self.scheduler.clock() - 1
+            return {'providerAccountId': 'account-1'}
+        self.scheduler.oauth.providers['instagram'].identity = identity
+        self.assertEqual(self.probe()['state'], 'cancelled')
+        self.assertEqual(self.calls, [])
 
     def test_disconnect_during_read_suppresses_result_values(self):
         def transport(method, url, **kwargs):

@@ -18,6 +18,16 @@ uuid.UUID(principal);uuid.UUID(wid)
 def connection():return psycopg.connect(f'host=127.0.0.1 port={port} dbname=postgres')
 host=HostedWorkspaceService(connection,lambda token:principal)
 saved=host.repository.get(wid,'fixture')
+if kind=='genome-prior':
+    # Seed a historical local fixture version, never bypass the one-proposal/day cap.
+    # Copy only current consent/evidence bindings so restore still revalidates them.
+    with connection() as db,db.cursor() as cur:
+        cur.execute("SELECT body FROM public.pr_genome_versions WHERE workspace_id=%s AND status='approved' ORDER BY created_at DESC LIMIT 1",(wid,))
+        current=cur.fetchone();assert current,'An approved local fixture Genome is required'
+        prior_id=str(uuid.uuid4());body={**current[0],'id':prior_id}
+        cur.execute("INSERT INTO public.pr_genome_versions(id,workspace_id,status,body,created_by,approved_by,approved_at,created_at) VALUES(%s,%s,'superseded',%s::jsonb,%s,%s,now()-interval '1 day',now()-interval '1 day')",(prior_id,wid,json.dumps(body),principal,principal))
+    print(json.dumps({'genomeId':prior_id,'execution':'explicitly synthetic prior version in disposable Phase 1 database'}))
+    sys.exit(0)
 def command(state,actor):
     if kind=='draft':
         state['variants']=[{'id':'growth-browser-draft','text':'One idea. Another idea!','platform':'Threads','language':'en','revision':1,
@@ -35,7 +45,7 @@ def command(state,actor):
                       'execution':'synthetic','idempotencyKey':digest(str(i))}
             if i==3:manifest['postDoctor']=v.get('postDoctor',{})
             jobs.append({'id':str(uuid.uuid4()),'state':'verified','stateReason':'Fixture verification only','providerReference':'fixture-post-'+str(i),
-                         'verification':{'at':now,'method':'fixture_lookup'},'manifest':manifest,'events':[],'attempts':[]})
+                         'verification':{'at':now-86400,'method':'fixture_lookup'},'manifest':manifest,'events':[],'attempts':[]})
         state['phase2']['jobs']=jobs
     else:raise ValueError('Unknown fixture')
     return state
@@ -45,6 +55,6 @@ if kind=='feedback':
         cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,'growth-browser-account','analytics','Direct') ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level='Direct'",(wid,))
         for i,job in enumerate(result['state']['phase2']['jobs']):
             on_verified(cur,wid,job)
-            cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,read_offset) VALUES(%s,'growth-browser-account','threads',%s,%s,'likes','fixture-native-v1',%s,'count','available',now(),'24h')",(wid,job['providerReference'],job['id'],[5,10,15,30][i]))
+            cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,period_start,observed_at,read_offset) VALUES(%s,'growth-browser-account','threads',%s,%s,'likes','fixture-native-v1',%s,'count','available',to_timestamp(%s),to_timestamp(%s),'24h')",(wid,job['providerReference'],job['id'],[5,10,15,30][i],job['verification']['at'],job['verification']['at']+86400))
     print(json.dumps({'jobId':result['state']['phase2']['jobs'][-1]['id']}))
 else:print(json.dumps({'variantId':'growth-browser-draft'}))
