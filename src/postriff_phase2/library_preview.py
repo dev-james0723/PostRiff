@@ -78,8 +78,10 @@ def _run_office(arguments, *, env, cwd):
             return result
     return result
 
-def _source_pdf(raw, extension):
-    """Convert once; both real page rendering and full-document text reuse it."""
+def _convert_source(raw, extension, target="pdf"):
+    """One isolated Office conversion with a fixed output-format allowlist."""
+    if target not in {"pdf", "xlsx"} or (target == "xlsx" and extension not in {"xls", "ods"}):
+        raise ValueError("Unsupported document conversion")
     if extension not in SUPPORTED or not raw or len(raw) > 50 * 1024 * 1024:
         raise ValueError('No first-page renderer for this file')
     if extension == 'pdf':
@@ -111,8 +113,8 @@ def _source_pdf(raw, extension):
                 fonts = work / 'fonts.conf'
                 fonts.write_text('<fontconfig><dir>'+str(ROOT / 'fonts')+'</dir><cachedir>'+str(work / 'font-cache')+'</cachedir></fontconfig>')
                 env['FONTCONFIG_FILE'] = str(fonts)
-            result = _run_office([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to','pdf','--outdir',str(work),str(source)], env=env, cwd=work)
-            output = work / 'source.pdf'
+            result = _run_office([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to',target,'--outdir',str(work),str(source)], env=env, cwd=work)
+            output = work / ('source.'+target)
             if result.returncode or not output.exists() or output.stat().st_size > 32*1024*1024:
                 missing = re.findall(rb'([A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*): cannot open shared object file', result.stderr)
                 logging.warning('Office renderer failed: exit=%s pdf_present=%s missing_libraries=%s', result.returncode, output.exists(), [name.decode('ascii') for name in missing])
@@ -120,10 +122,18 @@ def _source_pdf(raw, extension):
             pdf = output.read_bytes()
     return pdf
 
+def _source_pdf(raw, extension):
+    return _convert_source(raw, extension, 'pdf')
+
 def document_text(raw, extension):
     """Bounded text from one conversion; never rasterize each document page."""
     import pypdfium2 as pdfium
-    from .library_extract import MAX_TEXT
+    from .library_extract import MAX_TEXT, _office
+    if extension in {'xls','ods'}:
+        # Printed PDFs can clip cells or omit entire non-printing regions.
+        # Export once to XLSX and read all bounded cell/shared-string XML parts.
+        # This runs in the same credential-free, network-denied Office child.
+        return _office(_convert_source(raw, extension, 'xlsx'),'xlsx')[:MAX_TEXT]
     with pdfium.PdfDocument(_source_pdf(raw, extension)) as doc:
         if not 0 < len(doc) <= 300:
             raise ValueError('Document must have at most 300 pages')
