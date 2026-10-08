@@ -45,7 +45,7 @@ jobs:
           # The scripts start their own disposable server; its socket directory must be writable by the runner.
           sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
       - name: Install ffmpeg (media decoding tests render a test image with it)
-        run: sudo apt-get install -y ffmpeg
+        run: sudo apt-get install -y ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
       - name: Python domain and security contracts
         run: python scripts/consumer_ready_check.py ci-python python -m unittest discover -s tests -p 'test_*.py'
       - name: Disposable DB integration, migrations and restore

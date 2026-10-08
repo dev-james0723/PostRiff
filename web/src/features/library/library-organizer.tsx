@@ -73,7 +73,7 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
       })}</div></fieldset> : null}
       <Button type='submit' variant='glass' disabled={busy}>Save details</Button>
     </form>
-    {normalized && ['failed','queued'].includes(asset.processing ?? '') ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>Retry processing</Button> : null}
+    {normalized && (asset.canRetryProcessing || ['failed','queued'].includes(asset.processing ?? '')) ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>{asset.processing === 'unsupported' ? 'Index document' : 'Retry processing'}</Button> : null}
     {asset.assetKind === 'audio' && ready ? <details><summary className='rafii-focus cursor-pointer text-sm'>Add or replace transcript</summary>
       <p className='text-muted-foreground my-2 text-xs'>Automatic transcription is unavailable. A supplied transcript becomes searchable and keeps its provenance.</p>
       <label htmlFor={'library-transcript-'+asset.id} className='block text-xs'>Transcript<textarea id={'library-transcript-'+asset.id} aria-label='Transcript' className='rafii-quiet rafii-focus mt-1 min-h-28 w-full rounded-lg p-3 text-sm' maxLength={250000} value={text} onChange={(e) => setText(e.target.value)} /></label>
@@ -83,8 +83,8 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
       <Button variant='glass' disabled={busy || !snapshot.data || Boolean(source)} onClick={() => void change(async () => {
         const result = await api.librarySource(workspaceId, asset.id, snapshot.data!.revision); setSource(result.sourceId); await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       })}>{source ? 'Source added for review' : 'Use as a source'}</Button>
-      <p className='text-muted-foreground text-xs'>Review the extracted facts and sharing permission in Memory before Rafii uses them. Long documents use a labelled excerpt of up to 19,000 characters.</p>
-      {source ? <a className='rafii-focus text-sm underline underline-offset-4' href={`/app/memory?source=${encodeURIComponent(source)}`}>Review source in Memory</a> : null}
+      <p className='text-muted-foreground text-xs'>Review the extracted facts and sharing permission in Ideas before Rafii uses them. Long documents use a labelled excerpt of up to 19,000 characters.</p>
+      {source ? <a className='rafii-focus text-sm underline underline-offset-4' href={`/app/ideas?source=${encodeURIComponent(source)}`}>Review source in Ideas</a> : null}
     </div> : null}
   </section>;
 }

@@ -419,23 +419,66 @@ async function main() {
           check('evidence drawer: no failed control request', seen.apiFailures.length === 0, seen.apiFailures);
         });
 
-        // Founder Rafii answers a Demo question through the founder runtime (harness model, no provider).
+        // Hold the real session response to exercise send readiness, then answer
+        // through the founder runtime (harness model, no provider).
         await attempt('Ask Rafii answers in Demo', async () => {
-          await page.goto(base + '/founder?mode=demo');
-          await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
-          await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
-          const box = page.getByRole('textbox', { name: 'Ask Rafii' });
-          await box.waitFor({ timeout: 15000 });
-          await box.fill('Summarise the three things that need me today.');
-          const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
-          await page.getByRole('button', { name: 'Send' }).click();
-          const response = await turn;
-          check('agent turn is accepted (201)', response.status() === 201, response.status());
-          await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
-          check('Rafii answer is rendered', true);
-          await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
-          const seen = drain(tracker);
-          check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          const sessionPattern = '**/api/control/v2/session';
+          let releaseSession;
+          const heldSession = new Promise((resolve) => { releaseSession = resolve; });
+          const turns = [];
+          const recordTurn = (request) => {
+            if (request.url().endsWith('/api/control/v2/agent/turns') && request.method() === 'POST') turns.push(request);
+          };
+          page.on('request', recordTurn);
+          await page.route(sessionPattern, async (route) => { await heldSession; await route.continue(); });
+          try {
+            const pendingSession = page.waitForRequest(sessionPattern, { timeout: 30000 });
+            await page.goto(base + '/founder?mode=demo');
+            await pendingSession;
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30000 });
+            await page.getByRole('button', { name: 'Ask Rafii' }).first().click();
+            const box = page.getByRole('textbox', { name: 'Ask Rafii' });
+            await box.waitFor({ timeout: 15000 });
+            const question = 'Summarise the three things that need me today.';
+            await box.fill(question);
+            const send = page.getByRole('button', { name: 'Send', exact: true });
+            check('Ask Rafii: send disabled until session environment is ready', await send.isDisabled());
+            const suggestions = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
+            check('Ask Rafii: suggested sends disabled during session loading', await suggestions.evaluateAll((buttons) => buttons.length > 0 && buttons.every((button) => button.disabled)));
+            await box.press('Enter');
+            check('Ask Rafii: Enter during session loading keeps the draft and sends no turn', await box.inputValue() === question && turns.length === 0, { draftKept: await box.inputValue() === question, turnCount: turns.length });
+            check('Ask Rafii: loading readiness is visible and accessible', await page.getByRole('status').filter({ hasText: 'Connecting to Founder Rafii' }).isVisible());
+            const sessionResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/control/v2/session' && response.request().method() === 'GET', { timeout: 30000 });
+            releaseSession();
+            const session = await sessionResponse;
+            const sessionEnvelope = await session.json();
+            check('Ask Rafii: held real session resolves with an environment', session.status() === 200 && Boolean(sessionEnvelope.environment), { status: session.status(), environment: sessionEnvelope.environment });
+            await page.unroute(sessionPattern);
+            const turn = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/agent/turns') && response.request().method() === 'POST', { timeout: 60000 });
+            await send.click();
+            const response = await turn;
+            const envelope = await response.json();
+            const accepted = envelope.data ?? envelope;
+            check('agent turn is accepted (201)', response.status() === 201, { status: response.status(), environment: envelope.environment, runStatus: accepted.status });
+            try {
+              await page.getByRole('article', { name: "Rafii's answer" }).first().waitFor({ timeout: 90000 });
+            } catch (error) {
+              await page.screenshot({ path: path.join(outDir, 'FAIL-1440-demo-rafii.png') }).catch(() => {});
+              const visible = await page.getByRole('log', { name: 'Conversation with Rafii' }).innerText().catch(() => 'Conversation unavailable');
+              const storedKeys = await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith('rafii.founder.panel.conversation.')));
+              check('Ask Rafii: answer readiness diagnostics', false, { environment: sessionEnvelope.environment, responseEnvironment: envelope.environment, status: accepted.status, conversationId: accepted.conversationId, runId: accepted.runId, storedKeys, visible: visible.slice(0, 800) });
+              throw error;
+            }
+            check('Rafii answer is rendered', true);
+            check('Ask Rafii: one turn persists under the resolved environment key', turns.length === 1 && await page.evaluate(({ environment, conversationId }) => sessionStorage.getItem(`rafii.founder.panel.conversation.demo:${environment}`) === conversationId, { environment: sessionEnvelope.environment, conversationId: accepted.conversationId }), { turnCount: turns.length, environment: sessionEnvelope.environment });
+            await page.screenshot({ path: path.join(outDir, '1440-demo-rafii.png') });
+            const seen = drain(tracker);
+            check('Ask Rafii: no page error', seen.pageErrors.length === 0, seen.pageErrors);
+          } finally {
+            releaseSession();
+            page.off('request', recordTurn);
+            await page.unroute(sessionPattern);
+          }
         });
 
         // Founder voice: the strip opens from the panel. Voice is off in this harness, so "Talk to Rafii" is disabled and

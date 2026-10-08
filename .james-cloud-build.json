@@ -44,7 +44,7 @@
   "cacheScope": "e408bbcd8242",
   "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7",
+  "lockfileSha256": "c347e642ee841cdcc2ca1a8450c4acc09cd391ea6962735c7b1f31fe6c551504",
   "orgId": "jf34f85hr0",
   "baseRef": "refs/remotes/origin/consumer-saas"
 }

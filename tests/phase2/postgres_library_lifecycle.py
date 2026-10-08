@@ -3,7 +3,7 @@ import runpy
 from pathlib import Path
 base=runpy.run_path(str(Path(__file__).with_name('postgres_library.py')))
 globals().update({k:v for k,v in base.items() if not k.startswith('__')})
-from library_samples import samples
+from library_samples import samples, viewer_pdf
 from postriff_phase2.library_extract import MIMES,AUDIO_MIMES
 from postriff_phase2.site_agent.tools import Context
 from postriff_phase2.site_agent.library_reads import library_read,library_search
@@ -23,10 +23,52 @@ for ext,raw in samples().items():
         check(ext+': extracted acceptance text','Brahms' in detail['extractedText'],detail)
     check(ext+': signed private original',library.url(wid,'one',i,True)['url'].startswith('https://') if detail['asset']['processing']!='duplicate' else True)
 
+# Previously stored legacy documents retain their exact storage identity and gain
+# an explicit indexing action after the renderer upgrade; no bulk data migration.
+legacy=b'{\\rtf1\\ansi Legacy archive Brahms upgrade marker.}'
+legacy_upload=library.begin(wid,'one',{'filename':'historical.rtf','mime':'application/rtf','bytes':len(legacy)})['upload'];legacy_id=legacy_upload['assetId']
+storage.put(wid,legacy_id+'.rtf',legacy,'application/octet-stream')
+with connection() as db:
+    db.execute("UPDATE public.pr_library_assets SET kind='file',mime='application/octet-stream',processing_status='unsupported',indexing_status='not_applicable',etag=%s WHERE id=%s",(storage.object_info(wid,'file',legacy_id+'.rtf')['etag'],legacy_id))
+check('historical legacy offers scoped indexing',library.detail(wid,'one',legacy_id)['asset']['canRetryProcessing'])
+check('historical legacy indexing completes',library.retry(wid,'one',legacy_id)['status']=='ready')
+legacy_detail=library.detail(wid,'one',legacy_id)
+check('historical storage identity preserved',legacy_detail['asset']['assetKind']=='file' and legacy_detail['asset']['mime']=='application/octet-stream')
+check('historical legacy source content searchable',any(x['id']==legacy_id for x in library.list(wid,'one','upgrade marker')['assets']))
+for unchanged in (ids['bin'],ids['wav']):
+    check('unsupported generic/audio cannot reindex automatically',not library.detail(wid,'one',unchanged)['asset']['canRetryProcessing'])
+    try:library.retry(wid,'one',unchanged);raise AssertionError('Unsupported content retry escaped')
+    except AlphaError as e:check('unsupported retry denied',e.status==409)
+
+# Explicit retry processes only this bounded source, even without a cron scheduler.
+reader=viewer_pdf()
+reader_upload=library.begin(wid,'one',{'filename':'reader.pdf','mime':'application/pdf','bytes':len(reader)})['upload'];reader_id=reader_upload['assetId']
+storage.put(wid,reader_id+'.pdf',reader,'application/pdf')
+check('complex document starts in durable queue',library.commit(wid,'one',reader_id)['status']=='queued')
+check('explicit small-document retry completes extraction',library.retry(wid,'one',reader_id)['status']=='ready')
+reader_first=library.viewer_page(wid,'one',reader_id,1);reader_second=library.viewer_page(wid,'one',reader_id,2)
+check('private viewer retrieves two actual distinct pages',reader_first['pageCount']==2 and 'Brahms' in reader_first['text'] and 'Mozart' in reader_second['text'] and reader_first['url']!=reader_second['url'])
+reader_thumbs=[library._preview_object({'id':reader_id,'sha256':hashlib.sha256(reader).hexdigest()},n) for n in (1,2)]
+library.delete(wid,'one',reader_id)
+check('deletion removes every rendered page',all((wid,name) not in storage.objects for name in reader_thumbs))
+
 # Search has no dependence on title and supports CJK substrings.
 text=b'Unique lifecycle search marker.\nSecond fact for permission test.'
 item=library.begin(wid,'one',{'filename':'context.txt','mime':'text/plain','bytes':len(text)})['upload'];i=item['assetId']
 storage.put(wid,i+'.txt',text,'text/plain');library.commit(wid,'one',i)
+preview=library.preview(wid,'one',i)
+check('actual JPEG page preview',preview['mime']=='image/jpeg' and preview['page']==1)
+thumb=library.detail(wid,'one',i)['asset']['provenance']['thumbnail']['objectName']
+check('preview stores actual raster bytes',storage.objects[(wid,thumb)][0].startswith(b'\xff\xd8'))
+check('preview cache reuses immutable object',library.preview(wid,'one',i)==preview)
+page=library.viewer_page(wid,'one',i,1)
+check('viewer returns actual page text and dimensions',page['pageCount']==1 and page['page']==1 and page['width']>500 and 'Unique lifecycle' in page['text'])
+try:library.viewer_page(wid,'one',i,2);raise AssertionError('Invalid viewer page escaped')
+except AlphaError as e:check('viewer page bounds',e.status==422)
+used=library.list(wid,'one')['storage']['usedBytes']
+check('rendered page bytes count toward workspace storage',used>=len(text)+len(storage.objects[(wid,thumb)][0]))
+try: library.preview(viewer_workspace,'viewer',i); raise AssertionError('Cross-workspace preview escaped')
+except AlphaError as e: check('preview workspace isolation',e.status in (403,404))
 check('full text search',any(x['id']==i for x in library.list(wid,'one','lifecycle search')['assets']))
 collection=library.collections(wid,'one',{'name':'Rehearsal'})['collections'][0]['id']
 library.metadata(wid,'one',i,{'title':'Session notes','tags':['practice','Brahms'],'collections':[collection]})
@@ -49,6 +91,9 @@ result=read_tool()
 check('AI retrieval keeps provenance',result['data']['sourceId']==source_id and result['data']['sha256']==hashlib.sha256(text).hexdigest(),result)
 check('AI retrieval approved facts only',len(result['data']['facts'])==1,result)
 library.delete(wid,'one',i)
+check('delete removes page preview',(wid,thumb) not in storage.objects)
+try: library.preview(wid,'one',i); raise AssertionError('Deleted preview escaped')
+except AlphaError as e: check('deleted preview unavailable',e.status==404)
 source=next(s for s in service.get(wid,'one')['state']['sources'] if s['id']==source_id)
 check('deletion retracts AI source',not source['active'] and not source['facts'])
 

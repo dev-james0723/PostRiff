@@ -19,12 +19,24 @@ npm --prefix web run lint
 npm --prefix web run build
 python scripts/consumer_ready_secrets.py
 sudo -n apt-get -qq update
-sudo -n apt-get -y -qq install ffmpeg
+sudo -n apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
 python tests/library_samples.py .codex/library-samples
-for ext in mp3 m4a ogg flac aac webm; do
-  ffmpeg -hide_banner -loglevel error -y -i .codex/library-samples/archive-acceptance.wav ".codex/library-samples/archive-acceptance.$ext"
+# Real encoded tones, with explicit codecs and unique OGA/OGG bytes (deduplication
+# must not hide a format under the other extension). Decode every result as well.
+for ext in mp3 m4a ogg oga flac aac webm; do
+  case "$ext" in
+    mp3) codec=libmp3lame ;;
+    m4a|aac) codec=aac ;;
+    ogg|oga) codec=libvorbis ;;
+    flac) codec=flac ;;
+    webm) codec=libopus ;;
+  esac
+  ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'sine=frequency=440:duration=3' -c:a "$codec" -metadata title="Rafii acceptance $ext" ".codex/library-samples/archive-acceptance.$ext"
+  ffmpeg -hide_banner -loglevel error -i ".codex/library-samples/archive-acceptance.$ext" -f null -
 done
-cp .codex/library-samples/archive-acceptance.ogg .codex/library-samples/archive-acceptance.oga
+# Preserve the original H264 frames while testing the accepted QuickTime container.
+ffmpeg -hide_banner -loglevel error -y -i web/public/onboarding/welcome-loop-dark.mp4 -c copy .codex/library-samples/archive-acceptance.mov
+ffmpeg -hide_banner -loglevel error -i .codex/library-samples/archive-acceptance.mov -f null -
 cd web
 npx playwright install --with-deps chromium webkit
 cd ..

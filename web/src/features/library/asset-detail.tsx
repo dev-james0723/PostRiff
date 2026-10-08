@@ -26,6 +26,7 @@ import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { DocumentViewerLauncher } from './document-viewer';
 
 interface AssetDetailProps {
   asset: LibraryAsset | null;
@@ -109,7 +110,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
     </div>;
   }
   if (!mediaAsset) {
-    return <AssetFileThumbnail asset={asset} size='detail' />;
+    return <div className='flex flex-col gap-3'><AssetFileThumbnail asset={asset} size='detail' /><DocumentViewerLauncher key={asset.id} asset={asset} /></div>;
   }
   if (isVideo) {
     return (

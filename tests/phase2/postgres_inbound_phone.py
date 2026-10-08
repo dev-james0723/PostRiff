@@ -208,12 +208,16 @@ with TestClient(app) as client:
                 provider_calls[ref].update(status='completed', duration=8)
                 socket.send_json({'type': 'call_ended'}); break
         assert {'type': 'media', 'payload': base64.b64encode(b'saved').decode()} in frames
+        # TestClient cancels the ASGI task on context exit. Keep the carrier
+        # socket alive until its terminal frame reaches durable settlement.
+        status = inbound.status(phone, w, u, t['id']); cid = status['call']['id']
+        deadline = time.monotonic() + 5
+        value = read(cid)
+        while (value['state'] != 'completed' or value['live_usage_seconds'] is None) and time.monotonic() < deadline:
+            time.sleep(.02); value = read(cid)
+        assert value['state'] == 'completed' and value['live_usage_seconds'] == 4, ('Inbound call did not settle', value['state'], value['live_usage_seconds'])
     assert len(code_audio_requests) == (1 if spoken else 0)
     print('PASS signed ASGI code admission method: ' + ('spoken, no star' if spoken else 'keypad plus star'))
-    status = inbound.status(phone, w, u, t['id']); cid = status['call']['id']
-    deadline = time.monotonic() + 5
-    while read(cid)['live_usage_seconds'] is None and time.monotonic() < deadline: time.sleep(.02)
-    assert read(cid)['state'] == 'completed' and read(cid)['live_usage_seconds'] == 4
     assert service.get(w, u)['state']['variants'][0]['text'] == edited
     assert service.get(w, u)['state']['variants'][0]['needsReview']
     assert not service.get(w, u)['state']['phase2']['jobs']
