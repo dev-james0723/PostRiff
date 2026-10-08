@@ -231,6 +231,10 @@ class VoiceCursor:
     def _voice_workspace_lock(self, args):
         self._set([(self.db.revision, json.dumps(self.db.state))])
 
+    def _voice_workspace_hold(self, args):
+        self.db.held = getattr(self.db, "held", 0) + 1  # voice.hold_workspace before a final recheck
+        self._set([(1,)])
+
     def _voice_workspace_save(self, args):
         self.db.state = json.loads(args[0])
         self.db.revision += 1
@@ -427,6 +431,10 @@ class AdmissionTests(Base):
         db.on_share = concurrent_revoke
         self.refused(lambda: approve(db, refs["essay"], span(0, [P0, P1, P2])), "library_grant_required", 403)
         self.nothing_admitted()
+        sqls = [s for s, _ in db.executed]
+        hold = next(i for i, s in enumerate(sqls) if "voice.workspace_hold" in s)
+        recheck = max(i for i, s in enumerate(sqls) if s.startswith("SELECT grant_revision FROM public.pr_library_policy"))
+        self.assertLess(hold, recheck, "the workspace row is locked before the final recheck (recheck itself takes no lock)")
 
     def test_page_and_slide_locators(self):
         """Structural locators: part of a PDF page passage with exact offsets, a whole page, a slide; a page passage
@@ -607,7 +615,7 @@ class RevocationTests(Base):
     def test_withdraw_keeps_spans_still_covered_by_another_voice_grant(self):
         db, refs = self.db, self.refs
         asset_grant = db.grant("voice", ESSAY)
-        db.grant("voice")  # workspace-wide voice permission remains
+        db.grant("voice", ESSAY)  # a second, still-active per-item voice permission (voice is never workspace-wide)
         approve(db, refs["essay"], span(0, [P0, P1, P2]))
         receipt = policy.revoke(make_ctx(db), asset_grant)
         self.assertEqual(receipt["propagation"]["voiceSpansWithdrawn"], 0)

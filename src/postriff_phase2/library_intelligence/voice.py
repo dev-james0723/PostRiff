@@ -118,6 +118,18 @@ def _mutate_state(ctx, apply) -> dict:
     return {"result": result, "before": before, "after": state, "effectsRun": len(effects)}
 
 
+# Source packs hand evidence to Ideas through the same locked, effect-running state change.
+mutate_state = _mutate_state
+
+
+def hold_workspace(ctx) -> None:
+    """Take the workspace row lock before the final permission recheck of a short write path (nothing here waits on a
+    provider). policy.recheck reads the committed revision without a lock; every grant revoke over HTTP holds this row
+    lock for its whole transaction, so after this the recheck either sees a committed revoke or the revoke waits and its
+    propagation then sees this write. An HTTP write context already holds it (a no-op re-lock)."""
+    ctx.cur.execute("/*voice.workspace_hold*/ SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (ctx.workspace_id,))
+
+
 def _canonical(state: dict, source_id: str | None) -> dict | None:
     if not source_id:
         return None
@@ -347,8 +359,9 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
                        select: bool = False, expected_revision: int | None = None) -> dict:
     """approve_voice_span(ctx, ref, locator, persona_id, author_attestation) -> VoiceSample (implementation plan T07).
 
-    Owner only. Every refusal happens before any write; the purpose grant is rechecked (TOCTOU) right before the
-    canonical import, which holds the policy row so a concurrent revoke waits and then withdraws this span."""
+    Owner only. Every refusal happens before any write. Right before the canonical import the workspace row is locked
+    (hold_workspace) and the purpose grant rechecked (TOCTOU), so a revoke that committed first wins, and one that comes
+    later waits for this write and then withdraws the span."""
     ctx.require("owner")
     seg.writable(ctx)
     if not policy.enabled("voice"):
@@ -402,6 +415,7 @@ def approve_voice_span(ctx, ref, locator, persona_id, author_attestation, *, pol
     if existing:
         out = sample_contract(existing[0], ctx.state)
         return {**out, "alreadyApproved": True, "warnings": ["This passage was already approved."]}
+    hold_workspace(ctx)
     decision = policy.recheck(ctx, decision)
     policy.require(decision)
     if retired:
@@ -546,8 +560,8 @@ def withdraw_for_keys(ctx, keys, *, force: bool = False) -> int:
     if not force:
         ctx.caches.pop("grants", None)
         loaded = versions.load(ctx, [r["versionKey"] for r in rows])
-        live = lambda r: (v := loaded.get(r["versionKey"])) is not None and v["status"] not in ("deleting", "duplicate", "missing")  # noqa: E731
-        rows = [r for r in rows if not (live(r) and (policy.purpose_grants(ctx, "voice", r["versionKey"]) or policy.purpose_grants(ctx, "voice", r["assetKey"])))]
+        # The policy decides coverage (exact versions only); a missing or deleting version is never still allowed.
+        rows = [r for r in rows if not ((v := loaded.get(r["versionKey"])) is not None and policy.authorize_source(ctx, v, "voice").allowed)]
         if not rows:
             return 0
     _withdraw(ctx, rows, reason="deleted" if force else "voice_grant_revoked")
@@ -576,6 +590,36 @@ def style_exemplars(ctx, persona_id: str, language: str, limit: int = 6, *, bran
     rows = _select(ctx, "scope", "status='approved' AND persona_id=%s AND coalesce(brand,'')=%s AND language=ANY(%s)",
                    (persona, brand or "", langs, MAX_EXEMPLARS * 4 * len(langs)), suffix=" ORDER BY created_at DESC,id LIMIT %s")
     rows.sort(key=lambda r: langs.index(r["language"]))  # stable: newest first within each language
+    return _collect(ctx, rows, out, limit=limit, purpose=purpose, route=route)
+
+
+def exemplars_by_ids(ctx, sample_ids, *, purpose: str = "generation", route: str | None = None) -> dict:
+    """The same checks as style_exemplars for examples a person picked explicitly (a source pack's style refs), in the
+    order given. Unknown, foreign or withdrawn ids come back in `excluded`, never as examples."""
+    if not isinstance(sample_ids, list) or len(sample_ids) > MAX_EXEMPLARS or len(set(map(str, sample_ids))) != len(sample_ids):
+        c.fail(f"Choose at most {MAX_EXEMPLARS} distinct voice examples.")
+    if purpose not in voice_sources.PURPOSES:
+        c.fail("Choose analysis or generation.")
+    keys = [c.asset_key(s) for s in sample_ids]
+    out = {"contractVersion": c.CONTRACT_VERSION, "positive": [], "negative": [], "bindings": [], "excluded": [], "explanation": EXPLANATION,
+           "enabled": policy.enabled("voice")}
+    if not out["enabled"]:
+        out["warnings"] = ["Library voice examples are turned off."]
+        out["excluded"] = [{"sampleId": k, "reason": "voice_disabled"} for k in keys]
+        return out
+    rows = []
+    for key in keys:
+        found = _select(ctx, "by_id", "id=%s", (uuid.UUID(hex=key),))
+        if not found or found[0]["status"] != "approved":
+            out["excluded"].append({"sampleId": key, "reason": "unavailable" if not found else "revoked"})
+        else:
+            rows.append(found[0])
+    return _collect(ctx, rows, out, limit=MAX_EXEMPLARS, purpose=purpose, route=route)
+
+
+def _collect(ctx, rows: list, out: dict, *, limit: int, purpose: str, route) -> dict:
+    """Shared per-example checks: the Library voice grant (policy.authorize_source, then policy.recheck before returning),
+    and for positives an active canonical sample with this purpose (and route) whose text is unchanged."""
     loaded = versions.load(ctx, [r["versionKey"] for r in rows])
     candidates = []
     for r in rows:
