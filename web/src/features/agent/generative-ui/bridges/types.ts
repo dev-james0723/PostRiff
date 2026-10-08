@@ -96,6 +96,8 @@ export interface UiBridges {
   query: QueryBridge;
   action: ActionBridge;
   onContinue(request: ContinueRequest): void;
+  /** Disposes both bridges (aborts in-flight requests, clears timers/caches); called when scope, artifact or revision changes. */
+  dispose(): void;
 }
 
 /** D exports `createUiBridges` from `bridges/index.ts` with exactly this signature. */
