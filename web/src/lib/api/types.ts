@@ -54,6 +54,7 @@ export interface Asset {
   sourceId?: string | null;
   transcriptionStatus?: string;
   extractionError?: string | null;
+  canRetryProcessing?: boolean;
   processingStatus?: string;
   duplicateOf?: string | null;
   displayTitle?: string;
@@ -289,8 +290,13 @@ export interface SourceFact {
   locator?: string;
 }
 
-/** Where a web-research page came from (`ideas._research`). */
+/** Provenance of a researched page or an explicitly imported Library file. */
 export interface SourceOrigin {
+  assetId?: string;
+  sha256?: string;
+  filename?: string;
+  locator?: string;
+  clipped?: boolean;
   trendLineage?: {
     opportunity_id: string; opportunity_revision: number; trend_id: string;
     trust_receipt_id: string; context_digest: string; expires_at: string;
