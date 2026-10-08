@@ -178,7 +178,7 @@ export function AssetCard({
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
                 <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
@@ -221,11 +221,6 @@ export function AssetCard({
               </span>
             </span>
           </button>
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute inset-x-0 top-0 z-10 aspect-square overflow-hidden rounded-t-[var(--rafii-radius-card)]'>
-              <AssetFileThumbnail asset={asset} size='gallery' loadPreview />
-            </div>
-          ) : null}
           {image.canRetry && (
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>

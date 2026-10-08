@@ -8,6 +8,9 @@ on:
       - 'tests/**'
       - 'migrations/postriff/**'
       - 'scripts/*library*'
+      - 'runtime/**'
+      - 'requirements*.txt'
+      - 'vercel.json'
       - '.github/workflows/library-release.yml'
   workflow_dispatch:
     inputs:
@@ -55,6 +58,21 @@ jobs:
             docs/consumer-ready/evidence/library/
             .codex/library-samples/
           retention-days: 14
+  document-runtime:
+    if: ${{ inputs.prepare_dependency_lock != true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build and exercise the real Amazon Linux document bundle
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work amazonlinux:2023 bash -euc '
+            dnf install -y python3.12 python3.12-pip tar gzip findutils which
+            python3.12 runtime/build_document_renderer.py
+            python3.12 -m pip install Pillow==12.3.0 pypdfium2==5.14.0 Markdown==3.11
+            PYTHONPATH=src:tests python3.12 -m unittest test_library_preview
+            du -sh .document-runtime
+          '
   dependency-lock:
     if: ${{ inputs.prepare_dependency_lock == true }}
     runs-on: ubuntu-24.04

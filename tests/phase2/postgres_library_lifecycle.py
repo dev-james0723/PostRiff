@@ -27,6 +27,13 @@ for ext,raw in samples().items():
 text=b'Unique lifecycle search marker.\nSecond fact for permission test.'
 item=library.begin(wid,'one',{'filename':'context.txt','mime':'text/plain','bytes':len(text)})['upload'];i=item['assetId']
 storage.put(wid,i+'.txt',text,'text/plain');library.commit(wid,'one',i)
+preview=library.preview(wid,'one',i)
+check('actual JPEG page preview',preview['mime']=='image/jpeg' and preview['page']==1)
+thumb=library.detail(wid,'one',i)['asset']['provenance']['thumbnail']['objectName']
+check('preview stores actual raster bytes',storage.objects[(wid,thumb)][0].startswith(b'\xff\xd8'))
+check('preview cache reuses immutable object',library.preview(wid,'one',i)==preview)
+try: library.preview(viewer_workspace,'viewer',i); raise AssertionError('Cross-workspace preview escaped')
+except AlphaError as e: check('preview workspace isolation',e.status in (403,404))
 check('full text search',any(x['id']==i for x in library.list(wid,'one','lifecycle search')['assets']))
 collection=library.collections(wid,'one',{'name':'Rehearsal'})['collections'][0]['id']
 library.metadata(wid,'one',i,{'title':'Session notes','tags':['practice','Brahms'],'collections':[collection]})
@@ -49,6 +56,9 @@ result=read_tool()
 check('AI retrieval keeps provenance',result['data']['sourceId']==source_id and result['data']['sha256']==hashlib.sha256(text).hexdigest(),result)
 check('AI retrieval approved facts only',len(result['data']['facts'])==1,result)
 library.delete(wid,'one',i)
+check('delete removes page preview',(wid,thumb) not in storage.objects)
+try: library.preview(wid,'one',i); raise AssertionError('Deleted preview escaped')
+except AlphaError as e: check('deleted preview unavailable',e.status==404)
 source=next(s for s in service.get(wid,'one')['state']['sources'] if s['id']==source_id)
 check('deletion retracts AI source',not source['active'] and not source['facts'])
 

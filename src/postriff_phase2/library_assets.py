@@ -313,6 +313,66 @@ class UniversalLibrary:
             cur.execute("UPDATE public.pr_library_assets SET transcription_status='ready',indexing_status='ready',summary=%s,provenance=provenance||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id=%s",(normalize(text)[:360],json.dumps({'transcriptSource':'user_supplied','transcriptBy':p}),w,i))
         return self.detail(w,t,i)
 
+    @staticmethod
+    def _preview_object(a):
+        from .library_preview import VERSION
+        digest = hashlib.sha256((str(a['sha256']) + VERSION).encode()).hexdigest()
+        return str(a['id']).replace('-', '')+'-'+digest+'.jpg'
+
+    def preview(self,w,t,i):
+        from .library_preview import SUPPORTED, VERSION, render_isolated
+        store = self._store()
+        claim = uuid.uuid4().hex
+        now = self.clock()
+        with self.service.repository.transaction(t,w) as (cur,row,p):
+            require(_member(row),'read')
+            a = self._row(cur,w,i,True)
+            if a['extension'] not in SUPPORTED or a['processing_status'] not in READY or not a['sha256']:
+                raise AlphaError('First-page preview unavailable for this file.',422)
+            name = self._preview_object(a)
+            previous = (a.get('provenance') or {}).get('thumbnail') or {}
+            if previous.get('state') == 'ready' and previous.get('version') == VERSION:
+                cached = True
+            else:
+                cached = False
+                if previous.get('state') == 'processing' and previous.get('until',0)>now:
+                    raise AlphaError('Preparing first-page preview. Try again shortly.',409)
+                if previous.get('attempts',0)>=3 and previous.get('until',0)>now-600:
+                    raise AlphaError('First-page rendering failed. Try again in a few minutes.',422)
+                cur.execute("SELECT count(*) FROM public.pr_library_assets WHERE workspace_id=%s AND provenance->'thumbnail'->>'state'='processing' AND (provenance->'thumbnail'->>'until')::numeric>%s",(w,now))
+                if cur.fetchone()[0]>=2:
+                    raise AlphaError('Preparing other document previews. Try again shortly.',429)
+                pending = {'state':'processing','version':VERSION,'claim':claim,'until':now+90,'attempts':previous.get('attempts',0)+1 if previous.get('until',0)>now-600 else 1}
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
+        if cached:
+            return {'url':store.signed_url(w,'media',name),'mime':'image/jpeg','page':1}
+        try:
+            info = store.object_info(w,'file',a['object_name'])
+            if (info.get('bytes'),info.get('mime'),info.get('etag')) != (a['bytes'],a['mime'],a['etag']):
+                raise AlphaError('The source file changed before rendering.',409)
+            raw = store.get_bounded(w,'file',a['object_name'],a['bytes'])
+            if len(raw)!=a['bytes'] or hashlib.sha256(raw).hexdigest()!=a['sha256'] or store.object_info(w,'file',a['object_name'])!=info:
+                raise AlphaError('The source file changed during rendering.',409)
+            image = render_isolated(raw,a['extension'])
+            try:
+                store.put_immutable(w,'media',name,image,'image/jpeg')
+            except AlphaError as error:
+                if error.status!=409: raise
+            with self.service.repository.transaction(t,w) as (cur,row,p):
+                current = self._row(cur,w,i,True)
+                if current['processing_status'] not in READY or (current.get('provenance') or {}).get('thumbnail',{}).get('claim')!=claim:
+                    store.delete(w,'media',name)
+                    raise AlphaError('This file is no longer available.',404)
+                pending.update(state='ready',objectName=name)
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
+            return {'url':store.signed_url(w,'media',name),'mime':'image/jpeg','page':1}
+        except Exception as error:
+            with self.service.repository.transaction(t,w) as (cur,row,p):
+                pending.update(state='failed')
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s AND provenance->'thumbnail'->>'claim'=%s",(json.dumps(pending),w,i,claim))
+            if isinstance(error,AlphaError): raise
+            raise AlphaError('First-page preview could not be rendered. The original file is still available.',422) from None
+
     def url(self,w,t,i,download=False):
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
@@ -333,6 +393,7 @@ class UniversalLibrary:
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
         s.delete(w,'file',a['object_name'])
+        s.delete(w,'media',self._preview_object(a))
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             self._forget(cur,w,i)
@@ -399,6 +460,9 @@ class UniversalLibrary:
         for w,i,o in due:
             try:
                 s.delete(w,'file',o)
+                with connect() as db,db.cursor() as cur:
+                    a = self._row(cur,w,i.replace('-',''))
+                s.delete(w,'media',self._preview_object(a))
                 with connect() as db,db.cursor() as cur:
                     self._forget(cur,w,i.replace('-',''))
                 removed+=1

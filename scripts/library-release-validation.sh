@@ -19,7 +19,7 @@ npm --prefix web run lint
 npm --prefix web run build
 python scripts/consumer_ready_secrets.py
 sudo -n apt-get -qq update
-sudo -n apt-get -y -qq install ffmpeg
+sudo -n apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
 python tests/library_samples.py .codex/library-samples
 for ext in mp3 m4a ogg flac aac webm; do
   ffmpeg -hide_banner -loglevel error -y -i .codex/library-samples/archive-acceptance.wav ".codex/library-samples/archive-acceptance.$ext"

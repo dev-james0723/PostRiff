@@ -69,12 +69,17 @@ class Storage:
             raise AlphaError("too large", 413)
         return raw
 
+    def put_immutable(self, ws, category, name, raw, content_type='image/jpeg'):
+        assert category == 'media'
+        if (ws,name) in self.objects: raise AlphaError('Immutable object exists.',409)
+        self.put(ws,name,raw,content_type)
+
     def signed_url(self, ws, category, name, expires_in=300):
-        assert (ws, name) in self.objects and category == "file"
+        assert (ws, name) in self.objects and category in ('file','media')
         return f"https://download.invalid/{ws}/{name}?token=fake"
 
     def delete(self, ws, category, name):
-        assert category == "file"
+        assert category in ("file","media")
         if self.fail_delete:
             raise AlphaError("storage unavailable", 503)
         self.objects.pop((ws, name), None)

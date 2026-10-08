@@ -60,7 +60,6 @@ export function AssetListRow({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
-  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
   const preview = useAssetImage(asset.id, nearView && mediaAsset);
   const video = assetKind === 'video';
   const title = libraryAssetTitle(asset);
@@ -105,7 +104,7 @@ export function AssetListRow({
           >
             <span data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined} data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined} className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='row' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='row' loadPreview={nearView} />
               ) : preview.data ? (
                 <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-cover' />
               ) : preview.isError ? (
@@ -131,11 +130,6 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute top-2.5 left-3 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]'>
-              <AssetFileThumbnail asset={asset} size='row' loadPreview />
-            </div>
-          ) : null}
         </motion.div>
       </ContextMenuTrigger>
       <ContextMenuContent ariaLabel={`${kindLabel} actions`}>

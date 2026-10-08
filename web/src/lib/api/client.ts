@@ -123,8 +123,8 @@ export function createApi(getToken: TokenSource) {
     return { ...base, Authorization: `Bearer ${token}` };
   }
 
-  async function get<T>(path: string, auth = true): Promise<T> {
-    return parse<T>(await fetch(path, { headers: await headers(auth), cache: 'no-store' }));
+  async function get<T>(path: string, auth = true, timeoutMs?: number): Promise<T> {
+    return parse<T>(await fetch(path, { headers: await headers(auth), cache: 'no-store', ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) }));
   }
 
   async function send<T>(method: string, path: string, body: unknown = {}, timeoutMs?: number): Promise<T> {
@@ -332,6 +332,8 @@ export function createApi(getToken: TokenSource) {
       send<{ asset: Asset; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(assetId)}/commit`, {}),
     libraryFile: (w: string, assetId: string) =>
       get<{ asset: Asset; extractedText: string; chunks: { ordinal: number; text: string }[] }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
+    libraryPreviewUrl: (w: string, assetId: string) =>
+      get<{ url: string; mime: string; page: number }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/preview`, true, 90_000),
     libraryFileUrl: (w: string, assetId: string, download = false) =>
       get<{ url: string; mime: string; filename: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/url${download ? "?download=1" : ""}`),
     renameLibraryFile: (w: string, assetId: string, title: string) =>

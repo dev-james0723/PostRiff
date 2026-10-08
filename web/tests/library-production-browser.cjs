@@ -132,23 +132,24 @@ const checks=[];
    for(const ext of thumbnailFormats){
     await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
    }
-   const wordThumbnail=page.locator('[data-library-thumbnail="docx"][data-thumbnail-preview="first-page"]').first();
-   await wordThumbnail.waitFor({timeout:15000});
-   assert.match(await wordThumbnail.innerText(),/Rafii archive acceptance/,'DOCX thumbnail must show extracted content from the beginning of its first page');
+   for(const ext of ['docx','xlsx','pptx','pdf','md']){
+    await search.fill(ext==='md'?'Brahms browser notes':'sample.'+ext);
+    const raster=page.locator(`[data-library-thumbnail="${ext}"][data-thumbnail-preview="first-page-raster"] img`).first();
+    await raster.waitFor({state:'visible',timeout:90000});
+    await raster.evaluate(image=>image.decode());
+    assert.ok(await raster.evaluate(image=>image.naturalWidth>500&&image.naturalHeight>500),ext+' must display a real page raster');
+    await page.screenshot({path:resolve(out,`page-${ext}-${engine}-${width}.png`),fullPage:true});
+    checks.push({engine,width,format:ext,preview:'actual source-page JPEG',execution:'real source bytes and renderer; synthetic identity/storage'});
+   }
    await search.fill('sample.pdf');
    const pdfCard=page.getByRole('button',{name:/Document sample, first-page preview/}).first();await pdfCard.waitFor({timeout:15000});
-   await pdfCard.scrollIntoViewIfNeeded();
-   const pdfFrame=page.locator('[data-thumbnail-preview="first-page"] iframe').first();await pdfFrame.waitFor({timeout:15000});
-   assert.match(await pdfFrame.getAttribute('src'),/#page=1&view=Fit&toolbar=0&navpanes=0$/,'PDF thumbnail must target its first page');
-   const pdfFetchDeadline=Date.now()+15000;
-   while(Date.now()<pdfFetchDeadline&&!storageTrace.some(item=>item.method==='GET'&&item.mime==='application/pdf'&&item.status===200))await new Promise(resolve=>setTimeout(resolve,100));
-   assert.ok(storageTrace.some(item=>item.method==='GET'&&item.mime==='application/pdf'&&item.status===200),`PDF first-page thumbnail did not read the private PDF object: ${JSON.stringify(storageTrace)}`);
+   assert.ok(storageTrace.some(item=>item.method==='GET'&&item.mime==='image/jpeg'&&item.status===200),'Preview must fetch private raster bytes');
    const view=page.getByRole('radiogroup',{name:'Library view'});
    await view.getByRole('radio',{name:'List'}).click();
-   await page.locator('[data-thumbnail-preview="first-page"] iframe').first().waitFor({timeout:15000});
+   await page.locator('[data-library-thumbnail="pdf"][data-thumbnail-preview="first-page-raster"] img').first().waitFor({timeout:15000});
    await page.getByRole('button',{name:/Document sample, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).waitFor();
-   assert.ok(await page.locator('[data-thumbnail-preview="first-page"] iframe').count()>=2,'PDF first-page thumbnail must also appear in asset details');
+   assert.ok(await page.locator('[data-library-thumbnail="pdf"][data-thumbnail-preview="first-page-raster"] img').count()>=2,'Actual PDF page must also appear in asset details');
    await page.getByRole('button',{name:'Close asset details'}).click();
    await search.fill(videoName);
    const videoRow=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoRow.waitFor({timeout:15000});

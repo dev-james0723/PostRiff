@@ -183,6 +183,13 @@ class DevAssets:
         bucket = self.VIDEO_BUCKET if category == "video" else self.file_bucket
         return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{bucket}/{workspace_id}/{category}/{object_name}?token={token}"
 
+    def put_immutable(self, workspace_id, category, object_name, raw, content_type='image/jpeg'):
+        key = (workspace_id, category, object_name)
+        if key in self.objects: raise AlphaError('Immutable object exists.',409)
+        self.objects[key] = raw
+        self.objects[('mime',workspace_id,object_name)] = content_type
+        return '/'.join(key)
+
     def receive_upload(self, token, raw, mime):
         target = self.uploads.pop(token, None)
         if target is None or not raw:

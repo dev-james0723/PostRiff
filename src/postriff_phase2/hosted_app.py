@@ -924,6 +924,7 @@ class HostedApplication:
                     if verb == "commit" and method == "POST":
                         self._body(environ)
                         return self._json(start_response, 200, library.commit(workspace_id, token, asset_id))
+                    if verb == "preview" and method == "GET": return self._json(start_response, 200, library.preview(workspace_id, token, asset_id))
                     if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id, "download=1" in environ.get("QUERY_STRING", "")))
                 raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
