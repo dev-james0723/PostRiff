@@ -4,8 +4,8 @@
   "consoleAppId": "263833009",
   "appName": "James Studio",
   "project": "postriff-phase2-private",
-  "branch": "codex/linkedin-publishing-recovery-20261008",
-  "sourceSha": "Local candidate commit on codex/linkedin-publishing-recovery-20261008, parent reviewed integration SHA required before activation",
+  "branch": "codex/social-connection-recovery-20261007",
+  "sourceSha": "4e69d89936c788bab3408ad5e39106c8a817f930",
   "previewOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
   "proposedProductRecordKey": "share_on_linkedin",
   "proposedProductRecord": {
@@ -51,5 +51,7 @@
     "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/131",
     "authorization": "Existing push/PR/preview authorization; parent reviews/integrates local worker commit. Worker branch is not pushed."
   },
-  "remainingApproval": "Preview evidence/workflow activation, owner optional publishing consent, one exact post and only-created-ID cleanup."
+  "remainingApproval": "Preview evidence/workflow activation, owner optional publishing consent, one exact post and only-created-ID cleanup.",
+  "localImplementationBranch": "codex/linkedin-publishing-recovery-20261008",
+  "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/131"
 }

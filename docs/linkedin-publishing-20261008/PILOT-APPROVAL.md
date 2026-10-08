@@ -2,7 +2,7 @@
 
 Execution state: **CANDIDATE ONLY; no wider consent, configuration activation, post, deletion, push or deployment performed.**
 
-The current verified connection preview remains SHA82b4c282. These publishing repairs are local to branch `codex/linkedin-publishing-recovery-20261008`; candidate source SHA and final remote check receipts will be attached before action.
+The current verified connection preview remains SHA82b4c282. These publishing repairs are local to branch `codex/linkedin-publishing-recovery-20261008`; implementation source is `4e69d89936c788bab3408ad5e39106c8a817f930`; final remote check receipts and actual preview deployment identity will be attached before activation.
 
 ## Proposed sequence
 

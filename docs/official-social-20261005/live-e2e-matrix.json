@@ -2251,5 +2251,13 @@
   "caseCounts": {
     "PARTIAL": 2,
     "NOT_RUN": 194
+  },
+  "publishingRecovery": {
+    "date": "2026-10-08",
+    "evidence": "../linkedin-publishing-20261008/EVIDENCE.json",
+    "approvalCandidate": "../linkedin-publishing-20261008/PILOT-APPROVAL.md",
+    "execution": "SYNTHETIC_ENGINEERING_CANDIDATE; optional write consent/create/delete NOT_RUN",
+    "liveStatusesPromoted": false,
+    "originalCasesPreserved": 196
   }
 }

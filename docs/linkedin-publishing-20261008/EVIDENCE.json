@@ -62,8 +62,9 @@
   "externalEffectsPerformed": [],
   "originalMatricesEditedByWorker": false,
   "matrixHashMeaning": "Historical baseline hashes before parent-owned evidence-only updates; worker did not edit original205/196 matrices.",
-  "candidateSourceSha": "Resolve HEAD on codex/linkedin-publishing-recovery-20261008 after scoped candidate commit; parent records integration SHA separately.",
+  "candidateSourceSha": "4e69d89936c788bab3408ad5e39106c8a817f930",
   "validation": "VALIDATION.json",
   "pilotCandidate": "PILOT-APPROVAL.md",
-  "runtimePresenceDiagnostic": "memberPublishingStatus.runtimeEnvironmentVerified plus allowlisted runtimeEnvironment are observable before product evidence activation. Actual deployed value still UNVERIFIED."
+  "runtimePresenceDiagnostic": "memberPublishingStatus.runtimeEnvironmentVerified plus allowlisted runtimeEnvironment are observable before product evidence activation. Actual deployed value still UNVERIFIED.",
+  "targetPreviewBranch": "codex/social-connection-recovery-20261007"
 }

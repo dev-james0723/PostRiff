@@ -29,7 +29,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -58,7 +59,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -86,7 +88,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -114,7 +117,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -142,7 +146,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -170,7 +175,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -198,7 +204,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -226,7 +233,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -254,7 +262,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -282,7 +291,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -310,7 +320,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -338,7 +349,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -366,7 +378,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -394,7 +407,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -422,7 +436,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -451,7 +466,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -480,7 +496,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -509,7 +526,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -538,7 +556,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -567,7 +586,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -596,7 +616,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -625,7 +646,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -654,7 +676,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -683,7 +706,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -712,7 +736,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -741,7 +766,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -770,7 +796,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -799,7 +826,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -828,7 +856,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -857,7 +886,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -886,7 +916,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -912,7 +943,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "UNSUPPORTED BY OFFICIAL API"
+      "productionVerdict": "UNSUPPORTED BY OFFICIAL API",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -940,7 +972,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 LINKEDIN APPROVAL"
+      "productionVerdict": "BLOCKED \u2014 LINKEDIN APPROVAL",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -968,7 +1001,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -996,7 +1030,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1024,7 +1059,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1052,7 +1088,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1080,7 +1117,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1108,7 +1146,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1136,7 +1175,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1164,7 +1204,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1193,7 +1234,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified"
+      "productionVerdict": "NOT PRODUCTION READY \u2014 approvals, actual grant, eligibility and live E2E unverified",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1219,7 +1261,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE"
+      "productionVerdict": "BLOCKED \u2014 OFFICIAL AUDIT UNAVAILABLE",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "linkedin",
@@ -1245,7 +1288,8 @@
       "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
       "auditDate": "2026-10-05",
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
-      "productionVerdict": "UNSUPPORTED BY OFFICIAL API"
+      "productionVerdict": "UNSUPPORTED BY OFFICIAL API",
+      "publishingRecoveryEvidence": "../linkedin-publishing-20261008/CAPABILITY-MAP.csv; synthetic engineering only; publishing live tests NOT_RUN"
     },
     {
       "provider": "threads",
@@ -5903,5 +5947,11 @@
       "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
       "productionVerdict": "UNSUPPORTED BY OFFICIAL API"
     }
-  ]
+  ],
+  "publishingRecovery": {
+    "evidence": "../linkedin-publishing-20261008/EVIDENCE.json",
+    "execution": "SYNTHETIC_ENGINEERING_CANDIDATE; NO_REAL_PUBLICATION",
+    "originalRowsPreserved": 205,
+    "liveStatusesPromoted": false
+  }
 }
