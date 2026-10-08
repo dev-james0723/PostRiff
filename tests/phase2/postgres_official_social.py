@@ -104,6 +104,35 @@ class OfficialPersistence(unittest.TestCase):
         with self.assertRaises(AlphaError): oauth.complete(wid,'fixture-one','threads',state,'code')
         self.assertEqual(adapter.exchange.call_count,1)
 
+    def test_linkedin_optional_analytics_denial_preserves_verified_member_publication(self):
+        from unittest.mock import Mock
+        from test_linkedin_publishing_recovery import approved_member_app
+        adapter = approved_member_app()
+        adapter.approved_scopes = {'r_member_postAnalytics'}
+        adapter.exchange = Mock(return_value={'accessToken':'synthetic-token','scopes':['openid','profile','w_member_social'],'expiresIn':3600})
+        adapter.identity = Mock(return_value={'providerAccountId':'urn:li:person:ordinary-synthetic','handle':'Synthetic ordinary member','accountType':'member'})
+        oauth = OAuthService(service.repository, service.commands, CredentialVault(CredentialVault.generate_key()), {'linkedin':adapter}, adapter.public_origin, clock=lambda:self.now)
+        oauth._keep_picture = Mock()
+        first = oauth.start(wid, 'fixture-one', 'linkedin', 'publish')
+        state = parse_qs(urlsplit(first['authorizeUrl']).query)['state'][0]
+        connected = oauth.complete(wid, 'fixture-one', 'linkedin', state, 'code')
+        upgrade = oauth.start(wid, 'fixture-one', 'linkedin', 'analytics', {'connectionId':connected['connectionId']})
+        requested = set(parse_qs(urlsplit(upgrade['authorizeUrl']).query)['scope'][0].split())
+        self.assertEqual(requested, {'openid','profile','w_member_social','r_member_postAnalytics'})
+        state = parse_qs(urlsplit(upgrade['authorizeUrl']).query)['state'][0]
+        result = oauth.complete(wid, 'fixture-one', 'linkedin', state, 'code')
+        self.assertEqual(result['connectionId'], connected['connectionId'])
+        self.assertEqual(result['missingScopes'], ['r_member_postAnalytics'])
+        self.assertEqual(result['capabilities']['publish']['level'], 'Direct')
+        self.assertNotEqual(result['capabilities']['analytics']['level'], 'Direct')
+        persisted = service.repository.get(wid,'fixture-one')['state']['phase2']['channels']
+        channel = next(c for c in persisted if c['id'] == result['connectionId'])
+        self.assertTrue(channel['capabilityVerified'])
+        with connection() as db:
+            stored = db.execute('SELECT access_ciphertext,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(wid,result['connectionId'])).fetchone()
+        self.assertNotEqual(stored[0], 'synthetic-token')
+        self.assertEqual(set(stored[1]), {'openid','profile','w_member_social'})
+
     def test_connection_state_failure_rolls_back_credentials_and_capabilities(self):
         from unittest.mock import Mock, patch
         adapter = ThreadsProvider('app', 'secret')

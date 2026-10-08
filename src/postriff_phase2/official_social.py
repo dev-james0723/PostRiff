@@ -173,7 +173,7 @@ def implementation_revision():
     return hashlib.sha256(b"".join((root/f).read_bytes() for f in files if (root/f).exists())).hexdigest()
 
 
-def capability_states(provider, channel=None, *, approvals=None, evidence=None, implemented=None, connection_approval=None, now=0):
+def capability_states(provider, channel=None, *, approvals=None, evidence=None, implemented=None, connection_approval=None, member_publishing_approved=False, now=0):
     """Release qualification from six independent dimensions; secrets never enter this result.
 
     approvals/evidence are server-owned records, not submitted by a customer's browser.
@@ -195,6 +195,11 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
         proof = evidence.get(key) or {}
         approval = approvals.get(feature.product) or {}
         app_approved = approval.get("state") == "approved" and bool(approval.get("evidenceRef"))
+        member_publication = provider == 'linkedin' and feature.product == 'share_on_linkedin'
+        if member_publication:
+            # The adapter binds Share product evidence to the exact OAuth app,
+            # callback and deployment. A generic approved flag is insufficient.
+            app_approved = member_publishing_approved is True
         member_identity = provider == "linkedin" and key in ("connected", "member_identity")
         approved_connection_scopes = connection_approval.get("approvedScopes")
         if (member_identity and not app_approved and connection_approval.get("state") == "approved"
@@ -208,7 +213,7 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
         # A verified /userinfo response proves member identity, not organization
         # eligibility, publication approval or a complete live acceptance test.
         eligible = (channel.get("eligibility", {}).get(key) is True
-                    or (member_identity and connected and channel.get("accountType") == "member"))
+                    or ((member_identity or member_publication) and connected and channel.get("accountType") == "member"))
         built = feature.implemented or key in implemented
         live = (proof.get("state") == "passed" and proof.get("kind") == "live_api"
                 and proof.get("accountId") == channel.get("providerAccountId")
@@ -221,7 +226,7 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
         if feature.support != "documented":
             blockers.append("UNSUPPORTED BY OFFICIAL API" if feature.support == "unsupported" else "OFFICIAL AUDIT UNAVAILABLE")
         if not app_approved:
-            blockers.append("BLOCKED — LINKEDIN APPROVAL" if provider == "linkedin" else "APP APPROVAL NOT VERIFIED")
+            blockers.append('RAFII MEMBER PUBLISHING ACCESS NOT VERIFIED FOR THIS DEPLOYMENT' if member_publication else "BLOCKED — LINKEDIN APPROVAL" if provider == "linkedin" else "APP APPROVAL NOT VERIFIED")
         if not granted: blockers.append("ACTUAL GRANT MISSING OR EXPIRED")
         if not eligible: blockers.append("ACCOUNT/DESTINATION ELIGIBILITY NOT VERIFIED")
         if not built: blockers.append("IMPLEMENTATION PENDING")

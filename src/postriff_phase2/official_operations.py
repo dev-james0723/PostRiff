@@ -266,7 +266,10 @@ class OfficialAPI:
                 "metered": self.provider == "x"}
 
     def write(self, action, target, payload):
-        if not getattr(self.adapter, "official_social_enabled", False) or not self.adapter.production_reviewed:
+        member_product = (self.provider == 'linkedin' and action in ('edit', 'delete')
+                          and not str(payload.get('actor', '')).startswith('urn:li:organization:')
+                          and getattr(self.adapter, 'member_publishing_approved', lambda: False)())
+        if not getattr(self.adapter, "official_social_enabled", False) or (not self.adapter.production_reviewed and not member_product):
             raise AlphaError("Official native action execution is not enabled/reviewed.", 409)
         from .official_action_contracts import validate
         validate(self.provider, action, payload)
@@ -301,8 +304,9 @@ class OfficialAPI:
                 if not authorized: raise AlphaError("The exact organization action is not authorized.", 409)
             if action == "delete": response = self.adapter.api(self.token, "DELETE", "/posts/"+encoded)
             elif action == "edit":
+                from .provider_candidates import little_text
                 headers = {"Authorization": "Bearer "+self.token, "LinkedIn-Version": "202609", "X-Restli-Protocol-Version": "2.0.0", "X-RestLi-Method": "PARTIAL_UPDATE"}
-                response = self.adapter.transport("POST", "https://api.linkedin.com/rest/posts/"+encoded, headers=headers, body={"patch": {"$set": {"commentary": payload["text"]}}})
+                response = self.adapter.transport("POST", "https://api.linkedin.com/rest/posts/"+encoded, headers=headers, body={"patch": {"$set": {"commentary": little_text(payload["text"])}}})
             elif action == "reply":
                 body = {"actor": actor, "object": payload["rootPostUrn"], "message": {"text": payload["text"]}}
                 if target.startswith('urn:li:comment:'): body['parentComment'] = target

@@ -44,7 +44,7 @@ export function SocialOptions({ platform, channelId, media, onChange }: {
       result.destinationType = selected.kind === 'organization' ? 'organization' : 'member';
       result.authorUrn = selected.id;
       if (title) result.title = title;
-      if (mode === 'link') { if (!link.startsWith('https://')) { onChange(null); return; } result.link = link; }
+      if (mode === 'link') { if (!link.startsWith('https://') || !title.trim()) { onChange(null); return; } result.link = link; }
       if (mode === 'poll') {
         if (!question || choices.some((choice) => !choice)) { onChange(null); return; }
         result.poll = { question, options: choices.map((text) => ({ text })), settings: { duration } };
@@ -90,7 +90,7 @@ export function SocialOptions({ platform, channelId, media, onChange }: {
       {platform === 'LinkedIn' && <div className='flex flex-col gap-1.5'><Label htmlFor='social-destination'>Publish as</Label><Select value={destination} onValueChange={(value) => setDestination(value ?? '')}><SelectTrigger id='social-destination'><SelectValue placeholder='Choose member or Organization' /></SelectTrigger><SelectContent>{destinations.data?.destinations.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} · {item.kind}</SelectItem>)}</SelectContent></Select>{destinations.isError && <p role='alert' className='text-xs'>Could not verify destinations. Enable organization discovery separately if needed.</p>}</div>}
       <div className='flex flex-col gap-1.5'><Label htmlFor='social-format'>Format</Label><Select value={mode} onValueChange={(value) => setMode(value ?? 'standard')}><SelectTrigger id='social-format'><SelectValue /></SelectTrigger><SelectContent>{formats.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
       {(platform === 'LinkedIn' && mode === 'link' || platform === 'Threads' && mode === 'standard' || platform === 'Facebook' && mode === 'standard') && <div><Label htmlFor='social-link'>Link {platform === 'LinkedIn' ? '' : '(optional)'}</Label><Input id='social-link' type='url' value={link} onChange={(event) => setLink(event.target.value)} /></div>}
-      {platform === 'LinkedIn' && <div><Label htmlFor='social-title'>Media or link title (optional)</Label><Input id='social-title' value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></div>}
+      {platform === 'LinkedIn' && <div><Label htmlFor='social-title'>{mode === 'link' ? 'Link title (required)' : 'Media title (optional)'}</Label><Input id='social-title' value={title} required={mode === 'link'} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></div>}
       {mode === 'poll' && <div className='flex flex-col gap-2'>
         {platform === 'LinkedIn' && <div><Label htmlFor='poll-question'>Poll question</Label><Input id='poll-question' value={question} maxLength={140} onChange={(event) => setQuestion(event.target.value)} /></div>}
         {choices.map((choice, index) => <div key={index}><Label htmlFor={`poll-option-${index}`}>Option {index+1}</Label><Input id={`poll-option-${index}`} value={choice} maxLength={platform === 'LinkedIn' ? 30 : 25} onChange={(event) => setChoices((old) => old.map((value, at) => at === index ? event.target.value : value))} /></div>)}

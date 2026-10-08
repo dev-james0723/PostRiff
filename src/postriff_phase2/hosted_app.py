@@ -202,7 +202,8 @@ def runtime_from_environment(environ=None):
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
     # Adapters mount only with client credentials; live execution only when a provider is
-    # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
+    # explicitly marked reviewed, or exact member Share product evidence is verified.
+    # Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
@@ -215,7 +216,8 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+        p.production_reviewed or getattr(p, "account_scoped_direct", False)
+        or (getattr(p, 'id', None) == 'linkedin' and p.member_publishing_approved()) for p in providers.values()
     ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None

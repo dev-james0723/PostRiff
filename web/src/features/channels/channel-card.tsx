@@ -325,7 +325,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       {!disconnected && connectionMessage && <p className='text-sm' aria-label='Connection status'>{connectionMessage}</p>}
-      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} readiness={channel.socialReadiness} offered={provider?.capabilities} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
+      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} readiness={channel.socialReadiness} offered={provider?.capabilities} setupIssue={provider?.memberPublishingStatus && !provider.memberPublishingStatus.approved ? 'Rafii’s LinkedIn publishing setup is incomplete. Your account remains connected; the Rafii operator needs to finish setup.' : undefined} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
       {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
       {!disconnected && channel.platform === 'Facebook' && channel.accountType !== 'page' && <p className='text-sm'>Choose an eligible Page to finish connecting Facebook.</p>}
       {!disconnected && !channel.officialCapabilities && channel.socialReadiness && (

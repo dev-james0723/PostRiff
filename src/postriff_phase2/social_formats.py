@@ -96,6 +96,8 @@ def options(platform, value, media, text):
                 result[key] = value[key]
         if value.get("link"):
             if media or value.get("poll"): raise AlphaError("Choose one LinkedIn content type.", 400)
+            if not result.get('title', '').strip():
+                raise AlphaError('A LinkedIn link post needs an explicit title. Rafii does not scrape the destination.', 400)
             result["link"] = web_url(value["link"])
         if value.get("poll"):
             poll = value["poll"]

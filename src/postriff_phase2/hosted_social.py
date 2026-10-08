@@ -47,7 +47,7 @@ def _uncertain(message):
 
 
 class HostedSocial:
-    """Mounted only when at least one production-reviewed provider is registered."""
+    """Mounted only with reviewed provider access or verified member Share access."""
     X_RECONCILE_LIMIT = 3  # billed reads before X reconciliation stops and asks a person
     MASTODON_MEDIA_POLLS, MASTODON_MEDIA_WAIT = 5, 2.0
 
@@ -82,7 +82,11 @@ class HostedSocial:
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.
-        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False):
+        options = manifest.get('publishOptions') or {}
+        member_product = (getattr(provider, 'id', None) == 'linkedin' and provider.member_publishing_approved()
+                          and options.get('destinationType', 'member') == 'member'
+                          and not str(options.get('authorUrn', '')).startswith('urn:li:organization:'))
+        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False) and not member_product:
             return None
         if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
@@ -795,7 +799,11 @@ class HostedSocial:
             return early
         reference = response.get("headers", {}).get("x-restli-id")
         if response.get("status") == 201 and isinstance(reference, str) and reference.startswith(("urn:li:share:", "urn:li:ugcPost:")):
-            return {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending"}
+            result = {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending. Do not resubmit."}
+            url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+            if valid_receipt_url(url, 'LinkedIn'):
+                result['url'] = url
+            return result
         return _uncertain("No conclusive LinkedIn acceptance evidence; do not resubmit")
 
     def _submit_threads(self, manifest, token):
@@ -953,8 +961,15 @@ class HostedSocial:
             if manifest["platform"] == "LinkedIn":
                 organization = (manifest.get('publishOptions') or {}).get('destinationType') == 'organization'
                 required_read = 'r_organization_social' if organization else 'r_member_social'
-                if not reference or required_read not in grant["scopes"]:
-                    return _uncertain("BLOCKED — LINKEDIN APPROVAL: exact post read-back permission unavailable; preserve the create receipt and do not resubmit")
+                if not reference:
+                    return _uncertain("LinkedIn post receipt is missing; inspect the account before any new submission")
+                if required_read not in grant["scopes"]:
+                    result = {"state": "provider_accepted", "reference": reference,
+                              "confirmed": "LinkedIn accepted this post. Restricted read permission is unavailable; open the post to confirm publication. Do not resubmit."}
+                    url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+                    if valid_receipt_url(url, 'LinkedIn'):
+                        result.update(reference=reference, url=url)
+                    return result
                 response = self.transport("GET", "https://api.linkedin.com/rest/posts/" + quote(reference, safe=""), headers={"Linkedin-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0", "Authorization": "Bearer " + token})
                 body = response.get("body", {})
                 if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and (not self.official_enabled(manifest) or body.get("author") == ((manifest.get("publishOptions") or {}).get("authorUrn") or manifest["providerAccountId"])) and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:

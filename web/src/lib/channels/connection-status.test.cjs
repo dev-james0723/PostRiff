@@ -51,3 +51,15 @@ test('connection summary keeps operation gates and recovery states independent',
   assert.equal(connectionSummary({ socialReadiness: { connection: 'REAUTHORIZATION_REQUIRED' } }), 'Reconnect required.');
   assert.equal(connectionSummary({}), null);
 });
+test('verified Share access and actual write grant remain distinct from live publication qualification', () => {
+  const { connectionSummary, officialCapabilityStatus } = helpers();
+  const publication = { ...identity, permission_group: 'publish', appApproved: true, eligible: true };
+  const channel = { socialReadiness: { ...readiness, publishing: 'PUBLISHING_AVAILABLE' }, officialCapabilities: { member_publish: publication } };
+  assert.equal(connectionSummary(channel), 'Connected — publishing permission granted; verification pending.');
+  assert.equal(officialCapabilityStatus('member_publish', publication, channel.socialReadiness), 'Live test pending');
+  assert.equal(publication.state, 'BLOCKED');
+  assert.equal(publication.liveE2E, false);
+  for (const change of [{ appApproved: false }, { granted: false }, { implemented: false }]) {
+    assert.equal(connectionSummary({ ...channel, officialCapabilities: { member_publish: { ...publication, ...change } } }), 'Connected — publishing not enabled.');
+  }
+});

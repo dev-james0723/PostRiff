@@ -1,12 +1,16 @@
 import { STATUS } from '@/lib/status-labels';
 import { jobBadge, jobGroup, type JobBadge } from './job-state';
+import type { Job } from '@/lib/api/types';
 
 /**
  * A job's badge in the shared status words (`STATUS`). `jobBadge` keeps the precise group (so "held" never reads as
  * "scheduled"); this only renames it for people and moves the reason into the tooltip.
  */
-export function jobStatus(job: Parameters<typeof jobBadge>[0]): JobBadge {
+export function jobStatus(job: Parameters<typeof jobBadge>[0] & Partial<Pick<Job, 'manifest'>>): JobBadge {
   const badge = jobBadge(job);
+  if (job.state === 'provider_accepted' && job.manifest?.platform === 'LinkedIn') {
+    return { ...badge, label: 'Accepted — confirm on LinkedIn', title: 'LinkedIn accepted this post. API verification is pending; confirm it on LinkedIn before any new submission.' };
+  }
   const group = jobGroup(job.state);
   if (badge.label === 'cancelling') return { ...badge, label: 'Cancelling…', title: 'Cancel requested' };
   switch (group) {

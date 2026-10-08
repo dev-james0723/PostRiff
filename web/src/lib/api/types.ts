@@ -1445,6 +1445,8 @@ export interface ProviderView {
   id: string;
   platform: string;
   productionReviewed: boolean;
+  memberPublishingApproved?: boolean;
+  memberPublishingStatus?: { approved: boolean; code: string; message: string; runtimeEnvironmentVerified?: boolean; runtimeEnvironment?: 'preview' | 'production' | null } | null;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
   wave?: string | null;

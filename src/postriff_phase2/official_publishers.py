@@ -9,6 +9,8 @@ import re
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
 from .official_social import LINKEDIN_VERSION, THREADS_VERSION
+from .provider_candidates import little_text
+from .outcomes import valid_receipt_url
 
 ASYNC_PLATFORMS = ("LinkedIn", "Threads", "Instagram", "Facebook", "X", "YouTube", "TikTok", "Pinterest")
 FORWARD_STAGES = ("assets_uploaded", "children_created", "children_ready", "container_created", "container_ready", "upload_session", "upload_finalizable", "next_asset", "metadata_pending", "thread_ready")
@@ -165,22 +167,29 @@ class OfficialPublishers:
                     return self._progress("assets_uploaded", job["container"], assets)
             return self._progress("container_ready", job["container"], assets)
         if action not in ("create", "publish"): return _unknown("Unsupported LinkedIn transition")
-        payload = {"author": owner, "commentary": manifest["payload"]["text"], "visibility": "PUBLIC",
+        payload = {"author": owner, "commentary": little_text(manifest["payload"]["text"]), "visibility": "PUBLIC",
                    "distribution": {"feedDistribution": "MAIN_FEED", "targetEntities": [], "thirdPartyDistributionChannels": []},
                    "lifecycleState": "PUBLISHED", "isReshareDisabledByAuthor": False}
         if media:
             if action != "publish" or len(assets) != len(media): return _unknown("Media is not ready for publication")
             if len(assets) > 1:
                 payload["content"] = {"multiImage": {"images": [{"id": a["id"], "altText": a["alt"]} for a in assets]}}
-            else: payload["content"] = {"media": {"id": assets[0]["id"], "title": options.get("title") or ""}}
+            else:
+                payload["content"] = {"media": {"id": assets[0]["id"], "title": options.get("title") or ""}}
+                if assets[0]['kind'] == 'images':
+                    payload['content']['media']['altText'] = assets[0].get('alt', '')
         if options.get("link"):
             payload["content"] = {"article": {"source": options["link"], "title": options.get("title") or "", "description": options.get("description") or ""}}
         if options.get("poll"): payload["content"] = {"poll": options["poll"]}
         response = self.transport("POST", "https://api.linkedin.com/rest/posts", headers=headers, body=payload)
         reference = response.get("headers", {}).get("x-restli-id")
         if response.get("status") == 201 and isinstance(reference, str) and reference.startswith(("urn:li:share:", "urn:li:ugcPost:")):
-            return {"state": "provider_accepted", "reference": reference, "providerAssets": assets,
-                    "confirmed": "LinkedIn created the post; provider read-back pending"}
+            result = {"state": "provider_accepted", "reference": reference, "providerAssets": assets,
+                      "confirmed": "LinkedIn accepted the create request; publication verification pending. Do not resubmit."}
+            url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+            if valid_receipt_url(url, 'LinkedIn'):
+                result['url'] = url
+            return result
         return _unknown("LinkedIn create result inconclusive", providerAssets=assets)
 
     def meta(self, manifest, job, action, provider, token):

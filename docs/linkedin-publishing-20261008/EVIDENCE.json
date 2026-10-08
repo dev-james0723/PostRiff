@@ -1,0 +1,69 @@
+{
+  "state": "LOCAL_CANDIDATE_NOT_RELEASED",
+  "asOf": "2026-10-08T04:38:37.475885+00:00",
+  "branch": "codex/linkedin-publishing-recovery-20261008",
+  "baseHead": "37bb00bbaa1a9fb3de4f0089d3487ae5c55160fd",
+  "startingCandidate": "82b4c28260641659dca357c83487c66c17a07bf2",
+  "reconciledProductionBase": "07b3295eb5518f604760e507c0bbbb2d73c8e048",
+  "implementationRevision": "e7ab9e1c6aa72c1e65e7276c9ea10575989d4ee39271c2cc62e9400241466547",
+  "originalScope": 205,
+  "linkedinRows": 44,
+  "originalMatrixSha256": "30072536f73a3de02af29fefd9bed0fde94b47c916b1e42e293aad5bb2665afa",
+  "originalE2EMatrixSha256": "9954070c43941a48916fe152a01b5478ff41bfbe4f13386c830f63b5bef2deda",
+  "appConsoleId": "263833009",
+  "oauthClientId": "86761m831bhyiu",
+  "clientBindingEvidence": "docs/official-social-20261007/CONNECTION-ACCEPTANCE.json and operator-console-20261007.json; recheck securely before activation",
+  "consoleFacts": "app-product-observation.json",
+  "publicPublishingLiveVerified": false,
+  "ordinaryTesterB": {
+    "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
+    "displayLabel": "James Au",
+    "subtitle": "LinkedIn \u00b7 member",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "notFounder": true,
+    "notProviderAppRole": "user-attested; parent ordinary-user evidence",
+    "parentEvidence": "docs/official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+    "publishingScopeConsent": "PENDING_OWNER_CONSENT"
+  },
+  "preview": {
+    "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "observedDeployment": "dpl_FXUewGAhV15JfCzyCuooTw1FuVCP",
+    "observedSource": "82b4c28260641659dca357c83487c66c17a07bf2",
+    "project": "postriff-phase2-private",
+    "candidateDeployed": false,
+    "runtimeVERCEL_ENV": "UNVERIFIED; must equal preview before activation"
+  },
+  "primarySources": {
+    "identity": "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication",
+    "share_access": "https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access",
+    "posts": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09",
+    "images": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api?view=li-lms-2026-09",
+    "videos": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09",
+    "documents": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api?view=li-lms-2026-09",
+    "multi_image": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/multiimage-post-api?view=li-lms-2026-09",
+    "poll": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/poll-post-api?view=li-lms-2026-09",
+    "celebration": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/celebration-post-api?view=li-lms-2026-09",
+    "member_analytics": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/members/post-statistics?view=li-lms-2026-09",
+    "community_review": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review?view=li-lms-2026-03",
+    "community_migration": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-api-migration-guide?view=li-lms-2026-09",
+    "organization_roles": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2026-06",
+    "article_url_share": "https://learn.microsoft.com/en-us/linkedin/marketing/integrations/ads/advertising-targeting/version/article-ads-integrations?view=li-lms-2026-09",
+    "little_text": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/little-text-format?view=li-lms-2026-09"
+  },
+  "sourceFetchLimitations": [
+    "The guessed poll-api URL failed; verified correct poll-post-api primary page. Failure was not classified as unsupported.",
+    "Community-management-app-review version2026-09 fetch failed; official indexed2026-03 primary body was available and current portal facts remain authoritative.",
+    "Native article/newsletter and organic document analytics have no newly verified authoring/organic-metric contract; preserve historical unresolved evidence."
+  ],
+  "externalEffectsPerformed": [],
+  "originalMatricesEditedByWorker": false,
+  "matrixHashMeaning": "Historical baseline hashes before parent-owned evidence-only updates; worker did not edit original205/196 matrices.",
+  "candidateSourceSha": "Resolve HEAD on codex/linkedin-publishing-recovery-20261008 after scoped candidate commit; parent records integration SHA separately.",
+  "validation": "VALIDATION.json",
+  "pilotCandidate": "PILOT-APPROVAL.md",
+  "runtimePresenceDiagnostic": "memberPublishingStatus.runtimeEnvironmentVerified plus allowlisted runtimeEnvironment are observable before product evidence activation. Actual deployed value still UNVERIFIED."
+}

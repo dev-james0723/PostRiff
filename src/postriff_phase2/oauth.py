@@ -150,6 +150,8 @@ class OAuthService:
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
+                            'memberPublishingApproved': bool(pid == 'linkedin' and adapter and getattr(adapter, 'member_publishing_approved', lambda: False)()),
+                            'memberPublishingStatus': getattr(adapter, 'member_publishing_status', lambda: None)() if pid == 'linkedin' and adapter else None,
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
@@ -168,7 +170,7 @@ class OAuthService:
         for entry in entries:
             pid, adapter = entry['id'], self.providers.get(entry['id'])
             if pid in CATALOG:
-                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, now=self.clock())
+                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, member_publishing_approved=entry.get('memberPublishingApproved', False), now=self.clock())
                 groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
                 entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
         return entries
@@ -195,7 +197,8 @@ class OAuthService:
             elif read_scope:
                 history = 'HISTORICAL_IMPORT_PERMISSION_UNAVAILABLE'
             if publish_scope and publish_scope in scopes:
-                if not provider.get('productionReviewed'):
+                member_product = platform == 'LinkedIn' and channel.get('accountType') == 'member' and provider.get('memberPublishingApproved')
+                if not provider.get('productionReviewed') and not member_product:
                     publishing = 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
                 elif channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct':
                     publishing = 'PUBLISHING_AVAILABLE'
@@ -468,7 +471,11 @@ class OAuthService:
             # The workspace row is already locked; a second command transaction
             # would allow an intervening edit to strand a successfully exchanged grant.
             import copy
-            updated = self.commands.upsert_verified_channel(copy.deepcopy(workspace_state), principal, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct")
+            # Declining an optional LinkedIn read permission must not invalidate
+            # a separately verified member write grant. The denied operation
+            # retains its own non-Direct capability and missingScopes result.
+            publish_verified = matrix["publish"]["level"] == "Direct" and (not missing or provider_id == 'linkedin')
+            updated = self.commands.upsert_verified_channel(copy.deepcopy(workspace_state), principal, channel, capability_verified=publish_verified)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(updated), workspace_id))
             for effect in getattr(self.repository, 'effects', []):
                 effect(cur, workspace_id, workspace_state, updated, principal)
@@ -747,6 +754,7 @@ class OAuthService:
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
+        member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and adapter.member_publishing_approved())
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))
@@ -757,7 +765,7 @@ class OAuthService:
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
         )
-        if publish_granted and direct_allowed and publisher_ready:
+        if publish_granted and (direct_allowed or member_product) and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
             schedule_scopes = set(adapter.capability_scopes("schedule"))
@@ -772,7 +780,8 @@ class OAuthService:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
+                message = 'Rafii member publishing access has not yet been verified/configured for this deployment. Your account connection is retained.' if getattr(adapter, 'id', None) == 'linkedin' else f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself."
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", message, now, adapter.capability_version)
 
         for name in ("analytics", "comments_read", "reply", "moderate"):
             required = set(adapter.capability_scopes(name))
@@ -812,7 +821,8 @@ class OAuthService:
                 view['officialCapabilities'] = capability_states(provider['id'], trusted,
                     approvals=getattr(adapter, 'official_approvals', {}), evidence=qualification.get('features', {}),
                     implemented=getattr(adapter, 'official_implemented', ()),
-                    connection_approval=getattr(adapter, 'connection_review', {}) if provider.get('publicConnectionReady') else {}, now=now)
+                    connection_approval=getattr(adapter, 'connection_review', {}) if provider.get('publicConnectionReady') else {},
+                    member_publishing_approved=provider.get('memberPublishingApproved', False), now=now)
                 # Compatibility summary never promotes an eight-platform connection to Full Access.
                 view['socialReadiness']['fullyAvailable'] = False
         return {'channels': views, 'providers': catalog}

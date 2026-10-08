@@ -1,0 +1,83 @@
+{
+  "state": "validation_unavailable",
+  "execution": "Synthetic regression and disposable cloud PostgreSQL only; no live LinkedIn publication",
+  "sourceHead": "37bb00bbaa1a9fb3de4f0089d3487ae5c55160fd",
+  "priorRemoteRuns": [
+    {
+      "task": "test",
+      "runId": "rgw3grb6k7",
+      "exitCode": 1,
+      "purpose": "RED: incorrect restricted-review gate, schedule capability, unescaped commentary and missing image alt",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T042654538640Z-test.json",
+      "sourceFingerprint": "b00eba226d4cbdd8851a43c2dda037dc16efd93a655f141503fb715cc940dd7c"
+    },
+    {
+      "task": "test",
+      "runId": "b4j3g6l60h",
+      "exitCode": 0,
+      "purpose": "Focused GREEN:9 Python +5 JS at that source; synthetic only",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043052256324Z-test.json",
+      "sourceFingerprint": "dbd3dc10df935e2feb507eb76f0de4dd367592df3b60637b2ef3d0a8ccbb2c1d",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6x66t7612b?job=5v4lc6nhpg&attempt=52dxx2qct7"
+    },
+    {
+      "task": "ci",
+      "runId": "55q3qzs92p",
+      "exitCode": 1,
+      "purpose": "Caught FakeProvider compatibility regression after affected tests/SQL passed; fixed using getattr adapter.id",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043526419368Z-ci.json",
+      "sourceFingerprint": "5ae83187f748b26f52e07565336314e406c25b315d4d4de774dc17d7fbf99c9f"
+    },
+    {
+      "task": "ci",
+      "runId": "njs1p84h8q",
+      "exitCode": 0,
+      "purpose": "Integrated affected lint/types/JS/Python13 publishing regressions/disposable SQL/production build PASS before accepted-receipt follow-up and environment observability",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043851732721Z-ci.json",
+      "sourceFingerprint": "5de87d6c29b57c100828de33019d2738d363e0462240d8336518a18d5d8de21f"
+    },
+    {
+      "task": "e2e",
+      "runId": "qgncxfxxl7",
+      "exitCode": 0,
+      "purpose": "Cloud Chromium1280/390px connection/permission UI fixtures PASS at njs1p84h8q source. Latest accepted-receipt case not included. Not real iPhone or ordinary-user live proof.",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T044222975040Z-e2e.json",
+      "sourceFingerprint": "5de87d6c29b57c100828de33019d2738d363e0462240d8336518a18d5d8de21f"
+    }
+  ],
+  "latestAttempt": {
+    "task": "ci",
+    "state": "TOOL_ACCESS_BEFORE_SUBMISSION",
+    "runId": null,
+    "exitCode": 143,
+    "log": "/private/tmp/rafii-linkedin-publishing-final-ci.log",
+    "diagnostic": "JCB-TOOL-ACCESS.txt",
+    "noDuplicateCloudRun": true,
+    "alreadyEscalated": true,
+    "boundedGitMetadataDiagnostic": "Also stalled; only own diagnostic stopped. No runtime copied, package installed or policy bypassed."
+  },
+  "localLightweight": [
+    {
+      "check": "accepted receipt known-acceptance single Python unit",
+      "red": "state uncertain vs provider_accepted",
+      "green": "PASS1 test,0.002s; no provider calls"
+    },
+    {
+      "check": "runtime configuration diagnostic single Python unit",
+      "result": "PASS1 test,0.000s; synthetic only"
+    },
+    {
+      "check": "AST parse affected Python / bash -n / git diff --check",
+      "result": "PASS; no Node/build/full suite locally"
+    }
+  ],
+  "cloudAdapterPreserved": "Temporary focused task adapter and .depot workflow restored byte-for-byte before integrated CI; not part of worker change",
+  "pending": [
+    "Final latest-source required GitHub PR checks after parent integration",
+    "Latest official-social-browser.cjs including accepted receipt at1280/390px on existing cloud route",
+    "Real ordinary B optional w_member_social consent and one exact approved pilot/cleanup",
+    "Real iPhone Safari; two-tenant live negative probe; time-dependent renewal; media/schedule and other operation-specific tests"
+  ],
+  "externalEffects": [],
+  "reason": "Latest-source CI/browser validation unavailable through JCB: installed internal launcher content open stalled before code execution and remote submission, including already-approved require_escalated invocation. Parent will integrate local candidate into existing authorized PR for current required GitHub checks; existing cloud browser route remains pending."
+}

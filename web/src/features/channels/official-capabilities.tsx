@@ -9,16 +9,18 @@ function label(key: string) {
   return key.replace(/_/g, ' ').replace(/^./, (first) => first.toUpperCase());
 }
 
-export function OfficialCapabilities({ features, readiness, offered, onEnable }: {
+export function OfficialCapabilities({ features, readiness, offered, setupIssue, onEnable }: {
   features: Record<string, OfficialCapability>;
   readiness?: ChannelView['socialReadiness'];
   offered?: Record<string, boolean>;
+  setupIssue?: string;
   onEnable?: (capability: ConnectCapability) => void;
 }) {
   return (
     <details className='rafii-quiet rounded-xl p-3'>
       <summary className='rafii-focus cursor-pointer text-sm'>Individual capabilities and verification</summary>
       <p className='text-muted-foreground mt-2 text-xs'>Your saved connection and each additional feature have separate permissions and verification.</p>
+      {setupIssue && <p className='text-muted-foreground mt-2 text-xs'>{setupIssue}</p>}
       <ul className='mt-3 flex flex-col gap-3' aria-label='Official capabilities'>
         {Object.entries(features).map(([key, feature]) => (
           <li key={key} className='flex flex-wrap items-start justify-between gap-2 border-b border-foreground/5 pb-2 last:border-0'>

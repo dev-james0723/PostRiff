@@ -1,0 +1,55 @@
+{
+  "executionState": "CANDIDATE_ONLY_NOT_APPLIED",
+  "provider": "linkedin",
+  "consoleAppId": "263833009",
+  "appName": "James Studio",
+  "project": "postriff-phase2-private",
+  "branch": "codex/linkedin-publishing-recovery-20261008",
+  "sourceSha": "Local candidate commit on codex/linkedin-publishing-recovery-20261008, parent reviewed integration SHA required before activation",
+  "previewOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "proposedProductRecordKey": "share_on_linkedin",
+  "proposedProductRecord": {
+    "state": "approved",
+    "appId": "86761m831bhyiu",
+    "audience": "external",
+    "approvedScopes": [
+      "w_member_social"
+    ],
+    "evidenceRef": "docs/linkedin-publishing-20261008/app-product-observation.json",
+    "environment": "preview",
+    "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback"
+  },
+  "proposedPreviewEnvironmentOnly": {
+    "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED": "true"
+  },
+  "requiredRuntimeChecks": [
+    "Observe memberPublishingStatus.runtimeEnvironmentVerified=true and runtimeEnvironment=preview in the existing hosted catalog before adding Share evidence.",
+    "Actual Python runtime VERCEL_ENV equals preview. If missing, stop; do not infer from a frontend variable.",
+    "Actual public base URL equals previewOrigin, with exact registered /api/oauth/linkedin/callback.",
+    "Secure equality comparison of actual configured LinkedIn OAuth client ID with approved app; never print client secret.",
+    "Preserve current openid_connect evidence and unrelated products; merge only this product key.",
+    "Verify production runtime rejects this preview record and production settings remain unchanged."
+  ],
+  "excludedChanges": [
+    "POSTRIFF_OFFICIAL_SOCIAL_ENABLED global flag",
+    "productionReviewed",
+    "liveVerified",
+    "production release or live activation",
+    "other providers",
+    "provider registration changes",
+    "billing authority",
+    "secrets or credential-key rotation"
+  ],
+  "operationEffect": "Allows a member grant with actual w_member_social to prepare/approve/create supported member posts through existing gates. Does not turn feature E2E qualification READY or grant restricted reads, organization publishing, comments or analytics.",
+  "rollback": [
+    "Restore only previous preview LinkedIn workflow flag value and previous share_on_linkedin product record.",
+    "Keep OAuth connection and encrypted grant; do not rotate credentials or revoke customer grants.",
+    "For an already-created pilot post, reconcile its returned ID first; rollback never retries the create."
+  ],
+  "integrationTarget": {
+    "branch": "codex/social-connection-recovery-20261007",
+    "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "authorization": "Existing push/PR/preview authorization; parent reviews/integrates local worker commit. Worker branch is not pushed."
+  },
+  "remainingApproval": "Preview evidence/workflow activation, owner optional publishing consent, one exact post and only-created-ID cleanup."
+}

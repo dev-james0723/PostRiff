@@ -31,5 +31,11 @@ export function connectionSummary(channel: Pick<ChannelView, 'socialReadiness' |
   const publishingAvailable = channel.officialCapabilities
     ? Object.values(channel.officialCapabilities).some((feature) => ['publish', 'organization_publish'].includes(feature.permission_group) && feature.state === 'READY')
     : readiness.publishing === 'PUBLISHING_AVAILABLE';
+  const memberPublication = channel.officialCapabilities?.member_publish;
+  if (!publishingAvailable && readiness.publishing === 'PUBLISHING_AVAILABLE'
+      && memberPublication?.appApproved && memberPublication.granted && memberPublication.implemented
+      && memberPublication.officialSupport === 'documented') {
+    return 'Connected — publishing permission granted; verification pending.';
+  }
   return publishingAvailable ? 'Connected — see publishing permissions below.' : 'Connected — publishing not enabled.';
 }
