@@ -72,11 +72,11 @@ class FakeDB:
 
     # helpers used by tests
     def add_parent(self, *, eligible=True, status="completed", composed="manager", billing="metered", age=5.0, actor=ME, ceiling=88_000, spent=30_000,
-                   spent_state="actual", journeys=("J01",), workspace=WS):
+                   spent_state="actual", journeys=("J01",), workspace=WS, run_key=None):
         run_id, conversation = uid(), uid()
         result = {"composedBy": composed, "usage": {"billing": billing}, "ui": {"eligible": eligible, "journeyIds": list(journeys)},
                   "answerText": "Here are your drafts.", "references": [{"type": "draft", "id": "d1", "title": PRIVATE_CONTEXT_TEXT}]}
-        self.runs[run_id] = {"runId": run_id, "workspaceId": workspace, "conversationId": conversation, "status": status, "runKey": "agent:" + uid(),
+        self.runs[run_id] = {"runId": run_id, "workspaceId": workspace, "conversationId": conversation, "status": status, "runKey": run_key or "agent:" + uid(),
                              "actor": actor, "result": result, "age": age}
         if ceiling is not None:
             rid = uid()
