@@ -2,7 +2,7 @@
  "role": "D",
  "branch": "claude/rafii-openui-d-data",
  "base_sha": "31cbee09",
- "head_sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb (code); this file is committed on top",
+ "head_sha": "7492205cd006a2dcd21123b9d79eee04c9024689 (code); this file is committed on top",
  "owned_paths": [
   "src/postriff_phase2/agent_runtime_v2/ui_projection.py",
   "src/postriff_phase2/agent_runtime_v2/ui_capabilities.py",
@@ -35,7 +35,11 @@
   "D-A20: domain_tools._writing_run forwards ctx.voice_choice (voiceMode/voiceSourceIds) to every writing call",
   "Shared patches 01 (memory_layers pending statement, R0 R-J04-1) and 02 (EffectLedger.research -> result.research for J07) written; A applied both at 5d6b8c68 and they are merged here",
   "Lane E defects fixed: founder_costs reads current.*, drafts_list ids:[] -> empty, slot_check without a time -> empty 'Pick a time'",
-  "Cross-lane defect fixed: founder route queries (F calls ui_queries.query_http with the founder runtime) now resolve founder-scope artifacts"
+  "Cross-lane defect fixed: founder route queries (F calls ui_queries.query_http with the founder runtime) now resolve founder-scope artifacts",
+  "D-A45: UiBridges.dispose() in createUiBridges (aborts in flight, clears timers/caches/listeners, idempotent)",
+  "Query bridge: `cursor` is a reserved argument sent as UiQueryV1.cursor (lane E paging)",
+  "shapes.py declares every possible key with OPTIONAL branch/row keys; catalog dataShape {keys, lists, optional, open}; tests check no undeclared and all required keys on real PG output",
+  "Kill switch reaches the manifest: project_ui_context/build_manifest flags= (actions off -> no write controls)"
  ],
  "interfaces_produced": {
   "python": {
@@ -45,7 +49,8 @@
    "ui_capabilities.build_manifest(cur, auth, projection, *, scope='workspace', flags=None); query_binding; action_binding; current; load_artifact; require_accepted": true,
    "ui_queries.query_ui_binding(cur, auth, artifact, manifest, request, *, runtime=None, now=None, founder=None); query_http(runtime, workspace_id, token, request)": true,
    "ui_actions.activate_ui_action / execute_ui_action / activate_http / execute_http (Deferred for two-phase)": true,
-   "ui_domain.catalog() -> {journeys: {J0x: {queries:[{name, argsSchema, dataShape}], actions:[{actionId, inputSchema, effect}]}}, queries, actions}": true
+   "ui_domain.catalog() -> {journeys: {J0x: {queries:[{name, argsSchema, dataShape}], actions:[{actionId, inputSchema, effect}]}}, queries, actions}": true,
+   "ui_domain.shapes.SHAPES / OPTIONAL / required(binding)": true
   },
   "query_bindings": {
    "J01": [
@@ -171,46 +176,46 @@
  },
  "tests": [
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (agent-ui: Types)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (agent-ui: Types)",
    "conclusion": "success",
    "test_counts": "tsc --noEmit",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (agent-ui: Lint)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (agent-ui: Lint)",
    "conclusion": "success",
    "test_counts": "oxlint src (0 errors)",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh unit: tests/test_agent_ui_*.py)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (scripts/agent_ui_validation.sh unit: tests/test_agent_ui_*.py)",
    "conclusion": "success",
-   "test_counts": "62 Python tests (projection 18, queries 15, actions 12, plus A's contracts)",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "test_counts": "63 Python tests (projection 18, queries 16, actions 12, plus A's contracts)",
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh unit: web/tests/agent-ui-*.test.cjs)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (scripts/agent_ui_validation.sh unit: web/tests/agent-ui-*.test.cjs)",
    "conclusion": "success",
-   "test_counts": "35 node tests (bridges 23, coverage parity 9, A's contracts)",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "test_counts": "37 node tests (bridges 25, coverage parity 9, A's contracts)",
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh database: postgres_agent_ui_actions)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (scripts/agent_ui_validation.sh database: postgres_agent_ui_actions)",
    "conclusion": "success",
    "test_counts": "23/23 scenarios Q01-Q07, A01-A16 on PostgreSQL 17",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
-   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh database: postgres_agent_ui_isolation)",
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828038831 (scripts/agent_ui_validation.sh database: postgres_agent_ui_isolation)",
    "conclusion": "success",
    "test_counts": "4/4 scenarios I01-I04",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   },
   {
    "command_or_ci_run_url": "local: .venv/bin/python -m unittest tests.test_agent_ui_projection tests.test_agent_ui_queries tests.test_agent_ui_actions",
    "conclusion": "success",
    "test_counts": "45",
-   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+   "sha": "7492205cd006a2dcd21123b9d79eee04c9024689"
   }
  ],
  "blockers": [
