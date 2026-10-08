@@ -1,0 +1,2280 @@
+{
+  "package_id": "RAFII-INSIGHTS-GROWTH-20261004",
+  "version": "1.0",
+  "baseline_date": "2026-10-04",
+  "product_validation_executed": true,
+  "allowed_statuses": [
+    "not_run",
+    "pass",
+    "fail",
+    "blocked",
+    "not_applicable"
+  ],
+  "cases": [
+    {
+      "id": "AC01",
+      "phase": "P0",
+      "requirement_ids": [
+        "R01",
+        "R20"
+      ],
+      "name": "開工身份與 base",
+      "required_environment": "read-only project inspection",
+      "expected": "origin、最新 integration SHA、dirty state、owners、AGENTS／lease 有實際記錄；保留舊工作，不以 d91660b7 開工。",
+      "implementation_tasks": [
+        "0"
+      ],
+      "status": "pass",
+      "actual": "最新 integration base／隔離樹／dirty／owner／lease 已記錄。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:26:36.527363+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/initial-state.txt",
+        "docs/design/rafii-insights-growth/evidence/integration-final.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "base"
+      ],
+      "executed_environment": [
+        "local runtime"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC02",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02"
+      ],
+      "name": "真零與缺值",
+      "required_environment": "unit + browser + export",
+      "expected": "原生 0 顯示 0 並計入可比數據；null 保持原因且不計入數值，UI／API／輸出一致。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "原生 0 保留並計樣本；缺值保持 null／原因。實際 API、DOM、CSV 與 PDF 使用同份已保存 payload。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_contract",
+        "browser",
+        "matrix_pg",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC03",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02",
+        "R06"
+      ],
+      "name": "無效數字",
+      "required_environment": "unit + contract",
+      "expected": "boolean、NaN、Infinity、負值不進入 measured／totals；null reason 存在。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "boolean、NaN、Infinity、負值被拒絕，不成為 measured／totals。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T00:20:13.045398+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_contract"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC04",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "每 metric 的 timestamp",
+      "required_environment": "exact regression + unit",
+      "expected": "同 post reach／likes 的不同 observedAt 各自保留；hypothesis 不借其他 metric 時間。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "exact historical regressions 通過：不同 metrics 各自保留 observedAt／ingestedAt；hypothesis range 只用支持 metric。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-04T23:35:44.867912+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit"
+      ],
+      "executed_environment": [
+        "local runtime"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC05",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03",
+        "R14"
+      ],
+      "name": "更新及 basisDigest",
+      "required_environment": "unit + PG",
+      "expected": "自己的 evidence 變更使 digest／舊 result 失效；只更新另一 metric 不偽稱本 metric 已刷新。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "自己的 reading binding／metric correction 改變 basis，使舊 result／prepare／replay 失效；其他 metric refresh 不偽稱本 metric 更新。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "boundaries_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC06",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "Lesson 支持期間",
+      "required_environment": "exact regression + export",
+      "expected": "每項 support 保留 exact ID、24h、publication／observation periods；可對回來源並匯出。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "Lesson 支持證據保留 exact IDs／24h／publication 與 observation periods；報告 native rows 能對回 IDs 和時間。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "matrix_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC07",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03"
+      ],
+      "name": "反證及 legacy period",
+      "required_environment": "unit + contract",
+      "expected": "counterEvidence 有相同時間語義；舊 lesson 缺期間標 legacy_period_unavailable，不由 createdAt 補造。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "counter 與 support 同時間語義；legacy lesson 缺期標 unavailable，不由 createdAt 補造。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T00:20:13.045398+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_contract"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC08",
+      "phase": "P0",
+      "requirement_ids": [
+        "R04",
+        "R14"
+      ],
+      "name": "身份與能力分層",
+      "required_environment": "unit + PG + native read",
+      "expected": "workspace／account／provider／nativePost／verified job 均匹配；登入或 grant-qualified 不能變成 live-tested。",
+      "implementation_tasks": [
+        "1",
+        "8"
+      ],
+      "status": "blocked",
+      "actual": "Real authenticated Rafii API/UI and existing Instagram native insights inspected; no qualified exact24h Rafii observation exists in the accessible workspace.",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T02:41:51.677711+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/native-probe.json",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/native-release-probe.json",
+        "docs/design/rafii-insights-growth/evidence/production-baseline.json"
+      ],
+      "blocked_reason": "Authenticated production workspace My agency (0ceb3635-59a6-426f-bfa8-6d0203b8c98e) has zero channels and zero publication jobs. The existing Instagram UI post 4000805824623599834 has unavailable views and no exact24h window, Rafii mapping or ingested observation. No scope/admission/history-import/publication changes were made. MFA is no longer the blocker. Current production SHA is 676397a205de065f6962fb6c3f6a9204681c31b4.",
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "native"
+      ],
+      "executed_environment": [
+        "authorized production API/browser; baseline SHA 676397a205de065f6962fb6c3f6a9204681c31b4",
+        "authorized existing Instagram native UI"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC09",
+      "phase": "P0",
+      "requirement_ids": [
+        "R02",
+        "R04"
+      ],
+      "name": "收集狀態",
+      "required_environment": "unit + browser",
+      "expected": "disabled、unscheduled、pending horizon、scheduled、pending、unsupported、disconnected、unauthorized 分開；文案由 current state 推導。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "current canonical tracking 分開呈現 disabled／unscheduled／pending horizon／scheduled／pending／unsupported／disconnected／not-authorized，顯示真實 due time。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T00:31:56.582704+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "growth_owner_pg",
+        "ui_catalog"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC10",
+      "phase": "P0",
+      "requirement_ids": [
+        "R03",
+        "R06"
+      ],
+      "name": "嚴格 readOffset 與 freshness",
+      "required_environment": "unit + PG",
+      "expected": "1h／7d／backfill／未知 legacy offset 不進 strict24h cohort；舊 available 值保留真實時間與 stale／last attempt 狀態。",
+      "implementation_tasks": [
+        "1"
+      ],
+      "status": "pass",
+      "actual": "wrong／unknown offset、wrong definition／cutoff／native ID 被排除；later unavailable 保留舊值與原時間並標 stale。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC11",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05"
+      ],
+      "name": "日期與時區",
+      "required_environment": "unit + contract",
+      "expected": "半開 UTC 邊界可由原 IANA timezone 重建，跨 DST／月底／週月差異不混；cumulative 不稱週內事件。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "pass",
+      "actual": "半開 UTC、IANA、microseconds、DST civil week／month 已測；UI／輸出明示 cumulative at horizon。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_contract",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC12",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R09"
+      ],
+      "name": "跨頁共用 context",
+      "required_environment": "browser + contract",
+      "expected": "Analytics→Growth／報告保留完整解析 context；若改範圍明示新期間及原因，每 card 使用實際期間。",
+      "implementation_tasks": [
+        "2",
+        "4",
+        "5"
+      ],
+      "status": "pass",
+      "actual": "Analytics→Growth→Analytics URL 保留解析日期、cutoff、comparison；server contextDigest 相同；固定報告顯示自身實際 period。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:10:51.627729+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_contract",
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC13",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R14"
+      ],
+      "name": "不可信 scope input",
+      "required_environment": "PG + API",
+      "expected": "偽造 workspace／connection／tag／format IDs 不取到另一 workspace 資料；無權 view 不靜默換帳戶。",
+      "implementation_tasks": [
+        "2",
+        "3"
+      ],
+      "status": "pass",
+      "actual": "偽造 workspace／connection／format／tag 400；foreign member 403、foreign snapshot workspace 404；不靜默換帳戶。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "boundaries_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC14",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "樣本與去重",
+      "required_environment": "unit + contract",
+      "expected": "同一作品多 snapshots 只算一 publication；三篇描述性、五篇 Trend baseline、既有 experiment gates 各自保留且不稱因果證明。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "pass",
+      "actual": "同作品多 readings 不增加 publication 樣本；描述性 3、Trend baseline 5、experiment 5/arm 保持各自 gate，causal=false。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-04T23:36:47.232605+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "trends_pg",
+        "growth_loop_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL; synthetic external inputs"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC15",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "跨平台及混 cohort",
+      "required_environment": "unit + browser + export",
+      "expected": "不同 provider／account／language／format／definition／unit／horizon 不混比；reach 不稱跨貼文去重受眾。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "pass",
+      "actual": "cohort 按 provider／connection／language／format／definition／unit／horizon 拆分；原生名稱、單位與來源保留；不造去重 reach。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "matrix_pg",
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC16",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "零或缺失 baseline",
+      "required_environment": "unit + browser",
+      "expected": "baseline0／null 時 relative change 為 null 及原因；顯示原始值，不出無限成長。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "pass",
+      "actual": "零 baseline 的 relative change 為 null／原因；real PG 無 baseline 也保持 null；UI 未出無限增長。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "matrix_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC17",
+      "phase": "P1",
+      "requirement_ids": [
+        "R03",
+        "R06"
+      ],
+      "name": "比率 matched readings",
+      "required_environment": "unit + PG",
+      "expected": "分子分母需相同合格 reading binding；異時或不同定義只顯示原值，derived ratio unavailable。",
+      "implementation_tasks": [
+        "1",
+        "2"
+      ],
+      "status": "pass",
+      "actual": "Legacy display ratio 須同 observed／ingested／definition／offset／unit；異時 reading 原值保留，derived ratio unavailable。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC18",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06"
+      ],
+      "name": "聚合定義",
+      "required_environment": "unit + export",
+      "expected": "mean-of-ratios 與 ratio-of-sums 明確區分；native 名稱、分子分母、方法與 definition version 可重建。",
+      "implementation_tasks": [
+        "2",
+        "5"
+      ],
+      "status": "not_applicable",
+      "actual": "Review 只提供已定義的 native count median／mean；沒有 ratio aggregate、mean-of-ratios 或 ratio-of-sums 的產品輸出，故此 derived-ratio aggregation case 不適用。匹配 ratio guard 另由 AC17 覆蓋。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_contract",
+        "matrix_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC19",
+      "phase": "P1",
+      "requirement_ids": [
+        "R06",
+        "R09"
+      ],
+      "name": "未知付費影響",
+      "required_environment": "unit + browser",
+      "expected": "unknown promotion 明示未知，建議是描述性假說；無成本或 conversion 不算 ROI／ROAS／CAC。",
+      "implementation_tasks": [
+        "2",
+        "4"
+      ],
+      "status": "pass",
+      "actual": "Promotion unknown 可見；takeaways 描述性且 causal=false；沒有成本／conversion 時不造 ROI／ROAS／CAC。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:10:51.627729+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC20",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07"
+      ],
+      "name": "相對 Saved View",
+      "required_environment": "unit + browser",
+      "expected": "跨日重新開啟解析當下 period；既有固定 snapshot 日期不移動，两者標籤不同。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "pass",
+      "actual": "真 PG clock 前進 8 日後 relative Saved View period 重解析；civil previous period 同步移動；固定 snapshot／notes 保持；UI 區分 fixed dates。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC21",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07",
+        "R14"
+      ],
+      "name": "Saved View mutation",
+      "required_environment": "PG + API",
+      "expected": "create／update／archive current rights、expectedRevision、idempotency 正確；並發及不同 body 重用 key 返回 conflict。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "pass",
+      "actual": "save／update CAS、同 body replay、異 body key conflict、兩線並發一成功一409；所有 mutation／replay 重新檢查角色與 rights；archive 共用同 guard。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC22",
+      "phase": "P1",
+      "requirement_ids": [
+        "R08"
+      ],
+      "name": "可修改分類",
+      "required_environment": "unit + browser",
+      "expected": "theme／campaign／series 分開；AI 只是 suggestion，人手可修改／確認，approved source 保留。",
+      "implementation_tasks": [
+        "3"
+      ],
+      "status": "pass",
+      "actual": "theme／campaign／series 分類契約分開；未確認 AI suggestion 不進分析；人手確認與修改產生版本，UI 已操作。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC23",
+      "phase": "P1",
+      "requirement_ids": [
+        "R08",
+        "R12"
+      ],
+      "name": "歷史重分類",
+      "required_environment": "PG + export",
+      "expected": "建立新 classificationVersion，舊 report 的內容 membership／值保持可重建；新版本明示影響。",
+      "implementation_tasks": [
+        "3",
+        "5"
+      ],
+      "status": "pass",
+      "actual": "classificationVersion 更新而舊 scope membership 不改；新 membership 與既有 immutable report 各自可重建。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC24",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R07"
+      ],
+      "name": "完整 filters 解析",
+      "required_environment": "browser + API",
+      "expected": "account／language／format／tag／date／comparison 依 server scope 生效；unknown 不偷偷歸入其他格式或語言。",
+      "implementation_tasks": [
+        "2",
+        "3"
+      ],
+      "status": "pass",
+      "actual": "實際 server account／language／format／aggregation／fixed comparison 解析生效；zh-Hant 無資料保持空；DOM 操作分類、日期、時區、horizon 與跨頁 context。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "matrix_pg",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC25",
+      "phase": "P1",
+      "requirement_ids": [
+        "R09"
+      ],
+      "name": "Bounded Takeaways",
+      "required_environment": "unit + browser",
+      "expected": "最多三個，有資料才產生；每項數字／期間／support／counter／限制可對回 projection，不湊滿空假說。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "pass",
+      "actual": "最多三 takeaways；1 publication 時無假說；12-post scope 的實際 period／support／counter／sample 可查看。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC26",
+      "phase": "P1",
+      "requirement_ids": [
+        "R09",
+        "R10"
+      ],
+      "name": "具體下一步",
+      "required_environment": "unit + contract",
+      "expected": "每卡一個明確動作，綁現有 hypothesis／experiment／draft reference 和 contextDigest；引用不合停止。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "pass",
+      "actual": "next step 綁既有 hypothesis／experiment 與 review context／basis；錯 scope／低 arm sample 不可 propose。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_contract",
+        "boundaries_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC27",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R17"
+      ],
+      "name": "人手接受與 replay",
+      "required_environment": "PG + browser",
+      "expected": "接受建立既有草稿／實驗，重複同 body 不重建；不發布、不自動更新 Genome／偏好。",
+      "implementation_tasks": [
+        "4"
+      ],
+      "status": "pass",
+      "actual": "scope-bound proposal idempotent；Growth Studio Run experiment 為明確 owner accept；12 publication jobs 不增加，不發布／不自動改 Genome。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "boundaries_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC28",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R14"
+      ],
+      "name": "行動前失效",
+      "required_environment": "PG + API",
+      "expected": "basis／revision／rights／receipt／expiry 改變後 action 或 replay 被拒絕，顯示可恢復原因。",
+      "implementation_tasks": [
+        "4",
+        "6"
+      ],
+      "status": "pass",
+      "actual": "reading／native ID／grant／expiry／membership／revision drift 令 action 或 replay 403／409／410；client refusal 刷新 current state。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "boundaries_pg",
+        "trends_pg",
+        "growth_owner_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC29",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R17"
+      ],
+      "name": "讀取無 paid side effects",
+      "required_environment": "API spy + browser",
+      "expected": "GET、mount、filters、Saved View、export retry 不排 acquisition／model jobs；顯式 paid action 經既有 quote／consent／quota／reservation。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "8"
+      ],
+      "status": "pass",
+      "actual": "browser POST spy 無 paid acquisition/model/publish/history-import paths；propose／accept 後 jobs 不增加；既有 paid fencing 用 deterministic tests 保留。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "boundaries_pg",
+        "browser",
+        "growth_owner_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL; deterministic local models only"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC30",
+      "phase": "P1",
+      "requirement_ids": [
+        "R10",
+        "R16"
+      ],
+      "name": "Learning 由 owner 控制",
+      "required_environment": "PG + browser",
+      "expected": "提出 lesson／偏好後需 owner approve；可 restore，失效 evidence 不保留有效學習結論。",
+      "implementation_tasks": [
+        "4",
+        "7"
+      ],
+      "status": "pass",
+      "actual": "既有 lesson owner approval、chronological calibration owner approve v1→v2→restore v1 實際 DOM／PG 通過；不自動套用。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T00:46:31.324531+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "growth_owner_pg",
+        "growth_owner_browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC31",
+      "phase": "P1",
+      "requirement_ids": [
+        "R11",
+        "R18"
+      ],
+      "name": "工作與結果分層",
+      "required_environment": "unit + export",
+      "expected": "completed／accepted／verified 分別；Time Back 標 estimated；UTC workspace proof 和選定 native cohort 各自列 scope。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "完成／接受／verified count 沿用 authoritative proof；workspace UTC workProof 與 native cohort 分列；Time Back estimated／unavailable，非假0。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:10:51.627729+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/report.pdf",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "growth_loop_pg",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC32",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12"
+      ],
+      "name": "不可變快照",
+      "required_environment": "PG + unit",
+      "expected": "相同 version 值／notes／範圍不改；刷新或改註記建立新 version，canonical payloadDigest 可重建。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "相同 snapshot v1 值／notes 不变；Human notes 新建 v2；current-rights 仍在每次 read/replay 檢查。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC33",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12"
+      ],
+      "name": "三格式同源",
+      "required_environment": "golden + rendered export",
+      "expected": "PDF／Markdown／CSV 同 snapshot／context／metric values／null reasons／notes；formatter 不再 query 或重算。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "MD／CSV／fixed HTML→actual PDF 同 snapshot ID／context／payloadDigest／notes／source SHA，formatter 無重查／重算數據。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC34",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "匯出 current rights",
+      "required_environment": "PG + API + export",
+      "expected": "撤銷、expired、deleted 資料不能新匯出／replay；redacted report 建新 version；offline 檔不宣稱可遠端撤銷。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "rebinding／expired／revoked／deleted source 拒絕所有格式與 replay；UI 清除舊 report；既有離線檔不可遠端撤銷的文案保留。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC35",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "CSV 安全及語義",
+      "required_environment": "export parser",
+      "expected": "UTF-8／quoting／注入防護符合既有政策；每行有來源、原生定義、window、timestamps、status／null reason。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "CSV parser 實測 UTF-8、quoting、formula prefix、明確 null／原因、ID／definition／window／observed／ingested／rights；沒有把 unknown time 補成 measured time。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "matrix_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC36",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R19"
+      ],
+      "name": "PDF 可讀",
+      "required_environment": "PDF rendering inspection",
+      "expected": "繁體字無缺字，長註記／表格跨頁無截斷、来源可讀，fixed period 和 snapshot version 可辨識。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "Chrome 實際 10-page A4；Poppler 讀出最後一行繁體註記；視覺檢查頁1／5／10 的 scope/version、table headers/source wrapping 與長註記。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:10:51.627729+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC37",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R17"
+      ],
+      "name": "匯出失敗重試",
+      "required_environment": "API + export",
+      "expected": "snapshot 已保存；重試同 payload／format／rendererVersion，不重跑 AI／provider，不漂移數值。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "實際 service renderer 注入503後 snapshot 保持；重試 CSV 內容／payloadDigest／rendererVersion 完全相同，zero model/provider calls。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "matrix_pg",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC38",
+      "phase": "P1",
+      "requirement_ids": [
+        "R12",
+        "R14"
+      ],
+      "name": "快照角色與 workspace",
+      "required_environment": "PG + API",
+      "expected": "另一 workspace／無權角色不能讀／export；snapshot ID 不是繞過 membership 的 bearer authority。",
+      "implementation_tasks": [
+        "5"
+      ],
+      "status": "pass",
+      "actual": "外部 member／revoked member／異 workspace 無法讀或 export；snapshot ID 不繞過 membership；demoted role 不可 mutation/replay。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "boundaries_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC39",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R04",
+        "R14"
+      ],
+      "name": "權限撤銷讀取",
+      "required_environment": "API + browser",
+      "expected": "曾有值但 grant／來源權限已撤銷仍 fail closed；不因 frozen／cached measured 值繼續展示敏感資料。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "7"
+      ],
+      "status": "pass",
+      "actual": "current rights 優先於 cached measured；實際 PG revoke後 values/content/export/reopen 移除，含 in-place refusal refresh。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "boundaries_pg",
+        "browser",
+        "ui_catalog"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC40",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R14",
+        "R17"
+      ],
+      "name": "兩階段與並發 rights",
+      "required_environment": "PG race + replay",
+      "expected": "prepare 與 commit／model／export 時再次檢查 current rights／basis；競態撤銷、expired revision、idempotent replay 不繞過。",
+      "implementation_tasks": [
+        "1",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "status": "pass",
+      "actual": "same cursor locks／prepare-commit race 強制撤銷時 state/revision rollback；prepare/model/export/replay 都重查 current basis/rights。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "boundaries_pg",
+        "growth_owner_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL; deterministic local models only"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC41",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R14"
+      ],
+      "name": "Restricted／secret 不洩漏",
+      "required_environment": "API + DOM + model-input inspection",
+      "expected": "source secret queries、tokens、restricted excerpts 不在 response、hidden DOM、prompt、logs、PDF、CSV。",
+      "implementation_tasks": [
+        "1",
+        "4",
+        "5",
+        "7"
+      ],
+      "status": "pass",
+      "actual": "synthetic secret queries 被 sourceRef sanitize；restricted projections與模型輸入既有檢查；DOM 不含 synthetic secret；generic workspace 隱藏整個 private Review namespace。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "review_pg",
+        "boundaries_pg",
+        "trends_pg",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC42",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13"
+      ],
+      "name": "完整 Trends lineage",
+      "required_environment": "contract + PG",
+      "expected": "receipt／opportunity revision／angle／accepted source／draft revision／approved manifest／verified native identity 可追溯，只由 server 帶入。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "pass",
+      "actual": "canonical receipt/opportunity revision/angle/accepted source/draft revision/approved manifest/verified identity 驗證沿用 server owners；client scope 不接受 lineage。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trend-contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "trend_contract",
+        "trends_pg",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC43",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13"
+      ],
+      "name": "採用不是結果",
+      "required_environment": "unit + API + browser",
+      "expected": "GET 不算 exposure；failed exposure 不造 ID；view／accept／draft／verified publish／24h outcome 分開。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "pass",
+      "actual": "既有 exposure/decision/accepted draft/verified publication/outcome 狀態各自計數；GET 不記 exposure，failed exposure不造ID；Review 分列 workspace exposure scope。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:12:02.816173+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trend-contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "trends_pg",
+        "trend_contract",
+        "growth_owner_browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; synthetic external inputs",
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC44",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R06"
+      ],
+      "name": "24h 可比 feedback",
+      "required_environment": "unit + PG",
+      "expected": "既有五篇 baseline、same cohort、matched counter time、unchanged outcome 生效；unknown offset／重複 snapshots 不充樣本。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "pass",
+      "actual": "real PG strict24h same cohort／5 baseline／matched counter／dedupe／unchanged outcome 既有 gates 通過；unknown offset 不充样本。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-04T23:36:47.232605+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "trends_pg",
+        "unit"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; synthetic external inputs",
+        "local runtime"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC45",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R09"
+      ],
+      "name": "反證與 treatment unknown",
+      "required_environment": "unit + browser",
+      "expected": "counterEvidence 可查，多建議 treatment unknown；relative difference 永遠 causal=false，不推 adoption 的因果收益。",
+      "implementation_tasks": [
+        "4",
+        "6"
+      ],
+      "status": "pass",
+      "actual": "counter bindings 與實際期間可查；多建議 treatment unknown 保留，所有 comparison/takeaway causal=false。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "trends_pg",
+        "unit",
+        "browser"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; synthetic external inputs",
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC46",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R14"
+      ],
+      "name": "Revision drift 失效",
+      "required_environment": "PG + API",
+      "expected": "opportunity／draft／receipt／context 變更後 Lab、edit、accept、learning、review linkage 失效且不串錯 native post。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "pass",
+      "actual": "既有 opportunity/receipt/draft revision drift、current rights、corrected reading invalidation 在 PG 通過；Review action/context mismatch 被拒絕。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "trends_pg",
+        "growth_owner_pg",
+        "boundaries_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL; deterministic local models only",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC47",
+      "phase": "P1",
+      "requirement_ids": [
+        "R13",
+        "R16"
+      ],
+      "name": "禁止代理推估",
+      "required_environment": "unit + contract",
+      "expected": "JEV 不處理 popularity／views／reach／follower-growth；空 native conversion registry 仍 unavailable，不用 delta／views 作 conversion。",
+      "implementation_tasks": [
+        "6"
+      ],
+      "status": "pass",
+      "actual": "空 native conversion registry 保持 unavailable；JEV／view delta／follower proxy 不進新 timing/format/frequency 或人氣推估。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:12:02.816173+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trend-contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "trend_contract",
+        "trends_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime",
+        "real disposable PostgreSQL; synthetic external inputs"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC48",
+      "phase": "P2",
+      "requirement_ids": [
+        "R15",
+        "R17"
+      ],
+      "name": "HistoryImport 維持 OFF",
+      "required_environment": "unit + API",
+      "expected": "重用／檢索／replay 不開旗標、不排 backfill、不擴 scopes；available history 的邊界明示。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "pass",
+      "actual": "HistoryImport OFF；重用／review／export／replay 不啟動 backfill或scope擴張；頁面明示 available stored history。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "browser",
+        "growth_owner_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL; deterministic local models only"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC49",
+      "phase": "P2",
+      "requirement_ids": [
+        "R15"
+      ],
+      "name": "內容候選可追溯",
+      "required_environment": "unit + browser",
+      "expected": "每個候選回到原文、版本、平台／格式／語言／日期；無 metric 是 content-only；同作品去重，刪改令舊候選失效。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "pass",
+      "actual": "reuse candidates 保留原文、revision、native identity／平台／language／format／date；content_only、去重；revoked／expired／identity changed 時失效。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "browser",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC50",
+      "phase": "P2",
+      "requirement_ids": [
+        "R16"
+      ],
+      "name": "個人化資格",
+      "required_environment": "unit + calibration fixture",
+      "expected": "只有 reviewed method／sample／coverage／calibration 合格才出有期間時區的假說；不足 method_unavailable，不造 accuracy 或最佳。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "pass",
+      "actual": "沒有 reviewed timing/format/frequency method 時 method_unavailable；existing ≥50 chronological writing calibration 不冒充另一種方法，無虛構 accuracy／最佳。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "unit",
+        "growth_owner_pg",
+        "browser",
+        "ui_catalog"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC51",
+      "phase": "P2",
+      "requirement_ids": [
+        "R16",
+        "R10"
+      ],
+      "name": "偏好版本與撤銷",
+      "required_environment": "PG + browser",
+      "expected": "propose／owner approve／restore／expiry 依既有規則；支持來源失效使建議 stale，不自動更改發文頻率。",
+      "implementation_tasks": [
+        "7"
+      ],
+      "status": "pass",
+      "actual": "既有 propose→owner approve→restore v1 DOM／PG 通過；evidence expiry/revision/current-rights 失效，不自動改發文頻率。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "growth_owner_pg",
+        "growth_owner_browser",
+        "review_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC52",
+      "phase": "P1",
+      "requirement_ids": [
+        "R05",
+        "R19"
+      ],
+      "name": "異步 scope 不串頁",
+      "required_environment": "browser race",
+      "expected": "快速切帳戶／workspace／filter 时舊 response 不覆蓋新 context；cache 包含 context／rights epoch，未保存變更使舊行動失效。",
+      "implementation_tasks": [
+        "2"
+      ],
+      "status": "pass",
+      "actual": "真 browser held response／503＋scope切換隱藏舊值、export/reuse與hidden report DOM；cache含workspace/input/context/rights；未保存scope令舊snapshot action失效。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_contract",
+        "browser"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC53",
+      "phase": "P1",
+      "requirement_ids": [
+        "R18",
+        "R17"
+      ],
+      "name": "冷啟動與基本誠實性",
+      "required_environment": "browser + API",
+      "expected": "零內容／無 metric 仍顯示工作和缺口；不假學習；基本 state／來源說明不因新 paywall 隱藏，現有 entitlements 不改。",
+      "implementation_tasks": [
+        "4",
+        "7"
+      ],
+      "status": "pass",
+      "actual": "空 workspace／無metric 可見缺口與Channels recovery，Time Back unavailable；沒有新entitlement/paywall變更。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "browser",
+        "growth_loop_pg",
+        "growth_owner_browser",
+        "ui_catalog"
+      ],
+      "executed_environment": [
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC54",
+      "phase": "P1",
+      "requirement_ids": [
+        "R19"
+      ],
+      "name": "手機與鍵盤",
+      "required_environment": "browser + accessibility inspection",
+      "expected": "390px／430px／desktop 可用，整頁不溢出；filters／source／accept／export 可鍵盤操作，非單靠顏色。",
+      "implementation_tasks": [
+        "2",
+        "8"
+      ],
+      "status": "pass",
+      "actual": "1440／390／430px whole-page overflow檢查，keyboard scope与summary/controls、axe serious/critical 0；既有owner flow另測320px/dark/reduced motion。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:10:51.627729+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log",
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/report.pdf"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "browser",
+        "growth_owner_browser",
+        "pdf"
+      ],
+      "executed_environment": [
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC55",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R02",
+        "R14",
+        "R19"
+      ],
+      "name": "所有 UI 狀態",
+      "required_environment": "browser + DOM",
+      "expected": "catalog 狀態有可理解文案及恢復動作；loading／error／partial／stale／revoked 不顯示假的0或可操作舊結果。",
+      "implementation_tasks": [
+        "2",
+        "5",
+        "8"
+      ],
+      "status": "pass",
+      "actual": "全部23 catalog states 真DOM覆蓋；合成 response overlays 明確限design-state驗收，不算native。另以真PG驗stale/partial/revocation與transport delay/error。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:09:27.944745+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "ui_catalog",
+        "browser"
+      ],
+      "executed_environment": [
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC56",
+      "phase": "P1",
+      "requirement_ids": [
+        "R07",
+        "R08",
+        "R12",
+        "R14"
+      ],
+      "name": "持久化與隔離",
+      "required_environment": "disposable PostgreSQL",
+      "expected": "真 PG migration／rollback／RLS或等效scope／unique／並發／idempotency／retention 按 final storage map 驗證。",
+      "implementation_tasks": [
+        "3",
+        "5",
+        "8"
+      ],
+      "status": "pass",
+      "actual": "實際 disposable PG migrations／scope isolation／service RLS／unique／CAS並發／same-cursor rollback／idempotency；第33 view含archives與第65 snapshot拒絕且不覆寫。",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T01:21:59.401870+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "blocked_reason": null,
+      "validation_ids": [
+        "review_pg",
+        "boundaries_pg",
+        "matrix_pg",
+        "trends_pg",
+        "growth_owner_pg"
+      ],
+      "executed_environment": [
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL; deterministic local models only"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    },
+    {
+      "id": "AC57",
+      "phase": "P0–P2",
+      "requirement_ids": [
+        "R01",
+        "R20"
+      ],
+      "name": "必要工程檢查",
+      "required_environment": "CI + local runtime",
+      "expected": "相關 regression、generated contracts、web lint／typecheck／build、PG／browser 通過，source SHA 對應；保留 PR107／120 修補。",
+      "implementation_tasks": [
+        "8"
+      ],
+      "status": "blocked",
+      "actual": "Real repaired-source CI on def32abb/checkout c8803584: Review, Growth Studio, Growth metrics, Rafii browser and Founder PASS. Local release Python/PG PASS, web671 tests669pass/2fail. The two genuine web contract/copy failures are repaired and focused8+1tests pass; next real remote validation pending.",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T03:08:26.343412+00:00",
+      "evidence_paths": [
+        ".github/workflows/rafii-review.yml",
+        "docs/design/rafii-insights-growth/evidence/boundaries.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log",
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/build-final.log",
+        "docs/design/rafii-insights-growth/evidence/ci-config-validation.log",
+        "docs/design/rafii-insights-growth/evidence/contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log",
+        "docs/design/rafii-insights-growth/evidence/lint-final.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.json",
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json",
+        "docs/design/rafii-insights-growth/evidence/python-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py",
+        "docs/design/rafii-insights-growth/evidence/trend-contract-final.log",
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log",
+        "docs/design/rafii-insights-growth/evidence/typecheck-final.log",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log",
+        "docs/design/rafii-insights-growth/evidence/remote-ci.json",
+        "docs/design/rafii-insights-growth/evidence/repair-validation.json"
+      ],
+      "blocked_reason": "Two genuine web contract/copy failures repaired; fresh remote validation of their committed source remains pending.",
+      "validation_ids": [
+        "unit",
+        "review_contract",
+        "trend_contract",
+        "review_pg",
+        "boundaries_pg",
+        "matrix_pg",
+        "trends_pg",
+        "growth_owner_pg",
+        "browser",
+        "ui_catalog",
+        "lint",
+        "typecheck",
+        "build",
+        "ci_config",
+        "remote_ci"
+      ],
+      "executed_environment": [
+        "local runtime",
+        "local runtime",
+        "local runtime",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+        "real disposable PostgreSQL; synthetic external inputs",
+        "real disposable PostgreSQL; deterministic local models only",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+        "local runtime",
+        "local runtime",
+        "local runtime",
+        "local runtime",
+        "remote CI"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false,
+      "ci_branch_head": "def32abbdcc64415aa373254e6622a3b2352be73",
+      "ci_checkout_sha": "c88035849f0172d672090c071c1085c4259b3a4e"
+    },
+    {
+      "id": "AC58",
+      "phase": "P1",
+      "requirement_ids": [
+        "R04",
+        "R20"
+      ],
+      "name": "真實讀取及完成證據",
+      "required_environment": "authorized native read + evidence audit",
+      "expected": "一合格帳戶一格式的 exact 24h native讀取與原生口徑對照有證據；若要完整發布閉環另需既有批准素材／verified post。每項 receipt 含SHA／環境／方法／實際輸出；未有則 blocked，不由fixture替代。",
+      "implementation_tasks": [
+        "0",
+        "8"
+      ],
+      "status": "blocked",
+      "actual": "Real authenticated Rafii API/UI and existing Instagram native insights inspected; no qualified exact24h Rafii observation exists in the accessible workspace.",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "executed_at": "2026-10-05T02:41:51.677711+00:00",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/initial-state.txt",
+        "docs/design/rafii-insights-growth/evidence/integration-final.json",
+        "docs/design/rafii-insights-growth/evidence/native-probe.json",
+        "docs/design/rafii-insights-growth/evidence/native-release-probe.json",
+        "docs/design/rafii-insights-growth/evidence/production-baseline.json"
+      ],
+      "blocked_reason": "Authenticated production workspace My agency (0ceb3635-59a6-426f-bfa8-6d0203b8c98e) has zero channels and zero publication jobs. The existing Instagram UI post 4000805824623599834 has unavailable views and no exact24h window, Rafii mapping or ingested observation. No scope/admission/history-import/publication changes were made. MFA is no longer the blocker. Current production SHA is 676397a205de065f6962fb6c3f6a9204681c31b4.",
+      "validation_ids": [
+        "base",
+        "native"
+      ],
+      "executed_environment": [
+        "authorized production API/browser; baseline SHA 676397a205de065f6962fb6c3f6a9204681c31b4",
+        "authorized existing Instagram native UI"
+      ],
+      "method": "See evidence/validation.json records; original executed source SHA and unchanged-source reuse proof are retained there.",
+      "native_acceptance": false
+    }
+  ],
+  "native_validation_passed": false,
+  "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "integration_base_sha": "676397a205de065f6962fb6c3f6a9204681c31b4",
+  "recorded_at": "2026-10-05T03:08:26.343412+00:00",
+  "scope": "local engineering acceptance with explicit synthetic external identities; AC08/58 require real native evidence",
+  "status_counts": {
+    "pass": 54,
+    "blocked": 3,
+    "not_applicable": 1
+  }
+}

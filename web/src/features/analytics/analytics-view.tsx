@@ -33,6 +33,7 @@ import { AnalyticsEmptyState, chooseEmptyKind } from './empty-states';
 import { PostSheet } from './post-sheet';
 import { PostsTable, type PostRowData } from './posts-table';
 import { RulesCollapsible } from './rules-collapsible';
+import { ReviewPanel } from './review-scope';
 
 const infoContent = {
   title: 'Analytics',
@@ -44,7 +45,7 @@ const infoContent = {
     },
     { title: 'Unavailable isn’t zero', description: 'A metric the platform hasn’t reported shows “Unavailable”. A real zero shows 0.' },
     { title: 'Rates', description: 'Every rate shows both of its numbers. Fewer than three posts is too few to compare.' },
-    { title: 'When numbers update', description: 'Numbers aren’t collected automatically yet. A row shows numbers only after a reading, with the time it was read.' },
+    { title: 'When numbers update', description: 'Collection depends on this workspace’s worker admission and each account’s analytics permission. Each metric shows its own actual reading time and collection state.' },
     {
       title: 'Accounts without numbers',
       description: 'Analytics is a separate permission, granted per account. Some platforms, like LinkedIn, don’t share analytics with Rafii.',
@@ -170,9 +171,10 @@ export function AnalyticsView() {
     <PageContainer pageTitle='Analytics' infoContent={infoContent} pageHeaderAction={headerAction}>
       <div className='flex min-w-0 flex-col gap-6'>
         <GrowthEntry />
+        <ReviewPanel />
         <GrowthAnalytics />
         <TimeBackSection />
-        <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
+        <SectionHeading id='post-performance-heading' title='Latest stored readings' description='All available stored readings, separately from the selected review cohort above.' className='pt-2' />
         {channels.error ? (
           <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />
         ) : coverage.connections.length > 0 || channels.isLoading ? (

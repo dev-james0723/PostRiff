@@ -1,0 +1,51 @@
+test_invalid_values_do_not_become_numbers_in_summary (test_review_evidence.EvidenceTests.test_invalid_values_do_not_become_numbers_in_summary) ... FAIL
+test_legacy_lesson_does_not_invent_publication_period (test_review_evidence.EvidenceTests.test_legacy_lesson_does_not_invent_publication_period) ... FAIL
+test_lesson_periods_bind_exact_metric_and_digest_changes (test_review_evidence.EvidenceTests.test_lesson_periods_bind_exact_metric_and_digest_changes) ... FAIL
+test_unrelated_refresh_does_not_change_primary_binding (test_review_evidence.EvidenceTests.test_unrelated_refresh_does_not_change_primary_binding) ... FAIL
+
+======================================================================
+FAIL: test_invalid_values_do_not_become_numbers_in_summary (test_review_evidence.EvidenceTests.test_invalid_values_do_not_become_numbers_in_summary)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review_evidence.py", line 58, in test_invalid_values_do_not_become_numbers_in_summary
+    self.assertIsNone(metric['value'])
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: 1.0 is not None
+
+======================================================================
+FAIL: test_legacy_lesson_does_not_invent_publication_period (test_review_evidence.EvidenceTests.test_legacy_lesson_does_not_invent_publication_period)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review_evidence.py", line 29, in test_legacy_lesson_does_not_invent_publication_period
+    self.assertEqual(lesson.get('periodState'), 'legacy_period_unavailable')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != 'legacy_period_unavailable'
+
+======================================================================
+FAIL: test_lesson_periods_bind_exact_metric_and_digest_changes (test_review_evidence.EvidenceTests.test_lesson_periods_bind_exact_metric_and_digest_changes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review_evidence.py", line 45, in test_lesson_periods_bind_exact_metric_and_digest_changes
+    self.assertEqual(lesson.get('periodState'), 'available')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != 'available'
+
+======================================================================
+FAIL: test_unrelated_refresh_does_not_change_primary_binding (test_review_evidence.EvidenceTests.test_unrelated_refresh_does_not_change_primary_binding)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review_evidence.py", line 20, in test_unrelated_refresh_does_not_change_primary_binding
+    self.assertEqual(before, after)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'po[373 chars]9999940.0, 'publishedAt': 1799049600.0, 'featu[5126 chars]g'}}] != [{'po[373 chars]9999960.0, 'publishedAt': 1799049600.0, 'featu[5126 chars]g'}}]
+
+First differing element 0:
+{'pos[372 chars]9999940.0, 'publishedAt': 1799049600.0, 'featu[125 chars]ng'}}
+{'pos[372 chars]9999960.0, 'publishedAt': 1799049600.0, 'featu[125 chars]ng'}}
+
+Diff is 8595 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.035s
+
+FAILED (failures=4)

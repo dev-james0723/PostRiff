@@ -63,15 +63,19 @@ def attach_readings(cur, workspace_id, posts):
                 post.setdefault('readings',{}).setdefault(horizon,{})[metric]={
                     'value':value,'availability':'available','definitionVersion':'user-export:'+horizon,
                     'provenance':'user_supplied','observedAt':None}
-    index = {(p.get('provider'), p.get('providerPostId'), p.get('connectionId')): p for p in posts}
+    index = {(p.get('provider'), p.get('providerPostId'), p.get('connectionId'), p.get('id')): p for p in posts}
     for horizon in HORIZONS:
-        for provider, post_id, _, metric, version, value, unit, availability, observed, _, conn, offset in latest_observations(cur, workspace_id, horizon):
-            post = index.get((provider, post_id, conn))
+        for row in latest_observations(cur, workspace_id, horizon, include_identity=True):
+            provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, conn, offset = row[:12]
+            identity = row[12:]
+            post = index.get((provider, post_id, conn, job_id))
             if post is None or offset != horizon:
                 continue
             post.setdefault('readings', {}).setdefault(horizon, {})[metric] = {
                 'value': float(value) if availability == 'available' and value is not None else None,
-                'availability': availability, 'definitionVersion': version, 'unit': unit, 'observedAt': float(observed),'provenance':'official'}
+                'availability': availability, 'definitionVersion': version, 'unit': unit, 'observedAt': float(observed),
+                'ingestedAt': float(ingested), 'readOffset': offset, 'observationId': identity[0] if identity else None,
+                'provenance':'official'}
     return posts
 
 

@@ -1,0 +1,8 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/scripts/postriff_dev_hosted.py", line 456, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/scripts/postriff_dev_hosted.py", line 318, in main
+    raise ValueError('Review fixtures require --growth-phase2-fixture on the disposable harness.')
+ValueError: Review fixtures require --growth-phase2-fixture on the disposable harness.

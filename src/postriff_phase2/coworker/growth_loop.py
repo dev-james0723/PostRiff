@@ -286,8 +286,10 @@ class GrowthLoop:
         from .service import _event
         _event(cur, workspace_id, principal, event, {"recordId": record_id}, f"{event}:{record_id}:{principal}")
 
-    def _save(self, workspace_id, token, mutate, event, record_id):
+    def _save(self, workspace_id, token, mutate, event, record_id, *, check=None):
         def after(cur, state, principal):
+            if check:
+                check(cur,state,principal)
             actual_event = event
             if event == "growth_experiment.completed":
                 experiment = next(e for e in view(state)["experiments"] if e["id"] == record_id)
@@ -332,14 +334,30 @@ class GrowthLoop:
 
     def propose(self, workspace_id, token, payload):
         request_key = key(payload)
+        review_scope = payload.get('reviewScope')
+        def current_review(cur,state,actor):
+            if review_scope is None:
+                if payload.get('reviewContextDigest') or payload.get('reviewBasisDigest'):
+                    raise AlphaError('A review scope is required for this evidence binding.',400)
+                return None
+            from .review import review_hypothesis_eligible
+            projection=self.service.review._project(cur,workspace_id,state,actor,review_scope)
+            if projection['contextDigest']!=payload.get('reviewContextDigest') or projection['basisDigest']!=payload.get('reviewBasisDigest'):
+                raise AlphaError('Review scope or current evidence changed. Review it before proposing a test.',409)
+            candidate={'cohort':h[1],'metric':h[2],'dimension':h[3],'sample_a':h[10],'sample_b':h[11],
+                       'evidence_ids':h[8],'counter_evidence_ids':h[9],'expiresAt':float(h[7])}
+            if not review_hypothesis_eligible(state,projection,candidate,self.service.clock()):
+                raise AlphaError('This hypothesis lacks five qualified posts per arm in the chosen review scope.',409)
+            return projection
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.service.hosted.ideas._member(row), "owner")
-            cur.execute("""SELECT revision,cohort,metric,dimension,arm_a,arm_b,statement,extract(epoch from expires_at),evidence_ids,counter_evidence_ids
+            cur.execute("""SELECT revision,cohort,metric,dimension,arm_a,arm_b,statement,extract(epoch from expires_at),evidence_ids,counter_evidence_ids,sample_a,sample_b
                            FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND id::text=%s AND causal=false AND status IN ('candidate','experiment','supported')""", (workspace_id, str(payload.get("hypothesisId") or "")))
             h = cur.fetchone()
             if h is None:
                 raise AlphaError("An eligible hypothesis is required in this workspace.", 404)
+            current_review(cur,self.service.hosted.ideas._state(row),principal)
         now = self.service.clock()
         if float(h[7]) <= now:
             raise AlphaError("This hypothesis has expired. Collect fresh evidence first.", 409)
@@ -354,7 +372,7 @@ class GrowthLoop:
         def change(state, actor):
             existing = next((e for e in view(state)["experiments"] if e["id"] == record_id), None)
             if existing:
-                if existing["hypothesisId"] != payload["hypothesisId"] or existing["minimumPerArm"] != minimum or existing["windowDays"] != days:
+                if existing["hypothesisId"] != payload["hypothesisId"] or existing["minimumPerArm"] != minimum or existing["windowDays"] != days or existing.get('reviewContextDigest')!=payload.get('reviewContextDigest') or existing.get('reviewBasisDigest')!=payload.get('reviewBasisDigest'):
                     raise AlphaError("This request key belongs to another experiment design.", 409)
                 return existing
             if len(root(state)["experiments"]) >= 80:
@@ -366,9 +384,17 @@ class GrowthLoop:
                     "generatedVariantIds": [], "publishingJobIds": [], "result": None, "causal": False, "limitations": list(LIMITATIONS),
                     "history": [{"status": "candidate", "at": now, "actor": actor}]}
             transition(item, "proposed", actor, now)
+            if review_scope is not None:
+                item.update(reviewScope=copy.deepcopy(review_scope),reviewContextDigest=payload['reviewContextDigest'],reviewBasisDigest=payload['reviewBasisDigest'])
             root(state)["experiments"].append(item)
             return item
-        return self._save(workspace_id, token, change, "growth_experiment.proposed", record_id)
+        def recheck(cur,state,actor):
+            current_review(cur,state,actor)
+            cur.execute("SELECT revision,status,extract(epoch from expires_at) FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND id::text=%s FOR SHARE",(workspace_id,payload['hypothesisId']))
+            current=cur.fetchone()
+            if not current or current[0]!=h[0] or current[1] not in ('candidate','experiment','supported') or float(current[2])<=self.service.clock():
+                raise AlphaError('The source hypothesis changed during proposal.',409)
+        return self._save(workspace_id, token, change, "growth_experiment.proposed", record_id,check=recheck)
 
     def experiment_action(self, workspace_id, token, record_id, payload):
         action = payload.get("action")
@@ -420,7 +446,13 @@ class GrowthLoop:
             experiment["updatedAt"] = now
             return experiment
         event = "growth_experiment." + {"start": "started", "measure": "completed", "apply": "applied", "dismiss": "dismissed"}.get(action, str(action))
-        return self._save(workspace_id, token, change, event, record_id)
+        def recheck(cur,state,actor):
+            experiment=next(e for e in view(state)['experiments'] if e['id']==record_id)
+            if action in ('accept','prepare','start','measure','apply') and experiment.get('reviewScope'):
+                projection=self.service.review._project(cur,workspace_id,state,actor,experiment['reviewScope'])
+                if projection['contextDigest']!=experiment['reviewContextDigest'] or projection['basisDigest']!=experiment['reviewBasisDigest']:
+                    raise AlphaError('The bound review evidence is no longer current. Review a new proposal.',409)
+        return self._save(workspace_id, token, change, event, record_id,check=recheck)
 
     def generate_proof(self, workspace_id, token, frequency="weekly"):
         if frequency not in ("weekly", "monthly"):

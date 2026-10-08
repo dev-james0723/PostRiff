@@ -1,0 +1,418 @@
+{
+  "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "integration_base_sha": "676397a205de065f6962fb6c3f6a9204681c31b4",
+  "recorded_at": "2026-10-05T01:26:35.930260+00:00",
+  "runtime": {
+    "os": "macOS-15.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.5",
+    "node": "24.15.0",
+    "npm": "11.12.1",
+    "next": "16.3.8",
+    "playwright": "1.62.1",
+    "chrome": "154.0.0.0",
+    "postgresql": "17.11",
+    "ports": {
+      "web": 33404,
+      "api": 43404,
+      "review_pg": 55404,
+      "trends_pg": 56451
+    },
+    "nativeInputs": "synthetic except the separately dated read-only production probe",
+    "historyImport": "OFF",
+    "realProviderCalls": 0,
+    "realModelCalls": 0
+  },
+  "records": {
+    "unit": {
+      "status": "pass",
+      "command": "PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest test_review test_review_evidence test_rafii_analytics_acceptance test_growth_loop test_growth_closed_loop test_growth_beta test_growth_metric_schedule test_postriff_learning_performance test_growth_calibration test_growth_history_import test_trend_contracts test_trend_learning test_trend_opportunities test_trend_exposures test_trend_integration.TrendIntegrationTests test_native_insights_canary",
+      "source_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+      "environment": "local runtime",
+      "completed_at": "2026-10-04T23:35:44.867912+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "208 run: 179 passed, 29 environment-dependent PG tests skipped. The real-PG Trends suite below covers those SQL dependencies.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/python-final.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "from_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "unchanged_scopes": [
+          "src",
+          "scripts",
+          "migrations",
+          "requirements.txt",
+          "requirements-dev.txt",
+          "pyproject.toml",
+          "tests/test_review.py",
+          "tests/test_review_evidence.py",
+          "tests/test_rafii_analytics_acceptance.py"
+        ],
+        "method": "git diff --name-only <from> <to> -- <scopes>; empty output; same Python/dependency/runtime configuration"
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "review_contract": {
+      "status": "pass",
+      "command": "/opt/homebrew/opt/node@24/bin/node --test web/tests/review-contract.test.cjs",
+      "source_sha": "372e418d17cba7bd19aba3f2853776d70355b1f6",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T00:20:13.045398+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "10 passed, including exact generated schema, finite zero/null, rights override, canonical tracking limit and due-time validation.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/contract-final.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "unchanged_scopes": [
+          "web/src/lib/analytics/review-contract.ts",
+          "web/src/lib/coworker/trend-types.ts",
+          "web/tests/review-contract.test.cjs",
+          "web/package-lock.json"
+        ],
+        "method": "scoped git diff empty; same Node 24 and installed dependencies"
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "trend_contract": {
+      "status": "pass",
+      "command": "/opt/homebrew/opt/node@24/bin/node web/tests/trend-contract.cjs",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:12:02.816173+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "PASS: canonical schema export, precise revocation enum, strict mutation input, restricted evidence projection.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/trend-contract-final.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "review_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_DSN='host=127.0.0.1 port=55404 dbname=postgres' POSTRIFF_SOURCE_SHA=b42da10f87d31dd7398cdcd3512266d3052dfd9a POSTRIFF_REVIEW_EVIDENCE_DIR=docs/design/rafii-insights-growth/evidence /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python docs/design/rafii-insights-growth/evidence/run-review-matrix.py",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+      "completed_at": "2026-10-05T01:21:59.401870+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "10 check groups PASS: authorized exact native identities, metric-local times, sanitized endpoints, no model calls; Saved View idempotency/body conflict, relative reopen, serialized optimistic concurrency; unconfirmed suggestion excluded, versioned human confirmation and historical classification membership; fixed reports immutable versions, replay idempotency and three renderer payload parity / CSV injection; current native publication identity blocks snapshot read, replay and all exports after rebinding; expired source blocks current values, Saved View resolution, snapshot replay and all export formats; prepare/commit current-rights race rolls back workspace state and revision; membership demotion blocks snapshot mutation and replay; current grant revocation blocks new reads, snapshot replay and every export format; availability correction and deleted observation invalidate frozen-source replay",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/postgres.json"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "boundaries_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_DSN='host=127.0.0.1 port=55404 dbname=postgres' POSTRIFF_SOURCE_SHA=b42da10f87d31dd7398cdcd3512266d3052dfd9a POSTRIFF_REVIEW_EVIDENCE_DIR=docs/design/rafii-insights-growth/evidence /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python docs/design/rafii-insights-growth/evidence/run-review-matrix.py",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+      "completed_at": "2026-10-05T01:21:59.401870+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "5 check groups PASS: forged workspace, connection, format and classification identifiers rejected by server scope; foreign member, foreign workspace snapshot ID and revoked membership cannot read, export or replay; generic workspace presentation omits private snapshot values and idempotent results; scope-bound existing hypothesis proposal is idempotent and explicitly owner-accepted; changed metric or revoked analytics right invalidates prepare and proposal replay before model dispatch",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/boundaries.json"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "matrix_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_DSN='host=127.0.0.1 port=55404 dbname=postgres' POSTRIFF_SOURCE_SHA=b42da10f87d31dd7398cdcd3512266d3052dfd9a POSTRIFF_REVIEW_EVIDENCE_DIR=docs/design/rafii-insights-growth/evidence /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python docs/design/rafii-insights-growth/evidence/run-review-matrix.py",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "real disposable PostgreSQL / actual services and transactions; synthetic external identities",
+      "completed_at": "2026-10-05T01:21:59.401870+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "3 check groups PASS: real server resolves account, language, format, aggregation and fixed previous-period filters; absent language stays empty and missing baseline never creates growth; monthly fixed report survives a real service renderer failure and repeats byte-identical CSV/payload/renderer version; UTF-8, injection, zero, null reasons, native definitions, IDs and times parsed; actual PG limit guards reject view 33 including archived history and snapshot version 65; state and revision roll back without overwriting retained records",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/matrix.log",
+        "docs/design/rafii-insights-growth/evidence/matrix.json"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "trends_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_SOURCE_SHA=8f65ae51c345be00339cf4b44f286e3c22624a94 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python docs/design/rafii-insights-growth/evidence/run-trends.py",
+      "source_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+      "environment": "real disposable PostgreSQL; synthetic external inputs",
+      "completed_at": "2026-10-04T23:36:47.232605+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "45 tests passed with no skips; service-only RLS and retained Trends outcomes on real isolated PG.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log",
+        "docs/design/rafii-insights-growth/evidence/run-trends.py"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "from_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "unchanged_scopes": [
+          "src",
+          "scripts",
+          "migrations",
+          "requirements.txt",
+          "requirements-dev.txt",
+          "pyproject.toml",
+          "tests/test_review.py",
+          "tests/test_review_evidence.py",
+          "tests/test_rafii_analytics_acceptance.py"
+        ],
+        "method": "git diff --name-only <from> <to> -- <scopes>; empty output; same Python/dependency/runtime configuration"
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "growth_loop_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_SOURCE_SHA=8f65ae51c345be00339cf4b44f286e3c22624a94 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python docs/design/rafii-insights-growth/evidence/run-trends.py",
+      "source_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+      "environment": "real disposable PostgreSQL; synthetic external inputs",
+      "completed_at": "2026-10-04T23:36:47.232605+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "9 existing Growth Loop check groups passed, including proof, experiments, UTC work scope, Time Back unavailable, idempotency and RLS.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/trends-postgres-final.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "from_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "unchanged_scopes": [
+          "src",
+          "scripts",
+          "migrations",
+          "requirements.txt",
+          "requirements-dev.txt",
+          "pyproject.toml",
+          "tests/test_review.py",
+          "tests/test_review_evidence.py",
+          "tests/test_rafii_analytics_acceptance.py"
+        ],
+        "method": "git diff --name-only <from> <to> -- <scopes>; empty output; same Python/dependency/runtime configuration"
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "growth_owner_pg": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_DSN='host=127.0.0.1 port=55404 dbname=postgres' /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python tests/phase2/postgres_growth_phase2.py",
+      "source_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+      "environment": "real disposable PostgreSQL; deterministic local models only",
+      "completed_at": "2026-10-04T23:58:10.297979+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "7 check groups passed: native/schedule states, session/tenant fencing, exact postmortem replay, current-rights before model dispatch, privacy/dedupe, minimum-50 chronological calibration owner approve/restore, retention/deletion/RLS.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-phase2-final.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "from_sha": "8f65ae51c345be00339cf4b44f286e3c22624a94",
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "unchanged_scopes": [
+          "src",
+          "scripts",
+          "migrations",
+          "requirements.txt",
+          "requirements-dev.txt",
+          "pyproject.toml",
+          "tests/test_review.py",
+          "tests/test_review_evidence.py",
+          "tests/test_rafii_analytics_acceptance.py"
+        ],
+        "method": "git diff --name-only <from> <to> -- <scopes>; empty output; same Python/dependency/runtime configuration"
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "browser": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_PYTHON=/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python POSTRIFF_TEST_BROWSER_CHANNEL=chrome POSTRIFF_TEST_PDFTOTEXT=/opt/homebrew/bin/pdftotext POSTRIFF_SOURCE_SHA=b42da10f87d31dd7398cdcd3512266d3052dfd9a /opt/homebrew/opt/node@24/bin/node web/tests/review-browser.cjs",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+      "completed_at": "2026-10-05T01:09:27.944745+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "8 browser check groups passed; real browser HTTP + disposable PG, synthetic native data; error/latency injected only for transport states",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/browser.json",
+        "docs/design/rafii-insights-growth/evidence/browser-final.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "ui_catalog": {
+      "status": "pass",
+      "command": "POSTRIFF_TEST_BROWSER_CHANNEL=chrome /opt/homebrew/opt/node@24/bin/node web/tests/review-states-browser.cjs",
+      "source_sha": "8629a463b761fa46bbe9aef20b529009b7a3019a",
+      "environment": "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+      "completed_at": "2026-10-05T00:31:56.582704+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "23 browser check groups passed; real browser DOM; actual local server projection as baseline; explicitly synthetic response overlays for design states only",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.json",
+        "docs/design/rafii-insights-growth/evidence/ui-states-browser.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "actual_changed_files": [
+          "web/src/features/growth/growth-loop.tsx",
+          "web/src/features/growth/growth-studio.tsx"
+        ],
+        "qualification": "UI-state rendering/canonical contract unchanged. Later changes add existing Growth Lab and action-refusal refresh; final core browser covers its explicit owner acceptance and real in-place rights refusal. Existing Genome/calibration owner handlers remain unchanged."
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "growth_owner_browser": {
+      "status": "pass",
+      "command": "/opt/homebrew/opt/node@24/bin/node docs/design/rafii-insights-growth/evidence/run-growth-browser.cjs",
+      "source_sha": "8629a463b761fa46bbe9aef20b529009b7a3019a",
+      "environment": "actual Chrome / HTTP / local PG; all native inputs explicitly synthetic",
+      "completed_at": "2026-10-05T00:46:31.324531+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "7 browser check groups passed; zero-network deterministic fixtures, disposable database",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/growth-owner/browser.json",
+        "docs/design/rafii-insights-growth/evidence/growth-owner-browser.log"
+      ],
+      "native_acceptance": false,
+      "reuse": {
+        "to_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+        "actual_changed_files": [
+          "web/src/features/growth/growth-loop.tsx",
+          "web/src/features/growth/growth-studio.tsx"
+        ],
+        "qualification": "UI-state rendering/canonical contract unchanged. Later changes add existing Growth Lab and action-refusal refresh; final core browser covers its explicit owner acceptance and real in-place rights refusal. Existing Genome/calibration owner handlers remain unchanged."
+      },
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "lint": {
+      "status": "pass",
+      "command": "PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix web run lint",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:09:02.304733+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "0 errors; 3 preexisting warnings in contact-policy, thread-navigator and connect-sheet.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/lint-final.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "typecheck": {
+      "status": "pass",
+      "command": "PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix web run typecheck",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:09:51.515117+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "Exit 0: tsc --noEmit.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/typecheck-final.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "build": {
+      "status": "pass",
+      "command": "cd web; NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_SENTRY_DISABLED=1 POSTRIFF_DIST_DIR=.next-review-build npm run build",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:10:57.154702+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "Exit 0: production compilation, TypeScript and route generation passed. Next added only temporary dist-directory includes; those incidental tsconfig edits were restored to the committed source.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/build-final.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "ci_config": {
+      "status": "pass",
+      "command": "PyYAML safe_load + bash -n for every workflow run block",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:15:34.451243+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "Local YAML and shell syntax passed; no remote CI run, dispatch or deployment.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/ci-config-validation.log"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "pdf": {
+      "status": "pass",
+      "command": "Chrome page.pdf(A4) + pdfinfo + pdftotext + pdftoppm; inspect pages 1, 5, 10",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "actual HeadlessChrome 154 rendering and Poppler; synthetic saved report",
+      "completed_at": "2026-10-05T01:10:51.627729+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "Actual 10-page A4 PDF; Traditional Chinese and final note extracted. Visual inspection confirms fixed scope/version/source SHA, readable repeated table headers/long source fields, wrapped notes, and no missing glyphs or clipped final line.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/report.pdf",
+        "docs/design/rafii-insights-growth/evidence/pdf-text.txt",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-1.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-5.png",
+        "docs/design/rafii-insights-growth/evidence/pdf-b42-page-10.png"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "base": {
+      "status": "pass",
+      "command": "git ls-remote + ownership/lease/ancestry inspection",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "local runtime",
+      "completed_at": "2026-10-05T01:26:36.527363+00:00",
+      "timestamp_basis": "output artifact last-written timestamp; not fabricated command start time",
+      "actual_output": "Latest remote base 676397a verified. Isolated branch; original d91660b7 dirty checkout and other owner preserved. Own lease held.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/integration-final.json",
+        "docs/design/rafii-insights-growth/evidence/initial-state.txt"
+      ],
+      "native_acceptance": false,
+      "working_directory": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio"
+    },
+    "native": {
+      "status": "blocked",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "actual production browser; deployment SHA unknown",
+      "completed_at": "2026-10-05T01:19:12.505Z",
+      "actual_output": "Latest live reload requires MFA reauthentication. The earlier authenticated probe at 2026-10-05T00:14:28.269Z had 0 posts read / 0 of 0 accounts reporting / No accounts connected. No exact 24h native reading or definition comparison is available; deployment SHA remains unknown.",
+      "evidence_paths": [
+        "docs/design/rafii-insights-growth/evidence/native-probe.json"
+      ],
+      "native_acceptance": false
+    },
+    "remote_ci": {
+      "status": "blocked",
+      "source_sha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+      "environment": "remote CI",
+      "completed_at": "2026-10-05T01:26:35.930260+00:00",
+      "actual_output": "validation_unavailable: this local branch has not been pushed and no remote CI run is available for its source SHA; no applicable push/dispatch/merge/deploy authorization was established. The workflow is a locally validated candidate.",
+      "evidence_paths": [
+        ".github/workflows/rafii-review.yml",
+        "docs/design/rafii-insights-growth/evidence/ci-config-validation.log"
+      ],
+      "native_acceptance": false
+    }
+  },
+  "required_external_gates_complete": false,
+  "safety_boundaries": {
+    "HistoryImport": "OFF",
+    "scope_expansion": false,
+    "pricing_changed": false,
+    "provider_admission_changed": false,
+    "production_payment_settings_changed": false,
+    "publishing": false,
+    "paid_generation": false,
+    "push": false,
+    "merge": false,
+    "deploy": false
+  },
+  "intermediate_evidence": "Early RED/failure logs are retained as historical repair evidence; only named final records count as successful validation. Supplemental matrix failures were harness assumptions about the existing Direct enum, views-only scope, explicit CSV null/unknown windows and a reseed clearing previous views; no application behavior was relaxed to satisfy them."
+}

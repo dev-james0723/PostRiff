@@ -1,0 +1,20 @@
+pg_ctl: could not start server
+Examine the log output.
+2026-10-04 18:32:52.815 EDT [4304] LOG:  starting PostgreSQL 17.11 (Homebrew) on aarch64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.4.2), 64-bit
+2026-10-04 18:32:52.816 EDT [4304] LOG:  could not bind IPv4 address "127.0.0.1": Address already in use
+2026-10-04 18:32:52.816 EDT [4304] HINT:  Is another postmaster already running on port 55438? If not, wait a few seconds and retry.
+2026-10-04 18:32:52.816 EDT [4304] WARNING:  could not create listen socket for "127.0.0.1"
+2026-10-04 18:32:52.816 EDT [4304] FATAL:  could not create any TCP/IP sockets
+2026-10-04 18:32:52.817 EDT [4304] LOG:  database system is shut down
+
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/scripts/postriff_pg_suite.py", line 49, in <module>
+    if __name__=='__main__':sys.exit(main())
+                                     ~~~~^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/scripts/postriff_pg_suite.py", line 30, in main
+    subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/opt/homebrew/opt/postgresql@17/bin/pg_ctl', '-D', '/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/consumer-pg-8xr3lplb/data', '-l', '/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/consumer-pg-8xr3lplb/postgres.log', '-o', '-h 127.0.0.1 -p 55438', '-w', 'start']' returned non-zero exit status 1.

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 96, in <module>
+    for f in (None,'markdown','csv','pdf'):refused(410,lambda:r.snapshot(wid,'one',s['snapshotId'],1,format_=f))
+                                           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 32, in refused
+    raise AssertionError('Expected refusal '+str(status))
+AssertionError: Expected refusal 410

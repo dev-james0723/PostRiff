@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "observedAt": "2026-10-05T01:26:35.930260+00:00",
+  "method": "git ls-remote origin refs/heads/consumer-saas; git ancestry and scoped diff inspection",
+  "origin": "https://github.com/dev-james0723/PostRiff.git",
+  "integrationBaseSha": "676397a205de065f6962fb6c3f6a9204681c31b4",
+  "initialIntegrationBaseSha": "fc29af29482fb28e1acbd42a62700b0db7e51829",
+  "sourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "branch": "codex/rafii-insights-growth-20261004",
+  "worktree": "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio",
+  "originalCheckoutHead": "d91660b7936a5158b820914107306ad4a1e51c2d",
+  "originalCheckoutDirtyPreserved": true,
+  "otherOwner": "rafii-studio-product-finish-20261004 worktree not edited",
+  "writeLease": {
+    "ownerSession": "01a108b0-c465-7851-b443-43be5c769da0",
+    "leaseRef": "d3d845f5ea8d",
+    "takeover": false
+  },
+  "PR107Ancestor": true
+}

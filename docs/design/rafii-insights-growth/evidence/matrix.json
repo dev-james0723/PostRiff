@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "execution": "real owned disposable PG/services; explicitly synthetic native data and renderer failure",
+  "sourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a",
+  "checks": [
+    "real server resolves account, language, format, aggregation and fixed previous-period filters; absent language stays empty and missing baseline never creates growth",
+    "monthly fixed report survives a real service renderer failure and repeats byte-identical CSV/payload/renderer version; UTF-8, injection, zero, null reasons, native definitions, IDs and times parsed",
+    "actual PG limit guards reject view 33 including archived history and snapshot version 65; state and revision roll back without overwriting retained records"
+  ],
+  "realProviderCalls": 0,
+  "realModelCalls": 0,
+  "nativeAcceptance": false
+}

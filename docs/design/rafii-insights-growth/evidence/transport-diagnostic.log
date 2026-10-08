@@ -1,0 +1,12 @@
+{"mode":"default","i":0,"status":200,"bytes":27523,"connection":"keep-alive"}
+{"mode":"default","i":1,"status":200,"bytes":27523,"connection":"keep-alive"}
+{"mode":"default","i":2,"status":200,"bytes":27523,"connection":"keep-alive"}
+{"mode":"default","i":3,"status":200,"bytes":27523,"connection":"keep-alive"}
+{"mode":"default","i":4,"status":200,"bytes":27523,"connection":"keep-alive"}
+{"mode":"close","i":0,"status":200,"bytes":27523,"connection":"close"}
+{"mode":"close","i":1,"status":200,"bytes":27523,"connection":"close"}
+{"mode":"close","i":2,"status":200,"bytes":27523,"connection":"close"}
+{"mode":"close","i":3,"status":200,"bytes":27523,"connection":"close"}
+{"mode":"close","i":4,"status":200,"bytes":27523,"connection":"close"}
+{"blockingFixtureEquivalentSeconds":8,"mode":"default","error":"ECONNRESET"}
+{"blockingFixtureEquivalentSeconds":8,"mode":"close","status":200}

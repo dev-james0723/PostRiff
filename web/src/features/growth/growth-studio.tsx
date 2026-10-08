@@ -1,5 +1,7 @@
 'use client';
 
+import { ReviewPanel } from '@/features/analytics/review-scope';
+
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +16,7 @@ import { GrowthConsent, useGrowthCatalog } from './shared';
 import { EmptyGrowth, GrowthHero, useGrowthAction } from './studio-parts';
 import { AudienceMiner } from './audience-miner';
 import { readingState } from './measurement-state';
+import { GrowthAnalytics } from './growth-loop';
 
 const VIEWS = ['results', 'audience', 'patterns'] as const;
 const TABS = [{ id: 'results', label: 'Your results', icon: IconChartDots3 }, { id: 'audience', label: 'Your audience', icon: IconMessageCircle2 }, { id: 'patterns', label: 'Your patterns', icon: IconDna2 }] as const;
@@ -31,6 +34,8 @@ function Studio() {
   return <PageContainer pageTitle='Growth Studio'>
     <div className='growth-studio'>
       <GrowthHero eyebrow='Your creative practice, evolving' title='Make every post' accent='a little more you.' description='See what resonates, listen to your audience, and decide what to carry into your next idea.' />
+      <ReviewPanel destination='analytics' />
+      <GrowthAnalytics experimentsOnly />
       <div className='growth-tabs' role='tablist' aria-label='Growth Studio views'>
         {TABS.map(({ id, label, icon: Icon }, i) => <button key={id} id={`tab-${id}`} role='tab' aria-selected={view === id} aria-controls={`panel-${id}`} tabIndex={view === id ? 0 : -1} onClick={() => void setView(id)} onKeyDown={(event) => {
           const next = event.key === 'ArrowRight' ? (i + 1) % TABS.length : event.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null;

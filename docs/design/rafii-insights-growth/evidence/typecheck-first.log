@@ -1,0 +1,15 @@
+
+> postriff-web@0.1.0 typecheck
+> tsc --noEmit
+
+src/features/analytics/review-scope.tsx(55,68): error TS2339: Property 'revoked' does not exist on type 'ChannelView'.
+src/features/analytics/review-scope.tsx(57,44): error TS2322: Type '{ horizon: "7d" | "1h" | "24h"; aggregation: "median" | "mean"; comparison: { kind: "none"; } | { kind: "previous_period"; publicationPeriod: { start: string; end: string; timezone: string; }; }; ... 11 more ...; attributionState?: "unknown" | undefined; }' is not assignable to type '{ channelIds: string[]; schemaVersion?: "1.0" | undefined; workspaceId?: string | undefined; publicationPeriod?: { start: string; end: string; timezone: string; } | undefined; relativeDateRule?: { ...; } | undefined; ... 9 more ...; attributionState?: "unknown" | undefined; }'.
+  Types of property 'relativeDateRule' are incompatible.
+    Type '{ kind: "this_week" | "last_week" | "this_month" | "last_month"; timezone: string; } | { kind: "this_week"; timezone: {}; } | undefined' is not assignable to type '{ kind: "this_week" | "last_week" | "this_month" | "last_month"; timezone: string; } | undefined'.
+      Type '{ kind: "this_week"; timezone: {}; }' is not assignable to type '{ kind: "this_week" | "last_week" | "this_month" | "last_month"; timezone: string; }'.
+        Types of property 'timezone' are incompatible.
+          Type '{}' is not assignable to type 'string'.
+src/features/analytics/review-scope.tsx(74,96): error TS2339: Property 'contentType' does not exist on type 'Manifest'.
+src/features/analytics/review-scope.tsx(83,131): error TS2339: Property 'displayName' does not exist on type 'ChannelView'.
+src/features/analytics/review-scope.tsx(85,336): error TS2322: Type '{}' is not assignable to type 'string'.
+src/features/analytics/review-scope.tsx(89,148): error TS2322: Type '{}' is not assignable to type 'string | number | readonly string[] | undefined'.

@@ -1,0 +1,7 @@
+...................................................................................{"event": "metric_reads.complete_failed", "exceptionType": "RuntimeError"}
+.{"event": "metric_reads.read_failed", "exceptionType": "ValueError"}
+..................................................................sssssssssssssssssss........ssssssssss.....................
+----------------------------------------------------------------------
+Ran 208 tests in 6.868s
+
+OK (skipped=29)

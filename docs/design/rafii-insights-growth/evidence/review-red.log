@@ -1,0 +1,105 @@
+test_basis_uses_exact_readings_and_scope_digest (test_review.ReviewTests.test_basis_uses_exact_readings_and_scope_digest) ... FAIL
+test_dates_require_explicit_timezone_and_half_open_period (test_review.ReviewTests.test_dates_require_explicit_timezone_and_half_open_period) ... FAIL
+test_duplicate_readings_count_one_publication_and_latest_failure_is_stale (test_review.ReviewTests.test_duplicate_readings_count_one_publication_and_latest_failure_is_stale) ... FAIL
+test_mixed_readings_cannot_make_a_ratio (test_review.ReviewTests.test_mixed_readings_cannot_make_a_ratio) ... FAIL
+test_relative_view_resolves_dst_local_week_without_moving_snapshot (test_review.ReviewTests.test_relative_view_resolves_dst_local_week_without_moving_snapshot) ... FAIL
+test_revoked_rights_remove_value_and_source (test_review.ReviewTests.test_revoked_rights_remove_value_and_source) ... FAIL
+test_route_workspace_cannot_be_overridden (test_review.ReviewTests.test_route_workspace_cannot_be_overridden) ... FAIL
+test_strict_offset_definition_cutoff_and_identity (test_review.ReviewTests.test_strict_offset_definition_cutoff_and_identity) ... FAIL
+test_zero_and_null_and_invalid_values_are_separate (test_review.ReviewTests.test_zero_and_null_and_invalid_values_are_separate) ... FAIL
+test_zero_baseline_has_no_relative_infinity (test_review.ReviewTests.test_zero_baseline_has_no_relative_infinity) ... FAIL
+
+======================================================================
+FAIL: test_basis_uses_exact_readings_and_scope_digest (test_review.ReviewTests.test_basis_uses_exact_readings_and_scope_digest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_dates_require_explicit_timezone_and_half_open_period (test_review.ReviewTests.test_dates_require_explicit_timezone_and_half_open_period)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_duplicate_readings_count_one_publication_and_latest_failure_is_stale (test_review.ReviewTests.test_duplicate_readings_count_one_publication_and_latest_failure_is_stale)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_mixed_readings_cannot_make_a_ratio (test_review.ReviewTests.test_mixed_readings_cannot_make_a_ratio)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_relative_view_resolves_dst_local_week_without_moving_snapshot (test_review.ReviewTests.test_relative_view_resolves_dst_local_week_without_moving_snapshot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_revoked_rights_remove_value_and_source (test_review.ReviewTests.test_revoked_rights_remove_value_and_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_route_workspace_cannot_be_overridden (test_review.ReviewTests.test_route_workspace_cannot_be_overridden)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_strict_offset_definition_cutoff_and_identity (test_review.ReviewTests.test_strict_offset_definition_cutoff_and_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_zero_and_null_and_invalid_values_are_separate (test_review.ReviewTests.test_zero_and_null_and_invalid_values_are_separate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+======================================================================
+FAIL: test_zero_baseline_has_no_relative_infinity (test_review.ReviewTests.test_zero_baseline_has_no_relative_infinity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 40, in setUp
+    self.assertIsNotNone(self.review, 'The strict review projection adapter is required')
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : The strict review projection adapter is required
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.011s
+
+FAILED (failures=10)

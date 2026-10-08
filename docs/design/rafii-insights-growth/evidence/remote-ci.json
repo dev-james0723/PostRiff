@@ -1,0 +1,148 @@
+{
+  "status": "web_contract_repair_pending_remote_validation",
+  "recordedAt": "2026-10-05T03:08:26.343412+00:00",
+  "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/126",
+  "baseBranch": "consumer-saas",
+  "originalBranchHead": "535d0e0614b83a20eb100720e875750e1d02b84f",
+  "firstCiCheckoutSha": "91aa427cd06f5bf09fe90ba077db71946b214faf",
+  "runs": [
+    {
+      "name": "Review evidence",
+      "runId": 37252258565,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258565"
+    },
+    {
+      "name": "Growth Studio browser",
+      "runId": 37252258510,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258510"
+    },
+    {
+      "name": "Growth metrics native-learning",
+      "runId": 37252258573,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258573"
+    },
+    {
+      "name": "Rafii browser",
+      "runId": 37252258533,
+      "conclusion": "success",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258533"
+    },
+    {
+      "name": "Founder admin browser",
+      "runId": 37252258527,
+      "conclusion": "failure",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258527"
+    },
+    {
+      "name": "Local release gates",
+      "runId": 37252258559,
+      "conclusion": "failure",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37252258559"
+    }
+  ],
+  "genuineFailures": [
+    {
+      "runId": 37252258527,
+      "failure": "Demo turn accepted 201 but answer absent from visible thread; 1229 of 1230 Founder checks passed",
+      "repair": "Wait for the authenticated session/environment before dispatch; preserve draft while loading. Add delayed real-session browser regression."
+    },
+    {
+      "runId": 37252258559,
+      "failure": "Review tests hard-coded disposable PG port 55404; standard runner owns 55438. Standard runner does not supply CI-only evidence variables.",
+      "repair": "Parse and restrict DSN to known disposable loopback PG ports; resolve source SHA from actual git if not supplied; optional evidence directory, retain stdout."
+    },
+    {
+      "runId": 37256475165,
+      "failure": "After PG PASS, web contracts fail twice: legacy Coworker test loader rejects @/lib/analytics/review-contract; product copy audit flags payload in two report messages. Web671 tests:669pass/2fail.",
+      "repair": "Load real Zod, canonical Trend and Review schema modules in the strict test harness; replace only the two flagged report messages with contents/saved report. No API/schema/security behavior changed."
+    }
+  ],
+  "firstPreview": {
+    "deploymentId": "dpl_EMyLfXg5at5MZbWPX2Mg3MGyzzud",
+    "status": "READY",
+    "url": "https://postriff-phase2-private-7lp98mt0i-jamesau0723-6572s-projects.vercel.app",
+    "execution": "preview_only"
+  },
+  "requestedReleaseMerged": false,
+  "requestedReleaseDeployed": false,
+  "broadLocalAcceptanceRerun": false,
+  "repairBranchHead": "def32abbdcc64415aa373254e6622a3b2352be73",
+  "repairCiCheckoutSha": "c88035849f0172d672090c071c1085c4259b3a4e",
+  "repairRuns": [
+    {
+      "name": "Review evidence",
+      "runId": 37256475174,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475174",
+      "conclusion": "success"
+    },
+    {
+      "name": "Growth Studio browser",
+      "runId": 37256475161,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475161",
+      "conclusion": "success"
+    },
+    {
+      "name": "Founder admin browser",
+      "runId": 37256475180,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475180",
+      "conclusion": "success"
+    },
+    {
+      "name": "Local release gates",
+      "runId": 37256475165,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475165",
+      "conclusion": "failure"
+    },
+    {
+      "name": "Growth metrics native-learning",
+      "runId": 37256475163,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475163",
+      "conclusion": "success"
+    },
+    {
+      "name": "Rafii browser",
+      "runId": 37256475336,
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37256475336",
+      "conclusion": "success"
+    }
+  ],
+  "verifiedArtifacts": [
+    {
+      "runId": 37256475174,
+      "artifactId": 11323355345,
+      "name": "rafii-review-c88035849f0172d672090c071c1085c4259b3a4e",
+      "browserChecks": 8,
+      "uiStateChecks": 23,
+      "postgresChecks": 10,
+      "boundaryChecks": 5,
+      "status": "PASS",
+      "sourceSha": "c88035849f0172d672090c071c1085c4259b3a4e",
+      "nativeAcceptance": false
+    },
+    {
+      "runId": 37256475180,
+      "artifactId": 11323660348,
+      "name": "founder-browser-c88035849f0172d672090c071c1085c4259b3a4e",
+      "founderChecks": 1231,
+      "failed": 0,
+      "delayedSessionChecks": 8,
+      "delayedSessionStatus": "PASS",
+      "realProviderCalls": 0
+    },
+    {
+      "runId": 37256475165,
+      "artifactId": 11322954296,
+      "name": "local-gates-c88035849f0172d672090c071c1085c4259b3a4e",
+      "sourceSha": "c88035849f0172d672090c071c1085c4259b3a4e",
+      "python": "PASS",
+      "postgres": "PASS",
+      "postgresSeconds": 653.17,
+      "webTests": 671,
+      "webPassed": 669,
+      "webFailed": 2
+    }
+  ]
+}

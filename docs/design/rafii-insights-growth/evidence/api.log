@@ -1,0 +1,2 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+PostRiff DEV hosted harness: http://127.0.0.1:33404 | disposable PostgreSQL host=127.0.0.1 port=55404 dbname=postgres | providers: dev-synthetic | identity: dev

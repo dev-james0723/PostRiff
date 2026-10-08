@@ -1,0 +1,14 @@
+E
+======================================================================
+ERROR: test_takeaway_cannot_propose_hypothesis_with_other_scope_or_low_arms (test_review.ReviewTests.test_takeaway_cannot_propose_hypothesis_with_other_scope_or_low_arms)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 78, in test_takeaway_cannot_propose_hypothesis_with_other_scope_or_low_arms
+    self.assertFalse(self.review.review_hypothesis_eligible(self.state,p,h,NOW))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'postriff_phase2.coworker.review' has no attribute 'review_hypothesis_eligible'
+
+----------------------------------------------------------------------
+Ran 1 test in 1.304s
+
+FAILED (errors=1)

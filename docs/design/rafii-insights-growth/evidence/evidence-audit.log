@@ -1,0 +1,1 @@
+{"status": "PASS", "sourceSha": "b42da10f87d31dd7398cdcd3512266d3052dfd9a", "catalogCases": 58, "statusCounts": {"pass": 54, "blocked": 3, "not_applicable": 1}, "hashedArtifacts": 46, "method": "strict metadata types/IDs and canonical case requirements; existing paths, relative document links and SHA256 bytes checked"}

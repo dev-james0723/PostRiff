@@ -94,7 +94,8 @@ def observations(cur, workspace_id, state, now, basis=insights.COMPARISON_BASIS)
         cohort = {**post["cohort"], "connectionId": post.get("connectionId"),
                   "definitionVersion": metric_read.get("definitionVersion")}
         rows.append({"postId": post["providerPostId"], "jobId": job.get("id"), "provider": post["provider"], "cohort": cohort, "metric": metric,
-                     "value": value, "readOffset": metric_read.get("readOffset"), "observedAt": post["freshness"]["observedAt"],
+                     "value": value, "readOffset": metric_read.get("readOffset"), "observedAt": metric_read.get("observedAt"),
+                     "ingestedAt": metric_read.get("ingestedAt"), "definitionVersion": metric_read.get("definitionVersion"),
                      "publishedAt": published_at(job), "features": features(job)})
     return rows
 
@@ -186,9 +187,9 @@ def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=N
         flipped = current is not None and current[3] is not None and (float(current[3]) > 0) != (h["effect"] > 0)
         if current is not None and not flipped:
             cur.execute("""UPDATE public.pr_strategy_hypotheses SET sample_a=%s, sample_b=%s, effect=%s, evidence_ids=%s::jsonb, counter_evidence_ids=%s::jsonb,
-                           confidence=%s, statement=%s, last_supported_at=now(), expires_at=now() + make_interval(days => %s), date_to=to_timestamp(%s) WHERE id::text=%s""",
+                           confidence=%s, statement=%s, last_supported_at=now(), expires_at=now() + make_interval(days => %s), date_from=to_timestamp(%s), date_to=to_timestamp(%s) WHERE id::text=%s""",
                         (h["sample_a"], h["sample_b"], h["effect"], json.dumps(h["evidence_ids"]), json.dumps(h["counter_evidence_ids"]), h["confidence"], h["statement"],
-                         EXPIRY_DAYS, h["date_to"], current[0]))
+                         EXPIRY_DAYS, h["date_from"], h["date_to"], current[0]))
             updated += 1
             continue
         # The existing uniqueness key predates account cohorts: allocate a revision

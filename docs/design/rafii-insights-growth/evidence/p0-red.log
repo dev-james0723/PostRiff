@@ -1,0 +1,43 @@
+test_hypothesis_range_uses_its_supporting_metric_time (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_hypothesis_range_uses_its_supporting_metric_time) ... FAIL
+test_insufficient_history_and_unavailable_data_withhold_outcome_recommendations (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_insufficient_history_and_unavailable_data_withhold_outcome_recommendations) ... ok
+test_missing_analytics_authorization_identified_before_transport (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_missing_analytics_authorization_identified_before_transport) ... ok
+test_missing_invalid_and_unavailable_values_never_become_measured_zero (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_missing_invalid_and_unavailable_values_never_become_measured_zero) ... ok
+test_postmortem_lessons_emit_supporting_evidence_time_range (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_postmortem_lessons_emit_supporting_evidence_time_range) ... FAIL
+test_sufficient_native_data_is_observation_with_traceable_qualified_hypotheses (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_sufficient_native_data_is_observation_with_traceable_qualified_hypotheses) ... ok
+test_true_measured_zero_survives_parser_storage_display_and_comparison (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_true_measured_zero_survives_parser_storage_display_and_comparison) ... ok
+
+======================================================================
+FAIL: test_hypothesis_range_uses_its_supporting_metric_time (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_hypothesis_range_uses_its_supporting_metric_time)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_rafii_analytics_acceptance.py", line 192, in test_hypothesis_range_uses_its_supporting_metric_time
+    self.assertEqual([recommendation["date_from"], recommendation["date_to"]],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [min(times), max(times)], "Recommendation range must use reach, not comments")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [1799999940.0, 1799999940.0] != [1799136000, 1799913600]
+
+First differing element 0:
+1799999940.0
+1799136000
+
+- [1799999940.0, 1799999940.0]
++ [1799136000, 1799913600] : Recommendation range must use reach, not comments
+
+======================================================================
+FAIL: test_postmortem_lessons_emit_supporting_evidence_time_range (test_rafii_analytics_acceptance.SyntheticAnalyticsAcceptance.test_postmortem_lessons_emit_supporting_evidence_time_range)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_rafii_analytics_acceptance.py", line 207, in test_postmortem_lessons_emit_supporting_evidence_time_range
+    self.assertEqual(lesson.get("dateRange", report.get("dateRange")),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [min(times[i] for i in evidence), max(times[i] for i in evidence)],
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "24h age is not the calendar range of supporting evidence")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != [1798963200, 1799913600] : 24h age is not the calendar range of supporting evidence
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.100s
+
+FAILED (failures=2)

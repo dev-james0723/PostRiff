@@ -1,0 +1,61 @@
+✔ review runtime contract exists (1.123166ms)
+✔ UTC half-open dates and IANA timezone (136.995375ms)
+✔ true zero, unknown and invalid numbers are distinct (0.85975ms)
+✔ input forbids provider claims and client lineage (5.730416ms)
+✔ current access overrides a cached measured zero (8.52075ms)
+✔ completed collection does not turn a missing or unsupported value into measured (0.898958ms)
+✖ expired source has a distinct display state and a recovery instruction (2.713375ms)
+✖ Review reuses canonical tracking states with its own 300-publication limit (0.243667ms)
+✔ relative baseline input resolves separately from the fixed report contract (2.56425ms)
+✔ generated schema matches canonical runtime (51.901875ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 8
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2109.12
+
+✖ failing tests:
+
+test at tests/review-contract.test.cjs:36:3
+✖ expired source has a distinct display state and a recovery instruction (2.713375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'not_authorized'
+  - 'expired'
+  
+      at TestContext.<anonymous> (/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-contract.test.cjs:37:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'not_authorized',
+    expected: 'expired',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/review-contract.test.cjs:40:3
+✖ Review reuses canonical tracking states with its own 300-publication limit (0.243667ms)
+  AssertionError [ERR_ASSERTION]: Validated canonical tracking is required for read due times
+      at TestContext.<anonymous> (/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/web/tests/review-contract.test.cjs:41:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

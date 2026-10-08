@@ -14,7 +14,7 @@ import type { GrowthExperiment, GrowthGoal, GrowthProof } from '@/lib/coworker/g
 import { QueryProblem } from '@/features/coworker/parts';
 import { cn } from '@/lib/utils';
 
-const queryKey = (w: string) => ['coworker', w, 'growth-loop'] as const;
+export const growthLoopQueryKey = (w: string) => ['coworker', w, 'growth-loop'] as const;
 const field = 'rafii-focus rafii-quiet min-h-11 w-full rounded-xl border border-border px-3 text-base';
 const label = (s: string) => s.replaceAll('_', ' ');
 const value = (n: number | null | undefined) => n == null ? 'Unavailable' : n.toLocaleString();
@@ -24,14 +24,14 @@ function useGrowth() {
   const { api, w, enabled } = useCoworkerApi();
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
-  const query = useQuery({ queryKey: queryKey(w), queryFn: () => api.growthLoop(w), enabled, retry: shouldRetry, staleTime: 30_000 });
+  const query = useQuery({ queryKey: growthLoopQueryKey(w), queryFn: () => api.growthLoop(w), enabled, retry: shouldRetry, staleTime: 30_000 });
   async function run(action: () => Promise<{ verified: boolean }>) {
     if (pending) return false;
     setPending(true);
     try {
       const result = await action();
       if (!result.verified) throw new Error('The saved change could not be verified. Refresh before retrying.');
-      await client.invalidateQueries({ queryKey: queryKey(w) });
+      await client.invalidateQueries({ queryKey: growthLoopQueryKey(w) });
       await client.invalidateQueries({ queryKey: ['coworker', w, 'performance'] });
       return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : 'That change could not be saved.'); return false; }
@@ -73,7 +73,7 @@ export function GrowthHome() {
   </Surface>;
 }
 
-export function GrowthAnalytics() {
+export function GrowthAnalytics({experimentsOnly=false}:{experimentsOnly?:boolean}={}) {
   const growth = useGrowth();
   const channels = useChannels();
   const owner = checkAccess(useWorkspaceAccess(), { permission: 'owner' });
@@ -85,19 +85,20 @@ export function GrowthAnalytics() {
   const opened = useRef(new Set<string>());
   const data = growth.query.data;
   useEffect(() => {
+    if(experimentsOnly)return;
     const id = new URLSearchParams(window.location.search).get('proof');
     if (id && data?.proofs.some(p => p.id === id) && !opened.current.has(id)) {
       opened.current.add(id);
       void growth.api.growthProofAction(growth.w, id, 'opened').catch(() => opened.current.delete(id));
       document.getElementById(id)?.scrollIntoView({ block: 'center' });
     }
-  }, [data, growth.api, growth.w]);
+  }, [data, growth.api, growth.w,experimentsOnly]);
   if (growth.query.error) return <QueryProblem what='Growth Loop' error={growth.query.error} onRetry={() => void growth.query.refetch()} />;
   if (!data) return <p className='text-muted-foreground text-sm' role='status'>Loading growth outcomes…</p>;
   const goal = data.goal;
   const unused = performance.data?.hypotheses.filter(h => !data.experiments.some(e => e.hypothesisId === h.id) && ['candidate', 'supported', 'experiment'].includes(h.status)) || [];
   return <div className='flex flex-col gap-6'>
-    <Surface material='glass' className='p-5 sm:p-6' as='section' id='growth-goal' aria-labelledby='growth-title'>
+    {!experimentsOnly&&<Surface material='glass' className='p-5 sm:p-6' as='section' id='growth-goal' aria-labelledby='growth-title'>
       <div className='mb-4 flex flex-wrap items-center justify-between gap-3'><h2 id='growth-title' className='text-lg font-medium'>Growth Goal</h2><span className='text-muted-foreground text-xs'>One primary outcome</span></div>
       {goal ? <GoalReadout goal={goal} /> : <p className='text-muted-foreground text-sm'>A declared goal connects your weekly plan to covered outcomes.</p>}
       {owner && <div className='mt-4 flex flex-wrap gap-2'>
@@ -123,11 +124,12 @@ export function GrowthAnalytics() {
         <p className='text-muted-foreground text-xs sm:col-span-2'>Covered outcomes are added to your declared baseline from activation onward. Missing provider metrics stay Unavailable.</p>
       </form>}
       {!owner && <p className='text-muted-foreground mt-3 text-xs'>A workspace owner manages goals and experiment decisions.</p>}
-    </Surface>
+    </Surface>}
 
     <section aria-labelledby='growth-lab-title' className='flex flex-col gap-3' id='growth-lab'>
       <h2 id='growth-lab-title' className='text-lg font-medium'>Growth Lab</h2>
       <p className='text-muted-foreground text-sm'>Test account-specific performance hypotheses. Strategy changes only after you choose to use a measured result.</p>
+      {experimentsOnly&&<p className='text-muted-foreground text-sm'>Workspace experiments keep their saved cohort and evidence. Review filters apply to the observations above.</p>}
       {unused.map(h => <Surface key={h.id} material='quiet' className='p-4'><p className='text-sm'>{h.statement}</p><p className='text-muted-foreground my-2 text-xs'>{h.why}</p>{owner && <Button variant='glass' disabled={growth.pending} onClick={() => {
         if (!proposalKeys.current.has(h.id)) proposalKeys.current.set(h.id, crypto.randomUUID());
         void growth.run(() => growth.api.proposeGrowthExperiment(growth.w, { hypothesisId: h.id, minimumPerArm: 5, windowDays: 14, idempotencyKey: proposalKeys.current.get(h.id)! }));
@@ -137,12 +139,12 @@ export function GrowthAnalytics() {
       {Boolean(performance.error) && <QueryProblem what='Performance hypotheses' error={performance.error} hideWhenOff onRetry={() => void performance.refetch()} />}
     </section>
 
-    <section aria-labelledby='proof-title' className='flex flex-col gap-3' id='proof-history'>
+    {!experimentsOnly&&<section aria-labelledby='proof-title' className='flex flex-col gap-3' id='proof-history'>
       <div className='flex flex-wrap items-center justify-between gap-3'><h2 id='proof-title' className='text-lg font-medium'>Proof of value</h2>{owner && <div className='flex flex-wrap gap-2'>{(['weekly', 'monthly'] as const).map(f => <Button key={f} variant='glass' disabled={growth.pending} onClick={() => void growth.run(() => growth.api.generateGrowthProof(growth.w, f))}>Generate {f} recap</Button>)}</div>}</div>
       <p className='text-muted-foreground text-sm'>Completed reporting periods (UTC), backed by approved work and verified outcomes. Your existing notification settings control delivery.</p>
       {data.proofs.toReversed().map(p => <ProofCard key={p.id} proof={p} open={() => { void growth.api.growthProofAction(growth.w, p.id, 'opened').catch(() => {}); }} act={async () => { if (await growth.run(() => growth.api.growthProofAction(growth.w, p.id, 'acted'))) window.location.assign('/app/weekly'); }} />)}
       {!data.proofs.length && <p className='text-muted-foreground text-sm'>Your first recap will show accepted work, publishing verification and the data actually covered.</p>}
-    </section>
+    </section>}
   </div>;
 }
 

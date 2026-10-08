@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/postgres_review.py", line 42, in <module>
+    jobs=seed_review(host,wid,'one',clock[0]);conn=jobs[0]['manifest']['channelId']
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/phase2/review_fixture.py", line 38, in seed_review
+    cur.execute('DELETE FROM public.pr_perf_snapshots WHERE workspace_id=%s',(wid,))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ouxianxing/Documents/James-Au-Studio/.venv/lib/python3.14/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "public.pr_perf_snapshots" does not exist
+LINE 1: DELETE FROM public.pr_perf_snapshots WHERE workspace_id=$1
+                    ^

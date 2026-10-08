@@ -5,6 +5,7 @@
  */
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
 import type { GoalInput, GrowthGoal, GrowthExperiment, GrowthProof, GrowthLoopView, GrowthWrite } from './growth-types';
+import { reviewProjectionSchema,reviewViewsSchema,reviewSnapshotSchema,reviewExportSchema,savedReviewViewSchema,contentClassificationSchema, type ReviewInput, type ClassificationTag } from '@/lib/analytics/review-contract';
 import type {
   AttentionResponse,
   CoworkerStatus,
@@ -85,10 +86,26 @@ export function createCoworkerApi(getToken: TokenSource) {
   const co = (w: string) => `${ws(w)}/coworker`;
 
   return {
+    review: async (w: string, scope: ReviewInput) => reviewProjectionSchema.parse(await get<unknown>(`${co(w)}/review?scope=${encodeURIComponent(JSON.stringify(scope))}`)),
+    reviewViews: async (w:string) => reviewViewsSchema.parse(await get<unknown>(`${co(w)}/review/views`)),
+    saveReviewView: async (w:string,body:{id?:string;name:string;filterDefinition:ReviewInput;expectedRevision:number;workspaceRevision:number;idempotencyKey:string;archive?:boolean}) => {
+      const result=await send<{record:unknown;workspaceRevision:number;verified:boolean}>('POST',`${co(w)}/review/views`,body);
+      return {...result,record:savedReviewViewSchema.parse(result.record)};
+    },
+    classifyReviewContent: async (w:string,body:{jobId:string;manifestDigest:string;tags:ClassificationTag[];source:'human'|'ai_suggestion';confirmed:boolean;expectedRevision:number;workspaceRevision:number;idempotencyKey:string}) => {
+      const result=await send<{record:unknown;workspaceRevision:number;verified:boolean}>('POST',`${co(w)}/review/classifications`,body);
+      return {...result,record:contentClassificationSchema.parse(result.record)};
+    },
+    createReviewSnapshot: async (w:string,body:{scope:ReviewInput;contextDigest:string;basisDigest:string;workspaceRevision:number;humanNotes:string[];frequency:'weekly'|'monthly';idempotencyKey:string;snapshotId?:string;expectedVersion?:number}) => {
+      const result=await send<{record:unknown;workspaceRevision:number;verified:boolean;existing:boolean}>('POST',`${co(w)}/review/snapshots`,body);
+      return {...result,record:reviewSnapshotSchema.parse(result.record)};
+    },
+    reviewSnapshot: async (w:string,id:string,version:number) => reviewSnapshotSchema.parse(await get<unknown>(`${co(w)}/review/snapshots/${seg(id)}?version=${version}`)),
+    exportReviewSnapshot: async (w:string,id:string,version:number,format:'pdf'|'markdown'|'csv') => reviewExportSchema.parse(await get<unknown>(`${co(w)}/review/snapshots/${seg(id)}/export?version=${version}&format=${format}`)),
     growthLoop: (w: string) => get<GrowthLoopView>(`${co(w)}/growth-loop`),
     createGrowthGoal: (w: string, body: GoalInput) => send<GrowthWrite<GrowthGoal>>('POST', `${co(w)}/growth-loop/goals`, body),
     growthGoalStatus: (w: string, id: string, status: GrowthGoal['status']) => send<GrowthWrite<GrowthGoal>>('POST', `${co(w)}/growth-loop/goals/${seg(id)}/status`, { status }),
-    proposeGrowthExperiment: (w: string, body: { hypothesisId: string; minimumPerArm: number; windowDays: number; idempotencyKey: string }) => send<GrowthWrite<GrowthExperiment>>('POST', `${co(w)}/growth-loop/experiments`, body),
+    proposeGrowthExperiment: (w: string, body: { hypothesisId: string; minimumPerArm: number; windowDays: number; idempotencyKey: string;reviewScope?:ReviewInput;reviewContextDigest?:string;reviewBasisDigest?:string }) => send<GrowthWrite<GrowthExperiment>>('POST', `${co(w)}/growth-loop/experiments`, body),
     growthExperimentAction: (w: string, id: string, action: string) => send<GrowthWrite<GrowthExperiment>>('POST', `${co(w)}/growth-loop/experiments/${seg(id)}/action`, { action }),
     generateGrowthProof: (w: string, frequency: 'weekly' | 'monthly') => send<GrowthWrite<GrowthProof>>('POST', `${co(w)}/growth-loop/proofs`, { frequency }),
     growthProofAction: (w: string, id: string, action: 'opened' | 'acted') => send<Verified & { href: string }>('POST', `${co(w)}/growth-loop/proofs/${seg(id)}/action`, { action }),

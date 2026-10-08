@@ -1,0 +1,137 @@
+{
+  "status": "PASS",
+  "execution": "real browser DOM; actual local server projection as baseline; explicitly synthetic response overlays for design states only",
+  "sourceSha": "8629a463b761fa46bbe9aef20b529009b7a3019a",
+  "checks": [
+    {
+      "state": "not_authorized",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "unsupported",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "disabled",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "unscheduled",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "pending_horizon",
+      "status": "pass",
+      "value": null,
+      "dueVisible": true
+    },
+    {
+      "state": "scheduled",
+      "status": "pass",
+      "value": null,
+      "dueVisible": true
+    },
+    {
+      "state": "pending",
+      "status": "pass",
+      "value": null,
+      "dueVisible": true
+    },
+    {
+      "state": "measured",
+      "status": "pass",
+      "value": 100,
+      "dueVisible": false
+    },
+    {
+      "state": "measured_zero",
+      "status": "pass",
+      "value": 0,
+      "dueVisible": false
+    },
+    {
+      "state": "unavailable",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "stale",
+      "status": "pass",
+      "value": 100,
+      "dueVisible": false
+    },
+    {
+      "state": "disconnected",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "expired",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "deleted",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "revoked",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "legacy_period_unavailable",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "incompatible_readings",
+      "status": "pass",
+      "value": null,
+      "dueVisible": false
+    },
+    {
+      "state": "no_account",
+      "status": "pass"
+    },
+    {
+      "state": "partial",
+      "status": "pass"
+    },
+    {
+      "state": "insufficient_sample",
+      "status": "pass"
+    },
+    {
+      "state": "method_unavailable",
+      "status": "pass"
+    },
+    {
+      "state": "loading",
+      "status": "pass"
+    },
+    {
+      "state": "error",
+      "status": "pass"
+    }
+  ],
+  "realProviderCalls": 0,
+  "realModelCalls": 0,
+  "nativeAcceptance": false,
+  "consoleErrors": []
+}

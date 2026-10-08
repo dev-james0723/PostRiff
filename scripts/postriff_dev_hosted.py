@@ -280,11 +280,14 @@ def main():
     parser.add_argument('--radar-fixture',action='store_true',help='Radar deterministic providers and models; disposable local database only')
     parser.add_argument('--postdoctor-v2-fixture',action='store_true',help='Post Doctor v2 deterministic models, disposable database only')
     parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
+    parser.add_argument('--review-fixture',action='store_true',help='Review acceptance: stored synthetic measurements on disposable PostgreSQL; no collector or provider dispatch')
     parser.add_argument('--history-import-fixture', action='store_true', help='History Import review/status on disposable PostgreSQL; synthetic providers only')
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
+    if args.review_fixture and not args.growth_phase2_fixture:
+        parser.error('Review fixtures require --growth-phase2-fixture on the disposable harness.')
     if args.growth_phase2_fixture or args.radar_fixture or args.postdoctor_v2_fixture:args.growth_fixture=True
     import psycopg
     dsn, data = start_postgres(args.pg_port)
@@ -319,8 +322,11 @@ def main():
         service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
     if args.growth_fixture:
         from postriff_phase2.growth.service import GrowthService
-        service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
+        service.growth=GrowthService(service,env={**ENV,**({'POSTRIFF_METRIC_READS':'1'} if args.review_fixture else {})},router_factory=Models().router)
         if args.radar_fixture:service.growth.radar.sources=Sources()
+    if args.review_fixture:
+        from types import SimpleNamespace
+        service.metric_reads=SimpleNamespace(workspace_allowed=lambda _:True)
     if args.credit_fixture:
         from launch_credit_fixture import configure
         configure(service, connection)

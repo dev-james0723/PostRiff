@@ -1,0 +1,23 @@
+FF
+======================================================================
+FAIL: test_scope_rejects_ambiguous_dates_and_future_classification (test_review.ReviewTests.test_scope_rejects_ambiguous_dates_and_future_classification)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 61, in test_scope_rejects_ambiguous_dates_and_future_classification
+    with self.assertRaises(AlphaError): self.context()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AlphaError not raised
+
+======================================================================
+FAIL: test_metric_time_keeps_subsecond_precision (test_review.ReviewTests.test_metric_time_keeps_subsecond_precision)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 70, in test_metric_time_keeps_subsecond_precision
+    self.assertEqual(self.review.stamp(evidence['observedAt']), self.rows[0]['observedAt'])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1791028800.0 != 1791028800.125
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.158s
+
+FAILED (failures=2)

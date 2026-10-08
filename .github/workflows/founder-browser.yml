@@ -79,6 +79,8 @@ jobs:
           python scripts/founder_signin_web.py --prepare npm ci
           python scripts/founder_signin_web.py npm run build
           python scripts/founder_signin_web.py --test
+      - name: Founder chat waits for the real session environment (local delayed-session regression)
+        run: FOUNDER_EVIDENCE_DIR=founder-evidence node web/tests/founder-session-browser.cjs
       - name: Founder scenes (sections in Live and Demo at 1440/768/390, axe, deep links, evidence, Ask Rafii, settings, follow-ups, sign-out)
         run: FOUNDER_EVIDENCE_DIR=founder-evidence node web/tests/founder-browser.cjs
       - name: Harness and web logs

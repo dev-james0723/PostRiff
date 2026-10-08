@@ -1,0 +1,17 @@
+psql:migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+.............................................
+----------------------------------------------------------------------
+Ran 45 tests in 50.540s
+
+OK
+PASS growth-loop: goal persistence, truthful missing coverage, idempotency and permission/tenant isolation
+PASS growth-loop: one active primary goal and a real covered zero
+PASS growth-loop: approved experiment lifecycle, prospective window, no early result or automatic strategy
+PASS growth-loop: PostgreSQL metric observations → robust measured result → explicit reversible planning preference; voice unchanged
+PASS growth-loop: insufficient prospective data never becomes an applied strategy
+{"event": "notifications.emit_failed", "type": "weekly_proof.generated", "error": "RuntimeError"}
+PASS growth-loop: authoritative/idempotent proof, notification failure isolation, missing Time Back history, monthly honesty, RLS and content-free events
+PASS growth-loop: Time Back data failure is unavailable, never a fake zero or failed recap
+PASS growth-loop: provider/storage failure returns unavailable and leaves subsequent workspace commands usable
+PASS growth-loop: monthly improvement comparison requires sufficient authoritative decision and edit history in both periods
+{"sourceSha": "8f65ae51c345be00339cf4b44f286e3c22624a94", "execution": "real isolated PG; synthetic external inputs; zero real model/provider calls", "exitCodes": [0, 0]}

@@ -1,0 +1,14 @@
+........F...................
+======================================================================
+FAIL: test_generic_workspace_presentation_never_contains_private_review_storage (test_review.ReviewTests.test_generic_workspace_presentation_never_contains_private_review_storage)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-insights-growth-20261004/James-Au-Studio/tests/test_review.py", line 50, in test_generic_workspace_presentation_never_contains_private_review_storage
+    self.assertNotIn('review',shown['state']['coworker'])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'review' unexpectedly found in {'review': {'snapshots': [{'value': 'restricted report'}], 'requests': {'cached': {'result': 'restricted report'}}}, 'growthLoop': {'active': 'existing control'}}
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.281s
+
+FAILED (failures=1)
