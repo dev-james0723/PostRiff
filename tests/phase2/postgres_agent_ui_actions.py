@@ -744,8 +744,9 @@ def _():
 @scenario("A17", "NC18: a view whose library version this build can't draw refuses activate and execute (409 library_unsupported), with zero writes")
 def _():
     art = make_artifact(["J01", "J05"])
-    rev = query("draft_read", {"draftId": DRAFT}, token=EDITOR, artifact=art)["data"]["revision"]
-    inputs = {"draftId": DRAFT, "revision": rev, "text": "Edit that must never land."}
+    draft = fresh_draft("A draft only this scenario edits: one bar, three times.")   # DRAFT is in the queue since A08
+    rev = query("draft_read", {"draftId": draft}, token=EDITOR, artifact=art)["data"]["revision"]
+    inputs = {"draftId": draft, "revision": rev, "text": "Edit that must never land."}
     issued = activate("draft_edit", inputs, token=EDITOR, artifact=art)            # while the view is drawable
     old_hash = "f" * 64
     with connection() as db:
@@ -756,7 +757,7 @@ def _():
             return {**counts(),
                     "activations": db.execute("SELECT count(*) FROM public.pr_ui_activations WHERE workspace_id=%s", (wid,)).fetchone()[0],
                     "used": db.execute("SELECT used_at IS NOT NULL FROM public.pr_ui_activations WHERE id=%s", (issued["activationId"],)).fetchone()[0],
-                    "text": next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == DRAFT)["text"],
+                    "text": next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == draft)["text"],
                     "campaigns": len(service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"])}
     before = snapshot()
     denied(lambda: activate("draft_edit", inputs, token=EDITOR, artifact=art), 409, "library_unsupported")
