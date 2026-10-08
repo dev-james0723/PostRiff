@@ -310,7 +310,7 @@ function GenerativeMessage(props: RafiiGenerativeMessageProps): JSX.Element {
       onContinue: (request) => onContinueRef.current(request),
     });
     setBridges(created);
-    return () => created.dispose();
+    return () => created.query.dispose(); // disposes both sides (bridges/index.ts)
     // The manifest identity is its id + binding version; a new object with the same identity keeps the bridges.
   }, [transport.scopeKey, artifactId, revision, accepted, historical, manifest?.manifestId, manifest?.bindingVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

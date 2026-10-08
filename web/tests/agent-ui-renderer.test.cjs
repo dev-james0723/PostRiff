@@ -138,16 +138,28 @@ test('every spec in both libraries has a renderer', () => {
   assert.ok(supportedLibraryHashes('consumer').includes(consumer.libraryHash), 'generated assets match the current consumer library');
 });
 
+function capture(fn) {
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => errors.push(args.map((a) => (a && a.stack) || String(a)).join(' ').slice(0, 600));
+  try {
+    return { value: fn(), errors };
+  } finally {
+    console.error = original;
+  }
+}
+
 test('an accepted view renders every primitive inside the generated frame, after the native answer', () => {
   const result = canonical(KITCHEN);
-  const html = render({ artifact: artifact({ canonicalSource: result.canonicalSource, sourceHash: result.sourceHash }) });
+  const { value: html, errors } = capture(() => render({ artifact: artifact({ canonicalSource: result.canonicalSource, sourceHash: result.sourceHash }) }));
+  const why = () => `\nconsole.error: ${errors.slice(0, 3).join('\n')}\nhtml: ${html.slice(0, 2500)}`;
   assert.ok(html.indexOf('data-native') < html.indexOf('data-rafii-generated'), 'native answer first');
   assert.match(html, new RegExp(`data-rafii-generated="" data-artifact-id="${ARTIFACT_ID}" data-generation-state="ready"`));
   for (const name of ['RafiiRoot', 'Stack', 'Grid', 'Section', 'Card', 'Tabs', 'AccordionItem', 'Text', 'EvidenceLink', 'EmptyState', 'LoadingState', 'ErrorState',
     'ToolBoundTable', 'ToolBoundChart', 'Metric', 'Timeline', 'Comparison', 'TaskStatus', 'SelectionList', 'Form', 'TextField', 'Select', 'DateRange', 'Button', 'ActionButton']) {
-    assert.ok(html.includes(`data-genui="${name}"`), `${name} rendered`);
+    assert.ok(html.includes(`data-genui="${name}"`), `${name} rendered${why()}`);
   }
-  assert.ok(!html.includes('data-genui-invalid'), 'no component rejected its props');
+  assert.ok(!html.includes('data-genui-invalid'), `no component rejected its props${why()}`);
   assert.ok(!html.includes('data-genui-missing'), 'no missing renderer');
   assert.ok(html.includes('tab one') && html.includes('in card') && html.includes('hidden detail'));
   // Text is text: no HTML injection from generated strings.

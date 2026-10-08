@@ -104,6 +104,7 @@ export const SelectionList: RafiiComponentRenderer = ({ props, statementId }) =>
                   <input
                     id={inputId}
                     type="checkbox"
+                    aria-label={title}
                     className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
                     checked={checked}
                     disabled={disabled}

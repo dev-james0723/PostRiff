@@ -6,6 +6,9 @@ import { useGenUiLocale } from '../../core/locale';
 import { plainText, safeProps } from '../../core/props';
 import { LoadingRows } from './shared';
 
+/** Shared state notes (D-A43 names them here; they live in shared.tsx). */
+export { QueryStateNote, SourceMeta, StatusBadge } from './shared';
+
 const titled = z.object({ title: z.union([z.string(), z.number()]), description: z.union([z.string(), z.number()]).optional() });
 
 export const EmptyState: RafiiComponentRenderer = ({ props, statementId }) => {

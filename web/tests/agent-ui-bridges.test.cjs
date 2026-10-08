@@ -126,7 +126,7 @@ test('a read posts UiQueryV1 to the queries route and wraps the result for OpenU
   const t = transport(() => ok(result()));
   const q = bridges.createQueryBridge({ transport: t, artifact: artifact() });
   const out = await q.toolProvider().callTool({ name: 'draft_read', arguments: { draftId: 'v1' } });
-  assert.deepEqual(out.content, []);
+  assert.equal(Array.isArray(out.content) && out.content.length === 0, true);
   assert.equal(out.structuredContent.state, 'available');
   assert.equal(t.calls.length, 1);
   assert.equal(t.calls[0].path, '/api/workspaces/ws-1/agent/ui/queries');
@@ -429,7 +429,7 @@ test('createUiBridges invalidates reads named by a verified result and forwards 
   assert.equal(t.calls.filter((c) => c.path.endsWith('/queries')).length, 2);
   ui.onContinue({ message: '  compare the second two  ', artifactId: 'forged', artifactRevision: 99, stateRevision: 4 });
   ui.onContinue({ message: '   ', artifactId: ARTIFACT_ID, artifactRevision: 2, stateRevision: 0 });
-  assert.deepEqual(sent, [{ message: 'compare the second two', artifactId: ARTIFACT_ID, artifactRevision: 2, stateRevision: 4 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ message: 'compare the second two', artifactId: ARTIFACT_ID, artifactRevision: 2, stateRevision: 4 }]);
   ui.query.dispose();
   assert.equal(ui.action.writesEnabled('draft_edit'), false, 'disposing one side stops both');
 });

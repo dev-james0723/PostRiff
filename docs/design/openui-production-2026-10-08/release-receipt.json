@@ -1,0 +1,65 @@
+{
+  "status": "partial",
+  "scope": "Rafii x OpenUI full release: C01-C10, J01-J09, consumer chat/panel/expanded/mobile/browser voice + founder surface",
+  "final_commit_sha": null,
+  "merge_sha": null,
+  "pr_url": null,
+  "ci_results": [],
+  "deployment_id": null,
+  "deployment_sha": null,
+  "canonical_origin": null,
+  "canonical_origin_note": "rafii.io NXDOMAIN and not attached to the Vercel project as of 2026-10-08 12:30 EDT; observed production alias https://postriff-phase2-private.vercel.app",
+  "verified_at": null,
+  "timezone": "America/New_York",
+  "library_versions_and_hashes": {
+    "@openuidev/react-lang": "0.3.2",
+    "@openuidev/lang-core": "0.3.2",
+    "consumer_library_hash": null,
+    "founder_library_hash": null
+  },
+  "contract_hash": "c4e2c3aeeb388728e6fc8972799384d1d2d56361949042d9ca10bbc003b94fb5",
+  "migrations": [
+    {
+      "file": "migrations/postriff/102_agent_ui_artifacts.sql",
+      "applied_production": false,
+      "evidence": null
+    }
+  ],
+  "feature_flag_state": {
+    "RAFII_GENUI_ENABLED": null,
+    "RAFII_GENUI_ACTIONS_ENABLED": null,
+    "RAFII_GENUI_EDITS_ENABLED": null,
+    "RAFII_GENUI_FOUNDER_ENABLED": null,
+    "RAFII_GENUI_WORKSPACES": null
+  },
+  "eligible_audience": null,
+  "journey_results": {
+    "J01": "unverified",
+    "J02": "unverified",
+    "J03": "unverified",
+    "J04": "unverified",
+    "J05": "unverified",
+    "J06": "unverified",
+    "J07": "unverified",
+    "J08": "unverified",
+    "J09": "unverified"
+  },
+  "gate_results": "see acceptance.json",
+  "real_provider_evidence": null,
+  "real_database_evidence": null,
+  "physical_device_evidence": null,
+  "model_attempt_and_cost_summary": null,
+  "rollback_deployment": {
+    "deployment_id": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+    "sha": "bb4ca5aa",
+    "recorded_at": "2026-10-08T14:20:00-04:00",
+    "previous": {
+      "deployment_id": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+      "sha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816"
+    },
+    "note": "consumer-saas advanced to bb4ca5aa (PR #134) during the release; integration merged it at 1e023ffa"
+  },
+  "rollback_drill": null,
+  "known_unverified_items": [],
+  "remaining_human_action": []
+}

@@ -123,7 +123,7 @@ export function createActionBridge(options: ActionBridgeOptions): ActionBridge {
 
   const set = (next: ActionState) => {
     state = next;
-    for (const listener of [...listeners]) {
+    for (const listener of Array.from(listeners)) {
       try {
         listener();
       } catch {
