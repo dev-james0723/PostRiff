@@ -130,7 +130,10 @@ if __name__ == '__main__':
     try:
         import resource
         resource.setrlimit(resource.RLIMIT_CPU,(10,10))
-        resource.setrlimit(resource.RLIMIT_AS,(384*1024*1024,384*1024*1024))
+        try:
+            resource.setrlimit(resource.RLIMIT_AS,(384*1024*1024,384*1024*1024))
+        except (ValueError,OSError):
+            pass  # macOS rejects RLIMIT_AS; Linux (production, CI) enforces it. CPU and output bounds still apply.
         raw=sys.stdin.buffer.read(MAX_FILE_BYTES+1)
         status,text=extract_text(raw,sys.argv[1])
         print(json.dumps({'status':status,'text':text}))

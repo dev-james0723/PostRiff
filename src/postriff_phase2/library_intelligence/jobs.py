@@ -131,6 +131,8 @@ class JobContext:
     _reader: Callable[[], bytes] | None = None
     _heartbeat: Callable[[], bool] | None = None
     _progress: Callable[[int, int, str], bool] | None = None
+    _segments: Callable[[], list] | None = None
+    _frames: Callable[[], list] | None = None
     _raw: bytes | None = field(default=None, repr=False)
 
     def raw(self) -> bytes:
@@ -144,6 +146,14 @@ class JobContext:
     def heartbeat(self) -> bool:
         """Extend the lease. False means the job was cancelled, revoked or taken over: stop and return."""
         return bool(self._heartbeat()) if self._heartbeat else True
+
+    def segments(self) -> list:
+        """This version's active segments (contract shape), read in a fresh short transaction; [] when none."""
+        return list(self._segments()) if self._segments else []
+
+    def frames(self) -> list:
+        """Stored poster/frame images (raw JPEG bytes) for a legacy video; [] when none were kept."""
+        return list(self._frames()) if self._frames else []
 
     def progress(self, done: int, total: int, unit: str = "items") -> bool:
         """Report measurable progress (also a heartbeat). Never a guessed percentage."""
@@ -634,9 +644,21 @@ def _prepare(intel, connect, prepared):
                 capabilities.set_state(pcur, job["workspaceId"], version["versionId"], job["capability"], "processing", job_id=jid, job_guard=jid,
                                        progress={"done": done, "total": total, "unit": unit}, processor_version=proc["version"])
                 return True
+        def segments_of():
+            from . import segments as seg
+            with connect() as sg, sg.cursor() as scur:
+                scur.execute(seg.SELECT, (job["workspaceId"], version["versionId"], False, -1, -1, seg.ZERO, 500))
+                return [seg.to_contract(r) for r in scur.fetchall()]
+
+        def frames_of():
+            if storage is None or not legacy or version["kind"] != "video":
+                return []
+            frames = [f for f in legacy.get("frames") or [] if isinstance(f, dict) and f.get("objectName")][:4]
+            return [storage.get(job["workspaceId"], "media", f["objectName"]) for f in frames]
         jobctx = JobContext(job_id=jid, workspace_id=job["workspaceId"], actor=ctx.actor, version=version, providers=getattr(intel, "providers", None),
                             now=time.time(), processor=proc, consent_revision=decision.grant_revision, attempt=job["attempts"],
-                            _reader=_reader(storage, job["workspaceId"], version, obj, legacy), _heartbeat=heartbeat, _progress=progress)
+                            _reader=_reader(storage, job["workspaceId"], version, obj, legacy), _heartbeat=heartbeat, _progress=progress,
+                            _segments=segments_of, _frames=frames_of)
         prepared["context"] = jobctx
         if not capabilities.is_local(proc):
             estimate = proc["estimate"](jobctx) if proc.get("estimate") else None
@@ -693,18 +715,25 @@ def _write(ctx, version, proc, outcome) -> dict:
     written = {}
     revs = policy.revisions(ctx)
     receipt_value = outcome.get("provider") or {}
+    # Media facts first: segment locators are validated against the version's (new) duration/page bounds.
+    if outcome.get("media") and not version["legacy"]:
+        try:
+            written["media"] = bool(_writer("media", "write_media")(ctx.cur, ctx.workspace_id, version, outcome["media"]))
+        except _WriterUnavailable:
+            ctx.cur.execute(MEDIA, (json.dumps(outcome["media"], default=str), ctx.workspace_id, _uuid(version["versionId"])))
+            written["media"] = True
+        version = {**version, "media": {**(version.get("media") or {}), **outcome["media"]}}
     if outcome["segments"]:
         written["segments"] = _writer("segments", "write_segments")(ctx.cur, ctx.workspace_id, version, outcome["segments"],
-                                                                    extractor=proc.get("name") or proc["capability"], extractor_version=proc["version"])
+                                                                    extractor=outcome.get("extractor") or proc.get("name") or proc["capability"],
+                                                                    extractor_version=outcome.get("extractorVersion") or proc["version"])
     if outcome["embeddings"]:
         written["embeddings"] = _writer("index", "write_embeddings")(ctx.cur, ctx.workspace_id, version, outcome["embeddings"],
                                                                      consent_revision=revs["grantRevision"], index_generation=revs["indexGeneration"])
     if outcome["annotations"]:
         written["annotations"] = _writer("understanding", "write_annotations")(ctx.cur, ctx.workspace_id, version, outcome["annotations"],
-                                                                               processor_version=proc["version"], model=receipt_value.get("model"))
-    if outcome.get("media") and not version["legacy"]:
-        ctx.cur.execute(MEDIA, (json.dumps(outcome["media"], default=str), ctx.workspace_id, _uuid(version["versionId"])))
-        written["media"] = True
+                                                                               processor_version=proc["version"], model=receipt_value.get("model"),
+                                                                               replace_fields=outcome.get("replaceFields"))
     return written
 
 

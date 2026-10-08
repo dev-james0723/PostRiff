@@ -43,7 +43,7 @@ _loaded = False
 
 def register(processor: dict) -> dict:
     """Processor = {capability, version, location, category, applies(version)->bool, estimate(job)->usd_micro|None,
-    run(job)->Outcome, name?, model?}. Re-registering the same (capability, version) replaces the earlier entry."""
+    run(job)->Outcome, name?, model?}. Re-registering the same name (or, unnamed, the same version) replaces the earlier entry."""
     if not isinstance(processor, dict):
         raise ValueError("A processor is a dict.")
     missing = [k for k in REQUIRED if k not in processor]
@@ -62,7 +62,10 @@ def register(processor: dict) -> dict:
     entry = dict(processor)
     entry.setdefault("estimate", None)
     bucket = PROCESSORS.setdefault(entry["capability"], [])
-    bucket[:] = [p for p in bucket if p["version"] != entry["version"]]
+    # Idempotent by name when given (one capability can have a local and a cloud processor at the same version),
+    # otherwise by version.
+    same = (lambda p: p.get("name") == entry["name"]) if entry.get("name") else (lambda p: not p.get("name") and p["version"] == entry["version"])
+    bucket[:] = [p for p in bucket if not same(p)]
     bucket.append(entry)
     return entry
 

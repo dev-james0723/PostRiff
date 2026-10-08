@@ -1,0 +1,55 @@
+"""Coordinator wiring between workstreams: processor registry identity and the job writer order."""
+import unittest
+
+from library_intelligence_fakes import FakeCursor, ctx, version
+from postriff_phase2.library_intelligence import capabilities, jobs
+
+
+def proc(name, capability="extract", ver="v1", location="local", category="extract"):
+    return {"name": name, "capability": capability, "version": ver, "location": location, "category": category,
+            "applies": lambda v: True, "run": lambda job: {"state": "ready"}}
+
+
+class Registry(unittest.TestCase):
+    def setUp(self):
+        self.saved = {k: list(v) for k, v in capabilities.PROCESSORS.items()}
+
+    def tearDown(self):
+        capabilities.PROCESSORS.clear()
+        capabilities.PROCESSORS.update(self.saved)
+
+    def test_local_and_cloud_processors_for_one_capability_coexist(self):
+        capabilities.PROCESSORS.pop("extract", None)
+        capabilities.register(proc("t.structure"))
+        capabilities.register(proc("t.ocr", location="cloud", category="ocr"))
+        capabilities.register(proc("t.structure"))  # re-import is idempotent by name
+        names = [p["name"] for p in capabilities.PROCESSORS["extract"]]
+        self.assertEqual(names, ["t.ocr", "t.structure"])
+
+
+class WriterOrder(unittest.TestCase):
+    def test_media_written_before_segments_with_new_bounds(self):
+        calls = []
+        originals = jobs._writer
+
+        def fake_writer(module, function):
+            def write(cur, ws, v, items, **kw):
+                calls.append((function, (v.get("media") or {}).get("durationMs"), kw))
+                return len(items) if isinstance(items, list) else True
+            return write
+        jobs._writer = fake_writer
+        try:
+            context = ctx(FakeCursor())
+            outcome = {"state": "ready", "segments": [{"text": "hi"}], "annotations": [], "embeddings": [], "media": {"durationMs": 9000},
+                       "extractor": "library.transcribe", "extractorVersion": "asr-1:whisper-1", "replaceFields": None, "provider": None}
+            written = jobs._write(context, version(kind="audio"), proc("t.transcribe", capability="transcribe"), outcome)
+        finally:
+            jobs._writer = originals
+        self.assertEqual([c[0] for c in calls], ["write_media", "write_segments"])
+        self.assertEqual(calls[1][1], 9000, "segments see the duration written in the same finalize")
+        self.assertEqual(calls[1][2]["extractor_version"], "asr-1:whisper-1")
+        self.assertTrue(written["media"])
+
+
+if __name__ == "__main__":
+    unittest.main()
