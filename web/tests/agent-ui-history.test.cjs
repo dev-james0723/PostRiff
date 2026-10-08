@@ -236,3 +236,17 @@ test('registries: one stable presentation key per scope and run; fresh marks and
   registry.enterUiScope(null);
   assert.deepEqual(registry.registrySizes(), { fresh: 0, inUse: 0, byArtifact: 0, keys: 0 });
 });
+
+test('registries: a fresh mark made after a slot rendered notifies it (the turn response may land after the message)', () => {
+  registry.enterUiScope('workspace:u9:w9');
+  let calls = 0;
+  const stop = registry.onUiScopeChange(() => { calls += 1; });
+  const before = registry.registryVersion();
+  registry.markFresh('workspace:u9:w9', 'run-late');
+  assert.equal(calls, 1);
+  assert.ok(registry.registryVersion() > before, 'useSyncExternalStore sees a new snapshot');
+  registry.markFresh('workspace:u9:w9', 'run-late');
+  assert.equal(calls, 1, 'marking the same run again changes nothing');
+  stop();
+  registry.enterUiScope(null);
+});

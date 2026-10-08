@@ -173,6 +173,15 @@ test('hidden views make no requests; a scope switch disposes sessions and aborts
   assert.equal(sessions.sessionCount(), 0);
 });
 
+test('a panel turn sent before the runtime status loaded waits for it instead of falling back to the site agent', () => {
+  const chat = fs.readFileSync(path.join(WEB, 'src/features/site-agent/chat.tsx'), 'utf8');
+  const send = chat.slice(chat.indexOf('const send = useCallback('), chat.indexOf('const continueFromView'));
+  assert.ok(send.includes('agent.status ?? (await loadStatus(client, agent.api, w))'), 'send reads the status itself when the query has not answered');
+  assert.ok(send.indexOf('loadStatus(') < send.indexOf('if (agentOn)'), 'the runtime is chosen after the status is known');
+  assert.ok(send.indexOf('panelStore.setBusy(w, true)') < send.indexOf('loadStatus('), 'the wait happens inside the busy turn (no double send)');
+  assert.ok(/markFresh\(uiScope, response\.runId\)/.test(send), 'an eligible answer from this tab is marked fresh');
+});
+
 test('the outline and the panel Escape handling skip generated layers (same selectors everywhere)', () => {
   const outline = fs.readFileSync(path.join(WEB, 'src/features/site-agent/use-page-context.ts'), 'utf8');
   for (const selector of selectors.OUTLINE_SKIP_SELECTORS) assert.ok(outline.includes(selector), `OWN_SURFACES includes ${selector}`);

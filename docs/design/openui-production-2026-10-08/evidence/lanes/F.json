@@ -1,0 +1,92 @@
+{
+ "role": "F",
+ "lane": "durable artifacts, CAS history, replay/resume, UI state, surfaces and voice continuity, founder surface (R5)",
+ "branch": "claude/rafii-openui-f-surfaces",
+ "base_sha": "31cbee09",
+ "head_sha": "1940f6b8c39375bdff5019f4583105be8049248f",
+ "head_note": "head_sha is the code head this record describes; the commit adding this file follows it",
+ "owned_paths": [
+  "src/postriff_phase2/agent_runtime_v2/ui_store.py",
+  "src/rafii_control/founder_agent_ui.py",
+  "web/src/features/agent/generative-ui/state/**",
+  "web/src/features/agent/generative-ui/surfaces/**",
+  "web/src/lib/agent-runtime/use-ui-artifact-stream.ts",
+  "bounded edits: web/src/features/agent/conversation-view.tsx, web/src/features/site-agent/{answer,chat,panel}.tsx, web/src/features/site-agent/use-page-context.ts, web/src/features/founder/agent/{answer,chat}.tsx, web/src/lib/founder/types.ts, web/src/lib/agent-runtime/voice-session.ts",
+  "tests/test_agent_ui_store.py",
+  "tests/test_agent_ui_store_founder.py",
+  "tests/test_agent_ui_store_voice.py",
+  "tests/phase2/postgres_agent_ui_store.py",
+  "web/tests/agent-ui-stream.test.cjs",
+  "web/tests/agent-ui-history.test.cjs",
+  "web/tests/agent-ui-surfaces.test.cjs",
+  "web/tests/agent-ui-voice.test.cjs"
+ ],
+ "completed_tasks": [
+  "ui_store on migration 102: create_or_resume_artifact (D-A32/D-A33 lease, same key = same attempt, one live producer per target revision, generate never re-spends, explicit retry, single repair, edit base CAS before spend, body.agent.uiArtifacts on the message)",
+  "append_event monotonic seq (heartbeats never persisted, D-A36), events_after, replay_view, attempt_state; checkpoint lease-owner checked (409 ui_lease_lost / ui_attempt_closed), queued→streaming, lease renewal",
+  "commit_ui_revision atomic CAS (baseRevision + baseSourceHash), server-validation re-checked (hash, size, statements, queries/actions inside the stored manifest, founder read-only), immutable revisions, previous ready revision recoverable, delta compaction",
+  "finish_attempt state machine without accounting columns (D-A39); reap_expired/reap_all interrupt expired leases and settle unknown via ui_metering.settle_attempt (Ledger fallback while B's stub was in place)",
+  "persist_ui_state: declared $vars/forms only (validator stateNames/formNames, D-A42) + explicit @selection system field, secret-like names and signed URLs refused, 16 KiB, stateRevision CAS with StateConflict(.current), bounded state event history",
+  "selection_context: stored order at selection time + visible list, kind for the Manager, ids only in the note, revoked items dropped, foreign view → no selection",
+  "snapshot/by-message/persist-state HTTP: re-authorized every read, scope isolation (founder 404 on consumer and vice versa, Demo vs Live), revoked message/conversation/member/approved refs, old library → native fallback with canonical source withheld, access + display + declared fields",
+  "founder_agent_ui (J09, D-A22): mode from run/artifact, runtime rebuilt per namespace (ui_transaction scope from runtime.founder), client scope/surface refused, fdr_ namespaced keys, blocking presentation drained, polling replay, no action routes, reads survive kill switch",
+  "browser stream client: incremental SSE parser (fragmented UTF-8, CRLF/CR edges), replay-only controller (heartbeat before dedupe, gap → one replay, authoritative replays, failure-only backoff, pause when hidden, abort on dispose/scope switch), founder polling source, consumer and founder UiTransports (D-A41)",
+  "state module: artifact reducer (preview vs accepted, edits keep the accepted revision, failures keep last valid, library fallback), UiStateController (debounce, CAS conflict merge, refusal stop, size cap, applyUiPatch with lost values), UiArtifactStateContext for C, useRecordSelection for E, tab registries (stable presentation keys, fresh turns, uiContext, scope reset)",
+  "surfaces: one ArtifactSession per (scope, artifact) shared by chat/panel/mobile/expanded/founder; fresh-turn-only presentation start; reload = snapshots only; explicit Build/Try again (cost note, new key)/Change this view/Stop/Expand; C's RafiiGenerativeMessage lazily mounted with render/status/manifest/historical/active",
+  "mounts: SiteAgentAnswer and FounderAnswer generated slots; panel (panel/mobile per D-A21), full chat (chat + agent follow-ups with uiContext), founder chat; Escape skip list and page outline skip generated layers; founder section contract drift fixed",
+  "voice: uiContext on delegated turns (host hook or the tab's view in use for this workspace/conversation), speakableSummary-only speech guard (source-like text never spoken, record ids stripped)"
+ ],
+ "interfaces_produced": [
+  "ui_store frozen entry points + ext: attempt_state, replay_view, reap_all, StateConflict/RevisionConflict (.current), supported_library_hashes, snapshot()/by_message() cursor-level helpers",
+  "founder_agent_ui.handle(...) and scoped_key(scope_key, key)",
+  "use-ui-artifact-stream.ts: createSseParser, parseUiEvent, UiArtifactStream, UiArtifactPoller, createUiEventSource, createConsumerUiTransport, createFounderUiTransport, useUiArtifactStream",
+  "generative-ui/state: reduceArtifact/renderOf/statusLine, UiStateController, applyUiPatch, UiArtifactStateContext/useUiArtifactState, useRecordSelection(listId, items, visibleOrder?), registry (presentationKey, markFresh/isFresh, setUiContext/currentUiContext/currentUiContextForWorkspace, enterUiScope)",
+  "generative-ui/surfaces: GeneratedAnswerSlot, FounderGeneratedSlot, GeneratedArtifact, ExpandedArtifact, ArtifactSession/sessionFor/startPresentation/startFounderPresentation/loadMessageViews/flushConversation, useConsumerUiTransport, useFounderUiTransport, presentationPlan/surfaceFor, selectors",
+  "SiteAgentAnswer `generated` prop; FounderAnswer `generated` prop; VoiceHost.uiContext; voice-session speakableText"
+ ],
+ "tests": [
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37820885220",
+   "conclusion": "success",
+   "test_counts": "Python unit (store + founder) green; PG postgres_agent_ui_store 18/18",
+   "sha": "28d9f62e"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37828770915",
+   "conclusion": "failure (outside lane F)",
+   "test_counts": "Types success; Lint success; unit-python 113 OK; database 3 scripts OK (F store 18 scenarios incl. founder routes); unit-web 112 with 2 failures in lane C's agent-ui-renderer.test.cjs ('stable statement ids', 'unsafe links') caused by generated-asset drift on the integrated tree; drift check failed (A regenerates assets)",
+   "sha": "1940f6b8"
+  },
+  {
+   "command_or_ci_run_url": "PYTHONPATH=src:tests .venv/bin/python -m unittest tests.test_agent_ui_store (local, seconds)",
+   "conclusion": "success",
+   "test_counts": "31 OK",
+   "sha": "1940f6b8"
+  }
+ ],
+ "blockers": [
+  {
+   "kind": "other_lane_ci",
+   "exact_dependency": "lane C/A: web/src/features/agent/generative-ui/generated assets drift on the integrated tree → agent-ui-renderer.test.cjs 'stable statement ids key children' and 'unsafe links render as text' see libraryHash unsupported; generate-openui-assets --check fails",
+   "independent_work_remaining": "none in lane F; re-run F on the integration head after A's final asset regeneration"
+  },
+  {
+   "kind": "live_verification",
+   "exact_dependency": "G04/G11/G15/G19 deployed and real-iPhone evidence needs the integrated deployment (lane G/A)",
+   "independent_work_remaining": "none in lane F"
+  }
+ ],
+ "shared_patches": [
+  "evidence/lanes/F-shared-patches/01-ui-auth-founder-scope-and-state-conflict.patch (applied by A b9c67dce)",
+  "02-service-ui-selection-refs-note.patch (applied b9c67dce)",
+  "03-ui-validator-state-names.patch (applied b9c67dce)",
+  "04-cron-ui-reaper.patch (applied b9c67dce)",
+  "05-founder-ui-budget-buckets.patch (applied 091da6f3)"
+ ],
+ "defects_reported": [
+  "service.py refs_note \"\\n\".join over a list (fixed by patch 02)",
+  "lane B: create_presentation/_artifact_head refused founder runs/artifacts (B fixed per A)",
+  "lane C: renderer lint/test failures (C fixed in 8dba78c5); remaining asset drift (A regenerates)"
+ ],
+ "next_action": "A: integrate claude/rafii-openui-f-surfaces; after the final asset regeneration, run agent-ui on the integration head; G: browser scenes locate [data-rafii-generated] (C) inside [data-rafii-generated-host] (F)"
+}
