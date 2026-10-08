@@ -148,8 +148,16 @@ class Worker(unittest.TestCase):
         self.assertEqual(social.submit(manifest())["state"], "scheduled")   # 429 → retry later, not a failure
         self.assertEqual(social.submit(manifest())["state"], "held")        # 403 → permission
         self.assertEqual(social.submit(manifest())["state"], "uncertain")   # 200 without evidence → never published
-        social_no_read = HostedSocial(FakeOAuth(scopes=("w_member_social",)), providers, transport=Recorder([]))
-        self.assertEqual(social_no_read.reconcile(manifest(), {"providerReference": "urn:li:share:1"})["state"], "uncertain")
+        no_read_transport = Recorder([])
+        social_no_read = HostedSocial(FakeOAuth(scopes=("w_member_social",)), providers, transport=no_read_transport)
+        retained = social_no_read.reconcile(manifest(), {"providerReference": accepted["reference"]})
+        self.assertEqual((retained["state"], retained["reference"]), ("provider_accepted", accepted["reference"]))
+        self.assertEqual(retained["url"], "https://www.linkedin.com/feed/update/urn:li:share:123/")
+        self.assertNotIn("verification", retained, "A known create receipt does not prove API read-back")
+        self.assertIn("Do not resubmit", retained["confirmed"])
+        self.assertEqual(social_no_read.reconcile(manifest(), {})["state"], "uncertain",
+                         "An unknown create outcome still requires reconciliation")
+        self.assertEqual(no_read_transport.calls, [], "Neither a restricted read nor duplicate create is authorized")
 
     def test_threads_readback_needs_exact_author_even_when_id_and_text_match(self):
         for owner in ({}, {'id':'foreign'}, None):
