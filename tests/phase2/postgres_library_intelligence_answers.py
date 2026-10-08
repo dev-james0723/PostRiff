@@ -232,7 +232,8 @@ check("A035 contradictory sources are attributed and contrasted", len(conflictin
 def both_dates(payload):
     a, b = handle_for(payload, "Venue contract"), handle_for(payload, "Newsletter draft")
     return {"abstain": False, "claims": [{"text": "The venue contract says 12 October; the newsletter says 19 October.", "support": "conflicting",
-                                          "quotes": [{"passage": a, "text": quote(payload, a, "12 October")}, {"passage": b, "text": quote(payload, b, "19 October")}]}]}
+                                          "quotes": [{"passage": a, "text": quote(payload, a, "recital is on 12 October")},
+                                                     {"passage": b, "text": quote(payload, b, "recital moved to 19 October")}]}]}
 
 
 with connection() as db:
@@ -242,7 +243,8 @@ with connection() as db:
                "VALUES(%s,%s,'processing','workspace','*','cloud','llm',%s,%s)", (llm_grant, wid, ONE, revision))
 model = FixtureLLM(both_dates)
 llm_conflict = run_answer(wid, "When is the recital?", selection("contract", "newsletter"), llm=model)
-check("A035 a fixture model's conflict keeps both verified sources", llm_conflict["mode"] == "llm" and [cl["support"] for cl in llm_conflict["claims"]] == ["conflicting"]
+check("A035 a fixture model's conflict keeps both verified sources, shown as quotations", llm_conflict["mode"] == "llm"
+      and [cl["support"] for cl in llm_conflict["claims"]] == ["conflicting"] and llm_conflict["claims"][0].get("paraphraseWithheld")
       and cited_keys(llm_conflict) == {assets["contract"]["key"], assets["newsletter"]["key"]} and model.calls == 1, llm_conflict)
 collection_scope = {"scope": {"kind": "collection", "collectionId": collection.hex}}
 scoped = run_answer(wid, "When are rehearsals?", collection_scope)

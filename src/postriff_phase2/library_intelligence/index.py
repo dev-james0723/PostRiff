@@ -31,6 +31,7 @@ import json
 import math
 import uuid
 from collections import OrderedDict
+from contextlib import contextmanager
 
 from postriff_alpha.domain import AlphaError
 
@@ -235,10 +236,68 @@ def providers_for(ctx):
     return ctx.caches["providers"]
 
 
+@contextmanager
+def ledger_cursor(ctx):
+    """A short transaction of its own for one budget reservation or settlement, committed on exit. Ledger.reserve locks
+    workspace and global budget rows; holding them across a provider call would block every paid reservation in every
+    tenant, and a request rollback would erase a settlement. Without a connection factory (unit tests, detached
+    callers) it falls back to a savepoint on the request cursor."""
+    factory = getattr(getattr(ctx.service, "repository", None), "connection_factory", None)
+    if callable(factory):
+        with factory() as db, db.cursor() as cur:
+            yield cur
+        return
+    savepoint = _savepoint(ctx.cur, "lib_ledger")
+    try:
+        yield ctx.cur
+    except BaseException:
+        _rollback(ctx.cur, savepoint)
+        raise
+    _release(ctx.cur, savepoint)
+
+
+def possibly_billed(error) -> bool:
+    """The provider answered 200 but the body was unusable, so the call may have been billed (settle as unknown, never as
+    a free failure). Refusals, rate limits and timeouts are not billed."""
+    text = str(error).lower()
+    return isinstance(error, AlphaError) and error.code == "library_provider_failed" and ("unreadable" in text or "unexpected shape" in text)
+
+
+def _settle_committed(ctx, settle, reservation, result, *, failed: bool):
+    try:
+        with ledger_cursor(ctx) as cur:
+            settle(cur, ctx.workspace_id, reservation, result, failed=failed)
+    except Exception as error:  # the reservation stays open for the ledger's own expiry; never hide the provider's outcome
+        print(json.dumps({"event": "library_intelligence.settle_failed", "error": type(error).__name__}), flush=True)
+
+
+def paid_call(ctx, *, capability: str, model: str, estimate_usd_micro: int, key: str, call, reserve=None, settle=None):
+    """Reserve (short committed transaction) -> provider call with no budget lock held -> settle (short committed
+    transaction). Raises ProviderUnavailable(capability, 'blocked_budget' | 'budget_unavailable') when nothing was
+    reserved (then no ledger row exists). A provider failure is settled first (failed, or unknown when possibly billed)
+    and then re-raised."""
+    reserve = reserve or _reserve
+    settle = settle or _settle
+    try:
+        with ledger_cursor(ctx) as cur:
+            reservation = reserve(cur, ctx.workspace_id, ctx.actor, capability=capability, estimate_usd_micro=estimate_usd_micro, key=key, model=model)
+    except Exception as error:
+        raise providers_module.ProviderUnavailable(capability, "budget_unavailable") from error
+    if (reservation or {}).get("status") != "reserved":
+        raise providers_module.ProviderUnavailable(capability, "blocked_budget")
+    try:
+        result = call()
+    except Exception as error:
+        _settle_committed(ctx, settle, reservation, None, failed=not possibly_billed(error))
+        raise
+    _settle_committed(ctx, settle, reservation, result, failed=False)
+    return result
+
+
 def embed_query(ctx, text: str) -> tuple[list[float], str]:
-    """The user's query text through the gateway (it is the user's own input, not Library content). Budget-reserved;
-    cached per process by (workspace, model, dims, text) so paging never pays twice. Raises ProviderUnavailable or
-    AlphaError; the caller degrades to labelled lexical results."""
+    """The user's query text through the gateway (it is the user's own input, not Library content). Budget-reserved in
+    short transactions of its own (paid_call); cached per process by (workspace, model, dims, text) so paging never pays
+    twice. Raises ProviderUnavailable or AlphaError; the caller degrades to labelled lexical results."""
     prov = providers_for(ctx)
     prov.require("embedding")
     model = prov.model("embedding")
@@ -246,29 +305,8 @@ def embed_query(ctx, text: str) -> tuple[list[float], str]:
     if cache_key in _QUERY_CACHE:
         _QUERY_CACHE.move_to_end(cache_key)
         return list(_QUERY_CACHE[cache_key]), model
-    cur = ctx.cur
-    savepoint = _savepoint(cur, "lib_embed")
-    try:
-        reservation = _reserve(cur, ctx.workspace_id, ctx.actor, capability="embedding", estimate_usd_micro=prov.estimate("embedding", units=max(1, len(text))),
-                               key="search-embed:" + uuid.uuid4().hex, model=model)
-        if (reservation or {}).get("status") != "reserved":
-            raise providers_module.ProviderUnavailable("embedding", "blocked_budget")
-        try:
-            result = prov.embed([text], dims=TEXT_DIMS)
-        except Exception:
-            _settle(cur, ctx.workspace_id, reservation, None, failed=True)
-            raise
-        _settle(cur, ctx.workspace_id, reservation, result)
-    except providers_module.ProviderUnavailable:
-        _rollback(cur, savepoint)
-        raise
-    except AlphaError:
-        _rollback(cur, savepoint)
-        raise
-    except Exception as error:
-        _rollback(cur, savepoint)
-        raise providers_module.ProviderUnavailable("embedding", "budget_unavailable") from error
-    _release(cur, savepoint)
+    result = paid_call(ctx, capability="embedding", model=model, estimate_usd_micro=prov.estimate("embedding", units=max(1, len(text))),
+                       key="search-embed:" + uuid.uuid4().hex, call=lambda: prov.embed([text], dims=TEXT_DIMS))
     vector = [float(v) for v in result.value[0]]
     _QUERY_CACHE[cache_key] = vector
     while len(_QUERY_CACHE) > QUERY_CACHE_SIZE:
