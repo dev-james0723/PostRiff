@@ -81,6 +81,37 @@ class Effects(unittest.TestCase):
         self.assertEqual(order, ["inner", "usage"])
 
 
+class ActionAtomicity(unittest.TestCase):
+    def test_refused_action_rolls_back_handler_writes(self):
+        import sys
+        import types
+        from library_intelligence_fakes import ctx as make_ctx
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.library_intelligence import actions
+        fake = types.ModuleType("postriff_phase2.library_intelligence.voice")
+
+        def approve(context, envelope, targets):
+            context.cur.execute("INSERT INTO public.pr_library_grants(id) VALUES(%s)", ("written-before-refusal",))
+            raise AlphaError("This passage quotes someone else.", 403, code="library_voice_reference")
+        fake.approve_span_action = approve
+        cur = FakeCursor().on(r"FROM public.pr_library_action_receipts", [])
+        saved = sys.modules.get(fake.__name__)
+        sys.modules[fake.__name__] = fake
+        try:
+            result = actions.apply(make_ctx(cur), {"actionId": "a1", "uiInstanceId": "ui1", "actionType": "voice.approve_span", "targetRefs": [],
+                                                   "idempotencyKey": "atomic-key-000000001", "payload": {}})
+        finally:
+            if saved is not None:
+                sys.modules[fake.__name__] = saved
+            else:
+                sys.modules.pop(fake.__name__, None)
+        self.assertEqual(result["status"], "denied")
+        order = [sql for sql, _ in cur.executed if "SAVEPOINT" in sql or "pr_library_grants" in sql or "action_receipts(" in sql]
+        self.assertEqual(order[0], "SAVEPOINT library_action")
+        self.assertIn("ROLLBACK TO SAVEPOINT library_action", order)
+        self.assertFalse([sql for sql in order if sql.startswith("INSERT INTO public.pr_library_action_receipts")], "no receipt for a refusal")
+
+
 class OfficeXmlGuard(unittest.TestCase):
     def test_utf16_part_cannot_hide_a_doctype(self):
         import io

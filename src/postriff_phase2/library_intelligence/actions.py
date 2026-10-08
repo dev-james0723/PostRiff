@@ -67,15 +67,26 @@ def apply(ctx, envelope: dict) -> dict:
         handler = getattr(module, function_name)
     except (ImportError, AttributeError):
         return c.action_result("denied", warnings=["This Library action is not available in this build."])
+    # The handler runs under a savepoint: anything but an applied outcome leaves no write behind (e.g. a grant written
+    # before a later refusal), so "refused" always means "nothing changed".
+    ctx.cur.execute("SAVEPOINT library_action")
     try:
         outcome = handler(ctx, envelope, targets)
     except AlphaError as error:
+        ctx.cur.execute("ROLLBACK TO SAVEPOINT library_action")
+        ctx.caches.clear()
         if error.status == 409:
             outcome = c.action_result("conflict", warnings=[str(error)])
         elif error.status in (401, 403, 404):
             outcome = c.action_result("denied", warnings=[str(error)])
         else:
             raise
+    else:
+        if outcome.get("status") == "applied":
+            ctx.cur.execute("RELEASE SAVEPOINT library_action")
+        else:
+            ctx.cur.execute("ROLLBACK TO SAVEPOINT library_action")
+            ctx.caches.clear()
     if envelope["actionType"] not in READ_ONLY and outcome.get("status") in ("applied", "requires_confirmation"):
         ctx.cur.execute("INSERT INTO public.pr_library_action_receipts(workspace_id,idempotency_key,actor,action_type,request_hash,status,result) "
                         "VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
