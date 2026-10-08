@@ -196,6 +196,7 @@ def counts():
     with connection() as db:
         return {"revision": db.execute("SELECT revision FROM public.pr_workspaces WHERE id=%s", (wid,)).fetchone()[0],
                 "audit": db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s", (wid,)).fetchone()[0],
+                "edits": db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind='agent.draft_edited'", (wid,)).fetchone()[0],
                 "actions": db.execute("SELECT count(*) FROM public.pr_ui_actions WHERE workspace_id=%s", (wid,)).fetchone()[0],
                 "messages": db.execute("SELECT count(*) FROM public.pr_messages WHERE workspace_id=%s", (wid,)).fetchone()[0]}
 
@@ -393,7 +394,7 @@ def _():
     saved = next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == DRAFT)
     assert saved["text"] == inputs["text"] and saved["revision"] == rev + 1 and saved["needsReview"] is True
     after = counts()
-    assert after["audit"] == before["audit"] + 1 and after["actions"] == before["actions"] + 1 and after["revision"] == before["revision"] + 1
+    assert after["edits"] == before["edits"] + 1 and after["actions"] == before["actions"] + 1 and after["revision"] == before["revision"] + 1, (before, after)
     assert one("SELECT state FROM public.pr_ui_actions WHERE workspace_id=%s AND idempotency_key=%s", wid, key)[0] == "done"
     STATE.update(edit_inputs=inputs, edit_key=key, edit_result=result, edit_activation=activation["activationId"])
     return {"revision": saved["revision"]}
@@ -463,7 +464,7 @@ def _():
     for t in threads:
         t.join()
     after = counts()
-    assert after["audit"] == before["audit"] + 1 and after["revision"] == before["revision"] + 1, (before, after)
+    assert after["edits"] == before["edits"] + 1 and after["revision"] == before["revision"] + 1 and after["actions"] == before["actions"] + 1, (before, after)
     assert len(outcomes) == 2 and outcomes[0] == outcomes[1] and not errors, (outcomes, errors)
     return {}
 

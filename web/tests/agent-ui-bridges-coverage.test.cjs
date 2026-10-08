@@ -16,11 +16,11 @@ const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   fileName: filename,
 }).outputText;
-const exports = {};
+const coverage = {};
 vm.runInContext(`(function(require, exports, module){${code}\n})`, vm.createContext({ console }), { filename })(
   (name) => require(require.resolve(name, { paths: [WEB] })),
-  exports,
-  { exports },
+  coverage,
+  { exports: coverage },
 );
 const cases = JSON.parse(fs.readFileSync(path.join(WEB, '..', 'tests/fixtures/agent_ui/coverage/cases.json'), 'utf8'));
 
@@ -30,10 +30,10 @@ test('the shared coverage fixtures exist', () => {
 
 for (const item of cases) {
   test(`coverage parity: ${item.name}`, () => {
-    const coverage = exports.buildCoverage({ channels: item.channels, providers: item.providers, jobs: item.jobs, posts: item.posts });
-    assert.equal(exports.coverageState(coverage), item.expected.state);
-    assert.equal(exports.unreadVerifiedCount(coverage.connections), item.expected.unread);
-    assert.equal(coverage.unmatchedPosts.length, item.expected.unmatched);
-    assert.equal(coverage.usesPlatformFallback, item.expected.platformFallback);
+    const built = coverage.buildCoverage({ channels: item.channels, providers: item.providers, jobs: item.jobs, posts: item.posts });
+    assert.equal(coverage.coverageState(built), item.expected.state);
+    assert.equal(coverage.unreadVerifiedCount(built.connections), item.expected.unread);
+    assert.equal(built.unmatchedPosts.length, item.expected.unmatched);
+    assert.equal(built.usesPlatformFallback, item.expected.platformFallback);
   });
 }
