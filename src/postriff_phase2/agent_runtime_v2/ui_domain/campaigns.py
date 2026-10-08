@@ -182,7 +182,8 @@ def task_progress(dctx, inputs, _cursor):
     from .. import task_state
     plan = task_state.load(dctx.cur, dctx.workspace_id, inputs["taskId"]) if inputs.get("taskId") else task_state.latest(dctx.cur, dctx.workspace_id, dctx.artifact["conversation_id"])
     if plan is None:
-        return ui_contracts.query_result("empty", {"task": None}, as_of=common.iso(dctx.now), known=0, total=0, note="No multi-step task in this conversation.")
+        return ui_contracts.query_result("empty", {"task": None, "summary": None, "rule": "only the tool that did a step's work marks it done"}, as_of=common.iso(dctx.now),
+                                         known=0, total=0, note="No multi-step task in this conversation.")
     if inputs.get("taskId") and plan.conversation_id not in (None, dctx.artifact["conversation_id"]) if hasattr(plan, "conversation_id") else False:
         raise AlphaError("Task unavailable.", 404)
     view = plan.view()

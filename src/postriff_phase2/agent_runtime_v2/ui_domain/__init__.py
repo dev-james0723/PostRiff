@@ -251,7 +251,9 @@ class Receipt:
 
 
 def load() -> None:
-    """Import every journey module (registration side effects), once."""
+    """Import every journey module (registration side effects), once. The site agent's tools module goes first: it imports its
+    `reads` module at its end, so importing `reads` first would be circular."""
+    from ...site_agent import tools as _site_tools  # noqa: F401
     from . import analytics, automations, calendar, campaigns, drafts, founder, library, research, voice  # noqa: F401
 
 
