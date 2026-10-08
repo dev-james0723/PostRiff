@@ -47,8 +47,9 @@ const checks=[];
    await page.getByRole('button',{name:'Save details',exact:true}).click();
    await page.getByRole('button',{name:'Use as a source',exact:true}).click();await page.getByRole('link',{name:'Review source in Memory'}).waitFor();
    await page.getByRole('button',{name:'Close asset details'}).click();
-   await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');await page.getByRole('button',{name:'Create',exact:true}).click();
-   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByLabel('Practice',{exact:true}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();
+   await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
+   const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
+   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();
    await page.getByRole('button',{name:'Close asset details'}).click();
    // Search only words inside the file; server full-text results drive the UI.
    const search=page.getByRole('searchbox');await search.fill('Finger exercises');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().waitFor();
