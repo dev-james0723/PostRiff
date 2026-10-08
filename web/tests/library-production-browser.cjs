@@ -18,10 +18,13 @@ const checks=[];
    await context.addInitScript(id=>localStorage.setItem('postriff-dev-principal',id),principal);
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
    const ws=(await boot.json()).workspaceId,path=base+'/api/workspaces/'+ws+'/library';
+   const storageTrace=[];
    await context.route('https://devharness.supabase.co/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,POST,OPTIONS','Access-Control-Allow-Headers':'*'}});
-    const result=await context.request.put(base+'/dev/upload/'+u.searchParams.get('token'),{data:req.postDataBuffer(),headers:{'Content-Type':req.headers()['content-type']}});
+    const raw=req.postDataBuffer(),mime=req.headers()['content-type']||null;
+    const result=await context.request.put(base+'/dev/upload/'+u.searchParams.get('token'),{data:raw,headers:mime?{'Content-Type':mime}:{}});
+    storageTrace.push({bytes:raw?.length??0,mime,status:result.status(),object:u.pathname.split('/').slice(-2).join('/')});
     return route.fulfill({status:result.status(),body:await result.body(),headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
    });
    await context.route('https://dev.invalid/**',async route=>{
@@ -54,8 +57,8 @@ const checks=[];
     await new Promise(resolve=>setTimeout(resolve,250));
    }
    const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
-   assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
-   assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
+   assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
+   assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
    await page.getByRole('button',{name:'Save details',exact:true}).click();
