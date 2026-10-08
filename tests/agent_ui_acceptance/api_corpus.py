@@ -653,6 +653,31 @@ class Faults(Case):
         return f"2 provider requests, ui.failed {reason}, native answer intact"
 
     @check
+    def test_library_skew_is_terminal_without_repair(self):
+        """G12/G13 (regression of the lane B defect found by G): when the deployed validator builds another library than the
+        Python assets name, the presentation ends ui.failed library_unsupported after at most one presenter request — no
+        automatic repair and no second reservation (a repair can never fix a skew)."""
+        self.ready()
+        owner = self.owner()
+        result = self.w.eligible_turn(owner)
+        presenter = self.w.presenter_requests()
+        self.w.skew(True)
+        try:
+            shown = self.w.present(owner, result["runId"])
+        finally:
+            self.w.skew(False)
+        used = self.w.presenter_requests() - presenter
+        terminal = shown.terminal or {}
+        reason = ((terminal.get("data") or {}).get("payload") or {}).get("reason")
+        self.assertEqual(terminal.get("event"), "ui.failed", shown.kinds()[-4:])
+        self.assertEqual(reason, "library_unsupported")
+        self.assertLessEqual(used, 1, f"{used} presenter requests: a skew was 'repaired'")
+        attempts = self.w.db.attempts(shown.artifact_id) if shown.artifact_id else []
+        self.assertFalse([a for a in attempts if a.get("kind") == "repair"], "a repair attempt was created for a library skew")
+        self.assertLessEqual(sum(1 for a in attempts if a.get("reservation_id")), 1, "more than one reservation for a skewed presentation")
+        return f"skew → ui.failed library_unsupported after {used} presenter request(s); no repair"
+
+    @check
     def test_provider_failure_and_truncation_keep_native_answer(self):
         """G12: provider 500, a truncated stream and an unknown root end in ui.failed with a stable reason; no ready revision."""
         self.ready()

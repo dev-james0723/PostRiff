@@ -128,6 +128,14 @@ class World:
     def arm(self, fault: str | None, count: int = 1):
         self.provider.request("POST", "/__fault", body={"fault": fault, "count": count})
 
+    def skew(self, on: bool):
+        """serve.py's deploy-skew injection: B reads assets whose library hash the deployed validator doesn't build."""
+        flag = Path(os.environ["AGENT_UI_STACK_STATE"]).resolve().parent / "skew-assets.flag"
+        if on:
+            flag.write_text("1")
+        elif flag.exists():
+            flag.unlink()
+
     def seen(self, markers, kinds=("presenter",)) -> dict:
         return (self.provider.request("POST", "/__seen", body={"markers": list(markers), "kinds": list(kinds)}).json() or {}).get("seen") or {}
 
