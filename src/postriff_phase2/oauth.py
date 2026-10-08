@@ -284,7 +284,14 @@ class OAuthService:
         return base
 
     def callback_uri(self, provider_id):
-        return f"{self.callback_base_url(provider_id)}/api/oauth/{provider_id}/callback"
+        base = self.callback_base_url(provider_id)
+        # A provider whose console still lists only an earlier origin keeps that registered callback; the public
+        # callback lands on the canonical app origin. An explicit dedicated YouTube origin is registered for
+        # its separate clients and intentionally supersedes a legacy provider pin for both authorization lanes.
+        pinned = getattr(self.providers.get(provider_id), 'callback_origin', None) if hasattr(self.providers, 'get') else None
+        if provider_id == 'youtube' and self.youtube_public_base_url:
+            pinned = None
+        return f"{pinned or base}/api/oauth/{provider_id}/callback"
 
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):

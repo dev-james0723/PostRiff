@@ -12,13 +12,13 @@ The earlier formal 151-case matrix reported zero real passes and preceded those 
 
 The coordinating release agent observed creation of **Rafii YouTube Production**, project `rafii-youtube-production`, number `568838253270`. Project identity and owner-approved activation of YouTube Data API and YouTube Analytics API are verified. The production Data API allocation is100 uploads/day,100 search/day and10,000 Queries/day; exact Console labels/values are retained in `GOOGLE-QUOTAS.observed.json`. A higher-quota request has not been submitted or approved. Console access was recovered through a fresh tab in the same browser session. Production OAuth clients, consent branding/audience/publishing status and review submissions remain unconfigured; verified support/developer contacts and policy approval are still required. Existing `rafii-509720` (`81579135390`) remains a separate staging reference; its External/Testing status comes from the prior receipt.
 
-The release agent observed `https://rafii.io` serving commit `bb4ca5aa`, deployment `dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc`, with current Library preserved. This is the running baseline, not deployment of this integration. A validated release may deploy with unapproved YouTube public and agentic gates disabled. The release owner records the later commit, migration, CI, merge/deployment and smoke results separately.
+The release agent observed `https://rafii.io` serving commit `bb4ca5aa`, deployment `dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc`, with current Library preserved. This is the running baseline, not deployment of this integration. A validated release may deploy with unapproved YouTube public and agentic gates disabled. Production subsequently advanced to `65b1ea83` (PR #135 canonical-origin migration). The candidate preserves that newer code; current denied YouTube/Gmail callbacks land on rafii.io. This HTTP observation does not prove Google registration or consent. The release owner records the final commit, migration, CI, merge/deployment and exact-SHA smoke separately.
 
 | Area | Status | Evidence boundary |
 | --- | --- | --- |
 | Production OAuth, public non-tester onboarding | BLOCKED | New project only; clients and approved scopes absent |
 | OAuth verification, YouTube audit, quota request | NOT SUBMITTED | Draft packets exist; no application IDs or provider confirmation |
-| Approved production daily upload quota | UNVERIFIED | No new-project allocation/usage observation; never transfer staging/default counts into approval |
+| Current production daily upload allocation | VERIFIED DEFAULT: 100/day | Actual dedicated-project Console allocation observed; higher quota and public-upload eligibility remain unapproved |
 | Read-only connection and proactive refresh | VERIFIED, prior source | One owner's earlier staging grant; not current v2 production acceptance |
 | Separate standard/agentic custody and dispatch | IMPLEMENTED BUT UNVERIFIED | Synthetic regression; no actual agentic client/grant |
 | Large-video private storage | BLOCKED | Verified Free 50 MB global ceiling and 50000000-byte private bucket; owner billing decision pending |

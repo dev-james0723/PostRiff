@@ -355,6 +355,8 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
         agentic = YouTubeProvider('agent-client', 'synthetic-secret', transport=Wire(audience='agent-client'), creator_enabled=True, authorization_lane='agentic')
         standard.execution_enabled = agentic.execution_enabled = True
         standard.agentic_provider = agentic
+        standard.callback_origin = 'https://registered-legacy.example'
+        agentic.callback_origin = 'https://agentic-registered-legacy.example'
         identity = {'providerAccountId': 'UC' + 'a' * 22, 'handle': 'Synthetic', 'accountType': 'channel'}
         for provider in (standard, agentic):
             provider.identity = Mock(return_value=identity)
@@ -380,9 +382,11 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
             self.assertEqual(repository.txn[4], expected_redirect)
             # An in-flight transaction retains its exact original redirect on exchange.
             service.youtube_public_base_url = 'https://future-cutover.example'
+            standard.callback_origin = 'https://moved-legacy.example'
             completed = service.complete('workspace', 'session', 'youtube', query['state'][0], 'synthetic-code')
             self.assertEqual(selected.exchange.call_args.args[2], expected_redirect)
             service.youtube_public_base_url = 'https://rafii.example'
+            standard.callback_origin = 'https://registered-legacy.example'
             ids.append(completed['connectionId'])
             encrypted = repository.credentials[completed['connectionId']][4]
             binding = json.loads(vault.decrypt(encrypted, vault.key_id))

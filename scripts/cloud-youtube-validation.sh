@@ -32,6 +32,7 @@ suite = unittest.TestSuite()
 # Include the existing creator tests and new test_youtube*.py OAuth regressions.
 suite.addTests(loader.discover('tests', pattern='test_youtube*.py', top_level_dir='tests'))
 suite.addTests(loader.loadTestsFromNames([
+    'test_rafii_origin_migration',
     'test_hosted_wave3_connectors',
     'test_productivity_connectors',
     'test_instagram_full_capabilities',

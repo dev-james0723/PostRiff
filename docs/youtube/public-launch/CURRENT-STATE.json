@@ -18,7 +18,8 @@
     "oauthPublishingStatus": null,
     "verificationStatus": "NOT SUBMITTED",
     "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
-    "existingReferenceProjectId": "rafii-509720"
+    "existingReferenceProjectId": "rafii-509720",
+    "domainOwnership": "NOT VERIFIED: Google Search Console signed-in account lacks property; additive Spaceship TXT candidate prepared but unsaved, owner action-time confirmation pending"
   },
   "stagingGoogleProject": {
     "id": "rafii-509720",
@@ -41,7 +42,12 @@
     "dailyUploads": 100,
     "searchCalls": 100,
     "generalUnits": 10000,
-    "analytics": null,
+    "analytics": {
+      "queriesPerDay": 100000,
+      "queriesPerMinute": 720,
+      "queriesPerMinutePerUser": 720,
+      "status": "VERIFIED DEFAULT; NOT AN EXTENSION"
+    },
     "status": "VERIFIED CONFIGURED DEFAULT DATA API ALLOCATION; EXTENSION NOT SUBMITTED",
     "note": "GOOGLE-QUOTAS.observed.json retains exact Console labels. This does not establish audit approval, public-upload eligibility or sufficient rollout capacity."
   },
@@ -61,7 +67,7 @@
     "youtubeDataApiEnabled": true,
     "youtubeAnalyticsApiEnabled": true
   },
-  "releaseGate": "JCB cfj6vg03bh passed the synthetic subset. PR #136 at 668a1cc9 passed Library/aux/Vercel but full PG failed a premature synthetic fleet attempt cutoff on 4 CPU; fixture coordination corrected, current-head full CI still required before merge/deploy. Public/agentic/fleet execution remains off.",
+  "releaseGate": "Pre-reconciliation b0ca13a4 passed all GHA checks (main37850230732,99PG modules; Library37850230723,140browser checks), aux and Vercel preview. Production advanced to65b1ea83/PR135; current candidate merges and preserves its canonical-origin/Bluesky/passkey/proxy behavior. Fresh combined-source cloud validation and PR CI required before merge/deploy. Public/agentic/fleet flags remain off.",
   "ownerInputsPending": [
     "verified operator/legal/contact facts",
     "legal approval/required attestations",
@@ -113,7 +119,7 @@
     "verification": "Three capacity/worker tables enforce FORCE RLS; anon/authenticated SELECT denied; service_role allowed. Production eight creator tables similarly verified after 089.",
     "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls."
   },
-  "recordScope": "Pre-release baseline and actual configuration actions in this mission. Running version must be verified again after release; this record alone never proves deployment.",
+  "recordScope": "Dated baseline plus actual configuration actions; runningProduction is the earlier bb4ca5aa observation, not a claim of latest live version. Production branch advanced to65b1ea83; final coordinating release receipt and exact-SHA smoke supersede this snapshot.",
   "productionEnvironmentChanges": {
     "execution": "VERIFIED VERCEL CONFIGURATION; EFFECTIVE AFTER NEXT DEPLOYMENT",
     "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
@@ -122,7 +128,7 @@
       "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "0",
       "POSTRIFF_YOUTUBE_AGENTIC_ENABLED": "0"
     },
-    "preserved": "Existing global POSTRIFF_PUBLIC_BASE_URL, Gmail/Calendar grants and credentials, customer data, and staging configuration untouched.",
-    "youtubeCallbackObserved": "GET rafii.io/api/oauth/youtube/callback?error=access_denied returned302 to postriff-phase2-private.vercel.app/channels/connect; canonical YouTube callback cutover requires dedicated registered client."
+    "preserved": "This mission did not change global POSTRIFF_PUBLIC_BASE_URL, existing Gmail/Calendar grants or credentials. Separate PR135 canonical-origin migration is preserved; callback landing now rafii.io. Fresh Google callback registration/consent remains unverified.",
+    "youtubeCallbackObserved": "Latest public YouTube and Gmail denied callbacks302 to rafii.io/channels/connect and rafii.io/connectors/connect; transport landing only, no provider acceptance."
   }
 }

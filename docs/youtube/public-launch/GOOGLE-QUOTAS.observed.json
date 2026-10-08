@@ -25,7 +25,7 @@
   },
   "extension": {
     "status": "NOT SUBMITTED",
-    "consolePreview": "Above100 uploads/day or10,000 Queries/day requires the linked YouTube audit/quota form; no console request submitted",
+    "consolePreview": "Above100uploads/day or10000Queries/day requires the linked YouTube audit/quota form; no console request submitted",
     "form": "https://support.google.com/youtube/contact/yt_api_form",
     "proposedUploadsPerDay": 4000,
     "proposedGeneralUnitsPerDay": 1500000,
@@ -36,8 +36,37 @@
     "YouTube audit approval",
     "public-upload eligibility",
     "capacity for intended public workload",
-    "independent account consent",
-    "analytics quota allocation"
+    "independent account consent"
   ],
-  "note": "These are actual Console labels/values, not derived from old documentation. Default configured capacity is distinct from an approved extension and public-upload eligibility."
+  "note": "These are actual Console labels/values, not derived from old documentation. Default configured capacity is distinct from an approved extension and public-upload eligibility.",
+  "analytics": {
+    "observedAt": "2026-10-08T22:03:04.256463+00:00",
+    "execution": "LIVE GOOGLE CLOUD CONSOLE UI READ",
+    "service": "youtubeanalytics.googleapis.com",
+    "status": "ENABLED",
+    "source": "https://console.cloud.google.com/apis/api/youtubeanalytics.googleapis.com/quotas?project=rafii-youtube-production",
+    "values": [
+      {
+        "consoleLabel": "Queries per day",
+        "value": 100000,
+        "currentUsage": 0,
+        "currentUsagePercent": 0,
+        "adjustable": true
+      },
+      {
+        "consoleLabel": "Queries per minute",
+        "value": 720,
+        "currentUsage": 0,
+        "currentUsagePercent": 0,
+        "adjustable": true
+      },
+      {
+        "consoleLabel": "Queries per minute per user",
+        "value": 720,
+        "currentUsage": null,
+        "adjustable": true
+      }
+    ],
+    "quotaExtension": "NOT SUBMITTED"
+  }
 }
