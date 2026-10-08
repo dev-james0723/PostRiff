@@ -1,0 +1,15 @@
+# A evidence log (release owner). Times America/New_York (EDT), 2026-10-08.
+
+- 12:25 G01 baseline: `git ls-remote origin consumer-saas` = 3da806f0e31a01396a3bd4a9e27f66f9b21ce816; production deployment dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt (githubCommitSha 3da806f0, READY, alias postriff-phase2-private.vercel.app). Main checkout /Users/ouxianxing/Documents/James-Au-Studio dirty at 80bc24d2 — untouched.
+- 12:30 Canonical origin: `nslookup rafii.io 8.8.8.8` and `1.1.1.1` → NXDOMAIN; `vercel domains ls` (team jamesau0723-6572s-projects) lists only mybestlife-os.com, fantasiamusic-space.com, d-festival.org; project domains are postriff-phase2-private.vercel.app and postriff-phase2-private-staging.vercel.app. G24 canonical-origin part = external prerequisite.
+- 12:33 Integration worktree created from 3da806f0 (branch claude/rafii-openui-production-20261008).
+- 12:40 Package probe: npm registry @openuidev/react-lang 0.3.2 (latest), deps lang-core ^0.3.2, observability ^0.0.4, devtools ^0.2.2; lang-core postinstall telemetry (PostHog) is disabled by OPENUI_TELEMETRY_DISABLED / DO_NOT_TRACK. Tarballs unpacked read-only under .agent-worktrees/openui-probe-20261008.
+- 12:22–12:56 R0 understand workflow wf_d4bf5780-8e1: 9 read-only maps in evidence/r0/.
+- 13:05 JCB: doctor reported a stale workflow (lockfile hash) → setup --force → doctor PASS.
+- 13:10 Vercel env OPENUI_TELEMETRY_DISABLED=1 added for Production and Preview (values hidden).
+- 13:12 Contract freeze b37cbe13 pushed; agent-ui.yml dependency-lock run 37814843087 (package-lock-only, install scripts ignored): +96 lockfile lines, 0 vulnerabilities, lang-core deduped to 0.3.2, lockfile sha256 1b300aac…; committed fb3ec029.
+- 13:22 Preview dpl_77To8Zb3GewgRvCKFtdRGjJZkb35 (d60793f) build log: `npm warn install-scripts @openuidev/lang-core@0.3.2 (postinstall: node ./postinstall.cjs)` → npm 11 did not run the unapproved postinstall; with OPENUI_TELEMETRY_DISABLED=1 also set, no install-telemetry path executes (G14 evidence, build side).
+- 13:25 Integration CI run 37815521190 (31cbee09): typecheck PASS, lint PASS, unit python 17/17 PASS, web 5/5 PASS (runner miscounted node "ℹ pass" lines → fixed in d60793f8).
+- 13:28 Vercel env RAFII_GENUI_VALIDATOR_SECRET provisioned (distinct random values for Production and Preview; never printed). Not added to the preview pin set (distinct per environment by design).
+- 13:30 Production DB (Supabase buoyhkbodnhzngaotoel) read-only: no pr_ui_* tables present; pr_agent_runs / pr_messages / pr_conversations / pr_workspaces exist. A staging DB read was refused by this session's auto-mode classifier (not retried).
+- 13:20 Lanes B–G dispatched (workflow wf_dbbd8933-7ed) in worktrees .agent-worktrees/rafii-openui-{b-runtime,c-renderer,d-data,e-journeys,f-surfaces,g-acceptance}-20261008, fast-forwarded to d60793f8.
