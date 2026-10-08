@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { AssetFileThumbnail } from './asset-thumbnail';
 
 interface AssetDetailProps {
   asset: LibraryAsset | null;
@@ -106,23 +107,18 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
   const isVideo = assetKind === 'video';
   if (isLegacyPdf(asset)) return <div className='rafii-quiet flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--rafii-radius-card)] p-4 text-sm'><span>Verified PDF · {asset.pages ?? 'Unknown'} pages</span><button type='button' className='rafii-focus underline' onClick={() => void api.media(workspaceId, asset.id).then((blob) => { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `rafii-${asset.id}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch((error) => toast.error(error instanceof Error ? error.message : 'Document unavailable'))}>Download original PDF</button></div>;
   if (assetKind === 'audio') {
-    return <div className='rafii-quiet flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--rafii-radius-card)] p-6'>
-      <Icons.play aria-hidden className='size-8' />
+    return <div className='flex flex-col items-center gap-3'>
+      <AssetFileThumbnail asset={asset} size='detail' />
       <p className='text-muted-foreground text-sm'>Private audio · {asset.extension?.toUpperCase()}</p>
       <Button variant='glass' size='control' disabled={!['ready', 'unsupported'].includes(asset.processing ?? '')} onClick={() => void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ kind: 'audio', workspaceId, assetId: asset.id, title: asset.displayTitle || asset.originalFilename || 'Audio', url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Audio unavailable'))}>Play audio in Now Playing</Button>
     </div>;
   }
   if (!mediaAsset) {
-    return (
-      <div className='rafii-quiet text-muted-foreground flex min-h-40 flex-col items-center justify-center gap-2 rounded-[var(--rafii-radius-card)] p-6 text-center'>
-        <span className='text-foreground text-lg font-semibold'>{asset.extension?.toUpperCase() || 'FILE'}</span>
-        <span className='text-sm'>{assetKind === 'document' ? 'Document' : 'File'} · private workspace asset</span>
-      </div>
-    );
+    return <AssetFileThumbnail asset={asset} size='detail' />;
   }
   if (isVideo) {
     return (
-      <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
+      <div data-library-thumbnail='video' data-thumbnail-preview='video-poster' className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
         <button type='button' className='rafii-focus relative flex w-full items-center justify-center'
           onClick={() => void api.mediaUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ workspaceId, assetId: asset.id, title: `Video ${asset.id.slice(0, 8)}`, url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Video unavailable'))}>
           {image.data ? <Image src={image.data} alt='' width={asset.width ?? 480} height={asset.height ?? 270} unoptimized className='h-auto max-h-[40vh] w-auto max-w-full md:max-h-[50vh]' /> : <span className='h-40 w-full' />}

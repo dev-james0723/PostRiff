@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { kindOf } from '@/lib/media/asset-kinds';
+import { AssetFileThumbnail } from './asset-thumbnail';
 
 /**
  * The server's own wording when the deployment has no private media storage (`hosted.py` upload_media,
@@ -136,6 +137,7 @@ export function AssetCard({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
   const image = useAssetImage(asset.id, nearView && mediaAsset);
   const storageMissing = mediaAsset && image.storageNotConfigured;
   const loaded = Boolean(image.data);
@@ -148,7 +150,9 @@ export function AssetCard({
   const dims = dimensionsOf(asset);
   const count = uses.length;
   const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo');
-  const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
+  const wordAsset = assetKind === 'document' && ['doc', 'docx', 'odt', 'rtf'].includes((asset.extension || '').toLowerCase());
+  const previewLabel = assetKind === 'video' ? ', video thumbnail' : assetKind === 'document' ? (pdfAsset || wordAsset ? ', first-page preview' : `, ${asset.extension?.toUpperCase() || 'document'} preview`) : '';
+  const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
     <ContextMenu>
@@ -174,12 +178,9 @@ export function AssetCard({
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
               {!mediaAsset ? (
-                <div className='rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-2 p-4'>
-                  <span className='text-foreground text-sm font-medium'>{asset.extension?.toUpperCase() || 'FILE'}</span>
-                  <span className='max-w-full truncate text-xs'>{assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : 'File'}</span>
-                </div>
+                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={false} />
               ) : image.data ? (
-                <div className='relative'>
+                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (
                     <span className='bg-background/80 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
@@ -220,6 +221,11 @@ export function AssetCard({
               </span>
             </span>
           </button>
+          {pdfAsset && nearView ? (
+            <div className='pointer-events-none absolute inset-x-0 top-0 z-10 aspect-square overflow-hidden rounded-t-[var(--rafii-radius-card)]'>
+              <AssetFileThumbnail asset={asset} size='gallery' loadPreview />
+            </div>
+          ) : null}
           {image.canRetry && (
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
