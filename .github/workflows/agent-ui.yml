@@ -145,7 +145,7 @@ jobs:
 
   # Browser acceptance (lane G) runs in its own job and budget so a long browser stack never cancels the unit/PG gates.
   agent-ui-browser:
-    if: ${{ !contains(github.event.head_commit.message, '[agent-ui-lock]') && hashFiles('scripts/agent_ui_acceptance.sh') != '' }}
+    if: ${{ !contains(github.event.head_commit.message, '[agent-ui-lock]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
