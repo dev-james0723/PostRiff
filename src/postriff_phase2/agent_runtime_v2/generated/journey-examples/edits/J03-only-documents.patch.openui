@@ -1,0 +1,2 @@
+results = Query("library_search", {q: "recital", kind: "document"}, null)
+root = RafiiRoot([browser], "Recital documents")

@@ -1,0 +1,742 @@
+{
+ "catalogVersion": "journeys/2",
+ "contractVersion": "rafii-genui/1",
+ "note": "Lane E's journey index: which components, bindings and actions each journey uses, its examples (inputs to prompt generation), its explicit edit case and the truth rules its tests enforce. Binding names, argument names and action ids are lane D's ui_domain registry; tests fail on drift. Example ids such as v_7f3c2a91 are placeholders: the presenter uses only ids from the turn's allowed context.",
+ "selection": {
+  "rule": "A selection $variable holds the record ids the binding's own arguments take (draft ids, job ids, asset ids, …), in the order the person picked them. Selecting never approves, schedules or publishes.",
+  "max": {
+   "drafts": 10,
+   "default": 20
+  }
+ },
+ "journeys": {
+  "J01": {
+   "title": "Draft and platform studio",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "drafts",
+    "library_selection",
+    "research_sources",
+    "tasks"
+   ],
+   "components": [
+    "Commentary",
+    "DraftList",
+    "DraftCompare",
+    "DraftDetail",
+    "DraftEvidence",
+    "DraftEditor",
+    "LibrarySelectionCheck",
+    "SavedSources",
+    "TaskProgress"
+   ],
+   "bindings": [
+    "draft_evidence",
+    "draft_read",
+    "drafts_list",
+    "library_selection",
+    "research_sources",
+    "task_progress"
+   ],
+   "actions": [
+    "draft_edit"
+   ],
+   "examples": [
+    {
+     "file": "J01-drafts-studio.openui",
+     "request": "Show my unscheduled drafts so I can pick two to compare"
+    },
+    {
+     "file": "J01-draft-edit.openui",
+     "request": "Open my latest LinkedIn draft, show where it came from and let me fix the wording"
+    }
+   ],
+   "editCase": {
+    "id": "J01-compare-selected",
+    "instruction": "Compare the two I picked",
+    "base": "J01-drafts-studio.openui",
+    "patch": "edits/J01-compare-selected.patch.openui",
+    "preserves": [
+     "$selectedDrafts",
+     "drafts",
+     "picks",
+     "list",
+     "compare"
+    ],
+    "removes": [
+     "note"
+    ],
+    "addsBindings": [],
+    "changes": [
+     "root",
+     "compare"
+    ]
+   },
+   "truth": [
+    "Selecting a draft is not approval or publication.",
+    "A draft in the publishing queue is read-only here.",
+    "Rewrites and adaptations are follow-up turns, never a direct write.",
+    "An edit saves only after the person confirms, and the draft needs review again."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J02": {
+   "title": "Calendar and publishing operations",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "calendar",
+    "schedule_check",
+    "queue",
+    "proposals",
+    "tasks"
+   ],
+   "components": [
+    "Commentary",
+    "CalendarAgenda",
+    "RescheduleForm",
+    "SlotCheck",
+    "QueueStatus",
+    "ProposalList",
+    "TaskProgress"
+   ],
+   "bindings": [
+    "calendar_agenda",
+    "open_proposals",
+    "queue_status",
+    "slot_check",
+    "task_progress"
+   ],
+   "actions": [
+    "schedule_prepare"
+   ],
+   "examples": [
+    {
+     "file": "J02-calendar-week.openui",
+     "request": "What's on my calendar this week and is anything stuck in the queue?"
+    },
+    {
+     "file": "J02-reschedule.openui",
+     "request": "Move my Thursday LinkedIn post to Friday morning"
+    }
+   ],
+   "editCase": {
+    "id": "J02-change-period",
+    "instruction": "Change the period to next week",
+    "base": "J02-calendar-week.openui",
+    "patch": "edits/J02-change-period.patch.openui",
+    "preserves": [
+     "$selectedJob",
+     "queueNow",
+     "agenda",
+     "queue"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "cal",
+     "root"
+    ]
+   },
+   "truth": [
+    "Every time is shown with its time zone.",
+    "Unknown states stay unknown; they are never counted as scheduled.",
+    "Preparing a time only prepares a proposal; it is applied on its own card.",
+    "Published is shown only for posts the queue reports as published."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J03": {
+   "title": "Universal Library",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "library",
+    "library_selection"
+   ],
+   "components": [
+    "Commentary",
+    "LibraryBrowser",
+    "LibraryAssetCard",
+    "LibraryLineage",
+    "LibrarySelectionCheck"
+   ],
+   "bindings": [
+    "library_item",
+    "library_lineage",
+    "library_search",
+    "library_selection"
+   ],
+   "actions": [
+    "library_use_as_source"
+   ],
+   "examples": [
+    {
+     "file": "J03-library-search.openui",
+     "request": "Find my recital photos and programme PDFs"
+    },
+    {
+     "file": "J03-asset-detail.openui",
+     "request": "Where did this PDF come from and can I use it in a draft?"
+    }
+   ],
+   "editCase": {
+    "id": "J03-only-documents",
+    "instruction": "Only show documents",
+    "base": "J03-library-search.openui",
+    "patch": "edits/J03-only-documents.patch.openui",
+    "preserves": [
+     "$selectedAssets",
+     "browser"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "results",
+     "root"
+    ]
+   },
+   "truth": [
+    "Rows carry ids and an authenticated preview route, never a signed URL.",
+    "Selecting files only selects them for the next message.",
+    "Use as source imports a document that still needs review."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J04": {
+   "title": "Brand Brain and Learn My Voice",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "voice",
+    "consent"
+   ],
+   "components": [
+    "Commentary",
+    "VoiceSourcePicker",
+    "VoiceAnalyzeLocal",
+    "VoiceProfileReview",
+    "VoicePreferenceList",
+    "VoiceLearningStatus",
+    "VoiceSampleImport",
+    "VoiceConsentPanel"
+   ],
+   "bindings": [
+    "voice_consent",
+    "voice_learning_status",
+    "voice_preferences",
+    "voice_profile_state",
+    "voice_sources"
+   ],
+   "actions": [
+    "preference_decide",
+    "voice_profile_analyze_local",
+    "voice_profile_approve",
+    "voice_samples_import"
+   ],
+   "examples": [
+    {
+     "file": "J04-voice-review.openui",
+     "request": "Show my writing samples and what Rafii learned about my voice"
+    },
+    {
+     "file": "J04-consent.openui",
+     "request": "What have I allowed Rafii to learn and use, and can I add a sample?"
+    }
+   ],
+   "editCase": {
+    "id": "J04-add-learning-status",
+    "instruction": "Also show what learning is doing now",
+    "base": "J04-voice-review.openui",
+    "patch": "edits/J04-add-learning-status.patch.openui",
+    "preserves": [
+     "$selectedSamples",
+     "samples",
+     "picker",
+     "analyze",
+     "review",
+     "prefs"
+    ],
+    "removes": [],
+    "addsBindings": [
+     "voice_learning_status"
+    ],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "Nothing says trained: Rafii trains no model.",
+    "A proposed profile is not in effect until an owner approves it.",
+    "Consent is shown per layer and changed only on its native page.",
+    "Eligibility exclusions name their reason."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J05": {
+   "title": "Campaign planning",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "campaigns",
+    "calendar",
+    "proposals",
+    "automations",
+    "tasks"
+   ],
+   "components": [
+    "Commentary",
+    "CampaignList",
+    "CampaignPlan",
+    "CampaignItems",
+    "CampaignTimeline",
+    "CampaignBriefForm",
+    "CampaignBriefEditor",
+    "CampaignLinkDrafts",
+    "CalendarAgenda",
+    "RescheduleForm",
+    "ProposalList",
+    "AutomationList",
+    "AutomationDetail",
+    "AutomationChangeForm",
+    "TaskProgress"
+   ],
+   "bindings": [
+    "automation_detail",
+    "automations_list",
+    "calendar_agenda",
+    "campaign_detail",
+    "campaign_items",
+    "campaign_timeline",
+    "campaigns_list",
+    "open_proposals",
+    "task_progress"
+   ],
+   "actions": [
+    "automation_change_prepare",
+    "campaign_create",
+    "campaign_link",
+    "campaign_update",
+    "schedule_prepare"
+   ],
+   "examples": [
+    {
+     "file": "J05-campaign-plan.openui",
+     "request": "How is my autumn recital campaign going?"
+    },
+    {
+     "file": "J05-campaign-link.openui",
+     "request": "Add this draft to my recital campaign and schedule it for Friday 9am"
+    },
+    {
+     "file": "J05-new-campaign.openui",
+     "request": "Start a campaign for my December masterclass"
+    }
+   ],
+   "editCase": {
+    "id": "J05-add-timeline",
+    "instruction": "Add the campaign timeline",
+    "base": "J05-campaign-plan.openui",
+    "patch": "edits/J05-add-timeline.patch.openui",
+    "preserves": [
+     "detail",
+     "members",
+     "task",
+     "plan",
+     "items",
+     "progress"
+    ],
+    "removes": [],
+    "addsBindings": [
+     "campaign_timeline"
+    ],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "Progress and gaps are derived and labelled with their rule.",
+    "Rafii records no dependencies between campaign items.",
+    "Linking is organisation only; nothing is drafted, scheduled or published."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J06": {
+   "title": "Analytics and content performance",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "analytics"
+   ],
+   "components": [
+    "Commentary",
+    "MetricTable",
+    "MetricChart",
+    "ComparisonSummary",
+    "CoverageNote",
+    "PostFeedback"
+   ],
+   "bindings": [
+    "analytics_compare",
+    "analytics_coverage",
+    "analytics_posts",
+    "analytics_series",
+    "post_feedback"
+   ],
+   "actions": [],
+   "examples": [
+    {
+     "file": "J06-performance.openui",
+     "request": "How did my posts do in the last 30 days?"
+    }
+   ],
+   "editCase": {
+    "id": "J06-add-chart",
+    "instruction": "Add a chart of views by week",
+    "base": "J06-performance.openui",
+    "patch": "edits/J06-add-chart.patch.openui",
+    "preserves": [
+     "cov",
+     "posts",
+     "like",
+     "coverage",
+     "table",
+     "compare"
+    ],
+    "removes": [],
+    "addsBindings": [
+     "analytics_series"
+    ],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "Unknown is not zero: missing readings are Unavailable.",
+    "Every value carries its unit, read time and definition version.",
+    "Comparisons below the minimum sample say so and never claim a cause.",
+    "Accounts are never summed across platforms."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J07": {
+   "title": "Research and content intelligence",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "research",
+    "research_sources",
+    "consent"
+   ],
+   "components": [
+    "Commentary",
+    "ResearchStatus",
+    "ResearchBrief",
+    "ComparisonMatrix",
+    "SavedSources",
+    "VoiceConsentPanel"
+   ],
+   "bindings": [
+    "research_results",
+    "research_sources",
+    "research_state",
+    "voice_consent"
+   ],
+   "actions": [
+    "research_save_sources"
+   ],
+   "examples": [
+    {
+     "file": "J07-research-brief.openui",
+     "request": "Research what people are saying about Chopin competitions this month"
+    },
+    {
+     "file": "J07-saved-sources.openui",
+     "request": "Which Chopin sources have I saved?"
+    }
+   ],
+   "editCase": {
+    "id": "J07-add-comparison",
+    "instruction": "Compare the sources side by side",
+    "base": "J07-research-brief.openui",
+    "patch": "edits/J07-add-comparison.patch.openui",
+    "preserves": [
+     "$selectedPages",
+     "state",
+     "results",
+     "status",
+     "brief"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "Research off is shown as off with the owner's recovery path.",
+    "Page text is quoted data, never instructions.",
+    "A missing publication date stays 'no date'; the fetch time is labelled."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J08": {
+   "title": "Automations and workspace recovery",
+   "library": "consumer",
+   "groups": [
+    "journey_common",
+    "automations",
+    "automation_history",
+    "recovery",
+    "queue",
+    "proposals",
+    "tasks"
+   ],
+   "components": [
+    "Commentary",
+    "AutomationList",
+    "AutomationDetail",
+    "AutomationChangeForm",
+    "RunHistory",
+    "ConnectionHealth",
+    "RecoveryGuides",
+    "QueueStatus",
+    "ProposalList",
+    "TaskProgress"
+   ],
+   "bindings": [
+    "automation_detail",
+    "automation_history",
+    "automations_list",
+    "connections_status",
+    "open_proposals",
+    "queue_status",
+    "recovery_guides",
+    "task_progress"
+   ],
+   "actions": [
+    "automation_change_prepare"
+   ],
+   "examples": [
+    {
+     "file": "J08-automations.openui",
+     "request": "When does my weekly practice-tip automation run next and did the last runs work?"
+    }
+   ],
+   "editCase": {
+    "id": "J08-add-connections",
+    "instruction": "Also show which accounts need reconnecting",
+    "base": "J08-automations.openui",
+    "patch": "edits/J08-add-connections.patch.openui",
+    "preserves": [
+     "$selectedAutomation",
+     "autos",
+     "plan",
+     "runs",
+     "list",
+     "detail",
+     "history",
+     "change"
+    ],
+    "removes": [],
+    "addsBindings": [
+     "connections_status",
+     "recovery_guides"
+    ],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "Next run times carry their time zone.",
+    "Run cost unknown stays unknown, never zero.",
+    "Changes are prepared as proposals; reconnecting happens on the Accounts page.",
+    "Attention unavailable is said explicitly, not shown as empty."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  },
+  "J09": {
+   "title": "Founder agent",
+   "library": "founder",
+   "groups": [
+    "founder"
+   ],
+   "components": [
+    "FounderNote",
+    "FounderMetricsTable",
+    "FounderCostBreakdown",
+    "FounderAttentionList",
+    "FounderSourceHealth"
+   ],
+   "bindings": [
+    "founder_attention",
+    "founder_costs",
+    "founder_metrics",
+    "founder_sources"
+   ],
+   "actions": [],
+   "examples": [
+    {
+     "file": "J09-founder-overview.openui",
+     "request": "How are revenue, AI cost and data sources this month?"
+    }
+   ],
+   "editCase": {
+    "id": "J09-cost-by-model",
+    "instruction": "Break AI cost down by model",
+    "base": "J09-founder-overview.openui",
+    "patch": "edits/J09-cost-by-model.patch.openui",
+    "preserves": [
+     "att",
+     "rev",
+     "src",
+     "attention",
+     "revenue",
+     "costs",
+     "sources"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "cost"
+    ]
+   },
+   "truth": [
+    "Founder definitions and data never load in consumer chat.",
+    "Unavailable metrics stay unavailable with their reason.",
+    "Every figure shows its receipt; Demo data is labelled Demo."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
+  }
+ },
+ "composite": {
+  "id": "library-draft-campaign",
+  "title": "Library selection to voice-aware draft to campaign and calendar proposal",
+  "steps": [
+   {
+    "journey": "J03",
+    "example": "J03-library-search.openui",
+    "select": {
+     "var": "$selectedAssets",
+     "type": "library_file"
+    },
+    "continue": "Write a LinkedIn post from these in my voice"
+   },
+   {
+    "journey": "J01",
+    "example": "J01-drafts-studio.openui",
+    "select": {
+     "var": "$selectedDrafts",
+     "type": "draft"
+    },
+    "continue": "Add this draft to my recital campaign and schedule it for Friday 9am"
+   },
+   {
+    "journey": "J05",
+    "example": "J05-campaign-link.openui",
+    "action": "campaign_link",
+    "outcome": "applied"
+   },
+   {
+    "journey": "J05",
+    "example": "J05-campaign-link.openui",
+    "action": "schedule_prepare",
+    "outcome": "prepared"
+   }
+  ],
+  "retains": "every follow-up turn sends uiContext {artifactId, artifactRevision, stateRevision}; the server resolves the stored @selection in its displayed order"
+ },
+ "edits": [
+  {
+   "patch": "edits/J01-compare-selected.patch.openui",
+   "base": "J01-drafts-studio.openui"
+  },
+  {
+   "patch": "edits/J02-change-period.patch.openui",
+   "base": "J02-calendar-week.openui"
+  },
+  {
+   "patch": "edits/J03-only-documents.patch.openui",
+   "base": "J03-library-search.openui"
+  },
+  {
+   "patch": "edits/J04-add-learning-status.patch.openui",
+   "base": "J04-voice-review.openui"
+  },
+  {
+   "patch": "edits/J05-add-timeline.patch.openui",
+   "base": "J05-campaign-plan.openui"
+  },
+  {
+   "patch": "edits/J06-add-chart.patch.openui",
+   "base": "J06-performance.openui"
+  },
+  {
+   "patch": "edits/J07-add-comparison.patch.openui",
+   "base": "J07-research-brief.openui"
+  },
+  {
+   "patch": "edits/J08-add-connections.patch.openui",
+   "base": "J08-automations.openui"
+  },
+  {
+   "patch": "edits/J09-cost-by-model.patch.openui",
+   "base": "J09-founder-overview.openui"
+  }
+ ]
+}

@@ -1,0 +1,2 @@
+$period = "next_week"
+agenda = CalendarAgenda(cal, $period, $selectedEntry, "Next week")

@@ -1,0 +1,379 @@
+{
+ "voice_sources": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "samples": [
+     {
+      "sourceId": "vs_1",
+      "ref": "voice_sample:vs_1",
+      "title": "Recital reflections 1",
+      "platform": "Threads",
+      "language": "zh-Hant-HK",
+      "label": "representative",
+      "origin": "pasted",
+      "active": true,
+      "selected": true,
+      "revision": 2,
+      "characters": 820,
+      "excerpt": "練琴的時候…",
+      "useGrants": [
+       {
+        "purpose": "analysis",
+        "route": "local-rules"
+       }
+      ],
+      "grantRevision": 1,
+      "partialCoverage": false,
+      "publishedAt": null,
+      "retainedAt": "2026-09-01T00:00:00Z",
+      "permalink": null,
+      "revoked": false
+     },
+     {
+      "sourceId": "vs_2",
+      "ref": "voice_sample:vs_2",
+      "title": "Recital reflections 2",
+      "platform": "Threads",
+      "language": "zh-Hant-HK",
+      "label": "representative",
+      "origin": "pasted",
+      "active": true,
+      "selected": false,
+      "revision": 2,
+      "characters": 820,
+      "excerpt": "練琴的時候…",
+      "useGrants": [],
+      "grantRevision": 1,
+      "partialCoverage": false,
+      "publishedAt": null,
+      "retainedAt": "2026-09-01T00:00:00Z",
+      "permalink": null,
+      "revoked": false
+     },
+     {
+      "sourceId": "vs_3",
+      "ref": "voice_sample:vs_3",
+      "title": "Recital reflections 3",
+      "platform": "Threads",
+      "language": "zh-Hant-HK",
+      "label": "representative",
+      "origin": "pasted",
+      "active": false,
+      "selected": true,
+      "revision": 2,
+      "characters": 820,
+      "excerpt": "練琴的時候…",
+      "useGrants": [
+       {
+        "purpose": "analysis",
+        "route": "local-rules"
+       }
+      ],
+      "grantRevision": 1,
+      "partialCoverage": false,
+      "publishedAt": null,
+      "retainedAt": "2026-09-01T00:00:00Z",
+      "permalink": null,
+      "revoked": true
+     }
+    ],
+    "offset": 0,
+    "eligibility": {
+     "purpose": "analysis",
+     "route": "local-rules",
+     "allowed": [
+      "vs_1"
+     ],
+     "excluded": [
+      {
+       "sourceId": "vs_2",
+       "reason": "not_selected"
+      },
+      {
+       "sourceId": "vs_3",
+       "reason": "revoked"
+      }
+     ],
+     "digest": "d",
+     "rule": "a sample counts only when active, selected and granted for this exact purpose and route"
+    }
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 3,
+    "total": 3,
+    "note": "Writing samples are style evidence only, never approved facts."
+   },
+   "warnings": []
+  }
+ },
+ "voice_profile_state": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "approved": {
+     "revision": 3,
+     "approvedAt": "2026-09-20T10:00:00Z",
+     "reason": null,
+     "stale": false,
+     "staleReason": null,
+     "tone": "Warm, precise",
+     "observations": [],
+     "dimensions": [
+      {
+       "id": "Short se",
+       "observation": "Short sentences with one image each",
+       "evidenceLevel": "supported",
+       "support": 4,
+       "counterEvidence": 0,
+       "quotes": []
+      }
+     ],
+     "unknowns": []
+    },
+    "proposed": {
+     "status": "proposed",
+     "method": "local-rules",
+     "route": "local-rules",
+     "model": null,
+     "proposedAt": "2026-10-07T09:00:00Z",
+     "proposalKey": "0123456789abcdef01234567",
+     "coverage": null,
+     "dimensions": [
+      {
+       "id": "Mentions",
+       "observation": "Mentions practice routines",
+       "evidenceLevel": "limited",
+       "support": 1,
+       "counterEvidence": 0,
+       "quotes": []
+      }
+     ],
+     "unknowns": [
+      "Tone in English posts"
+     ],
+     "sources": 1
+    },
+    "revisions": 3,
+    "derived": {
+     "draftsOnVoice": 4,
+     "scheduledPostsOnVoice": 1,
+     "rule": "drafts that carry a voice revision"
+    },
+    "note": "No model was trained. A proposed profile is not in effect until an owner approves it.",
+    "href": "/app/brand"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "approved": null,
+    "proposed": null,
+    "revisions": 0,
+    "derived": {
+     "draftsOnVoice": 0,
+     "scheduledPostsOnVoice": 0,
+     "rule": "r"
+    },
+    "note": "No model was trained.",
+    "href": "/app/brand"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "voice_preferences": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "pending": [
+     {
+      "id": "11111111-2222-4333-8444-555555555555",
+      "status": "pending",
+      "op": "add",
+      "source": "chat",
+      "at": 1791460000,
+      "expiresAt": 1792060000,
+      "statement": "Use 'recital' rather than 'concert'",
+      "why": "You changed it three times",
+      "evidence": [],
+      "scopeLabel": "All posts"
+     }
+    ],
+    "recent": [],
+    "recentTotal": 0,
+    "learned": [
+     {
+      "id": "p1",
+      "type": "wording",
+      "ruleKey": "k",
+      "polarity": "prefer",
+      "scope": {},
+      "statement": "No exclamation marks",
+      "applyWhen": null,
+      "evidenceState": "user_confirmed",
+      "evidenceSummary": "you edited the wording",
+      "source": "chat",
+      "status": "active",
+      "since": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "versions": 1,
+    "settings": {},
+    "stats": {},
+    "rule": "learned = in effect; proposed = waiting for an owner's decision"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "voice_consent": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "cloudMemory": {
+     "cloud": false
+    },
+    "samples": {
+     "total": 3,
+     "grantedForAnalysis": 1,
+     "grantedForGeneration": 0
+    },
+    "learning": {
+     "enabled": true,
+     "teamEdits": false,
+     "cloudExtraction": false,
+     "modelExtractionAllowed": false
+    },
+    "media": {
+     "cloud": false
+    },
+    "webResearch": {
+     "web": true,
+     "enabled": true
+    },
+    "owner": false,
+    "rule": "each layer is a separate owner decision",
+    "href": "/app/memory"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 5,
+    "total": 5,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "voice_learning_status": {
+  "partial": {
+   "state": "partial",
+   "data": {
+    "enabled": true,
+    "eventsWaiting": 0,
+    "pendingProposals": 1,
+    "newestProposalAt": "2026-10-07T09:00:00Z",
+    "extractor": {
+     "kind": "rules",
+     "allowed": true
+    },
+    "lastRun": null,
+    "lastRunNote": "Rafii does not record when preference extraction last ran.",
+    "rule": "derived: events not yet read. No model is trained."
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": "The last extraction time isn't recorded."
+   },
+   "warnings": []
+  },
+  "unavailable": {
+   "state": "unavailable",
+   "data": null,
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": "Learning records aren't available here."
+   },
+   "warnings": [
+    "learning_tables_unavailable"
+   ]
+  }
+ },
+ "actions": [
+  {
+   "actionId": "voice_profile_analyze_local",
+   "label": "Analyse locally",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  },
+  {
+   "actionId": "voice_profile_approve",
+   "label": "Approve profile",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  },
+  {
+   "actionId": "preference_decide",
+   "label": "Decide",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  },
+  {
+   "actionId": "voice_samples_import",
+   "label": "Keep sample",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  }
+ ]
+}

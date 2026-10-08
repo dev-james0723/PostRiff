@@ -434,6 +434,48 @@ test('createUiBridges invalidates reads named by a verified result and forwards 
   assert.equal(ui.action.writesEnabled('draft_edit'), false, 'disposing one side stops both');
 });
 
+test('UiBridges.dispose stops both bridges: in-flight reads aborted, debounce timers cleared, no further traffic', async () => {
+  const timers = manualTimers();
+  const signals = [];
+  const t = transport((_p, _b, _n, init) => {
+    signals.push(init.signal);
+    return new Promise(() => {});
+  });
+  const sent = [];
+  const ui = bridges.createUiBridges({ transport: t, artifact: artifact(), onContinue: (r) => sent.push(r) });
+  ui.query.read('draft_read', { draftId: 'v1' });
+  await tick();
+  ui.dispose();
+  ui.dispose();
+  assert.equal(signals[0].aborted, true);
+  assert.equal(ui.query.toolProvider(), null);
+  assert.equal(ui.action.writesEnabled('draft_edit'), false);
+  assert.equal((await ui.query.read('draft_read', { draftId: 'v2' })).state, 'unavailable');
+  ui.action.request({ actionId: 'draft_edit', inputs: {} });
+  ui.onContinue({ message: 'after dispose', artifactId: ARTIFACT_ID, artifactRevision: 2, stateRevision: 0 });
+  assert.equal(t.calls.length, 1);
+  assert.deepEqual(sent, []);
+  const q = bridges.createQueryBridge({ transport: transport(() => ok(result())), artifact: artifact(), timers });
+  const pending = q.read('drafts_list', { q: 'pia' });
+  q.dispose();
+  assert.equal(timers.pending.every((h) => h.done), true, 'the debounce timer is cleared');
+  assert.equal((await pending).state, 'unavailable');
+});
+
+test('cursor is a reserved argument: it travels as UiQueryV1.cursor and never as an input', async () => {
+  const t = transport(() => ok(result()));
+  const q = bridges.createQueryBridge({ transport: t, artifact: artifact() });
+  await q.toolProvider().callTool({ name: 'draft_read', arguments: { draftId: 'v1', cursor: 'c1.abc' } });
+  await q.read('draft_read', { draftId: 'v2' }, { cursor: 'c1.def' });
+  await q.read('draft_read', { draftId: 'v3', cursor: null });
+  await q.read('draft_read', { draftId: 'v4', cursor: 'x'.repeat(600) });
+  const bodies = t.calls.map((c) => JSON.parse(JSON.stringify(c.body)));
+  assert.deepEqual(bodies.map((b) => b.cursor), ['c1.abc', 'c1.def', null, null]);
+  assert.deepEqual(bodies.map((b) => b.inputs), [{ draftId: 'v1' }, { draftId: 'v2' }, { draftId: 'v3' }, { draftId: 'v4' }]);
+  await q.read('draft_read', { draftId: 'v1', cursor: 'c1.other' });
+  assert.equal(t.calls.length, 5, 'another page of the same binding and inputs is its own cache entry');
+});
+
 test('context hooks return null outside a provider (never throw)', () => {
   const React = require(require.resolve('react', { paths: [WEB] }));
   const { renderToStaticMarkup } = require(require.resolve('react-dom/server', { paths: [WEB] }));
