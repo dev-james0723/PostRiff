@@ -143,8 +143,8 @@ export class UiArtifactStream {
   private attempts = 0;
   private active = true;
   private terminalSeen = new Set<string>();
-  private gapAt: number | null = null;
-  private replayAfterGap = false;
+  /** A replay connection reads the durable log in seq order: what it returns is complete (gaps are compacted or rolled-back seqs). */
+  private replaying = false;
   status: UiStreamStatus = 'idle';
   lastSeq: number;
   artifactId: string;
@@ -166,7 +166,12 @@ export class UiArtifactStream {
 
   /** Replay + live tail of an existing artifact. Never creates or regenerates anything. */
   connect(): void {
-    if (TERMINAL_STATUSES.has(this.status) || !this.artifactId) return;
+    if (TERMINAL_STATUSES.has(this.status)) return;
+    if (!this.artifactId) {
+      // A POST stream that ended before naming its artifact has nothing to replay.
+      this.set('failed', { code: 'ui_stream_empty' });
+      return;
+    }
     if (!this.active) {
       this.set('paused');
       return;
@@ -174,6 +179,7 @@ export class UiArtifactStream {
     this.abortCurrent();
     const controller = new AbortController();
     this.controller = controller;
+    this.replaying = true;
     this.set(this.attempts > 0 ? 'reconnecting' : 'connecting');
     const path = `${this.opts.transport.base}/presentations/${encodeURIComponent(this.artifactId)}/events?after=${this.lastSeq}`;
     void this.opts.transport
@@ -188,6 +194,7 @@ export class UiArtifactStream {
     this.abortCurrent();
     const controller = new AbortController();
     this.controller = controller;
+    this.replaying = false;
     this.set('connecting');
     void this.read(response, controller).catch((error: unknown) => this.onDisconnect(controller, error, false));
   }
@@ -304,16 +311,10 @@ export class UiArtifactStream {
       }
       return 'ignored';
     }
-    if (this.lastSeq > 0 && event.seq > this.lastSeq + 1) {
-      if (!(this.replayAfterGap && this.gapAt === this.lastSeq)) {
-        this.gapAt = this.lastSeq;
-        this.replayAfterGap = true;
-        return 'gap';
-      }
-      // The replay confirmed the gap (compacted deltas of a finished attempt): the server is authoritative.
+    if (!this.replaying && this.lastSeq > 0 && event.seq > this.lastSeq + 1) {
+      // A producer stream skipped seqs (another tab's state change, a repair's bookkeeping): replay the durable log from here.
+      return 'gap';
     }
-    this.replayAfterGap = false;
-    this.gapAt = null;
     this.lastSeq = event.seq;
     if (terminalKey) this.terminalSeen.add(terminalKey);
     this.opts.onEvent(event);
@@ -337,14 +338,16 @@ export class UiArtifactStream {
       return;
     }
     if (error && (error as { name?: string }).name === 'AbortError') return;
+    // A replay tail that closed normally (it had events or heartbeats) reconnects promptly and resets the failure count;
+    // failures back off exponentially with jitter, capped at 15 s, and stop after maxReconnects.
     if (progressed) this.attempts = 0;
-    this.attempts += 1;
-    const max = this.opts.maxReconnects ?? 8;
-    if (this.attempts > max) {
-      this.set('failed', { code: 'ui_stream_unreachable' });
-      return;
+    else {
+      this.attempts += 1;
+      if (this.attempts > (this.opts.maxReconnects ?? 8)) {
+        this.set('failed', { code: 'ui_stream_unreachable' });
+        return;
+      }
     }
-    // A replay tail that closed normally reconnects promptly; failures back off exponentially with jitter, capped at 15 s.
     const base = progressed ? 250 : Math.min(15_000, 500 * 2 ** (this.attempts - 1));
     const jitter = Math.floor((this.opts.random ?? Math.random)() * 250);
     this.set('reconnecting');
@@ -353,6 +356,128 @@ export class UiArtifactStream {
       this.connect();
     }, base + jitter);
   }
+}
+
+/**
+ * The founder transport cannot stream (the control app answers one JSON body, D-A22): poll the durable replay
+ * `GET …/presentations/{id}/events?after=` once a second while the view is visible and not finished. Same ordering rules as the
+ * stream (older seqs ignored, terminal ends it); never creates or regenerates anything.
+ */
+export class UiArtifactPoller {
+  private opts: UiArtifactStreamOptions & { intervalMs?: number };
+  private controller: AbortController | null = null;
+  private timer: unknown = null;
+  private failures = 0;
+  private active = true;
+  status: UiStreamStatus = 'idle';
+  lastSeq: number;
+  artifactId: string;
+
+  constructor(opts: UiArtifactStreamOptions & { intervalMs?: number }) {
+    this.opts = opts;
+    this.artifactId = opts.artifactId;
+    this.lastSeq = Math.max(0, Math.floor(opts.afterSeq ?? 0));
+  }
+
+  private get timers() {
+    return this.opts.timers ?? { setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms), clearTimeout: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>) };
+  }
+
+  private set(status: UiStreamStatus, detail?: { code?: string | null; httpStatus?: number }) {
+    this.status = status;
+    this.opts.onStatus?.(status, detail);
+  }
+
+  connect(): void {
+    if (TERMINAL_STATUSES.has(this.status) || !this.artifactId) return;
+    if (!this.active) {
+      this.set('paused');
+      return;
+    }
+    this.stop();
+    const controller = new AbortController();
+    this.controller = controller;
+    if (this.status === 'idle') this.set('connecting');
+    const path = `${this.opts.transport.base}/presentations/${encodeURIComponent(this.artifactId)}/events?after=${this.lastSeq}`;
+    void this.opts.transport.fetch(path, { method: 'GET', signal: controller.signal }).then(async (response) => {
+      if (controller.signal.aborted) return;
+      const body = (await response.json().catch(() => ({}))) as { events?: unknown[]; done?: boolean; code?: string };
+      if (!response.ok) {
+        if (response.status >= 500 || response.status === 429) return this.again(controller, false);
+        this.set('failed', { code: typeof body.code === 'string' ? body.code : null, httpStatus: response.status });
+        return;
+      }
+      this.set('open');
+      for (const raw of body.events ?? []) {
+        const parsed = uiEventSchema.safeParse(raw);
+        if (!parsed.success || parsed.data.kind === 'ui.heartbeat' || parsed.data.seq <= this.lastSeq) continue;
+        this.lastSeq = parsed.data.seq;
+        this.opts.onEvent(parsed.data);
+        if (isTerminalEvent(parsed.data.kind)) {
+          this.set('done');
+          return;
+        }
+      }
+      if (body.done) {
+        this.set('done');
+        return;
+      }
+      this.again(controller, true);
+    }).catch((error: unknown) => {
+      if ((error as { name?: string })?.name === 'AbortError') return;
+      this.again(controller, false);
+    });
+  }
+
+  private again(controller: AbortController, ok: boolean) {
+    if (this.controller !== controller || TERMINAL_STATUSES.has(this.status)) return;
+    this.failures = ok ? 0 : this.failures + 1;
+    if (this.failures > (this.opts.maxReconnects ?? 8)) {
+      this.set('failed', { code: 'ui_stream_unreachable' });
+      return;
+    }
+    const delay = ok ? (this.opts.intervalMs ?? 1000) : Math.min(15_000, 1000 * 2 ** this.failures);
+    this.timer = this.timers.setTimeout(() => {
+      this.timer = null;
+      this.connect();
+    }, delay);
+  }
+
+  /** A founder POST answers JSON, never a stream: release it and poll the durable replay instead. */
+  consume(response: Response): void {
+    void response.body?.cancel().catch(() => undefined);
+    this.connect();
+  }
+
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (!active) {
+      this.stop();
+      if (!TERMINAL_STATUSES.has(this.status)) this.set('paused');
+    } else if (this.status === 'paused') this.connect();
+  }
+
+  private stop() {
+    if (this.timer !== null) {
+      this.timers.clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.controller?.abort();
+    this.controller = null;
+  }
+
+  dispose(): void {
+    this.stop();
+    if (this.status !== 'done' && this.status !== 'failed') this.set('closed');
+  }
+}
+
+export type UiEventSource = Pick<UiArtifactStream, 'connect' | 'consume' | 'setActive' | 'dispose' | 'status' | 'lastSeq' | 'artifactId'>;
+
+/** The event source for a transport: SSE for consumer routes, polling replay for founder routes. */
+export function createUiEventSource(opts: UiArtifactStreamOptions): UiEventSource {
+  return opts.transport.scope === 'founder' ? new UiArtifactPoller(opts) : new UiArtifactStream(opts);
 }
 
 // --- transports (frozen UiTransport) -------------------------------------------------------------------------------------

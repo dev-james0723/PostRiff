@@ -62,14 +62,27 @@ function plain(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as JsonValue;
 }
 
+/** Text without control characters (a title is display text; it never carries line breaks or terminal codes). */
+function printable(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 0x20 && code !== 0x7f) out += ch;
+  }
+  return out;
+}
+
 /** Clean an ordered selection: what was selected and the list as it was shown (D-A20), ids and types only plus a short title. */
 export function selectionValue(listId: string | null, items: SelectionItem[], visible?: SelectionItem[] | null): JsonValue {
   const seen = new Set<string>();
-  const clean = items
-    .filter((i) => i && REF_TYPE.test(i.type) && REF_ID.test(i.id))
-    .filter((i) => (seen.has(`${i.type}:${i.id}`) ? false : (seen.add(`${i.type}:${i.id}`), true)))
-    .slice(0, SELECTION_MAX_ITEMS)
-    .map((i) => ({ type: i.type, id: i.id, title: (i.title ?? '').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120) }));
+  const unique: SelectionItem[] = [];
+  for (const item of items) {
+    if (!item || !REF_TYPE.test(item.type) || !REF_ID.test(item.id) || seen.has(`${item.type}:${item.id}`)) continue;
+    seen.add(`${item.type}:${item.id}`);
+    unique.push(item);
+  }
+  const clean = unique.slice(0, SELECTION_MAX_ITEMS)
+    .map((i) => ({ type: i.type, id: i.id, title: printable(i.title ?? '').slice(0, 120) }));
   const out: Record<string, JsonValue> = { items: clean };
   const shown = (visible ?? []).filter((i) => i && REF_TYPE.test(i.type) && REF_ID.test(i.id)).slice(0, SELECTION_VISIBLE_MAX);
   if (shown.length) out.visible = shown.map((i) => ({ type: i.type, id: i.id }));
@@ -243,7 +256,7 @@ export class UiStateController {
    * A newer accepted revision arrived (an edit, or another tab's state): take its state and declaration, keep this tab's dirty
    * fields that the new revision still declares, and report the ones it no longer declares so a native warning can offer them.
    */
-  rebase(next: StoredState, declared: DeclaredState | null): { initialState: Record<string, JsonValue>; lostFields: string[] } {
+  rebase(next: StoredState, declared: DeclaredState | null): { initialState: Record<string, JsonValue>; lostFields: string[]; lostValues: Record<string, JsonValue> } {
     const result = applyUiPatch({ safeState: this.local }, next, this.dirtyFields(), declared);
     this.declared = declared;
     this.persisted = { safeState: { ...next.safeState }, stateRevision: next.stateRevision };
@@ -275,9 +288,13 @@ export function applyUiPatch(current: { safeState: Record<string, JsonValue> }, 
   const keep = new Set(persistableKeys(Object.fromEntries(localDirtyFields.map((k) => [k, true])), declared));
   const initialState: Record<string, JsonValue> = { ...next.safeState };
   const lostFields: string[] = [];
+  const lostValues: Record<string, JsonValue> = {};
   for (const key of localDirtyFields) {
     if (keep.has(key)) initialState[key] = current.safeState[key] ?? null;
-    else lostFields.push(key);
+    else {
+      lostFields.push(key);
+      lostValues[key] = current.safeState[key] ?? null;
+    }
   }
-  return { initialState, lostFields: lostFields.sort() };
+  return { initialState, lostFields: lostFields.sort(), lostValues };
 }
