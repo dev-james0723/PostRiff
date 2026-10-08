@@ -189,7 +189,23 @@ class World:
             self.call(owner, "POST", f"/api/workspaces/{w}/ideas/runs/{run['runId']}/apply", {"expectedRevision": snap["revision"], "artifactHash": run["artifactHash"]})
             snap = self.call(owner, "GET", f"/api/workspaces/{w}")
             draft = next((v for v in snap["state"].get("variants") or [] if (v.get("provenance") or {}).get("runId") == run["runId"]), None)
-            out.update({"channelId": linkedin["id"], "draftId": draft and draft["id"]})
+            # Scheduling preconditions, the same way the existing site-agent scene seeds them: the draft is confirmed after
+            # review, and the account's identity + capability are verified (store.channel_state "Ready for posting").
+            if draft:
+                snap = self.call(owner, "POST", f"/api/workspaces/{w}/actions", {"expectedRevision": snap["revision"], "action": "p2_variant_review", "payload": {
+                    "variantId": draft["id"], "variantRevision": draft["revision"], "confirmed": True, "excludedUnknowns": draft.get("unknowns") or []}})
+            verified = self.api.request("POST", f"/api/workspaces/{w}/channels/{linkedin['id']}/verify", owner.token, {})
+            out.update({"channelId": linkedin["id"], "draftId": draft and draft["id"], "channelVerify": verified.status})
+            # A saved weekly automation (the builder's own action, as the site-agent scene seeds it): J08 prepares changes to it.
+            snap = self.call(owner, "GET", f"/api/workspaces/{w}")
+            snap = self.call(owner, "POST", f"/api/workspaces/{w}/actions", {"expectedRevision": snap["revision"], "action": "raffi_recurrence_save", "payload": {
+                "name": "G acceptance weekly note", "goal": "A short note about practising slowly", "audience": "Adult piano learners", "facts": {},
+                "schedule": {"weekdays": ["Friday"], "localTime": "16:00", "timeZone": "Asia/Hong_Kong"},
+                "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": linkedin["id"]}], "contentType": None, "route": "deterministic-preview",
+                "reasoning": "quick", "maxCostUsdMicro": 0, "sourceIds": [], "include": None, "voiceMode": "neutral"}})
+            tasks = (((snap.get("state") or {}).get("raffi") or {}).get("campaignPlanning") or {}).get("recurringTasks") or []
+            task = next((t for t in tasks if t.get("name") == "G acceptance weekly note"), None)
+            out["automationId"] = task and task.get("id")
         except (AssertionError, KeyError, StopIteration) as error:
             out["seedError"] = str(error)[:300]
         self._seeded = out

@@ -483,6 +483,10 @@ def concurrency(api: Api, token_factory, workspace_factory, levels, prompt) -> l
             token = token_factory()
             workspace = workspace_factory(token)
             t0 = time.monotonic()
+            if not isinstance(workspace, str) or not workspace:
+                # The first sign-in itself failed under load: recorded as such (never a request to /workspaces/None).
+                results.append({"i": i, "status": f"verify_failed:{workspace}", "ms": 0.0, "foreignRead": None})
+                return
             turn = api.request("POST", f"/api/workspaces/{workspace}/agent/turns", token, {"message": prompt, "idempotencyKey": new_key("cc")}, timeout=180)
             raw = turn.json() or {}
             body = {**(raw.get("result") if isinstance(raw.get("result"), dict) else {}), "runId": raw.get("runId")}
@@ -586,7 +590,8 @@ def main(argv=None) -> int:
             return f"dev:{uuid.uuid4()}"
 
         def workspace_factory(token):
-            return (api.request("POST", "/api/auth/verify", token, {}).json() or {}).get("workspaceId")
+            answer = api.request("POST", "/api/auth/verify", token, {})
+            return (answer.json() or {}).get("workspaceId") if answer.status in (200, 201) else answer.status
         levels = [int(x) for x in str(args.levels).split(",") if x.strip()]
         # The harness QA script's J05 flow (campaign specialist → campaign_list) with an explicit UI intent: eligible for a view.
         result = concurrency(api, token_factory, workspace_factory, levels, "Chart what's missing in the campaign by status")

@@ -54,7 +54,9 @@ async function openPanel(t, page) {
 
 /** Ask an eligible question in the panel and wait for the generated view. Resolves {region, startedAt}. */
 async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout = 120000 } = {}) {
-  if (t.shared.noRegion) blocked(t.shared.noRegion);   // proven once per run: don't wait again for a lane that isn't there
+  // Proven absent (no scene of this run ever got a region): don't wait again. Once any scene had a region, a miss is that
+  // scene's own FAILURE (with diagnostics) and later scenes still try: one miss must never cascade into "blocked".
+  if (t.shared.noRegion && !t.shared.regionSeen) blocked(t.shared.noRegion);
   const composer = await openPanel(t, page);
   await page.evaluate(() => { window.__g = { mutations: 0, firstChildAt: null }; });
   const startedAt = await page.evaluate(() => performance.now());
@@ -76,12 +78,15 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
     }
     if (!(await region.count())) {
       const answered = await page.locator('#rafii-panel article[aria-label="Rafii\'s answer"]').count();
-      t.shared.noRegion = `lane F/C: no ${GENERATED} region within 45 s of the native answer to an eligible turn (native answers: ${answered}; `
+      const why = `no ${GENERATED} region within 45 s of the native answer to an eligible turn (native answers: ${answered}; `
         + `'Build interactive view' ${clicked ? 'clicked' : 'absent'})`;
+      if (t.shared.regionSeen) throw new Error(`lane F/C (intermittent: earlier scenes rendered views): ${why}`);
+      t.shared.noRegion = `lane F/C: ${why}`;
       blocked(t.shared.noRegion);
     }
     t.shared.buildButtonNeeded = (t.shared.buildButtonNeeded || 0) + 1;
   }
+  t.shared.regionSeen = true;
   await page.evaluate((sel) => {
     const nodes = document.querySelectorAll(sel);
     const node = nodes[nodes.length - 1];
@@ -174,12 +179,13 @@ scene('typing-during-patch', async (t) => {
   await input.type('dirty value 普通话', { delay: 20 });
   const artifactId = await region.getAttribute('data-artifact-id');
   if (!artifactId) blocked('lane F: the generated region has no data-artifact-id to address an edit');
-  const editButton = page.locator('#rafii-panel').getByRole('button', { name: /edit|change this view|修改/i }).first();
-  if (!(await editButton.count())) blocked('lane F: no explicit edit affordance on the generated view');
+  // Lane F's explicit edit (surfaces/artifact.tsx): "Change this view" → "What should change?" → "Update view".
+  const editButton = page.locator('#rafii-panel').getByRole('button', { name: 'Change this view', exact: true }).last();
+  if (!(await editButton.count())) blocked('lane F: no "Change this view" affordance on the generated view (edits flag or role)');
   const readyBefore = await page.evaluate(() => performance.getEntriesByName('rafii-genui:ready').length);
   await editButton.click();
-  await page.keyboard.type('change the period');
-  await page.keyboard.press('Enter');
+  await page.locator('#rafii-panel').getByLabel('What should change?').last().fill('change the period');
+  await page.locator('#rafii-panel').getByRole('button', { name: 'Update view', exact: true }).last().click();
   const edited = await page.waitForFunction((n) => performance.getEntriesByName('rafii-genui:ready').length > n
     || document.querySelector('[data-rafii-generated][data-generation-state="failed"]'), readyBefore, { timeout: 90000 }).then(() => true).catch(() => false);
   if (!edited) blocked('lanes B/F: the explicit edit produced no new ready revision within 90 s');
@@ -191,21 +197,44 @@ scene('typing-during-patch', async (t) => {
 
 scene('keyboard-only', async (t) => {
   const page = await t.page({ surface: 'panel' });
-  const { region } = await generated(t, page);
-  const focusables = await region.locator('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])').count();
-  if (!focusables) blocked('lane C/E: the generated view has no focusable control to reach by keyboard');
-  let reached = false;
-  let left = false;
-  for (let i = 0; i < 60 && !(reached && left); i += 1) {
-    await page.keyboard.press('Tab');
-    const inside = await page.evaluate((sel) => !!document.activeElement?.closest(sel), GENERATED);
-    if (inside) reached = true;
-    else if (reached) left = true;
-  }
-  t.assert(reached, 'Tab reaches a control inside the generated view');
-  t.assert(left, 'Tab leaves the generated view again (no keyboard trap)');
+  await generated(t, page);
+  // Deterministic: focus the tabbable just before the view and press Tab once (must land inside), then focus the view's last
+  // tabbable and press Tab once (must land outside: no trap). Every step names the element, for lane C.
+  const plan = await page.evaluate((sel) => {
+    const regions = document.querySelectorAll(sel);
+    const region = regions[regions.length - 1];
+    const tabbable = [...document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')]
+      .filter((el) => el.tabIndex >= 0 && !el.disabled && el.getClientRects().length > 0 && !el.closest('[inert]') && getComputedStyle(el).visibility !== 'hidden');
+    const inside = tabbable.map((el, i) => (region.contains(el) ? i : -1)).filter((i) => i >= 0);
+    const tag = (el, mark) => { if (el) el.setAttribute('data-g-kb', mark); };
+    if (!inside.length) return { inside: 0 };
+    tag(tabbable[inside[0] - 1], 'before');
+    tag(tabbable[inside[inside.length - 1]], 'last');
+    const describe = (el) => el && `${el.tagName.toLowerCase()}${el.getAttribute('role') ? `[role=${el.getAttribute('role')}]` : ''}`
+      + `${el.closest('[data-genui]') ? `@${el.closest('[data-genui]').getAttribute('data-genui')}#${el.closest('[data-statement-id]')?.getAttribute('data-statement-id') || ''}` : ''}`;
+    return { inside: inside.length, first: describe(tabbable[inside[0]]), last: describe(tabbable[inside[inside.length - 1]]), hasBefore: inside[0] > 0 };
+  }, GENERATED);
+  if (!plan.inside) blocked('lane C/E: the generated view has no tabbable control (tabIndex >= 0, visible, enabled)');
+  const where = () => page.evaluate((sel) => {
+    const el = document.activeElement;
+    const inView = !!el?.closest(sel);
+    return { inView, el: el ? `${el.tagName.toLowerCase()}${el.closest('[data-genui]') ? `@${el.closest('[data-genui]').getAttribute('data-genui')}` : ''}` : null };
+  }, GENERATED);
+  // WebKit follows Safari's default keyboard model: plain Tab reaches only text fields and pop-up selects; Alt+Tab reaches
+  // buttons, links and checkboxes too. Use the key that visits every control, so the check means the same in both engines.
+  const tab = t.browser === 'webkit' ? 'Alt+Tab' : 'Tab';
+  if (plan.hasBefore) await page.locator('[data-g-kb="before"]').focus();
+  else await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press(tab);
+  const entered = await where();
+  await page.locator('[data-g-kb="last"]').focus();
+  await page.keyboard.press(tab);
+  const exited = await where();
+  t.metric('tabKey', tab);
+  t.assert(entered.inView, `Tab from the control before the view lands inside it (landed on ${entered.el}; first tabbable inside: ${plan.first})`);
+  t.assert(!exited.inView, `Tab from the view's last control (${plan.last}) leaves the view (landed on ${exited.el})`);
   const visible = await page.evaluate(() => { const el = document.activeElement; const s = el && getComputedStyle(el); return !!s && (s.outlineStyle !== 'none' || s.boxShadow !== 'none'); });
-  return `reached and left by Tab; focus indicator visible=${visible}`;
+  return `${plan.inside} tabbable control(s); entered at ${entered.el}, left to ${exited.el}; focus indicator visible=${visible}`;
 });
 
 scene('reduced-motion', async (t) => {
@@ -280,6 +309,7 @@ scene('scope-switch-aborts', async (t) => {
   if (!(await trigger.count())) blocked('app: the sidebar workspace menu is not reachable on this page/viewport');
   await trigger.click();
   const target = page.getByRole('menuitem').filter({ hasText: /editor/i }).first();
+  await target.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});   // the menu renders its items after opening
   if (!(await target.count())) blocked('app: the second workspace is not listed in the workspace menu');
   const since = Date.now();
   await target.click();

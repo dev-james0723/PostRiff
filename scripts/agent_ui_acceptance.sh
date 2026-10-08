@@ -112,6 +112,7 @@ run_scenes() {
   provider="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("providerUrl",""))' "$EVIDENCE/stack.json")"
   for engine in chromium webkit; do
     RAFII_WEB_URL="http://127.0.0.1:$WEB_PORT" AGENT_UI_PROVIDER_URL="$provider" AGENT_UI_EVIDENCE_DIR="$EVIDENCE" \
+      AGENT_UI_STACK_STATE="$EVIDENCE/stack.json" RAFII_TEST_PYTHON="$PY" \
       node web/tests/agent-ui-e2e/run.cjs --browser="$engine" --out="$EVIDENCE" 2>&1 | tee "$EVIDENCE/e2e-$engine.log" || failed=1
     record "e2e-$engine" "$failed" "$(grep -cE '^(PASS|FAIL|BLOCKED) ' "$EVIDENCE/e2e-$engine.log" || echo 0)"
   done
