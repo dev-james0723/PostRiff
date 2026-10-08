@@ -316,11 +316,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByLabel('New collection name').fill(emptyCollectionName);
    await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:'Remove collection '+emptyCollectionName,exact:true}).waitFor();
-   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
-   const collectionFilterControl=page.locator('#library-collection');await collectionFilterControl.waitFor({state:'visible'});
-   await collectionFilterControl.selectOption({label:emptyCollectionName});
-   await page.getByRole('button',{name:'Done',exact:true}).click();
-   await page.getByText('No assets match these filters',{exact:true}).waitFor({timeout:15000});
+   // Collections scope the Library from the collection rail (creating one opens it); an empty one says so and keeps search.
+   const emptyCollection=page.getByRole('navigation',{name:'Collections'}).getByRole('button',{name:new RegExp('^'+emptyCollectionName+', ')});
+   if((await emptyCollection.getAttribute('aria-current'))!=='true')await emptyCollection.click();
+   await page.getByText('This collection is empty',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'empty collection must retain search');
    await page.getByRole('button',{name:'Show all',exact:true}).click();
    await restoredDocument.waitFor({state:'visible',timeout:15000});
