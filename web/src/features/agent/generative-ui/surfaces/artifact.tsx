@@ -166,12 +166,18 @@ function EditView({ session, onDone }: { session: ArtifactSession; onDone: () =>
   const [problem, setProblem] = useState<string | null>(null);
   const ime = useRef(createImeGuard());
   const inputId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  // The field takes focus when it opens (the button that opened it is gone), so typing goes straight into the request.
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     const instruction = text.trim();
     if (!instruction) return;
+    // The stored selection travels as the edit's `selection` ({items, visible, listId}), so "compare the selected two" means them.
     const selection = session.getState().view?.artifact.safeState?.['@selection'] as JsonValue | undefined;
-    const result = await session.edit(instruction, selection && typeof selection === 'object' && !Array.isArray(selection) ? { selection } : null);
+    const result = await session.edit(instruction, selection && typeof selection === 'object' && !Array.isArray(selection) ? (selection as Record<string, JsonValue>) : null);
     if (result.ok) {
       setText('');
       onDone();
@@ -191,7 +197,7 @@ function EditView({ session, onDone }: { session: ArtifactSession; onDone: () =>
     <form onSubmit={(event) => void submit(event)} className='rafii-quiet mt-2 flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
       <label htmlFor={inputId} className='flex flex-col gap-2 text-sm font-medium'>
         What should change?
-        <input id={inputId} aria-label='What should change?' value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
+        <input ref={input} id={inputId} aria-label='What should change?' value={text} maxLength={2000} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown}
           onCompositionStart={() => ime.current.onCompositionStart()} onCompositionEnd={() => ime.current.onCompositionEnd()}
           placeholder='For example: add a chart, compare the selected two, show last month'
           className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base font-normal' />
