@@ -195,15 +195,20 @@ class Roles(Case):
         snap = self.w.ui(viewer, "GET", f"/presentations/{art['artifactId']}", route="snapshot")
         self.assertEqual(snap.status, 200, "a viewer may read the persisted view")
         action = self.manifest_action(art)
+        viewer_manifest = (snap.json() or {}).get("manifest") or {}
+        self.assertEqual(viewer_manifest.get("actions") or [], [], "a viewer's view offers write controls")
+        inputs = sample_inputs(action)
         activate = self.w.ui(viewer, "POST", "/actions/activate", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art),
-                                                                  "actionId": action["actionId"], "inputs": {}}, route="activate")
-        self.assertEqual(activate.status, 403, f"viewer activate → {activate.status} {activate.text(200)}")
+                                                                  "actionId": action["actionId"], "inputs": inputs}, route="activate")
+        # 403 (role) or 404 (the action isn't in a viewer's manifest at all, D filters by role): both are refusals.
+        self.assertIn(activate.status, (403, 404), f"viewer activate → {activate.status} {activate.text(200)}")
         execute = self.w.ui(viewer, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": action["actionId"],
-                                                         "inputs": {}, "idempotencyKey": new_key("viewer"), "activationId": "act_" + "v" * 40}, route="actions")
-        self.assertIn(execute.status, (403, 409))
+                                                         "inputs": inputs, "idempotencyKey": new_key("viewer"), "activationId": "act_" + "v" * 40}, route="actions")
+        self.assertIn(execute.status, (403, 404, 409))
         after = self.snap()
         self.assert_no_business_change(before, after, "viewer write attempts")
         self.assertEqual(Db.delta(before, after).get("ui_activations"), None, "an activation row was created for a viewer")
+        self.assertEqual(Db.delta(before, after).get("ui_actions"), None, "a UI action receipt was created for a viewer")
         self.assert_no_spend(before, after, provider, "viewer write attempts")
         return "viewer: read 200, activate 403, execute refused, zero rows"
 
@@ -287,12 +292,25 @@ class Actions(Case):
 
 class Approvals(Case):
     def proposal(self):
+        """A pending proposal on the ORIGINAL approval path: prepared from the generated view (schedule_prepare writes a new
+        assistant message with the proposal), read back from the conversation state like the native card does."""
         owner = self.owner()
-        result = self.w.turn(owner, "Generate a matching image and make the LinkedIn copy, then schedule it Thursday 18:00")
-        proposals = result.get("proposals") or (result.get("siteAgent") or {}).get("proposals") or []
-        if not proposals:
-            raise Blocked("BLOCKED harness: the compound harness turn produced no scheduling proposal to decide")
-        return result, proposals[0]
+        art = self.ready()
+        if "schedule_prepare" not in {a.get("actionId") for a in (art.get("manifest") or {}).get("actions") or []}:
+            raise Blocked("BLOCKED lane D: no schedule_prepare in the ready artifact's manifest to create a proposal")
+        draft = self.w.seed().get("draftId")
+        if not draft:
+            raise Blocked("BLOCKED harness: the seed has no confirmed draft")
+        import datetime
+        inputs = {"draftId": draft, "local": (datetime.datetime.now() + datetime.timedelta(days=4)).strftime("%Y-%m-%dT09:30"), "zone": "Asia/Hong_Kong"}
+        activation = _activate(self, art, {"actionId": "schedule_prepare"}, inputs)
+        self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "schedule_prepare",
+                                              "inputs": inputs, "idempotencyKey": new_key("propose"), "activationId": activation["activationId"]}, route="actions")
+        state = self.w.api.request("GET", f"/api/workspaces/{owner.workspace_id}/agent/conversations/{art['conversationId']}/state", owner.token).json() or {}
+        found = [p for p in (state.get("pendingApprovals") or state.get("approvals") or []) if isinstance(p, dict) and p.get("digest")]
+        if not found:
+            raise Blocked(f"BLOCKED lanes D/A: the prepared proposal is not listed in the conversation state ({sorted(state)[:8]})")
+        return {"conversationId": art["conversationId"]}, found[-1]
 
     @check
     def test_stale_digest_and_expired_proposal_refused(self):
@@ -300,32 +318,50 @@ class Approvals(Case):
         owner = self.owner()
         result, proposal = self.proposal()
         before = self.snap()
-        body = {"conversationId": result.get("conversationId"), "messageId": result.get("messageId") or proposal.get("messageId"), "proposalId": proposal.get("id"),
-                "digest": "0" * 64, "decision": "apply", "timeZone": "Asia/Hong_Kong"}
+        body = {"conversationId": result.get("conversationId"), "messageId": proposal.get("messageId") or result.get("messageId"),
+                "proposalId": proposal.get("proposalId") or proposal.get("id"), "digest": "0" * 64, "decision": "apply", "timeZone": "Asia/Hong_Kong"}
         wrong = self.w.api.request("POST", f"/api/workspaces/{owner.workspace_id}/agent/approvals/decide", owner.token, body)
-        self.assertIn(wrong.status, (400, 403, 404, 409), f"wrong digest → {wrong.status}")
+        self.assertIn(wrong.status, (400, 403, 404, 409), f"wrong digest → {wrong.status} {wrong.text(160)}")
         self.assert_no_business_change(before, self.snap(), "wrong-digest decision")
-        return "wrong digest refused on the original decide path"
+        dismissed = self.w.api.request("POST", f"/api/workspaces/{owner.workspace_id}/agent/approvals/decide", owner.token,
+                                       {**body, "digest": proposal["digest"], "decision": "dismiss"})
+        self.assertIn(dismissed.status, (200, 201), f"dismiss with the right digest → {dismissed.status} {dismissed.text(160)}")
+        again = self.w.api.request("POST", f"/api/workspaces/{owner.workspace_id}/agent/approvals/decide", owner.token,
+                                   {**body, "digest": proposal["digest"], "decision": "apply"})
+        self.assertIn(again.status, (200, 400, 404, 409), f"apply after dismiss → {again.status}")
+        if again.status == 200:
+            self.assertNotEqual(((again.json() or {}).get("decision") or (again.json() or {}).get("status")), "applied", "a dismissed proposal was applied")
+        self.assertNotIn("jobs", Db.delta(before, self.snap()), "a dismissed proposal scheduled a job")
+        return "wrong digest refused; dismissed on the original path; apply after dismiss refused; no job"
 
     @check
     def test_prepared_is_not_applied(self):
         """NC23: a UI 'prepare' action returns outcome prepared, verified false, and the domain record is not applied."""
         art = self.ready()
         owner = self.owner()
-        action = self.manifest_action(art, effects=("PREPARE_EXTERNAL",))
+        actions = {a.get("actionId"): a for a in (art.get("manifest") or {}).get("actions") or []}
+        if "schedule_prepare" not in actions:
+            raise Blocked(f"BLOCKED lane D: the ready artifact's manifest has no schedule_prepare (actions: {sorted(actions)[:8]})")
+        draft = self.w.seed().get("draftId")
+        if not draft:
+            raise Blocked(f"BLOCKED harness: the seed has no confirmed draft to prepare ({self.w.seed().get('seedError')})")
+        import datetime
+        when = (datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%Y-%m-%dT18:00")
+        inputs = {"draftId": draft, "local": when, "zone": "Asia/Hong_Kong"}
         activation = self.w.ui(owner, "POST", "/actions/activate", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art),
-                                                                   "actionId": action["actionId"], "inputs": {}}, route="activate")
-        if activation.status != 201:
-            raise Blocked(f"BLOCKED lane D: activation of {action['actionId']} with empty inputs → {activation.status} {activation.code}")
+                                                                   "actionId": "schedule_prepare", "inputs": inputs}, route="activate")
+        self.assertEqual(activation.status, 201, activation.text(300))
+        confirmation = (activation.json() or {}).get("confirmation") or {}
+        self.assertEqual(confirmation.get("timeZone"), "Asia/Hong_Kong", "the native confirmation must state the exact zone")
         before = self.snap()
-        done = self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": action["actionId"],
-                                                     "inputs": {}, "idempotencyKey": new_key("prep"), "activationId": activation.json()["activationId"]}, route="actions")
+        done = self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "schedule_prepare",
+                                                     "inputs": inputs, "idempotencyKey": new_key("prep"), "activationId": activation.json()["activationId"]}, route="actions")
         outcome = done.json() or {}
         self.assertEqual(outcome.get("outcome"), "prepared", outcome)
-        self.assertFalse(outcome.get("verified"))
+        self.assertFalse(outcome.get("verified"), "a prepared proposal was reported verified")
         delta = Db.delta(before, self.snap())
         self.assertNotIn("jobs", delta, "a prepared action scheduled a job")
-        return "prepared, verified=false, no job"
+        return f"schedule_prepare → prepared, verified=false, zone stated, no job ({outcome.get('proposalRef')})"
 
 
 class Edits(Case):
@@ -708,8 +744,11 @@ class State(Case):
         snap = self.w.ui(owner, "GET", f"/presentations/{art['artifactId']}", route="snapshot").json() or {}
         base = int((snap.get("artifact") or {}).get("stateRevision") or 0)
         declared = (snap.get("declared") or {}).get("stateNames") or []
-        one = {"@selection": {"items": [{"type": "campaign", "id": "g-tab-one", "title": "Tab one"}], "visible": ["g-tab-one"], "listId": "g"}}
-        two = {"@selection": {"items": [{"type": "campaign", "id": "g-tab-two", "title": "Tab two"}], "visible": ["g-tab-two"], "listId": "g"}}
+        # F's selection shape (ui_store.clean_selection; the browser's recordSelection sends the same): visible is a list of refs.
+        one = {"@selection": {"items": [{"type": "campaign", "id": "g-tab-one", "title": "Tab one"}],
+                              "visible": [{"type": "campaign", "id": "g-tab-one"}, {"type": "campaign", "id": "g-tab-two"}], "listId": "g"}}
+        two = {"@selection": {"items": [{"type": "campaign", "id": "g-tab-two", "title": "Tab two"}],
+                              "visible": [{"type": "campaign", "id": "g-tab-one"}, {"type": "campaign", "id": "g-tab-two"}], "listId": "g"}}
         if "$g_note" in declared:
             one["$g_note"], two["$g_note"] = "typed in tab one", "typed in tab two"
         first = self.w.ui(owner, "POST", f"/presentations/{art['artifactId']}/state", {"expectedStateRevision": base, "patch": one}, route="state")
