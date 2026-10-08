@@ -240,6 +240,47 @@ const checks=[];
    // Search only words inside the file; server full-text results drive the UI.
    const search=page.getByRole('searchbox');await search.fill('Finger exercises');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().waitFor();
    await search.fill('');
+   const restoredDocument=page.getByRole('button',{name:/Document Brahms browser notes/}).first();
+   const missingQuery='no-matching-asset-'+principal;
+   await search.fill(missingQuery);
+   await page.getByText(`No asset matches “${missingQuery}”`,{exact:true}).waitFor({timeout:15000});
+   assert.ok(await search.isVisible(),'unmatched query must retain its editable search control');
+   assert.ok(await page.getByRole('button',{name:/^Filters(?:,|$)/}).isVisible(),'unmatched query must retain filters');
+   await page.getByRole('button',{name:'Clear search',exact:true}).last().click();
+   await restoredDocument.waitFor({state:'visible',timeout:15000});assert.equal(await search.inputValue(),'');
+   assert.match(doc.sha256,/^[a-f0-9]{64}$/,'use the real normalized document fingerprint');
+   const hashPrefix=doc.sha256.slice(0,12);
+   for(const [hashIndex,hashQuery] of [hashPrefix,hashPrefix.toUpperCase()].entries()){
+    const actualHashSearch=await context.request.get(path+'?q='+hashQuery,{headers});
+    assert.equal(actualHashSearch.status(),200,await actualHashSearch.text());
+    assert.ok((await actualHashSearch.json()).assets.some(asset=>asset.id===doc.id),'real API must retrieve this document by case-insensitive SHA prefix');
+    const browserHashResponse=hashIndex===0?page.waitForResponse(response=>response.url().startsWith(path+'?')&&new URL(response.url()).searchParams.get('q')===hashPrefix&&response.ok(),{timeout:15000}):null;
+    await search.fill(hashQuery);
+    if(browserHashResponse)assert.ok((await (await browserHashResponse).json()).assets.some(asset=>asset.id===doc.id),'browser query must receive the normalized document');
+    await restoredDocument.waitFor({state:'visible',timeout:15000});
+    assert.equal(await search.inputValue(),hashQuery);
+   }
+   await search.fill('');
+   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
+   await page.getByLabel('Type',{exact:true}).selectOption('image');
+   await page.getByRole('button',{name:'Done',exact:true}).click();
+   await page.getByText('No photos match these filters',{exact:true}).waitFor({timeout:15000});
+   assert.ok(await search.isVisible(),'unmatched type must retain search');
+   await page.getByRole('button',{name:'Show all',exact:true}).click();
+   await restoredDocument.waitFor({state:'visible',timeout:15000});
+   const emptyCollectionName='Empty acceptance '+width;
+   if(!await page.getByLabel('New collection name').isVisible())await page.getByText('Manage collections',{exact:true}).click();
+   await page.getByLabel('New collection name').fill(emptyCollectionName);
+   await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
+   await page.getByRole('button',{name:'Remove collection '+emptyCollectionName,exact:true}).waitFor();
+   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
+   await page.getByLabel('Collection',{exact:true}).selectOption({label:emptyCollectionName});
+   await page.getByRole('button',{name:'Done',exact:true}).click();
+   await page.getByText('No assets match these filters',{exact:true}).waitFor({timeout:15000});
+   assert.ok(await search.isVisible(),'empty collection must retain search');
+   await page.getByRole('button',{name:'Show all',exact:true}).click();
+   await restoredDocument.waitFor({state:'visible',timeout:15000});
+   checks.push({engine,width,search:'unmatched query/type/empty collection remain recoverable; actual normalized SHA prefix lower/uppercase',execution:'real UI/API/DB; synthetic identity/storage'});
    for(const ext of ['pdf','docx','xlsx','pptx','txt','markdown','html','htm','json','csv','bin','wav','mp3','m4a','ogg','oga','flac','aac','webm']){
     const bytes=readFileSync(resolve(__dirname,'../../.codex/library-samples/archive-acceptance.'+ext));
     const mime={pdf:'application/pdf',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',wav:'audio/wav',mp3:'audio/mpeg',m4a:'audio/mp4',ogg:'audio/ogg',oga:'audio/ogg',flac:'audio/flac',aac:'audio/aac',webm:'audio/webm',txt:'text/plain',markdown:'text/markdown',html:'text/html',htm:'text/html',json:'application/json',csv:'text/csv',bin:'application/octet-stream'}[ext];
@@ -260,9 +301,13 @@ const checks=[];
    }
    for(const ext of ['docx','xlsx','pptx','pdf','md']){
     await search.fill(ext==='md'?'Brahms browser notes':'sample.'+ext);
-    const raster=page.locator(`[data-library-thumbnail="${ext}"][data-thumbnail-preview="first-page-raster"] img`).first();
+    const rasterSelector=`[data-library-thumbnail="${ext}"][data-thumbnail-preview="first-page-raster"] img`;
+    const rasterAlt='First page of '+(ext==='md'?'rehearsal-'+width+'.md':'sample.'+ext);
+    const raster=page.getByRole('img',{name:rasterAlt,exact:true}).first();
     await raster.waitFor({state:'visible',timeout:90000});
-    await raster.evaluate(image=>image.decode());
+    // Filter transitions and private URL renewal can replace src during decode().
+    // Observe the current original's successfully loaded raster instead.
+    await page.waitForFunction(({selector,alt})=>[...document.querySelectorAll(selector)].some(image=>image.alt===alt&&image.isConnected&&image.complete&&image.naturalWidth>500&&image.naturalHeight>500),{selector:rasterSelector,alt:rasterAlt},{timeout:90000});
     assert.ok(await raster.evaluate(image=>image.naturalWidth>500&&image.naturalHeight>500),ext+' must display a real page raster');
     await page.screenshot({path:resolve(out,`page-${ext}-${engine}-${width}.png`),fullPage:true});
     checks.push({engine,width,format:ext,preview:'actual source-page JPEG',execution:'real source bytes and renderer; synthetic identity/storage'});

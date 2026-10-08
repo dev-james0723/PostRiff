@@ -399,7 +399,7 @@ export function LibraryView() {
         }
       />
     );
-  } else if (assets.length === 0) {
+  } else if (assets.length === 0 && !query.trim() && filter === 'all' && kindFilter === 'all' && !tag && !collection) {
     content = (
       <motion.div
         key='empty'
@@ -417,12 +417,12 @@ export function LibraryView() {
             </span>
           }
           title='No assets yet'
-          description={canEdit ? 'Upload a photo here. Videos added from Rafii chat also appear in this Library.' : 'Only editors can add media.'}
+          description={canEdit ? 'Add photos, videos, audio, documents or files to your Library.' : 'Only editors can add assets.'}
           action={
             canEdit ? (
-              <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null} title='Or drop JPEG or PNG files anywhere on this page'>
+              <Button variant='action' size='control' onClick={() => filePicker.current?.click()} disabled={library.revision === null || uploadingFile}>
                 <Icons.upload aria-hidden />
-                Upload images
+                Choose assets
               </Button>
             ) : undefined
           }
@@ -530,9 +530,11 @@ export function LibraryView() {
                 ? `No asset matches “${normalizedQuery}”`
                 : kindFilter !== 'all'
                   ? `No ${kindFilter === 'image' ? 'photos' : kindFilter === 'video' ? 'videos' : kindFilter === 'audio' ? 'audio files' : kindFilter === 'document' ? 'documents' : 'files'} match these filters`
-                  : filter === 'unused'
-                    ? 'Every asset is used in a post'
-                    : 'No asset is used in a post yet'
+                  : tag || collection
+                    ? 'No assets match these filters'
+                    : filter === 'unused'
+                      ? 'Every asset is used in a post'
+                      : 'No asset is used in a post yet'
             }
             action={
               <Button
@@ -540,7 +542,7 @@ export function LibraryView() {
                 size='control'
                 onClick={() => {
                   if (normalizedQuery) setQuery('');
-                  else setFilter('all');
+                  else { setFilter('all'); setKindFilter('all'); setTag(''); setCollection(''); }
                 }}
               >
                 {normalizedQuery ? 'Clear search' : 'Show all'}
