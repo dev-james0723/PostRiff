@@ -176,12 +176,14 @@ with TestClient(app) as client,api:
                 break
         assert {'type':'ping_pong','timestamp':42} in received
         assert {'type':'media','payload':base64.b64encode(b'fake-result').decode()} in received
+        # TestClient cancels the ASGI task on context exit; keep the carrier
+        # socket alive until its terminal frame reaches durable settlement.
+        value=finished(cid)
     models['rafii_manager'].assert_complete()
     assert 'piano draft' in json.dumps(wire.sent[0])
     saved=service.get(wid,USER)['state']['variants'][0]
     assert saved['text']==edited and saved['revision']==2 and saved['needsReview']
     assert not service.get(wid,USER)['state']['phase2']['jobs']
-    value=finished(cid)
     assert value['state']=='completed' and value['live_usage_seconds']==4
     assert sql('SELECT count(*) FROM pr_phone_delegations WHERE call_id=%s',cid)==[(1,)]
     assert sql('SELECT count(*) FROM pr_messages WHERE conversation_id=%s',conv)[0][0]>=4
@@ -228,7 +230,7 @@ with TestClient(app) as client,api:
         while socket.receive_json()['type']!='end_call':pass
         http.calls[eref].update(status='completed',duration=2)
         socket.send_json({'type':'call_ended','reason':'customer_hangup'})
-    assert finished(ending['id'])['state']=='completed'
+        assert finished(ending['id'])['state']=='completed'
     # A signed reconnect must not create a second voice session or replay agent mutations.
     before=connect_count
     with client.websocket_connect('/api/phone/dial/media/'+eref,headers=socket_headers(eref)) as socket:
