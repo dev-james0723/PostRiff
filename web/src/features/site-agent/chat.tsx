@@ -37,7 +37,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
-import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
+import type { AgentResult, AgentStatus, AgentTurnResponse } from '@/lib/agent-runtime/types';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
@@ -110,7 +110,6 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   // Generated views (rafii-genui/1): this scope's transport; its key separates every principal/workspace's views and selections.
   const uiTransport = useConsumerUiTransport();
   const uiScope = uiTransport?.scopeKey ?? null;
-  const genuiOn = Boolean(agent.status?.genui?.enabled);
   const [images, setImages] = useState<{ assetId: string; index: number | null }[]>([]);
 
   useEffect(() => {
@@ -245,6 +244,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
         let result: SiteAgentTurnResult;
         let blocks: readonly SiteAgentBlock[] | undefined;
         let answerId: string | null;
+        // Which runtime answers is decided by the deployment status. A turn sent before it loaded must not silently fall back
+        // to the site agent (no generated view, no agent features): wait for it here, bounded (the turn is already busy).
+        const status = agent.status ?? (await loadStatus(client, agent.api, w));
+        const agentOn = Boolean(status?.manager.available);
+        const genuiOn = Boolean(status?.genui?.enabled);
         if (agentOn) {
           // The view the person is using (and its stored selection) travels as uiContext; its unsaved state is saved first so
           // "the second one" means what they just picked. Text and voice read the same registry.
@@ -313,7 +317,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
         panelStore.setBusy(w, false);
       }
     },
-    [agent.api, agentOn, api, choice.model, client, genuiOn, images, pathname, runAuto, runCommand, timeZone, uiScope, workspaceId]
+    [agent.api, agent.status, api, choice.model, client, images, pathname, runAuto, runCommand, timeZone, uiScope, workspaceId]
   );
   const continueFromView = useCallback((request: ContinueRequest) => {
     void send(request.message, { uiContext: { artifactId: request.artifactId, artifactRevision: request.artifactRevision, stateRevision: request.stateRevision } });
@@ -522,6 +526,24 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
       </Sheet>
     </div>
   );
+}
+
+/** The agent runtime status for a workspace when the panel's own query hasn't answered yet (shared cache, at most 8 s). */
+async function loadStatus(client: ReturnType<typeof useQueryClient>, api: ReturnType<typeof useAgent>['api'], workspaceId: string): Promise<AgentStatus | null> {
+  const key = ['agent-runtime', 'status', workspaceId];
+  const cached = client.getQueryData<AgentStatus>(key);
+  if (cached) return cached;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      client.fetchQuery({ queryKey: key, queryFn: () => api.status(workspaceId), staleTime: 60_000, retry: 1 }),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 8000); })
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavigate, onStop, surface, onContinue, onOpenPath }: {
