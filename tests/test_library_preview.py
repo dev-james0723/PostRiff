@@ -40,15 +40,19 @@ class FirstPageRendering(unittest.TestCase):
     def test_full_document_text_rejects_over_300_pages(self):
         import re
         from postriff_phase2.library_preview import extract_text_isolated
-        # A valid PDF page tree with 301 references to the same source page.
+        # A valid 301-page PDF; verify page rendering before testing the text cap.
         objects = re.findall(rb'[0-9]+ 0 obj\n(.*?)\nendobj',pdf(),re.DOTALL)
-        objects[1] = b'<< /Type /Pages /Kids ['+b'3 0 R '*301+b'] /Count 301 >>'
+        objects.extend([objects[2]] * 300)
+        kids = [3,*range(6,306)]
+        objects[1] = b'<< /Type /Pages /Kids ['+b' '.join(f'{number} 0 R'.encode() for number in kids)+b'] /Count 301 >>'
         raw = b'%PDF-1.4\n'; offsets = []
         for number, obj in enumerate(objects,1):
             offsets.append(len(raw)); raw += str(number).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
-        xref = len(raw); raw += b'xref\n0 6\n0000000000 65535 f \n'
+        count = len(objects)+1
+        xref = len(raw); raw += f'xref\n0 {count}\n0000000000 65535 f \n'.encode()
         for offset in offsets: raw += f'{offset:010} 00000 n \n'.encode()
-        raw += f'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+        raw += f'trailer\n<< /Size {count} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+        self.assertEqual(render_isolated(raw,'pdf',1)['pageCount'],301)
         with self.assertRaises(ValueError):extract_text_isolated(raw,'pdf')
 
     def test_actual_supported_source_bytes(self):
