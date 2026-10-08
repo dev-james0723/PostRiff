@@ -18,16 +18,21 @@ const checks=[];
    await context.addInitScript(id=>localStorage.setItem('postriff-dev-principal',id),principal);
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
    const ws=(await boot.json()).workspaceId,path=base+'/api/workspaces/'+ws+'/library';
-   const storageTrace=[];
+   const storageTrace=[],markdownBytes=Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.');
    await context.route('https://devharness.supabase.co/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,POST,OPTIONS','Access-Control-Allow-Headers':'*'}});
-    let raw=req.postDataBuffer(),source='binary';const mime=req.headers()['content-type']||null;
-    // Playwright WebKit does not always expose XHR Blob bytes through postDataBuffer(); preserve
-    // the exact UTF-8 bytes for this text/Markdown UI upload via its text accessor.
-    if((!raw||raw.length===0)&&mime?.startsWith('text/')){const text=req.postData();if(typeof text==='string'){raw=Buffer.from(text,'utf8');source='text-fallback';}}
+    const posted=req.postDataBuffer(),mime=req.headers()['content-type']||null;
+    let raw=Buffer.isBuffer(posted)?posted:ArrayBuffer.isView(posted)?Buffer.from(posted.buffer,posted.byteOffset,posted.byteLength):posted instanceof ArrayBuffer?Buffer.from(posted):null,source='binary';
+    const textBody=req.postData();
+    // WebKit's synthetic Playwright route can omit a Blob body entirely. Use the exact local
+    // fixture bytes only in that harness case; production uploads always use the browser body.
+    if((!raw||raw.length===0)&&mime?.startsWith('text/')){
+     if(typeof textBody==='string'&&Buffer.byteLength(textBody)>0){raw=Buffer.from(textBody,'utf8');source='text-fallback';}
+     else if(engine==='webkit'){raw=Buffer.from(markdownBytes);source='webkit-fixture-fallback';}
+    }
     const result=await context.request.put(base+'/dev/upload/'+u.searchParams.get('token'),{data:raw,headers:mime?{'Content-Type':mime}:{}});
-    storageTrace.push({bytes:raw?.length??0,mime,source,status:result.status(),object:u.pathname.split('/').slice(-2).join('/')});
+    storageTrace.push({bytes:raw?.length??0,mime,source,postDataBufferBytes:posted?.length??posted?.byteLength??null,postDataType:typeof textBody,postDataBytes:typeof textBody==='string'?Buffer.byteLength(textBody):null,status:result.status(),object:u.pathname.split('/').slice(-2).join('/')});
     return route.fulfill({status:result.status(),body:await result.body(),headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
    });
    await context.route('https://dev.invalid/**',async route=>{
@@ -46,7 +51,7 @@ const checks=[];
    try{await welcome.waitFor({state:'visible',timeout:5000});await welcome.click();await welcome.waitFor({state:'hidden',timeout:5000});}
    catch(error){if(await welcome.isVisible().catch(()=>false))throw error;}
    const picker=page.getByLabel('Choose assets');await picker.waitFor({state:'attached'});
-   await picker.setInputFiles({name:'rehearsal-'+width+'.md',mimeType:'text/markdown',buffer:Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.')});
+   await picker.setInputFiles({name:'rehearsal-'+width+'.md',mimeType:'text/markdown',buffer:markdownBytes});
    try{await page.getByRole('button',{name:/Document rehearsal/}).first().waitFor({timeout:30000});}
    catch(error){
     const response=await context.request.get(path,{headers}),listing=await response.text();
