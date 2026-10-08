@@ -26,6 +26,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 
 /**
  * The server's own wording when the deployment has no private media storage (`hosted.py` upload_media,
@@ -137,6 +138,7 @@ export function AssetCard({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const inlineMedia = assetKind === 'audio' || assetKind === 'video';
   const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
   const image = useAssetImage(asset.id, nearView && mediaAsset);
   const storageMissing = mediaAsset && image.storageNotConfigured;
@@ -169,6 +171,7 @@ export function AssetCard({
           transition={{ layout: SPRING_LAYOUT }}
           className='bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
         >
+          {inlineMedia ? <GalleryMediaPreview key={asset.id} asset={asset} video={assetKind === 'video'} posterUrl={image.data} enabled={nearView} /> : null}
           <button
             type='button'
             onClick={onOpen}
@@ -176,11 +179,11 @@ export function AssetCard({
             className='focus-visible:ring-ring/50 flex min-w-0 flex-col rounded-[var(--rafii-radius-card)] text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
-            <TiltCard max={6} className='rounded-none'>
+            {!inlineMedia ? <TiltCard max={6} className='rounded-none'>
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
-                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='relative'>
+                <div data-library-thumbnail='image' data-thumbnail-preview='image' className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (
                     <span className='bg-background/80 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
@@ -202,7 +205,7 @@ export function AssetCard({
               ) : (
                 <Skeleton className='aspect-square w-full rounded-none' />
               )}
-            </TiltCard>
+            </TiltCard> : null}
             <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
               <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
               {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
@@ -221,12 +224,7 @@ export function AssetCard({
               </span>
             </span>
           </button>
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute inset-x-0 top-0 z-10 aspect-square overflow-hidden rounded-t-[var(--rafii-radius-card)]'>
-              <AssetFileThumbnail asset={asset} size='gallery' loadPreview />
-            </div>
-          ) : null}
-          {image.canRetry && (
+          {image.canRetry && !inlineMedia && (
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
               <Button
