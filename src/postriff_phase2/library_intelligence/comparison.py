@@ -61,7 +61,7 @@ def _key(value) -> str:
 def approval(ctx, version: dict) -> dict:
     """Approval as recorded by the existing source review (Ideas source policy, approved facts, useApprovals) plus the
     purpose policy's current decisions. A version without its own reviewed import is 'not_reviewed', never approved."""
-    source = policy._ideas_source(ctx, version)
+    source = policy.ideas_source(ctx, version)
     if source is not None and (source.get("origin") or {}).get("sha256") not in (None, version.get("sha256")):
         source = None  # imported from different bytes: that review does not cover this version
     approved_facts = sum(1 for f in (source or {}).get("facts", []) if isinstance(f, dict) and f.get("approved"))

@@ -276,12 +276,12 @@ with connection() as db:
                                    "AND relation IN ('version_of','supersedes')", (w1,)).fetchall()}
     stale_rows = {(r[0], r[1]) for r in db.execute("SELECT to_kind,to_key FROM public.pr_library_relations WHERE workspace_id=%s AND from_version=%s "
                                                     "AND relation='used_in' AND status='stale'", (w1, v1)).fetchall()}
-    suggestions = db.execute("SELECT category,state FROM public.pr_library_suggestions WHERE workspace_id=%s", (w1,)).fetchall()
+    suggestions = db.execute("SELECT category,state,jsonb_array_length(affected) FROM public.pr_library_suggestions WHERE workspace_id=%s", (w1,)).fetchall()
 check("link: newer row restacked under the older lineage", lineage == (v1, 2), lineage)
 check("link: version_of and supersedes edges", edges == {("version_of", v2, v1), ("supersedes", v2, v1)}, edges)
 check("link: pack, Ideas source, draft and post flagged stale", stale_rows == {("source_pack", pack.hex), ("idea", source_id), ("draft", "variant-pg"),
                                                                                 ("post", "post-42")}, stale_rows)
-check("link: one outdated_source suggestion per dependent", sorted(suggestions) == [("outdated_source", "new")] * 4, suggestions)
+check("link: one outdated_source warning listing all four dependents", suggestions == [("outdated_source", "new", 4)], suggestions)
 check("link: old citations are not rewritten", scalar("SELECT evidence_refs FROM public.pr_library_source_packs WHERE id=%s", (pack,)) == pack_refs_before)
 check("link: Ideas sources and drafts unchanged", scalar("SELECT state FROM public.pr_workspaces WHERE id=%s", (w1,)) == state_before)
 status, stack = route("GET", w1, ["assets", v1, "versions"], "owner")
