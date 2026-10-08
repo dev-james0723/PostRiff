@@ -84,6 +84,7 @@ def local_service(*args, **kwargs):
     with args[0]() as db:
         db.execute((ROOT / 'migrations/postriff/089_youtube_creator.sql').read_text())
         db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
+        db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
     provider = YouTubeProvider(STANDARD_CLIENT, 'local-synthetic-secret', transport=SyntheticGoogle(), creator_enabled=True)
     provider.agentic_provider = YouTubeProvider(AGENTIC_CLIENT, 'local-agentic-synthetic-secret',
         transport=SyntheticGoogle(AGENTIC_CLIENT), creator_enabled=True, authorization_lane='agentic')

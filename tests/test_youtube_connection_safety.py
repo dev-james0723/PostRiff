@@ -34,6 +34,10 @@ class Repository:
             self.result = ('youtube', TOKEN, None, 'test', NOW + 3600, False, False, list(self.scopes), CHANNEL, NOW - 10)
         elif sql.startswith('SELECT provider,provider_account_id,scopes'):
             self.result = ('youtube', CHANNEL, list(self.scopes), TOKEN)
+        elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
+            self.result = (True,)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            self.result = ('00000000-0000-0000-0000-000000000098',)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', CHANNEL, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id,scopes'):

@@ -35,6 +35,8 @@ with connection() as db:
     db.execute((ROOT / 'migrations/postriff/089_youtube_creator.sql').read_text())
     db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
     db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
+    db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
+    db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
     db.execute('DELETE FROM public.pr_account_tombstones WHERE user_id=%s', (TWO,))
     db.execute("UPDATE public.pr_memberships SET status='active' WHERE user_id=%s", (TWO,))
     db.execute('UPDATE public.pr_profiles SET deleted_at=NULL WHERE user_id=%s', (TWO,))
@@ -123,13 +125,20 @@ with connection() as db:
     assert 'synthetic-access' not in row[0] and 'synthetic-refresh' not in row[1]
     assert json.loads(vault.decrypt(row[1], row[2])) == {'clientId': provider.client_id, 'authorizationLane': provider.authorization_lane, 'rt': 'synthetic-refresh', 'v': 2}
 
+with connection() as db:
+    original_generation = db.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()[0]
 google.omit_refresh = True
 assert authorize(wid, 'one', 'manage_video', conn) == conn
+with connection() as db:
+    upgraded_generation = db.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()[0]
+assert upgraded_generation != original_generation, 'A new consent must invalidate in-flight old authorization.'
 with connection() as db:
     row = db.execute('SELECT refresh_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()
     assert json.loads(vault.decrypt(row[0], row[1]))['rt'] == 'synthetic-refresh'
     db.execute("UPDATE public.pr_encrypted_credentials SET access_expires_at=now()-interval '1 second' WHERE workspace_id=%s AND connection_id=%s", (wid, conn))
-assert service.oauth.token_for_worker(wid, conn)['scopes'] == sorted(google.scopes)
+refreshed_grant = service.oauth.token_for_worker(wid, conn)
+assert refreshed_grant['scopes'] == sorted(google.scopes)
+assert refreshed_grant['authorizationGeneration'] == upgraded_generation, 'Ordinary refresh must preserve consent generation.'
 overview = service.youtube.overview(wid, 'one', conn)
 assert len(overview['capabilities']) == 37
 assert overview['capabilities']['public_publish']['state'] == 'BLOCKED — GOOGLE APPROVAL'

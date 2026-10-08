@@ -49,6 +49,10 @@ class CredentialRepository:
         if sql.startswith('SELECT provider,access_ciphertext'):
             self.result = ('youtube', self.access, self.refresh, 'synthetic-key', self.expires,
                            bool(self.refresh), False, SCOPES, 'UC' + 'a' * 22, NOW - 3600)
+        elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
+            self.result = (True,)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            self.result = ('00000000-0000-0000-0000-000000000098',)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):

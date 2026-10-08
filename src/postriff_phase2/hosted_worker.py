@@ -153,7 +153,7 @@ class PostgresWorker:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
                         forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
-                                           and (stage != 'native_scheduled' or job.get('cancelRequested')))
+                                           and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
                             self._event(job, "canceled", "Canceled before provider submission")
                             continue
@@ -315,6 +315,13 @@ class PostgresWorker:
                 job = find(state['phase2']['jobs'], claimed['job']['id'])
                 if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
                         or job.get('leaseUntil', 0) <= self.clock()):
+                    return False
+                if job.get('state') in (*TERMINAL, 'held'):
+                    # Disconnect/cancellation may have ended a claimed operation
+                    # while verification was in flight. A later reconnect never
+                    # makes that same stale worker's lease a fresh approval.
+                    job['leaseOwner'], job['leaseUntil'] = None, 0
+                    cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
                 youtube_cancel = (claimed.get('youtubeForward') and claimed['reconciliation']
                                   and claimed['job'].get('cancelRequested') is True)

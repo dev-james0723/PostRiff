@@ -177,13 +177,16 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
 
     @patch('postriff_phase2.hosted_worker.assert_job_authority', side_effect=AlphaError('Synthetic paused Autopilot.', 409))
     def test_accepted_native_schedule_readback_survives_paused_autopilot(self, authority):
-        worker, db, _, order, _ = worker_for(1)
-        db.state['phase2']['jobs'][0].update(state='processing', progress={'stage': 'native_scheduled'},
-                                             youtubeAgent={'policyId': 'synthetic-paused-policy'})
-        self.assertTrue(worker.step())
-        self.assertEqual(order, [('reconcile', 'connection-0')])
+        for stage, state in (('native_scheduled', 'processing'), ('native_schedule_reconciling', 'uncertain')):
+            with self.subTest(stage=stage):
+                worker, db, _, order, _ = worker_for(1)
+                db.state['phase2']['jobs'][0].update(state=state, progress={'stage': stage},
+                                                     youtubeAgent={'policyId': 'synthetic-paused-policy'})
+                self.assertTrue(worker.step())
+                self.assertEqual(order, [('reconcile', 'connection-0')])
+                worker.social.submit.assert_not_called()
+                worker.social.youtube.oauth.reverify_for_worker.assert_not_called()
         authority.assert_not_called()
-        worker.social.submit.assert_not_called()
 
     @patch('postriff_phase2.billing.require_publishing')
     @patch('postriff_phase2.hosted_worker.assert_job_authority')
@@ -322,6 +325,26 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
                     worker.social.submit.assert_not_called()
                 else:
                     self.assertEqual(job['leaseId'], 'another-fence')
+
+    @patch('postriff_phase2.billing.require_publishing')
+    def test_disconnect_hold_or_terminal_state_survives_reconnect_during_refresh(self, _billing):
+        for stopped in ('held', 'canceled', 'failed', 'verified'):
+            with self.subTest(stopped=stopped):
+                worker, db, _, _, reverify = worker_for(1)
+
+                def disconnected_then_reconnected(workspace, connection):
+                    # The fresh identity/scopes can match exactly after reconnect.
+                    # The original operation's explicit hold still ends its lease.
+                    result = reverify(workspace, connection)
+                    db.state['phase2']['jobs'][0]['state'] = stopped
+                    return result
+
+                worker.social.youtube.oauth.reverify_for_worker.side_effect = disconnected_then_reconnected
+                self.assertTrue(worker.step())
+                job = db.state['phase2']['jobs'][0]
+                self.assertEqual((job['state'], job['attempts'], job['leaseUntil']), (stopped, [], 0))
+                worker.social.submit.assert_not_called()
+                worker.social.reconcile.assert_not_called()
 
     def test_age_deferral_never_applies_to_revoked_unverified_or_local_channels(self):
         worker, db, _, _, _ = worker_for(1)

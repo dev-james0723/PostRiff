@@ -528,7 +528,9 @@ class OAuthService:
                     if reusable:
                         refresh_ct = self.vault.encrypt(reusable)[0]
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None
-            cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
+            # Keep Gmail/Calendar and other consent paths independent of 098.
+            consent_generation_sql = ',authorization_generation=gen_random_uuid()' if provider_id == 'youtube' else ''
+            cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL" + consent_generation_sql + ",rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
             for name, value in matrix.items():
@@ -955,6 +957,17 @@ class OAuthService:
                 row = cur.fetchone()
                 if not row or row[6]:
                     raise AlphaError("Connection unavailable.", 404)
+                authorization_generation = None
+                if row[0] == 'youtube':
+                    # Check schema and capture consent before OAuth transport,
+                    # under the same credential lock used for token custody.
+                    from .youtube.journal import UploadJournal
+                    UploadJournal._schema(cur)
+                    cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
+                    generation = cur.fetchone()
+                    if not generation or not generation[0]:
+                        raise AlphaError('YouTube authorization is no longer available.', 409, code='youtube_revoked_oauth')
+                    authorization_generation = generation[0]
                 with self._credential_errors(row[0], row[1]):
                     provider, access_ct, refresh_ct, key_id, expires, refresh_supported, _, scopes, account_id, issued_at = row
                     adapter = self._provider_for_access(provider, self.vault.decrypt(access_ct, key_id))
@@ -1024,7 +1037,8 @@ class OAuthService:
                         scopes = reported if authoritative else []
                         cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                     return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires, 'providerAccountId': account_id,
-                            **({'refreshBindingRequired': refresh_binding_required, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard')} if provider == 'youtube' else {})}
+                            **({'refreshBindingRequired': refresh_binding_required, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
+                                'authorizationGeneration': authorization_generation} if provider == 'youtube' else {})}
 
     def verify(self, workspace_id, token, connection_id):
         """Re-check identity and scope drift for an existing connection."""

@@ -1,5 +1,6 @@
 """Official-contract and crash-recovery tests. All transports are synthetic, never real E2E."""
 import copy
+import hashlib
 import io
 import json
 import unittest
@@ -18,6 +19,7 @@ from postriff_phase2.youtube.provider import YouTubeProvider
 from postriff_phase2.youtube.uploads import UploadEngine, CHUNK_SIZE, session_url
 from postriff_phase2.youtube.notifications import feed_entries, verified_signature
 from postriff_phase2.youtube.service import YouTubeCreatorService
+from postriff_phase2.youtube.journal import UploadJournal
 from postriff_phase2.youtube.model import upload_body
 from postriff_phase2.outcomes import normalize_result
 
@@ -27,11 +29,23 @@ MEDIA = {'id': 'a' * 32, 'mime': 'video/mp4', 'bytes': CHUNK_SIZE + 7, 'width': 
 
 
 class Journal:
-    def __init__(self): self.states = {}; self.saves = []
+    def __init__(self):
+        self.states = {}; self.saves = []
+        self.generation, self.locked_generation, self.revoked = 1, None, False
     @contextmanager
-    def lock(self, _): yield
+    def lock(self, _):
+        self.locked_generation = self.generation
+        try:
+            yield
+        finally:
+            self.locked_generation = None
+    def assert_current(self, _key):
+        if self.revoked or self.generation != self.locked_generation:
+            raise UploadJournal._authorization_error(changed=not self.revoked)
     def load(self, key): return copy.deepcopy(self.states.get(key))
-    def save(self, key, state): self.states[key] = copy.deepcopy(state); self.saves.append(copy.deepcopy(state))
+    def save(self, key, state):
+        self.assert_current(key)
+        self.states[key] = copy.deepcopy(state); self.saves.append(copy.deepcopy(state))
     def seal(self, value): return ('encrypted:' + value, 'test-key')
     def unseal(self, value, _): return value.removeprefix('encrypted:')
 
@@ -73,6 +87,19 @@ def manifest():
 
 
 class ContractTests(unittest.TestCase):
+    def test_schedule_lead_is_rechecked_after_authorization_fence_wait(self):
+        calls, reservations, now = [], [], [1_000_000_000]
+        a = api(lambda *args, **kwargs: calls.append((args, kwargs)))
+        a.clock = lambda: now[0]
+        a.account_usage = lambda *args: reservations.append(args)
+        a.before_request = lambda: now.__setitem__(0, now[0] + 45)
+        target = datetime.fromtimestamp(now[0] + 90, timezone.utc).isoformat().replace('+00:00', 'Z')
+        with self.assertRaises(AlphaError) as expired:
+            a.call('videos.update', {'part': 'status'}, {'id': VIDEO, 'status': {'privacyStatus': 'private', 'publishAt': target}})
+        self.assertEqual(expired.exception.code, 'youtube_invalid_scheduling_state')
+        self.assertEqual(calls, [])
+        self.assertEqual(len(reservations), 1)
+
     def test_upload_quota_current_separate_bucket(self):
         self.assertEqual((METHODS['videos.insert']['bucket'], METHODS['videos.insert']['cost']), ('videoUploads', 1))
         self.assertEqual(METHODS['captions.insert']['cost'], 400)
@@ -263,6 +290,121 @@ class UploadTests(unittest.TestCase):
         result = self.advance()
         self.assertEqual(result['state'], 'held'); self.assertEqual(self.journal.states, {})
         self.assertEqual(result['progress']['errorCategory'], 'revoked_oauth')
+
+    def test_disconnect_during_initialization_never_restores_session_or_sends_bytes(self):
+        self.setup_engine()
+        original = self.a.provider.transport
+        def disconnect_after_response(*args, **kwargs):
+            response = original(*args, **kwargs)
+            self.journal.revoked = True
+            self.journal.states.clear()
+            return response
+        self.a.provider.transport = disconnect_after_response
+        errors = []
+        self.a.on_error = lambda *_: errors.append('provider revocation')
+        result = self.advance()
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(result['progress']['errorCategory'], 'revoked_oauth')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual([item[0] for item in self.wire.calls], ['POST'])
+        self.assertEqual(errors, [])
+
+    def test_reconnect_during_initialization_preserves_new_authority_and_purge(self):
+        self.setup_engine()
+        original = self.a.provider.transport
+        def reconnect_after_response(*args, **kwargs):
+            response = original(*args, **kwargs)
+            self.journal.generation += 1
+            self.journal.states.clear()
+            return response
+        self.a.provider.transport = reconnect_after_response
+        errors = []
+        self.a.on_error = lambda *_: errors.append('purged new grant')
+        result = self.advance()
+        self.assertEqual(result['progress']['errorCategory'], 'authorization_changed')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual([item[0] for item in self.wire.calls], ['POST'])
+        self.assertEqual(errors, [])
+
+    def test_disconnect_during_status_probe_stops_the_next_chunk(self):
+        self.setup_engine(); self.advance()
+        before = len(self.wire.calls)
+        original = self.a.provider.transport
+        def disconnect_after_response(*args, **kwargs):
+            response = original(*args, **kwargs)
+            self.journal.revoked = True
+            self.journal.states.clear()
+            return response
+        self.a.provider.transport = disconnect_after_response
+        result = self.advance()
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual(len(self.wire.calls), before + 1)
+        self.assertTrue(self.wire.calls[-1][2]['headers']['Content-Range'].startswith('bytes */'))
+
+    def test_disconnect_during_media_read_stops_chunk_dispatch(self):
+        self.setup_engine()
+        def reader(_manifest, _offset, size):
+            self.journal.revoked = True
+            self.journal.states.clear()
+            return b'x' * size
+        self.engine.media_reader = reader
+        result = self.advance()
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual([item[0] for item in self.wire.calls], ['POST', 'PUT'])
+        self.assertTrue(self.wire.calls[-1][2]['headers']['Content-Range'].startswith('bytes */'))
+
+    def test_disconnect_during_quota_admission_stops_initialization(self):
+        self.setup_engine()
+        def usage(*_):
+            self.journal.revoked = True
+            self.journal.states.clear()
+        self.a.account_usage = usage
+        result = self.advance()
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual(self.wire.calls, [])
+
+    def test_finalization_write_rechecks_authority_after_its_own_admission(self):
+        self.setup_engine()
+        self.engine.finalize = lambda _key, _state, _video, api, _save: api.call(
+            'videos.update', {'part': 'status'}, {'id': VIDEO, 'status': {'privacyStatus': 'public'}})
+        self.journal.states[('one', 'connection-one', 'exact-key')] = {
+            'manifestDigest': hashlib.sha256(json.dumps(self.m, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'stage': 'uploaded_private', 'videoId': VIDEO, 'bytesSent': MEDIA['bytes'], 'totalBytes': MEDIA['bytes']}
+        def usage(*_):
+            self.journal.revoked = True
+            self.journal.states.clear()
+        self.a.account_usage = usage
+        result = self.advance()
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual(self.wire.calls, [])
+
+    def test_cancellation_write_rechecks_authority_after_its_own_admission(self):
+        self.setup_engine()
+        self.video['status']['publishAt'] = '2099-01-01T00:00:00Z'
+        self.journal.states[('one', 'connection-one', 'exact-key')] = {
+            'manifestDigest': hashlib.sha256(json.dumps(self.m, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'stage': 'native_scheduled', 'videoId': VIDEO, 'bytesSent': MEDIA['bytes'],
+            'totalBytes': MEDIA['bytes'], 'steps': {}}
+        def usage(*_):
+            self.journal.revoked = True
+            self.journal.states.clear()
+        self.a.account_usage = usage
+        result = self.engine.step(self.m, cancel=True)
+        self.assertEqual(result['state'], 'held')
+        self.assertEqual(self.journal.states, {})
+        self.assertEqual(self.wire.calls, [])
+
+    def test_normal_access_token_refresh_retains_generation_and_resumes_session(self):
+        self.setup_engine(); self.advance()
+        self.a.grant['accessToken'] = json.dumps({'v': 1, 'at': 'synthetic-refreshed-token'})
+        result = self.advance()
+        self.assertEqual(result['reference'], VIDEO)
+        self.assertEqual(result['progress']['stage'], 'uploaded_private')
+        self.assertEqual(sum(item[0] == 'POST' for item in self.wire.calls), 1)
 
     def test_known_session_rate_limit_is_backed_off_without_new_initialization(self):
         self.setup_engine(); self.advance()

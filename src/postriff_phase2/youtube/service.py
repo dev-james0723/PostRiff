@@ -94,15 +94,30 @@ class YouTubeCreatorService:
                   AND k.cache_key='authorization-check'
                 WHERE c.provider='youtube' AND c.revoked_at IS NULL AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
                   AND (k.expires_at IS NULL OR k.expires_at<=now())""" + exclusion + """
-                ORDER BY k.refreshed_at NULLS FIRST,c.updated_at LIMIT 1 FOR UPDATE OF c SKIP LOCKED""", parameters)
-            row = cur.fetchone()
-            if row:
+                ORDER BY k.refreshed_at NULLS FIRST,c.updated_at LIMIT 100 FOR KEY SHARE OF w SKIP LOCKED""", parameters)
+            candidates = cur.fetchall()
+            row = None
+            for candidate in candidates:
+                # Disconnect owns workspace -> credential. Acquire workspace
+                # key-share locks above before any credential lock or child FK
+                # insert; skip busy credentials within this bounded due set.
+                cur.execute("""SELECT c.workspace_id::text,c.connection_id FROM public.pr_encrypted_credentials c
+                    JOIN public.pr_workspaces w ON w.id=c.workspace_id
+                    LEFT JOIN public.pr_youtube_cache k ON k.workspace_id=c.workspace_id AND k.connection_id=c.connection_id
+                      AND k.cache_key='authorization-check'
+                    WHERE c.workspace_id=%s AND c.connection_id=%s AND c.provider='youtube' AND c.revoked_at IS NULL
+                      AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
+                      AND (k.expires_at IS NULL OR k.expires_at<=now()) FOR UPDATE OF c SKIP LOCKED""", candidate)
+                selected = cur.fetchone()
+                if not selected:
+                    continue
                 cur.execute("""INSERT INTO public.pr_youtube_cache(workspace_id,connection_id,cache_key,source,data,expires_at)
                     VALUES(%s,%s,'authorization-check','Rafii operational lease','{}'::jsonb,now()+interval '5 minutes')
                     ON CONFLICT(workspace_id,connection_id,cache_key) DO UPDATE SET expires_at=excluded.expires_at,refreshed_at=now()
-                    WHERE pr_youtube_cache.expires_at<=now() RETURNING connection_id""", row)
-                if not cur.fetchone():
-                    row = None  # Another invocation committed this lease after our selection snapshot.
+                    WHERE pr_youtube_cache.expires_at<=now() RETURNING connection_id""", selected)
+                if cur.fetchone():
+                    row = selected
+                    break
         return row
 
     def identity_one(self, *, excluded=()):
@@ -195,7 +210,8 @@ class YouTubeCreatorService:
         provider = self.oauth.provider_for_grant(grant)
         return YouTubeApi(provider, grant, channel, clock=self.clock, account_usage=self.account_usage(workspace, connection, provider),
                           chat_resource=lambda kind, ident, chat: self.chat_resource(workspace, connection, kind, ident, chat),
-                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method, expected_access_token=grant['accessToken']))
+                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method, expected_access_token=grant['accessToken']),
+                          before_request=lambda: self.journal.assert_authorized(workspace, connection, grant.get('authorizationGeneration')))
 
     def operational_error(self, workspace, connection, error, method, *, expected_access_token=None):
         category = getattr(error, 'category', None) or getattr(error, 'code', '')
@@ -238,8 +254,14 @@ class YouTubeCreatorService:
             row = cur.fetchone()
         return row[0] if row else None
 
-    def _cache(self, workspace, connection, key, data, source='YouTube Data API', ttl=1800):
+    def _cache(self, workspace, connection, key, data, source='YouTube Data API', ttl=1800, *, authorization_generation=None):
         with self.service.connection_factory() as db, db.cursor() as cur:
+            # Operational timestamps/alerts carry no provider content. They
+            # still must not resurrect rows after disconnect. Provider-derived
+            # content always supplies the exact generation from its API grant.
+            if authorization_generation is None:
+                authorization_generation = self.journal._generation(cur, (workspace, connection))
+            self.journal.assert_authorized(workspace, connection, authorization_generation, cursor=cur, locked=True)
             cur.execute('INSERT INTO public.pr_youtube_cache(workspace_id,connection_id,cache_key,source,data,expires_at) VALUES(%s,%s,%s,%s,%s::jsonb,now()+make_interval(secs=>%s)) ON CONFLICT(workspace_id,connection_id,cache_key) DO UPDATE SET source=excluded.source,data=excluded.data,refreshed_at=now(),expires_at=excluded.expires_at', (workspace, connection, key, source, json.dumps(data), min(ttl, 30 * 86400)))
 
     def identity(self, workspace, connection, api):
@@ -255,7 +277,7 @@ class YouTubeCreatorService:
         item['eligibility'] = {k: bool(v.get('verified') and v.get('source') in ('YouTube Data API', 'YouTube Analytics API')
                                      and v.get('channelId') == api.channel_id and v.get('observedAt', 0) > self.clock() - 30 * 86400)
                                for k, v in (evidence.get('eligibility') or {}).items()}
-        self._cache(workspace, connection, key, item)
+        self._cache(workspace, connection, key, item, authorization_generation=api.grant.get('authorizationGeneration'))
         return item
 
     def _matrix(self, workspace, connection, api):
@@ -388,7 +410,7 @@ class YouTubeCreatorService:
             report = api.analytics('revenue' if resource == 'revenue' else x.get('report', 'daily'), x.get('startDate'), x.get('endDate'), video_id=x.get('videoId'), playlist_id=x.get('playlistId'), monetary_authorized=auth['monetary'])
             if resource == 'revenue' and api.provider.real_transport:
                 self.record_eligibility(workspace, connection, api.channel_id, 'monetary_analytics', 'analytics.reports.query')
-            self._cache(workspace, connection, key, report, 'YouTube Analytics API', 3600)
+            self._cache(workspace, connection, key, report, 'YouTube Analytics API', 3600, authorization_generation=api.grant.get('authorizationGeneration'))
             return report
         if resource in ('broadcasts', 'streams'):
             self._allow(workspace, connection, api, 'identity')
@@ -412,7 +434,7 @@ class YouTubeCreatorService:
             body = api.call('liveChatModerators.list', {'liveChatId': x['liveChatId'], 'part': 'snippet', **pagination})
             if api.provider.real_transport:
                 self.record_eligibility(workspace, connection, api.channel_id, 'live_moderation', x['liveChatId'])
-            self._cache(workspace, connection, 'chat-moderators:' + x['liveChatId'], body, 'YouTube Live Streaming API', 600)
+            self._cache(workspace, connection, 'chat-moderators:' + x['liveChatId'], body, 'YouTube Live Streaming API', 600, authorization_generation=api.grant.get('authorizationGeneration'))
             return {'source': 'YouTube Live Streaming API', **body}
         if resource in ('members', 'membership_levels'):
             self._allow(workspace, connection, api, 'memberships', eligibility_probe=probe)
@@ -477,6 +499,109 @@ class YouTubeCreatorService:
         mime = validate_image(raw, podcast)
         return raw, mime, fingerprint({'assetId': asset_id, 'sha256': hashlib.sha256(raw).hexdigest()})
 
+    @staticmethod
+    def _schedule_tracking_error():
+        return AlphaError('The exact upload schedule approval changed or is ambiguous. Review this same video before continuing.',
+                          409, code='youtube_schedule_tracking_conflict')
+
+    @staticmethod
+    def _schedule_tracking_root(key, upload, channel, workspace_state):
+        """Bind to the immutable approved upload, never merely a matching Video ID."""
+        from ..contracts import digest
+        workspace, connection, operation = key
+        jobs = [job for job in workspace_state.get('phase2', {}).get('jobs', [])
+                if job.get('manifest', {}).get('workspaceId') == workspace
+                and job.get('manifest', {}).get('channelId') == connection
+                and job.get('manifest', {}).get('idempotencyKey') == operation]
+        if len(jobs) != 1:
+            raise YouTubeCreatorService._schedule_tracking_error()
+        job, manifest = jobs[0], jobs[0]['manifest']
+        upload_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if (manifest.get('providerAccountId') != channel or not upload.get('videoId')
+                or upload.get('manifestDigest') != upload_digest or job.get('approvalDigest') != digest(manifest)
+                or not job.get('approvedBy') or job.get('approvedBy') != manifest.get('actor')):
+            raise YouTubeCreatorService._schedule_tracking_error()
+        return {'workspaceId': workspace, 'connectionId': connection, 'channelId': channel,
+                'videoId': upload['videoId'], 'operationKey': operation, 'uploadManifestDigest': upload_digest,
+                'uploadApprovalDigest': job['approvalDigest'], 'jobId': job['id']}
+
+    @staticmethod
+    def _schedule_action_chain(rows, root):
+        """A predecessor chain orders approvals; readback updated_at is not authority."""
+        records = {}
+        for action_id, manifest, digest, status, receipt in rows:
+            if status in ('prepared', 'failed'):
+                continue
+            binding = manifest.get('uploadScheduleBinding') or {}
+            plan = manifest.get('plan') or {}
+            if (fingerprint(manifest) != digest or any(binding.get(k) != v for k, v in root.items())
+                    or manifest.get('workspaceId') != root['workspaceId']
+                    or manifest.get('connectionId') != root['connectionId']
+                    or manifest.get('channelId') != root['channelId']
+                    or manifest.get('action') not in ('video.schedule', 'video.cancel_schedule')
+                    or plan.get('action') != manifest['action'] or plan.get('method') != 'videos.update'
+                    or plan.get('targetId') != root['videoId'] or (plan.get('body') or {}).get('id') != root['videoId']
+                    or manifest.get('inputs', {}).get('id') != root['videoId']):
+                raise YouTubeCreatorService._schedule_tracking_error()
+            records[action_id] = {'id': action_id, 'manifest': manifest, 'digest': digest,
+                                  'status': status, 'receipt': receipt, 'previous': binding.get('previousAction')}
+        if not records:
+            return None
+        predecessors = set()
+        for record in records.values():
+            previous = record['previous']
+            if previous is not None:
+                if (not isinstance(previous, dict) or previous.get('id') not in records
+                        or previous.get('digest') != records[previous['id']]['digest']):
+                    raise YouTubeCreatorService._schedule_tracking_error()
+                predecessors.add(previous['id'])
+        heads = set(records) - predecessors
+        if len(heads) != 1:
+            raise YouTubeCreatorService._schedule_tracking_error()
+        head = records[heads.pop()]
+        seen, record = set(), head
+        while record is not None:
+            if record['id'] in seen:
+                raise YouTubeCreatorService._schedule_tracking_error()
+            seen.add(record['id'])
+            record = records[record['previous']['id']] if record['previous'] is not None else None
+        if len(seen) != len(records):
+            raise YouTubeCreatorService._schedule_tracking_error()
+        return head
+
+    def _schedule_action_head(self, cur, root):
+        cur.execute("""SELECT id::text,manifest,manifest_digest,status,receipt FROM public.pr_youtube_actions
+            WHERE workspace_id=%s AND connection_id=%s AND status NOT IN ('prepared','failed')
+              AND manifest->'uploadScheduleBinding'->>'operationKey'=%s
+              AND manifest->'uploadScheduleBinding'->>'uploadManifestDigest'=%s""",
+                    (root['workspaceId'], root['connectionId'], root['operationKey'], root['uploadManifestDigest']))
+        return self._schedule_action_chain(cur.fetchall(), root)
+
+    def _upload_schedule_binding(self, workspace, connection, channel, video_id, workspace_state, *, cursor=None, locked=False):
+        def read(cur):
+            cur.execute("""SELECT operation_key,state FROM public.pr_youtube_uploads
+                WHERE workspace_id=%s AND connection_id=%s AND state->>'videoId'=%s"""
+                        + (' FOR UPDATE' if locked else ''), (workspace, connection, video_id))
+            rows = [(operation, upload) for operation, upload in cur.fetchall()
+                    if upload.get('options', {}).get('publishAt') and upload.get('stage') not in ('failed', 'canceled', 'published')
+                    and (upload.get('stage') == 'native_scheduled' or upload.get('nativeScheduleTracking') is True
+                         or upload.get('steps', {}).get('visibility', {}).get('status') == 'verified')]
+            if not rows:
+                return None  # Standalone owned-video actions retain their existing behavior.
+            if len(rows) != 1:
+                raise self._schedule_tracking_error()
+            operation, upload = rows[0]
+            root = self._schedule_tracking_root((workspace, connection, operation), upload, channel, workspace_state)
+            head = self._schedule_action_head(cur, root)
+            if head and head['status'] != 'verified':
+                raise AlphaError('Reconcile the preceding approved schedule change before preparing another write.',
+                                 409, code='youtube_schedule_verification_pending')
+            return {**root, 'previousAction': {'id': head['id'], 'digest': head['digest']} if head else None}
+        if cursor is not None:
+            return read(cursor)
+        with self.service.connection_factory() as db, db.cursor() as cur:
+            return read(cur)
+
     def preview(self, workspace, token, connection, body):
         action, inputs = body.get('action'), body.get('inputs', {})
         if action not in ACTION_CAPABILITY:
@@ -503,11 +628,17 @@ class YouTubeCreatorService:
         manifest = {'workspaceId': workspace, 'connectionId': connection, 'channelId': channel, 'action': action,
                     'inputs': inputs, 'plan': plan, 'destructive': destructive, 'eligibilityProbe': probe, 'rightsConfirmed': body.get('rightsConfirmed') is True,
                     'approvalExpiresAt': self.clock() + 600}
+        if action in ('video.schedule', 'video.cancel_schedule'):
+            binding = self._upload_schedule_binding(workspace, connection, channel, inputs.get('id'), state)
+            if binding is not None:
+                manifest['uploadScheduleBinding'] = binding
         digest = fingerprint(manifest)
         operation_key = body.get('operationKey') or str(uuid.uuid4())
         resource_id(operation_key, 'resource')
         from ..hosted import audit, throttle
         with self.repository.transaction(token, workspace) as (cur, _, actor):
+            # A late planning read must not recreate prepared data after disconnect.
+            self.journal.assert_authorized(workspace, connection, api.grant.get('authorizationGeneration'), cursor=cur, locked=True)
             throttle(cur, 'youtube-preview:' + workspace + ':' + connection, 30, 600)
             cur.execute("INSERT INTO public.pr_youtube_actions(workspace_id,connection_id,actor,operation_key,manifest,manifest_digest,status) VALUES(%s,%s,%s,%s,%s::jsonb,%s,'prepared') ON CONFLICT(workspace_id,connection_id,operation_key) DO NOTHING RETURNING id::text", (workspace, connection, actor, operation_key, json.dumps(manifest), digest))
             result = cur.fetchone()
@@ -530,12 +661,20 @@ class YouTubeCreatorService:
             require(_membership(row), 'owner' if manifest['eligibilityProbe'] else requirement(manifest['action']))
             if manifest['destructive'] or manifest['eligibilityProbe']:
                 self.repository.assert_fresh(token, actor)
-            if body.get('digest') != digest:
+            if body.get('digest') != digest or fingerprint(manifest) != digest:
                 raise AlphaError('The exact review changed. Prepare a fresh review.', 409)
             if status != 'prepared':
                 return {'id': action_id, 'status': status, 'receipt': receipt, 'retried': False}
             if manifest['approvalExpiresAt'] < self.clock():
                 raise AlphaError('The exact review expired. Prepare a fresh review.', 409)
+            if manifest['action'] in ('video.schedule', 'video.cancel_schedule'):
+                workspace_state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                # This short row lock serializes approval intent for this upload.
+                # It is released with started before any Google request begins.
+                binding = self._upload_schedule_binding(workspace, connection, manifest['channelId'],
+                                                        manifest['inputs'].get('id'), workspace_state, cursor=cur, locked=True)
+                if binding != manifest.get('uploadScheduleBinding'):
+                    raise self._schedule_tracking_error()
             target = manifest['plan'].get('targetId') or manifest['inputs'].get('id') or manifest['inputs'].get('videoId') or manifest['inputs'].get('liveChatId')
             if manifest['destructive'] and (not target or body.get('confirmationTarget') != target):
                 raise AlphaError('Confirm the exact YouTube resource ID for this destructive action.', 400)
@@ -570,6 +709,7 @@ class YouTubeCreatorService:
             secret = result.get('cdn', {}).get('ingestionInfo', {}).get('streamName') if isinstance(result, dict) else None
             ciphertext, key_id = self.oauth.vault.encrypt(secret) if secret else (None, None)
             receipt = {'source': 'YouTube Data API', 'channelId': channel, 'action': manifest['action'], 'acceptedAt': self.clock(),
+                       'actionId': action_id, 'approvalDigest': digest,
                        'result': redacted(result), 'execution': 'real' if api.provider.real_transport else 'transport-injected'}
             with self.service.connection_factory() as db, db.cursor() as cur:
                 cur.execute("UPDATE public.pr_youtube_actions SET status='accepted',receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s", (json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
@@ -581,6 +721,7 @@ class YouTubeCreatorService:
                 verification = {'verified': False, 'method': 'readback_unavailable', 'note': 'The official write was accepted; verification must be retried without repeating the write.'}
             status = 'verified' if verification.get('verified') else 'accepted'
             receipt = {'source': 'YouTube Data API', 'channelId': channel, 'action': manifest['action'], 'acceptedAt': self.clock(),
+                       'actionId': action_id, 'approvalDigest': digest,
                        'result': redacted(result), 'verification': verification, 'execution': 'real' if api.provider.real_transport else 'transport-injected'}
             with self.service.connection_factory() as db, db.cursor() as cur:
                 cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
@@ -591,7 +732,8 @@ class YouTubeCreatorService:
         except (AlphaError, OSError, TimeoutError) as error:
             ambiguous = remote_accepted or getattr(error, 'ambiguous', False) or isinstance(error, (OSError, TimeoutError))
             status = 'outcome_unknown' if ambiguous else 'failed'
-            receipt = {'category': getattr(error, 'category', getattr(error, 'code', 'creator_operation_failed')), 'message': str(error) if isinstance(error, AlphaError) else 'Remote outcome is unknown.', 'retriableAutomatically': False}
+            receipt = {'category': getattr(error, 'category', getattr(error, 'code', 'creator_operation_failed')), 'message': str(error) if isinstance(error, AlphaError) else 'Remote outcome is unknown.', 'retriableAutomatically': False,
+                       'actionId': action_id, 'approvalDigest': digest}
             with self.service.connection_factory() as db, db.cursor() as cur:
                 cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), workspace, connection, action_id))
                 audit(cur, workspace, actor, 'youtube.action_result', action_id, {'action': manifest['action'], 'status': status, 'category': receipt['category']})
@@ -667,7 +809,7 @@ class YouTubeCreatorService:
                 cur.execute("SELECT 1 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace, connection))
                 if not cur.fetchone():
                     raise AlphaError('This upload connection was revoked before recovery.', 409, code='youtube_revoked_oauth')
-                self.journal.save(key, saved)
+                self.journal.save(key, saved, cursor=cur)
                 latest_job.update(state='provider_accepted', nextAt=self.clock(), progress={'version': 2, **upload_view(saved)})
                 latest_job['youtubeRecoveryApproval'] = {'approvedBy': actor, 'digest': job['approvalDigest'],
                     'approvedAt': self.clock(), 'expiresAt': self.clock() + 36 * 3600}
@@ -839,20 +981,92 @@ class YouTubeCreatorService:
             raise AlphaError('Private storage did not honor the resume range; no bytes were sent.', 503)
         return piece['data']
 
+    def _finalize_native_schedule(self, key, state, current, api):
+        """Reconcile an approved native schedule; this path never writes to Google."""
+        state['nativeScheduleTracking'] = True
+        channel, video_id = api.channel_id, state['videoId']
+        if current.get('id') != video_id or current.get('snippet', {}).get('channelId') != channel:
+            state.update(stage='held', errorCategory='youtube_schedule_tracking_conflict')
+            return state
+        try:
+            with self.service.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (key[0],))
+                row = cur.fetchone()
+                if not row:
+                    raise self._schedule_tracking_error()
+                workspace_state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                root = self._schedule_tracking_root(key, state, channel, workspace_state)
+                head = self._schedule_action_head(cur, root)
+        except AlphaError:
+            state.update(stage='held', errorCategory='youtube_schedule_tracking_conflict')
+            return state
+        target, canceled = state['options'].get('publishAt'), False
+        if head:
+            receipt = head['receipt'] or {}
+            verification = receipt.get('verification') or {}
+            prior_observed = verification.get('observed') or {}
+            plan_status = (head['manifest']['plan'].get('body') or {}).get('status') or {}
+            canceled = head['manifest']['action'] == 'video.cancel_schedule'
+            target = plan_status.get('publishAt')
+            verified = (head['status'] == 'verified' and verification.get('verified') is True
+                        and receipt.get('actionId') == head['id'] and receipt.get('approvalDigest') == head['digest']
+                        and receipt.get('channelId') == channel and receipt.get('action') == head['manifest']['action']
+                        and receipt.get('source') == 'YouTube Data API'
+                        and receipt.get('execution') == ('real' if api.provider.real_transport else 'transport-injected')
+                        and (receipt.get('result') or {}).get('id') == video_id
+                        and verification.get('resourceId') == video_id and verification.get('method') == 'videos.list'
+                        and prior_observed.get('id') == video_id
+                        and prior_observed.get('snippet', {}).get('channelId') == channel
+                        and prior_observed.get('status', {}).get('privacyStatus') == 'private'
+                        and plan_status.get('privacyStatus') == 'private'
+                        and prior_observed.get('status', {}).get('publishAt') == target
+                        and (target is None if canceled else isinstance(target, str) and bool(target)))
+            if not verified:
+                previous = state.setdefault('steps', {}).get('scheduleTracking', {})
+                same = previous.get('actionId') == head['id'] and previous.get('approvalDigest') == head['digest']
+                checks = previous.get('checks', 0) + 1 if same else 1
+                state['steps']['scheduleTracking'] = {'status': head['status'], 'actionId': head['id'],
+                    'approvalDigest': head['digest'], 'checks': checks, 'reconciliationOnly': True,
+                    'humanInterventionRequired': checks >= 3}
+                state.update(stage='held' if checks >= 3 else 'native_schedule_reconciling',
+                             errorCategory='youtube_schedule_intervention_required' if checks >= 3 else 'youtube_schedule_verification_pending',
+                             retryAt=self.clock() + 60)
+                return state  # Even matching provider state cannot promote an unknown action.
+            state.setdefault('steps', {})['scheduleTracking'] = {'status': 'verified', 'actionId': head['id'],
+                'approvalDigest': head['digest'], 'reconciliationOnly': True, 'source': 'YouTube Data API',
+                'observedAt': self.clock()}
+        observed, status = lifecycle(current), current.get('status', {})
+        if canceled:
+            if observed['stage'] != 'processed_private' or status.get('privacyStatus') != 'private' or status.get('publishAt') is not None:
+                state.update(stage='held', errorCategory='youtube_schedule_changed')
+                return state
+            state.update(stage='canceled', cancelRequested=True, privacyStatus='private', publishAt=None, published=False)
+            state.pop('errorCategory', None)
+            state.pop('retryAt', None)
+            return state
+        try:
+            planned_at = datetime.fromisoformat(target.replace('Z', '+00:00'))
+            if planned_at.tzinfo is None:
+                raise ValueError('Missing schedule timezone')
+        except (AttributeError, TypeError, ValueError):
+            state.update(stage='held', errorCategory='youtube_schedule_tracking_conflict')
+            return state
+        if observed['stage'] == 'native_scheduled' and observed.get('publishAt') == target:
+            state.update(observed, privacyStatus='private', retryAt=self.clock() + 300)
+        elif (observed['stage'] == 'published' and observed['privacyStatus'] == state['options']['privacyStatus']
+              and self.clock() >= planned_at.timestamp()):
+            state.update(observed, neverPublished=False, publishAt=target)
+        else:
+            state.update(stage='held', errorCategory='youtube_schedule_changed')
+            return state
+        state.pop('errorCategory', None)
+        return state
+
     def finalize_upload(self, key, state, current, api, save):
         options, video_id = state['options'], state['videoId']
         observed = lifecycle(current)
         if observed['stage'] == 'published':
             state['neverPublished'] = False
-            if state.get('stage') == 'native_scheduled' and observed['privacyStatus'] == options['privacyStatus']:
-                state.update(observed)
-                return state
-        if state.get('stage') == 'native_scheduled':
-            if observed['stage'] == 'native_scheduled' and observed.get('publishAt') == options.get('publishAt'):
-                state.update(observed, retryAt=self.clock() + 300)
-            else:
-                state.update(stage='held', errorCategory='youtube_schedule_changed')
-            return state
         from .model import upload_body
         approved = upload_body(options)
         for part in ('snippet', 'localizations', 'recordingDetails'):
@@ -863,6 +1077,12 @@ class YouTubeCreatorService:
         if any(current.get('status', {}).get(k) != v for k, v in approved_status.items()):
             state.update(stage='held', errorCategory='youtube_declaration_readback_mismatch')
             return state
+        if (state.get('stage') in ('native_scheduled', 'native_schedule_reconciling')
+                or state.get('nativeScheduleTracking') is True
+                or (options.get('publishAt') and state.get('steps', {}).get('visibility', {}).get('status') == 'verified')):
+            # Recovery may reset stage to uploaded_private. The durable marker
+            # still forbids restoring a superseded schedule or uploading again.
+            return self._finalize_native_schedule(key, state, current, api)
         ws, connection, _ = key
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (ws,))
@@ -951,6 +1171,8 @@ class YouTubeCreatorService:
             state.update(stage='held', errorCategory='youtube_readback_mismatch'); return state
         state['steps']['visibility'] = {'status': 'verified', 'observedAt': self.clock(), 'source': 'YouTube Data API'}
         state.update(lifecycle(current), retryAt=self.clock() + 300)
+        if state['stage'] == 'native_scheduled':
+            state['nativeScheduleTracking'] = True
         if state['stage'] == 'published':
             state['neverPublished'] = False
         state.update(privacyStatus=status.get('privacyStatus'), publishAt=status.get('publishAt'))
