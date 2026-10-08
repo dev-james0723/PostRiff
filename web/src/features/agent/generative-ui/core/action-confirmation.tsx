@@ -5,7 +5,8 @@
  *
  *   confirming  a modal sheet with the server's own copy (title, change summary, target, time zone, cost) and
  *               Confirm / Cancel. Nothing executes until the person confirms.
- *   executing   the sheet shows that it is working (Cancel is not offered once the server may be applying it).
+ *   executing   the sheet closes (no modal holds focus while the server works) and an inline status says it is working;
+ *               there is nothing to cancel once the server may be applying it.
  *   done        an inline receipt below the view, worded from the server's outcome: "prepared" is never shown as
  *               applied, and "applied" reads as done only when the server verified it.
  *   error       the bridge's sanitized message with Try again (same key and activation) and Close.
@@ -87,16 +88,16 @@ export function ActionConfirmation(props: { frame: RefObject<HTMLElement | null>
   const phase = state.phase;
   const previous = useRef(phase);
   useEffect(() => {
-    if ((previous.current === 'confirming' || previous.current === 'executing') && (phase === 'idle' || phase === 'done' || phase === 'error')) {
-      returnFocus();
-    }
+    // The sheet closed (confirmed, cancelled or failed): put focus back on the control that opened it.
+    if (previous.current === 'confirming' && phase !== 'confirming') returnFocus();
     previous.current = phase;
   });
 
   if (!bridge) return null;
   const activation = state.activation;
   const binding = state.request ? bridge.binding(state.request.actionId) : undefined;
-  const open = phase === 'confirming' || (phase === 'executing' && !!activation?.confirmation.required);
+  // Modal only while the person decides; never while the server works (no focus held without an enabled control).
+  const open = phase === 'confirming';
   const confirmation = activation?.confirmation;
 
   return (
@@ -132,20 +133,23 @@ export function ActionConfirmation(props: { frame: RefObject<HTMLElement | null>
             </div>
           ) : null}
           <AlertDialogFooter>
-            {phase === 'confirming' ? <AlertDialogCancel>{l.t('cancel')}</AlertDialogCancel> : null}
+            <AlertDialogCancel>{l.t('cancel')}</AlertDialogCancel>
             <Button
               type="button"
-              disabled={phase !== 'confirming'}
-              aria-busy={phase === 'executing' || undefined}
               onClick={() => {
                 void bridge.confirm();
               }}
             >
-              {phase === 'executing' ? l.t('working') : binding?.label || l.t('confirm')}
+              {binding?.label || l.t('confirm')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {phase === 'executing' ? (
+        <p role="status" data-genui-action-receipt="working" className="text-sm text-muted-foreground">
+          {l.t('working')}
+        </p>
+      ) : null}
       {phase === 'done' && state.result ? (
         <Receipt
           l={l}
